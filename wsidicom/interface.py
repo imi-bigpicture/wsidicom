@@ -31,7 +31,7 @@ class WsiDicomFile:
         filepath: Path
             Path to file to open
         """
-        self.filepath = filepath
+        self._filepath = filepath
 
         if not pydicom.misc.is_dicom(self.filepath):
             raise WsiDicomFileError(self.filepath, "is not a DICOM file")
@@ -77,8 +77,8 @@ class WsiDicomFile:
             self._mpp = self._get_image_mpp(ds)
             self._image_size = self._get_image_size(ds)
             self._mm_size = self._get_mm_size(ds)
-            self._frame_count = int(getattr(ds, "NumberOfFrames", 1))
-            self._tile_size = Size(width=ds.Columns, height=ds.Rows)
+            self._frame_count = int(getattr(ds, 'NumberOfFrames', 1))
+            self._tile_size = self._get_tile_size(ds)
             self._tile_type = self._get_tile_type(ds)
             self._samples_per_pixel = int(ds.SamplesPerPixel)
             self._transfer_syntax = Uid(ds.file_meta.TransferSyntaxUID)
@@ -119,6 +119,11 @@ class WsiDicomFile:
 
     def __str__(self) -> str:
         return self.pretty_str()
+
+    @property
+    def filepath(self) -> Path:
+        """Return filepath"""
+        return self._filepath
 
     @property
     def wsi_type(self) -> str:
@@ -423,7 +428,8 @@ class WsiDicomFile:
             WSI image flavor
         """
         SUPPORTED_IMAGE_TYPES = ['VOLUME', 'LABEL', 'OVERVIEW']
-        image_type: str = ds.ImageType[2]
+        IMAGE_FLAVOR = 2
+        image_type: str = ds.ImageType[IMAGE_FLAVOR]
         image_type_supported = image_type in SUPPORTED_IMAGE_TYPES
         if not image_type_supported:
             warnings.warn(f"Non-supported image type {image_type}")
@@ -466,51 +472,84 @@ class WsiDicomFile:
         """Close the file."""
         self._fp.close()
 
-    @staticmethod
-    def _get_mm_size(ds: Dataset) -> SizeMm:
+    def _get_mm_size(self, ds: Dataset) -> SizeMm:
         """Read mm size from dicom file.
+
+        Parameters
+        ----------
+        ds: Dataset
+            Pydicom dataset
 
         Returns
         ----------
         SizeMm
             The size of the image in mm
         """
-        return SizeMm(
-            width=float(ds.ImagedVolumeWidth),
-            height=float(ds.ImagedVolumeHeight)
-        )
+        width = float(ds.ImagedVolumeWidth)
+        height = float(ds.ImagedVolumeHeight)
+        if width == 0 or height == 0:
+            raise WsiDicomFileError(self.filepath, "Image mm size is zero")
+        return SizeMm(width=width, height=height)
 
-    @staticmethod
-    def _get_image_mpp(ds: Dataset) -> SizeMm:
+    def _get_image_mpp(self, ds: Dataset) -> SizeMm:
         """Read pixel spacing from dicom file.
+
+        Parameters
+        ----------
+        ds: Dataset
+            Pydicom dataset
 
         Returns
         ----------
         SizeMm
             The pixel spacing
         """
-        pixel_spacing = (
+        pixel_spacing: Tuple[float, float] = (
             ds.SharedFunctionalGroupsSequence[0].
             PixelMeasuresSequence[0].PixelSpacing
         )
-        return SizeMm(
-            width=float(pixel_spacing[0]),
-            height=float(pixel_spacing[1])
-        )
+        if any([spacing == 0 for spacing in pixel_spacing]):
+            raise WsiDicomFileError(self.filepath, "Pixel spacing is zero")
+        return SizeMm(width=pixel_spacing[0], height=pixel_spacing[1])
 
-    @staticmethod
-    def _get_image_size(ds: Dataset) -> Size:
+    def _get_tile_size(self, ds: Dataset) -> Size:
+        """Read tile size from from dicom file.
+
+        Parameters
+        ----------
+        ds: Dataset
+            Pydicom dataset
+
+        Returns
+        ----------
+        Size
+            The tile size
+        """
+        width = int(ds.Columns)
+        height = int(ds.Rows)
+        if width == 0 or height == 0:
+            raise WsiDicomFileError(self.filepath, "Tile size is zero")
+        return  Size(width=width, height=height)
+
+
+    def _get_image_size(self, ds: Dataset) -> Size:
         """Read total pixel size from dicom file.
+
+        Parameters
+        ----------
+        ds: Dataset
+            Pydicom dataset
 
         Returns
         ----------
         Size
             The image size
         """
-        return Size(
-            width=int(ds.TotalPixelMatrixColumns),
-            height=int(ds.TotalPixelMatrixRows)
-        )
+        width = int(ds.TotalPixelMatrixColumns)
+        height = int(ds.TotalPixelMatrixRows)
+        if width == 0 or height == 0:
+            raise WsiDicomFileError(self.filepath, "Image size is zero")
+        return Size(width=width, height=height)
 
     def _get_tile_type(self, ds: Dataset) -> str:
         """Return tiling type from dataset. Raises WsiDicomFileError if type
@@ -519,7 +558,7 @@ class WsiDicomFile:
         Parameters
         ----------
         ds: Dataset
-            Pydicom dataset to with tiling type.
+            Pydicom dataset.
 
         Returns
         ----------
@@ -567,6 +606,8 @@ class WsiDicomFile:
         list[tuple[int, int]]
             A list with frame positions and frame lengths
         """
+        TAG_BYTES = 4
+        LENGHT_BYTES = 4
         positions: List[Tuple[int, int]] = []
         frame_position = self._fp.tell()
         # Read items until sequence delimiter
@@ -577,7 +618,7 @@ class WsiDicomFile:
                 raise WsiDicomFileError(self.filepath, 'Invalid frame length')
             # Frame position
             position = frame_position
-            positions.append((position+8, length))
+            positions.append((position+TAG_BYTES+LENGHT_BYTES, length))
             # Jump to end of item
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
@@ -587,7 +628,8 @@ class WsiDicomFile:
         """Check if last read tag was a sequence delimter.
         Raises WsiDicomFileError otherwise.
         """
-        self._fp.seek(-4, 1)
+        TAG_BYTES = 4
+        self._fp.seek(-TAG_BYTES, 1)
         if(self._fp.read_tag() != pydicom.tag.SequenceDelimiterTag):
             raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
 
@@ -974,6 +1016,7 @@ class FullTileIndex(TileIndex):
         files: Dict[int, WsiDicomFile]
     ) -> List[float]:
         """Return list of focal planes from files.
+        Values in Pixel Measures Sequene are in mm.
 
         Parameters
         ----------
@@ -986,6 +1029,8 @@ class FullTileIndex(TileIndex):
             Focal planes
 
         """
+        MM_TO_MICRON = 1000
+        DECIMALS = 3
         focal_planes: List[float] = []
         for file in files.values():
             sequence = file.frame_sequence[0]
@@ -1000,7 +1045,7 @@ class FullTileIndex(TileIndex):
                     "Multipe focal planes and zero plane spacing"
                 )
             for plane in range(file.focal_planes):
-                z = round(plane * spacing * 1000, 3)
+                z = round(plane * spacing * MM_TO_MICRON, DECIMALS)
                 if z not in focal_planes:
                     focal_planes.append(z)
         return focal_planes
@@ -1213,6 +1258,8 @@ class SparseTileIndex(TileIndex):
             frame: DicomSequence
     ) -> Tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
+        In the Plane Position Slide Sequence x and y are defined in mm and z in
+        um.
 
         Parameters
         ----------
@@ -1224,10 +1271,11 @@ class SparseTileIndex(TileIndex):
         Point, float
             The frame xy coordinate and z coordinate
         """
+        DECIMALS = 3
         position = frame.PlanePositionSlideSequence[0]
         y = int(position.RowPositionInTotalImagePixelMatrix) - 1
         x = int(position.ColumnPositionInTotalImagePixelMatrix) - 1
-        z = round(float(position.ZOffsetInSlideCoordinateSystem), 3)
+        z = round(float(position.ZOffsetInSlideCoordinateSystem), DECIMALS)
         tile = Point(x=x, y=y) // self.tile_size
         return tile, z
 
@@ -1746,9 +1794,11 @@ class WsiDicomInstance:
             RGB color
 
         """
+        BLACK = 0
+        WHITE = 255
         if(photometric_interpretation == "MONOCHROME2"):
-            return (0, 0, 0)  # Monocrhome2 is black
-        return (255, 255, 255)
+            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
+        return (WHITE, WHITE, WHITE)
 
     @staticmethod
     def _create_tileindex(
@@ -2523,7 +2573,8 @@ class WsiDicomLevel(WsiDicomStack):
         """
         float_level = math.log2(self.mpp.width/base_mpp.width)
         level = int(round(float_level))
-        if not math.isclose(float_level, level, rel_tol=1e-2):
+        TOLERANCE = 1e-2
+        if not math.isclose(float_level, level, rel_tol=TOLERANCE):
             raise NotImplementedError("Levels needs to be integer")
         return level
 
