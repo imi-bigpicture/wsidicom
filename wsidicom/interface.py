@@ -74,7 +74,7 @@ class WsiDicomFile:
                 ds,
                 transfer_syntax_uid
             )
-            self._mpp = self._get_image_mpp(ds)
+            self._pixel_spacing = self._get_pixel_spacing(ds)
             self._image_size = self._get_image_size(ds)
             self._mm_size = self._get_mm_size(ds)
             self._frame_count = int(getattr(ds, 'NumberOfFrames', 1))
@@ -132,8 +132,13 @@ class WsiDicomFile:
 
     @property
     def mpp(self) -> SizeMm:
+        """Return pixel spacing in um/pixel"""
+        return 1000*self.pixel_spacing
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
         """Return pixel spacing in mm/pixel"""
-        return self._mpp
+        return self._pixel_spacing
 
     @property
     def image_size(self) -> Size:
@@ -491,7 +496,7 @@ class WsiDicomFile:
             raise WsiDicomFileError(self.filepath, "Image mm size is zero")
         return SizeMm(width=width, height=height)
 
-    def _get_image_mpp(self, ds: Dataset) -> SizeMm:
+    def _get_pixel_spacing(self, ds: Dataset) -> SizeMm:
         """Read pixel spacing from dicom file.
 
         Parameters
@@ -1309,7 +1314,7 @@ class WsiDicomInstance:
 
         base_file = files[0]
         self._size = base_file.image_size
-        self._mpp = base_file.mpp
+        self._pixel_spacing = base_file.pixel_spacing
         self._tile_size = base_file.tile_size
         self._samples_per_pixel = base_file.samples_per_pixel
         self._transfer_syntax = base_file.transfer_syntax
@@ -1390,8 +1395,13 @@ class WsiDicomInstance:
 
     @property
     def mpp(self) -> SizeMm:
+        """Return pixel spacing in um/pixel"""
+        return 1000*self.pixel_spacing
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
         """Return pixel spacing in mm/pixel"""
-        return self._mpp
+        return self._pixel_spacing
 
     @property
     def identifier(self) -> Uid:
@@ -2000,7 +2010,7 @@ class WsiDicomStack(metaclass=ABCMeta):
 
         base_instance = instances[0]
         self._size = base_instance.size
-        self._mpp = base_instance.mpp
+        self._pixel_spacing = base_instance.pixel_spacing
         self._default_instance_uid: str = base_instance.identifier
 
     def __getitem__(self, index) -> WsiDicomInstance:
@@ -2023,8 +2033,13 @@ class WsiDicomStack(metaclass=ABCMeta):
 
     @property
     def mpp(self) -> SizeMm:
+        """Return pixel spacing in um/pixel"""
+        return 1000*self.pixel_spacing
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
         """Return pixel spacing in mm/pixel"""
-        return self._mpp
+        return self._pixel_spacing
 
     @property
     def instances(self) -> Dict[str, WsiDicomInstance]:
@@ -2297,8 +2312,8 @@ class WsiDicomStack(metaclass=ABCMeta):
             Region in pixels
         """
         pixel_region = Region(
-            position=region.position // self.mpp,
-            size=region.size // self.mpp
+            position=region.position // self.pixel_spacing,
+            size=region.size // self.pixel_spacing
         )
         if not self.valid_pixels(pixel_region):
             raise WsiDicomOutOfBondsError(
@@ -2364,10 +2379,10 @@ class WsiDicomLevel(WsiDicomStack):
     def __init__(
         self,
         instances: List[WsiDicomInstance],
-        base_mpp: SizeMm
+        base_pixel_spacing: SizeMm
     ):
         """Represents a level in the pyramid and contains one or more
-        instances having the same level, mpp, and size but possibly
+        instances having the same level, pixel spacing, and size but possibly
         different focal planes and/or optical paths and present in
         different files.
 
@@ -2375,11 +2390,11 @@ class WsiDicomLevel(WsiDicomStack):
         ----------
         instances: List[WsiDicomInstance]
             Instances to build the stack.
-        base_mpp: SizeMm
+        base_pixel_spacing: SizeMm
             Pixel spacing of base level.
         """
         super().__init__(instances)
-        self._level = self._assign_level(base_mpp)
+        self._level = self._assign_level(base_pixel_spacing)
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -2390,7 +2405,7 @@ class WsiDicomLevel(WsiDicomStack):
         depth: int = None
     ) -> str:
         string = (
-            f"Level: {self.level}, size: {self.size} px, mpp: {self.mpp} mm/px"
+            f'Level: {self.level}, size: {self.size} px, mpp: {self.mpp} um/px'
         )
         if depth is not None:
             depth -= 1
@@ -2403,9 +2418,9 @@ class WsiDicomLevel(WsiDicomStack):
     def pyramid(self) -> str:
         """Return string representatin of the level"""
         return (
-            f"Level [{self.level}]"
-            f" tiles: {self.default_instance.tiles.plane_size},"
-            f" size: {self.size}, mpp: {self.mpp}"
+            f'Level [{self.level}]'
+            f' tiles: {self.default_instance.tiles.plane_size},'
+            f' size: {self.size}, mpp: {self.mpp} um/px'
         )
 
     @property
@@ -2439,9 +2454,9 @@ class WsiDicomLevel(WsiDicomStack):
         instances_grouped_by_stack = cls._group_instances(instances)
         largest_size = max(instances_grouped_by_stack.keys())
         base_group = instances_grouped_by_stack[largest_size]
-        base_mpp = base_group[0].mpp
+        base_pixel_spacing = base_group[0].pixel_spacing
         for level_group in instances_grouped_by_stack.values():
-            new_level = WsiDicomLevel(level_group, base_mpp)
+            new_level = WsiDicomLevel(level_group, base_pixel_spacing)
             levels.append(new_level)
 
         return levels
@@ -2556,14 +2571,14 @@ class WsiDicomLevel(WsiDicomStack):
         """
         return int(2 ** (level_to - self.level))
 
-    def _assign_level(self, base_mpp: SizeMm) -> int:
+    def _assign_level(self, base_pixel_spacing: SizeMm) -> int:
         """Return (2^level scale factor) based on pixel spacing.
         Will round to closest integer. Raises NotImplementedError if level is
         to far from integer.
 
         Parameters
         ----------
-        base_mpp: SizeMm
+        base_pixel_spacing: SizeMm
             The pixel spacing of the base lavel
 
         Returns
@@ -2571,7 +2586,9 @@ class WsiDicomLevel(WsiDicomStack):
         int
             The pyramid order of the level
         """
-        float_level = math.log2(self.mpp.width/base_mpp.width)
+        float_level = math.log2(
+            self.pixel_spacing.width/base_pixel_spacing.width
+        )
         level = int(round(float_level))
         TOLERANCE = 1e-2
         if not math.isclose(float_level, level, rel_tol=TOLERANCE):
@@ -2620,7 +2637,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     @property
     def mpps(self) -> List[SizeMm]:
-        """Return contained pixel spacings"""
+        """Return contained mpp (um/px)"""
         return [stack.mpp for stack in self.stacks]
 
     @property
@@ -2956,30 +2973,33 @@ class WsiDicomLevels(WsiDicomSeries):
             )
         return closest
 
-    def get_closest_by_mpp(self, mpp: SizeMm) -> WsiDicomLevel:
+    def get_closest_by_pixel_spacing(
+        self,
+        pixel_spacing: SizeMm
+    ) -> WsiDicomLevel:
         """Search for level that by pixel spacing is closest to and smaller
         than the given pixel spacing. Only the spacing in x-axis is used.
 
         Parameters
         ----------
-        mpp: SizeMm
-            Mpp to search for
+        pixel_spacing: SizeMm
+            Pixel spacing to search for
 
         Returns
         ----------
         WsiDicomLevel
-            The level with mpp closest to searched mpp
+            The level with pixel spacing closest to searched spacing
         """
-        closest_mpp: float = 0
+        closest_pixel_spacing: float = 0
         closest = None
         for wsi_level in self._levels.values():
-            if((mpp.width >= wsi_level.mpp.width) and
-               (closest_mpp <= wsi_level.mpp.width)):
-                closest_mpp = wsi_level.mpp.width
+            if((pixel_spacing.width >= wsi_level.pixel_spacing.width) and
+               (closest_pixel_spacing <= wsi_level.pixel_spacing.width)):
+                closest_pixel_spacing = wsi_level.pixel_spacing.width
                 closest = wsi_level
         if closest is None:
             raise WsiDicomNotFoundError(
-                f"Level for mpp {mpp}", "level series")
+                f"Level for pixel spacing {pixel_spacing}", "level series")
         return closest
 
 
@@ -3362,7 +3382,6 @@ class WsiDicom:
             position=Point.from_tuple(location),
             size=Size.from_tuple(size)
         ) * scale_factor
-        thumbnail_size = Size.from_tuple(size)
 
         if not wsi_level.valid_pixels(scaled_region):
             raise WsiDicomOutOfBondsError(
@@ -3428,7 +3447,7 @@ class WsiDicom:
         location: float, float
             Upper left corner of region in mm
         mpp: float
-            Requested pixel spacing
+            Requested pixel spacing (um/mm)
         size: float
             Size of region in mm
         z: float
@@ -3441,14 +3460,17 @@ class WsiDicom:
         Image
             Region as image
         """
-        wsi_level = self.levels.get_closest_by_mpp(SizeMm(mpp, mpp))
+        pixel_spacing = mpp/1000
+        wsi_level = self.levels.get_closest_by_pixel_spacing(
+            SizeMm(pixel_spacing, pixel_spacing)
+        )
         region = RegionMm(
             position=PointMm.from_tuple(location),
             size=SizeMm.from_tuple(size)
         )
         image = wsi_level.get_region_mm(region, z, path)
-        image_size = SizeMm(width=size[0], height=size[1]) // mpp
-        return image.resize(image_size.to_int_tuple, resample=Image.BILINEAR)
+        image_size = SizeMm(width=size[0], height=size[1]) // pixel_spacing
+        return image.resize(image_size.to_int_tuple(), resample=Image.BILINEAR)
 
     def read_tile(
         self,
