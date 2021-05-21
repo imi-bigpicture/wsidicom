@@ -133,7 +133,7 @@ class WsiDicomFile:
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000*self.pixel_spacing
+        return 1000.0*self.pixel_spacing
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -1034,7 +1034,7 @@ class FullTileIndex(TileIndex):
             Focal planes
 
         """
-        MM_TO_MICRON = 1000
+        MM_TO_MICRON = 1000.0
         DECIMALS = 3
         focal_planes: List[float] = []
         for file in files.values():
@@ -1396,7 +1396,7 @@ class WsiDicomInstance:
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000*self.pixel_spacing
+        return 1000.0*self.pixel_spacing
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -2034,7 +2034,7 @@ class WsiDicomStack(metaclass=ABCMeta):
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000*self.pixel_spacing
+        return 1000.0*self.pixel_spacing
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -3460,7 +3460,7 @@ class WsiDicom:
         Image
             Region as image
         """
-        pixel_spacing = mpp/1000
+        pixel_spacing = mpp/1000.0
         wsi_level = self.levels.get_closest_by_pixel_spacing(
             SizeMm(pixel_spacing, pixel_spacing)
         )
