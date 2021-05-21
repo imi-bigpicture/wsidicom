@@ -49,13 +49,15 @@ class WsiDicomTests(unittest.TestCase):
         closest_level = self.dicom_ds.levels.get_closest_by_level(2)
         self.assertEqual(closest_level.level, 0)
 
-    def test_find_closest_mpp(self):
-        closest_mpp = self.dicom_ds.levels.get_closest_by_mpp(SizeMm(0.5, 0.5))
-        self.assertEqual(closest_mpp.level, 0)
+    def test_find_closest_pixel_spacing(self):
+        closest_level = self.dicom_ds.levels.get_closest_by_pixel_spacing(
+            SizeMm(0.5, 0.5)
+        )
+        self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_size(self):
-        closest_size = self.dicom_ds.levels.get_closest_by_size(Size(100, 100))
-        self.assertEqual(closest_size.level, 0)
+        closest_level = self.dicom_ds.levels.get_closest_by_size(Size(100, 100))
+        self.assertEqual(closest_level.level, 0)
 
     def test_calculate_scale(self):
         wsi_level = self.dicom_ds.levels.get_level(0)
