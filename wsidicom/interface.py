@@ -2329,26 +2329,36 @@ class WsiDicomStack(metaclass=ABCMeta):
     def save(
         self,
         path: Path,
-        base_uid: Uid
     ):
         base_ds = self.default_instance.create_ds()
-        uid = pydicom.uid.generate_uid(base_uid)
-        file_path = path + '/' + uid + '.dcm'
+        uid = pydicom.uid.generate_uid()
+        import os
+        file_path = os.path.join(path, uid+'.dcm')
         fp = pydicom.filebase.DicomFile(file_path, mode='wb')
-        fp.is_little_endian = self._transfer_syntax.is_little_endian
-        fp.is_implicit_VR = self._transfer_syntax.is_implicit_VR
+        fp.is_little_endian = True
+        fp.is_implicit_VR = True
+        optical_paths: List[str] = []
+        for instance in self.instances.values():
+            for path in instance.tiles.optical_paths:
+                if path not in optical_paths:
+                    optical_paths.append(path)
 
-        optical_paths = [
-            instance.tiles.optical_paths for instance in self.instances
-        ]
-        focal_planes = [
-            instance.tiles.focal_planes for instance in self.instances
-        ]
+        focal_planes: List[float] = []
+        for instance in self.instances.values():
+            for z in instance.tiles.focal_planes:
+                if z not in focal_planes:
+                    focal_planes.append(z)
 
         tile_geometry = Region(
             Point(0, 0),
             self.default_instance.tiles.plane_size
         )
+        # We need to modify base_ds:
+        # Change to tile full
+        # Change number of frames
+        # Add optical path sequence
+        # Add focal planes
+        # Change instance UID
 
         # Write the base dataset
         pydicom.filewriter.write_dataset(fp, base_ds)
@@ -2358,7 +2368,7 @@ class WsiDicomStack(metaclass=ABCMeta):
             self.get_encoded_tile(Point(x_tile, y_tile), z, path)
             for path in optical_paths
             for z in focal_planes
-            for x_tile, y_tile in tile_geometry.iterate_all(include_end=True)
+            for x_tile, y_tile in tile_geometry.iterate_all(include_end=False)
         )
 
         pixel_data_element = pydicom.dataset.DataElement(
@@ -2802,10 +2812,9 @@ class WsiDicomSeries(metaclass=ABCMeta):
     def save(
         self,
         path: Path,
-        base_uid: Uid
     ):
         for stack in self.stacks:
-            stack.save(path, base_uid)
+            stack.save(path)
 
 
 class WsiDicomLabels(WsiDicomSeries):
@@ -3357,11 +3366,10 @@ class WsiDicom:
     def save(
         self,
         path: Path,
-        base_uid: Uid
     ):
         series = [self.levels, self.labels, self.overviews]
         for item in series:
-            item.save(path, base_uid)
+            item.save(path)
 
 
     def read_label(self, index: int = 0) -> Image:
