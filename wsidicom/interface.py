@@ -133,7 +133,7 @@ class WsiDicomFile:
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000*self.pixel_spacing
+        return self.pixel_spacing*1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -1034,7 +1034,7 @@ class FullTileIndex(TileIndex):
             Focal planes
 
         """
-        MM_TO_MICRON = 1000
+        MM_TO_MICRON = 1000.0
         DECIMALS = 3
         focal_planes: List[float] = []
         for file in files.values():
@@ -1396,7 +1396,7 @@ class WsiDicomInstance:
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000*self.pixel_spacing
+        return self.pixel_spacing*1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -2034,7 +2034,7 @@ class WsiDicomStack(metaclass=ABCMeta):
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000*self.pixel_spacing
+        return self.pixel_spacing*1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -2325,6 +2325,74 @@ class WsiDicomStack(metaclass=ABCMeta):
         """Close all instances on the stack."""
         for instance in self._instances.values():
             instance.close()
+
+    def save(
+        self,
+        path: Path,
+        base_uid: Uid
+    ):
+        base_ds = self.default_instance.create_ds()
+        uid = pydicom.uid.generate_uid(base_uid)
+        file_path = path + '/' + uid + '.dcm'
+        fp = pydicom.filebase.DicomFile(file_path, mode='wb')
+        fp.is_little_endian = self._transfer_syntax.is_little_endian
+        fp.is_implicit_VR = self._transfer_syntax.is_implicit_VR
+
+        optical_paths = [
+            instance.tiles.optical_paths for instance in self.instances
+        ]
+        focal_planes = [
+            instance.tiles.focal_planes for instance in self.instances
+        ]
+
+        tile_geometry = Region(
+            Point(0, 0),
+            self.default_instance.tiles.plane_size
+        )
+
+        # Write the base dataset
+        pydicom.filewriter.write_dataset(fp, base_ds)
+
+        # Generator for the tiles
+        tiles = (
+            self.get_encoded_tile(Point(x_tile, y_tile), z, path)
+            for path in optical_paths
+            for z in focal_planes
+            for x_tile, y_tile in tile_geometry.iterate_all(include_end=True)
+        )
+
+        pixel_data_element = pydicom.dataset.DataElement(
+            0x7FE00010,
+            'OB',
+            0,
+            is_undefined_length=True
+            )
+
+        # Write pixel data tag
+        fp.write_tag(pixel_data_element.tag)
+
+        if not fp.is_implicit_VR:
+            # Write pixel data VR "OB", two empty bytes (PS3.5 7.1.2)
+            # and unspecified length
+            fp.write(bytes(pixel_data_element.VR, "iso8859"))
+            fp.write_US(0)
+            fp.write_UL(0xFFFFFFFF)
+
+        # Write item tag and (empty) length for BOT
+        fp.write_tag(pydicom.tag.ItemTag)
+        fp.write_UL(0)
+
+        # itemize and and write the tiles
+        for tile in tiles:
+            item = pydicom.encaps.itemize_fragment(tile)
+            fp.write(item)
+
+        # end sequence
+        fp.write_tag(pydicom.tag.SequenceDelimiterTag)
+        fp.write_UL(0)
+
+        # close the file
+        fp.close()
 
     def _validate_stack(
         self,
@@ -2730,6 +2798,14 @@ class WsiDicomSeries(metaclass=ABCMeta):
         """Close all stacks in the series."""
         for stack in self.stacks:
             stack.close()
+
+    def save(
+        self,
+        path: Path,
+        base_uid: Uid
+    ):
+        for stack in self.stacks:
+            stack.save(path, base_uid)
 
 
 class WsiDicomLabels(WsiDicomSeries):
@@ -3278,6 +3354,16 @@ class WsiDicom:
              if type(item) == series_types[assign_as]), None
         )
 
+    def save(
+        self,
+        path: Path,
+        base_uid: Uid
+    ):
+        series = [self.levels, self.labels, self.overviews]
+        for item in series:
+            item.save(path, base_uid)
+
+
     def read_label(self, index: int = 0) -> Image:
         """Read label image of the whole slide. If several label
         images are present, index can be used to select a specific image.
@@ -3460,7 +3546,7 @@ class WsiDicom:
         Image
             Region as image
         """
-        pixel_spacing = mpp/1000
+        pixel_spacing = mpp/1000.0
         wsi_level = self.levels.get_closest_by_pixel_spacing(
             SizeMm(pixel_spacing, pixel_spacing)
         )
