@@ -133,7 +133,7 @@ class WsiDicomFile:
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000.0*self.pixel_spacing
+        return self.pixel_spacing*1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -1396,7 +1396,7 @@ class WsiDicomInstance:
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000.0*self.pixel_spacing
+        return self.pixel_spacing*1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -2034,7 +2034,7 @@ class WsiDicomStack(metaclass=ABCMeta):
     @property
     def mpp(self) -> SizeMm:
         """Return pixel spacing in um/pixel"""
-        return 1000.0*self.pixel_spacing
+        return self.pixel_spacing*1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
