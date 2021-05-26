@@ -21,7 +21,7 @@ class IccProfile:
 
 
 class Lut:
-    def __init__(self, size: int, bits: int):
+    def __init__(self, lut_sequence: DicomSequence):
         """Stores RGB lookup tables.
 
         Parameters
@@ -31,16 +31,21 @@ class Lut:
         bits: int
             the bits for each entry (currently forced to 16)
         """
-        self.bits = bits
+        self._lut_item = lut_sequence[0]
+        length, first, bits = \
+            self._lut_item.RedPaletteColorLookupTableDescriptor
+        self._length = length
         self._type: type
         if bits == 8:
             self._type = np.uint8
         else:
             self._type = np.uint16
-        self.table = np.zeros((3, size), self._type)
-        self._position = [0, 0, 0]
-        self._last_value = [-1, -1, -1]
         self._byte_format = 'HHH'  # Do we need to set endianess?
+        self.table = self._parse_lut(self._lut_item)
+
+    @property
+    def sequence(self) -> DicomSequence:
+        return DicomSequence[self._lut_item]
 
     def get(self) -> np.ndarray:
         """Return 2D representation of the lookup table.
@@ -63,7 +68,34 @@ class Lut:
         """
         return self.table.flatten()
 
-    def parse_lut(self, lut: DicomSequence):
+    def _parse_color(self, segmented_lut_data: bytes):
+        LENGTH = 6
+        parsed_table = np.ndarray(0, dtype=self._type)
+        for segment in range(int(len(segmented_lut_data)/LENGTH)):
+            segment_bytes = segmented_lut_data[
+                segment*LENGTH:segment*LENGTH+LENGTH
+            ]
+            lut_type, lut_length, lut_value = struct.unpack(
+                self._byte_format,
+                segment_bytes
+            )
+            if(lut_type == 0):
+                parsed_table = self._add_discret(
+                    parsed_table,
+                    lut_length,
+                    lut_value
+                )
+            elif(lut_type == 1):
+                parsed_table = self._add_linear(
+                    parsed_table,
+                    lut_length,
+                    lut_value
+                )
+            else:
+                raise NotImplementedError("Unkown lut segment type")
+        return parsed_table
+
+    def _parse_lut(self, lut: DicomSequence) -> np.ndarray:
         """Parse a dicom Palette Color Lookup Table Sequence item.
 
         Parameters
@@ -76,19 +108,14 @@ class Lut:
             lut.SegmentedGreenPaletteColorLookupTableData,
             lut.SegmentedBluePaletteColorLookupTableData,
         ]
-        for color, table in enumerate(tables):
-            for i in range(int(len(table)/6)):
-                segment_bytes = table[i*6:i*6+6]
-                segment_type, length, value = struct.unpack(
-                    self._byte_format,
-                    segment_bytes
-                )
-                if(segment_type == 0):
-                    self._add_discret(color, length, value)
-                elif(segment_type == 1):
-                    self._add_linear(color, length, value)
+        parsed_tables = np.zeros((len(tables), self._length), dtype=self._type)
 
-    def _insert(self, channel: int, segment: np.ndarray):
+        for color, table in enumerate(tables):
+            parsed_tables[color] = self._parse_color(table)
+        return parsed_tables
+
+    @classmethod
+    def _insert(cls, table: np.ndarray, segment: np.ndarray):
         """Insert a segement into the lookup table of channel.
 
         Parameters
@@ -98,13 +125,11 @@ class Lut:
         segment: np.ndarray
             The segment to insert
         """
-        length = len(segment)
-        position = self._position[channel]
-        self.table[channel, position:position+length] = segment
-        self._position[channel] += length
-        self._last_value[channel] = segment[length - 1]
+        table = np.append(table, segment)
+        return table
 
-    def _add_discret(self, channel: int, length: int, value: int):
+    @classmethod
+    def _add_discret(cls, table: np.ndarray, length: int, value: int):
         """Add a discret segement into the lookup table of channel.
 
         Parameters
@@ -112,14 +137,16 @@ class Lut:
         channel: int
             The channel (r=0, g=1, b=2) to operate on
         length: int
-            The lenght of the discret segment
+            The length of the discret segment
         value: int
             The value of the deiscret segment
         """
-        segment = np.full(length, value, dtype=self._type)
-        self._insert(channel, segment)
+        segment = np.full(length, value, dtype=table.dtype)
+        table = cls._insert(table, segment)
+        return table
 
-    def _add_linear(self, channel: int, lenght: int, value: int):
+    @classmethod
+    def _add_linear(cls, table: np.ndarray, length: int, value: int):
         """Add a linear segement into the lookup table of channel.
 
         Parameters
@@ -127,7 +154,7 @@ class Lut:
         channel: int
             The channel (r=0, g=1, b=2) to operate on
         length: int
-            The lenght of the discret segment
+            The length of the discret segment
         value: int
             The value of the deiscret segment
         """
@@ -136,16 +163,19 @@ class Lut:
         start_position = 1
         # If no last value, set it to 0 and include
         # first value in segment
-        if self._last_value[channel] == -1:
-            self._last_value[channel] = 0
+        try:
+            last_value = table[-1]
+        except IndexError:
+            last_value = 0
             start_position = 0
         segment = np.linspace(
-            start=self._last_value[channel],
+            start=last_value,
             stop=value,
-            num=start_position+lenght,
-            dtype=self._type
+            num=start_position+length,
+            dtype=table.dtype
         )
-        self._insert(channel, segment[start_position:])
+        table = cls._insert(table, segment[start_position:])
+        return table
 
 
 @dataclass
@@ -399,11 +429,7 @@ class OpticalManager:
         )
         lut: Optional[Lut] = None
         if('PaletteColorLookupTableSequence' in optical_path):
-            sequence = optical_path.PaletteColorLookupTableSequence[0]
-            lenght, first, bits = \
-                sequence.RedPaletteColorLookupTableDescriptor
-            lut = Lut(lenght, bits)
-            lut.parse_lut(sequence)
+            lut = Lut(optical_path.PaletteColorLookupTableSequence)
         # Create a new OpticalPath and add
         path = OpticalPath(
             identifier=identifier,
