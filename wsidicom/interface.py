@@ -1,8 +1,9 @@
-from datetime import datetime
 import io
 import math
+import os
 import warnings
 from abc import ABCMeta, abstractmethod
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, OrderedDict, Tuple, Union
 
@@ -87,6 +88,17 @@ class WsiDicomFile:
                 ds.PhotometricInterpretation
                 )
             self._optical_path_sequence = ds.OpticalPathSequence
+
+            pixel_measure = (
+                ds.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[0]
+            )
+            # We assume that slice thickness is the same for all focal planes
+            self._slice_spacing = getattr(
+                pixel_measure,
+                'SpacingBetweenSlices',
+                0
+            )
+            self._slice_thickness = pixel_measure.SliceThickness
 
             if self.tile_type == 'TILED_FULL':
                 try:
@@ -212,6 +224,16 @@ class WsiDicomFile:
     def focal_planes(self) -> int:
         """Return number of focal planes"""
         return self._focal_planes
+
+    @property
+    def slice_thickness(self) -> float:
+        """Return slice thickness"""
+        return self._slice_thickness
+
+    @property
+    def slice_spacing(self) -> float:
+        """Return slice spacing"""
+        return self._slice_spacing
 
     def pretty_str(
         self,
@@ -1319,6 +1341,8 @@ class WsiDicomInstance:
         self._samples_per_pixel = base_file.samples_per_pixel
         self._transfer_syntax = base_file.transfer_syntax
         self._photometric_interpretation = base_file.photometric_interpretation
+        self._slice_thickness = base_file.slice_thickness
+        self._slide_spacing = base_file.slice_spacing
 
         self._blank_color = self._get_blank_color(
             self._photometric_interpretation
@@ -1402,6 +1426,16 @@ class WsiDicomInstance:
     def pixel_spacing(self) -> SizeMm:
         """Return pixel spacing in mm/pixel"""
         return self._pixel_spacing
+
+    @property
+    def slice_thickness(self) -> float:
+        """Return slice thickness"""
+        return self._slice_thickness
+
+    @property
+    def slice_spacing(self) -> float:
+        """Return slice spacing"""
+        return self._slice_spacing
 
     @property
     def identifier(self) -> Uid:
@@ -2327,17 +2361,31 @@ class WsiDicomStack(metaclass=ABCMeta):
             instance.close()
 
     def _create_image_type_attribute(self) -> List[str]:
-        pass
         value_1 = 'DERIVED'
         value_4 = 'RESAMPLED'
         if isinstance(self, WsiDicomLevel):
-            value3 = 'VOLUME'
+            value_3 = 'VOLUME'
             if self.level == 0:
-                value1 = 'ORGINAL'
-                value4 = 'None'
+                value_1 = 'ORGINAL'
+                value_4 = 'None'
         value_2 = 'PRIMARY'
         value_3 = self.wsi_type
         return [value_1, value_2, value_3, value_4]
+
+    def _create_shared_functional_groups_sequence(self) -> DicomSequence:
+        pixel_measure_item = Dataset()
+        pixel_measure_item.SliceThickness = self.slice_thickness
+        if self.slice_spacing != 0:
+            pixel_measure_item.SpacingBetweenSlices = self.slice_spacing
+        pixel_measure_item.PixelSpacing = [
+            self.pixel_spacing.width,
+            self.pixel_spacing.height
+        ]
+        pixel_measure_sequence = DicomSequence([pixel_measure_item])
+        frame_type_item = Dataset()
+        frame_type_item.FrameType = self._create_image_type_attribute()
+        frame_type_sequence = DicomSequence([frame_type_item])
+        return DicomSequence([pixel_measure_sequence, frame_type_sequence])
 
     def save(
         self,
@@ -2347,7 +2395,6 @@ class WsiDicomStack(metaclass=ABCMeta):
     ):
         ds = self.default_instance.create_ds()
         uid = pydicom.uid.generate_uid()
-        import os
         file_path = os.path.join(path, uid+'.dcm')
         fp = pydicom.filebase.DicomFile(file_path, mode='wb')
         fp.is_little_endian = True
@@ -2366,7 +2413,6 @@ class WsiDicomStack(metaclass=ABCMeta):
                     if z not in focal_planes:
                         focal_planes.append(z)
 
-
         plane_size = self.default_instance.tiles.plane_size
         tile_geometry = Region(Point(0, 0), plane_size)
         number_of_frames = (
@@ -2383,11 +2429,12 @@ class WsiDicomStack(metaclass=ABCMeta):
         ds.ContentDate = datetime.date(now).strftime('%Y%m%d')
         ds.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
         ds.NumberOfFocalPlanes = len(focal_planes)
+        ds.SharedFunctionalGroupsSequence = (
+            self._create_shared_functional_groups_sequence
+        )
 
-        # We need to modify ds:
-        # Add optical path sequence
-        # Add focal planes
-        # Pixel spacing
+        # We need to add to ds:
+        # Optical path sequence
 
         # Write the base dataset
         print(ds)
