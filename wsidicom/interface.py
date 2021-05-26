@@ -2458,10 +2458,11 @@ class WsiDicomStack(metaclass=ABCMeta):
         now = datetime.now()
         ds.ContentDate = datetime.date(now).strftime('%Y%m%d')
         ds.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
-        ds.NumberOfFocalPlanes = len(focal_planes)
+        ds.TotalPixelMatrixFocalPlanes = len(focal_planes)
         ds.SharedFunctionalGroupsSequence = (
             self._create_shared_functional_groups_sequence()
         )
+        ds.NumberOfOpticalPaths = len(optical_paths)
 
         # We need to add to ds:
         # Optical path sequence
