@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, OrderedDict, Tuple, Union
 import numpy as np
 import pydicom
 from PIL import Image
+
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import UID as Uid
@@ -1342,7 +1343,7 @@ class WsiDicomInstance:
         self._transfer_syntax = base_file.transfer_syntax
         self._photometric_interpretation = base_file.photometric_interpretation
         self._slice_thickness = base_file.slice_thickness
-        self._slide_spacing = base_file.slice_spacing
+        self._slice_spacing = base_file.slice_spacing
 
         self._blank_color = self._get_blank_color(
             self._photometric_interpretation
@@ -2374,9 +2375,10 @@ class WsiDicomStack(metaclass=ABCMeta):
 
     def _create_shared_functional_groups_sequence(self) -> DicomSequence:
         pixel_measure_item = Dataset()
-        pixel_measure_item.SliceThickness = self.slice_thickness
-        if self.slice_spacing != 0:
-            pixel_measure_item.SpacingBetweenSlices = self.slice_spacing
+        instance = self.default_instance
+        pixel_measure_item.SliceThickness = instance.slice_thickness
+        if instance.slice_spacing != 0:
+            pixel_measure_item.SpacingBetweenSlices = instance.slice_spacing
         pixel_measure_item.PixelSpacing = [
             self.pixel_spacing.width,
             self.pixel_spacing.height
@@ -2385,7 +2387,12 @@ class WsiDicomStack(metaclass=ABCMeta):
         frame_type_item = Dataset()
         frame_type_item.FrameType = self._create_image_type_attribute()
         frame_type_sequence = DicomSequence([frame_type_item])
-        return DicomSequence([pixel_measure_sequence, frame_type_sequence])
+        sequence_item = Dataset()
+        sequence_item.PixelMeasuresSequence = pixel_measure_sequence
+        sequence_item.WholeSlideMicroscopyImageFrameTypeSequence = (
+            frame_type_sequence
+        )
+        return DicomSequence([sequence_item])
 
     def save(
         self,
@@ -2393,12 +2400,21 @@ class WsiDicomStack(metaclass=ABCMeta):
         focal_planes: List[float] = None,
         optical_paths: List[str] = None
     ):
-        ds = self.default_instance.create_ds()
+        WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
+
         uid = pydicom.uid.generate_uid()
+
+        meta_ds = pydicom.dataset.FileMetaDataset()
+        meta_ds.TransferSyntaxUID = self.default_instance._transfer_syntax
+        meta_ds.MediaStorageSOPInstanceUID = uid
+        meta_ds.MediaStorageSOPClassUID = WSI_SOP_CLASS_UID
+        pydicom.dataset.validate_file_meta(meta_ds)
+        ds = self.default_instance.create_ds()
+        ds.file_meta = meta_ds
         file_path = os.path.join(path, uid+'.dcm')
         fp = pydicom.filebase.DicomFile(file_path, mode='wb')
         fp.is_little_endian = True
-        fp.is_implicit_VR = True
+        fp.is_implicit_VR = False
         if optical_paths is None:
             optical_paths: List[str] = []
             for instance in self.instances.values():
@@ -2430,7 +2446,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         ds.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
         ds.NumberOfFocalPlanes = len(focal_planes)
         ds.SharedFunctionalGroupsSequence = (
-            self._create_shared_functional_groups_sequence
+            self._create_shared_functional_groups_sequence()
         )
 
         # We need to add to ds:
@@ -2445,7 +2461,7 @@ class WsiDicomStack(metaclass=ABCMeta):
             self.get_encoded_tile(Point(x_tile, y_tile), z, path)
             for path in optical_paths
             for z in focal_planes
-            for x_tile, y_tile in tile_geometry.iterate_all(include_end=False)
+            for x_tile, y_tile in tile_geometry.iterate_all()
         )
 
         pixel_data_element = pydicom.dataset.DataElement(
@@ -2459,11 +2475,11 @@ class WsiDicomStack(metaclass=ABCMeta):
         fp.write_tag(pixel_data_element.tag)
 
         if not fp.is_implicit_VR:
-            # Write pixel data VR "OB", two empty bytes (PS3.5 7.1.2)
+            # Write pixel data VR (OB), two empty bytes (PS3.5 7.1.2)
             # and unspecified length
             fp.write(bytes(pixel_data_element.VR, "iso8859"))
             fp.write_US(0)
-            fp.write_UL(0xFFFFFFFF)
+        fp.write_UL(0xFFFFFFFF)
 
         # Write item tag and (empty) length for BOT
         fp.write_tag(pydicom.tag.ItemTag)
@@ -2471,8 +2487,8 @@ class WsiDicomStack(metaclass=ABCMeta):
 
         # itemize and and write the tiles
         for tile in tiles:
-            item = pydicom.encaps.itemize_fragment(tile)
-            fp.write(item)
+            for frame in property.encaps.itemize_frame(tile, 1):
+                fp.write(frame)
 
         # end sequence
         fp.write_tag(pydicom.tag.SequenceDelimiterTag)
