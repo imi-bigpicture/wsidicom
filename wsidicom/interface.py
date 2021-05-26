@@ -1,3 +1,4 @@
+from datetime import datetime
 import io
 import math
 import warnings
@@ -16,9 +17,9 @@ from .errors import (WsiDicomFileError, WsiDicomMatchError,
                      WsiDicomNotFoundError, WsiDicomOutOfBondsError,
                      WsiDicomSparse, WsiDicomUidDuplicateError)
 from .geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
+from .optical import OpticalManager
 from .stringprinting import dict_pretty_str, list_pretty_str, str_indent
 from .uid import BaseUids, FileUids
-from .optical import OpticalManager
 
 
 class WsiDicomFile:
@@ -534,8 +535,7 @@ class WsiDicomFile:
         height = int(ds.Rows)
         if width == 0 or height == 0:
             raise WsiDicomFileError(self.filepath, "Tile size is zero")
-        return  Size(width=width, height=height)
-
+        return Size(width=width, height=height)
 
     def _get_image_size(self, ds: Dataset) -> Size:
         """Read total pixel size from dicom file.
@@ -2326,42 +2326,72 @@ class WsiDicomStack(metaclass=ABCMeta):
         for instance in self._instances.values():
             instance.close()
 
+    def _create_image_type_attribute(self) -> List[str]:
+        pass
+        value_1 = 'DERIVED'
+        value_4 = 'RESAMPLED'
+        if isinstance(self, WsiDicomLevel):
+            value3 = 'VOLUME'
+            if self.level == 0:
+                value1 = 'ORGINAL'
+                value4 = 'None'
+        value_2 = 'PRIMARY'
+        value_3 = self.wsi_type
+        return [value_1, value_2, value_3, value_4]
+
     def save(
         self,
         path: Path,
+        focal_planes: List[float] = None,
+        optical_paths: List[str] = None
     ):
-        base_ds = self.default_instance.create_ds()
+        ds = self.default_instance.create_ds()
         uid = pydicom.uid.generate_uid()
         import os
         file_path = os.path.join(path, uid+'.dcm')
         fp = pydicom.filebase.DicomFile(file_path, mode='wb')
         fp.is_little_endian = True
         fp.is_implicit_VR = True
-        optical_paths: List[str] = []
-        for instance in self.instances.values():
-            for path in instance.tiles.optical_paths:
-                if path not in optical_paths:
-                    optical_paths.append(path)
+        if optical_paths is None:
+            optical_paths: List[str] = []
+            for instance in self.instances.values():
+                for path in instance.tiles.optical_paths:
+                    if path not in optical_paths:
+                        optical_paths.append(path)
 
-        focal_planes: List[float] = []
-        for instance in self.instances.values():
-            for z in instance.tiles.focal_planes:
-                if z not in focal_planes:
-                    focal_planes.append(z)
+        if focal_planes is None:
+            focal_planes: List[float] = []
+            for instance in self.instances.values():
+                for z in instance.tiles.focal_planes:
+                    if z not in focal_planes:
+                        focal_planes.append(z)
 
-        tile_geometry = Region(
-            Point(0, 0),
-            self.default_instance.tiles.plane_size
+
+        plane_size = self.default_instance.tiles.plane_size
+        tile_geometry = Region(Point(0, 0), plane_size)
+        number_of_frames = (
+            plane_size.width
+            * plane_size.height
+            * len(optical_paths)
+            * len(focal_planes)
         )
-        # We need to modify base_ds:
-        # Change to tile full
-        # Change number of frames
+        ds.ImageType = self._create_image_type_attribute()
+        ds.SOPInstanceUID = uid
+        ds.DimensionOrganizationType = 'TILED_FULL'
+        ds.NumberOfFrames = number_of_frames
+        now = datetime.now()
+        ds.ContentDate = datetime.date(now).strftime('%Y%m%d')
+        ds.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
+        ds.NumberOfFocalPlanes = len(focal_planes)
+
+        # We need to modify ds:
         # Add optical path sequence
         # Add focal planes
-        # Change instance UID
+        # Pixel spacing
 
         # Write the base dataset
-        pydicom.filewriter.write_dataset(fp, base_ds)
+        print(ds)
+        pydicom.filewriter.write_dataset(fp, ds)
 
         # Generator for the tiles
         tiles = (
@@ -3366,11 +3396,11 @@ class WsiDicom:
     def save(
         self,
         path: Path,
+        levels: Tuple[int, int] = None,
     ):
         series = [self.levels, self.labels, self.overviews]
         for item in series:
             item.save(path)
-
 
     def read_label(self, index: int = 0) -> Image:
         """Read label image of the whole slide. If several label
