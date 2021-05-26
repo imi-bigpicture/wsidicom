@@ -10,7 +10,6 @@ from typing import Dict, List, Optional, OrderedDict, Tuple, Union
 import numpy as np
 import pydicom
 from PIL import Image
-
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import UID as Uid
@@ -421,7 +420,6 @@ class WsiDicomFile:
             'required': True,
             'standard': True
         }
-
         for key, module_attributes in TO_TEST.items():
             for module in module_attributes:
                 for attribute in module:
@@ -2394,52 +2392,68 @@ class WsiDicomStack(metaclass=ABCMeta):
         )
         return DicomSequence([sequence_item])
 
-    def save(
-        self,
-        path: Path,
-        focal_planes: List[float] = None,
-        optical_paths: List[str] = None
-    ):
+    @staticmethod
+    def write_preamble(fp: pydicom.filebase.DicomFileLike):
+        """Writes file preamble to file.
+
+        Parameters
+        ----------
+        fp: pydicom.filebase.DicomFileLike
+            Filepointer to file to write.
+        """
+        preamble = b'\x00' * 128
+        fp.write(preamble)
+        fp.write(b'DICM')
+
+    def write_file_meta(self, fp: pydicom.filebase.DicomFileLike, uid: Uid):
+        """Writes file meta dataset to file.
+
+        Parameters
+        ----------
+        fp: pydicom.filebase.DicomFileLike
+            Filepointer to file to write.
+        uid: Uid
+            SOP instance uid to include in file.
+        """
         WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
-
-        uid = pydicom.uid.generate_uid()
-
         meta_ds = pydicom.dataset.FileMetaDataset()
         meta_ds.TransferSyntaxUID = self.default_instance._transfer_syntax
         meta_ds.MediaStorageSOPInstanceUID = uid
         meta_ds.MediaStorageSOPClassUID = WSI_SOP_CLASS_UID
         pydicom.dataset.validate_file_meta(meta_ds)
+        pydicom.filewriter.write_file_meta_info(fp, meta_ds)
+
+    def write_base(
+        self,
+        fp: pydicom.filebase.DicomFileLike,
+        uid: Uid,
+        focal_planes: List[str],
+        optical_paths: List[float]
+    ):
+        """Writes base dataset to file.
+
+        Parameters
+        ----------
+        fp: pydicom.filebase.DicomFileLike
+            Filepointer to file to write.
+        uid: Uid
+            SOP instance uid to include in file.
+        focal_planes: List[float]
+            List of focal planes to include in file.
+        optical_paths: List[str]
+            List of optical paths to include in file.
+        """
         ds = self.default_instance.create_ds()
-        ds.file_meta = meta_ds
-        file_path = os.path.join(path, uid+'.dcm')
-        fp = pydicom.filebase.DicomFile(file_path, mode='wb')
-        fp.is_little_endian = True
-        fp.is_implicit_VR = False
-        if optical_paths is None:
-            optical_paths: List[str] = []
-            for instance in self.instances.values():
-                for path in instance.tiles.optical_paths:
-                    if path not in optical_paths:
-                        optical_paths.append(path)
-
-        if focal_planes is None:
-            focal_planes: List[float] = []
-            for instance in self.instances.values():
-                for z in instance.tiles.focal_planes:
-                    if z not in focal_planes:
-                        focal_planes.append(z)
-
+        ds.ImageType = self._create_image_type_attribute()
+        ds.SOPInstanceUID = uid
+        ds.DimensionOrganizationType = 'TILED_FULL'
         plane_size = self.default_instance.tiles.plane_size
-        tile_geometry = Region(Point(0, 0), plane_size)
         number_of_frames = (
             plane_size.width
             * plane_size.height
             * len(optical_paths)
             * len(focal_planes)
         )
-        ds.ImageType = self._create_image_type_attribute()
-        ds.SOPInstanceUID = uid
-        ds.DimensionOrganizationType = 'TILED_FULL'
         ds.NumberOfFrames = number_of_frames
         now = datetime.now()
         ds.ContentDate = datetime.date(now).strftime('%Y%m%d')
@@ -2452,10 +2466,27 @@ class WsiDicomStack(metaclass=ABCMeta):
         # We need to add to ds:
         # Optical path sequence
 
-        # Write the base dataset
-        print(ds)
         pydicom.filewriter.write_dataset(fp, ds)
 
+    def write_pixel_data(
+        self,
+        fp: pydicom.filebase.DicomFileLike,
+        focal_planes: List[str],
+        optical_paths: List[float]
+    ):
+        """Writes pixel data to file.
+
+        Parameters
+        ----------
+        fp: pydicom.filebase.DicomFileLike
+            Filepointer to file to write.
+        focal_planes: List[float]
+            List of focal planes to include in file.
+        optical_paths: List[str]
+            List of optical paths to include in file.
+        """
+        plane_size = self.default_instance.tiles.plane_size
+        tile_geometry = Region(Point(0, 0), plane_size)
         # Generator for the tiles
         tiles = (
             self.get_encoded_tile(Point(x_tile, y_tile), z, path)
@@ -2476,9 +2507,9 @@ class WsiDicomStack(metaclass=ABCMeta):
 
         if not fp.is_implicit_VR:
             # Write pixel data VR (OB), two empty bytes (PS3.5 7.1.2)
-            # and unspecified length
             fp.write(bytes(pixel_data_element.VR, "iso8859"))
             fp.write_US(0)
+        # Write unspecific length
         fp.write_UL(0xFFFFFFFF)
 
         # Write item tag and (empty) length for BOT
@@ -2487,12 +2518,75 @@ class WsiDicomStack(metaclass=ABCMeta):
 
         # itemize and and write the tiles
         for tile in tiles:
-            for frame in property.encaps.itemize_frame(tile, 1):
+            for frame in pydicom.encaps.itemize_frame(tile, 1):
                 fp.write(frame)
 
         # end sequence
         fp.write_tag(pydicom.tag.SequenceDelimiterTag)
         fp.write_UL(0)
+
+    @staticmethod
+    def create_filepointer(path: Path) -> pydicom.filebase.DicomFileLike:
+        """Return a dicom filepointer.
+
+        Parameters
+        ----------
+        path: Path
+            Path to filepointer.
+        Returns
+        ----------
+        pydicom.filebase.DicomFileLike
+            Created filepointer.
+        """
+        fp = pydicom.filebase.DicomFile(path, mode='wb')
+        fp.is_little_endian = True
+        fp.is_implicit_VR = False
+        return fp
+
+    def save(
+        self,
+        path: Path,
+        focal_planes: List[float] = None,
+        optical_paths: List[str] = None
+    ):
+        """Writes stack to to file. File is written as TILED_FULL.
+        Writing of optical path sequence is not yet implemented.
+
+        Parameters
+        ----------
+        path: Path
+            Path to directory to write to.
+        optical_paths: List[str]
+            List of optical paths to include in file.
+        focal_planes: List[float]
+            List of focal planes to include in file.
+        """
+        uid = pydicom.uid.generate_uid()
+        file_path = os.path.join(path, uid+'.dcm')
+
+        fp = self.create_filepointer(file_path)
+        self.write_preamble(fp)
+        self.write_file_meta(fp, uid)
+
+        # Optical paths and focal planes available in instance should be a
+        # property. We should also check that the requested path/plane is
+        # available
+        if optical_paths is None:
+            optical_paths: List[str] = []
+            for instance in self.instances.values():
+                for path in instance.tiles.optical_paths:
+                    if path not in optical_paths:
+                        optical_paths.append(path)
+
+        if focal_planes is None:
+            focal_planes: List[float] = []
+            for instance in self.instances.values():
+                for z in instance.tiles.focal_planes:
+                    if z not in focal_planes:
+                        focal_planes.append(z)
+
+        self.write_base(fp, uid, focal_planes, optical_paths)
+        self.write_pixel_data(fp, focal_planes, optical_paths)
 
         # close the file
         fp.close()
