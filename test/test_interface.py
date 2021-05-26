@@ -4,6 +4,8 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pydicom
+from pydicom.sequence import Sequence as DicomSequence
+
 import pytest
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.interface import (Point, PointMm, Region, RegionMm, Size, SizeMm,
@@ -56,7 +58,9 @@ class WsiDicomTests(unittest.TestCase):
         self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_size(self):
-        closest_level = self.dicom_ds.levels.get_closest_by_size(Size(100, 100))
+        closest_level = self.dicom_ds.levels.get_closest_by_size(
+            Size(100, 100)
+        )
         self.assertEqual(closest_level.level, 0)
 
     def test_calculate_scale(self):
@@ -329,8 +333,8 @@ class WsiDicomTests(unittest.TestCase):
         self.assertEqual(instance, wsi_level.default_instance)
 
     def test_parse_lut(self):
-        lut = Lut(256, 8)
         ds = pydicom.dataset.Dataset()
+        ds.RedPaletteColorLookupTableDescriptor = [256, 0, 8]
         ds.SegmentedRedPaletteColorLookupTableData = (
             b'\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00'
         )
@@ -340,13 +344,15 @@ class WsiDicomTests(unittest.TestCase):
         ds.SegmentedBluePaletteColorLookupTableData = (
             b'\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\xff\x00'
         )
-        lut.parse_lut(ds)
+        lut = Lut(DicomSequence([ds]))
         test = np.zeros((3, 256), dtype=np.uint16)
         test[2, :] = np.linspace(0, 255, 256, dtype=np.uint16)
+        print(lut.get())
+        print(test)
         self.assertTrue(np.array_equal(lut.get(), test))
 
-        lut = Lut(256, 16)
         ds = pydicom.dataset.Dataset()
+        ds.RedPaletteColorLookupTableDescriptor = [256, 0, 16]
         ds.SegmentedRedPaletteColorLookupTableData = (
             b'\x01\x00\x00\x01\xff\xff'
         )
@@ -356,7 +362,7 @@ class WsiDicomTests(unittest.TestCase):
         ds.SegmentedBluePaletteColorLookupTableData = (
             b'\x01\x00\x00\x01\x00\x00'
         )
-        lut.parse_lut(ds)
+        lut = Lut(DicomSequence([ds]))
         test = np.zeros((3, 256), dtype=np.uint16)
         test[0, :] = np.linspace(0, 65535, 256, dtype=np.uint16)
         self.assertTrue(np.array_equal(lut.get(), test))
