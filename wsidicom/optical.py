@@ -430,7 +430,7 @@ class OpticalManager:
         lut: Optional[Lut] = None
         if('PaletteColorLookupTableSequence' in optical_path):
             lut = Lut(optical_path.PaletteColorLookupTableSequence)
-        # Create a new OpticalPath and add
+        # Create a new OpticalPath
         path = OpticalPath(
             identifier=identifier,
             description=description,
