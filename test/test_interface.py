@@ -19,7 +19,7 @@ class WsiDicomTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(WsiDicomTests, self).__init__(*args, **kwargs)
         self.tempdir: TemporaryDirectory
-        self.dicom_ds: WsiDicom
+        self.slide: WsiDicom
 
     @classmethod
     def setUpClass(cls):
@@ -27,15 +27,15 @@ class WsiDicomTests(unittest.TestCase):
         dirpath = Path(cls.tempdir.name)
         test_file_path = dirpath.joinpath("test_im.dcm")
         create_layer_file(test_file_path)
-        cls.dicom_ds = WsiDicom.open(cls.tempdir.name)
+        cls.slide = WsiDicom.open(cls.tempdir.name)
 
     @classmethod
     def tearDownClass(cls):
-        cls.dicom_ds.close()
+        cls.slide.close()
         cls.tempdir.cleanup()
 
     def test_mm_to_pixel(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.slide.levels.get_level(0)
         mm_region = RegionMm(
             position=PointMm(0, 0),
             size=SizeMm(1, 1)
@@ -46,39 +46,39 @@ class WsiDicomTests(unittest.TestCase):
         self.assertEqual(pixel_region.size, Size(new_size, new_size))
 
     def test_find_closest_level(self):
-        closest_level = self.dicom_ds.levels.get_closest_by_level(2)
+        closest_level = self.slide.levels.get_closest_by_level(2)
         self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_pixel_spacing(self):
-        closest_level = self.dicom_ds.levels.get_closest_by_pixel_spacing(
+        closest_level = self.slide.levels.get_closest_by_pixel_spacing(
             SizeMm(0.5, 0.5)
         )
         self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_size(self):
-        closest_level = self.dicom_ds.levels.get_closest_by_size(Size(100, 100))
+        closest_level = self.slide.levels.get_closest_by_size(Size(100, 100))
         self.assertEqual(closest_level.level, 0)
 
     def test_calculate_scale(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.slide.levels.get_level(0)
         scale = wsi_level.calculate_scale(5)
         self.assertEqual(scale, 2 ** (5-0))
 
     def test_get_frame_number(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.slide.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         number = instance.tiles.get_frame_index(Point(0, 0), 0, '0')
         self.assertEqual(number, 0)
 
     def test_get_blank_color(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.slide.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         color = instance._get_blank_color(
             instance._photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
 
     def test_get_frame_file(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.slide.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         file = instance._get_file(0)
         self.assertEqual(file, (instance._files[0]))
@@ -90,7 +90,7 @@ class WsiDicomTests(unittest.TestCase):
         )
 
     def test_valid_tiles(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.slide.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         test = instance.tiles.valid_tiles(
             Region(Point(0, 0), Size(0, 0)), 0, '0'
@@ -113,7 +113,7 @@ class WsiDicomTests(unittest.TestCase):
         self.assertFalse(test)
 
     def test_crop_tile(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.slide.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         region = Region(
             position=Point(x=0, y=0),
@@ -149,7 +149,7 @@ class WsiDicomTests(unittest.TestCase):
         self.assertEqual(cropped_region, expected)
 
     def test_get_tiles(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.slide.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         region = Region(
             position=Point(0, 0),
@@ -176,7 +176,7 @@ class WsiDicomTests(unittest.TestCase):
         self.assertEqual(get_tiles, expected)
 
     def test_crop_region_to_level_size(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.slide.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         image_size = base_level.size
         tile_size = instance.tile_size
@@ -234,7 +234,7 @@ class WsiDicomTests(unittest.TestCase):
         self.assertEqual(point0.to_tuple(), (10, 10))
 
     def test_valid_pixel(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.slide.levels.get_level(0)
         # 154x290
         region = Region(
                 position=Point(0, 0),
@@ -248,7 +248,7 @@ class WsiDicomTests(unittest.TestCase):
         self.assertFalse(wsi_level.valid_pixels(region))
 
     def test_write_indexer(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.slide.levels.get_level(0)
         instance, _, _ = wsi_level.get_instance()
 
         write_index = Point(0, 0)
@@ -316,11 +316,11 @@ class WsiDicomTests(unittest.TestCase):
         self.assertEqual(write_index, Point(512, 512))
 
     def test_valid_level(self):
-        self.assertTrue(self.dicom_ds.levels.valid_level(1))
-        self.assertFalse(self.dicom_ds.levels.valid_level(20))
+        self.assertTrue(self.slide.levels.valid_level(1))
+        self.assertFalse(self.slide.levels.valid_level(20))
 
     def test_get_instance(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.slide.levels.get_level(0)
         instance, _, _ = wsi_level.get_instance()
         self.assertEqual(instance, wsi_level.default_instance)
         instance, _, _ = wsi_level.get_instance(path='0')
