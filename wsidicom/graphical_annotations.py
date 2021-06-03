@@ -621,8 +621,14 @@ class Geometry(metaclass=ABCMeta):
             if geometry_type == "Point":
                 return Point(*object.coords[0])
             elif geometry_type == "Polygon":
-                if list(object.interiors) == []:
-                    return Polygon(list(object.exterior.coords))
+                # if list(object.interiors) == []:
+                return Polygon(
+                    list(object.exterior.coords),
+                    [
+                        list(interior.coords)
+                        for interior in list(object.interiors)
+                    ]
+                )
             elif geometry_type == "LineString":
                 return Polyline(object.coords)
             raise NotImplementedError("Not a supported shapely like object")
@@ -797,10 +803,71 @@ class Polyline(Geometry):
 
 
 @dataclass
-class Polygon(Polyline):
-    """Geometry consisting of connected lines implicity closed."""
-    def __init__(self, points: List[Tuple[float, float]]):
+class Contour(Polyline):
+    def __init__(
+        self,
+        points: List[Tuple[float, float]]
+    ):
+        points = self.close_contour(points)
         super().__init__(points)
+
+    @property
+    def data(self) -> List[float]:
+        return [value for point in self.points[:-1] for value in point.data]
+
+    @staticmethod
+    def close_contour(
+        points: List[Tuple[float, float]]
+    ) -> List[Tuple[float, float]]:
+        if points[0] == points[-1]:
+            return points
+        return points + [points[0]]
+
+    def __repr__(self) -> str:
+        return f"Contour({self.to_coords()})"
+
+
+@dataclass
+class Polygon(Geometry):
+    """Geometry consisting of connected lines implicity closed."""
+    def __init__(
+        self,
+        exterior: List[Tuple[float, float]],
+        interiors: List[List[Tuple[float, float]]] = None
+    ):
+
+        self.exterior = Contour(exterior)
+        self.interiors: List[Contour]
+        if interiors is not None:
+            self.interiors = [
+                Contour(interior) for interior in interiors
+            ]
+        else:
+            self.interiors = []
+
+    @property
+    def contours(self) -> List[Contour]:
+        return [self.exterior] + self.interiors
+
+    @property
+    def data(self) -> List[float]:
+        interior_data = [
+            value
+            for data in [interior.data for interior in self.interiors]
+            for value in data
+        ]
+        return (
+            self.exterior.data + interior_data
+        )
+
+    def __len__(self) -> int:
+        return len(self.exterior.points)
+
+    def to_list_coords(self) -> List[List[float]]:
+        return [[point.x, point.y] for point in self.exterior.points]
+
+    def to_coords(self) -> List[Tuple[float, float]]:
+        return [(point.x, point.y) for point in self.exterior.points]
 
     @classmethod
     def from_coords(
@@ -830,7 +897,10 @@ class Polygon(Polyline):
         return cls.from_coords(coords)
 
     def __repr__(self) -> str:
-        return f"Polygon({self.to_coords()})"
+        return (
+            f"Polygon({self.exterior.to_coords()}, "
+            f"{[interior.to_coords() for interior in self.interiors]})"
+        )
 
 
 class Annotation:
@@ -1562,7 +1632,7 @@ class AnnotationGroup:
         ds = Dataset()
         ds.AnnotationGroupNumber = group_number + 1
         ds.AnnotationGroupUID = self._uid
-        ds.NumberOfAnnotations = len(self.annotations)
+        ds.NumberOfAnnotations = self.number_of_annotations
         ds.GraphicType = self.annotation_type
         ds.AnnotationGroupLabel = self.label
         if self.description is not None:
@@ -1893,9 +1963,129 @@ class PolygonAnnotationGroup(PolylineAnnotationGroupMeta):
     def annotation_type(self) -> str:
         return "POLYGON"
 
+    @property
+    def point_index_list(self) -> np.ndarray:
+        """Return point index list for annotations in group. Indices are stored
+        starting at index 1 and in relation to geometry data lenght.
+
+        Returns
+        ----------
+        np.ndarray
+            List of indices in annotation group
+        """
+        index = 1
+        indices = []
+        for annotation in self.annotations:
+            for contour in annotation.geometry.contours:
+                indices.append(index)
+                index += len(contour.data)
+        return np.array(indices, dtype=int)
+
     @staticmethod
     def _get_line_geometry_from_coords(coords: List[Tuple[float, float]]):
-        return Polygon.from_coords(coords)
+        return Polygon(exterior=coords)
+
+    @classmethod
+    def _get_geometries_from_ds(
+        cls,
+        ds: Dataset
+    ) -> List[Geometry]:
+        """Returns line geometries from dataset. Each line geometry consists of
+        multiple points, and the first coordinate in the coordinate list is
+
+        Parameters
+        ----------
+        ds: Dataset
+            Dataset containing annotation group.
+
+        Returns
+        ----------
+        List[Geometry]
+            Polyline geometries in the annotation group.
+        """
+        indices = cls._get_indices_from_ds(ds)
+        number_of_geometries = ds.NumberOfAnnotations
+        if number_of_geometries != len(indices):
+            raise ValueError(
+                "Number of indices must be the same as number of geometries"
+            )
+        coordinates = cls._get_coordinates_from_ds(ds)
+        indices += [len(coordinates)]  # Add end for last geometry
+        geometries: List[Geometry] = []
+
+        # Read interior index list if set
+        try:
+            interior_indices = dcm_to_list(ds[0x000b1001].value, 'l')
+        except KeyError:
+            interior_indices = []
+
+        # Hold coordiantes for found contours
+        last_interiors: List[List[Tuple[float, float]]] = []
+        last_exterior: List[Tuple[float, float]] = []
+
+        # For each geometry in ds
+        for index in range(number_of_geometries):
+            start = indices[index]
+            end = indices[index+1]
+            geometry_coordinates = coordinates[start:end]
+            if index+1 in interior_indices:
+                # Geometry is an interior, add to list
+                last_interiors.append(geometry_coordinates)
+            else:
+                # Geometry is an exterior
+                if last_exterior == []:
+                    last_exterior = geometry_coordinates
+                else:
+                    # A new exterior found, create polygon from last contours
+                    geometries.append(Polygon(last_exterior, last_interiors))
+                    last_interiors = []
+                    last_exterior = []
+
+        # Create the last polygon
+        geometries.append(Polygon(last_exterior, last_interiors))
+        return geometries
+
+    @property
+    def number_of_annotations(self) -> int:
+        return sum([
+            len(annotation.geometry.contours)
+            for annotation in self.annotations
+        ])
+
+    @property
+    def interior_contour_index_list(self) -> np.ndarray:
+        index = 1
+        indices = []
+
+        for annotation in self.annotations:
+            index += 1
+            for _ in annotation.geometry.interiors:
+                indices.append(index)
+                index += 1
+        return np.array(indices, dtype=int)
+
+    def to_ds(self, group_number: int) -> Dataset:
+        """Return annotation group as a Annotation Group Sequence item.
+
+        Parameters
+        ----------
+        group_number: int
+            The index of the group.
+
+        Returns
+        ----------
+        Dataset
+            Dataset containing the group.
+        """
+        ds = super().to_ds(group_number)
+        if len(self.interior_contour_index_list) > 0:
+            block = ds.private_block(
+                0x000b,
+                "SECTRA POLYGON INTERIOR",
+                create=True
+            )
+            block.add_new(0x01, 'OL', self.interior_contour_index_list)
+        return ds
 
 
 class AnnotationInstance:
