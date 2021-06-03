@@ -68,7 +68,7 @@ Annotations are currenly handled separarely from the WsiDicom object. Annotation
 - AnnotationGroupCollection
     Represents a collection of AnnotationGroups. All the groups have the same frame of reference, i.e. annotations are from the same wsi stack.
 - AnnotationGroup
-    Represents a group of annotations. All annotations in the group are of the same type (e.g. PointAnnotation), have the same label, description and category and classification. The category and classifications are codes that are used to define the annotated feature. A good resource for working with codes is avaiable [here](https://qiicr.gitbook.io/dcmqi-guide/opening/coding_schemes).
+    Represents a group of annotations. All annotations in the group are of the same type (e.g. PointAnnotation), have the same label, description and category and type. The category and type are codes that are used to define the annotated feature. A good resource for working with codes is avaiable [here](https://qiicr.gitbook.io/dcmqi-guide/opening/coding_schemes).
 - Annotation
     Represents a annotation. An Annotation has a geometry (currently Point, Polyline, Polygon) and an optional list of Measurements.
 - Measurement
@@ -100,12 +100,12 @@ point_annotation_with_measurment = Annotation(Point(10.0, 20.0), [measurement])
 ***Create a group of the annotations.***
 ```python
 from wsidicom import PointAnnotationGroup
-# The 222 suplement requires groups to have a label, a category and a classification
+# The 222 suplement requires groups to have a label, a category and a type
 group = PointAnnotationGroup(
     points=[point_annotation, point_annotation_with_measurment],
     label='group label',
-    category=ConceptCode.category('Tissue')
-    classification=ConceptCode.classification('Nucleus')
+    categorycode=ConceptCode.categorycode('Tissue')
+    typecode=ConceptCode.typecode('Nucleus')
     description='description'
 )
 ```
