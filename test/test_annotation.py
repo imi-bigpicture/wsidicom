@@ -179,7 +179,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 )
                 grouped_annotations: Dict[Key, Value] = {}
 
-                # For each annotation, make a type-categorycode key and insert the
+                # For each annotation, make a type-category key and insert the
                 # annotation in the correct dict-group. If no group exists,
                 # create one using the key and insert the label.
                 for input_annotation in input_dict:
@@ -201,7 +201,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                         }
                     group['geometries'] += geometries
 
-                # For each group of annotations (same type and categorycode) make
+                # For each group of annotations (same type and category) make
                 # an annotation group
                 annotation_groups: List[AnnotationGroup] = []
                 for group_keys, group_values in grouped_annotations.items():
