@@ -271,6 +271,9 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             for annotation_index, annotation in enumerate(group.annotations)
             for point_index, item in enumerate(annotation.geometry.to_coords())
         ]
+        # Explicit -> implicit closed for polygons
+        if geometry_type == 'Polygon':
+            group_coordinates.pop()
         return geometry_type, group_coordinates
 
     @classmethod
@@ -331,6 +334,9 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             {'x': float(item[0]), 'y': float(item[1])}
             for item in annotation.geometry.to_coords()
         ]
+        # Explicit -> implicit closed for polygons
+        if geometry_type == 'Area':
+            group_coordinates.pop()
         return geometry_type, group_coordinates
 
     @staticmethod
@@ -408,7 +414,13 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         elif(type(annotation.geometry) == Polyline):
             return shapely.geometry.LineString(annotation.geometry.to_coords())
         elif(type(annotation.geometry) == Polygon):
-            return shapely.geometry.Polygon(annotation.geometry.to_coords())
+            return shapely.geometry.Polygon(
+                annotation.geometry.exterior.to_coords(),
+                [
+                    interior.to_coords()
+                    for interior in annotation.geometry.interiors
+                ]
+            )
         raise NotImplementedError(annotation)
 
     def test_shapely(self):
@@ -427,7 +439,21 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 (29088, 16618.75),
                 (27464, 16874.75),
                 (26984, 17562.75)
-            ])
+            ]),
+            shapely.geometry.Polygon([
+                (4859.25, 6154.6953125),
+                (5066.25, 6171.1953125),
+                (4967.75, 5972.6953125),
+                (4814.25, 6030.1953125),
+                (4859.25, 6154.6953125)
+            ],
+                [[
+                    (4881.75, 6080.6953125),
+                    (4883.75, 6049.6953125),
+                    (4912.25, 6050.1953125),
+                    (4881.75, 6080.6953125)
+                ]]
+            )
         ]
         for input_geometry in input_geometries:
             print(input_geometry)
