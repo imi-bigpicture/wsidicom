@@ -36,6 +36,7 @@ class Lut:
             self._lut_item.RedPaletteColorLookupTableDescriptor
         self._length = length
         self._type: type
+        self._bits = bits
         if bits == 8:
             self._type = np.uint8
         else:
@@ -70,7 +71,7 @@ class Lut:
 
     def _parse_color(self, segmented_lut_data: bytes):
         LENGTH = 6
-        parsed_table = np.ndarray(0, dtype=self._type)
+        parsed_table = np.ndarray((0, ), dtype=self._type)
         for segment in range(int(len(segmented_lut_data)/LENGTH)):
             segment_bytes = segmented_lut_data[
                 segment*LENGTH:segment*LENGTH+LENGTH
@@ -297,7 +298,7 @@ class OpticalManager:
         if(image.mode == 'L'):
             image = image.convert('RGB')
         lut = self.get_lut(identifier)
-        lut_array = lut.get_flat()/(2**lut.bits/256)
+        lut_array = lut.get_flat()/(2**lut._bits/256)
         return image.point(lut_array)
 
     def get_icc(self, identifer: str) -> bytes:
