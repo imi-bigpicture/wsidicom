@@ -105,7 +105,7 @@ group = PointAnnotationGroup(
     points=[point_annotation, point_annotation_with_measurment],
     label='group label',
     categorycode=ConceptCode.categorycode('Tissue'),
-    typecode=ConceptCode.typecode('Nucleus')
+    typecode=ConceptCode.typecode('Nucleus'),
     description='description'
 )
 ```
