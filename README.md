@@ -65,7 +65,7 @@ slide.close()
 
 ## Annotation usage
 Annotations are currenly handled separarely from the WsiDicom object. Annotations are structured in a hierarchy:
-- AnnotationGroupCollection
+- AnnotationInstance
     Represents a collection of AnnotationGroups. All the groups have the same frame of reference, i.e. annotations are from the same wsi stack.
 - AnnotationGroup
     Represents a group of annotations. All annotations in the group are of the same type (e.g. PointAnnotation), have the same label, description and category and type. The category and type are codes that are used to define the annotated feature. A good resource for working with codes is avaiable [here](https://qiicr.gitbook.io/dcmqi-guide/opening/coding_schemes).
@@ -112,18 +112,18 @@ group = PointAnnotationGroup(
 
 ***Create a collection of annotation groups.***
 ```python
-from wsidicom import AnnotationGroupCollection
-collection = AnnotationGroupCollection([group], slide.frame_of_reference)
+from wsidicom import AnnotationInstance
+annotations = AnnotationInstance([group], slide.frame_of_reference)
 ```
 
 ***Save the collection to file.***
 ```python
-collection.save('path_to_dicom_dir/annotation.dcm')
+annotations.save('path_to_dicom_dir/annotation.dcm')
 ```
 
 ***Open the collection and access first annotation in first group.***
 ```python
-collection.open('path_to_dicom_dir/annotation.dcm')
+annotations.open('path_to_dicom_dir/annotation.dcm')
 group = collection[0]
 annotation = group[0]
 ```
