@@ -534,8 +534,7 @@ class WsiDicomFile:
         height = int(ds.Rows)
         if width == 0 or height == 0:
             raise WsiDicomFileError(self.filepath, "Tile size is zero")
-        return  Size(width=width, height=height)
-
+        return Size(width=width, height=height)
 
     def _get_image_size(self, ds: Dataset) -> Size:
         """Read total pixel size from dicom file.
@@ -3075,6 +3074,10 @@ class WsiDicom:
             + self.labels.instances
             + self.overviews.instances
         )
+
+    @property
+    def frame_of_reference(self) -> Uid:
+        return self.uids.frame_of_reference
 
     def pretty_str(
         self,
