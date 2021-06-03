@@ -17,8 +17,9 @@ from .errors import (WsiDicomFileError, WsiDicomMatchError,
                      WsiDicomSparse, WsiDicomUidDuplicateError)
 from .geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from .stringprinting import dict_pretty_str, list_pretty_str, str_indent
-from .uid import BaseUids, FileUids
+from .uid import BaseUids, FileUids, WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID
 from .optical import OpticalManager
+from .graphical_annotations import AnnotationInstance
 
 
 class WsiDicomFile:
@@ -293,8 +294,6 @@ class WsiDicomFile:
             True if file is wsi dicom SOP class and all required attributes
             are available
         """
-        WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
-
         REQURED_GENERAL_STUDY_MODULE_ATTRIBUTES = [
             "StudyInstanceUID"
         ]
@@ -3006,7 +3005,8 @@ class WsiDicom:
     def __init__(
         self,
         series: List[WsiDicomSeries],
-        optical: OpticalManager
+        optical: OpticalManager,
+        annotations: AnnotationInstance = None
     ):
         """Holds wsi dicom levels, labels and overviews.
 
@@ -3027,6 +3027,13 @@ class WsiDicom:
             optical
         )
         self.optical = optical
+        if (
+            annotations is not None and
+            annotations.frame_of_reference == self.uids.frame_of_reference
+        ):
+            self.annotations: AnnotationInstance = annotations
+        else:
+            warnings.warn("Annotations frame of referance does not match")
         base = self.levels.base_level.default_instance
         self.ds = base.create_ds()
         self.__enter__()
@@ -3113,17 +3120,22 @@ class WsiDicom:
         level_files: List[WsiDicomFile] = []
         label_files: List[WsiDicomFile] = []
         overview_files: List[WsiDicomFile] = []
+        annotation_files: List[Path] = []
 
         for filepath in cls._filter_paths(filepaths):
-            dicom_file = WsiDicomFile(filepath)
-            if(dicom_file.wsi_type == 'VOLUME'):
-                level_files.append(dicom_file)
-            elif(dicom_file.wsi_type == 'LABEL'):
-                label_files.append(dicom_file)
-            elif(dicom_file.wsi_type == 'OVERVIEW'):
-                overview_files.append(dicom_file)
-            else:
-                dicom_file.close()
+            sop_class_uid = cls._get_sop_class_uid(filepath)
+            if sop_class_uid == WSI_SOP_CLASS_UID:
+                wsi_file = WsiDicomFile(filepath)
+                if(wsi_file.wsi_type == 'VOLUME'):
+                    level_files.append(wsi_file)
+                elif(wsi_file.wsi_type == 'LABEL'):
+                    label_files.append(wsi_file)
+                elif(wsi_file.wsi_type == 'OVERVIEW'):
+                    overview_files.append(wsi_file)
+                else:
+                    wsi_file.close()
+            elif sop_class_uid == ANN_SOP_CLASS_UID:
+                annotation_files.append(filepath)
 
         base_file = cls._get_base_file(level_files)
 
@@ -3132,8 +3144,20 @@ class WsiDicom:
         levels = WsiDicomLevels.open(level_files, optical, base_file)
         labels = WsiDicomLabels.open(label_files, optical, base_file)
         overviews = WsiDicomOverviews.open(overview_files, optical, base_file)
+        annotations = AnnotationInstance.open(annotation_files)
 
-        return WsiDicom([levels, labels, overviews], optical=optical)
+        return WsiDicom(
+            [levels, labels, overviews],
+            optical=optical,
+            annotations=annotations
+        )
+
+    @staticmethod
+    def _get_sop_class_uid(path: Path) -> Uid:
+        metadata: pydicom.dataset.FileMetaDataset = (
+            pydicom.filereader.read_file_meta_info(path)
+        )
+        return metadata.MediaStorageSOPClassUID
 
     @staticmethod
     def _get_filepaths(path: Union[str, List[str]]) -> List[Path]:
