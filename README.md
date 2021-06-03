@@ -104,8 +104,8 @@ from wsidicom import PointAnnotationGroup
 group = PointAnnotationGroup(
     points=[point_annotation, point_annotation_with_measurment],
     label='group label',
-    categorycode=ConceptCode.categorycode('Tissue'),
-    typecode=ConceptCode.typecode('Nucleus'),
+    categorycode=ConceptCode.category('Tissue'),
+    typecode=ConceptCode.type('Nucleus'),
     description='description'
 )
 ```
