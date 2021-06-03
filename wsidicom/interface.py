@@ -2472,8 +2472,8 @@ class WsiDicomStack(metaclass=ABCMeta):
     def write_pixel_data(
         self,
         fp: pydicom.filebase.DicomFileLike,
-        focal_planes: List[str],
-        optical_paths: List[float]
+        focal_planes: List[float],
+        optical_paths: List[str]
     ):
         """Writes pixel data to file.
 
