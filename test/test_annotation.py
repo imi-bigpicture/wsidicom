@@ -1,12 +1,12 @@
-from dataclasses import make_dataclass
 import json
 import os
 import unittest
 from collections import OrderedDict
 from copy import deepcopy
+from dataclasses import make_dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, List, NamedTuple, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Tuple, Union, get_origin
 
 import numpy as np
 import pydicom
@@ -22,6 +22,9 @@ from wsidicom.graphical_annotations import (Annotation, AnnotationGroup,
                                             Point, PointAnnotationGroup,
                                             Polygon, PolygonAnnotationGroup,
                                             Polyline, PolylineAnnotationGroup)
+from wsidicom.interface import WsiDicom
+
+from .data_gen import create_layer_file
 
 wsidicom_test_data_dir = os.environ.get("WSIDICOM_TESTDIR", "C:/temp/wsidicom")
 sub_data_dir = "annotation"
@@ -38,12 +41,17 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         super().__init__(*args, **kwargs)
         self.test_files: Dict[str, List[Path]]
         self.tempdir: TemporaryDirectory
+        self.slide: WsiDicom
 
     @classmethod
     def setUpClass(cls):
-        cls.test_files = {}
         cls.tempdir = TemporaryDirectory()
+        dirpath = Path(cls.tempdir.name)
+        test_file_path = dirpath.joinpath("test_im_annotated.dcm")
+        create_layer_file(test_file_path)
+        cls.slide = WsiDicom.open(cls.tempdir.name)
 
+        cls.test_files = {}
         folders = cls._get_folders()
         for folder in folders:
             folder_name = os.path.basename(folder)
@@ -54,6 +62,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.slide.close()
         cls.tempdir.cleanup()
 
     @classmethod
@@ -82,11 +91,13 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             Read back annotation collection.
 
         """
-        dirpath = Path(cls.tempdir.name)
-        filename = "test_annotation.dcm"
+        tempdir = TemporaryDirectory()
+        dirpath = Path(tempdir.name)
+        filename = "annotation_round_trip.dcm"
         dcm_path = str(dirpath.joinpath(filename))
         dicom.save(dcm_path)
-        read_annotations = AnnotationInstance.open(dcm_path)
+        read_annotations = AnnotationInstance.open([dcm_path])
+        tempdir.cleanup()
         return read_annotations
 
     @staticmethod
@@ -699,3 +710,25 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     Point(float(i), float(i)),
                     output_group[i].geometry
                 )
+
+    def test_make_annotated_wsi_slide(self):
+        point_annotation = Annotation(Point(10.0, 20.0))
+        group = PointAnnotationGroup(
+            annotations=[point_annotation],
+            label='group label',
+            categorycode=ConceptCode.category('Tissue'),
+            typecode=ConceptCode.type('Nucleus'),
+            description='description'
+        )
+        annotations = AnnotationInstance(
+            [group],
+            self.slide.frame_of_reference
+        )
+        dirpath = Path(self.tempdir.name)
+        annotation_file_path = dirpath.joinpath("annotation_for_slide.dcm")
+        annotations.save(annotation_file_path)
+
+        slide = WsiDicom.open(self.tempdir.name)
+        output_group = slide.annotations[0]
+        slide.close()
+        self.assertEqual(output_group, group)
