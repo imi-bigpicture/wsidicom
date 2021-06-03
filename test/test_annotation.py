@@ -26,8 +26,8 @@ from wsidicom.graphical_annotations import (Annotation, AnnotationGroup,
 wsidicom_test_data_dir = os.environ.get("WSIDICOM_TESTDIR", "C:/temp/wsidicom")
 sub_data_dir = "annotation"
 data_dir = wsidicom_test_data_dir + '/' + sub_data_dir
-typecode = ConceptCode.typecode('Nucleus')
-categorycode = ConceptCode.categorycode('Tissue')
+typecode = ConceptCode.type('Nucleus')
+categorycode = ConceptCode.category('Tissue')
 frame_of_reference: Uid = pydicom.uid.generate_uid()
 
 
@@ -140,7 +140,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
     @staticmethod
     def qupath_get_typecode(annotation: Dict) -> ConceptCode:
         typecode = annotation["properties"]["classification"]["name"]
-        return ConceptCode.typecode(typecode)
+        return ConceptCode.type(typecode)
 
     @staticmethod
     def qupath_get_color(annotation: Dict) -> Tuple[int, int, int]:

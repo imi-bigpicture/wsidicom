@@ -142,7 +142,7 @@ class ConceptCode(Code):
         raise NotImplementedError(value)
 
     @classmethod
-    def typecode(cls, value: Union[str, Dataset]) -> 'ConceptCode':
+    def type(cls, value: Union[str, Dataset]) -> 'ConceptCode':
         """Return typecode code for value. Value can be a code meaning
         (str) or a DICOM dataset containing the code.
 
@@ -164,7 +164,7 @@ class ConceptCode(Code):
         raise NotImplementedError(value)
 
     @classmethod
-    def categorycode(cls, value: Union[str, Dataset]) -> 'ConceptCode':
+    def category(cls, value: Union[str, Dataset]) -> 'ConceptCode':
         """Return categorycode code for value. Value can be a code meaning
         (str) or a DICOM dataset containing the code.
 
@@ -1048,8 +1048,8 @@ class AnnotationGroup:
         annotations = cls._get_annotations_from_ds(ds)
         label = cls._get_label_from_ds(ds)
         description = getattr(ds, 'AnnotationGroupDescription', None)
-        typecode = ConceptCode.typecode(ds)
-        categorycode = ConceptCode.categorycode(ds)
+        typecode = ConceptCode.type(ds)
+        categorycode = ConceptCode.category(ds)
         color = getattr(ds, 'RecommendedDisplayCIELabValue', None)
         return cls(
             annotations,
