@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import (DefaultDict, Dict, Generator, List, Optional, Tuple,
                     Union, Set, Any)
+from pathlib import Path
 
 import numpy as np
 import pydicom
@@ -11,6 +12,7 @@ from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import Code, codes
 from pydicom.uid import UID as Uid
+from .uid import ANN_SOP_CLASS_UID
 
 # MICROSCOPY BULK SIMPLE ANNOTATIONS MODULE ATTRIBUTES
 # According to sup 222, 2021/03/26. (Note that group number is not decided in
@@ -36,8 +38,6 @@ annotation_dict_items = {
     0x6000ee19: ('UI', '1', "Annotation Group UID", '', 'AnnotationGroupUID'),  # noqa
     0x6000ee10: ('SH', '1-n', "Referenced Optical Path Identifier", '', 'ReferencedOpticalPathIdentifier')  # noqa
 }
-
-ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.1.1.sss'  # Not standard
 
 
 @dataclass
@@ -858,6 +858,14 @@ class Annotation:
     def __repr__(self) -> str:
         return f"Annotation({self.geometry}, {self.measurements})"
 
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Annotation):
+            raise NotImplementedError(other)
+        return (
+            self.geometry == other.geometry and
+            self.measurements == other.measurements
+        )
+
     @property
     def geometry(self) -> Geometry:
         return self._geometry
@@ -966,6 +974,19 @@ class AnnotationGroup:
             f"{type(self).__name__}({self.annotations}, {self.label}, "
             f"{self.categorycode}, {self.typecode}, "
             f"{self.description}, {self._is_double})"
+        )
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, AnnotationGroup):
+            raise NotImplementedError(other)
+        return (
+            self.annotations == other.annotations and
+            self.label == other.label and
+            self.typecode == other.typecode and
+            self.categorycode == other.categorycode and
+            self.description == other.description and
+            self.color == other.color and
+            self._is_double == other._is_double
         )
 
     @property
@@ -1966,34 +1987,43 @@ class AnnotationInstance:
         pydicom.filewriter.dcmwrite(path, file_ds)
 
     @classmethod
-    def open(cls, path: str) -> 'AnnotationInstance':
+    def open(cls, paths: List[Path]) -> 'AnnotationInstance':
         """Read annotations from DICOM file according to sup 222.
 
         Parameters
         ----------
-        path: Path
-            Path of DICOM file to read from.
+        paths: List[Path]
+            Paths to DICOM annotation files to read.
         """
-        ds = pydicom.filereader.dcmread(path)
-        if ds.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
-            raise ValueError("SOP Class UID of file is wrong")
-
-        is_3D = (ds.AnnotationCoordinateType == '3D')
-        if not is_3D:
-            raise NotImplementedError("Only support annotations of '3D' type")
-        frame_of_reference = ds.FrameOfReferenceUID
         groups: List[AnnotationGroup] = []
-        for annotation in ds.AnnotationGroupSequence:
-            annotation_type = annotation.GraphicType
-            if(annotation_type == 'POINT'):
-                annotation = PointAnnotationGroup.from_ds(annotation)
-            elif(annotation_type == 'POLYLINE'):
-                annotation = PolylineAnnotationGroup.from_ds(annotation)
-            elif(annotation_type == 'POLYGON'):
-                annotation = PolygonAnnotationGroup.from_ds(annotation)
+        frame_of_reference: Uid = None
+        for path in paths:
+            ds = pydicom.filereader.dcmread(path)
+            if ds.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
+                raise ValueError("SOP Class UID of file is wrong")
+
+            is_3D = (ds.AnnotationCoordinateType == '3D')
+            if not is_3D:
+                raise NotImplementedError(
+                    "Only support annotations of '3D' type"
+                )
+
+            if frame_of_reference is None:
+                frame_of_reference = ds.FrameOfReferenceUID
             else:
-                raise NotImplementedError("Unsupported Graphic type")
-            groups.append(annotation)
+                if frame_of_reference != ds.FrameOfReferenceUID:
+                    raise ValueError("Frame of reference should match")
+            for annotation in ds.AnnotationGroupSequence:
+                annotation_type = annotation.GraphicType
+                if(annotation_type == 'POINT'):
+                    annotation = PointAnnotationGroup.from_ds(annotation)
+                elif(annotation_type == 'POLYLINE'):
+                    annotation = PolylineAnnotationGroup.from_ds(annotation)
+                elif(annotation_type == 'POLYGON'):
+                    annotation = PolygonAnnotationGroup.from_ds(annotation)
+                else:
+                    raise NotImplementedError("Unsupported Graphic type")
+                groups.append(annotation)
         return AnnotationInstance(groups, frame_of_reference)
 
     def __getitem__(
