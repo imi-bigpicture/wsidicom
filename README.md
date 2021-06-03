@@ -63,8 +63,32 @@ tile_bytes = slide.read_encoded_tile(6, (1, 1))
 slide.close()
 ```
 
+## Data structure
+A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of different classes, starting from bottom:
+- *WsiDicomFile*, represents a WSI DICOM file. A file can contain one or several focal planes and/or optical paths.
+- *WsiDicomInstance*, reperesents a single or a concatenation of WSI DICOM files.
+- *WsiDicomLevel*, represents a group of instances with the same image size, i.e. of the same level.
+- *WsiDicomLevels*, represents a group of levels, i.e. the pyrimidal structure.
+- *WsiDicom*, represents a collection of levels, labels and overviews.
+
+Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions.
+
+The structure is easiest created using the open() helper functions, e.g. to create a WsiDicom-object:
+```python
+slide = WsiDicom.open(path_to_folder)
+```
+
+But the structure can also be created manually from the bottom:
+```python
+file = WsiDicomFile(path_to_file)
+instance = WsiDicomInstance([file])
+level = WsiDicomLevel([instance])
+levels = WsiDicomLevels([level])
+slide = WsiDicom([levels])
+```
+
 ## Annotation usage
-Annotations are currenly handled separarely from the WsiDicom object. Annotations are structured in a hierarchy:
+Annotations are structured in a hierarchy:
 - AnnotationInstance
     Represents a collection of AnnotationGroups. All the groups have the same frame of reference, i.e. annotations are from the same wsi stack.
 - AnnotationGroup
@@ -121,35 +145,10 @@ annotations = AnnotationInstance([group], slide.frame_of_reference)
 annotations.save('path_to_dicom_dir/annotation.dcm')
 ```
 
-***Open the collection and access first annotation in first group.***
-```python
-annotations.open('path_to_dicom_dir/annotation.dcm')
-group = collection[0]
-annotation = group[0]
-```
-
-## Data structure
-A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of different classes, starting from bottom:
-- *WsiDicomFile*, represents a WSI DICOM file. A file can contain one or several focal planes and/or optical paths.
-- *WsiDicomInstance*, reperesents a single or a concatenation of WSI DICOM files.
-- *WsiDicomLevel*, represents a group of instances with the same image size, i.e. of the same level.
-- *WsiDicomLevels*, represents a group of levels, i.e. the pyrimidal structure.
-- *WsiDicom*, represents a collection of levels, labels and overviews.
-
-Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions.
-
-The structure is easiest created using the open() helper functions, e.g. to create a WsiDicom-object:
+***Reopen the slide and access the annotation instance.***
 ```python
 slide = WsiDicom.open(path_to_folder)
-```
-
-But the structure can also be created manually from the bottom:
-```python
-file = WsiDicomFile(path_to_file)
-instance = WsiDicomInstance([file])
-level = WsiDicomLevel([instance])
-levels = WsiDicomLevels([level])
-slide = WsiDicom([levels])
+annotations = slide.annotations
 ```
 
 ## Advanced frame access
