@@ -253,26 +253,21 @@ class OpticalPath:
         OpticalPath
             New optical path item
         """
-        identifier = str(ds.OpticalPathIdentifier)
-
-        # New optical path, try to load ICC, get description and lut
-        icc_profile_name = IccProfile.read_name(ds)
-        description = getattr(ds, 'OpticalPathDescription', None)
-        lut: Optional[Lut] = None
-        if('PaletteColorLookupTableSequence' in ds):
-            lut = Lut(ds.PaletteColorLookupTableSequence)
-
-        illumination_wavelengt = getattr(ds, 'IlluminationWaveLength', None)
-
         return OpticalPath(
-            identifier=identifier,
-            icc_profile_name=icc_profile_name,
+            identifier=str(ds.OpticalPathIdentifier),
+            icc_profile_name=IccProfile.read_name(ds),
             illumination_types=cls.get_illumination_type_codes(ds),
-            illumination_wavelengt=illumination_wavelengt,
+            illumination_wavelengt=getattr(ds, 'IlluminationWaveLength', None),
             illumination_color=cls.get_illumination_color(ds),
-            description=description,
-            lut=lut
+            description=str(getattr(ds, 'OpticalPathDescription', None)),
+            lut=cls.get_lut(ds)
         )
+
+    @staticmethod
+    def get_lut(ds: Dataset) -> Optional[Lut]:
+        if('PaletteColorLookupTableSequence' in ds):
+            return Lut(ds.PaletteColorLookupTableSequence)
+        return None
 
     @staticmethod
     def get_illumination_color(ds: Dataset) -> Optional[Code]:
