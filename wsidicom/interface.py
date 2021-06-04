@@ -1470,9 +1470,12 @@ class WsiDicomInstance:
     def open(
         cls,
         files: List[WsiDicomFile],
-        optical: OpticalManager
+        optical: OpticalManager,
+        series_uids: BaseUids,
+        series_tile_size: Size = None
     ) -> List['WsiDicomInstance']:
-        """Return list of instances created from files.
+        """Return list of instances created from files. Only files matching
+        series uid and tile_size, if defined, are opened.
 
         Parameters
         ----------
@@ -1480,14 +1483,23 @@ class WsiDicomInstance:
             Files to create instances from.
         optical: OpticalManager
             Optical manager to add optical paths to.
+        series_uids: BaseUids
+            Uid to match against.
+        series_tile_size: Size
+            Tile size to match against (for level instances)
 
         Returns
         ----------
         List[WsiDicomInstance]
             List of created instances.
         """
+        filtered_files = cls._filter_files(
+            files,
+            series_uids,
+            series_tile_size
+        )
         instances: List[WsiDicomInstance] = []
-        files_grouped_by_instance = cls._group_files(files)
+        files_grouped_by_instance = cls._group_files(filtered_files)
 
         for instance_files in files_grouped_by_instance.values():
             new_instance = WsiDicomInstance(instance_files, optical)
@@ -1776,6 +1788,37 @@ class WsiDicomInstance:
             base_file.uids.base,
             base_file.wsi_type
         )
+
+    @staticmethod
+    def _filter_files(
+        files: List[WsiDicomFile],
+        series_uids: BaseUids,
+        series_tile_size: Size = None
+    ) -> List[WsiDicomFile]:
+        """Filter list of wsi dicom files to only include matching uids and
+        tile size if defined.
+
+        Parameters
+        ----------
+        files: List[WsiDicomFile]
+            Wsi files to filter
+        series_uids: Uids
+            Uids to check against
+        series_tile_size: Size
+            Tile size to check against
+
+        Returns
+        ----------
+        List[WsiDicomFile]
+            List of matching wsi dicom files
+        """
+        valid_files: List[WsiDicomFile] = []
+        for file in files:
+            if file.matches_series(series_uids, series_tile_size):
+                valid_files.append(file)
+            else:
+                file.close()
+        return valid_files
 
     @classmethod
     def _group_files(
@@ -2095,8 +2138,7 @@ class WsiDicomStack(metaclass=ABCMeta):
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager
+        instances: List[WsiDicomInstance],
     ) -> List['WsiDicomStack']:
         """Return list of stacks created from wsi files.
 
@@ -2115,7 +2157,6 @@ class WsiDicomStack(metaclass=ABCMeta):
         """
         stacks: List[WsiDicomStack] = []
 
-        instances = WsiDicomInstance.open(files, optical)
         instances_grouped_by_stack = cls._group_instances(instances)
 
         for instance_group in instances_grouped_by_stack.values():
@@ -2697,8 +2738,7 @@ class WsiDicomLevel(WsiDicomStack):
     @classmethod
     def open_levels(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager
+        instances: List[WsiDicomInstance],
     ) -> List['WsiDicomLevel']:
         """Return list of level stacks created wsi files.
 
@@ -2716,7 +2756,6 @@ class WsiDicomLevel(WsiDicomStack):
 
         """
         levels: List[WsiDicomLevel] = []
-        instances = WsiDicomInstance.open(files, optical)
         instances_grouped_by_stack = cls._group_instances(instances)
         largest_size = max(instances_grouped_by_stack.keys())
         base_group = instances_grouped_by_stack[largest_size]
@@ -2961,37 +3000,6 @@ class WsiDicomSeries(metaclass=ABCMeta):
         except IndexError:
             return None
 
-    @staticmethod
-    def _filter_files(
-        files: List[WsiDicomFile],
-        series_uids: BaseUids,
-        series_tile_size: Size = None
-    ) -> List[WsiDicomFile]:
-        """Filter list of wsi dicom files to only include matching uids and
-        tile size if defined.
-
-        Parameters
-        ----------
-        files: List[WsiDicomFile]
-            Wsi files to filter
-        series_uids: Uids
-            Uids to check against
-        series_tile_size: Size
-            Tile size to check against
-
-        Returns
-        ----------
-        List[WsiDicomFile]
-            List of matching wsi dicom files
-        """
-        valid_files: List[WsiDicomFile] = []
-        for file in files:
-            if file.matches_series(series_uids, series_tile_size):
-                valid_files.append(file)
-            else:
-                file.close()
-        return valid_files
-
     def close(self) -> None:
         """Close all stacks in the series."""
         for stack in self.stacks:
@@ -3011,31 +3019,21 @@ class WsiDicomLabels(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager,
-        base_file: WsiDicomFile
-    ) -> 'WsiDicomLabels':
+        instances: List[WsiDicomInstance]
+    ) -> 'WsiDicomLevels':
         """Return label series created from wsi files.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to create labels from.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
-        base_file: WsiDicomFile
-            File that defines valid files to add.
+        instances: List[WsiDicomInstance]
+            Instances to create levels from.
 
         Returns
         ----------
         WsiDicomLabels
             Created label series
         """
-        filtered_files = cls._filter_files(
-            files,
-            base_file.uids.base,
-        )
-        labels = WsiDicomStack.open(filtered_files, optical)
+        labels = WsiDicomStack.open(instances)
         return WsiDicomLabels(labels)
 
 
@@ -3045,31 +3043,21 @@ class WsiDicomOverviews(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager,
-        base_file: WsiDicomFile
-    ) -> 'WsiDicomOverviews':
+        instances: List[WsiDicomInstance]
+    ) -> 'WsiDicomLevels':
         """Return overview series created from wsi files.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to create overviews from.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
-        base_file: WsiDicomFile
-            File that defines valid files to add.
+        instances: List[WsiDicomInstance]
+            Instances to create levels from.
 
         Returns
         ----------
         WsiDicomOverviews
             Created overview series
         """
-        filtered_files = cls._filter_files(
-            files,
-            base_file.uids.base,
-        )
-        overviews = WsiDicomStack.open(filtered_files, optical)
+        overviews = WsiDicomStack.open(instances)
         return WsiDicomOverviews(overviews)
 
 
@@ -3124,32 +3112,21 @@ class WsiDicomLevels(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager,
-        base_file: WsiDicomFile
+        instances: List[WsiDicomInstance]
     ) -> 'WsiDicomLevels':
         """Return level series created from wsi files.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to create levels from.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
-        base_file: WsiDicomFile
-            File that defines valid files to add.
+        instances: List[WsiDicomInstance]
+            Instances to create levels from.
 
         Returns
         ----------
         WsiDicomLevels
             Created level series
         """
-        filtered_files = cls._filter_files(
-            files,
-            base_file.uids.base,
-            base_file.tile_size
-        )
-        levels = WsiDicomLevel.open_levels(filtered_files, optical)
+        levels = WsiDicomLevel.open_levels(instances)
         return WsiDicomLevels(levels)
 
     def valid_level(self, level: int) -> bool:
@@ -3396,12 +3373,28 @@ class WsiDicom:
                 dicom_file.close()
 
         base_file = cls._get_base_file(level_files)
-
         optical = OpticalManager(base_file.uids.base)
 
-        levels = WsiDicomLevels.open(level_files, optical, base_file)
-        labels = WsiDicomLabels.open(label_files, optical, base_file)
-        overviews = WsiDicomOverviews.open(overview_files, optical, base_file)
+        level_instances = WsiDicomInstance.open(
+            level_files,
+            optical,
+            base_file.uids.base,
+            base_file.tile_size
+        )
+        label_instances = WsiDicomInstance.open(
+            label_files,
+            optical,
+            base_file.uids.base,
+        )
+        overview_instances = WsiDicomInstance.open(
+            overview_files,
+            optical,
+            base_file.uids.base,
+        )
+
+        levels = WsiDicomLevels.open(level_instances)
+        labels = WsiDicomLabels.open(label_instances)
+        overviews = WsiDicomOverviews.open(overview_instances)
 
         return WsiDicom([levels, labels, overviews], optical=optical)
 
