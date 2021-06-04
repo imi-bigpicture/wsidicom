@@ -1303,7 +1303,7 @@ class WsiDicomInstance:
             self._identifier,
             self._uids,
             self._wsi_type
-        ) = self._validate_instance(optical)
+        ) = self._validate_instance(optical.uids)
 
         self.tiles = self._create_tileindex(self._files, optical)
 
@@ -1760,7 +1760,7 @@ class WsiDicomInstance:
 
     def _validate_instance(
         self,
-        optical: OpticalManager
+        optical_uids: BaseUids
     ) -> Tuple[str, BaseUids, str]:
         """Check that no files in instance are duplicate, that all files in
         instance matches (uid, type and size) and that the optical manager
@@ -1779,7 +1779,7 @@ class WsiDicomInstance:
         """
         WsiDicomFile.check_duplicate_file(self.files, self)
         base_file = self.files[0]
-        if not base_file.uids.base == optical.uids:
+        if not base_file.uids.base == optical_uids:
             raise WsiDicomMatchError(
                 str(base_file.filepath), str(self)
             )
