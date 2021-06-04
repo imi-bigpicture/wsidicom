@@ -1,16 +1,15 @@
-from dataclasses import dataclass
-import struct
-import numpy as np
-from typing import Dict, List, Optional
-from PIL import Image, ImageCms
 import io
+import struct
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set
 
-
+import numpy as np
+from PIL import Image, ImageCms
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
 from .errors import WsiDicomNotFoundError
-from .uid import BaseUids
+from .file import WsiDicomFile
 
 
 @dataclass
@@ -18,6 +17,43 @@ class IccProfile:
     name: str
     description: str
     profile: bytes
+
+    @staticmethod
+    def read_profile(ds: Dataset) -> ImageCms.ImageCmsProfile:
+        icc_profile: bytes = ds.ICCProfile
+        profile = ImageCms.ImageCmsProfile(io.BytesIO(icc_profile))
+        return profile
+
+    @classmethod
+    def read_name(cls, ds: Dataset) -> Optional[str]:
+        """Read Icc profile name from dataset.
+
+        Parameters
+        ----------
+        optical_path_ds: Dataset
+            A dataset containing an icc profile
+
+        Returns
+        ----------
+        Optional[str]
+            The icc profile name
+        """
+        try:
+            profile = cls.read_profile(ds)
+            icc_profile_name = str(ImageCms.getProfileName(profile))
+            return icc_profile_name
+        except (ImageCms.PyCMSError, AttributeError):
+            # No profile found or profile not valid
+            return None
+
+    @classmethod
+    def from_ds(cls, ds: Dataset) -> 'IccProfile':
+        profile = cls.read_profile(ds)
+        return IccProfile(
+            name=str(ImageCms.getProfileName(profile)),
+            description=str(ImageCms.getProfileDescription(profile)),
+            profile=profile
+        )
 
 
 class Lut:
@@ -198,45 +234,69 @@ class OpticalPath:
             return self.identifier
         return self.identifier + ':' + self.description
 
-
-class OpticalManager:
-    def __init__(self, uids: BaseUids = None):
-        """Store optical paths and icc profiles loaded from dicom files.
-        Parameters
-        ----------
-        uids: BaseUids
-            Base uids this manager is bound to
-        """
-
-        self.uids = uids
-        self._optical_paths: Dict[str, OpticalPath] = {}
-        self._icc_profiles: Dict[str, IccProfile] = {}
-
-    def add(self, sequence: DicomSequence) -> List[str]:
-        """Add optical paths parsed from pydicom optical path sequence.
+    @classmethod
+    def from_ds(cls, ds: Dataset) -> 'OpticalPath':
+        """Create new optical path item populated with optical path
+        identifier, description, icc profile name and lookup table.
 
         Parameters
         ----------
-        ds: DicomSequence
-            A pydicom Optical Path Sequence
+        optical_path: Dataset
+            Optical path dataset containing the optical path data
 
         Returns
         ----------
-        List[str]
-            A list of found identifiers
+        OpticalPath
+            New optical path item
         """
-        found_identifiers: List[str] = []
-        for optical_path in sequence:
-            identifier = str(optical_path.OpticalPathIdentifier)
-            found_identifiers.append(identifier)
-            # Is optical path with identifier already known?
-            try:
-                self.get(identifier)
-            except WsiDicomNotFoundError:
-                path = self._new_optical_path(identifier, optical_path)
-                # self._optical_paths.append(path)
-                self._optical_paths[identifier] = path
-        return found_identifiers
+        identifier = str(ds.OpticalPathIdentifier)
+
+        # New optical path, try to load ICC, get description and lut
+        icc_profile_name = IccProfile.read_name(ds)
+        description = getattr(
+            ds,
+            'OpticalPathDescription',
+            ''
+        )
+        lut: Optional[Lut] = None
+        if('PaletteColorLookupTableSequence' in ds):
+            lut = Lut(ds.PaletteColorLookupTableSequence)
+        # Create a new OpticalPath
+        return OpticalPath(
+            identifier=identifier,
+            description=description,
+            icc_profile_name=icc_profile_name,
+            lut=lut
+        )
+
+
+class OpticalManager:
+    def __init__(self, optical_paths, icc_profiles):
+        """Store optical paths and icc profiles loaded from dicom files.
+        """
+
+        self._optical_paths: Dict[str, OpticalPath] = optical_paths
+        self._icc_profiles: Dict[str, IccProfile] = icc_profiles
+
+    @classmethod
+    def open(cls, files: List[WsiDicomFile]) -> 'OpticalManager':
+        optical_paths: Dict[str, OpticalPath] = {}
+        icc_profiles: Dict[str, IccProfile] = {}
+        for file in files:
+            for optical_ds in file.optical_path_sequence:
+                identifier = str(optical_ds.OpticalPathIdentifier)
+                if identifier not in optical_paths:
+                    path = OpticalPath.from_ds(optical_ds)
+                    optical_paths[identifier] = path
+                    icc_profile_name = IccProfile.read_name(optical_ds)
+                    if (
+                        icc_profile_name is not None
+                        and icc_profile_name not in icc_profiles
+                    ):
+                        profile = IccProfile.from_ds(optical_ds)
+                        name = profile.name
+                        icc_profiles[name] = profile
+        return OpticalManager(optical_paths, icc_profiles)
 
     def get(self, identifier: str) -> OpticalPath:
         """Return the optical path item with identifier.
@@ -251,13 +311,13 @@ class OpticalManager:
         OpticalPath
             The OpticalPath item
         """
-        path = self._optical_paths.get(identifier)
-        if path is None:
+        try:
+            return self._optical_paths[identifier]
+        except KeyError:
             raise WsiDicomNotFoundError(
                 f"identifier {identifier}",
                 "optical path manager"
             )
-        return path
 
     def get_lut(self, identifer: str) -> Lut:
         """Return lookup table for optical path with identifier.
@@ -315,127 +375,18 @@ class OpticalManager:
             The Icc profile in bytes
         """
         path = self.get(identifer)
-        return self._get_icc_bytes(path.icc_profile_name)
-
-    def _get_icc_bytes(self, name: str) -> bytes:
-        """Get Icc profile bytes by icc profile name.
-
-        Parameters
-        ----------
-        name: str
-            The name of the icc profile
-
-        Returns
-        ----------
-        IccProfile
-            The profile with specified name
-        """
-        icc_profile = self._get_icc(name)
-        return icc_profile.profile
-
-    def _get_icc(self, name: str) -> IccProfile:
-        """Get a Icc profile item by icc profile name.
-
-        Parameters
-        ----------
-        name: str
-            The name of the icc profile
-
-        Returns
-        ----------
-        IccProfile
-            The profile with specified name
-        """
-        icc_profile = self._icc_profiles.get(name)
-        if icc_profile is None:
+        name = path.icc_profile_name
+        try:
+            return self._icc_profiles[name].profile
+        except KeyError:
             raise WsiDicomNotFoundError(
                 f"icc profile {name}", "optical path manager"
             )
-        return icc_profile
 
-    def _add_icc(self, name: str, profile: IccProfile):
-        """Add Icc profile item to manager
-
-        Parameters
-        ----------
-        name: str
-            Profile name
-        profile: IccProfile
-            The profile to add
-
-        """
-        self._icc_profiles[name] = profile
-
-    def _read_icc(self, optical_path_ds: Dataset) -> str:
-        """Read Icc profile item from dataset. If profile is not already saved,
-        saves the profile. Returns the profile name if succesfull.
-
-        Parameters
-        ----------
-        optical_path_ds: Dataset
-            A dataset containing an icc profile
-
-        Returns
-        ----------
-        str
-            The icc profile name
-        """
-        try:
-            icc_profile: bytes = optical_path_ds.ICCProfile
-            profile = ImageCms.ImageCmsProfile(io.BytesIO(icc_profile))
-            icc_profile_name = str(ImageCms.getProfileName(profile))
-            # Is the ICC name already known?
-            try:
-                self._get_icc(icc_profile_name)
-            except WsiDicomNotFoundError:
-                # Save profile
-                description = ImageCms.getProfileDescription(profile)
-                new_profile = IccProfile(
-                    name=icc_profile_name,
-                    description=description,
-                    profile=icc_profile
-                )
-                self._add_icc(icc_profile_name, new_profile)
-            return icc_profile_name
-        except (ImageCms.PyCMSError, AttributeError):
-            # No profile found or profile not valid
-            return ""
-
-    def _new_optical_path(
-        self,
-        identifier: str,
-        optical_path: Dataset
-    ) -> OpticalPath:
-        """Create new optical path item populated with optical path
-        identifier, description, icc profile name and lookup table.
-
-        Parameters
-        ----------
-        identifier: str
-            Identifier of the new optical path
-        optical_path: Dataset
-            Optical path dataset containing the optical path data
-
-        Returns
-        ----------
-        OpticalPath
-            New optical path item
-        """
-        # New optical path, try to load ICC, get description and lut
-        icc_profile_name = self._read_icc(optical_path)
-        description = getattr(
-            optical_path,
-            'OpticalPathDescription',
-            ''
-        )
-        lut: Optional[Lut] = None
-        if('PaletteColorLookupTableSequence' in optical_path):
-            lut = Lut(optical_path.PaletteColorLookupTableSequence)
-        # Create a new OpticalPath
-        path = OpticalPath(
-            identifier=identifier,
-            description=description,
-            icc_profile_name=icc_profile_name,
-            lut=lut
-        )
-        return path
+    @staticmethod
+    def get_path_identifers(optical_path_sequence: DicomSequence) -> List[str]:
+        found_identifiers: Set[str] = set()
+        for optical_ds in optical_path_sequence:
+            identifier = str(optical_ds.OpticalPathIdentifier)
+            found_identifiers.add(identifier)
+        return list(found_identifiers)
