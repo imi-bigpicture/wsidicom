@@ -880,32 +880,6 @@ class TileIndex(metaclass=ABCMeta):
             (path in self.optical_paths)
         )
 
-    def get_range(self, pixel_region: Region, z: float, path: str) -> Region:
-        """Return range of tiles to cover pixel region.
-
-        Parameters
-        ----------
-        pixel_region: Region
-            Pixel region of tiles to get
-        z: float
-            Z coordinate of tiles to get
-        path: str
-            Optical path identifier of tiles to get
-
-        Returns
-        ----------
-        Region
-            Region of tiles for stitching image
-        """
-        start = pixel_region.start // self.tile_size
-        end = pixel_region.end / self.tile_size - 1
-        tile_region = Region.from_points(start, end)
-        if not self.valid_tiles(tile_region, z, path):
-            raise WsiDicomOutOfBondsError(
-                f"Tile region {tile_region}", f"plane {self.plane_size}"
-            )
-        return tile_region
-
     @staticmethod
     def _select_default_z(focal_planes: List[float]) -> float:
         """Select default z coordinate to use if specific plane not set.
@@ -1589,7 +1563,7 @@ class WsiDicomInstance:
         Image
             Stitched image
         """
-        stitching_tiles = self.tiles.get_range(region, z, path)
+        stitching_tiles = self.get_tile_range(region, z, path)
         image = Image.new(mode=self._image_mode, size=region.size.to_tuple())
         write_index = Point(x=0, y=0)
         tile = stitching_tiles.position
@@ -1605,6 +1579,37 @@ class WsiDicomInstance:
                 region.size
             )
         return image
+
+    def get_tile_range(
+        self,
+        pixel_region: Region,
+        z: float,
+        path: str
+    ) -> Region:
+        """Return range of tiles to cover pixel region.
+
+        Parameters
+        ----------
+        pixel_region: Region
+            Pixel region of tiles to get
+        z: float
+            Z coordinate of tiles to get
+        path: str
+            Optical path identifier of tiles to get
+
+        Returns
+        ----------
+        Region
+            Region of tiles for stitching image
+        """
+        start = pixel_region.start // self.tiles.tile_size
+        end = pixel_region.end / self.tiles.tile_size - 1
+        tile_region = Region.from_points(start, end)
+        if not self.tiles.valid_tiles(tile_region, z, path):
+            raise WsiDicomOutOfBondsError(
+                f"Tile region {tile_region}", f"plane {self.tiles.plane_size}"
+            )
+        return tile_region
 
     def get_tile(self, tile: Point, z: float, path: str) -> Image:
         """Get tile image at tile coordinate x, y.
