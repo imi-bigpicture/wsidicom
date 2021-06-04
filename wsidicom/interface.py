@@ -140,7 +140,7 @@ class WsiDicomFile:
 
     @property
     def wsi_type(self) -> str:
-        """Return wsi flavour"""
+        """Return wsi type"""
         return self._wsi_type
 
     @property
@@ -1357,7 +1357,7 @@ class WsiDicomInstance:
 
     @property
     def wsi_type(self) -> str:
-        """Return wsi flavour"""
+        """Return wsi type"""
         return self._wsi_type
 
     @property
@@ -2104,7 +2104,7 @@ class WsiDicomStack(metaclass=ABCMeta):
 
     @property
     def wsi_type(self) -> str:
-        """Return wsi flavour"""
+        """Return wsi type"""
         return self._wsi_type
 
     @property
@@ -2425,7 +2425,6 @@ class WsiDicomStack(metaclass=ABCMeta):
         value_1 = 'DERIVED'
         value_4 = 'RESAMPLED'
         if isinstance(self, WsiDicomLevel):
-            value_3 = 'VOLUME'
             if self.level == 0:
                 value_1 = 'ORGINAL'
                 value_4 = 'None'
