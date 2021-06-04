@@ -1280,6 +1280,12 @@ class SparseTileIndex(TileIndex):
         return tile, z
 
 
+class Tiler(metaclass=ABCMeta):
+    @abstractmethod
+    def get_encoded_tile(self, tile: Point) -> bytes:
+        raise NotImplementedError
+
+
 class WsiInstance(metaclass=ABCMeta):
     def __init__(
         self,
@@ -1384,6 +1390,16 @@ class WsiInstance(metaclass=ABCMeta):
     @property
     @abstractmethod
     def optical_paths(self) -> List[str]:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def plane_size(self) -> Size:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def uids(self) -> Optional[BaseUids]:
         raise NotImplementedError
 
     def stitch_tiles(self, region: Region, path: str, z: float) -> Image:
@@ -1599,11 +1615,35 @@ class WsiInstance(metaclass=ABCMeta):
     def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         raise NotImplementedError
 
+    @staticmethod
+    def check_duplicate_instance(
+        instances: List['WsiInstance'],
+        self: object
+    ) -> None:
+        """Check for duplicates in list of instances. Instances are duplicate
+        if instance identifier (file instance uid or concatenation uid) match.
+        Stops at first found duplicate and raises WsiDicomUidDuplicateError.
+
+        Parameters
+        ----------
+        instances: List['WsiInstance']
+            List of instances to check.
+        caller: Object
+            Object that the instances belongs to.
+        """
+        instance_identifiers: List[str] = []
+        for instance in instances:
+            instance_identifier = instance.identifier
+            if instance_identifier not in instance_identifiers:
+                instance_identifiers.append(instance_identifier)
+            else:
+                raise WsiDicomUidDuplicateError(str(instance), str(self))
+
 
 class WsiGenericInstance(WsiInstance):
     def __init__(
         self,
-        tiler,
+        tiler: Tiler,
         size: Size,
         pixel_spacing: SizeMm,
         tile_size: Size,
@@ -1616,10 +1656,6 @@ class WsiGenericInstance(WsiInstance):
         slice_thickness: float,
         slice_spacing: float
     ):
-        self.tiler = tiler
-        self._focal_planes = focal_planes
-        self._optical_paths = optical_paths
-        self._identifier = pydicom.uid.generate_uid()
         super().__init__(
             size,
             pixel_spacing,
@@ -1631,6 +1667,11 @@ class WsiGenericInstance(WsiInstance):
             slice_thickness,
             slice_spacing
         )
+        self.tiler = tiler
+        self._focal_planes = focal_planes
+        self._optical_paths = optical_paths
+        self._identifier = pydicom.uid.generate_uid()
+        self._uids = None
 
     @property
     def default_z(self) -> float:
@@ -1648,8 +1689,17 @@ class WsiGenericInstance(WsiInstance):
     def optical_paths(self) -> List[str]:
         return self._optical_paths
 
+    @property
+    def plane_size(self) -> Size:
+        return self.size//self.tile_size
+
+    @property
+    def uids(self) -> Optional[BaseUids]:
+        return None
+
     def get_tile(self, tile: Point, z: float, path: str) -> Image:
-        image = Image.open(self.tiler.get_tile(tile))
+        tile_frame = self.tiler.get_encoded_tile(tile)
+        image = Image.open(io.BytesIO(tile_frame))
         # Check if tile is an edge tile that should be croped
         cropped_tile_region = self.crop_to_level_size(tile)
         if cropped_tile_region.size != self.tile_size:
@@ -1657,12 +1707,14 @@ class WsiGenericInstance(WsiInstance):
         return image
 
     def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
-        image = self.tiler.get_tile(tile)
+        tile_frame = self.tiler.get_encoded_tile(tile)
         # Check if tile is an edge tile that should be croped
         cropped_tile_region = self.crop_to_level_size(tile)
         if cropped_tile_region.size != self.tile_size:
-            image = image.crop(box=cropped_tile_region.box_from_origin)
-        return image
+            image = Image.open(io.BytesIO(tile_frame))
+            image.crop(box=cropped_tile_region.box_from_origin)
+            tile_frame = self.encode(image)
+        return tile_frame
 
     def get_tile_range(
         self,
@@ -1757,38 +1809,18 @@ class WsiDicomInstance(WsiInstance):
         return self.tiles.optical_paths
 
     @property
+    def plane_size(self) -> Size:
+        return self.tiles.plane_size
+
+    @property
     def files(self) -> List[WsiDicomFile]:
         """Return list of files"""
         return list(self._files.values())
 
     @property
-    def uids(self) -> BaseUids:
+    def uids(self) -> Optional[BaseUids]:
         """Return base uids"""
         return self._uids
-
-    @staticmethod
-    def check_duplicate_instance(
-        instances: List['WsiDicomInstance'],
-        self: object
-    ) -> None:
-        """Check for duplicates in list of instances. Instances are duplicate
-        if instance identifier (file instance uid or concatenation uid) match.
-        Stops at first found duplicate and raises WsiDicomUidDuplicateError.
-
-        Parameters
-        ----------
-        instances: List['WsiDicomInstance']
-            List of instances to check.
-        caller: Object
-            Object that the instances belongs to.
-        """
-        instance_identifiers: List[str] = []
-        for instance in instances:
-            instance_identifier = instance.identifier
-            if instance_identifier not in instance_identifiers:
-                instance_identifiers.append(instance_identifier)
-            else:
-                raise WsiDicomUidDuplicateError(str(instance), str(self))
 
     @classmethod
     def open(
@@ -2208,9 +2240,12 @@ class WsiDicomStack(metaclass=ABCMeta):
         self._instances = {  # key is identifier (str)
             instance.identifier: instance for instance in instances
         }
-        # self._uids, self._wsi_type = self._validate_stack()
+        self._validate_stack()
 
         base_instance = instances[0]
+        self._wsi_type = base_instance.wsi_type
+        self._uids = base_instance.uids
+
         self._size = base_instance.size
         self._pixel_spacing = base_instance.pixel_spacing
         self._default_instance_uid: str = base_instance.identifier
@@ -2266,7 +2301,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         return list({
             path
             for instance in self.instances.values()
-            for path in instance.tiles.optical_paths
+            for path in instance.optical_paths
         })
 
     @property
@@ -2274,7 +2309,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         return list({
             focal_plane
             for innstance in self.instances.values()
-            for focal_plane in innstance.tiles.focal_planes
+            for focal_plane in innstance.focal_planes
         })
 
     @classmethod
@@ -2625,11 +2660,14 @@ class WsiDicomStack(metaclass=ABCMeta):
         optical_paths: List[str]
             List of optical paths to include in file.
         """
-        ds = self.default_instance.create_ds()
+        if(isinstance(self.default_instance, WsiDicomInstance)):
+            ds = self.default_instance.create_ds()
+        else:
+            ds = Dataset()
         ds.ImageType = self._create_image_type_attribute()
         ds.SOPInstanceUID = uid
         ds.DimensionOrganizationType = 'TILED_FULL'
-        plane_size = self.default_instance.tiles.plane_size
+        plane_size = self.default_instance.plane_size
         number_of_frames = (
             plane_size.width
             * plane_size.height
@@ -2668,7 +2706,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         optical_paths: List[str]
             List of optical paths to include in file.
         """
-        plane_size = self.default_instance.tiles.plane_size
+        plane_size = self.default_instance.plane_size
         tile_geometry = Region(Point(0, 0), plane_size)
         # Generator for the tiles
         tiles = (
@@ -2769,27 +2807,19 @@ class WsiDicomStack(metaclass=ABCMeta):
         # close the file
         fp.close()
 
-    def _validate_stack(
-        self,
-    ) -> Tuple[BaseUids, str]:
+    def _validate_stack(self):
         """Check that no file or instance in stack is duplicate, instances in
         stack matches and that the optical manager matches by base uid.
         Raises WsiDicomMatchError otherwise.
-        Returns the matching base uid.
-
-        Returns
-        ----------
-        Tuple[BaseUids, str]
-            Matching uids and wsi type
         """
         instances = list(self.instances.values())
-        WsiDicomFile.check_duplicate_file(self.files, self)
-        WsiDicomInstance.check_duplicate_instance(instances, self)
-        base_instance = instances[0]
-        for instance in instances[1:]:
-            if not base_instance.matches(instance):
-                raise WsiDicomMatchError(str(instance), str(self))
-        return base_instance.uids, base_instance.wsi_type
+        if(isinstance(instances[0], WsiDicomInstance)):
+            WsiDicomFile.check_duplicate_file(self.files, self)
+            base_instance = instances[0]
+            for instance in instances[1:]:
+                if not base_instance.matches(instance):
+                    raise WsiDicomMatchError(str(instance), str(self))
+        WsiInstance.check_duplicate_instance(instances, self)
 
     @classmethod
     def _group_instances(
@@ -3049,7 +3079,11 @@ class WsiDicomSeries(metaclass=ABCMeta):
             List of stacks to include in the series
         """
         self._stacks: List[WsiDicomStack] = stacks
-        # self._uids = self._validate_series(self.stacks)
+
+        if len(self.stacks) != 0 and self.stacks[0].uids is not None:
+            self._uids = self._validate_series(self.stacks)
+        else:
+            self._uids = None
 
     def __getitem__(self, index: int) -> WsiDicomStack:
         """Get stack by index.
@@ -3212,7 +3246,10 @@ class WsiDicomLevels(WsiDicomSeries):
             (level.level, level)
             for level in sorted(levels, key=lambda level: level.level)
         )
-        # self._uids = self._validate_series(self.stacks)
+        if len(self.stacks) != 0 and self.stacks[0].uids is not None:
+            self._uids = self._validate_series(self.stacks)
+        else:
+            self._uids = None
 
     @property
     def pyramid(self) -> str:
@@ -3409,10 +3446,13 @@ class WsiDicom:
         self._labels: WsiDicomLabels = self._assign(series, 'labels')
         self._overviews: WsiDicomOverviews = self._assign(series, 'overviews')
 
-        # self.uids = self._validate_collection(
-        #     [self.levels, self.labels, self.overviews],
-        #     optical
-        # )
+        if self.levels.uids is not None:
+            self.uids = self._validate_collection(
+                [self.levels, self.labels, self.overviews],
+                optical
+            )
+        else:
+            self.uids = None
         self.optical = optical
         base = self.levels.base_level.default_instance
         # self.ds = base.create_ds()
@@ -3535,9 +3575,8 @@ class WsiDicom:
         return WsiDicom([levels, labels, overviews], optical=optical)
 
     @classmethod
-    def open_generic(cls, wsi_instance_generator) -> 'WsiDicom':
+    def open_generic(cls, instances: WsiGenericInstance) -> 'WsiDicom':
         optical = OpticalManager()
-        instances = wsi_instance_generator.instances()
         levels = WsiDicomLevels.open(instances)
         return cls([levels], optical)
 
@@ -3649,7 +3688,7 @@ class WsiDicom:
             )
         except StopIteration:
             raise WsiDicomNotFoundError("Valid series", "in collection")
-        for i, item in enumerate(series):
+        for item in series:
             if item.uids is not None and item.uids != base_uids:
                 raise WsiDicomMatchError(str(item), str(self))
         if base_uids != optical.uids:
@@ -3692,9 +3731,10 @@ class WsiDicom:
         path: Path,
         levels: Tuple[int, int] = None,
     ):
-        series = [self.levels, self.labels, self.overviews]
-        for item in series:
-            item.save(path)
+        self.levels.save(path)
+        # series = [self.levels, self.labels, self.overviews]
+        # for item in series:
+        #     item.save(path)
 
     def read_label(self, index: int = 0) -> Image:
         """Read label image of the whole slide. If several label
