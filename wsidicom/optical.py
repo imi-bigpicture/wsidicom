@@ -200,7 +200,7 @@ class OpticalPath:
 
 
 class OpticalManager:
-    def __init__(self, uids: BaseUids):
+    def __init__(self, uids: BaseUids = None):
         """Store optical paths and icc profiles loaded from dicom files.
         Parameters
         ----------
