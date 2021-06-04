@@ -2135,6 +2135,22 @@ class WsiDicomStack(metaclass=ABCMeta):
         ]
         return [file for sublist in instance_files for file in sublist]
 
+    @property
+    def optical_paths(self) -> List[str]:
+        return list({
+            path
+            for instance in self.instances.values()
+            for path in instance.tiles.optical_paths
+        })
+
+    @property
+    def focal_planes(self) -> List[float]:
+        return list({
+            focal_plane
+            for innstance in self.instances.values()
+            for focal_plane in innstance.tiles.focal_planes
+        })
+
     @classmethod
     def open(
         cls,
@@ -2610,22 +2626,17 @@ class WsiDicomStack(metaclass=ABCMeta):
         self.write_preamble(fp)
         self.write_file_meta(fp, uid)
 
-        # Optical paths and focal planes available in instance should be a
-        # property. We should also check that the requested path/plane is
-        # available
-        if optical_paths is None:
-            optical_paths: List[str] = []
-            for instance in self.instances.values():
-                for path in instance.tiles.optical_paths:
-                    if path not in optical_paths:
-                        optical_paths.append(path)
+        if optical_paths is not None:
+            if not all(path in self.optical_paths for path in optical_paths):
+                raise ValueError("Requested optical paths not found")
+        else:
+            optical_paths = self.optical_paths
 
-        if focal_planes is None:
-            focal_planes: List[float] = []
-            for instance in self.instances.values():
-                for z in instance.tiles.focal_planes:
-                    if z not in focal_planes:
-                        focal_planes.append(z)
+        if focal_planes is not None:
+            if not all(plane in self.focal_planes for plane in focal_planes):
+                raise ValueError("Requested focal planes not found")
+        else:
+            focal_planes = self.focal_planes
 
         self.write_base(fp, uid, focal_planes, optical_paths)
         self.write_pixel_data(fp, focal_planes, optical_paths)
