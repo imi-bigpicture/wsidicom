@@ -297,7 +297,11 @@ class OpticalPath:
 
 
 class OpticalManager:
-    def __init__(self, optical_paths, icc_profiles):
+    def __init__(
+        self,
+        optical_paths: List[OpticalPath] = None,
+        icc_profiles: List[IccProfile] = None
+    ):
         """Store optical paths and icc profiles loaded from dicom files.
         """
 

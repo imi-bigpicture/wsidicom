@@ -2700,6 +2700,22 @@ class WsiDicomLevels(WsiDicomSeries):
         return closest
 
 
+class TileManager(metaclass=ABCMeta):
+    def __init__(
+        self,
+        filepaths: List[Path],
+        optical_paths: List[str],
+        focal_planes: List[float]
+    ):
+        self.filepaths = filepaths
+        self.optical_paths = optical_paths
+        self.focal_planes = focal_planes
+
+    @abstractmethod
+    def level_instances(self) -> List[WsiGenericInstance]:
+        raise NotImplementedError
+
+
 class WsiDicom:
     def __init__(
         self,
