@@ -337,7 +337,7 @@ class WsiDicomFile:
         STANDARD_WHOLE_SLIDE_MICROSCOPY_MODULE_ATTRIBUTES = [
             "TotalPixelMatrixOriginSequence",
             "FocusMethod",
-            "ExtendedDepthOfField"
+            "ExtendedDepthOfField",
             "ImageOrientationSlide",
             "AcquisitionDateTime",
             "LossyImageCompression",
