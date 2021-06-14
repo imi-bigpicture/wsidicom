@@ -1,5 +1,6 @@
 import io
 import struct
+from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -8,9 +9,9 @@ from PIL import Image, ImageCms
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
+from .conceptcode import ConceptCode
 from .errors import WsiDicomNotFoundError
 from .file import WsiDicomFile
-from .conceptcode import ConceptCode
 
 
 @dataclass
@@ -219,14 +220,90 @@ class Lut:
 
 
 @dataclass
-class OpticalPath:
-    identifier: str
-    icc_profile_name: str
-    illumination_types: List[ConceptCode]
+class OpticalFilter(metaclass=ABCMeta):
+    filters: Optional[ConceptCode]
+    nominal: Optional[float]
+    low_pass: Optional[float]
+    high_pass: Optional[float]
+
+    @classmethod
+    @abstractmethod
+    def from_ds(cls, ds: Dataset):
+        raise NotImplementedError
+
+
+class LightPathFilter(OpticalFilter):
+    @classmethod
+    def from_ds(cls, ds: Dataset) -> 'LightPathFilter':
+        filter_band = getattr(ds, 'LightPathFilterPassBand', [None, None])
+        return cls(
+            filters=ConceptCode.light_path_filter(ds),
+            nominal=getattr(ds, 'LightPathFilterPassThroughWavelength', None),
+            low_pass=filter_band[0],
+            high_pass=filter_band[1]
+        )
+
+
+class ImagePathFilter(OpticalFilter):
+    @classmethod
+    def from_ds(cls, ds: Dataset) -> 'ImagePathFilter':
+        filter_band = getattr(ds, 'ImagePathFilterPassBand', [None, None])
+        return cls(
+            filters=ConceptCode.image_path_filter(ds),
+            nominal=getattr(ds, 'ImagePathFilterPassThroughWavelength', None),
+            low_pass=filter_band[0],
+            high_pass=filter_band[1]
+        )
+
+
+class Illumination:
+    illumination_method: List[ConceptCode]
     illumination_wavelengt: Optional[float]
     illumination_color: Optional[ConceptCode]
+    illuminator: Optional[ConceptCode]
+
+    @classmethod
+    def from_ds(cls, ds: Dataset) -> 'Illumination':
+        return cls(
+            illumination_method=ConceptCode.illumination(ds),
+            illumination_wavelengt=getattr(ds, 'IlluminationWaveLength', None),
+            illumination_color=ConceptCode.illumination_color(ds),
+            illuminator=ConceptCode.illuminator(ds),
+        )
+
+
+class Lenses:
+    lenses: Optional[List[ConceptCode]]
+    condenser_lens_power: Optional[float]
+    objective_lens_power: Optional[float]
+    objective_lens_numberical_aperature: Optional[float]
+
+    @classmethod
+    def from_ds(cls, ds: Dataset) -> 'Lenses':
+        objective_lens_numberical_aperature = float(
+            getattr(ds, 'ObjectiveLensNumericalAperture', None)
+        )
+        return cls(
+            lenses=ConceptCode.lenses(ds),
+            condenser_power=float(getattr(ds, 'ObjectiveLensPower', None)),
+            objective_power=float(getattr(ds, 'CondenserLensPower', None)),
+            objective_na=float(
+                getattr(ds, 'ObjectiveLensNumericalAperture', None)
+            )
+        )
+
+
+@dataclass
+class OpticalPath:
+    identifier: str
+    illumination: Illumination
     description: Optional[str]
+    icc_profile_name: Optional[str]
     lut: Optional[Lut]
+    light_path_filter: Optional[LightPathFilter]
+    image_path_filter: Optional[ImagePathFilter]
+    channel_description: Optional[List[ConceptCode]]
+    lenses: Optional[Lenses]
     dataset: Optional[Dataset]
 
     def __str__(self):
@@ -244,11 +321,6 @@ class OpticalPath:
     def to_ds(self) -> Dataset:
         if self.dataset is not None:
             return self.dataset
-
-        ds = Dataset()
-        ds.IlluminationTypeCodeSequence = DicomSequence([
-            Dataset
-        ])
 
         return Dataset()
 
@@ -269,12 +341,14 @@ class OpticalPath:
         """
         return OpticalPath(
             identifier=str(ds.OpticalPathIdentifier),
-            icc_profile_name=IccProfile.read_name(ds),
-            illumination_types=ConceptCode.illumination(ds),
-            illumination_wavelengt=getattr(ds, 'IlluminationWaveLength', None),
-            illumination_color=cls.get_illumination_color(ds),
+            illumination=Illumination.from_ds(ds),
             description=str(getattr(ds, 'OpticalPathDescription', None)),
+            icc_profile_name=IccProfile.read_name(ds),
             lut=cls.get_lut(ds),
+            light_path_filter=LightPathFilter.from_ds(ds),
+            image_path_filter=ImagePathFilter.from_ds(ds),
+            channel_description=ConceptCode.channel_description(ds),
+            lenses=Lenses.from_ds(ds),
             dataset=ds
         )
 
@@ -283,32 +357,6 @@ class OpticalPath:
         if('PaletteColorLookupTableSequence' in ds):
             return Lut(ds.PaletteColorLookupTableSequence)
         return None
-
-    @staticmethod
-    def get_illumination_color(ds: Dataset) -> Optional[ConceptCode]:
-        if 'IlluminationColorCodeSequence' not in ds:
-            return None
-        code_ds = ds.IlluminationColorCodeSequence[0]
-        code = ConceptCode(
-            value=code_ds.CodeValue,
-            scheme_designator=code_ds.CodingSchemeDesignator,
-            meaning=code_ds.CodeMeaning,
-            scheme_version=getattr(ds, 'CodingSchemeVersion', None)
-        )
-        return code
-
-    @staticmethod
-    def get_illumination_type_codes(ds: Dataset) -> List[ConceptCode]:
-        codes: List[ConceptCode] = []
-        for code_ds in ds.IlluminationTypeCodeSequence:
-            code = ConceptCode(
-                value=code_ds.CodeValue,
-                scheme_designator=code_ds.CodingSchemeDesignator,
-                meaning=code_ds.CodeMeaning,
-                scheme_version=getattr(ds, 'CodingSchemeVersion', None)
-            )
-            codes.append(code)
-        return codes
 
 
 class OpticalManager:
