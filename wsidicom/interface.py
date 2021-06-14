@@ -771,6 +771,30 @@ class WsiInstance(metaclass=ABCMeta):
             )
         return tile_region
 
+    def crop_encoded_tile_to_level(
+        self,
+        tile: Point,
+        tile_frame: bytes
+    ) -> bytes:
+        cropped_tile_region = self.crop_to_level_size(tile)
+        if cropped_tile_region.size != self.tile_size:
+            image = Image.open(io.BytesIO(tile_frame))
+            image.crop(box=cropped_tile_region.box_from_origin)
+            tile_frame = self.encode(image)
+        return tile_frame
+
+    def crop_tile_to_level(
+        self,
+        tile: Point,
+        tile_image: Image
+    ) -> Image:
+        cropped_tile_region = self.crop_to_level_size(tile)
+        if cropped_tile_region.size != self.tile_size:
+            tile_image = tile_image.crop(
+                box=cropped_tile_region.box_from_origin
+            )
+        return tile_image
+
     def encode(self, image: Image) -> bytes:
         """Encode image using transfer syntax.
 
@@ -916,7 +940,13 @@ class WsiInstance(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str,
+        crop: bool
+    ) -> bytes:
         raise NotImplementedError
 
     @staticmethod
@@ -1001,24 +1031,27 @@ class WsiGenericInstance(WsiInstance):
     def uids(self) -> Optional[BaseUids]:
         return None
 
-    def get_tile(self, tile: Point, z: float, path: str) -> Image:
+    def get_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str
+    ) -> Image:
         tile_frame = self.tiler.get_encoded_tile(tile)
         image = Image.open(io.BytesIO(tile_frame))
-        # Check if tile is an edge tile that should be croped
-        cropped_tile_region = self.crop_to_level_size(tile)
-        if cropped_tile_region.size != self.tile_size:
-            image = image.crop(box=cropped_tile_region.box_from_origin)
-        return image
+        return self.crop_tile_to_level(tile, image)
 
-    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str,
+        crop: bool = True
+    ) -> bytes:
         tile_frame = self.tiler.get_encoded_tile(tile)
-        # Check if tile is an edge tile that should be croped
-        cropped_tile_region = self.crop_to_level_size(tile)
-        if cropped_tile_region.size != self.tile_size:
-            image = Image.open(io.BytesIO(tile_frame))
-            image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.encode(image)
-        return tile_frame
+        if not crop:
+            return tile_frame
+        return self.crop_encoded_tile_to_level(tile, tile_frame)
 
     def get_tile_range(
         self,
@@ -1232,13 +1265,15 @@ class WsiDicomInstance(WsiInstance):
             image = Image.open(io.BytesIO(tile_frame))
         except WsiDicomSparse:
             image = self.blank_tile
-        # Check if tile is an edge tile that should be croped
-        cropped_tile_region = self.crop_to_level_size(tile)
-        if cropped_tile_region.size != self.tile_size:
-            image = image.crop(box=cropped_tile_region.box_from_origin)
-        return image
+        return self.crop_tile_to_level(tile, image)
 
-    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str,
+        crop: bool = True
+    ) -> bytes:
         """Get tile bytes at tile coordinate x, y
         If frame is inside tile geometry but no tile exists in
         frame data (sparse) returns encoded blank image.
@@ -1246,11 +1281,13 @@ class WsiDicomInstance(WsiInstance):
         Parameters
         ----------
         tile: Point
-            Tile x, y coordinate
+            Tile x, y coordinate.
         z: float
-            Z coordinate
+            Z coordinate.
         path: str
-            Optical path
+            Optical path.
+        crop: bool
+            If the tile should be croped to image region.
 
         Returns
         ----------
@@ -1264,13 +1301,9 @@ class WsiDicomInstance(WsiInstance):
         except WsiDicomSparse:
             tile_frame = self.blank_encoded_tile
 
-        # Check if tile is an edge tile that should be croped
-        cropped_tile_region = self.crop_to_level_size(tile)
-        if cropped_tile_region.size != self.tile_size:
-            image = Image.open(io.BytesIO(tile_frame))
-            image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.encode(image)
-        return tile_frame
+        if not crop:
+            return tile_frame
+        return self.crop_encoded_tile_to_level(tile, tile_frame)
 
     def get_filepointer(
         self,
@@ -1510,6 +1543,13 @@ class WsiDicomInstance(WsiInstance):
             )
         frame_index = self.tiles.get_frame_index(tile, z, path)
         return frame_index
+
+    def is_sparse(self, tile: Point, z: float, path: str) -> bool:
+        try:
+            self.tiles.get_frame_index(tile, z, path)
+            return False
+        except WsiDicomSparse:
+            return True
 
 
 class WsiDicomStack(metaclass=ABCMeta):
@@ -1815,7 +1855,8 @@ class WsiDicomStack(metaclass=ABCMeta):
         self,
         tile: Point,
         z: float = None,
-        path: str = None
+        path: str = None,
+        crop: bool = True
     ) -> bytes:
         """Return tile at tile coordinate x, y as bytes.
 
@@ -1827,6 +1868,8 @@ class WsiDicomStack(metaclass=ABCMeta):
             Z coordinate
         path: str
             Optical path
+        crop: bool
+            If the tile should be croped to image region.
 
         Returns
         ----------
@@ -1834,7 +1877,7 @@ class WsiDicomStack(metaclass=ABCMeta):
             The tile as bytes
         """
         (instance, z, path) = self.get_instance(z, path)
-        return instance.get_encoded_tile(tile, z, path)
+        return instance.get_encoded_tile(tile, z, path, crop)
 
     def mm_to_pixel(self, region: RegionMm) -> Region:
         """Convert region in mm to pixel region.
@@ -2013,7 +2056,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         tile_geometry = Region(Point(0, 0), plane_size)
         # Generator for the tiles
         tiles = (
-            self.get_encoded_tile(Point(x_tile, y_tile), z, path)
+            self.get_encoded_tile(Point(x_tile, y_tile), z, path, False)
             for path in optical_paths
             for z in focal_planes
             for x_tile, y_tile in tile_geometry.iterate_all()
