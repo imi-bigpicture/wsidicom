@@ -4,7 +4,8 @@ import json
 import os
 import unittest
 from pathlib import Path
-from typing import Sequence, Tuple, TypedDict, Dict
+from tempfile import TemporaryDirectory
+from typing import Dict, Sequence, Tuple, TypedDict
 
 import pytest
 from PIL import Image, ImageChops
@@ -21,11 +22,14 @@ class WsiFolder(TypedDict):
 
 
 @pytest.mark.integration
-class WsiDicomFilesTests(unittest.TestCase):
+class WsiDicomSaveTests(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.test_folders: Dict[Path, WsiDicom]
+        self.test_folders: Dict[
+            Path,
+            Tuple[WsiDicom, Path]
+        ]
 
     @classmethod
     def setUpClass(cls):
@@ -36,13 +40,19 @@ class WsiDicomFilesTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        for folder, wsi_dicom in cls.test_folders.items():
-            wsi_dicom.close()
+        for (wsi, tempdir) in cls.test_folders.values():
+            wsi.close()
+            tempdir.cleanup()
 
     @staticmethod
     def open(path: Path) -> WsiDicom:
         folder = Path(path).joinpath("dcm")
-        return WsiDicom.open(str(folder))
+        wsi = WsiDicom.open(str(folder))
+        tempdir = TemporaryDirectory()
+        wsi.save(Path(tempdir.name))
+        wsi.close()
+        restored_wsi = WsiDicom.open(str(tempdir.name))
+        return (restored_wsi, tempdir)
 
     @classmethod
     def _get_folders(cls):
@@ -52,7 +62,11 @@ class WsiDicomFilesTests(unittest.TestCase):
         ]
 
     def test_read_region(self):
-        for folder, wsi_dicom in self.test_folders.items():
+        for folder, (wsi, tempdir) in self.test_folders.items():
+            print(folder)
+            print(wsi)
+            print(tempdir)
+        for folder, (wsi, tempdir) in self.test_folders.items():
             json_files = glob.glob(
                 str(folder.absolute())+"/read_region/*.json")
 
@@ -60,7 +74,7 @@ class WsiDicomFilesTests(unittest.TestCase):
                 with open(json_file, "rt") as f:
                     region = json.load(f)
 
-                im = wsi_dicom.read_region(
+                im = wsi.read_region(
                     (region["location"]["x"], region["location"]["y"]),
                     region["level"],
                     (region["size"]["width"], region["size"]["height"])
@@ -74,7 +88,7 @@ class WsiDicomFilesTests(unittest.TestCase):
                 self.assertIsNone(bbox, msg=json_file)
 
     def test_read_region_mm(self):
-        for folder, wsi_dicom in self.test_folders.items():
+        for folder, (wsi, tempdir) in self.test_folders.items():
             json_files = glob.glob(
                 str(folder.absolute())+"/read_region_mm/*.json")
 
@@ -82,7 +96,7 @@ class WsiDicomFilesTests(unittest.TestCase):
                 with open(json_file, "rt") as f:
                     region = json.load(f)
 
-                im = wsi_dicom.read_region_mm(
+                im = wsi.read_region_mm(
                     (region["location"]["x"], region["location"]["y"]),
                     region["level"],
                     (region["size"]["width"], region["size"]["height"])
@@ -96,7 +110,7 @@ class WsiDicomFilesTests(unittest.TestCase):
                 self.assertIsNone(bbox, msg=json_file)
 
     def test_read_region_mpp(self):
-        for folder, wsi_dicom in self.test_folders.items():
+        for folder, (wsi, tempdir) in self.test_folders.items():
             json_files = glob.glob(
                 str(folder.absolute())+"/read_region_mpp/*.json")
 
@@ -104,7 +118,7 @@ class WsiDicomFilesTests(unittest.TestCase):
                 with open(json_file, "rt") as f:
                     region = json.load(f)
 
-                im = wsi_dicom.read_region_mpp(
+                im = wsi.read_region_mpp(
                     (region["location"]["x"], region["location"]["y"]),
                     region["mpp"],
                     (region["size"]["width"], region["size"]["height"])
@@ -118,7 +132,7 @@ class WsiDicomFilesTests(unittest.TestCase):
                 self.assertIsNone(bbox, msg=json_file)
 
     def test_read_tile(self):
-        for folder, wsi_dicom in self.test_folders.items():
+        for folder, (wsi, tempdir) in self.test_folders.items():
             json_files = glob.glob(
                 str(folder.absolute())+"/read_tile/*.json")
 
@@ -126,7 +140,7 @@ class WsiDicomFilesTests(unittest.TestCase):
                 with open(json_file, "rt") as f:
                     region = json.load(f)
 
-                im = wsi_dicom.read_tile(
+                im = wsi.read_tile(
                     region["level"],
                     (region["location"]["x"], region["location"]["y"])
                 )
@@ -138,14 +152,14 @@ class WsiDicomFilesTests(unittest.TestCase):
                 self.assertIsNone(bbox, msg=json_file)
 
     def test_read_encoded_tile(self):
-        for folder, wsi_dicom in self.test_folders.items():
+        for folder, (wsi, tempdir) in self.test_folders.items():
             json_files = glob.glob(
                 str(folder.absolute())+"/read_encoded_tile/*.json")
 
             for json_file in json_files:
                 with open(json_file, "rt") as f:
                     region = json.load(f)
-                tile = wsi_dicom.read_encoded_tile(
+                tile = wsi.read_encoded_tile(
                     region["level"],
                     (region["location"]["x"], region["location"]["y"])
                 )
@@ -158,14 +172,14 @@ class WsiDicomFilesTests(unittest.TestCase):
                 self.assertIsNone(bbox, msg=json_file)
 
     def test_read_thumbnail(self):
-        for folder, wsi_dicom in self.test_folders.items():
+        for folder, (wsi, tempdir) in self.test_folders.items():
             json_files = glob.glob(
                 str(folder.absolute())+"/read_thumbnail/*.json")
 
             for json_file in json_files:
                 with open(json_file, "rt") as f:
                     region = json.load(f)
-                im = wsi_dicom.read_thumbnail(
+                im = wsi.read_thumbnail(
                     (region["size"]["width"], region["size"]["height"])
                 )
                 expected_im = Image.open(Path(json_file).with_suffix(".png"))
