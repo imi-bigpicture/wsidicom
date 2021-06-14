@@ -5,13 +5,12 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 from PIL import Image, ImageCms
-from pydicom import dataset
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.sr.coding import Code
 
 from .errors import WsiDicomNotFoundError
 from .file import WsiDicomFile
+from .conceptcode import ConceptCode
 
 
 @dataclass
@@ -223,9 +222,9 @@ class Lut:
 class OpticalPath:
     identifier: str
     icc_profile_name: str
-    illumination_types: List[Code]
+    illumination_types: List[ConceptCode]
     illumination_wavelengt: Optional[float]
-    illumination_color: Optional[Code]
+    illumination_color: Optional[ConceptCode]
     description: Optional[str]
     lut: Optional[Lut]
     dataset: Optional[Dataset]
@@ -245,6 +244,12 @@ class OpticalPath:
     def to_ds(self) -> Dataset:
         if self.dataset is not None:
             return self.dataset
+
+        ds = Dataset()
+        ds.IlluminationTypeCodeSequence = DicomSequence([
+            Dataset
+        ])
+
         return Dataset()
 
     @classmethod
@@ -280,11 +285,11 @@ class OpticalPath:
         return None
 
     @staticmethod
-    def get_illumination_color(ds: Dataset) -> Optional[Code]:
+    def get_illumination_color(ds: Dataset) -> Optional[ConceptCode]:
         if 'IlluminationColorCodeSequence' not in ds:
             return None
         code_ds = ds.IlluminationColorCodeSequence[0]
-        code = Code(
+        code = ConceptCode(
             value=code_ds.CodeValue,
             scheme_designator=code_ds.CodingSchemeDesignator,
             meaning=code_ds.CodeMeaning,
@@ -293,10 +298,10 @@ class OpticalPath:
         return code
 
     @staticmethod
-    def get_illumination_type_codes(ds: Dataset) -> List[Code]:
-        codes: List[Code] = []
+    def get_illumination_type_codes(ds: Dataset) -> List[ConceptCode]:
+        codes: List[ConceptCode] = []
         for code_ds in ds.IlluminationTypeCodeSequence:
-            code = Code(
+            code = ConceptCode(
                 value=code_ds.CodeValue,
                 scheme_designator=code_ds.CodingSchemeDesignator,
                 meaning=code_ds.CodeMeaning,
