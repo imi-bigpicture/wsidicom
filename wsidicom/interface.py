@@ -19,7 +19,7 @@ from .errors import (WsiDicomFileError, WsiDicomMatchError,
                      WsiDicomSparse, WsiDicomUidDuplicateError)
 from .file import WsiDicomFile
 from .geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
-from .optical import OpticalManager
+from .optical import OpticalManager, OpticalPath
 from .stringprinting import dict_pretty_str, list_pretty_str, str_indent
 from .uid import BaseUids
 
@@ -595,7 +595,8 @@ class WsiInstance(metaclass=ABCMeta):
         transfer_syntax: Uid,
         photometric_interpretation: str,
         slice_thickness: float,
-        slice_spacing: float
+        slice_spacing: float,
+        mm_size: SizeMm
     ):
         self._size = size
         self._pixel_spacing = pixel_spacing
@@ -613,6 +614,7 @@ class WsiInstance(metaclass=ABCMeta):
             self._image_mode = "L"
         else:
             self._image_mode = "RGB"
+        self._mm_size = mm_size
 
     @property
     def wsi_type(self) -> str:
@@ -653,6 +655,11 @@ class WsiInstance(metaclass=ABCMeta):
     def pixel_spacing(self) -> SizeMm:
         """Return pixel spacing in mm/pixel"""
         return self._pixel_spacing
+
+    @property
+    def mm_size(self) -> SizeMm:
+        """Return slide size in mm"""
+        return self._mm_size
 
     @property
     def slice_thickness(self) -> float:
@@ -1059,7 +1066,8 @@ class WsiDicomInstance(WsiInstance):
             base_file.transfer_syntax,
             base_file.photometric_interpretation,
             base_file.slice_thickness,
-            base_file.slice_spacing
+            base_file.slice_spacing,
+            base_file.mm_size
         )
         self._blank_tile = self._create_blank_tile()
         self._blank_encoded_tile = self.encode(self._blank_tile)
@@ -1224,7 +1232,6 @@ class WsiDicomInstance(WsiInstance):
             image = Image.open(io.BytesIO(tile_frame))
         except WsiDicomSparse:
             image = self.blank_tile
-
         # Check if tile is an edge tile that should be croped
         cropped_tile_region = self.crop_to_level_size(tile)
         if cropped_tile_region.size != self.tile_size:
@@ -1921,6 +1928,7 @@ class WsiDicomStack(metaclass=ABCMeta):
     def write_base(
         self,
         fp: pydicom.filebase.DicomFileLike,
+        optical: OpticalManager,
         uid: Uid,
         focal_planes: List[str],
         optical_paths: List[float]
@@ -1931,6 +1939,8 @@ class WsiDicomStack(metaclass=ABCMeta):
         ----------
         fp: pydicom.filebase.DicomFileLike
             Filepointer to file to write.
+        optical: OpticalManager
+            Manager container optical paths.
         uid: Uid
             SOP instance uid to include in file.
         focal_planes: List[float]
@@ -1961,9 +1971,22 @@ class WsiDicomStack(metaclass=ABCMeta):
             self._create_shared_functional_groups_sequence()
         )
         ds.NumberOfOpticalPaths = len(optical_paths)
+        ds.OpticalPathSequence = DicomSequence([
+            optical.get(optical_path).to_ds()
+            for optical_path in optical_paths
+        ])
 
-        # We need to add to ds:
-        # Optical path sequence
+        ds.Rows = plane_size.width
+        ds.Columns = plane_size.height
+        ds.SamplesPerPixel = 3  # Should use correct values!
+        ds.PhotometricInterpretation = 'YBR_FULL_422'
+        ds.ImagedVolumeWidth = self.default_instance.mm_size.width
+        ds.ImagedVolumeHeight = self.default_instance.mm_size.height
+        ds.ImagedVolumeDepth = (  # Should use correct values!
+            len(self.focal_planes) * self.default_instance.slice_spacing
+        )
+        ds.TotalPixelMatrixColumns = self.size.width
+        ds.TotalPixelMatrixRows = self.size.height
 
         pydicom.filewriter.write_dataset(fp, ds)
 
@@ -2045,6 +2068,7 @@ class WsiDicomStack(metaclass=ABCMeta):
     def save(
         self,
         path: Path,
+        optical: OpticalManager,
         focal_planes: List[float] = None,
         optical_paths: List[str] = None
     ):
@@ -2055,6 +2079,8 @@ class WsiDicomStack(metaclass=ABCMeta):
         ----------
         path: Path
             Path to directory to write to.
+        optical: OpticalManager
+            Manager container optical paths.
         optical_paths: List[str]
             List of optical paths to include in file.
         focal_planes: List[float]
@@ -2079,7 +2105,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         else:
             focal_planes = self.focal_planes
 
-        self.write_base(fp, uid, focal_planes, optical_paths)
+        self.write_base(fp, optical, uid, focal_planes, optical_paths)
         self.write_pixel_data(fp, focal_planes, optical_paths)
 
         # close the file
@@ -2449,13 +2475,6 @@ class WsiDicomSeries(metaclass=ABCMeta):
         for stack in self.stacks:
             stack.close()
 
-    def save(
-        self,
-        path: Path,
-    ):
-        for stack in self.stacks:
-            stack.save(path)
-
 
 class WsiDicomLabels(WsiDicomSeries):
     wsi_type = 'LABEL'
@@ -2464,7 +2483,7 @@ class WsiDicomLabels(WsiDicomSeries):
     def open(
         cls,
         instances: List[WsiInstance]
-    ) -> 'WsiDicomLevels':
+    ) -> 'WsiDicomLabels':
         """Return label series created from wsi files.
 
         Parameters
@@ -2488,7 +2507,7 @@ class WsiDicomOverviews(WsiDicomSeries):
     def open(
         cls,
         instances: List[WsiInstance]
-    ) -> 'WsiDicomLevels':
+    ) -> 'WsiDicomOverviews':
         """Return overview series created from wsi files.
 
         Parameters
@@ -2575,6 +2594,20 @@ class WsiDicomLevels(WsiDicomSeries):
         """
         levels = WsiDicomLevel.open_levels(instances)
         return WsiDicomLevels(levels)
+
+    def save(
+        self,
+        path: Path,
+        optical: OpticalManager,
+        levels: List[int] = None,
+        focal_planes: List[float] = None,
+        optical_paths: List[str] = None
+    ):
+        if levels is None:
+            levels = self.levels
+        for level, level_stack in self._levels.items():
+            if level in levels:
+                level_stack.save(path, optical, focal_planes, optical_paths)
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -2825,7 +2858,7 @@ class WsiDicom:
         level_files: List[WsiDicomFile] = []
         label_files: List[WsiDicomFile] = []
         overview_files: List[WsiDicomFile] = []
-
+        print(filepaths)
         for filepath in cls._filter_paths(filepaths):
             dicom_file = WsiDicomFile(filepath)
             if(dicom_file.wsi_type == 'VOLUME'):
@@ -2836,6 +2869,8 @@ class WsiDicom:
                 overview_files.append(dicom_file)
             else:
                 dicom_file.close()
+
+        print(level_files)
 
         base_file = cls._get_base_file(level_files)
         optical = OpticalManager.open(level_files+label_files+overview_files)
@@ -3018,8 +3053,16 @@ class WsiDicom:
         self,
         path: Path,
         levels: Tuple[int, int] = None,
+        focal_planes: List[float] = None,
+        optical_paths: List[str] = None
     ):
-        self.levels.save(path)
+        self.levels.save(
+            path,
+            self.optical,
+            levels,
+            focal_planes,
+            optical_paths
+        )
         # series = [self.levels, self.labels, self.overviews]
         # for item in series:
         #     item.save(path)
