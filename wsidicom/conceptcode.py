@@ -126,14 +126,14 @@ class ConceptCode(Code):
     @classmethod
     def illumination(
         cls,
-        value: Union[str, List[str], Dataset]
+        values: Union[str, List[str], Dataset]
     ) -> List['ConceptCode']:
         """Return illumination type code for value. Value can be a code meaning
-        (str) or a DICOM dataset containing the code.
+        (str), list of code meanings, or a DICOM dataset containing the code.
 
         Parameters
         ----------
-        value: Union[str, Dataset]
+        values: Union[str, List[str], Dataset]
             The value for creating the code.
 
         Returns
@@ -143,19 +143,116 @@ class ConceptCode(Code):
 
         """
         codes: List[ConceptCode] = []
-        if isinstance(value, str):
-            value = [value]
-        if isinstance(value, list) and isinstance(value[0], str):
+        if isinstance(values, str):
+            values = [values]
+        if isinstance(values, list) and isinstance(values[0], str):
             cid = 'cid8123',  # Microscopy Illumination Method
-            for value in value:
-                codes.append(cls._from_cid(cid, value))
+            return [cls._from_cid(cid, value) for value in values]
 
-        elif isinstance(value, Dataset):
+        elif isinstance(values, Dataset):
             return cls._from_ds(
-                value,
+                values,
                 'IlluminationTypeCodeSequence',
             )
-        raise NotImplementedError(value)
+        raise NotImplementedError(values)
+
+    @classmethod
+    def lense(
+        cls,
+        values: Union[str, List[str], Dataset]
+    ) -> List['ConceptCode']:
+        """Return lense type codes for value. Value can be a code meaning
+        (str), list of code meanings, or a DICOM dataset containing the code.
+
+        Parameters
+        ----------
+        values: Union[str, List[str], Dataset]
+            The value for creating the code.
+
+        Returns
+        ----------
+        List[ConceptCode]
+            categorycode codes created from value.
+
+        """
+        if isinstance(values, str):
+            values = [values]
+        if isinstance(values, list) and isinstance(values[0], str):
+            cid = 'cid8121',  # WSI Microscopy Lens Type
+            return [cls._from_cid(cid, value) for value in values]
+
+        elif isinstance(values, Dataset):
+            return cls._from_ds(
+                values,
+                'LensesCodeSequence',
+            )
+        raise NotImplementedError(values)
+
+    @classmethod
+    def light_path_filter(
+        cls,
+        values: Union[str, List[str], Dataset]
+    ) -> List['ConceptCode']:
+        """Return light path filter type codes for value. Value can be a code
+        meaning (str), list of code meanings, or a DICOM dataset containing the
+        code.
+
+        Parameters
+        ----------
+        values: Union[str, List[str], Dataset]
+            The value for creating the code.
+
+        Returns
+        ----------
+        List[ConceptCode]
+            categorycode codes created from value.
+
+        """
+        if isinstance(values, str):
+            values = [values]
+        if isinstance(values, list) and isinstance(values[0], str):
+            cid = 'cid8124',  # Microscopy Filter
+            return [cls._from_cid(cid, value) for value in values]
+
+        elif isinstance(values, Dataset):
+            return cls._from_ds(
+                values,
+                'LightPathFilterTypeStackCodeSequence',
+            )
+        raise NotImplementedError(values)
+
+    @classmethod
+    def image_path_filter(
+        cls,
+        values: Union[str, List[str], Dataset]
+    ) -> List['ConceptCode']:
+        """Return image path filter type codes for value. Value can be a code
+        meaning (str), list of code meanings, or a DICOM dataset containing the
+        code.
+
+        Parameters
+        ----------
+        values: Union[str, List[str], Dataset]
+            The value for creating the code.
+
+        Returns
+        ----------
+        List[ConceptCode]
+            categorycode codes created from value.
+
+        """
+        if isinstance(values, str):
+            values = [values]
+        if isinstance(values, list) and isinstance(values[0], str):
+            cid = 'cid8124',  # Microscopy Filter
+            return [cls._from_cid(cid, value) for value in values]
+
+        elif isinstance(values, Dataset):
+            return cls._from_ds(
+                values,
+                'ImagePathFilterTypeStackCodeSequence',
+            )
+        raise NotImplementedError(values)
 
     @classmethod
     def illumination_color(
@@ -184,6 +281,66 @@ class ConceptCode(Code):
             return cls._from_ds(
                 value,
                 'IlluminationColorCodeSequence',
+            )
+        raise NotImplementedError(value)
+
+    @classmethod
+    def illuminator(
+        cls,
+        value: Union[str, Dataset]
+    ) -> 'ConceptCode':
+        """Return illuminator type code for value. Value can be a code
+        meaning (str) or a DICOM dataset containing the code.
+
+        Parameters
+        ----------
+        value: Union[str, Dataset]
+            The value for creating the code.
+
+        Returns
+        ----------
+        ConceptCode
+            categorycode code created from value.
+
+        """
+        if isinstance(value, str):
+            cid = 'cid8125',  # Microscopy Illuminator Type
+            return cls._from_cid(cid, value)
+
+        elif isinstance(value, Dataset):
+            return cls._from_ds(
+                value,
+                'IlluminatorTypeCodeSequence',
+            )
+        raise NotImplementedError(value)
+
+    @classmethod
+    def channel_description(
+        cls,
+        value: Union[str, Dataset]
+    ) -> 'ConceptCode':
+        """Return channel description code for value. Value can be a code
+        meaning (str) or a DICOM dataset containing the code.
+
+        Parameters
+        ----------
+        value: Union[str, Dataset]
+            The value for creating the code.
+
+        Returns
+        ----------
+        ConceptCode
+            categorycode code created from value.
+
+        """
+        if isinstance(value, str):
+            cid = 'cid8122',  # Microscopy Illuminator and Sensor Color
+            return cls._from_cid(cid, value)
+
+        elif isinstance(value, Dataset):
+            return cls._from_ds(
+                value,
+                'ChannelDescriptionCodeSequence',
             )
         raise NotImplementedError(value)
 
