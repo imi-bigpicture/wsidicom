@@ -1356,11 +1356,13 @@ class WsiDicomInstance(WsiInstance):
             List of matching wsi dicom files
         """
         valid_files: List[WsiDicomFile] = []
+
         for file in files:
             if file.matches_series(series_uids, series_tile_size):
                 valid_files.append(file)
             else:
                 file.close()
+
         return valid_files
 
     @classmethod
@@ -1976,8 +1978,8 @@ class WsiDicomStack(metaclass=ABCMeta):
             for optical_path in optical_paths
         ])
 
-        ds.Rows = plane_size.width
-        ds.Columns = plane_size.height
+        ds.Rows = self.default_instance.tile_size.width
+        ds.Columns = self.default_instance.tile_size.height
         ds.SamplesPerPixel = 3  # Should use correct values!
         ds.PhotometricInterpretation = 'YBR_FULL_422'
         ds.ImagedVolumeWidth = self.default_instance.mm_size.width
@@ -2858,7 +2860,7 @@ class WsiDicom:
         level_files: List[WsiDicomFile] = []
         label_files: List[WsiDicomFile] = []
         overview_files: List[WsiDicomFile] = []
-        print(filepaths)
+
         for filepath in cls._filter_paths(filepaths):
             dicom_file = WsiDicomFile(filepath)
             if(dicom_file.wsi_type == 'VOLUME'):
@@ -2870,11 +2872,9 @@ class WsiDicom:
             else:
                 dicom_file.close()
 
-        print(level_files)
-
         base_file = cls._get_base_file(level_files)
-        optical = OpticalManager.open(level_files+label_files+overview_files)
 
+        optical = OpticalManager.open(level_files+label_files+overview_files)
         level_instances = WsiDicomInstance.open(
             level_files,
             base_file.uids.base,
