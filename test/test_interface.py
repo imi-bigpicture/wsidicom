@@ -16,10 +16,10 @@ from .data_gen import create_layer_file
 
 
 @pytest.mark.unittest
-class WsiDicomTests(unittest.TestCase):
+class WsiDicomInterfaceTests(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(WsiDicomTests, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.tempdir: TemporaryDirectory
         self.dicom_ds: WsiDicom
 
