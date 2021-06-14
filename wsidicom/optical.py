@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 from PIL import Image, ImageCms
+from pydicom import dataset
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.coding import Code
@@ -18,6 +19,7 @@ class IccProfile:
     name: str
     description: str
     profile: bytes
+    dataset: Optional[Dataset]
 
     @staticmethod
     def read_profile(ds: Dataset) -> ImageCms.ImageCmsProfile:
@@ -53,7 +55,8 @@ class IccProfile:
         return IccProfile(
             name=str(ImageCms.getProfileName(profile)),
             description=str(ImageCms.getProfileDescription(profile)),
-            profile=profile
+            profile=profile,
+            dataset=ds
         )
 
 
@@ -225,6 +228,7 @@ class OpticalPath:
     illumination_color: Optional[Code]
     description: Optional[str]
     lut: Optional[Lut]
+    dataset: Optional[Dataset]
 
     def __str__(self):
         return self.pretty_str()
@@ -237,6 +241,11 @@ class OpticalPath:
         if(self.description == ''):
             return self.identifier
         return self.identifier + ':' + self.description
+
+    def to_ds(self) -> Dataset:
+        if self.dataset is not None:
+            return self.dataset
+        return Dataset()
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'OpticalPath':
@@ -260,7 +269,8 @@ class OpticalPath:
             illumination_wavelengt=getattr(ds, 'IlluminationWaveLength', None),
             illumination_color=cls.get_illumination_color(ds),
             description=str(getattr(ds, 'OpticalPathDescription', None)),
-            lut=cls.get_lut(ds)
+            lut=cls.get_lut(ds),
+            dataset=ds
         )
 
     @staticmethod

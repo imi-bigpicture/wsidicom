@@ -36,7 +36,6 @@ class WsiDicomFile:
         self._fp.is_implicit_VR = transfer_syntax_uid.is_implicit_VR
         ds = pydicom.dcmread(self._fp, stop_before_pixels=True)
         self._pixel_data_position = self._fp.tell()
-
         if self.is_wsi_dicom(self.filepath, ds):
             instance_uid = Uid(ds.SOPInstanceUID)
             concatenation_uid: Uid = getattr(
@@ -341,9 +340,6 @@ class WsiDicomFile:
         ]
         REQURED_WHOLE_SLIDE_MICROSCOPY_MODULE_ATTRIBUTES = [
             "ImageType",
-            "ImagedVolumeWidth",
-            "ImagedVolumeHeight",
-            "ImagedVolumeDepth",
             "TotalPixelMatrixColumns",
             "TotalPixelMatrixRows",
         ]
