@@ -270,7 +270,7 @@ class OpticalPath:
         return OpticalPath(
             identifier=str(ds.OpticalPathIdentifier),
             icc_profile_name=IccProfile.read_name(ds),
-            illumination_types=cls.get_illumination_type_codes(ds),
+            illumination_types=ConceptCode.illumination(ds),
             illumination_wavelengt=getattr(ds, 'IlluminationWaveLength', None),
             illumination_color=cls.get_illumination_color(ds),
             description=str(getattr(ds, 'OpticalPathDescription', None)),

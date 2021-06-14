@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, List
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
@@ -72,7 +72,7 @@ class ConceptCode(Code):
         if isinstance(value, str):
             return cls._from_dict('measurement', value)
         elif isinstance(value, Dataset):
-            return cls._from_ds(value, 'ConceptNameCodeSequence')
+            return cls._from_ds(value, 'ConceptNameCodeSequence')[0]
         raise NotImplementedError(value)
 
     @classmethod
@@ -94,7 +94,7 @@ class ConceptCode(Code):
         if isinstance(value, str):
             return cls._from_dict('typecode', value)
         elif isinstance(value, Dataset):
-            return cls._from_ds(value, 'AnnotationPropertyTypeCodeSequence')
+            return cls._from_ds(value, 'AnnotationPropertyTypeCodeSequence')[0]
         raise NotImplementedError(value)
 
     @classmethod
@@ -114,11 +114,76 @@ class ConceptCode(Code):
 
         """
         if isinstance(value, str):
-            return cls._from_cid('cid7150', value)
+            cid = 'cid7150'  # Segmentation Property Categories
+            return cls._from_cid(cid, value)
         elif isinstance(value, Dataset):
             return cls._from_ds(
                 value,
-                'AnnotationPropertyCategoryCodeSequence'
+                'AnnotationPropertyCategoryCodeSequence'[0]
+            )
+        raise NotImplementedError(value)
+
+    @classmethod
+    def illumination(
+        cls,
+        value: Union[str, List[str], Dataset]
+    ) -> List['ConceptCode']:
+        """Return illumination type code for value. Value can be a code meaning
+        (str) or a DICOM dataset containing the code.
+
+        Parameters
+        ----------
+        value: Union[str, Dataset]
+            The value for creating the code.
+
+        Returns
+        ----------
+        List[ConceptCode]
+            categorycode codes created from value.
+
+        """
+        codes: List[ConceptCode] = []
+        if isinstance(value, str):
+            value = [value]
+        if isinstance(value, list) and isinstance(value[0], str):
+            cid = 'cid8123',  # Microscopy Illumination Method
+            for value in value:
+                codes.append(cls._from_cid(cid, value))
+
+        elif isinstance(value, Dataset):
+            return cls._from_ds(
+                value,
+                'IlluminationTypeCodeSequence',
+            )
+        raise NotImplementedError(value)
+
+    @classmethod
+    def illumination_color(
+        cls,
+        value: Union[str, Dataset]
+    ) -> 'ConceptCode':
+        """Return illumination color code for value. Value can be a code
+        meaning (str) or a DICOM dataset containing the code.
+
+        Parameters
+        ----------
+        value: Union[str, Dataset]
+            The value for creating the code.
+
+        Returns
+        ----------
+        ConceptCode
+            categorycode code created from value.
+
+        """
+        if isinstance(value, str):
+            cid = 'cid8122',  # Microscopy Illuminator and Sensor Color
+            return cls._from_cid(cid, value)
+
+        elif isinstance(value, Dataset):
+            return cls._from_ds(
+                value,
+                'IlluminationColorCodeSequence',
             )
         raise NotImplementedError(value)
 
@@ -141,11 +206,15 @@ class ConceptCode(Code):
         if isinstance(value, str):
             return cls._from_ucum(value)
         elif isinstance(value, Dataset):
-            return cls._from_ds(value, 'MeasurementUnitsCodeSequence')
+            return cls._from_ds(value, 'MeasurementUnitsCodeSequence')[0]
         raise NotImplementedError(value)
 
     @classmethod
-    def _from_ds(cls, ds: Dataset, sequence_name: str) -> 'ConceptCode':
+    def _from_ds(
+        cls,
+        ds: Dataset,
+        sequence_name: str
+    ) -> List['ConceptCode']:
         """Return ConceptCode from sequence in dataset.
 
         Parameters
@@ -157,21 +226,25 @@ class ConceptCode(Code):
 
         Returns
         ----------
-        ConceptCode
-            Code created from sequence in dataset.
+        List[ConceptCode]
+            Codes created from sequence in dataset.
 
         """
-        code_ds = getattr(ds, sequence_name)[0]
-        value = code_ds.CodeValue
-        scheme = code_ds.CodingSchemeDesignator
-        meaning = code_ds.CodeMeaning
-        version = getattr(code_ds, 'CodeSchemeVersion', None)
-        return cls(
-            value=value,
-            scheme_designator=scheme,
-            meaning=meaning,
-            scheme_version=version
-        )
+        codes: List[ConceptCode] = []
+        for code_ds in getattr(ds, sequence_name):
+            value = code_ds.CodeValue
+            scheme = code_ds.CodingSchemeDesignator
+            meaning = code_ds.CodeMeaning
+            version = getattr(code_ds, 'CodeSchemeVersion', None)
+            codes.append(
+                cls(
+                    value=value,
+                    scheme_designator=scheme,
+                    meaning=meaning,
+                    scheme_version=version
+                )
+            )
+        return codes
 
     @classmethod
     def _from_dict(cls, dict_name: str, meaning: str) -> 'ConceptCode':
