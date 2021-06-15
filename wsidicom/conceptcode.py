@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import List, Dict, Optional
 from abc import ABCMeta, abstractmethod
 
@@ -7,13 +8,26 @@ from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
 
 
-class ConceptCode(Code, metaclass=ABCMeta):
+@dataclass
+class ConceptCode(metaclass=ABCMeta):
     """Help functions for handling SR codes.
     Provides functions for converting between Code and dicom dataset.
     For CIDs that are not-yet standardized, functions for creating Code from
     code meaning is provided using the CID definitions in the sup 222 draft.
     For standardized CIDs one can use pydicom.sr.codedict to create codes."""
     sequence_name: str
+
+    def __init__(
+        self,
+        meaning: str,
+        value: str,
+        scheme_designator: str,
+        scheme_version: str = None
+    ):
+        self.meaning = meaning
+        self.value = value
+        self.scheme_designator = scheme_designator
+        self.scheme_version = scheme_version
 
     def __hash__(self):
         return hash((
@@ -65,7 +79,7 @@ class ConceptCode(Code, metaclass=ABCMeta):
         try:
             sequence = getattr(ds, self.sequence_name)
         except AttributeError:
-            sequence = DicomSequence([Dataset])
+            sequence = DicomSequence([Dataset()])
             setattr(ds, self.sequence_name, sequence)
         sequence.append(self.to_ds())
         return ds
@@ -74,7 +88,7 @@ class ConceptCode(Code, metaclass=ABCMeta):
     def _from_ds(
         cls,
         ds: Dataset,
-    ) -> List[Optional['ConceptCode']]:
+    ) -> List[Optional[Code]]:
         """Return list of ConceptCode from sequence in dataset.
 
         Parameters
@@ -91,7 +105,7 @@ class ConceptCode(Code, metaclass=ABCMeta):
         if cls.sequence_name not in ds:
             return [None]
         return [
-            ConceptCode(
+            cls(
                 value=code_ds.CodeValue,
                 scheme_designator=code_ds.CodingSchemeDesignator,
                 meaning=code_ds.CodeMeaning,
@@ -148,10 +162,18 @@ class MultipleConceptCode(ConceptCode):
 class CidConceptCode(ConceptCode, metaclass=ABCMeta):
     cid: str
 
-    def __init__(self, value: str):
-        if isinstance(value, str):
-            return self._from_cid(value)
-        raise NotImplementedError(value)
+    def __init__(
+        self,
+        meaning: str,
+        value: str = None,
+        scheme_designator: str = None,
+        scheme_version: str = None
+    ):
+        if value is None or scheme_designator is None:
+            code = self._from_cid(value)
+        else:
+            code = Code(value, scheme_designator, meaning, scheme_version)
+        super().__init__(*code)
 
     @classmethod
     def _get_cid_dict(cls):
@@ -161,7 +183,7 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
             raise NotImplementedError("Unsupported cid")
 
     @classmethod
-    def _from_cid(cls, meaning: str) -> 'ConceptCode':
+    def _from_cid(cls, meaning: str) -> Code:
         """Return ConceptCode from CID and meaning. For a list of CIDs, see
         http://dicom.nema.org/medical/dicom/current/output/chtml/part16/chapter_B.html # noqa
 
@@ -178,10 +200,9 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
         """
         cid_dict = cls._get_cid_dict()
         try:
-            code = getattr(cid_dict, meaning)
+            return getattr(cid_dict, meaning)
         except AttributeError:
             raise NotImplementedError("Unsupported code")
-        return ConceptCode(*code)
 
     @classmethod
     def meanings(cls) -> List[str]:
@@ -192,13 +213,21 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
 class DictConceptCode(ConceptCode, metaclass=ABCMeta):
     code_dict: Dict[str, Code]
 
-    def __init__(self, value: str):
-        if isinstance(value, str):
-            return self._from_dict(value)
-        raise NotImplementedError(value)
+    def __init__(
+        self,
+        meaning: str,
+        value: str = None,
+        scheme_designator: str = None,
+        scheme_version: str = None
+    ):
+        if value is None or scheme_designator is None:
+            code = self._from_dict(meaning)
+        else:
+            code = Code(value, scheme_designator, meaning, scheme_version)
+        super().__init__(*code)
 
     @classmethod
-    def _from_dict(cls, meaning: str) -> 'ConceptCode':
+    def _from_dict(cls, meaning: str) -> Code:
         """Return ConceptCode from dictionary.
 
         Parameters
@@ -213,10 +242,9 @@ class DictConceptCode(ConceptCode, metaclass=ABCMeta):
 
         """
         try:
-            code = cls.code_dict[meaning]
+            return cls.code_dict[meaning]
         except KeyError:
             raise NotImplementedError("Unsupported code")
-        return ConceptCode(*code)
 
     @classmethod
     def meanings(cls) -> List[str]:
@@ -279,13 +307,21 @@ class ChannelDescriptionCode(DictConceptCode, SingleConceptCode):
 class UnitCode(SingleConceptCode):
     sequence_name = 'MeasurementUnitsCodeSequence'
 
-    def __init__(self, value: str):
-        if isinstance(value, str):
-            return self._from_ucum(value)
-        raise NotImplementedError(value)
+    def __init__(
+        self,
+        meaning: str,
+        value: str = None,
+        scheme_designator: str = None,
+        scheme_version: str = None
+    ):
+        if value is None or scheme_designator is None:
+            code = self._from_ucum(meaning)
+        else:
+            code = Code(value, scheme_designator, meaning, scheme_version)
+        super().__init__(*code)
 
     @classmethod
-    def _from_ucum(cls, unit: str) -> 'ConceptCode':
+    def _from_ucum(cls, unit: str) -> Code:
         """Return UCUM scheme ConceptCode.
 
         Parameters
@@ -299,7 +335,7 @@ class UnitCode(SingleConceptCode):
             Code created from meaning.
 
         """
-        return ConceptCode(
+        return Code(
             value=unit,
             scheme_designator='UCUM',
             meaning=unit
