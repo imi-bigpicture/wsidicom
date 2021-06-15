@@ -88,6 +88,12 @@ class Lut:
     def sequence(self) -> DicomSequence:
         return DicomSequence[self._lut_item]
 
+    @classmethod
+    def from_ds(cls, ds: Dataset) -> Optional['Lut']:
+        if('PaletteColorLookupTableSequence' in ds):
+            return cls(ds.PaletteColorLookupTableSequence)
+        return None
+
     def get(self) -> np.ndarray:
         """Return 2D representation of the lookup table.
 
@@ -367,7 +373,7 @@ class OpticalPath:
         if self.icc_profile is not None:
             ds.ICCprofile = self.icc_profile.byte_profile
         if self.lut is not None:
-            pass
+            ds.PaletteColorLookupTableSequence = self.lut.sequence
         if self.light_path_filter is not None:
             ds = self.light_path_filter.insert_into_ds(ds)
         if self.image_path_filter is not None:
@@ -403,19 +409,13 @@ class OpticalPath:
             illumination=Illumination.from_ds(ds),
             description=str(getattr(ds, 'OpticalPathDescription', None)),
             icc_profile=icc_profile,
-            lut=cls.get_lut(ds),
+            lut=Lut.from_ds(ds),
             light_path_filter=LightPathFilter.from_ds(ds),
             image_path_filter=ImagePathFilter.from_ds(ds),
             channel_description=ChannelDescriptionCode.from_ds(ds),
             lenses=Lenses.from_ds(ds),
             dataset=ds
         )
-
-    @staticmethod
-    def get_lut(ds: Dataset) -> Optional[Lut]:
-        if('PaletteColorLookupTableSequence' in ds):
-            return Lut(ds.PaletteColorLookupTableSequence)
-        return None
 
 
 class OpticalManager:
