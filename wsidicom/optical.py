@@ -194,6 +194,7 @@ class Lut:
 
 @dataclass
 class OpticalFilter(metaclass=ABCMeta):
+    """Metaclass for filter conditions for optical path"""
     filters: Optional[Union[LightPathFilterCode, ImagePathFilterCode]]
     nominal: Optional[float]
     low_pass: Optional[float]
@@ -221,7 +222,7 @@ class OpticalFilter(metaclass=ABCMeta):
         if self.nominal is not None:
             ds.LightPathFilterPassBand = self.nominal
         if self.low_pass is not None and self.high_pass is not None:
-            ds.LightPathFilterPassThroughWavelength = [
+            ds.LightPathFilterPassThroughwavelengthh = [
                 self.low_pass,
                 self.high_pass
             ]
@@ -233,14 +234,29 @@ class OpticalFilter(metaclass=ABCMeta):
 
 @dataclass
 class LightPathFilter(OpticalFilter):
+    """Set of light path filter conditions for optical path"""
     filters: Optional[List[LightPathFilterCode]]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'LightPathFilter':
+        """Returns LightPathFilter object read from dataset
+        (optical path sequence item).
+
+        Parameters
+        ----------
+        ds: Dataset
+           Optical path sequence item.
+
+        Returns
+        ----------
+        LightPathFilter
+            Object containing light path filter conditions for optical path.
+
+        """
         filter_band = getattr(ds, 'LightPathFilterPassBand', [None, None])
         return cls(
             filters=LightPathFilterCode.from_ds(ds),
-            nominal=getattr(ds, 'LightPathFilterPassThroughWavelength', None),
+            nominal=getattr(ds, 'LightPathFilterPassThroughwavelengthh', None),
             low_pass=filter_band[0],
             high_pass=filter_band[1]
         )
@@ -248,14 +264,29 @@ class LightPathFilter(OpticalFilter):
 
 @dataclass
 class ImagePathFilter(OpticalFilter):
+    """Set of image path filter conditions for optical path"""
     filters: Optional[List[ImagePathFilterCode]]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'ImagePathFilter':
+        """Returns ImagePathFilter object read from dataset
+        (optical path sequence item).
+
+        Parameters
+        ----------
+        ds: Dataset
+           Optical path sequence item.
+
+        Returns
+        ----------
+        ImagePathFilter
+            Object containing image path filter conditions for optical path.
+
+        """
         filter_band = getattr(ds, 'ImagePathFilterPassBand', [None, None])
         return cls(
             filters=ImagePathFilterCode.from_ds(ds),
-            nominal=getattr(ds, 'ImagePathFilterPassThroughWavelength', None),
+            nominal=getattr(ds, 'ImagePathFilterPassThroughwavelengthh', None),
             low_pass=filter_band[0],
             high_pass=filter_band[1]
         )
@@ -264,10 +295,19 @@ class ImagePathFilter(OpticalFilter):
 @dataclass
 class Illumination:
     """Set of illumination conditions for optical path"""
-    illumination_method: List[IlluminationCode]
-    illumination_wavelengt: Optional[float]
-    illumination_color: Optional[IlluminationColorCode]
-    illuminator: Optional[IlluminatorCode]
+    def __init__(
+        self,
+        illumination_method: List[IlluminationCode],
+        illumination_wavelength: float = None,
+        illumination_color: IlluminationColorCode = None,
+        illuminator: IlluminatorCode = None
+    ):
+        if illumination_color is None and illumination_wavelength is None:
+            raise ValueError("Illumination color or wavelenght need to be set")
+        self.illumination_method = illumination_method
+        self.illumination_wavelength = illumination_wavelength
+        self.illumination_color = illumination_color
+        self.illuminator = illuminator
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'Illumination':
@@ -287,7 +327,9 @@ class Illumination:
         """
         return cls(
             illumination_method=IlluminationCode.from_ds(ds),
-            illumination_wavelengt=getattr(ds, 'IlluminationWaveLength', None),
+            illumination_wavelength=getattr(
+                ds, 'Illuminationwavelength', None
+            ),
             illumination_color=IlluminationColorCode.from_ds(ds),
             illuminator=IlluminatorCode.from_ds(ds)
         )
@@ -306,8 +348,8 @@ class Illumination:
             Dataset with object inserted.
 
         """
-        if self.illumination_wavelengt is not None:
-            ds.IlluminationWaveLength = self.illumination_wavelengt
+        if self.illumination_wavelength is not None:
+            ds.Illuminationwavelengthh = self.illumination_wavelength
         if self.illumination_color is not None:
             ds = self.illumination_color.insert_into_ds(ds)
         if self.illuminator is not None:
@@ -319,6 +361,7 @@ class Illumination:
 
 @dataclass
 class Lenses:
+    """Set of lens conditions for optical path"""
     lenses: Optional[List[LenseCode]]
     condenser_power: Optional[float]
     objective_power: Optional[float]
@@ -326,6 +369,20 @@ class Lenses:
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'Lenses':
+        """Returns Lenses object read from dataset (optical path sequence
+        item).
+
+        Parameters
+        ----------
+        ds: Dataset
+           Optical path sequence item.
+
+        Returns
+        ----------
+        Lenses
+            Object containing lense conditions for optical path.
+
+        """
         return cls(
             lenses=LenseCode.from_ds(ds),
             condenser_power=getattr(ds, 'CondenserLensPower', None),
@@ -361,15 +418,38 @@ class Lenses:
 
 @dataclass
 class OpticalPath:
-    identifier: str
-    illumination: Illumination
-    description: Optional[str]
-    icc_profile: Optional[bytes]
-    lut: Optional[Lut]
-    light_path_filter: Optional[LightPathFilter]
-    image_path_filter: Optional[ImagePathFilter]
-    channel_description: Optional[List[ChannelDescriptionCode]]
-    lenses: Optional[Lenses]
+    """Represents an optical path"""
+    def __init__(
+        self,
+        identifier: str,
+        illumination: Illumination,
+        photometric_interpretation: str,
+        description: str = None,
+        icc_profile: bytes = None,
+        lut: Lut = None,
+        light_path_filter: LightPathFilter = None,
+        image_path_filter: ImagePathFilter = None,
+        channel_description: List[ChannelDescriptionCode] = None,
+        lenses: Lenses = None,
+    ):
+        # ICC profile required if not MONOCHROME2 or lut present
+        if photometric_interpretation != 'MONOCHROME2' and icc_profile is None:
+            raise ValueError(
+                "Icc profile required if photometric is"
+                f"{photometric_interpretation}"
+            )
+        if lut is not None and icc_profile is None:
+            raise ValueError("Icc profile required if lut is present")
+
+        self.identifier = identifier
+        self.illumination = illumination
+        self.description = description
+        self.icc_profile = icc_profile
+        self.lut = lut
+        self.light_path_filter = light_path_filter
+        self.image_path_filter = image_path_filter
+        self.channel_description = channel_description
+        self.lenses = lenses
 
     def __str__(self):
         return self.pretty_str()
@@ -407,7 +487,8 @@ class OpticalPath:
     @classmethod
     def from_ds(
         cls,
-        ds: Dataset
+        ds: Dataset,
+        photometric_interpretation: str
     ) -> 'OpticalPath':
         """Create new optical path item populated with optical path
         identifier, description, icc profile name and lookup table.
@@ -416,6 +497,8 @@ class OpticalPath:
         ----------
         optical_path: Dataset
             Optical path dataset containing the optical path data
+        photometric_interpretation: str
+            Photometric interprentation for parent dataset.
 
         Returns
         ----------
@@ -425,6 +508,7 @@ class OpticalPath:
         return OpticalPath(
             identifier=str(ds.OpticalPathIdentifier),
             illumination=Illumination.from_ds(ds),
+            photometric_interpretation=photometric_interpretation,
             description=getattr(ds, 'OpticalPathDescription', None),
             icc_profile=getattr(ds, 'ICCProfile', None),
             lut=Lut.from_ds(ds),
@@ -436,14 +520,15 @@ class OpticalPath:
 
 
 class OpticalManager:
+    """Store optical paths loaded from dicom files."""
     def __init__(
         self,
-        optical_paths: Dict[str, OpticalPath] = None,
+        optical_paths: List[OpticalPath] = None,
     ):
-        """Store optical paths loaded from dicom files.
-        """
-
-        self._optical_paths: Dict[str, OpticalPath] = optical_paths
+        self._optical_paths: Dict[str, OpticalPath] = {
+            optical_path.identifier: optical_path
+            for optical_path in optical_paths
+        }
 
     @classmethod
     def open(cls, files: List[WsiDicomFile]) -> 'OpticalManager':
@@ -452,9 +537,12 @@ class OpticalManager:
             for optical_ds in file.optical_path_sequence:
                 identifier = str(optical_ds.OpticalPathIdentifier)
                 if identifier not in optical_paths:
-                    path = OpticalPath.from_ds(optical_ds)
+                    path = OpticalPath.from_ds(
+                        optical_ds,
+                        file.photometric_interpretation
+                    )
                     optical_paths[identifier] = path
-        return OpticalManager(optical_paths)
+        return OpticalManager(optical_paths.values())
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
         """Codes and insert object into dataset.
