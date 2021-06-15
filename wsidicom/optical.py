@@ -15,12 +15,6 @@ from .errors import WsiDicomNotFoundError
 from .file import WsiDicomFile
 
 
-def get_float_from_ds(ds: Dataset, attribute: str) -> Optional[float]:
-    if 'attribute' in ds:
-        return float(getattr(ds, attribute))
-    return None
-
-
 class Lut:
     def __init__(self, lut_sequence: DicomSequence):
         """Stores RGB lookup tables.
@@ -281,12 +275,9 @@ class Lenses:
     def from_ds(cls, ds: Dataset) -> 'Lenses':
         return cls(
             lenses=LenseCode.from_ds(ds),
-            condenser_power=get_float_from_ds(ds, 'CondenserLensPower'),
-            objective_power=get_float_from_ds(ds, 'ObjectiveLensPower'),
-            objective_na=get_float_from_ds(
-                ds,
-                'ObjectiveLensNumericalAperture'
-            ),
+            condenser_power=getattr(ds, 'CondenserLensPower', None),
+            objective_power=getattr(ds, 'ObjectiveLensPower', None),
+            objective_na=getattr(ds, 'ObjectiveLensNumericalAperture', None)
         )
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
