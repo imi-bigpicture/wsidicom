@@ -2,7 +2,7 @@ import io
 import struct
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import DefaultDict, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from PIL import Image, ImageCms
@@ -27,45 +27,37 @@ class IccProfile:
     name: str
     description: str
     profile: bytes
-    dataset: Optional[Dataset]
+    byte_profile: bytes
 
     @staticmethod
-    def read_profile(ds: Dataset) -> ImageCms.ImageCmsProfile:
-        icc_profile: bytes = ds.ICCProfile
-        profile = ImageCms.ImageCmsProfile(io.BytesIO(icc_profile))
-        return profile
-
-    @classmethod
-    def read_name(cls, ds: Dataset) -> Optional[str]:
-        """Read Icc profile name from dataset.
-
-        Parameters
-        ----------
-        optical_path_ds: Dataset
-            A dataset containing an icc profile
-
-        Returns
-        ----------
-        Optional[str]
-            The icc profile name
-        """
+    def read_byte_profile(ds: Dataset) -> Optional[bytes]:
         try:
-            profile = cls.read_profile(ds)
-            icc_profile_name = str(ImageCms.getProfileName(profile))
-            return icc_profile_name
-        except (ImageCms.PyCMSError, AttributeError):
-            # No profile found or profile not valid
+            return bytes(ds.ICCprofile)
+        except AttributeError:
+            return None
+
+    @staticmethod
+    def read_profile(
+        byte_profile: bytes
+    ) -> Optional[ImageCms.ImageCmsProfile]:
+        try:
+            return ImageCms.ImageCmsProfile(io.BytesIO(byte_profile))
+        except ImageCms.PyCMSError:
             return None
 
     @classmethod
-    def from_ds(cls, ds: Dataset) -> 'IccProfile':
-        profile = cls.read_profile(ds)
-        return IccProfile(
-            name=str(ImageCms.getProfileName(profile)),
-            description=str(ImageCms.getProfileDescription(profile)),
-            profile=profile,
-            dataset=ds
-        )
+    def from_ds(cls, ds: Dataset) -> Optional['IccProfile']:
+        bytes_profile = cls.read_byte_profile(ds)
+        if bytes_profile is not None:
+            profile = cls.read_profile(bytes_profile)
+            if profile is not None:
+                return IccProfile(
+                    name=str(ImageCms.getProfileName(profile)),
+                    description=str(ImageCms.getProfileDescription(profile)),
+                    profile=profile,
+                    bytes_profile=bytes_profile
+                )
+        return None
 
 
 class Lut:
@@ -373,7 +365,7 @@ class OpticalPath:
         if self.description is not None:
             ds.OpticalPathDescription = self.description
         if self.icc_profile is not None:
-            pass
+            ds.ICCprofile = self.icc_profile.byte_profile
         if self.lut is not None:
             pass
         if self.light_path_filter is not None:
@@ -459,15 +451,12 @@ class OpticalManager:
         for optical_ds in file.optical_path_sequence:
             identifier = str(optical_ds.OpticalPathIdentifier)
             if identifier not in optical_paths:
-                icc_profile_name = IccProfile.read_name(optical_ds)
-                if icc_profile_name is not None:
-                    if icc_profile_name not in icc_profiles:
-                        icc_profile = IccProfile.from_ds(optical_ds)
-                        icc_profiles[icc_profile.name] = icc_profile
-                    else:
-                        icc_profile = icc_profiles[icc_profile_name]
-                else:
-                    icc_profile = None
+                icc_profile = IccProfile.from_ds(optical_ds)
+                if (
+                    icc_profile is not None and
+                    icc_profile.name not in icc_profiles
+                ):
+                    icc_profiles[icc_profile.name] = icc_profile
                 path = OpticalPath.from_ds(optical_ds, icc_profile)
                 optical_paths[identifier] = path
         return optical_paths, icc_profiles
