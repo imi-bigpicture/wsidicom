@@ -9,9 +9,17 @@ from PIL import Image, ImageCms
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
-from .conceptcode import ConceptCode
+from .conceptcode import (ChannelDescriptionCode, IlluminationCode,
+                          IlluminationColorCode, IlluminatorCode,
+                          ImagePathFilterCode, LenseCode, LightPathFilterCode)
 from .errors import WsiDicomNotFoundError
 from .file import WsiDicomFile
+
+
+def get_float_from_ds(ds: Dataset, attribute: str) -> Optional[float]:
+    if 'attribute' in ds:
+        return float(getattr(ds, attribute))
+    return None
 
 
 @dataclass
@@ -221,7 +229,6 @@ class Lut:
 
 @dataclass
 class OpticalFilter(metaclass=ABCMeta):
-    filters: Optional[ConceptCode]
     nominal: Optional[float]
     low_pass: Optional[float]
     high_pass: Optional[float]
@@ -232,65 +239,80 @@ class OpticalFilter(metaclass=ABCMeta):
         raise NotImplementedError
 
 
+@dataclass
 class LightPathFilter(OpticalFilter):
+    filters: Optional[List[LightPathFilterCode]]
+
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'LightPathFilter':
         filter_band = getattr(ds, 'LightPathFilterPassBand', [None, None])
         return cls(
-            filters=ConceptCode.light_path_filter(ds),
+            filters=LightPathFilterCode.from_ds(ds),
             nominal=getattr(ds, 'LightPathFilterPassThroughWavelength', None),
             low_pass=filter_band[0],
             high_pass=filter_band[1]
         )
 
 
+@dataclass
 class ImagePathFilter(OpticalFilter):
+    filters: Optional[List[ImagePathFilterCode]]
+
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'ImagePathFilter':
         filter_band = getattr(ds, 'ImagePathFilterPassBand', [None, None])
         return cls(
-            filters=ConceptCode.image_path_filter(ds),
+            filters=ImagePathFilterCode.from_ds(ds),
             nominal=getattr(ds, 'ImagePathFilterPassThroughWavelength', None),
             low_pass=filter_band[0],
             high_pass=filter_band[1]
         )
 
 
+@dataclass
 class Illumination:
-    illumination_method: List[ConceptCode]
+    illumination_method: List[IlluminationCode]
     illumination_wavelengt: Optional[float]
-    illumination_color: Optional[ConceptCode]
-    illuminator: Optional[ConceptCode]
+    illumination_color: Optional[IlluminationColorCode]
+    illuminator: Optional[IlluminatorCode]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'Illumination':
         return cls(
-            illumination_method=ConceptCode.illumination(ds),
+            illumination_method=IlluminationCode.from_ds(ds),
             illumination_wavelengt=getattr(ds, 'IlluminationWaveLength', None),
-            illumination_color=ConceptCode.illumination_color(ds),
-            illuminator=ConceptCode.illuminator(ds),
+            illumination_color=IlluminationColorCode.from_ds(ds),
+            illuminator=IlluminatorCode.from_ds(ds)
         )
 
+    def add_to_ds(self, ds: Dataset) -> Dataset:
+        pass
 
+
+@dataclass
 class Lenses:
-    lenses: Optional[List[ConceptCode]]
-    condenser_lens_power: Optional[float]
-    objective_lens_power: Optional[float]
-    objective_lens_numberical_aperature: Optional[float]
+    lenses: Optional[List[LenseCode]]
+    condenser_power: Optional[float]
+    objective_power: Optional[float]
+    objective_na: Optional[float]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'Lenses':
-        objective_lens_numberical_aperature = float(
-            getattr(ds, 'ObjectiveLensNumericalAperture', None)
-        )
         return cls(
-            lenses=ConceptCode.lenses(ds),
-            condenser_power=float(getattr(ds, 'ObjectiveLensPower', None)),
-            objective_power=float(getattr(ds, 'CondenserLensPower', None)),
-            objective_na=float(
-                getattr(ds, 'ObjectiveLensNumericalAperture', None)
-            )
+            lenses=LenseCode.from_ds(ds),
+            condenser_power=get_float_from_ds(ds, 'CondenserLensPower'),
+            objective_power=get_float_from_ds(ds, 'ObjectiveLensPower'),
+            objective_na=get_float_from_ds(
+                ds,
+                'ObjectiveLensNumericalAperture'
+            ),
         )
+
+    def insert_into_ds(self, ds: Dataset) -> Dataset:
+        ds.CondenserLensPower = self.condenser_lens_power
+        ds.ObjectiveLensPower = self.objective_lens_power
+        ds.ObjectiveLensNumericalAperture = self.objective_lens_na
+        ds = self.lenses.insert_into_ds(ds)
 
 
 @dataclass
@@ -302,7 +324,7 @@ class OpticalPath:
     lut: Optional[Lut]
     light_path_filter: Optional[LightPathFilter]
     image_path_filter: Optional[ImagePathFilter]
-    channel_description: Optional[List[ConceptCode]]
+    channel_description: Optional[List[ChannelDescriptionCode]]
     lenses: Optional[Lenses]
     dataset: Optional[Dataset]
 
@@ -322,6 +344,10 @@ class OpticalPath:
         if self.dataset is not None:
             return self.dataset
 
+        ds = Dataset()
+        ds.OpticalPathIdentifier = self.identifier
+        if self.description is not None:
+            ds.OpticalPathDescription = self.description
         return Dataset()
 
     @classmethod
@@ -347,7 +373,7 @@ class OpticalPath:
             lut=cls.get_lut(ds),
             light_path_filter=LightPathFilter.from_ds(ds),
             image_path_filter=ImagePathFilter.from_ds(ds),
-            channel_description=ConceptCode.channel_description(ds),
+            channel_description=ChannelDescriptionCode.from_ds(ds),
             lenses=Lenses.from_ds(ds),
             dataset=ds
         )
