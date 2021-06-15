@@ -347,7 +347,6 @@ class OpticalPath:
     image_path_filter: Optional[ImagePathFilter]
     channel_description: Optional[List[ChannelDescriptionCode]]
     lenses: Optional[Lenses]
-    dataset: Optional[Dataset]
 
     def __str__(self):
         return self.pretty_str()
@@ -362,9 +361,6 @@ class OpticalPath:
         return self.identifier + ':' + self.description
 
     def to_ds(self) -> Dataset:
-        if self.dataset is not None:
-            return self.dataset
-
         ds = Dataset()
         ds.OpticalPathIdentifier = self.identifier
         ds = self.illumination.insert_into_ds(ds)
@@ -383,7 +379,7 @@ class OpticalPath:
         if self.lenses is not None:
             ds = self.lenses.insert_into_ds(ds)
 
-        return Dataset()
+        return ds
 
     @classmethod
     def from_ds(
@@ -414,7 +410,6 @@ class OpticalPath:
             image_path_filter=ImagePathFilter.from_ds(ds),
             channel_description=ChannelDescriptionCode.from_ds(ds),
             lenses=Lenses.from_ds(ds),
-            dataset=ds
         )
 
 
