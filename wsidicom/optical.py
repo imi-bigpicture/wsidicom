@@ -2,7 +2,7 @@ import io
 import struct
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from PIL import Image, ImageCms
@@ -229,6 +229,7 @@ class Lut:
 
 @dataclass
 class OpticalFilter(metaclass=ABCMeta):
+    filters: Optional[Union[LightPathFilterCode, ImagePathFilterCode]]
     nominal: Optional[float]
     low_pass: Optional[float]
     high_pass: Optional[float]
@@ -237,6 +238,17 @@ class OpticalFilter(metaclass=ABCMeta):
     @abstractmethod
     def from_ds(cls, ds: Dataset):
         raise NotImplementedError
+
+    def insert_into_ds(self, ds: Dataset) -> Dataset:
+        if self.nominal is not None:
+            ds.LightPathFilterPassBand = self.nominal
+        if self.low_pass is not None and self.high_pass is not None:
+            ds.LightPathFilterPassThroughWavelength = [
+                self.low_pass,
+                self.high_pass
+            ]
+        if self.filters is not None:
+            ds = self.filters.insert_into_ds(ds)
 
 
 @dataclass
@@ -285,8 +297,15 @@ class Illumination:
             illuminator=IlluminatorCode.from_ds(ds)
         )
 
-    def add_to_ds(self, ds: Dataset) -> Dataset:
-        pass
+    def insert_into_ds(self, ds: Dataset) -> Dataset:
+        if self.illumination_wavelengt is not None:
+            ds.IlluminationWaveLength = self.illumination_wavelengt
+        if self.illumination_color is not None:
+            ds = self.illumination_color.insert_into_ds(ds)
+        if self.illuminator is not None:
+            ds = self.illuminator.insert_into_ds(ds)
+        for item in self.illumination_method:
+            ds = item.insert_into_ds(ds)
 
 
 @dataclass
@@ -309,10 +328,14 @@ class Lenses:
         )
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
-        ds.CondenserLensPower = self.condenser_lens_power
-        ds.ObjectiveLensPower = self.objective_lens_power
-        ds.ObjectiveLensNumericalAperture = self.objective_lens_na
-        ds = self.lenses.insert_into_ds(ds)
+        if self.condenser_lens_power is not None:
+            ds.CondenserLensPower = self.condenser_lens_power
+        if self.objective_lens_power is not None:
+            ds.ObjectiveLensPower = self.objective_lens_power
+        if self.objective_lens_na is not None:
+            ds.ObjectiveLensNumericalAperture = self.objective_lens_na
+        for lense in self.lenses:
+            ds = lense.insert_into_ds(ds)
 
 
 @dataclass
@@ -320,7 +343,7 @@ class OpticalPath:
     identifier: str
     illumination: Illumination
     description: Optional[str]
-    icc_profile_name: Optional[str]
+    icc_profile: Optional[IccProfile]
     lut: Optional[Lut]
     light_path_filter: Optional[LightPathFilter]
     image_path_filter: Optional[ImagePathFilter]
@@ -346,12 +369,30 @@ class OpticalPath:
 
         ds = Dataset()
         ds.OpticalPathIdentifier = self.identifier
+        ds = self.illumination.insert_into_ds(ds)
         if self.description is not None:
             ds.OpticalPathDescription = self.description
+        if self.icc_profile is not None:
+            pass
+        if self.lut is not None:
+            pass
+        if self.light_path_filter is not None:
+            ds = self.light_path_filter.insert_into_ds(ds)
+        if self.image_path_filter is not None:
+            ds = self.light_path_filter.insert_into_ds(ds)
+        for item in self.channel_description:
+            ds = item.insert_into_ds(ds)
+        if self.lenses is not None:
+            ds = self.lenses.insert_into_ds(ds)
+
         return Dataset()
 
     @classmethod
-    def from_ds(cls, ds: Dataset) -> 'OpticalPath':
+    def from_ds(
+        cls,
+        ds: Dataset,
+        icc_profile: IccProfile = None
+    ) -> 'OpticalPath':
         """Create new optical path item populated with optical path
         identifier, description, icc profile name and lookup table.
 
@@ -369,7 +410,7 @@ class OpticalPath:
             identifier=str(ds.OpticalPathIdentifier),
             illumination=Illumination.from_ds(ds),
             description=str(getattr(ds, 'OpticalPathDescription', None)),
-            icc_profile_name=IccProfile.read_name(ds),
+            icc_profile=icc_profile,
             lut=cls.get_lut(ds),
             light_path_filter=LightPathFilter.from_ds(ds),
             image_path_filter=ImagePathFilter.from_ds(ds),
@@ -388,8 +429,8 @@ class OpticalPath:
 class OpticalManager:
     def __init__(
         self,
-        optical_paths: List[OpticalPath] = None,
-        icc_profiles: List[IccProfile] = None
+        optical_paths: Dict[str, OpticalPath] = None,
+        icc_profiles: Dict[str, IccProfile] = None
     ):
         """Store optical paths and icc profiles loaded from dicom files.
         """
@@ -418,16 +459,17 @@ class OpticalManager:
         for optical_ds in file.optical_path_sequence:
             identifier = str(optical_ds.OpticalPathIdentifier)
             if identifier not in optical_paths:
-                path = OpticalPath.from_ds(optical_ds)
-                optical_paths[identifier] = path
                 icc_profile_name = IccProfile.read_name(optical_ds)
-                if (
-                    icc_profile_name is not None
-                    and icc_profile_name not in icc_profiles
-                ):
-                    profile = IccProfile.from_ds(optical_ds)
-                    name = profile.name
-                    icc_profiles[name] = profile
+                if icc_profile_name is not None:
+                    if icc_profile_name not in icc_profiles:
+                        icc_profile = IccProfile.from_ds(optical_ds)
+                        icc_profiles[icc_profile.name] = icc_profile
+                    else:
+                        icc_profile = icc_profiles[icc_profile_name]
+                else:
+                    icc_profile = None
+                path = OpticalPath.from_ds(optical_ds, icc_profile)
+                optical_paths[identifier] = path
         return optical_paths, icc_profiles
 
     def get(self, identifier: str) -> OpticalPath:
