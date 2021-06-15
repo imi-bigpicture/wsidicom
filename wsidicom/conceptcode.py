@@ -76,6 +76,19 @@ class ConceptCode(metaclass=ABCMeta):
         return ds
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
+        """Codes and insert object into sequence in dataset.
+
+        Parameters
+        ----------
+        ds: Dataset
+           Dataset to insert into.
+
+        Returns
+        ----------
+        Dataset
+            Dataset with object inserted.
+
+        """
         try:
             sequence = getattr(ds, self.sequence_name)
             sequence.append(self.to_ds())
