@@ -186,12 +186,3 @@ class WsiDicomSaveTests(unittest.TestCase):
 
                 bbox = diff.getbbox()
                 self.assertIsNone(bbox, msg=json_file)
-
-    def test_optical_module(self):
-        for folder, (original, restored, tempdir) in self.test_folders.items():
-            original_optical_ds = original.optical.insert_into_ds(Dataset())
-            restored_optical_ds = restored.optical.insert_into_ds(Dataset())
-            self.assertEqual(
-                original_optical_ds.to_json_dict(),
-                restored_optical_ds.to_json_dict()
-            )
