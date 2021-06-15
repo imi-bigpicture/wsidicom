@@ -22,45 +22,6 @@ def get_float_from_ds(ds: Dataset, attribute: str) -> Optional[float]:
     return None
 
 
-@dataclass
-class IccProfile:
-    name: str
-    description: str
-    profile: bytes
-    byte_profile: bytes
-
-    @staticmethod
-    def read_byte_profile(ds: Dataset) -> Optional[bytes]:
-        try:
-            return bytes(ds.ICCProfile)
-        except AttributeError:
-            return None
-
-    @staticmethod
-    def read_profile(
-        byte_profile: bytes
-    ) -> Optional[ImageCms.ImageCmsProfile]:
-        try:
-            return ImageCms.ImageCmsProfile(io.BytesIO(byte_profile))
-        except ImageCms.PyCMSError:
-            return None
-
-    @classmethod
-    def from_ds(cls, ds: Dataset) -> Optional['IccProfile']:
-        print(ds)
-        byte_profile = cls.read_byte_profile(ds)
-        if byte_profile is not None:
-            profile = cls.read_profile(byte_profile)
-            if profile is not None:
-                return IccProfile(
-                    name=str(ImageCms.getProfileName(profile)),
-                    description=str(ImageCms.getProfileDescription(profile)),
-                    profile=profile,
-                    byte_profile=byte_profile
-                )
-        return None
-
-
 class Lut:
     def __init__(self, lut_sequence: DicomSequence):
         """Stores RGB lookup tables.
@@ -347,7 +308,7 @@ class OpticalPath:
     identifier: str
     illumination: Illumination
     description: Optional[str]
-    icc_profile: Optional[IccProfile]
+    icc_profile: Optional[bytes]
     lut: Optional[Lut]
     light_path_filter: Optional[LightPathFilter]
     image_path_filter: Optional[ImagePathFilter]
@@ -373,7 +334,7 @@ class OpticalPath:
         if self.description is not None:
             ds.OpticalPathDescription = self.description
         if self.icc_profile is not None:
-            ds.ICCProfile = self.icc_profile.byte_profile
+            ds.ICCProfile = self.icc_profile
         if self.lut is not None:
             ds.PaletteColorLookupTableSequence = self.lut.sequence
         if self.light_path_filter is not None:
@@ -390,8 +351,7 @@ class OpticalPath:
     @classmethod
     def from_ds(
         cls,
-        ds: Dataset,
-        icc_profile: IccProfile = None
+        ds: Dataset
     ) -> 'OpticalPath':
         """Create new optical path item populated with optical path
         identifier, description, icc profile name and lookup table.
@@ -414,7 +374,7 @@ class OpticalPath:
             identifier=str(ds.OpticalPathIdentifier),
             illumination=Illumination.from_ds(ds),
             description=description,
-            icc_profile=icc_profile,
+            icc_profile=getattr(ds, 'ICCProfile', None),
             lut=Lut.from_ds(ds),
             light_path_filter=LightPathFilter.from_ds(ds),
             image_path_filter=ImagePathFilter.from_ds(ds),
@@ -427,44 +387,30 @@ class OpticalManager:
     def __init__(
         self,
         optical_paths: Dict[str, OpticalPath] = None,
-        icc_profiles: Dict[str, IccProfile] = None
     ):
         """Store optical paths and icc profiles loaded from dicom files.
         """
 
         self._optical_paths: Dict[str, OpticalPath] = optical_paths
-        self._icc_profiles: Dict[str, IccProfile] = icc_profiles
 
     @classmethod
     def open(cls, files: List[WsiDicomFile]) -> 'OpticalManager':
         optical_paths: Dict[str, OpticalPath] = {}
-        icc_profiles: Dict[str, IccProfile] = {}
         for file in files:
-            optical_paths, icc_profiles = cls._open_file(
-               file,
-               optical_paths,
-               icc_profiles
-            )
-        return OpticalManager(optical_paths, icc_profiles)
+            optical_paths = cls._open_file(file, optical_paths)
+        return OpticalManager(optical_paths)
 
     @staticmethod
     def _open_file(
         file: WsiDicomFile,
         optical_paths: Dict[str, OpticalPath],
-        icc_profiles: Dict[str, IccProfile]
-    ) -> Tuple[Dict[str, OpticalPath], Dict[str, IccProfile]]:
+    ) -> Dict[str, OpticalPath]:
         for optical_ds in file.optical_path_sequence:
             identifier = str(optical_ds.OpticalPathIdentifier)
             if identifier not in optical_paths:
-                icc_profile = IccProfile.from_ds(optical_ds)
-                if (
-                    icc_profile is not None and
-                    icc_profile.name not in icc_profiles
-                ):
-                    icc_profiles[icc_profile.name] = icc_profile
-                path = OpticalPath.from_ds(optical_ds, icc_profile)
+                path = OpticalPath.from_ds(optical_ds)
                 optical_paths[identifier] = path
-        return optical_paths, icc_profiles
+        return optical_paths
 
     def get(self, identifier: str) -> OpticalPath:
         """Return the optical path item with identifier.
