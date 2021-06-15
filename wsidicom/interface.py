@@ -2015,11 +2015,8 @@ class WsiDicomStack(metaclass=ABCMeta):
         ds.SharedFunctionalGroupsSequence = (
             self._create_shared_functional_groups_sequence()
         )
-        ds.NumberOfOpticalPaths = len(optical_paths)
-        ds.OpticalPathSequence = DicomSequence([
-            optical.get(optical_path).to_ds()
-            for optical_path in optical_paths
-        ])
+
+        ds = optical.insert_into_ds(ds)
 
         ds.Rows = self.default_instance.tile_size.width
         ds.Columns = self.default_instance.tile_size.height

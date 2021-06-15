@@ -399,6 +399,14 @@ class OpticalManager:
                     optical_paths[identifier] = path
         return OpticalManager(optical_paths)
 
+    def insert_into_ds(self, ds: Dataset) -> Dataset:
+        ds.NumberOfOpticalPaths = len(self._optical_paths)
+        ds.OpticalPathSequence = DicomSequence([
+            optical_path.to_ds()
+            for optical_path in self._optical_paths.values()
+        ])
+        return ds
+
     def get(self, identifier: str) -> OpticalPath:
         """Return the optical path item with identifier.
 
