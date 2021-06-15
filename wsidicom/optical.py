@@ -32,7 +32,7 @@ class IccProfile:
     @staticmethod
     def read_byte_profile(ds: Dataset) -> Optional[bytes]:
         try:
-            return bytes(ds.ICCprofile)
+            return bytes(ds.ICCProfile)
         except AttributeError:
             return None
 
@@ -47,15 +47,16 @@ class IccProfile:
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> Optional['IccProfile']:
-        bytes_profile = cls.read_byte_profile(ds)
-        if bytes_profile is not None:
-            profile = cls.read_profile(bytes_profile)
+        print(ds)
+        byte_profile = cls.read_byte_profile(ds)
+        if byte_profile is not None:
+            profile = cls.read_profile(byte_profile)
             if profile is not None:
                 return IccProfile(
                     name=str(ImageCms.getProfileName(profile)),
                     description=str(ImageCms.getProfileDescription(profile)),
                     profile=profile,
-                    bytes_profile=bytes_profile
+                    byte_profile=byte_profile
                 )
         return None
 
@@ -246,7 +247,9 @@ class OpticalFilter(metaclass=ABCMeta):
                 self.high_pass
             ]
         if self.filters is not None:
-            ds = self.filters.insert_into_ds(ds)
+            for filter in self.filters:
+                ds = filter.insert_into_ds(ds)
+        return ds
 
 
 @dataclass
@@ -304,6 +307,7 @@ class Illumination:
             ds = self.illuminator.insert_into_ds(ds)
         for item in self.illumination_method:
             ds = item.insert_into_ds(ds)
+        return ds
 
 
 @dataclass
@@ -326,14 +330,16 @@ class Lenses:
         )
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
-        if self.condenser_lens_power is not None:
-            ds.CondenserLensPower = self.condenser_lens_power
-        if self.objective_lens_power is not None:
-            ds.ObjectiveLensPower = self.objective_lens_power
-        if self.objective_lens_na is not None:
-            ds.ObjectiveLensNumericalAperture = self.objective_lens_na
-        for lense in self.lenses:
-            ds = lense.insert_into_ds(ds)
+        if self.condenser_power is not None:
+            ds.CondenserLensPower = self.condenser_power
+        if self.objective_power is not None:
+            ds.ObjectiveLensPower = self.objective_power
+        if self.objective_na is not None:
+            ds.ObjectiveLensNumericalAperture = self.objective_na
+        if self.lenses is not None:
+            for lense in self.lenses:
+                ds = lense.insert_into_ds(ds)
+        return ds
 
 
 @dataclass
@@ -367,18 +373,18 @@ class OpticalPath:
         if self.description is not None:
             ds.OpticalPathDescription = self.description
         if self.icc_profile is not None:
-            ds.ICCprofile = self.icc_profile.byte_profile
+            ds.ICCProfile = self.icc_profile.byte_profile
         if self.lut is not None:
             ds.PaletteColorLookupTableSequence = self.lut.sequence
         if self.light_path_filter is not None:
             ds = self.light_path_filter.insert_into_ds(ds)
         if self.image_path_filter is not None:
             ds = self.light_path_filter.insert_into_ds(ds)
-        for item in self.channel_description:
-            ds = item.insert_into_ds(ds)
+        if self.channel_description is not None:
+            for item in self.channel_description:
+                ds = item.insert_into_ds(ds)
         if self.lenses is not None:
             ds = self.lenses.insert_into_ds(ds)
-
         return ds
 
     @classmethod
@@ -400,10 +406,14 @@ class OpticalPath:
         OpticalPath
             New optical path item
         """
+        if 'OpticalPathDescription' in ds:
+            description = str(ds.OpticalPathDescription)
+        else:
+            description = None
         return OpticalPath(
             identifier=str(ds.OpticalPathIdentifier),
             illumination=Illumination.from_ds(ds),
-            description=str(getattr(ds, 'OpticalPathDescription', None)),
+            description=description,
             icc_profile=icc_profile,
             lut=Lut.from_ds(ds),
             light_path_filter=LightPathFilter.from_ds(ds),
