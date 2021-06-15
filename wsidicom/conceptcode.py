@@ -47,26 +47,15 @@ class ConceptCode(metaclass=ABCMeta):
     def meanings(cls) -> List[str]:
         raise NotImplementedError
 
-    @property
-    def sequence(self) -> DicomSequence:
-        """Return code as DICOM sequence.
+    def to_ds(self) -> Dataset:
+        """Codes code into DICOM dataset.
 
         Returns
         ----------
-        DicomSequence
-            Dicom sequence of dataset containing code.
+        Dataset
+            Dataset of code.
 
         """
-        ds = Dataset()
-        ds.CodeValue = self.value
-        ds.CodingSchemeDesignator = self.scheme_designator
-        ds.CodeMeaning = self.meaning
-        if self.scheme_version is not None:
-            ds.CodeSchemeVersion = self.scheme_version
-        sequence = DicomSequence([ds])
-        return sequence
-
-    def to_ds(self) -> Dataset:
         ds = Dataset()
         ds.CodeValue = self.value
         ds.CodingSchemeDesignator = self.scheme_designator
@@ -89,12 +78,12 @@ class ConceptCode(metaclass=ABCMeta):
             Dataset with object inserted.
 
         """
+        # Append if sequence already set otherwise create
         try:
             sequence = getattr(ds, self.sequence_name)
             sequence.append(self.to_ds())
         except AttributeError:
-            sequence = self.sequence
-            setattr(ds, self.sequence_name, sequence)
+            setattr(ds, self.sequence_name, DicomSequence([self.to_ds()]))
         return ds
 
     @classmethod
@@ -129,6 +118,7 @@ class ConceptCode(metaclass=ABCMeta):
 
 
 class SingleConceptCode(ConceptCode):
+    """Code for concepts that only allow a single item"""
     @classmethod
     def from_ds(cls, ds: Dataset) -> Optional['ConceptCode']:
         """Return measurement code for value. Value can be a code meaning (str)
@@ -152,6 +142,7 @@ class SingleConceptCode(ConceptCode):
 
 
 class MultipleConceptCode(ConceptCode):
+    """Code for concepts that allow multiple items"""
     @classmethod
     def from_ds(cls, ds: Dataset) -> Optional[List['ConceptCode']]:
         """Return measurement code for value. Value can be a code meaning (str)
@@ -172,6 +163,7 @@ class MultipleConceptCode(ConceptCode):
 
 
 class CidConceptCode(ConceptCode, metaclass=ABCMeta):
+    """Code for concepts defined in Context groups"""
     cid: str
 
     def __init__(
@@ -194,6 +186,7 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
 
     @classmethod
     def _get_cid_dict(cls):
+        """Get context group dict for class."""
         try:
             return getattr(codes, cls.cid)
         except AttributeError:
@@ -223,11 +216,20 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
 
     @classmethod
     def meanings(cls) -> List[str]:
+        """Return possible meanings for concept.
+
+        Returns
+        ----------
+        List[str]
+            Possible meanings for concept.
+
+        """
         cid_dict = cls._get_cid_dict()
         return cid_dict.dir()
 
 
 class DictConceptCode(ConceptCode, metaclass=ABCMeta):
+    """Code for concepts not yet defined in Context groups"""
     code_dict: Dict[str, Code]
 
     def __init__(
@@ -270,7 +272,70 @@ class DictConceptCode(ConceptCode, metaclass=ABCMeta):
 
     @classmethod
     def meanings(cls) -> List[str]:
+        """Return possible meanings for concept.
+
+        Returns
+        ----------
+        List[str]
+            Possible meanings for concept.
+
+        """
         return list(cls.code_dict.keys())
+
+class UnitCode(SingleConceptCode):
+    """Code for concepts representing units according to UCUM scheme"""
+    sequence_name = 'MeasurementUnitsCodeSequence'
+
+    def __init__(
+        self,
+        meaning: str,
+        value: str = None,
+        scheme_designator: str = None,
+        scheme_version: str = None
+    ):
+        if value is None or scheme_designator is None:
+            code = self._from_ucum(meaning)
+        else:
+            code = Code(value, scheme_designator, meaning, scheme_version)
+        super().__init__(
+            meaning=code.meaning,
+            value=code.value,
+            scheme_designator=code.scheme_designator,
+            scheme_version=code.scheme_version
+        )
+
+    @classmethod
+    def _from_ucum(cls, unit: str) -> Code:
+        """Return UCUM scheme ConceptCode.
+
+        Parameters
+        ----------
+        meaning: str
+            Code meaning.
+
+        Returns
+        ----------
+        ConceptCode
+            Code created from meaning.
+
+        """
+        return Code(
+            value=unit,
+            scheme_designator='UCUM',
+            meaning=unit
+        )
+
+    @classmethod
+    def measnings(cls) -> List[str]:
+        """Return possible meanings for concept.
+
+        Returns
+        ----------
+        List[str]
+            Possible meanings for concept.
+
+        """
+        return []
 
 
 class MeasurementCode(DictConceptCode, SingleConceptCode):
@@ -325,49 +390,3 @@ class ChannelDescriptionCode(DictConceptCode, SingleConceptCode):
     sequence_name = 'ChannelDescriptionCodeSequence'
     cid = 'cid8122',  # Microscopy Illuminator and Sensor Color
 
-
-class UnitCode(SingleConceptCode):
-    sequence_name = 'MeasurementUnitsCodeSequence'
-
-    def __init__(
-        self,
-        meaning: str,
-        value: str = None,
-        scheme_designator: str = None,
-        scheme_version: str = None
-    ):
-        if value is None or scheme_designator is None:
-            code = self._from_ucum(meaning)
-        else:
-            code = Code(value, scheme_designator, meaning, scheme_version)
-        super().__init__(
-            meaning=code.meaning,
-            value=code.value,
-            scheme_designator=code.scheme_designator,
-            scheme_version=code.scheme_version
-        )
-
-    @classmethod
-    def _from_ucum(cls, unit: str) -> Code:
-        """Return UCUM scheme ConceptCode.
-
-        Parameters
-        ----------
-        meaning: str
-            Code meaning.
-
-        Returns
-        ----------
-        ConceptCode
-            Code created from meaning.
-
-        """
-        return Code(
-            value=unit,
-            scheme_designator='UCUM',
-            meaning=unit
-        )
-
-    @classmethod
-    def measnings(cls) -> List[str]:
-        return []
