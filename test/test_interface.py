@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pydicom
+from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
 import pytest
@@ -12,7 +13,7 @@ from wsidicom.interface import (Point, PointMm, Region, RegionMm, Size, SizeMm,
                                 WsiDicom)
 from wsidicom.optical import Lut
 
-from .data_gen import create_layer_file
+from .data_gen import create_layer_file, create_main_dataset
 
 
 @pytest.mark.unittest
@@ -21,7 +22,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tempdir: TemporaryDirectory
-        self.dicom_ds: WsiDicom
+        self.wsi: WsiDicom
 
     @classmethod
     def setUpClass(cls):
@@ -29,15 +30,15 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         dirpath = Path(cls.tempdir.name)
         test_file_path = dirpath.joinpath("test_im.dcm")
         create_layer_file(test_file_path)
-        cls.dicom_ds = WsiDicom.open(cls.tempdir.name)
+        cls.wsi = WsiDicom.open(cls.tempdir.name)
 
     @classmethod
     def tearDownClass(cls):
-        cls.dicom_ds.close()
+        cls.wsi.close()
         cls.tempdir.cleanup()
 
     def test_mm_to_pixel(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.wsi.levels.get_level(0)
         mm_region = RegionMm(
             position=PointMm(0, 0),
             size=SizeMm(1, 1)
@@ -48,41 +49,41 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(pixel_region.size, Size(new_size, new_size))
 
     def test_find_closest_level(self):
-        closest_level = self.dicom_ds.levels.get_closest_by_level(2)
+        closest_level = self.wsi.levels.get_closest_by_level(2)
         self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_pixel_spacing(self):
-        closest_level = self.dicom_ds.levels.get_closest_by_pixel_spacing(
+        closest_level = self.wsi.levels.get_closest_by_pixel_spacing(
             SizeMm(0.5, 0.5)
         )
         self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_size(self):
-        closest_level = self.dicom_ds.levels.get_closest_by_size(
+        closest_level = self.wsi.levels.get_closest_by_size(
             Size(100, 100)
         )
         self.assertEqual(closest_level.level, 0)
 
     def test_calculate_scale(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.wsi.levels.get_level(0)
         scale = wsi_level.calculate_scale(5)
         self.assertEqual(scale, 2 ** (5-0))
 
     def test_get_frame_number(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         number = instance.tiles.get_frame_index(Point(0, 0), 0, '0')
         self.assertEqual(number, 0)
 
     def test_get_blank_color(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         color = instance._get_blank_color(
             instance._photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
 
     def test_get_frame_file(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         file = instance._get_file(0)
         self.assertEqual(file, (instance._files[0]))
@@ -94,7 +95,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         )
 
     def test_valid_tiles(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         test = instance.tiles.valid_tiles(
             Region(Point(0, 0), Size(0, 0)), 0, '0'
@@ -117,7 +118,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertFalse(test)
 
     def test_crop_tile(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         region = Region(
             position=Point(x=0, y=0),
@@ -153,7 +154,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(cropped_region, expected)
 
     def test_get_tiles(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         region = Region(
             position=Point(0, 0),
@@ -180,7 +181,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(get_tiles, expected)
 
     def test_crop_region_to_level_size(self):
-        base_level = self.dicom_ds.levels.get_level(0)
+        base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         image_size = base_level.size
         tile_size = instance.tile_size
@@ -238,7 +239,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(point0.to_tuple(), (10, 10))
 
     def test_valid_pixel(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.wsi.levels.get_level(0)
         # 154x290
         region = Region(
                 position=Point(0, 0),
@@ -252,7 +253,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertFalse(wsi_level.valid_pixels(region))
 
     def test_write_indexer(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.wsi.levels.get_level(0)
         instance, _, _ = wsi_level.get_instance()
 
         write_index = Point(0, 0)
@@ -320,11 +321,11 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(512, 512))
 
     def test_valid_level(self):
-        self.assertTrue(self.dicom_ds.levels.valid_level(1))
-        self.assertFalse(self.dicom_ds.levels.valid_level(20))
+        self.assertTrue(self.wsi.levels.valid_level(1))
+        self.assertFalse(self.wsi.levels.valid_level(20))
 
     def test_get_instance(self):
-        wsi_level = self.dicom_ds.levels.get_level(0)
+        wsi_level = self.wsi.levels.get_level(0)
         instance, _, _ = wsi_level.get_instance()
         self.assertEqual(instance, wsi_level.default_instance)
         instance, _, _ = wsi_level.get_instance(path='0')
@@ -366,3 +367,11 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         test = np.zeros((3, 256), dtype=np.uint16)
         test[0, :] = np.linspace(0, 65535, 256, dtype=np.uint16)
         self.assertTrue(np.array_equal(lut.get(), test))
+
+    def test_optical_module(self):
+        ds = create_main_dataset()
+        original_optical = Dataset()
+        original_optical.OpticalPathSequence = ds.OpticalPathSequence
+        original_optical.NumberOfOpticalPaths = ds.NumberOfOpticalPaths
+        restored_optical_ds = self.wsi.optical.insert_into_ds(Dataset())
+        self.assertEqual(original_optical, restored_optical_ds)
