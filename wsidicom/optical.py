@@ -39,6 +39,27 @@ class Lut:
         self._byte_format = 'HHH'  # Do we need to set endianess?
         self.table = self._parse_lut(self._lut_item)
 
+    def array(self, mode: str) -> np.ndarray:
+        """Return flattened representation of the lookup table with order
+        suitable for use with Pillows point(). The lookup table is scaled to
+        either 8 or 16 bit depending on mode.
+
+        Parameters
+        ----------
+        mode: str
+            Image mode to produce lookup table for.
+
+        Returns
+        ----------
+        np.ndarray
+            Lookup table ordered by rgb, rgb ...
+        """
+        if mode == 'L' or mode == 'I':
+            bits = 16
+        else:
+            bits = 8
+        return self.table.flatten()/(2**self._bits/2**bits)
+
     def insert_into_ds(self, ds: Dataset) -> Dataset:
         """Codes and insert object into sequence in dataset.
 
@@ -70,17 +91,6 @@ class Lut:
             Lookup table ordered by color x entry
         """
         return self.table
-
-    def get_flat(self) -> np.ndarray:
-        """Return 1D representation of the lookup table.
-        Suitable for use with pillows point function.
-
-        Returns
-        ----------
-        np.ndarray
-            Lookup table ordered by rgb, rgb ...
-        """
-        return self.table.flatten()
 
     def _parse_color(self, segmented_lut_data: bytes):
         LENGTH = 6
@@ -579,18 +589,7 @@ class OpticalManager:
         return ds
 
     def get(self, identifier: str) -> OpticalPath:
-        """Return the optical path item with identifier.
 
-        Parameters
-        ----------
-        identifier: str
-            The unique optical identifier to get
-
-        Returns
-        ----------
-        OpticalPath
-            The OpticalPath item
-        """
         try:
             return self._optical_paths[identifier]
         except KeyError:
@@ -598,27 +597,6 @@ class OpticalManager:
                 f"identifier {identifier}",
                 "optical path manager"
             )
-
-    def get_lut(self, identifer: str) -> Lut:
-        """Return lookup table for optical path with identifier.
-
-        Parameters
-        ----------
-        identifier: str
-            The unique optical identifier to get the lookup table for
-
-        Returns
-        ----------
-        Optional[Lut]
-            The Lut for the optical path, or None if not set
-        """
-        path = self.get(identifer)
-        if path.lut is None:
-            raise WsiDicomNotFoundError(
-                f"Lut for identifier {identifer}",
-                "optical path manager"
-            )
-        return path.lut
 
     def apply_lut(self, image: Image, identifier: str) -> Image:
         """Apply LUT of identifier to image. Converts gray scale image to RGB.
@@ -635,11 +613,17 @@ class OpticalManager:
         Image
             Image with LUT applied.
         """
-        if(image.mode == 'L'):
-            image = image.convert('RGB')
-        lut = self.get_lut(identifier)
-        lut_array = lut.get_flat()/(2**lut._bits/256)
-        return image.point(lut_array)
+
+        path = self.get(identifier)
+        lut = path.lut
+        if lut is None:
+            raise WsiDicomNotFoundError(
+                f"Lut for identifier {identifier}",
+                "optical path manager"
+            )
+        # if(image.mode == 'L'):
+        #     image = image.convert('RGB')
+        return image.point(lut.array(image.mode))
 
     @staticmethod
     def get_path_identifers(optical_path_sequence: DicomSequence) -> List[str]:
