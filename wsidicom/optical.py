@@ -39,9 +39,21 @@ class Lut:
         self._byte_format = 'HHH'  # Do we need to set endianess?
         self.table = self._parse_lut(self._lut_item)
 
-    @property
-    def sequence(self) -> DicomSequence:
-        return DicomSequence[self._lut_item]
+    def insert_into_ds(self, ds: Dataset) -> Dataset:
+        """Codes and insert object into sequence in dataset.
+
+        Parameters
+        ----------
+        ds: Dataset
+           Dataset to insert into.
+
+        Returns
+        ----------
+        Dataset
+            Dataset with object inserted.
+
+        """
+        ds.PaletteColorLookupTableSequence = DicomSequence[self._lut_item]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> Optional['Lut']:
@@ -193,6 +205,19 @@ class OpticalFilter(metaclass=ABCMeta):
         raise NotImplementedError
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
+        """Codes and insert object into dataset.
+
+        Parameters
+        ----------
+        ds: Dataset
+           Optical path sequence item.
+
+        Returns
+        ----------
+        Dataset
+            Dataset with object inserted.
+
+        """
         if self.nominal is not None:
             ds.LightPathFilterPassBand = self.nominal
         if self.low_pass is not None and self.high_pass is not None:
@@ -238,6 +263,7 @@ class ImagePathFilter(OpticalFilter):
 
 @dataclass
 class Illumination:
+    """Set of illumination conditions for optical path"""
     illumination_method: List[IlluminationCode]
     illumination_wavelengt: Optional[float]
     illumination_color: Optional[IlluminationColorCode]
@@ -245,6 +271,20 @@ class Illumination:
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'Illumination':
+        """Returns Illuminatin object read from dataset (optical path sequence
+        item).
+
+        Parameters
+        ----------
+        ds: Dataset
+           Optical path sequence item.
+
+        Returns
+        ----------
+        Illumination
+            Object containing illumination conditions for optical path.
+
+        """
         return cls(
             illumination_method=IlluminationCode.from_ds(ds),
             illumination_wavelengt=getattr(ds, 'IlluminationWaveLength', None),
@@ -253,6 +293,19 @@ class Illumination:
         )
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
+        """Codes and insert object into dataset.
+
+        Parameters
+        ----------
+        ds: Dataset
+           Optical path sequence item.
+
+        Returns
+        ----------
+        Dataset
+            Dataset with object inserted.
+
+        """
         if self.illumination_wavelengt is not None:
             ds.IlluminationWaveLength = self.illumination_wavelengt
         if self.illumination_color is not None:
@@ -281,6 +334,19 @@ class Lenses:
         )
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
+        """Codes and insert object into dataset.
+
+        Parameters
+        ----------
+        ds: Dataset
+           Optical path sequence item.
+
+        Returns
+        ----------
+        Dataset
+            Dataset with object inserted.
+
+        """
         if self.condenser_power is not None:
             ds.CondenserLensPower = self.condenser_power
         if self.objective_power is not None:
@@ -326,7 +392,7 @@ class OpticalPath:
         if self.icc_profile is not None:
             ds.ICCProfile = self.icc_profile
         if self.lut is not None:
-            ds.PaletteColorLookupTableSequence = self.lut.sequence
+            ds = self.lut.insert_into_ds(ds)
         if self.light_path_filter is not None:
             ds = self.light_path_filter.insert_into_ds(ds)
         if self.image_path_filter is not None:
@@ -391,6 +457,19 @@ class OpticalManager:
         return OpticalManager(optical_paths)
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
+        """Codes and insert object into dataset.
+
+        Parameters
+        ----------
+        ds: Dataset
+           DICOM dataset.
+
+        Returns
+        ----------
+        Dataset
+            Dataset with object inserted.
+
+        """
         ds.NumberOfOpticalPaths = len(self._optical_paths)
         ds.OpticalPathSequence = DicomSequence([
             optical_path.to_ds()
