@@ -532,6 +532,19 @@ class OpticalManager:
 
     @classmethod
     def open(cls, files: List[WsiDicomFile]) -> 'OpticalManager':
+        """Parse optical path sequence in listed files and create an
+        OpticalManager out of the found (unique) OpticalPaths.
+
+        Parameters
+        ----------
+        files: List[WsiDicomFile]
+            List of WsiDicom files to parse
+
+        Returns
+        ----------
+        OpticalManager
+            OpticalManager for the found OpticalPaths
+        """
         optical_paths: Dict[str, OpticalPath] = {}
         for file in files:
             for optical_ds in file.optical_path_sequence:
@@ -630,6 +643,19 @@ class OpticalManager:
 
     @staticmethod
     def get_path_identifers(optical_path_sequence: DicomSequence) -> List[str]:
+        """Parse optical path sequence and return list of optical path
+        identifiers
+
+        Parameters
+        ----------
+        optical_path_sequence: DicomSequence
+            Optical path sequence.
+
+        Returns
+        ----------
+        List[str]
+            List of optical path identifiers.
+        """
         return list({
             str(optical_ds.OpticalPathIdentifier)
             for optical_ds in optical_path_sequence
