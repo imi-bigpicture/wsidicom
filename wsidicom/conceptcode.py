@@ -78,17 +78,17 @@ class ConceptCode(metaclass=ABCMeta):
     def insert_into_ds(self, ds: Dataset) -> Dataset:
         try:
             sequence = getattr(ds, self.sequence_name)
+            sequence.append(self.to_ds())
         except AttributeError:
-            sequence = DicomSequence([Dataset()])
+            sequence = self.sequence
             setattr(ds, self.sequence_name, sequence)
-        sequence.append(self.to_ds())
         return ds
 
     @classmethod
     def _from_ds(
         cls,
         ds: Dataset,
-    ) -> List[Optional[Code]]:
+    ) -> Optional[List[Code]]:
         """Return list of ConceptCode from sequence in dataset.
 
         Parameters
@@ -103,7 +103,7 @@ class ConceptCode(metaclass=ABCMeta):
 
         """
         if cls.sequence_name not in ds:
-            return [None]
+            return None
         return [
             cls(
                 value=code_ds.CodeValue,
@@ -117,7 +117,7 @@ class ConceptCode(metaclass=ABCMeta):
 
 class SingleConceptCode(ConceptCode):
     @classmethod
-    def from_ds(cls, ds: Dataset) -> 'ConceptCode':
+    def from_ds(cls, ds: Dataset) -> Optional['ConceptCode']:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
@@ -132,14 +132,15 @@ class SingleConceptCode(ConceptCode):
             Measurement code created from value.
 
         """
-        if isinstance(ds, Dataset):
-            return cls._from_ds(ds)[0]
-        raise NotImplementedError(ds)
+        codes = cls._from_ds(ds)
+        if codes is None:
+            return None
+        return codes[0]
 
 
 class MultipleConceptCode(ConceptCode):
     @classmethod
-    def from_ds(cls, ds: Dataset) -> List['ConceptCode']:
+    def from_ds(cls, ds: Dataset) -> Optional[List['ConceptCode']]:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
@@ -154,9 +155,7 @@ class MultipleConceptCode(ConceptCode):
             Measurement code created from value.
 
         """
-        if isinstance(ds, Dataset):
-            return cls._from_ds(ds)
-        raise NotImplementedError(ds)
+        return cls._from_ds(ds)
 
 
 class CidConceptCode(ConceptCode, metaclass=ABCMeta):
@@ -173,7 +172,12 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
             code = self._from_cid(value)
         else:
             code = Code(value, scheme_designator, meaning, scheme_version)
-        super().__init__(*code)
+        super().__init__(
+            meaning=code.meaning,
+            value=code.value,
+            scheme_designator=code.scheme_designator,
+            scheme_version=code.scheme_version
+        )
 
     @classmethod
     def _get_cid_dict(cls):
@@ -224,7 +228,12 @@ class DictConceptCode(ConceptCode, metaclass=ABCMeta):
             code = self._from_dict(meaning)
         else:
             code = Code(value, scheme_designator, meaning, scheme_version)
-        super().__init__(*code)
+        super().__init__(
+            meaning=code.meaning,
+            value=code.value,
+            scheme_designator=code.scheme_designator,
+            scheme_version=code.scheme_version
+        )
 
     @classmethod
     def _from_dict(cls, meaning: str) -> Code:
@@ -318,7 +327,12 @@ class UnitCode(SingleConceptCode):
             code = self._from_ucum(meaning)
         else:
             code = Code(value, scheme_designator, meaning, scheme_version)
-        super().__init__(*code)
+        super().__init__(
+            meaning=code.meaning,
+            value=code.value,
+            scheme_designator=code.scheme_designator,
+            scheme_version=code.scheme_version
+        )
 
     @classmethod
     def _from_ucum(cls, unit: str) -> Code:
