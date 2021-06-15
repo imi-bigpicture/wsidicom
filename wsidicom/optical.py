@@ -1,11 +1,10 @@
-import io
 import struct
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import DefaultDict, Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Union
 
 import numpy as np
-from PIL import Image, ImageCms
+from PIL import Image
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
@@ -366,14 +365,10 @@ class OpticalPath:
         OpticalPath
             New optical path item
         """
-        if 'OpticalPathDescription' in ds:
-            description = str(ds.OpticalPathDescription)
-        else:
-            description = None
         return OpticalPath(
             identifier=str(ds.OpticalPathIdentifier),
             illumination=Illumination.from_ds(ds),
-            description=description,
+            description=getattr(ds, 'OpticalPathDescription', None),
             icc_profile=getattr(ds, 'ICCProfile', None),
             lut=Lut.from_ds(ds),
             light_path_filter=LightPathFilter.from_ds(ds),
@@ -388,7 +383,7 @@ class OpticalManager:
         self,
         optical_paths: Dict[str, OpticalPath] = None,
     ):
-        """Store optical paths and icc profiles loaded from dicom files.
+        """Store optical paths loaded from dicom files.
         """
 
         self._optical_paths: Dict[str, OpticalPath] = optical_paths
@@ -397,20 +392,12 @@ class OpticalManager:
     def open(cls, files: List[WsiDicomFile]) -> 'OpticalManager':
         optical_paths: Dict[str, OpticalPath] = {}
         for file in files:
-            optical_paths = cls._open_file(file, optical_paths)
+            for optical_ds in file.optical_path_sequence:
+                identifier = str(optical_ds.OpticalPathIdentifier)
+                if identifier not in optical_paths:
+                    path = OpticalPath.from_ds(optical_ds)
+                    optical_paths[identifier] = path
         return OpticalManager(optical_paths)
-
-    @staticmethod
-    def _open_file(
-        file: WsiDicomFile,
-        optical_paths: Dict[str, OpticalPath],
-    ) -> Dict[str, OpticalPath]:
-        for optical_ds in file.optical_path_sequence:
-            identifier = str(optical_ds.OpticalPathIdentifier)
-            if identifier not in optical_paths:
-                path = OpticalPath.from_ds(optical_ds)
-                optical_paths[identifier] = path
-        return optical_paths
 
     def get(self, identifier: str) -> OpticalPath:
         """Return the optical path item with identifier.
@@ -474,28 +461,6 @@ class OpticalManager:
         lut = self.get_lut(identifier)
         lut_array = lut.get_flat()/(2**lut._bits/256)
         return image.point(lut_array)
-
-    def get_icc(self, identifer: str) -> bytes:
-        """Return icc profile for optical path with identifier.
-
-        Parameters
-        ----------
-        identifier: str
-            The unique optical identifier to get the lookup table for
-
-        Returns
-        ----------
-        bytes
-            The Icc profile in bytes
-        """
-        path = self.get(identifer)
-        name = path.icc_profile_name
-        try:
-            return self._icc_profiles[name].profile
-        except KeyError:
-            raise WsiDicomNotFoundError(
-                f"icc profile {name}", "optical path manager"
-            )
 
     @staticmethod
     def get_path_identifers(optical_path_sequence: DicomSequence) -> List[str]:
