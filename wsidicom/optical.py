@@ -472,8 +472,7 @@ class OpticalManager:
 
     @staticmethod
     def get_path_identifers(optical_path_sequence: DicomSequence) -> List[str]:
-        found_identifiers: Set[str] = set()
-        for optical_ds in optical_path_sequence:
-            identifier = str(optical_ds.OpticalPathIdentifier)
-            found_identifiers.add(identifier)
-        return list(found_identifiers)
+        return list({
+            str(optical_ds.OpticalPathIdentifier)
+            for optical_ds in optical_path_sequence
+        })
