@@ -708,7 +708,7 @@ class Point(Geometry):
     ) -> 'Point':
         if not isinstance(coords, tuple):
             if len(coords) != 1:
-                raise NotImplementedError("Input has more than two points")
+                raise ValueError("Input has more than two points")
             coords = coords[0]
         return cls(*coords)
 
@@ -860,7 +860,7 @@ class Annotation:
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Annotation):
-            raise NotImplementedError(other)
+            raise NotImplemented(other)
         return (
             self.geometry == other.geometry and
             self.measurements == other.measurements
@@ -978,7 +978,7 @@ class AnnotationGroup:
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, AnnotationGroup):
-            raise NotImplementedError(other)
+            raise NotImplemented(other)
         return (
             self.annotations == other.annotations and
             self.label == other.label and
