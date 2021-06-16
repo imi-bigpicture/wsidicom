@@ -445,7 +445,7 @@ class OpticalPath:
         # ICC profile required if not MONOCHROME2 or lut present
         if photometric_interpretation != 'MONOCHROME2' and icc_profile is None:
             raise ValueError(
-                "Icc profile required if photometric is"
+                "Icc profile required if photometric is "
                 f"{photometric_interpretation}"
             )
         if lut is not None and icc_profile is None:
@@ -589,7 +589,6 @@ class OpticalManager:
         return ds
 
     def get(self, identifier: str) -> OpticalPath:
-
         try:
             return self._optical_paths[identifier]
         except KeyError:
