@@ -381,9 +381,6 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(original_optical, restored_optical_ds)
 
     def test_make_optical(self):
-        print(IlluminationCode.list())
-        print(IlluminationColorCode.list())
-
         illumination_method = IlluminationCode('Transmission illumination')
         illumination_color = IlluminationColorCode('Full Spectrum')
         illumination = Illumination(
@@ -397,6 +394,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             icc_profile=bytes(0)
         )
         optical = OpticalManager([path])
+
+        self.assertEqual(optical.get('1'), path)
 
     def test_concept_codes(self):
         code_classes = [
