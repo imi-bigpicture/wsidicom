@@ -2113,7 +2113,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         optical: OpticalManager,
         focal_planes: List[float] = None,
         optical_paths: List[str] = None
-    ):
+    ) -> None:
         """Writes stack to to file. File is written as TILED_FULL.
         Writing of optical path sequence is not yet implemented.
 
@@ -2122,7 +2122,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         path: Path
             Path to directory to write to.
         optical: OpticalManager
-            Manager container optical paths.
+            Manager containing optical paths.
         optical_paths: List[str]
             List of optical paths to include in file.
         focal_planes: List[float]
@@ -2146,6 +2146,18 @@ class WsiDicomStack(metaclass=ABCMeta):
                 raise ValueError("Requested focal planes not found")
         else:
             focal_planes = self.focal_planes
+
+        # Here we should check that the instances in the stack are possible
+        # to put in the same file. Start by getting the unique instances
+        # needed for the optical paths and focal planes
+        # instances = (optical_paths, focal_planes)
+        # Then group these, with the required attributes that needs to match
+        # (in the dicom file) as key. Attributes that needs to match:
+        # photometric_interpretation
+        # transfer_syntax
+        # samples_per_pixel
+        # focal method?
+
 
         self.write_base(fp, optical, uid, focal_planes, optical_paths)
         self.write_pixel_data(fp, focal_planes, optical_paths)
@@ -2517,6 +2529,31 @@ class WsiDicomSeries(metaclass=ABCMeta):
         for stack in self.stacks:
             stack.close()
 
+    def save(
+        self,
+        path: Path,
+        optical: OpticalManager,
+        focal_planes: List[float] = None,
+        optical_paths: List[str] = None,
+    ) -> None:
+        """Saves series to files in path. Optionaly only included selected
+        focal planes, and/or optical paths.
+
+        Parameters
+        ----------
+        path: Path
+            Folder path to save files to.
+        optical: OpticalManager
+            Optical manager containing optical paths for levels.
+        focal_planes: List[float]
+            Focal planes to save
+        optical_paths: List[str]
+            Optical paths to save.
+        """
+
+        for stack in self.stacks:
+            stack.save(path, optical, focal_planes, optical_paths)
+
 
 class WsiDicomLabels(WsiDicomSeries):
     wsi_type = 'LABEL'
@@ -2641,15 +2678,36 @@ class WsiDicomLevels(WsiDicomSeries):
         self,
         path: Path,
         optical: OpticalManager,
-        levels: List[int] = None,
         focal_planes: List[float] = None,
-        optical_paths: List[str] = None
-    ):
+        optical_paths: List[str] = None,
+        levels: List[int] = None
+    ) -> None:
+        """Saves levels to files in path. Optionaly only included selected
+        levels, focal planes, and/or optical paths.
+
+        Parameters
+        ----------
+        path: Path
+            Folder path to save files to.
+        optical: OpticalManager
+            Optical manager containing optical paths for levels.
+        focal_planes: List[float]
+            Focal planes to save
+        optical_paths: List[str]
+            Optical paths to save.
+        levels: List[int]
+            Levels to save.
+        """
         if levels is None:
             levels = self.levels
-        for level, level_stack in self._levels.items():
-            if level in levels:
-                level_stack.save(path, optical, focal_planes, optical_paths)
+
+        levels_to_save = [
+            level_stack for (level, level_stack) in self._levels.items()
+            if level in levels
+        ]
+
+        for level in levels_to_save:
+            level.save(path, optical, focal_planes, optical_paths)
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -3092,20 +3150,34 @@ class WsiDicom:
     def save(
         self,
         path: Path,
-        levels: Tuple[int, int] = None,
         focal_planes: List[float] = None,
-        optical_paths: List[str] = None
-    ):
+        optical_paths: List[str] = None,
+        levels: List[int] = None,
+    ) -> None:
+        """Saves wsi to files in path. Optionaly only included selected
+        levels, focal planes, and/or optical paths.
+
+        Parameters
+        ----------
+        path: Path
+            Folder path to save files to.
+        focal_planes: List[float]
+            Focal planes to save
+        optical_paths: List[str]
+            Optical paths to save.
+        levels: List[int]
+            Levels to save.
+        """
         self.levels.save(
             path,
             self.optical,
-            levels,
             focal_planes,
-            optical_paths
+            optical_paths,
+            levels
         )
-        # series = [self.levels, self.labels, self.overviews]
-        # for item in series:
-        #     item.save(path)
+        series = [self.labels, self.overviews]
+        for item in series:
+            item.save(path, self.optical, focal_planes, optical_paths)
 
     def read_label(self, index: int = 0) -> Image:
         """Read label image of the whole slide. If several label
