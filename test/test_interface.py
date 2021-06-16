@@ -4,14 +4,18 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import pydicom
+import pytest
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
-
-import pytest
+from wsidicom.conceptcode import (AnnotationCategoryCode, AnnotationTypeCode,
+                                  ChannelDescriptionCode, IlluminationCode,
+                                  IlluminationColorCode, IlluminatorCode,
+                                  ImagePathFilterCode, LenseCode,
+                                  LightPathFilterCode, MeasurementCode)
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.interface import (Point, PointMm, Region, RegionMm, Size, SizeMm,
                                 WsiDicom)
-from wsidicom.optical import Lut
+from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 from .data_gen import create_layer_file, create_main_dataset
 
@@ -368,10 +372,45 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         test[0, :] = np.linspace(0, 65535, 256, dtype=np.uint16)
         self.assertTrue(np.array_equal(lut.get(), test))
 
-    def test_optical_module(self):
+    def test_recreate_optical_module(self):
         ds = create_main_dataset()
         original_optical = Dataset()
         original_optical.OpticalPathSequence = ds.OpticalPathSequence
         original_optical.NumberOfOpticalPaths = ds.NumberOfOpticalPaths
         restored_optical_ds = self.wsi.optical.insert_into_ds(Dataset())
         self.assertEqual(original_optical, restored_optical_ds)
+
+    def test_make_optical(self):
+        print(IlluminationCode.list())
+        print(IlluminationColorCode.list())
+
+        illumination_method = IlluminationCode('Transmission illumination')
+        illumination_color = IlluminationColorCode('Full Spectrum')
+        illumination = Illumination(
+            illumination_method=[illumination_method],
+            illumination_color=illumination_color
+        )
+        path = OpticalPath(
+            identifier='1',
+            illumination=illumination,
+            photometric_interpretation='YBR_FULL_422',
+            icc_profile=bytes(0)
+        )
+        optical = OpticalManager([path])
+
+    def test_concept_codes(self):
+        code_classes = [
+            MeasurementCode, AnnotationTypeCode, AnnotationCategoryCode,
+            IlluminationCode, LenseCode, LightPathFilterCode,
+            ImagePathFilterCode, IlluminationColorCode, IlluminatorCode,
+            ChannelDescriptionCode
+        ]
+        for code_class in code_classes:
+            print(code_class)
+            available_codes = code_class.cid.values()
+            for available_code in available_codes:
+                code = code_class(available_code.meaning)
+                self.assertEqual(
+                    available_code,
+                    code
+                )
