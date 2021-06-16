@@ -44,7 +44,7 @@ class ConceptCode(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def meanings(cls) -> List[str]:
+    def list(cls) -> List[str]:
         raise NotImplementedError
 
     def to_ds(self) -> Dataset:
@@ -164,7 +164,7 @@ class MultipleConceptCode(ConceptCode):
 
 class CidConceptCode(ConceptCode, metaclass=ABCMeta):
     """Code for concepts defined in Context groups"""
-    cid: str
+    cid: Dict[str, Code]
 
     def __init__(
         self,
@@ -174,7 +174,7 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
         scheme_version: str = None
     ):
         if value is None or scheme_designator is None:
-            code = self._from_cid(value)
+            code = self._from_cid(meaning)
         else:
             code = Code(value, scheme_designator, meaning, scheme_version)
         super().__init__(
@@ -183,14 +183,6 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
             scheme_designator=code.scheme_designator,
             scheme_version=code.scheme_version
         )
-
-    @classmethod
-    def _get_cid_dict(cls):
-        """Get context group dict for class."""
-        try:
-            return getattr(codes, cls.cid)
-        except AttributeError:
-            raise NotImplementedError("Unsupported cid")
 
     @classmethod
     def _from_cid(cls, meaning: str) -> Code:
@@ -208,14 +200,14 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
             Code created from CID and meaning.
 
         """
-        cid_dict = cls._get_cid_dict()
-        try:
-            return getattr(cid_dict, meaning)
-        except AttributeError:
-            raise NotImplementedError("Unsupported code")
+        # The keys are camelcase meanings, dont use.
+        for code in cls.cid.values():
+            if code.meaning == meaning:
+                return code
+        raise ValueError("Unsupported code")
 
     @classmethod
-    def meanings(cls) -> List[str]:
+    def list(cls) -> List[str]:
         """Return possible meanings for concept.
 
         Returns
@@ -224,63 +216,8 @@ class CidConceptCode(ConceptCode, metaclass=ABCMeta):
             Possible meanings for concept.
 
         """
-        cid_dict = cls._get_cid_dict()
-        return cid_dict.dir()
+        return [code.meaning for code in cls.cid.values()]
 
-
-class DictConceptCode(ConceptCode, metaclass=ABCMeta):
-    """Code for concepts not yet defined in Context groups"""
-    code_dict: Dict[str, Code]
-
-    def __init__(
-        self,
-        meaning: str,
-        value: str = None,
-        scheme_designator: str = None,
-        scheme_version: str = None
-    ):
-        if value is None or scheme_designator is None:
-            code = self._from_dict(meaning)
-        else:
-            code = Code(value, scheme_designator, meaning, scheme_version)
-        super().__init__(
-            meaning=code.meaning,
-            value=code.value,
-            scheme_designator=code.scheme_designator,
-            scheme_version=code.scheme_version
-        )
-
-    @classmethod
-    def _from_dict(cls, meaning: str) -> Code:
-        """Return ConceptCode from dictionary.
-
-        Parameters
-        ----------
-        meaning: str
-            Code meaning of  code to get.
-
-        Returns
-        ----------
-        ConceptCode
-            Code from dictionary.
-
-        """
-        try:
-            return cls.code_dict[meaning]
-        except KeyError:
-            raise NotImplementedError("Unsupported code")
-
-    @classmethod
-    def meanings(cls) -> List[str]:
-        """Return possible meanings for concept.
-
-        Returns
-        ----------
-        List[str]
-            Possible meanings for concept.
-
-        """
-        return list(cls.code_dict.keys())
 
 class UnitCode(SingleConceptCode):
     """Code for concepts representing units according to UCUM scheme"""
@@ -338,55 +275,95 @@ class UnitCode(SingleConceptCode):
         return []
 
 
-class MeasurementCode(DictConceptCode, SingleConceptCode):
+class MeasurementCode(CidConceptCode, SingleConceptCode):
+    """
+    Concept code for measurement type.
+    Microscopy Measurement Types
+    """
     sequence_name = 'ConceptNameCodeSequence'
-    code_dict = {'Area': Code('42798000', 'SCT', 'Area')}  # noqa
+    cid = {'Area': Code('42798000', 'SCT', 'Area')}
 
 
-class AnnotationTypeCode(DictConceptCode, SingleConceptCode):
+class AnnotationTypeCode(CidConceptCode, SingleConceptCode):
+    """
+    Concept code for annotation type.
+    Microscopy Annotation Property Types
+    """
     sequence_name = 'AnnotationPropertyTypeCodeSequence'
-    code_dict = {
-        'Nucleus': Code('84640000', 'SCT', 'Nucleus'),  # noqa
-        'Entire cell': Code('362837007', 'SCT', 'Entire cell')  # noqa
+    cid = {
+        'Nucleus': Code('84640000', 'SCT', 'Nucleus'),
+        'EntireCell': Code('362837007', 'SCT', 'Entire cell')
     }
 
 
 class AnnotationCategoryCode(CidConceptCode, SingleConceptCode):
+    """
+    Concept code for annotation category.
+    From CID 7150 Segmentation Property Categories
+    """
     sequence_name = 'AnnotationPropertyCategoryCodeSequence'
-    cid = 'cid7150'
+    cid = codes.cid7150.concepts  # Segmentation Property Categories
 
 
 class IlluminationCode(CidConceptCode, MultipleConceptCode):
+    """
+    Concept code for illumination type.
+    From CID 8123 Microscopy Illumination Method
+    """
     sequence_name = 'IlluminationTypeCodeSequence'
-    cid = 'cid8123'  # Microscopy Illumination Method
+    cid = codes.cid8123.concepts  # Microscopy Illumination Method
 
 
 class LenseCode(CidConceptCode, MultipleConceptCode):
+    """
+    Concept code for lense.
+    From CID 8121 Microscopy Lens Type
+    """
     sequence_name = 'LensesCodeSequence'
-    cid = 'cid8121'  # Microscopy Lens Type
+    cid = codes.cid8121.concepts  # Microscopy Lens Type
 
 
 class LightPathFilterCode(CidConceptCode, MultipleConceptCode):
+    """
+    Concept code for light path filter.
+    From CID 8124 Microscopy Filter
+    """
     sequence_name = 'LightPathFilterTypeStackCodeSequence'
-    cid = 'cid8124'  # Microscopy Filter
+    cid = codes.cid8124.concepts  # Microscopy Filter
 
 
 class ImagePathFilterCode(CidConceptCode, MultipleConceptCode):
+    """
+    Concept code for image path filter.
+    From CID 8124 Microscopy Filter
+    """
     sequence_name = 'ImagePathFilterTypeStackCodeSequence'
-    cid = 'cid8124'  # Microscopy Filter
+    cid = codes.cid8124.concepts  # Microscopy Filter
 
 
-class IlluminationColorCode(DictConceptCode, SingleConceptCode):
+class IlluminationColorCode(CidConceptCode, SingleConceptCode):
+    """
+    Concept code for illumination color.
+    From CID 8122 Microscopy Illuminator and Sensor Color
+    """
     sequence_name = 'IlluminationColorCodeSequence'
-    cid = 'cid8122',  # Microscopy Illuminator and Sensor Color
+    cid = codes.cid8122.concepts  # Microscopy Illuminator and Sensor Color
 
 
-class IlluminatorCode(DictConceptCode, SingleConceptCode):
+class IlluminatorCode(CidConceptCode, SingleConceptCode):
+    """
+    Concept code for illuminator type.
+    From CID 8125 Microscopy Illuminator Type
+    """
     sequence_name = 'IlluminatorTypeCodeSequence'
-    cid = 'cid8125',  # Microscopy Illuminator Type
+    cid = codes.cid8125.concepts  # Microscopy Illuminator Type
 
 
-class ChannelDescriptionCode(DictConceptCode, SingleConceptCode):
+class ChannelDescriptionCode(CidConceptCode, SingleConceptCode):
+    """
+    Concept code for channel descriptor.
+    From CID 8122 Microscopy Illuminator and Sensor Color
+    """
     sequence_name = 'ChannelDescriptionCodeSequence'
-    cid = 'cid8122',  # Microscopy Illuminator and Sensor Color
+    cid = codes.cid8122.concepts  # Microscopy Illuminator and Sensor Color
 
