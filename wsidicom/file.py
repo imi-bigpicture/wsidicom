@@ -1,6 +1,6 @@
 import warnings
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import pydicom
 from pydicom.dataset import Dataset
@@ -77,6 +77,24 @@ class WsiDicomFile:
                 ds.PhotometricInterpretation
                 )
             self._optical_path_sequence = ds.OpticalPathSequence
+
+            self._focus_method = ds.FocusMethod
+            self._ext_depth_of_field = ds.ExtendedDepthOfField == 'YES'
+            self._ext_depth_of_field_planes = getattr(
+                ds, 'NumberOfFocalPlanes', None
+            )
+            self._ext_depth_of_field_plane_distance = getattr(
+                ds, 'DistanceBetweenFocalPlanes', None
+            )
+            if self._ext_depth_of_field:
+                if self._ext_depth_of_field_planes is None:
+                    raise WsiDicomFileError(
+                        self.filepath, "Missing NumberOfFocalPlanes"
+                    )
+                if self._ext_depth_of_field_plane_distance is None:
+                    raise WsiDicomFileError(
+                        self.filepath, "Missing DistanceBetweenFocalPlanes"
+                    )
 
             pixel_measure = (
                 ds.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[0]
@@ -223,6 +241,22 @@ class WsiDicomFile:
     def slice_spacing(self) -> float:
         """Return slice spacing"""
         return self._slice_spacing
+
+    @property
+    def focus_method(self) -> str:
+        return self._focus_method
+
+    @property
+    def ext_depth_of_field(self) -> bool:
+        return self._ext_depth_of_field
+
+    @property
+    def ext_depth_of_field_planes(self) -> Optional[int]:
+        return self._ext_depth_of_field_planes
+
+    @property
+    def ext_depth_of_field_plane_distance(self) -> Optional[float]:
+        return self._ext_depth_of_field_plane_distance
 
     def pretty_str(
         self,

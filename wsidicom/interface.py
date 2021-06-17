@@ -596,7 +596,11 @@ class WsiInstance(metaclass=ABCMeta):
         photometric_interpretation: str,
         slice_thickness: float,
         slice_spacing: float,
-        mm_size: SizeMm
+        mm_size: SizeMm,
+        focus_method: str,
+        ext_depth_of_field: bool,
+        ext_depth_of_field_planes: int = None,
+        ext_depth_of_field_plane_distance: float = None
     ):
         self._size = size
         self._pixel_spacing = pixel_spacing
@@ -615,6 +619,12 @@ class WsiInstance(metaclass=ABCMeta):
         else:
             self._image_mode = "RGB"
         self._mm_size = mm_size
+        self._focus_method = focus_method
+        self._ext_depth_of_field = ext_depth_of_field
+        self._ext_depth_of_field_planes = ext_depth_of_field_planes
+        self._ext_depth_of_field_plane_distance = (
+            ext_depth_of_field_plane_distance
+        )
 
     @property
     def wsi_type(self) -> str:
@@ -670,6 +680,32 @@ class WsiInstance(metaclass=ABCMeta):
     def slice_spacing(self) -> float:
         """Return slice spacing"""
         return self._slice_spacing
+
+    @property
+    def focus_method(self) -> str:
+        return self._focus_method
+
+    @property
+    def ext_depth_of_field(self) -> bool:
+        return self._ext_depth_of_field
+
+    @property
+    def ext_depth_of_field_planes(self) -> Optional[int]:
+        return self._ext_depth_of_field_planes
+
+    @property
+    def ext_depth_of_field_plane_distance(self) -> Optional[float]:
+        return self._ext_depth_of_field_plane_distance
+
+    @property
+    def photometric_interpretation(self) -> str:
+        """Return photometric interpretation"""
+        return self._photometric_interpretation
+
+    @property
+    def samples_per_pixel(self) -> int:
+        """Return samples per pixel (1 or 3)"""
+        return self._samples_per_pixel
 
     @property
     def identifier(self) -> Uid:
@@ -988,7 +1024,11 @@ class WsiGenericInstance(WsiInstance):
         transfer_syntax: Uid,
         photometric_interpretation: str,
         slice_thickness: float,
-        slice_spacing: float
+        slice_spacing: float,
+        focus_method: str,
+        ext_depth_of_field: bool,
+        ext_depth_of_field_planes: int = None,
+        ext_depth_of_field_plane_distance: float = None
     ):
         super().__init__(
             size,
@@ -1100,7 +1140,11 @@ class WsiDicomInstance(WsiInstance):
             base_file.photometric_interpretation,
             base_file.slice_thickness,
             base_file.slice_spacing,
-            base_file.mm_size
+            base_file.mm_size,
+            base_file.focus_method,
+            base_file.ext_depth_of_field,
+            base_file.ext_depth_of_field_planes,
+            base_file.ext_depth_of_field_plane_distance
         )
         self._blank_tile = self._create_blank_tile()
         self._blank_encoded_tile = self.encode(self._blank_tile)
@@ -2018,15 +2062,28 @@ class WsiDicomStack(metaclass=ABCMeta):
 
         ds = optical.insert_into_ds(ds)
 
-        ds.Rows = self.default_instance.tile_size.width
-        ds.Columns = self.default_instance.tile_size.height
-        ds.SamplesPerPixel = 3  # Should use correct values!
-        ds.PhotometricInterpretation = 'YBR_FULL_422'
-        ds.ImagedVolumeWidth = self.default_instance.mm_size.width
-        ds.ImagedVolumeHeight = self.default_instance.mm_size.height
+        instance = self.default_instance
+
+        ds.Rows = instance.tile_size.width
+        ds.Columns = instance.tile_size.height
+        ds.SamplesPerPixel = instance.samples_per_pixel
+        ds.PhotometricInterpretation = instance.photometric_interpretation
+        ds.ImagedVolumeWidth = instance.mm_size.width
+        ds.ImagedVolumeHeight = instance.mm_size.height
         ds.ImagedVolumeDepth = (  # Should use correct values!
-            len(self.focal_planes) * self.default_instance.slice_spacing
+            len(self.focal_planes) * instance.slice_spacing
         )
+        ds.FocusMethod = instance.focus_method
+        if instance.ext_depth_of_field:
+            ds.ExtendedDepthOfField = 'YES'
+        else:
+            ds.ExtendedDepthOfField = 'NO'
+        if instance.ext_depth_of_field_planes is not None:
+            ds.NumberOfFocalPlanes = instance.ext_depth_of_field_planes
+        if instance.ext_depth_of_field_plane_distance is not None:
+            ds.DistanceBetweenFocalPlanes = (
+                instance.ext_depth_of_field_plane_distance
+            )
         ds.TotalPixelMatrixColumns = self.size.width
         ds.TotalPixelMatrixRows = self.size.height
 
@@ -2157,7 +2214,6 @@ class WsiDicomStack(metaclass=ABCMeta):
         # transfer_syntax
         # samples_per_pixel
         # focal method?
-
 
         self.write_base(fp, optical, uid, focal_planes, optical_paths)
         self.write_pixel_data(fp, focal_planes, optical_paths)
