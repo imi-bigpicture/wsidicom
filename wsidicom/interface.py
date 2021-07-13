@@ -87,28 +87,16 @@ class WsiDicomFile:
                 ds.PhotometricInterpretation
                 )
             self._optical_path_sequence = ds.OpticalPathSequence
-
+            self._shared_frame_sequence = ds.SharedFunctionalGroupsSequence
+            self._per_frame_sequence = getattr(
+                ds,
+                'PerFrameFunctionalGroupsSequence',
+                None
+            )
             if self.tile_type == 'TILED_FULL':
-                try:
-                    self._frame_sequence = ds.SharedFunctionalGroupsSequence
-                except AttributeError:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        'Tiled full file missing shared functional'
-                        'group sequence'
-                    )
                 self._focal_planes = int(
                     getattr(ds, 'TotalPixelMatrixFocalPlanes', 1)
                 )
-            else:
-                try:
-                    self._frame_sequence = ds.PerFrameFunctionalGroupsSequence
-                except AttributeError:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        'Tiled sparse file missing per frame functional'
-                        'group sequence'
-                    )
 
             self._frame_positions = self._parse_pixel_data()
 
@@ -202,11 +190,16 @@ class WsiDicomFile:
         return self._optical_path_sequence
 
     @property
-    def frame_sequence(self) -> DicomSequence:
-        """Return DICOM Shared functional group sequence if TILED_FULL or
-        Per frame functional groups sequence if TILED_SPARSE.
+    def shared_frame_sequence(self) -> DicomSequence:
+        """Return DICOM Shared functional group sequence.
         """
-        return self._frame_sequence
+        return self._shared_frame_sequence
+
+    @property
+    def per_frame_sequence(self) -> Optional[DicomSequence]:
+        """Return DICOM Per frame functional groups sequence.
+        """
+        return self._per_frame_sequence
 
     @property
     def focal_planes(self) -> int:
@@ -1036,7 +1029,7 @@ class FullTileIndex(TileIndex):
         DECIMALS = 3
         focal_planes: List[float] = []
         for file in files.values():
-            sequence = file.frame_sequence[0]
+            sequence = file.shared_frame_sequence[0]
             spacing = getattr(
                 sequence.PixelMeasuresSequence[0],
                 'SpacingBetweenSlices',
@@ -1183,10 +1176,15 @@ class SparseTileIndex(TileIndex):
         """
         focal_planes: List[float] = []
         for file in files.values():
-            for frame in file.frame_sequence:
+            if 'PlanePositionSlideSequence' in file.shared_frame_sequence[0]:
+                frame_sequence = file.shared_frame_sequence
+            else:
+                frame_sequence = file.per_frame_sequence
+            for frame in frame_sequence:
                 try:
                     (tile, z) = self._get_frame_coordinates(frame)
                 except AttributeError:
+                    print(frame)
                     raise WsiDicomFileError(
                         file.filepath,
                         "Invalid plane position slide sequence"
@@ -1214,7 +1212,11 @@ class SparseTileIndex(TileIndex):
         planes: Dict[Tuple[float, str], SparseTilePlane] = {}
 
         for file_offset, file in files.items():
-            for i, frame in enumerate(file.frame_sequence):
+            if 'PlanePositionSlideSequence' in file.shared_frame_sequence[0]:
+                frame_sequence = file.shared_frame_sequence
+            else:
+                frame_sequence = file.per_frame_sequence
+            for i, frame in enumerate(frame_sequence):
                 (tile, z) = self._get_frame_coordinates(frame)
                 optical_sequence = getattr(
                     frame,
@@ -1257,8 +1259,8 @@ class SparseTileIndex(TileIndex):
             )
 
     def _get_frame_coordinates(
-            self,
-            frame: DicomSequence
+        self,
+        frame: DicomSequence
     ) -> Tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
         In the Plane Position Slide Sequence x and y are defined in mm and z in
@@ -3041,7 +3043,7 @@ class WsiDicom:
     def __enter__(self):
         return self
 
-    def __exit__(self):
+    def __exit__(self, type, value, traceback):
         self.close()
 
     def __str__(self) -> str:
