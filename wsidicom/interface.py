@@ -437,7 +437,7 @@ class WsiDicomFile:
         )
         if not syntax_supported:
             warnings.warn(
-                "Non-supported transfer syntax"
+                "Non-supported transfer syntax "
                 f"{transfer_syntax_uid}"
             )
         if image_type_supported and syntax_supported:
