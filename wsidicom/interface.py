@@ -1352,6 +1352,14 @@ class WsiDicomInstance:
         return string
 
     @property
+    def default_z(self) -> float:
+        return self.tiles.default_z
+
+    @property
+    def default_path(self) -> str:
+        return self.tiles.default_path
+
+    @property
     def files(self) -> List[WsiDicomFile]:
         """Return list of files"""
         return list(self._files.values())
@@ -1525,7 +1533,12 @@ class WsiDicomInstance:
             image.save(buffer, format=image_format, **image_options)
             return buffer.getvalue()
 
-    def stitch_tiles(self, region: Region, path: str, z: float) -> Image:
+    def stitch_tiles(
+        self,
+        region: Region,
+        path: str = None,
+        z: float = None
+    ) -> Image:
         """Stitches tiles together to form requested image.
 
         Parameters
@@ -1542,6 +1555,10 @@ class WsiDicomInstance:
         Image
             Stitched image
         """
+        if z is None:
+            z = self.default_z
+        if path is None:
+            path = self.default_path
         stitching_tiles = self.tiles.get_range(region, z, path)
         image = Image.new(mode=self._image_mode, size=region.size.to_tuple())
         write_index = Point(x=0, y=0)
@@ -1559,7 +1576,12 @@ class WsiDicomInstance:
             )
         return image
 
-    def get_tile(self, tile: Point, z: float, path: str) -> Image:
+    def get_tile(
+        self,
+        tile: Point,
+        z: float = None,
+        path: str = None
+    ) -> Image:
         """Get tile image at tile coordinate x, y.
         If frame is inside tile geometry but no tile exists in
         frame data (sparse) returns blank image
@@ -1578,6 +1600,10 @@ class WsiDicomInstance:
         Image
             Tile image
         """
+        if z is None:
+            z = self.default_z
+        if path is None:
+            path = self.default_path
         try:
             frame_index = self._get_frame_index(tile, z, path)
             tile_frame = self._get_tile_frame(frame_index)
@@ -1591,7 +1617,12 @@ class WsiDicomInstance:
             image = image.crop(box=cropped_tile_region.box_from_origin)
         return image
 
-    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(
+        self,
+        tile: Point,
+        z: float = None,
+        path: str = None
+    ) -> bytes:
         """Get tile bytes at tile coordinate x, y
         If frame is inside tile geometry but no tile exists in
         frame data (sparse) returns encoded blank image.
@@ -1610,7 +1641,10 @@ class WsiDicomInstance:
         bytes
             Tile image as bytes
         """
-
+        if z is None:
+            z = self.default_z
+        if path is None:
+            path = self.default_path
         try:
             frame_index = self._get_frame_index(tile, z, path)
             tile_frame = self._get_tile_frame(frame_index)
@@ -2119,7 +2153,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         self,
         z: float = None,
         path: str = None
-    ) -> Tuple[WsiDicomInstance, float, str]:
+    ) -> WsiDicomInstance:
         """Search for instance fullfilling the parameters.
         The behavior when z and/or path is none could be made more
         clear.
@@ -2133,15 +2167,14 @@ class WsiDicomStack(metaclass=ABCMeta):
 
         Returns
         ----------
-        WsiDicomInstance, float, str
-            The instance containing selected path and z coordinate,
-            selected or default focal plane and optical path
+        WsiDicomInstance
+            The instance containing selected path and z coordinate.
         """
         if z is None and path is None:
             instance = self.default_instance
             z = instance.tiles.default_z
             path = instance.tiles.default_path
-            return self.default_instance, z, path
+            return self.default_instance
 
         # Sort instances by number of focal planes (prefer simplest instance)
         sorted_instances = sorted(
@@ -2167,11 +2200,7 @@ class WsiDicomStack(metaclass=ABCMeta):
                 f"Instance for path: {path}, z: {z}",
                 "stack"
             )
-        if z is None:
-            z = instance.tiles.default_z
-        if path is None:
-            path = instance.tiles.default_path
-        return instance, z, path
+        return instance
 
     def get_default_full(self) -> Image:
         """Read full image using default z coordinate and path.
@@ -2213,7 +2242,7 @@ class WsiDicomStack(metaclass=ABCMeta):
             Region as image
         """
 
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
         image = instance.stitch_tiles(region, path, z)
         return image
 
@@ -2268,7 +2297,7 @@ class WsiDicomStack(metaclass=ABCMeta):
             The tile as image
         """
 
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
         return instance.get_tile(tile, z, path)
 
     def get_encoded_tile(
@@ -2293,7 +2322,8 @@ class WsiDicomStack(metaclass=ABCMeta):
         bytes
             The tile as bytes
         """
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
+
         return instance.get_encoded_tile(tile, z, path)
 
     def mm_to_pixel(self, region: RegionMm) -> Region:
@@ -2511,7 +2541,7 @@ class WsiDicomLevel(WsiDicomStack):
             A tile image
         """
         scale = self.calculate_scale(level)
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
         scaled_region = Region.from_tile(tile, instance.tile_size) * scale
         cropped_region = instance.crop_to_level_size(scaled_region)
         if not self.valid_pixels(cropped_region):
@@ -2552,7 +2582,7 @@ class WsiDicomLevel(WsiDicomStack):
             A transfer syntax encoded tile
         """
         image = self.get_scaled_tile(tile, scale, z, path)
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
         return instance.encode(image)
 
     def calculate_scale(self, level_to: int) -> int:
@@ -3582,7 +3612,7 @@ class WsiDicom:
         level: int,
         z: float = None,
         path: str = None
-    ) -> Tuple[WsiDicomInstance, float, str]:
+    ) -> WsiDicomInstance:
         """Return instance fullfilling level, z and/or path.
 
         Parameters
@@ -3596,8 +3626,8 @@ class WsiDicom:
 
         Returns
         ----------
-        Tuple[WsiDicomInstance, float, str]:
-            Instance, selected z and path
+        WsiDicomInstance
+            Instance
         """
         wsi_level = self.levels.get_level(level)
         return wsi_level.get_instance(z, path)

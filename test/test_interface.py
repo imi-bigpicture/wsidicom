@@ -66,20 +66,20 @@ class WsiDicomTests(unittest.TestCase):
 
     def test_get_frame_number(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         number = instance.tiles.get_frame_index(Point(0, 0), 0, '0')
         self.assertEqual(number, 0)
 
     def test_get_blank_color(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         color = instance._get_blank_color(
             instance._photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
 
     def test_get_frame_file(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         file = instance._get_file(0)
         self.assertEqual(file, (instance._files[0]))
 
@@ -91,7 +91,7 @@ class WsiDicomTests(unittest.TestCase):
 
     def test_valid_tiles(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         test = instance.tiles.valid_tiles(
             Region(Point(0, 0), Size(0, 0)), 0, '0'
         )
@@ -114,7 +114,7 @@ class WsiDicomTests(unittest.TestCase):
 
     def test_crop_tile(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         region = Region(
             position=Point(x=0, y=0),
             size=Size(width=100, height=100)
@@ -150,7 +150,7 @@ class WsiDicomTests(unittest.TestCase):
 
     def test_get_tiles(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         region = Region(
             position=Point(0, 0),
             size=Size(100, 100)
@@ -177,7 +177,7 @@ class WsiDicomTests(unittest.TestCase):
 
     def test_crop_region_to_level_size(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         image_size = base_level.size
         tile_size = instance.tile_size
         region = Region(
@@ -249,7 +249,7 @@ class WsiDicomTests(unittest.TestCase):
 
     def test_write_indexer(self):
         wsi_level = self.slide.levels.get_level(0)
-        instance, _, _ = wsi_level.get_instance()
+        instance = wsi_level.get_instance()
 
         write_index = Point(0, 0)
         tile = Point(0, 0)
@@ -321,11 +321,11 @@ class WsiDicomTests(unittest.TestCase):
 
     def test_get_instance(self):
         wsi_level = self.slide.levels.get_level(0)
-        instance, _, _ = wsi_level.get_instance()
+        instance = wsi_level.get_instance()
         self.assertEqual(instance, wsi_level.default_instance)
-        instance, _, _ = wsi_level.get_instance(path='0')
+        instance = wsi_level.get_instance(path='0')
         self.assertEqual(instance, wsi_level.default_instance)
-        instance, _, _ = wsi_level.get_instance(z=0)
+        instance = wsi_level.get_instance(z=0)
         self.assertEqual(instance, wsi_level.default_instance)
 
     def test_parse_lut(self):
