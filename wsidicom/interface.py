@@ -906,7 +906,6 @@ class TileIndex(metaclass=ABCMeta):
             middle = (largest - smallest)/2
             default = min(range(len(focal_planes)),
                           key=lambda i: abs(focal_planes[i]-middle))
-
         return focal_planes[default]
 
     @staticmethod
@@ -1337,7 +1336,7 @@ class WsiDicomInstance:
         depth: int = None
     ) -> str:
         string = (
-            f"Instance default z: {self.tiles.default_z,}"
+            f"Instance default z: {self.tiles.default_z}"
             f" default path: { self.tiles.default_path}"
         )
         if depth is not None:
@@ -2414,12 +2413,16 @@ class WsiDicomLevel(WsiDicomStack):
 
     @property
     def pyramid(self) -> str:
-        """Return string representatin of the level"""
+        """Return string representation of the level"""
         return (
             f'Level [{self.level}]'
             f' tiles: {self.default_instance.tiles.plane_size},'
             f' size: {self.size}, mpp: {self.mpp} um/px'
         )
+
+    @property
+    def tile_size(self) -> Size:
+        return self.default_instance.tile_size
 
     @property
     def level(self) -> int:
@@ -2622,6 +2625,9 @@ class WsiDicomSeries(metaclass=ABCMeta):
             The stack at index in the series
         """
         return self.stacks[index]
+
+    def __len__(self) -> int:
+        return len(self.stacks)
 
     @property
     def stacks(self) -> List[WsiDicomStack]:
@@ -3046,6 +3052,20 @@ class WsiDicom:
 
     def __str__(self) -> str:
         return self.pretty_str()
+
+    @property
+    def base_level(self) -> WsiDicomLevel:
+        return self.levels.base_level
+
+    @property
+    def size(self) -> Size:
+        """Return pixel size of base level."""
+        return self.base_level.size
+
+    @property
+    def tile_size(self) -> Size:
+        """Return tile size of levels."""
+        return self.base_level.tile_size
 
     @property
     def levels(self) -> WsiDicomLevels:
