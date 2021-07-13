@@ -2761,7 +2761,7 @@ class WsiDicomLabels(WsiDicomSeries):
             base_file.uids.base,
         )
         labels = WsiDicomStack.open(filtered_files, optical)
-        return WsiDicomLabels(labels)
+        return cls(labels)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
@@ -2795,7 +2795,7 @@ class WsiDicomOverviews(WsiDicomSeries):
             base_file.uids.base,
         )
         overviews = WsiDicomStack.open(filtered_files, optical)
-        return WsiDicomOverviews(overviews)
+        return cls(overviews)
 
 
 class WsiDicomLevels(WsiDicomSeries):
@@ -2875,7 +2875,7 @@ class WsiDicomLevels(WsiDicomSeries):
             base_file.tile_size
         )
         levels = WsiDicomLevel.open_levels(filtered_files, optical)
-        return WsiDicomLevels(levels)
+        return cls(levels)
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -3021,18 +3021,18 @@ class WsiDicom:
         self._levels: WsiDicomLevels = self._assign(series, 'levels')
         self._labels: WsiDicomLabels = self._assign(series, 'labels')
         self._overviews: WsiDicomOverviews = self._assign(series, 'overviews')
+        self.annotations: AnnotationInstance = annotations
 
         self.uids = self._validate_collection(
             [self.levels, self.labels, self.overviews],
             optical
         )
         self.optical = optical
+
         if (
-            annotations is not None and
-            annotations.frame_of_reference == self.uids.frame_of_reference
+            self.annotations.frame_of_reference is not None and
+            self.annotations.frame_of_reference != self.uids.frame_of_reference
         ):
-            self.annotations: AnnotationInstance = annotations
-        else:
             warnings.warn("Annotations frame of referance does not match")
         base = self.levels.base_level.default_instance
         self.ds = base.create_ds()
@@ -3145,8 +3145,7 @@ class WsiDicom:
         labels = WsiDicomLabels.open(label_files, optical, base_file)
         overviews = WsiDicomOverviews.open(overview_files, optical, base_file)
         annotations = AnnotationInstance.open(annotation_files)
-
-        return WsiDicom(
+        return cls(
             [levels, labels, overviews],
             optical=optical,
             annotations=annotations
