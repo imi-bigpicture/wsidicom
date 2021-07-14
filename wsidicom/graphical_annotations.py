@@ -15,28 +15,25 @@ from pydicom.uid import UID as Uid
 from .uid import ANN_SOP_CLASS_UID
 
 # MICROSCOPY BULK SIMPLE ANNOTATIONS MODULE ATTRIBUTES
-# According to sup 222, 2021/03/26. (Note that group number is not decided in
-# sup 222 draft. The created annotations are thus non-standard).
 # Each dict entry is Tag: (VR, VM, Name, Retired, Keyword)
 annotation_dict_items = {
-    0x06000044: ('OD', '1', "Double Point Coordinates Data", '', 'DoublePointCoordinatesData'),  # noqa
-    0x6000ee00: ('CS', '1', "Annotation Coordinate Type", '', 'AnnotationCoordinateType'),  # noqa
-    0x6000ee01: ('SQ', '1', "Annotation Group Sequence", '',  'AnnotationGroupSequence'),  # noqa
-    # 0x6000ee02: ('UL', '1', "Annotation Group Number", '', 'AnnotationGroupNumber'),  # noqa
-    0x6000ee03: ('LO', '1', "Annotation Group Label", '', 'AnnotationGroupLabel'),  # noqa
-    0x6000ee04: ('UT', '1', "Annotation Group Description", '', 'AnnotationGroupDescription'),  # noqa
-    0x6000ee05: ('UL', '1', "Number of Annotations", '', 'NumberOfAnnotations'),  # noqa
-    0x6000ee06: ('OL', '1', "Annotation Index List", '', 'AnnotationIndexList'),  # noqa
-    0x6000ee07: ('FD', '1-n', "Common Z Coordinate Value", '', 'CommonZCoordinateValue'),  # noqa
-    0x6000ee12: ('SQ', '1', "Annotation Group Algorithm Identification Sequence", '', 'AnnotationGroupAlgorithmIdentificationSequence'),  # noqa
-    0x6000ee13: ('CS', '1', "Annotation Group Generation Type", '', 'AnnotationGroupGenerationType'),  # noqa
-    0x6000ee14: ('CS', '1', "Annotation Applies to All Z Planes", '', 'AnnotationAppliesToAllZPlanes'),  # noqa
-    0x6000ee15: ('CS', '1', "Annotation Applies to All Optical Paths", '', 'AnnotationAppliesToAllOpticalPaths'),  # noqa
-    0x6000ee16: ('SQ', '1', "Annotation Property Category Code Sequence", '', 'AnnotationPropertyCategoryCodeSequence'),  # noqa
-    0x6000ee17: ('SQ', '1', "Annotation classification Code Sequence", '', 'AnnotationPropertyTypeCodeSequence'),  # noqa
-    0x6000ee18: ('SQ', '1', "Annotation classification Modifier Code Sequence", '', 'AnnotationPropertyTypeModifierCodeSequence'),  # noqa
-    0x6000ee19: ('UI', '1', "Annotation Group UID", '', 'AnnotationGroupUID'),  # noqa
-    0x6000ee10: ('SH', '1-n', "Referenced Optical Path Identifier", '', 'ReferencedOpticalPathIdentifier')  # noqa
+    0x00660022: ('OD', '1', "Double Point Coordinates Data", '', 'DoublePointCoordinatesData'),  # noqa
+    0x006A0001: ('CS', '1', "Annotation Coordinate Type", '', 'AnnotationCoordinateType'),  # noqa
+    0x006A0002: ('SQ', '1', "Annotation Group Sequence", '',  'AnnotationGroupSequence'),  # noqa
+    0x006A0003: ('UI', '1', "Annotation Group UID", '', 'AnnotationGroupUID'),  # noqa
+    0x006A0005: ('LO', '1', "Annotation Group Label", '', 'AnnotationGroupLabel'),  # noqa
+    0x006A0006: ('UT', '1', "Annotation Group Description", '', 'AnnotationGroupDescription'),  # noqa
+    0x006A0007: ('CS', '1', "Annotation Group Generation Type", '', 'AnnotationGroupGenerationType'),  # noqa
+    0x006A0008: ('SQ', '1', "Annotation Group Algorithm Identification Sequence", '', 'AnnotationGroupAlgorithmIdentificationSequence'),  # noqa
+    0x006A0009: ('SQ', '1', "Annotation Property Category Code Sequence", '', 'AnnotationPropertyCategoryCodeSequence'),  # noqa
+    0x006A000A: ('SQ', '1', "Annotation Property Type Code Sequence", '', 'AnnotationPropertyTypeCodeSequence'),  # noqa
+    0x006A000B: ('SQ', '1', "Annotation Property Type Modifier Code Sequence", '', 'AnnotationPropertyTypeModifierCodeSequence'),  # noqa
+    0x006A000C: ('UL', '1', "Number of Annotations", '', 'NumberOfAnnotations'),  # noqa
+    0x006A000D: ('CS', '1', "Annotation Applies to All Z Planes", '', 'AnnotationAppliesToAllZPlanes'),  # noqa
+    0x006A000E: ('SH', '1-n', "Referenced Optical Path Identifier", '', 'ReferencedOpticalPathIdentifier'),  # noqa
+    0x006A000F: ('CS', '1', "Annotation Applies to All Optical Paths", '', 'AnnotationAppliesToAllOpticalPaths'),  # noqa
+    0x006A0010: ('FD', '1-n', "Common Z Coordinate Value", '', 'CommonZCoordinateValue'),  # noqa
+    0x006A0011: ('OL', '1', "Annotation Index List", '', 'AnnotationIndexList'),  # noqa
 }
 
 
