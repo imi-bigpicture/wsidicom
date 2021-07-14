@@ -2,7 +2,7 @@ from pydicom.uid import UID as Uid
 from dataclasses import dataclass
 
 WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
-ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.1.1.sss'  # Not standard # noqa
+ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.91.1'
 
 
 @dataclass
