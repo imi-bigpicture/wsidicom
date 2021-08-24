@@ -3036,11 +3036,11 @@ class WsiDicom:
         )
         label_instances = WsiDicomInstance.open(
             label_files,
-            base_file.uids.base,
+            base_file.uids.base
         )
         overview_instances = WsiDicomInstance.open(
             overview_files,
-            base_file.uids.base,
+            base_file.uids.base
         )
 
         levels = WsiDicomLevels.open(level_instances)
