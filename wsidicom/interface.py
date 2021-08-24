@@ -597,6 +597,7 @@ class WsiInstance(metaclass=ABCMeta):
         slice_thickness: float,
         slice_spacing: float,
         mm_size: SizeMm,
+        mm_depth: float,
         focus_method: str,
         ext_depth_of_field: bool,
         ext_depth_of_field_planes: int = None,
@@ -619,6 +620,7 @@ class WsiInstance(metaclass=ABCMeta):
         else:
             self._image_mode = "RGB"
         self._mm_size = mm_size
+        self._mm_depth = mm_depth
         self._focus_method = focus_method
         self._ext_depth_of_field = ext_depth_of_field
         self._ext_depth_of_field_planes = ext_depth_of_field_planes
@@ -670,6 +672,11 @@ class WsiInstance(metaclass=ABCMeta):
     def mm_size(self) -> SizeMm:
         """Return slide size in mm"""
         return self._mm_size
+
+    @property
+    def mm_depth(self) -> float:
+        """Return imaged depth in mm."""
+        return self._mm_depth
 
     @property
     def slice_thickness(self) -> float:
@@ -1141,6 +1148,7 @@ class WsiDicomInstance(WsiInstance):
             base_file.slice_thickness,
             base_file.slice_spacing,
             base_file.mm_size,
+            base_file.mm_depth,
             base_file.focus_method,
             base_file.ext_depth_of_field,
             base_file.ext_depth_of_field_planes,
@@ -2070,9 +2078,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         ds.PhotometricInterpretation = instance.photometric_interpretation
         ds.ImagedVolumeWidth = instance.mm_size.width
         ds.ImagedVolumeHeight = instance.mm_size.height
-        ds.ImagedVolumeDepth = (  # Should use correct values!
-            len(self.focal_planes) * instance.slice_spacing
-        )
+        ds.ImagedVolumeDepth = instance.mm_depth
         ds.FocusMethod = instance.focus_method
         if instance.ext_depth_of_field:
             ds.ExtendedDepthOfField = 'YES'
