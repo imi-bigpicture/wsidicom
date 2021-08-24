@@ -68,6 +68,7 @@ class WsiDicomFile:
             self._pixel_spacing = self._get_pixel_spacing(ds)
             self._image_size = self._get_image_size(ds)
             self._mm_size = self._get_mm_size(ds)
+            self._mm_depth = ds.ImagedVolumeDepth
             self._frame_count = int(getattr(ds, 'NumberOfFrames', 1))
             self._tile_size = self._get_tile_size(ds)
             self._tile_type = self._get_tile_type(ds)
@@ -169,6 +170,11 @@ class WsiDicomFile:
     def mm_size(self) -> SizeMm:
         """Return image size in mm"""
         return self._mm_size
+
+    @property
+    def mm_depth(self) -> float:
+        """Return imaged depth in mm."""
+        return self._mm_depth
 
     @property
     def tile_size(self) -> Size:
