@@ -106,31 +106,33 @@ class WsiDicomFile:
                 'SpacingBetweenSlices',
                 0
             )
-            self._slice_thickness = pixel_measure.SliceThickness
+            try:
+                self._slice_thickness = pixel_measure.SliceThickness
+            except AttributeError:
+                # This might not be correct if multiple focal planes
+                self._slice_thickness = ds.ImagedVolumeDepth
+
+            # If per frame sequence that contains plane position sequence, use
+            # that. Otherwise use shared sequence.
+            if (
+                'PerFrameFunctionalGroupsSequence' in ds and
+                (
+                    'PlanePositionSlideSequence' in
+                    ds.PerFrameFunctionalGroupsSequence[0]
+                )
+            ):
+                self._frame_sequence = ds.PerFrameFunctionalGroupsSequence
+            else:
+                self._frame_sequence = ds.SharedFunctionalGroupsSequence
 
             if self.tile_type == 'TILED_FULL':
-                try:
-                    self._frame_sequence = ds.SharedFunctionalGroupsSequence
-                except AttributeError:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        'Tiled full file missing shared functional'
-                        'group sequence'
-                    )
                 self._focal_planes = int(
                     getattr(ds, 'TotalPixelMatrixFocalPlanes', 1)
                 )
-            else:
-                try:
-                    self._frame_sequence = ds.PerFrameFunctionalGroupsSequence
-                except AttributeError:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        'Tiled sparse file missing per frame functional'
-                        'group sequence'
-                    )
 
             self._frame_positions = self._parse_pixel_data()
+
+            self._instance_number = ds.InstanceNumber
 
         else:
             self._wsi_type = "None"
@@ -263,6 +265,10 @@ class WsiDicomFile:
     @property
     def ext_depth_of_field_plane_distance(self) -> Optional[float]:
         return self._ext_depth_of_field_plane_distance
+
+    @property
+    def instance_number(self) -> int:
+        return self._instance_number
 
     def pretty_str(
         self,

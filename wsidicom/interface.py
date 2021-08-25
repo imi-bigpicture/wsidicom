@@ -585,6 +585,7 @@ class WsiInstance(metaclass=ABCMeta):
         pixel_spacing: SizeMm,
         tile_size: Size,
         wsi_type: str,
+        instance_number: int,
         samples_per_pixel: int,
         transfer_syntax: Uid,
         photometric_interpretation: str,
@@ -601,6 +602,7 @@ class WsiInstance(metaclass=ABCMeta):
         self._pixel_spacing = pixel_spacing
         self._tile_size = tile_size
         self._wsi_type = wsi_type
+        self._instance_number = instance_number
         self._samples_per_pixel = samples_per_pixel
         self._transfer_syntax = transfer_syntax
         self._photometric_interpretation = photometric_interpretation
@@ -713,6 +715,10 @@ class WsiInstance(metaclass=ABCMeta):
         """Return identifier (instance uid for single file instance or
         concatenation uid for multiple file instance)"""
         return self._identifier
+
+    @property
+    def instance_number(self) -> int:
+        return self._instance_number
 
     @property
     @abstractmethod
@@ -1021,6 +1027,7 @@ class WsiGenericInstance(WsiInstance):
         optical_paths: List[str],
         focal_planes: List[float],
         wsi_type: str,
+        instance_number: int,
         samples_per_pixel: int,
         transfer_syntax: Uid,
         photometric_interpretation: str,
@@ -1036,6 +1043,7 @@ class WsiGenericInstance(WsiInstance):
             pixel_spacing,
             tile_size,
             wsi_type,
+            instance_number,
             samples_per_pixel,
             transfer_syntax,
             photometric_interpretation,
@@ -1142,6 +1150,7 @@ class WsiDicomInstance(WsiInstance):
             base_file.pixel_spacing,
             base_file.tile_size,
             wsi_type,
+            base_file.instance_number,
             base_file.samples_per_pixel,
             base_file.transfer_syntax,
             base_file.photometric_interpretation,
@@ -2071,6 +2080,9 @@ class WsiDicomStack(metaclass=ABCMeta):
         ds = optical.insert_into_ds(ds)
 
         instance = self.default_instance
+
+        # It would be nicer to re-enumerate the instances
+        ds.InstanceNumber = instance.instance_number
 
         ds.Rows = instance.tile_size.width
         ds.Columns = instance.tile_size.height
