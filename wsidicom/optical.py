@@ -338,7 +338,7 @@ class Illumination:
         return cls(
             illumination_method=IlluminationCode.from_ds(ds),
             illumination_wavelength=getattr(
-                ds, 'Illuminationwavelength', None
+                ds, 'IlluminationWaveLength', None
             ),
             illumination_color=IlluminationColorCode.from_ds(ds),
             illuminator=IlluminatorCode.from_ds(ds)
