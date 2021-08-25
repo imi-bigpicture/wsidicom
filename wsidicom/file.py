@@ -387,18 +387,18 @@ class WsiDicomFile:
         REQURED_WHOLE_SLIDE_MICROSCOPY_MODULE_ATTRIBUTES = [
             "ImageType",
             "TotalPixelMatrixColumns",
-            "TotalPixelMatrixRows",
+            "TotalPixelMatrixRows"
         ]
         STANDARD_WHOLE_SLIDE_MICROSCOPY_MODULE_ATTRIBUTES = [
             "TotalPixelMatrixOriginSequence",
             "FocusMethod",
-            "ExtendedDepthOfField"
+            "ExtendedDepthOfField",
             "ImageOrientationSlide",
             "AcquisitionDateTime",
             "LossyImageCompression",
             "VolumetricProperties",
             "SpecimenLabelInImage",
-            "BurnedInAnnotation",
+            "BurnedInAnnotation"
         ]
         REQURED_MULTI_FRAME_FUNCTIONAL_GROUPS_MODULE_ATTRIBUTES = [
             "NumberOfFrames",
