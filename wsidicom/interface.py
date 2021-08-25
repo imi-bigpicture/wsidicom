@@ -336,19 +336,13 @@ class FullTileIndex(TileIndex):
         DECIMALS = 3
         focal_planes: Set[float] = set()
         for file in files.values():
-            sequence = file.frame_sequence[0]
-            spacing = getattr(
-                sequence.PixelMeasuresSequence[0],
-                'SpacingBetweenSlices',
-                0
-            )
-            if spacing == 0 and file.focal_planes != 1:
+            if file.slice_spacing == 0 and file.focal_planes != 1:
                 raise WsiDicomFileError(
                     file.filepath,
                     "Multipe focal planes and zero plane spacing"
                 )
             for plane in range(file.focal_planes):
-                z = round(plane * spacing * MM_TO_MICRON, DECIMALS)
+                z = round(plane * file.slice_spacing * MM_TO_MICRON, DECIMALS)
                 focal_planes.add(z)
         return list(focal_planes)
 
@@ -1046,7 +1040,13 @@ class WsiGenericInstance(WsiInstance):
             transfer_syntax,
             photometric_interpretation,
             slice_thickness,
-            slice_spacing
+            slice_spacing,
+            SizeMm(0.0, 0.0),
+            0.0,
+            focus_method,
+            ext_depth_of_field,
+            ext_depth_of_field_planes,
+            ext_depth_of_field_plane_distance
         )
         self.tiler = tiler
         self._focal_planes = focal_planes
@@ -2945,7 +2945,7 @@ class WsiDicom:
     def __enter__(self):
         return self
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
     def __str__(self) -> str:
@@ -3062,7 +3062,7 @@ class WsiDicom:
         label_instanaces: WsiGenericInstance,
         overview_instances: WsiGenericInstance
     ) -> 'WsiDicom':
-        optical = OpticalManager()
+        optical = OpticalManager([])
         levels = WsiDicomLevels.open(level_instances)
         labels = WsiDicomLabels(label_instanaces)
         overviews = WsiDicomOverviews(overview_instances)
