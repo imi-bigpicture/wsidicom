@@ -1,4 +1,5 @@
 import warnings
+from functools import cached_property
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -7,353 +8,26 @@ from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import UID as Uid
 
-from .errors import WsiDicomFileError, WsiDicomUidDuplicateError
+from .errors import WsiDicomError, WsiDicomFileError, WsiDicomUidDuplicateError
 from .geometry import Size, SizeMm
-from .stringprinting import dict_pretty_str, list_pretty_str, str_indent
 from .uid import BaseUids, FileUids
 
 
-class WsiDicomFile:
-    def __init__(self, filepath: Path):
-        """Open dicom file in filepath. If valid wsi type read required
-        parameters. Parses frames in pixel data but does not read the frames.
-
-        Parameters
-        ----------
-        filepath: Path
-            Path to file to open
-        """
-        self._filepath = filepath
-
-        if not pydicom.misc.is_dicom(self.filepath):
-            raise WsiDicomFileError(self.filepath, "is not a DICOM file")
-        file_meta = pydicom.filereader.read_file_meta_info(self.filepath)
-        transfer_syntax_uid = Uid(file_meta.TransferSyntaxUID)
-
-        self._fp = pydicom.filebase.DicomFile(self.filepath, mode='rb')
-        self._fp.is_little_endian = transfer_syntax_uid.is_little_endian
-        self._fp.is_implicit_VR = transfer_syntax_uid.is_implicit_VR
-        ds = pydicom.dcmread(self._fp, stop_before_pixels=True)
-
-        # Quick fix, We need the dataset of each file in the instances that
-        # will be created from the files.
-        # Change code to use self.ds instead of ds.
-        self._dataset = ds
-
-        self._pixel_data_position = self._fp.tell()
-        if self.is_wsi_dicom(self.filepath, ds):
-            instance_uid = Uid(ds.SOPInstanceUID)
-            concatenation_uid: Uid = getattr(
-                ds,
-                'SOPInstanceUIDOfConcatenationSource',
-                None
-            )
-            base_uids = BaseUids(
-                ds.StudyInstanceUID,
-                ds.SeriesInstanceUID,
-                ds.FrameOfReferenceUID,
-            )
-            self._uids = FileUids(instance_uid, concatenation_uid, base_uids)
-
-            if concatenation_uid is not None:
-                try:
-                    self._frame_offset = int(ds.ConcatenationFrameOffsetNumber)
-                except AttributeError:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        'Concatenated file missing concatenation frame offset'
-                        'number'
-                    )
-            else:
-                self._frame_offset = 0
-            self._wsi_type = self.get_supported_wsi_dicom_type(
-                ds,
-                transfer_syntax_uid
-            )
-            self._pixel_spacing = self._get_pixel_spacing(ds)
-            self._image_size = self._get_image_size(ds)
-            self._mm_size = self._get_mm_size(ds)
-            self._mm_depth = ds.ImagedVolumeDepth
-            self._frame_count = int(getattr(ds, 'NumberOfFrames', 1))
-            self._tile_size = self._get_tile_size(ds)
-            self._tile_type = self._get_tile_type(ds)
-            self._samples_per_pixel = int(ds.SamplesPerPixel)
-            self._transfer_syntax = Uid(ds.file_meta.TransferSyntaxUID)
-            self._photometric_interpretation = str(
-                ds.PhotometricInterpretation
-                )
-            self._optical_path_sequence = ds.OpticalPathSequence
-
-            self._focus_method = ds.FocusMethod
-            self._ext_depth_of_field = ds.ExtendedDepthOfField == 'YES'
-            self._ext_depth_of_field_planes = getattr(
-                ds, 'NumberOfFocalPlanes', None
-            )
-            self._ext_depth_of_field_plane_distance = getattr(
-                ds, 'DistanceBetweenFocalPlanes', None
-            )
-            if self._ext_depth_of_field:
-                if self._ext_depth_of_field_planes is None:
-                    raise WsiDicomFileError(
-                        self.filepath, "Missing NumberOfFocalPlanes"
-                    )
-                if self._ext_depth_of_field_plane_distance is None:
-                    raise WsiDicomFileError(
-                        self.filepath, "Missing DistanceBetweenFocalPlanes"
-                    )
-
-            pixel_measure = (
-                ds.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[0]
-            )
-            # We assume that slice thickness is the same for all focal planes
-            self._slice_spacing = getattr(
-                pixel_measure,
-                'SpacingBetweenSlices',
-                0
-            )
-            try:
-                self._slice_thickness = pixel_measure.SliceThickness
-            except AttributeError:
-                # This might not be correct if multiple focal planes
-                self._slice_thickness = ds.ImagedVolumeDepth
-
-            # If per frame sequence that contains plane position sequence, use
-            # that. Otherwise use shared sequence.
-            if (
-                'PerFrameFunctionalGroupsSequence' in ds and
-                (
-                    'PlanePositionSlideSequence' in
-                    ds.PerFrameFunctionalGroupsSequence[0]
-                )
-            ):
-                self._frame_sequence = ds.PerFrameFunctionalGroupsSequence
-            else:
-                self._frame_sequence = ds.SharedFunctionalGroupsSequence
-
-            if self.tile_type == 'TILED_FULL':
-                self._focal_planes = int(
-                    getattr(ds, 'TotalPixelMatrixFocalPlanes', 1)
-                )
-
-            self._frame_positions = self._parse_pixel_data()
-
-            self._instance_number = ds.InstanceNumber
-
-        else:
-            self._wsi_type = "None"
-
-    def __repr__(self) -> str:
-        return f"WsiDicomFile('{self.filepath}')"
-
-    def __str__(self) -> str:
-        return self.pretty_str()
-
-    @property
-    def dataset(self) -> pydicom.Dataset:
-        """Return pydicom dataset of file."""
-        return self._dataset
-
-    @property
-    def filepath(self) -> Path:
-        """Return filepath"""
-        return self._filepath
-
-    @property
-    def wsi_type(self) -> str:
-        """Return wsi type"""
-        return self._wsi_type
-
-    @property
-    def mpp(self) -> SizeMm:
-        """Return pixel spacing in um/pixel"""
-        return self.pixel_spacing*1000.0
-
-    @property
-    def pixel_spacing(self) -> SizeMm:
-        """Return pixel spacing in mm/pixel"""
-        return self._pixel_spacing
-
-    @property
-    def image_size(self) -> Size:
-        """Return image size in pixels"""
-        return self._image_size
-
-    @property
-    def mm_size(self) -> SizeMm:
-        """Return image size in mm"""
-        return self._mm_size
-
-    @property
-    def mm_depth(self) -> float:
-        """Return imaged depth in mm."""
-        return self._mm_depth
-
-    @property
-    def tile_size(self) -> Size:
-        """Return tile size in pixels"""
-        return self._tile_size
-
-    @property
-    def tile_type(self) -> str:
-        """Return tiling type (TILED_FULL or TILED_SPARSE)"""
-        return self._tile_type
-
-    @property
-    def uids(self) -> FileUids:
-        """Return uids"""
-        return self._uids
-
-    @property
-    def samples_per_pixel(self) -> int:
-        """Return samples per pixel (1 or 3)"""
-        return self._samples_per_pixel
-
-    @property
-    def transfer_syntax(self) -> Uid:
-        """Return transfer syntax uid"""
-        return self._transfer_syntax
-
-    @property
-    def photometric_interpretation(self) -> str:
-        """Return photometric interpretation"""
-        return self._photometric_interpretation
-
-    @property
-    def frame_offset(self) -> int:
-        """Return frame offset (for concatenated file, 0 otherwise)"""
-        return self._frame_offset
-
-    @property
-    def frame_positions(self) -> List[Tuple[int, int]]:
-        """Return frame positions and lengths"""
-        return self._frame_positions
-
-    @property
-    def frame_count(self) -> int:
-        """Return number of frames"""
-        return self._frame_count
-
-    @property
-    def optical_path_sequence(self) -> DicomSequence:
-        """Return DICOM Optical path sequence"""
-        return self._optical_path_sequence
-
-    @property
-    def frame_sequence(self) -> DicomSequence:
-        """Return DICOM Shared functional group sequence if TILED_FULL or
-        Per frame functional groups sequence if TILED_SPARSE.
-        """
-        return self._frame_sequence
-
-    @property
-    def focal_planes(self) -> int:
-        """Return number of focal planes"""
-        return self._focal_planes
-
-    @property
-    def slice_thickness(self) -> float:
-        """Return slice thickness"""
-        return self._slice_thickness
-
-    @property
-    def slice_spacing(self) -> float:
-        """Return slice spacing"""
-        return self._slice_spacing
-
-    @property
-    def focus_method(self) -> str:
-        return self._focus_method
-
-    @property
-    def ext_depth_of_field(self) -> bool:
-        return self._ext_depth_of_field
-
-    @property
-    def ext_depth_of_field_planes(self) -> Optional[int]:
-        return self._ext_depth_of_field_planes
-
-    @property
-    def ext_depth_of_field_plane_distance(self) -> Optional[float]:
-        return self._ext_depth_of_field_plane_distance
-
-    @property
-    def instance_number(self) -> int:
-        return self._instance_number
-
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: int = None
-    ) -> str:
-        return f"File with path: {self.filepath}"
-
-    def matches_series(self, uids: BaseUids, tile_size: Size = None) -> bool:
-        """Check if instance is valid (Uids and tile size match).
-        Base uids should match for instances in all types of series,
-        tile size should only match for level series.
-        """
-        if tile_size is not None and tile_size != self.tile_size:
-            return False
-        return uids == self.uids.base
-
-    def matches_instance(self, other_file: 'WsiDicomFile') -> bool:
-        """Return true if other file is of the same instance as self.
-
-        Parameters
-        ----------
-        other_file: WsiDicomFile
-            File to check.
-
-        Returns
-        ----------
-        bool
-            True if same instance.
-        """
-        return (
-            self.uids.match(other_file.uids) and
-            self.image_size == other_file.image_size and
-            self.tile_size == other_file.tile_size and
-            self.tile_type == other_file.tile_type and
-            self.wsi_type == other_file.wsi_type
-        )
+class WsiDataset(Dataset):
+    """Extend pydicom dataset with simple parsers for attributes. Use snake
+    case to avoid name collision with dicom fields."""
 
     @staticmethod
-    def check_duplicate_file(
-        files: List['WsiDicomFile'],
-        caller: object
-    ) -> None:
-        """Check for duplicates in list of files. Files are duplicate if file
-        instance uids match. Stops at first found duplicate and raises
-        WsiDicomUidDuplicateError.
-
-        Parameters
-        ----------
-        files: List[WsiDicomFile]
-            List of files to check.
-        caller: Object
-            Object that the files belongs to.
-        """
-        instance_uids: List[str] = []
-        for file in files:
-            instance_uid = file.uids.instance
-            if instance_uid not in instance_uids:
-                instance_uids.append(file.uids.identifier)
-            else:
-                raise WsiDicomUidDuplicateError(str(file), str(caller))
-
-    @staticmethod
-    def is_wsi_dicom(filepath: Path, ds: Dataset) -> bool:
-        """Check if file is dicom wsi type and that required attributes
+    def is_wsi_dicom(ds: pydicom.Dataset) -> bool:
+        """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
         Warn if attribute listed as requierd in the library or required in the
         standard is missing.
 
         Parameters
         ----------
-        filepath: Path
-            Path to file
-        ds: Dataset
-            Dataset of file
+        ds: pydicom.Dataset
+            Dataset
 
         Returns
         ----------
@@ -477,17 +151,71 @@ class WsiDicomFile:
         return passed['required'] and sop_class_uid_check
 
     @staticmethod
+    def check_duplicate_dataset(
+        datasets: List[Dataset],
+        caller: object
+    ) -> None:
+        """Check for duplicates in list of datasets. Datasets are duplicate if
+        instance uids match. Stops at first found duplicate and raises
+        WsiDicomUidDuplicateError.
+
+        Parameters
+        ----------
+        datasets: List[Dataset]
+            List of datasets to check.
+        caller: Object
+            Object that the files belongs to.
+        """
+        instance_uids: List[str] = []
+        for dataset in datasets:
+            instance_uid = Uid(dataset.SOPInstanceUID)
+            if instance_uid not in instance_uids:
+                instance_uids.append(instance_uid)
+            else:
+                raise WsiDicomUidDuplicateError(str(dataset), str(caller))
+
+    def matches_instance(self, other_dataset: 'WsiDataset') -> bool:
+        """Return true if other file is of the same instance as self.
+
+        Parameters
+        ----------
+        other_dataset: 'WsiDataset
+            Dataset to check.
+
+        Returns
+        ----------
+        bool
+            True if same instance.
+        """
+        return (
+            self.uids.match(other_dataset.uids) and
+            self.image_size == other_dataset.image_size and
+            self.tile_size == other_dataset.tile_size and
+            self.tile_type == other_dataset.tile_type and
+            (
+                self.get_supported_wsi_dicom_type()
+                == other_dataset.get_supported_wsi_dicom_type()
+            )
+        )
+
+    def matches_series(self, uids: BaseUids, tile_size: Size = None) -> bool:
+        """Check if instance is valid (Uids and tile size match).
+        Base uids should match for instances in all types of series,
+        tile size should only match for level series.
+        """
+        if tile_size is not None and tile_size != self.tile_size:
+            return False
+        return uids == self.base_uids
+
     def get_supported_wsi_dicom_type(
-        ds: Dataset,
+        self,
         transfer_syntax_uid: Uid
     ) -> str:
-        """Check image flavor and transfer syntax of dicom file.
+        """Check image flavor and transfer syntax of dicom dataset.
         Return image flavor if file valid.
 
         Parameters
         ----------
-        ds: Dataset
-            Pydicom dataset to check.
         transfer_syntax_uid: Uid'
             Transfer syntax uid for file.
 
@@ -498,7 +226,7 @@ class WsiDicomFile:
         """
         SUPPORTED_IMAGE_TYPES = ['VOLUME', 'LABEL', 'OVERVIEW']
         IMAGE_FLAVOR = 2
-        image_type: str = ds.ImageType[IMAGE_FLAVOR]
+        image_type: str = self.ImageType[IMAGE_FLAVOR]
         image_type_supported = image_type in SUPPORTED_IMAGE_TYPES
         if not image_type_supported:
             warnings.warn(f"Non-supported image type {image_type}")
@@ -515,6 +243,320 @@ class WsiDicomFile:
         if image_type_supported and syntax_supported:
             return image_type
         return ""
+
+    def get_optical_path_identifier(self, frame: Dataset) -> str:
+        """Return optical path identifier from frame, or from self if not
+        found."""
+        optical_sequence = getattr(
+            frame,
+            'OpticalPathIdentificationSequence',
+            self.OpticalPathSequence
+        )
+        return getattr(optical_sequence[0], 'OpticalPathIdentifier', '0')
+
+    @cached_property
+    def instance_uid(self) -> Uid:
+        return Uid(self.SOPInstanceUID)
+
+    @cached_property
+    def concatenation_uid(self) -> Optional[Uid]:
+        return getattr(
+            self,
+            'SOPInstanceUIDOfConcatenationSource',
+            None
+        )
+
+    @cached_property
+    def base_uids(self) -> BaseUids:
+        return BaseUids(
+            self.StudyInstanceUID,
+            self.SeriesInstanceUID,
+            self.FrameOfReferenceUID,
+        )
+
+    @cached_property
+    def uids(self) -> FileUids:
+        return FileUids(
+            self.instance_uid,
+            self.concatenation_uid,
+            self.base_uids
+        )
+
+    @cached_property
+    def frame_offset(self) -> int:
+        if self.concatenation_uid is None:
+            return 0
+        try:
+            return int(self.ConcatenationFrameOffsetNumber)
+        except AttributeError:
+            raise WsiDicomError(
+                'Concatenated file missing concatenation frame offset'
+                'number'
+            )
+
+    @cached_property
+    def frame_count(self) -> int:
+        return int(getattr(self, 'NumberOfFrames', 1))
+
+    @cached_property
+    def tile_type(self) -> str:
+        """Return tiling type from dataset. Raises WsiDicomError if type
+        is undetermined.
+
+        Parameters
+        ----------
+        ds: Dataset
+            Pydicom dataset.
+
+        Returns
+        ----------
+        str
+            Tiling type
+        """
+        if(getattr(self, 'DimensionOrganizationType', '') == 'TILED_FULL'):
+            return 'TILED_FULL'
+        elif 'PerFrameFunctionalGroupsSequence' in self:
+            return 'TILED_SPARSE'
+        raise WsiDicomError("undetermined tile type")
+
+    @cached_property
+    def frame_count(self) -> int:
+        return int(getattr(self, 'NumberOfFrames', 1))
+
+    @cached_property
+    def pixel_measure(self) -> Dataset:
+        return self.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[0]
+
+    @cached_property
+    def pixel_spacing(self) -> SizeMm:
+        """Read pixel spacing from dicom file.
+
+        Parameters
+        ----------
+        ds: Dataset
+            Pydicom dataset
+
+        Returns
+        ----------
+        SizeMm
+            The pixel spacing
+        """
+        pixel_measure = self.pixel_measure
+        pixel_spacing: Tuple[float, float] = pixel_measure.PixelSpacing
+        if any([spacing == 0 for spacing in pixel_spacing]):
+            raise WsiDicomError("Pixel spacing is zero")
+        return SizeMm(width=pixel_spacing[0], height=pixel_spacing[1])
+
+    @cached_property
+    def spacing_between_slices(self) -> float:
+        pixel_measure = self.pixel_measure
+        return getattr(pixel_measure, 'SpacingBetweenSlices', 0.0)
+
+    @cached_property
+    def number_of_focal_planes(self) -> int:
+        return getattr(self, 'TotalPixelMatrixFocalPlanes', 1)
+
+    @cached_property
+    def file_offset(self) -> int:
+        return int(getattr(self, 'ConcatenationFrameOffsetNumber', 0))
+
+    @cached_property
+    def frame_sequence(self) -> DicomSequence:
+        if (
+            'PerFrameFunctionalGroupsSequence' in self and
+            (
+                'PlanePositionSlideSequence' in
+                self.PerFrameFunctionalGroupsSequence[0]
+            )
+        ):
+            return self.PerFrameFunctionalGroupsSequence
+
+        return self.SharedFunctionalGroupsSequence
+
+    @cached_property
+    def ext_depth_of_field(self) -> bool:
+        return self.ExtendedDepthOfField == 'YES'
+
+    @cached_property
+    def ext_depth_of_field_planes(self) -> Optional[int]:
+        return getattr(self, 'NumberOfFocalPlanes', None)
+
+    @cached_property
+    def ext_depth_of_field_plane_distance(self) -> Optional[int]:
+        return getattr(self, 'DistanceBetweenFocalPlanes', None)
+
+    @cached_property
+    def focus_method(self) -> str:
+        return str(self.FocusMethod)
+
+    @cached_property
+    def image_size(self) -> Size:
+        """Read total pixel size from dataset.
+
+        Returns
+        ----------
+        Size
+            The image size
+        """
+        width = int(self.TotalPixelMatrixColumns)
+        height = int(self.TotalPixelMatrixRows)
+        if width == 0 or height == 0:
+            raise WsiDicomFileError(self.filepath, "Image size is zero")
+        return Size(width=width, height=height)
+
+    @cached_property
+    def mm_size(self) -> SizeMm:
+        """Read mm size from dataset.
+
+        Returns
+        ----------
+        SizeMm
+            The size of the image in mm
+        """
+        width = float(self.ImagedVolumeWidth)
+        height = float(self.ImagedVolumeHeight)
+        return SizeMm(width=width, height=height)
+
+    @cached_property
+    def mm_depth(self) -> float:
+        return self.ImagedVolumeDepth
+
+    @cached_property
+    def tile_size(self) -> Size:
+        """Read tile size from from dataset.
+
+        Returns
+        ----------
+        Size
+            The tile size
+        """
+        width = int(self.Columns)
+        height = int(self.Rows)
+        return Size(width=width, height=height)
+
+    @cached_property
+    def samples_per_pixel(self) -> int:
+        return int(self.SamplesPerPixel)
+
+    @cached_property
+    def photophotometric_interpretation(self) -> str:
+        return self.PhotometricInterpretation
+
+    @cached_property
+    def instance_number(self) -> str:
+        return self.InstanceNumber
+
+    @cached_property
+    def optical_path_sequence(self) -> DicomSequence:
+        return self.OpticalPathSequence
+
+    @cached_property
+    def slice_thickness(self) -> float:
+        try:
+            pixel_measure = self.pixel_measure
+            return float(pixel_measure.SliceThickness)
+        except AttributeError:
+            # This might not be correct if multiple focal planes
+            return self.get_mm_depth()
+
+
+class WsiDicomFile:
+    def __init__(self, filepath: Path):
+        """Open dicom file in filepath. If valid wsi type read required
+        parameters. Parses frames in pixel data but does not read the frames.
+
+        Parameters
+        ----------
+        filepath: Path
+            Path to file to open
+        """
+        self._filepath = filepath
+
+        if not pydicom.misc.is_dicom(self.filepath):
+            raise WsiDicomFileError(self.filepath, "is not a DICOM file")
+
+        file_meta = pydicom.filereader.read_file_meta_info(self.filepath)
+        self._transfer_syntax_uid = Uid(file_meta.TransferSyntaxUID)
+
+        self._fp = pydicom.filebase.DicomFile(self.filepath, mode='rb')
+        self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
+        self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
+
+        dataset = pydicom.dcmread(self._fp, stop_before_pixels=True)
+
+        if WsiDataset.is_wsi_dicom(dataset):
+            self._pixel_data_position = self._fp.tell()
+            self._dataset = WsiDataset(dataset)
+            self._wsi_type = self.dataset.get_supported_wsi_dicom_type(
+                self.transfer_syntax
+            )
+            instance_uid = self.dataset.instance_uid
+            concatenation_uid = self.dataset.concatenation_uid
+            base_uids = self.dataset.base_uids
+            self._uids = FileUids(instance_uid, concatenation_uid, base_uids)
+            self._frame_offset = self.dataset.frame_offset
+            self._frame_count = self.dataset.frame_count
+            self._tile_type = self.dataset.tile_type
+            self._frame_positions = self._parse_pixel_data()
+        else:
+            self._wsi_type = "None"
+
+    def __repr__(self) -> str:
+        return f"WsiDicomFile('{self.filepath}')"
+
+    def __str__(self) -> str:
+        return self.pretty_str()
+
+    @property
+    def dataset(self) -> WsiDataset:
+        """Return pydicom dataset of file."""
+        return self._dataset
+
+    @property
+    def filepath(self) -> Path:
+        """Return filepath"""
+        return self._filepath
+
+    @property
+    def tile_type(self) -> str:
+        """Return tiling type (TILED_FULL or TILED_SPARSE)"""
+        return self._tile_type
+
+    @property
+    def wsi_type(self) -> str:
+        return self._wsi_type
+
+    @property
+    def uids(self) -> FileUids:
+        """Return uids"""
+        return self._uids
+
+    @property
+    def transfer_syntax(self) -> Uid:
+        """Return transfer syntax uid"""
+        return self._transfer_syntax_uid
+
+    @property
+    def frame_offset(self) -> int:
+        """Return frame offset (for concatenated file, 0 otherwise)"""
+        return self._frame_offset
+
+    @property
+    def frame_positions(self) -> List[Tuple[int, int]]:
+        """Return frame positions and lengths"""
+        return self._frame_positions
+
+    @property
+    def frame_count(self) -> int:
+        """Return number of frames"""
+        return self._frame_count
+
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: int = None
+    ) -> str:
+        return f"File with path: {self.filepath}"
 
     def get_filepointer(
         self,
@@ -540,104 +582,6 @@ class WsiDicomFile:
     def close(self) -> None:
         """Close the file."""
         self._fp.close()
-
-    def _get_mm_size(self, ds: Dataset) -> SizeMm:
-        """Read mm size from dicom file.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset
-
-        Returns
-        ----------
-        SizeMm
-            The size of the image in mm
-        """
-        width = float(ds.ImagedVolumeWidth)
-        height = float(ds.ImagedVolumeHeight)
-        if width == 0 or height == 0:
-            raise WsiDicomFileError(self.filepath, "Image mm size is zero")
-        return SizeMm(width=width, height=height)
-
-    def _get_pixel_spacing(self, ds: Dataset) -> SizeMm:
-        """Read pixel spacing from dicom file.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset
-
-        Returns
-        ----------
-        SizeMm
-            The pixel spacing
-        """
-        pixel_spacing: Tuple[float, float] = (
-            ds.SharedFunctionalGroupsSequence[0].
-            PixelMeasuresSequence[0].PixelSpacing
-        )
-        if any([spacing == 0 for spacing in pixel_spacing]):
-            raise WsiDicomFileError(self.filepath, "Pixel spacing is zero")
-        return SizeMm(width=pixel_spacing[0], height=pixel_spacing[1])
-
-    def _get_tile_size(self, ds: Dataset) -> Size:
-        """Read tile size from from dicom file.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset
-
-        Returns
-        ----------
-        Size
-            The tile size
-        """
-        width = int(ds.Columns)
-        height = int(ds.Rows)
-        if width == 0 or height == 0:
-            raise WsiDicomFileError(self.filepath, "Tile size is zero")
-        return Size(width=width, height=height)
-
-    def _get_image_size(self, ds: Dataset) -> Size:
-        """Read total pixel size from dicom file.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset
-
-        Returns
-        ----------
-        Size
-            The image size
-        """
-        width = int(ds.TotalPixelMatrixColumns)
-        height = int(ds.TotalPixelMatrixRows)
-        if width == 0 or height == 0:
-            raise WsiDicomFileError(self.filepath, "Image size is zero")
-        return Size(width=width, height=height)
-
-    def _get_tile_type(self, ds: Dataset) -> str:
-        """Return tiling type from dataset. Raises WsiDicomFileError if type
-        is undetermined.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset.
-
-        Returns
-        ----------
-        str
-            Tiling type
-        """
-        if(getattr(ds, 'DimensionOrganizationType', '') == 'TILED_FULL'):
-            return 'TILED_FULL'
-        elif 'PerFrameFunctionalGroupsSequence' in ds:
-            return 'TILED_SPARSE'
-        raise WsiDicomFileError(self.filepath, "undetermined tile type")
 
     def _read_bot(self) -> None:
         """Read (skips over) basic table offset (BOT). The BOT can contain

@@ -2,6 +2,16 @@ from pathlib import Path
 from .geometry import Point
 
 
+class WsiDicomError(Exception):
+    """Raised for general error."""
+
+    def __init__(self, error: str):
+        self.error = error
+
+    def __str__(self):
+        return self.error
+
+
 class WsiDicomFileError(Exception):
     """Raised if read file data is incorrect."""
 
