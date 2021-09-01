@@ -1,7 +1,7 @@
 import struct
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -12,7 +12,6 @@ from .conceptcode import (ChannelDescriptionCode, IlluminationCode,
                           IlluminationColorCode, IlluminatorCode,
                           ImagePathFilterCode, LenseCode, LightPathFilterCode)
 from .errors import WsiDicomNotFoundError
-from .file import WsiDicomFile
 
 
 class Lut:
@@ -541,7 +540,7 @@ class OpticalManager:
         }
 
     @classmethod
-    def open(cls, files: List[WsiDicomFile]) -> 'OpticalManager':
+    def open(cls, instances: List) -> 'OpticalManager':
         """Parse optical path sequence in listed files and create an
         OpticalManager out of the found (unique) OpticalPaths.
 
@@ -556,15 +555,17 @@ class OpticalManager:
             OpticalManager for the found OpticalPaths
         """
         optical_paths: Dict[str, OpticalPath] = {}
-        for file in files:
-            for optical_ds in file.optical_path_sequence:
-                identifier = str(optical_ds.OpticalPathIdentifier)
-                if identifier not in optical_paths:
-                    path = OpticalPath.from_ds(
-                        optical_ds,
-                        file.photometric_interpretation
-                    )
-                    optical_paths[identifier] = path
+        for instance in instances:
+            for dataset in instance.contained_datasets:
+                optical_path_sequence = dataset.OpticalPathSequence
+                for optical_path in optical_path_sequence:
+                    identifier = str(optical_path.OpticalPathIdentifier)
+                    if identifier not in optical_paths:
+                        path = OpticalPath.from_ds(
+                            optical_path,
+                            dataset.PhotometricInterpretation
+                        )
+                        optical_paths[identifier] = path
         return OpticalManager(optical_paths.values())
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:

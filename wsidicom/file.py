@@ -27,7 +27,6 @@ class WsiDicomFile:
 
         if not pydicom.misc.is_dicom(self.filepath):
             raise WsiDicomFileError(self.filepath, "is not a DICOM file")
-
         file_meta = pydicom.filereader.read_file_meta_info(self.filepath)
         transfer_syntax_uid = Uid(file_meta.TransferSyntaxUID)
 
@@ -35,6 +34,12 @@ class WsiDicomFile:
         self._fp.is_little_endian = transfer_syntax_uid.is_little_endian
         self._fp.is_implicit_VR = transfer_syntax_uid.is_implicit_VR
         ds = pydicom.dcmread(self._fp, stop_before_pixels=True)
+
+        # Quick fix, We need the dataset of each file in the instances that
+        # will be created from the files.
+        # Change code to use self.ds instead of ds.
+        self._dataset = ds
+
         self._pixel_data_position = self._fp.tell()
         if self.is_wsi_dicom(self.filepath, ds):
             instance_uid = Uid(ds.SOPInstanceUID)
@@ -142,6 +147,11 @@ class WsiDicomFile:
 
     def __str__(self) -> str:
         return self.pretty_str()
+
+    @property
+    def dataset(self) -> pydicom.Dataset:
+        """Return pydicom dataset of file."""
+        return self._dataset
 
     @property
     def filepath(self) -> Path:

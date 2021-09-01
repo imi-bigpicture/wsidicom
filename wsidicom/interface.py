@@ -1137,6 +1137,9 @@ class WsiDicomInstance(WsiInstance):
             (file.frame_offset, file) for file
             in sorted(files, key=lambda file: file.frame_offset)
         )
+
+        self._contained_datasets = [file.dataset for file in files]
+
         (
             self._identifier,
             self._uids,
@@ -1188,6 +1191,10 @@ class WsiDicomInstance(WsiInstance):
             + str_indent(indent) + self.tiles.pretty_str(indent+1, depth)
         )
         return string
+
+    @property
+    def contained_datasets(self) -> List[pydicom.Dataset]:
+        return self._contained_datasets
 
     @property
     def default_z(self) -> float:
@@ -2058,6 +2065,7 @@ class WsiDicomStack(metaclass=ABCMeta):
             ds = self.default_instance.create_ds()
         else:
             ds = Dataset()
+        ds.SOPClassUID = '1.2.840.10008.5.1.4.1.1.77.1.6'
         ds.ImageType = self._create_image_type_attribute()
         ds.SOPInstanceUID = uid
         ds.DimensionOrganizationType = 'TILED_FULL'
@@ -2926,30 +2934,35 @@ class TileManager(metaclass=ABCMeta):
 class WsiDicom:
     def __init__(
         self,
-        series: List[WsiDicomSeries],
-        optical: OpticalManager
+        levels: WsiDicomLevels,
+        labels: WsiDicomLabels,
+        overviews: WsiDicomOverviews
     ):
         """Holds wsi dicom levels, labels and overviews.
 
         Parameters
         ----------
-        series: List[WsiDicomSeries]
-            List of series (levels, labels, overviews).
-        optical: OpticalManager
-            Manager for optical paths.
+        levels: WsiDicomLevels
+            Series of pyramidal levels.
+        labels: WsiDicomLabels
+            Series of label images.
+        overviews: WsiDicomOverviews
+            Series of overview images
+
         """
 
-        self._levels: WsiDicomLevels = self._assign(series, 'levels')
-        self._labels: WsiDicomLabels = self._assign(series, 'labels')
-        self._overviews: WsiDicomOverviews = self._assign(series, 'overviews')
-
+        self._levels = levels
+        self._labels = labels
+        self._overviews = overviews
         if self.levels.uids is not None:
             self.uids = self._validate_collection(
                 [self.levels, self.labels, self.overviews],
             )
         else:
             self.uids = None
-        self.optical = optical
+        self.optical = OpticalManager.open(
+            levels.instances + labels.instances + overviews.instances
+        )
         base = self.levels.base_level.default_instance
         # self.ds = base.create_ds()
         self.__enter__()
@@ -3013,6 +3026,50 @@ class WsiDicom:
             + list_pretty_str(self.levels.stacks, indent, depth, 0, 2)
         )
 
+    @staticmethod
+    def create_test_base_dataset() -> pydicom.Dataset:
+        ds = pydicom.Dataset()
+        ds.StudyInstanceUID = pydicom.uid.generate_uid()
+        ds.SeriesInstanceUID = pydicom.uid.generate_uid()
+        ds.FrameOfReferenceUID = pydicom.uid.generate_uid()
+        ds.Modality = 'SM'
+        ds.SOPClassUID = '1.2.840.10008.5.1.4.1.1.77.1.6'
+        ds.Manufacturer = 'Manufacturer'
+        ds.ManufacturerModelName = 'ManufacturerModelName'
+        ds.DeviceSerialNumber = 'DeviceSerialNumber'
+        ds.SoftwareVersions = ['SoftwareVersions']
+
+        ds.ContainerIdentifier = 'ContainerIdentifier'
+        specimen_description_sequence = pydicom.Dataset()
+        specimen_description_sequence.SpecimenIdentifier = 'SpecimenIdentifier'
+        specimen_description_sequence.SpecimenUID = pydicom.uid.generate_uid()
+        ds.SpecimenDescriptionSequence = pydicom.Sequence(
+            [specimen_description_sequence]
+        )
+        optical_path_sequence = pydicom.Dataset()
+
+        illumination_type_code_sequence = pydicom.Dataset()
+        illumination_type_code_sequence.CodeValue = '111744'
+        illumination_type_code_sequence.CodingSchemeDesignator = 'DCM'
+        illumination_type_code_sequence.CodeMeaning = (
+            'Brightfield illumination'
+        )
+        optical_path_sequence.IlluminationTypeCodeSequence = pydicom.Sequence(
+            [illumination_type_code_sequence]
+        )
+
+        illumination_color_code_sequence = pydicom.Dataset()
+        illumination_color_code_sequence.CodeValue = 'R-102C0'
+        illumination_color_code_sequence.CodingSchemeDesignator = 'SRT'
+        illumination_color_code_sequence.CodeMeaning = 'Full Spectrum'
+        optical_path_sequence.IlluminationColorCodeSequence = pydicom.Sequence(
+            [illumination_color_code_sequence]
+        )
+
+        ds.OpticalPathSequence = pydicom.Sequence([optical_path_sequence])
+
+        return ds
+
     @classmethod
     def open(cls, path: Union[str, List[str]]) -> 'WsiDicom':
         """Open valid wsi dicom files in path and return a WsiDicom object.
@@ -3046,7 +3103,6 @@ class WsiDicom:
 
         base_file = cls._get_base_file(level_files)
 
-        optical = OpticalManager.open(level_files+label_files+overview_files)
         level_instances = WsiDicomInstance.open(
             level_files,
             base_file.uids.base,
@@ -3065,20 +3121,19 @@ class WsiDicom:
         labels = WsiDicomLabels.open(label_instances)
         overviews = WsiDicomOverviews.open(overview_instances)
 
-        return WsiDicom([levels, labels, overviews], optical=optical)
+        return WsiDicom(levels, labels, overviews)
 
     @classmethod
-    def open_generic(
+    def import_wsi(
         cls,
-        level_instances: WsiGenericInstance,
-        label_instanaces: WsiGenericInstance,
-        overview_instances: WsiGenericInstance
+        base_ds: pydicom.Dataset,
+        tile_manager: TileManager
     ) -> 'WsiDicom':
         optical = OpticalManager([])
-        levels = WsiDicomLevels.open(level_instances)
-        labels = WsiDicomLabels(label_instanaces)
-        overviews = WsiDicomOverviews(overview_instances)
-        return cls([levels, labels, overviews], optical)
+        levels = WsiDicomLevels.open(tile_manager.level_instances)
+        labels = WsiDicomLabels.open(tile_manager.label_instances)
+        overviews = WsiDicomOverviews.open(tile_manager.overview_instances)
+        return cls(levels, labels, overviews, optical, base_ds)
 
     @staticmethod
     def _get_filepaths(path: Union[str, List[str]]) -> List[Path]:
@@ -3189,37 +3244,6 @@ class WsiDicom:
             if item.uids is not None and item.uids != base_uids:
                 raise WsiDicomMatchError(str(item), str(self))
         return base_uids
-
-    @staticmethod
-    def _assign(series: List[WsiDicomSeries], assign_as: str):
-        """Returns first series in list that matches assign as parameter.
-        Returns None if none found.
-
-        Parameters
-        ----------
-        series: List[WsiDicomSeries]
-            List of series to check
-        assign_as: str
-            Type of series to get
-
-        Returns
-        ----------
-        Optional[
-            WsiDicomLevels,
-            WsiDicomLabels,
-            WsiDicomOverviews
-        ]
-            Series of assign as type
-        """
-        series_types = {
-            'levels': WsiDicomLevels,
-            'labels': WsiDicomLabels,
-            'overviews': WsiDicomOverviews
-        }
-        return next(
-            (item for item in series
-             if type(item) == series_types[assign_as]), None
-        )
 
     def save(
         self,
