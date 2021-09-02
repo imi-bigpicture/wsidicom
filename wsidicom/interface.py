@@ -2505,6 +2505,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         return [
             dataset for sublist in series_datasets for dataset in sublist
         ]
+
     @property
     def instances(self) -> List[WsiInstance]:
         """Return contained instances"""

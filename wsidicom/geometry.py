@@ -18,7 +18,7 @@ class SizeMm:
             return SizeMm(factor.width*self.width, factor.height*self.height)
         elif isinstance(factor, Point):
             return SizeMm(factor.x*self.width, factor.y*self.height)
-        raise NotImplementedError()
+        return NotImplemented
 
     def __floordiv__(self, divider):
         if isinstance(divider, (int, float)):
@@ -28,7 +28,7 @@ class SizeMm:
                 int(self.width/divider.width),
                 int(self.height/divider.height)
             )
-        raise NotImplementedError()
+        return NotImplemented
 
     def to_int_tuple(self) -> Tuple[int, int]:
         return int(self.width), int(self.height)
@@ -46,7 +46,7 @@ class PointMm:
     def __floordiv__(self, divider):
         if isinstance(divider, SizeMm):
             return Point(int(self.x/divider.width), int(self.y/divider.height))
-        raise NotImplementedError()
+        return NotImplemented
 
     def __add__(self, value):
         if isinstance(value, (int, float)):
@@ -55,7 +55,7 @@ class PointMm:
             return PointMm(self.x + value.width, self.y + value.height)
         elif isinstance(value, PointMm):
             return PointMm(self.x + value.x, self.y + value.y)
-        raise NotImplementedError()
+        return NotImplemented
 
     @staticmethod
     def from_tuple(tuple: Tuple[float, float]) -> 'PointMm':
@@ -80,7 +80,7 @@ class Size:
             return Size(self.width - value.width, self.height - value.height)
         if isinstance(value, Point):
             return Size(self.width - value.x, self.height - value.y)
-        raise NotImplementedError()
+        return NotImplemented
 
     def __add__(self, value):
         if isinstance(value, int):
@@ -89,7 +89,7 @@ class Size:
             return Size(self.width + value.width, self.height + value.height)
         if isinstance(value, Point):
             return Size(self.width + value.x, self.height + value.y)
-        raise NotImplementedError()
+        return NotImplemented
 
     def __mul__(self, factor):
         if isinstance(factor, (int, float)):
@@ -98,7 +98,7 @@ class Size:
             return Size(factor.width*self.width, factor.height*self.height)
         elif isinstance(factor, Point):
             return Size(factor.x*self.width, factor.y*self.height)
-        raise NotImplementedError()
+        return NotImplemented
 
     def __floordiv__(self, divider):
         if isinstance(divider, (int, float)):
@@ -109,7 +109,7 @@ class Size:
                 int(self.width/divider.width),
                 int(self.height/divider.height)
             )
-        raise NotImplementedError()
+        return NotImplemented
 
     def __truediv__(self, divider):
         if isinstance(divider, (int, float)):
@@ -122,7 +122,7 @@ class Size:
                 math.ceil(self.width/divider.width),
                 math.ceil(self.height/divider.height)
             )
-        raise NotImplementedError()
+        return NotImplemented
 
     def __hash__(self):
         return hash((self.width, self.height))
@@ -158,14 +158,14 @@ class Point:
             return Point(factor.width*self.x, factor.height*self.y)
         elif isinstance(factor, Point):
             return Point(factor.x*self.x, factor.y*self.y)
-        raise NotImplementedError()
+        return NotImplemented
 
     def __floordiv__(self, divider):
         if isinstance(divider, (int, float)):
             return Point(int(self.x/divider), int(self.y/divider))
         if isinstance(divider, (Size, SizeMm)):
             return Point(int(self.x/divider.width), int(self.y/divider.height))
-        raise NotImplementedError()
+        return NotImplemented
 
     def __truediv__(self, divider):
         if isinstance(divider, (int, float)):
@@ -178,14 +178,14 @@ class Point:
                 math.ceil(self.x/divider.width),
                 math.ceil(self.y/divider.height)
             )
-        raise NotImplementedError()
+        return NotImplemented
 
     def __mod__(self, divider):
         if isinstance(divider, Size):
             return Point(self.x % divider.width, self.y % divider.height)
         elif isinstance(divider, Point):
             return Point(self.x % divider.x, self.y % divider.y)
-        raise NotImplementedError()
+        return NotImplemented
 
     def __add__(self, value):
         if isinstance(value, (int, float)):
@@ -194,7 +194,7 @@ class Point:
             return Point(self.x + value.width, self.y + value.height)
         elif isinstance(value, Point):
             return Point(self.x + value.x, self.y + value.y)
-        raise NotImplementedError()
+        return NotImplemented
 
     def __sub__(self, value):
         if isinstance(value, (int, float)):
@@ -203,7 +203,7 @@ class Point:
             return Point(self.x - value.width, self.y - value.height)
         elif isinstance(value, Point):
             return Point(self.x - value.x, self.y - value.y)
-        raise NotImplementedError()
+        return NotImplemented
 
     @staticmethod
     def max(point_1: 'Point', point_2: 'Point'):
@@ -244,7 +244,7 @@ class Region:
                 position=self.position * value,
                 size=self.size * value
             )
-        raise NotImplementedError()
+        return NotImplemented
 
     @property
     def box(self) -> Tuple[int, int, int, int]:
