@@ -141,8 +141,7 @@ class WsiDataset(Dataset):
                 for attribute in module:
                     if attribute not in ds:
                         # warnings.warn(
-                        #     f'File {filepath} is missing {key}'
-                        #     f' attribute {attribute}'
+                        #     f' is missing {key} attribute {attribute}'
                         # )
                         passed[key] = False
 
@@ -166,7 +165,8 @@ class WsiDataset(Dataset):
         caller: Object
             Object that the files belongs to.
         """
-        instance_uids: List[str] = []
+        instance_uids: List[Uid] = []
+
         for dataset in datasets:
             instance_uid = Uid(dataset.SOPInstanceUID)
             if instance_uid not in instance_uids:
@@ -457,7 +457,51 @@ class WsiDataset(Dataset):
             return float(pixel_measure.SliceThickness)
         except AttributeError:
             # This might not be correct if multiple focal planes
-            return self.get_mm_depth()
+            return self.mm_depth
+
+    @staticmethod
+    def create_test_base_dataset() -> Dataset:
+        ds = Dataset()
+        ds.StudyInstanceUID = pydicom.uid.generate_uid()
+        ds.SeriesInstanceUID = pydicom.uid.generate_uid()
+        ds.FrameOfReferenceUID = pydicom.uid.generate_uid()
+        ds.Modality = 'SM'
+        ds.SOPClassUID = '1.2.840.10008.5.1.4.1.1.77.1.6'
+        ds.Manufacturer = 'Manufacturer'
+        ds.ManufacturerModelName = 'ManufacturerModelName'
+        ds.DeviceSerialNumber = 'DeviceSerialNumber'
+        ds.SoftwareVersions = ['SoftwareVersions']
+
+        ds.ContainerIdentifier = 'ContainerIdentifier'
+        specimen_description_sequence = Dataset()
+        specimen_description_sequence.SpecimenIdentifier = 'SpecimenIdentifier'
+        specimen_description_sequence.SpecimenUID = pydicom.uid.generate_uid()
+        ds.SpecimenDescriptionSequence = DicomSequence(
+            [specimen_description_sequence]
+        )
+        optical_path_sequence = Dataset()
+        optical_path_sequence.OpticalPathIdentifier = '1'
+        illumination_type_code_sequence = Dataset()
+        illumination_type_code_sequence.CodeValue = '111744'
+        illumination_type_code_sequence.CodingSchemeDesignator = 'DCM'
+        illumination_type_code_sequence.CodeMeaning = (
+            'Brightfield illumination'
+        )
+        optical_path_sequence.IlluminationTypeCodeSequence = DicomSequence(
+            [illumination_type_code_sequence]
+        )
+
+        illumination_color_code_sequence = Dataset()
+        illumination_color_code_sequence.CodeValue = 'R-102C0'
+        illumination_color_code_sequence.CodingSchemeDesignator = 'SRT'
+        illumination_color_code_sequence.CodeMeaning = 'Full Spectrum'
+        optical_path_sequence.IlluminationColorCodeSequence = DicomSequence(
+            [illumination_color_code_sequence]
+        )
+
+        ds.OpticalPathSequence = DicomSequence([optical_path_sequence])
+
+        return ds
 
 
 class WsiDicomFile:
@@ -496,7 +540,6 @@ class WsiDicomFile:
             self._uids = FileUids(instance_uid, concatenation_uid, base_uids)
             self._frame_offset = self.dataset.frame_offset
             self._frame_count = self.dataset.frame_count
-            self._tile_type = self.dataset.tile_type
             self._frame_positions = self._parse_pixel_data()
         else:
             self._wsi_type = "None"
@@ -516,11 +559,6 @@ class WsiDicomFile:
     def filepath(self) -> Path:
         """Return filepath"""
         return self._filepath
-
-    @property
-    def tile_type(self) -> str:
-        """Return tiling type (TILED_FULL or TILED_SPARSE)"""
-        return self._tile_type
 
     @property
     def wsi_type(self) -> str:
