@@ -744,6 +744,29 @@ class WsiInstance(metaclass=ABCMeta):
         """Return base uids"""
         return self._uids
 
+    def create_base_dataset(self) -> Dataset:
+        """Create a base pydicom dataset based on first file in instance.
+
+        Returns
+        ----------
+        Dataset
+            Pydicom dataset with common attributes for the levels.
+        """
+        INCLUDE = [0x0002, 0x0008, 0x0010, 0x0018, 0x0020, 0x0040]
+        DELETE = ['ImageType', 'SOPInstanceUID', 'ContentTime',
+                  'InstanceNumber', 'DimensionOrganizationSequence']
+
+        base_ds = self.contained_datasets[0]
+        ds = Dataset()
+        for group in INCLUDE:
+            group_ds = base_ds.group_dataset(group)
+            for element in group_ds.iterall():
+                ds.add(element)
+        for delete in DELETE:
+            if delete in ds:
+                ds.pop(delete)
+        return ds
+
     def stitch_tiles(self, region: Region, path: str, z: float) -> Image:
         """Stitches tiles together to form requested image.
 
@@ -1041,16 +1064,19 @@ class WsiGenericInstance(WsiInstance):
     def __init__(
         self,
         tiler: Tiler,
-        dataset: Dataset
+        dataset: Dataset,
+        transfer_syntax: Uid
     ):
-        super().__init__(WsiDataset(dataset))
+        self._dataset = WsiDataset(dataset)
+        super().__init__(self._dataset, transfer_syntax)
         self.tiler = tiler
-        self._focal_planes = FullTileIndex._get_focal_planes_from_datasets(
-            [dataset]
-        )
-        self._optical_paths = FullTileIndex._get_optical_paths_from_datasets(
-            [dataset]
-        )
+        tile_index = FullTileIndex(self.contained_datasets)
+        self._focal_planes = tile_index.focal_planes
+        self._optical_paths = tile_index.optical_paths
+
+    @property
+    def contained_datasets(self) -> List[WsiDataset]:
+        return [self._dataset]
 
     @property
     def default_z(self) -> float:
@@ -1222,7 +1248,7 @@ class WsiDicomInstance(WsiInstance):
         return instances
 
     def matches(self, other_instance: 'WsiDicomInstance') -> bool:
-        """Return true if other instance is of the same stack as self.
+        """Return true if other instance is of the same group as self.
 
         Parameters
         ----------
@@ -1232,7 +1258,7 @@ class WsiDicomInstance(WsiInstance):
         Returns
         ----------
         bool
-            True if instanes are of same stack.
+            True if instanes are of same group.
 
         """
         return (
@@ -1241,29 +1267,6 @@ class WsiDicomInstance(WsiInstance):
             self.tile_size == other_instance.tile_size and
             self.wsi_type == other_instance.wsi_type
         )
-
-    def create_base_dataset(self) -> Dataset:
-        """Create a base pydicom dataset based on first file in instance.
-
-        Returns
-        ----------
-        Dataset
-            Pydicom dataset with common attributes for the levels.
-        """
-        INCLUDE = [0x0002, 0x0008, 0x0010, 0x0018, 0x0020, 0x0040]
-        DELETE = ['ImageType', 'SOPInstanceUID', 'ContentTime',
-                  'InstanceNumber', 'DimensionOrganizationSequence']
-
-        base_ds = self.contained_datasets[0]
-        ds = Dataset()
-        for group in INCLUDE:
-            group_ds = base_ds.group_dataset(group)
-            for element in group_ds.iterall():
-                ds.add(element)
-        for delete in DELETE:
-            if delete in ds:
-                ds.pop(delete)
-        return ds
 
     def get_tile(self, tile: Point, z: float, path: str) -> Image:
         """Get tile image at tile coordinate x, y.
@@ -1550,24 +1553,24 @@ class WsiDicomInstance(WsiInstance):
             return True
 
 
-class WsiDicomStack(metaclass=ABCMeta):
+class WsiDicomGroup(metaclass=ABCMeta):
     def __init__(
         self,
         instances: List[WsiInstance]
     ):
-        """Represents a stack of instances having the same size,
+        """Represents a group of instances having the same size,
         but possibly different z coordinate and/or optical path.
         Instances should match in the common uids, wsi type, and tile size.
 
         Parameters
         ----------
         instances: List[WsiInstance]
-            Instances to build the stack
+            Instances to build the group.
         """
         self._instances = {  # key is identifier (str)
             instance.identifier: instance for instance in instances
         }
-        self._validate_stack()
+        self._validate_group()
 
         base_instance = instances[0]
         self._wsi_type = base_instance.wsi_type
@@ -1653,41 +1656,40 @@ class WsiDicomStack(metaclass=ABCMeta):
     def open(
         cls,
         instances: List[WsiInstance],
-    ) -> List['WsiDicomStack']:
-        """Return list of stacks created from wsi files.
+    ) -> List['WsiDicomGroup']:
+        """Return list of groups created from wsi instances.
 
         Parameters
         ----------
         files: List[WsiInstance]
-            Instances to create stacks from.
+            Instances to create groups from.
 
         Returns
         ----------
-        List[WsiDicomStack]
-            List of created stacks.
+        List[WsiDicomGroup]
+            List of created groups.
 
         """
-        stacks: List[WsiDicomStack] = []
+        groups: List[WsiDicomGroup] = []
 
-        instances_grouped_by_stack = cls._group_instances(instances)
+        grouped_instances = cls._group_instances(instances)
 
-        for instance_group in instances_grouped_by_stack.values():
-            new_stack = WsiDicomStack(instance_group)
-            stacks.append(new_stack)
+        for group in grouped_instances.values():
+            groups.append(WsiDicomGroup(group))
 
-        return stacks
+        return groups
 
-    def matches(self, other_stack: 'WsiDicomStack') -> bool:
-        """Check if stack is valid (Uids and tile size match).
+    def matches(self, other_group: 'WsiDicomGroup') -> bool:
+        """Check if group is valid (Uids and tile size match).
         The common Uids should match for all series.
         """
         return (
-            other_stack.uids == self.uids and
-            other_stack.wsi_type == self.wsi_type
+            other_group.uids == self.uids and
+            other_group.wsi_type == self.wsi_type
         )
 
     def valid_pixels(self, region: Region) -> bool:
-        """Check if pixel region is withing the size of the stack image size.
+        """Check if pixel region is withing the size of the group image size.
 
         Parameters
         ----------
@@ -1752,8 +1754,7 @@ class WsiDicomStack(metaclass=ABCMeta):
                                     path in i.optical_paths))
         except StopIteration:
             raise WsiDicomNotFoundError(
-                f"Instance for path: {path}, z: {z}",
-                "stack"
+                f"Instance for path: {path}, z: {z}", "group"
             )
         if z is None:
             z = instance.default_z
@@ -1767,7 +1768,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         Returns
         ----------
         Image
-            Full image of the stack
+            Full image of the group.
         """
         instance = self.default_instance
         z = instance.tiles.default_z
@@ -1911,7 +1912,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         return pixel_region
 
     def close(self) -> None:
-        """Close all instances on the stack."""
+        """Close all instances on the group."""
         for instance in self._instances.values():
             instance.close()
 
@@ -2001,10 +2002,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         optical_paths: List[str]
             List of optical paths to include in file.
         """
-        if(isinstance(self.default_instance, WsiDicomInstance)):
-            ds = self.default_instance.create_base_dataset()
-        else:
-            ds = Dataset()
+        ds = self.default_instance.create_base_dataset()
         ds.SOPClassUID = '1.2.840.10008.5.1.4.1.1.77.1.6'
         ds.ImageType = self._create_image_type_attribute()
         ds.SOPInstanceUID = uid
@@ -2137,7 +2135,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         focal_planes: List[float] = None,
         optical_paths: List[str] = None
     ) -> None:
-        """Writes stack to to file. File is written as TILED_FULL.
+        """Writes group to file. File is written as TILED_FULL.
         Writing of optical path sequence is not yet implemented.
 
         Parameters
@@ -2187,18 +2185,17 @@ class WsiDicomStack(metaclass=ABCMeta):
         # close the file
         fp.close()
 
-    def _validate_stack(self):
-        """Check that no file or instance in stack is duplicate, instances in
-        stack matches and that the optical manager matches by base uid.
+    def _validate_group(self):
+        """Check that no file or instance in group is duplicate, instances in
+        group matches and that the optical manager matches by base uid.
         Raises WsiDicomMatchError otherwise.
         """
+        WsiDataset.check_duplicate_dataset(self.contained_datasets, self)
         instances = list(self.instances.values())
-        if(isinstance(instances[0], WsiDicomInstance)):
-            WsiDataset.check_duplicate_dataset(self.contained_datasets, self)
-            base_instance = instances[0]
-            for instance in instances[1:]:
-                if not base_instance.matches(instance):
-                    raise WsiDicomMatchError(str(instance), str(self))
+        base_instance = instances[0]
+        for instance in instances[1:]:
+            if not base_instance.matches(instance):
+                raise WsiDicomMatchError(str(instance), str(self))
         WsiInstance.check_duplicate_instance(instances, self)
 
     @classmethod
@@ -2206,12 +2203,12 @@ class WsiDicomStack(metaclass=ABCMeta):
         cls,
         instances: List[WsiInstance]
     ) -> Dict[Size, List[WsiInstance]]:
-        """Return instances grouped by image size (stacks).
+        """Return instances grouped by image size.
 
         Parameters
         ----------
         instances: List[WsiInstance]
-            Instances to group into stacks.
+            Instances to group by image size.
 
         Returns
         ----------
@@ -2228,7 +2225,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         return grouped_instances
 
 
-class WsiDicomLevel(WsiDicomStack):
+class WsiDicomLevel(WsiDicomGroup):
     def __init__(
         self,
         instances: List[WsiInstance],
@@ -2242,7 +2239,7 @@ class WsiDicomLevel(WsiDicomStack):
         Parameters
         ----------
         instances: List[WsiInstance]
-            Instances to build the stack.
+            Instances to build the level.
         base_pixel_spacing: SizeMm
             Pixel spacing of base level.
         """
@@ -2286,40 +2283,39 @@ class WsiDicomLevel(WsiDicomStack):
         cls,
         instances: List[WsiInstance],
     ) -> List['WsiDicomLevel']:
-        """Return list of level stacks created wsi files.
+        """Return list of levels created wsi files.
 
         Parameters
         ----------
         files: List[WsiInstance]
-            Instances to create stacks from.
+            Instances to create levels from.
 
         Returns
         ----------
         List[WsiDicomLevel]
-            List of created level stacks.
+            List of created levels.
 
         """
         levels: List[WsiDicomLevel] = []
-        instances_grouped_by_stack = cls._group_instances(instances)
-        largest_size = max(instances_grouped_by_stack.keys())
-        base_group = instances_grouped_by_stack[largest_size]
+        instances_grouped_by_level = cls._group_instances(instances)
+        largest_size = max(instances_grouped_by_level.keys())
+        base_group = instances_grouped_by_level[largest_size]
         base_pixel_spacing = base_group[0].pixel_spacing
-        for level_group in instances_grouped_by_stack.values():
-            new_level = WsiDicomLevel(level_group, base_pixel_spacing)
-            levels.append(new_level)
+        for level in instances_grouped_by_level.values():
+            levels.append(WsiDicomLevel(level, base_pixel_spacing))
 
         return levels
 
-    def matches(self, other_stack: 'WsiDicomStack') -> bool:
-        """Check if stack is valid (Uids and tile size match).
+    def matches(self, other_group: 'WsiDicomGroup') -> bool:
+        """Check if group is valid (Uids and tile size match).
         The common Uids should match for all series. For level series the tile
-        size should also match. It is assumed that the instances in the stacks
+        size should also match. It is assumed that the instances in the groups
         are matching each other.
         """
-        other_instance = other_stack.default_instance
+        other_instance = other_group.default_instance
         this_instance = self.default_instance
         return (
-            other_stack.uids == self.uids and
+            other_group.uids == self.uids and
             other_instance.tile_size == this_instance.tile_size
         )
 
@@ -2448,23 +2444,23 @@ class WsiDicomLevel(WsiDicomStack):
 class WsiDicomSeries(metaclass=ABCMeta):
     wsi_type: str
 
-    def __init__(self, stacks: List[WsiDicomStack]):
-        """Holds a series of stacks of same image flavor
+    def __init__(self, groups: List[WsiDicomGroup]):
+        """Holds a series of image groups of same image flavor
 
         Parameters
         ----------
-        stacks: List[WsiDicomStack]
-            List of stacks to include in the series
+        groups: List[WsiDicomGroup]
+            List of groups to include in the series
         """
-        self._stacks: List[WsiDicomStack] = stacks
+        self._groups: List[WsiDicomGroup] = groups
 
-        if len(self.stacks) != 0 and self.stacks[0].uids is not None:
-            self._uids = self._validate_series(self.stacks)
+        if len(self.groups) != 0 and self.groups[0].uids is not None:
+            self._uids = self._validate_series(self.groups)
         else:
             self._uids = None
 
-    def __getitem__(self, index: int) -> WsiDicomStack:
-        """Get stack by index.
+    def __getitem__(self, index: int) -> WsiDicomGroup:
+        """Get group by index.
 
         Parameters
         ----------
@@ -2473,45 +2469,47 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         Returns
         ----------
-        WsiDicomStack
-            The stack at index in the series
+        WsiDicomGroup
+            The group at index in the series
         """
-        return self.stacks[index]
+        return self.groups[index]
 
     @property
-    def stacks(self) -> List[WsiDicomStack]:
-        """Return contained stacks"""
-        return self._stacks
+    def groups(self) -> List[WsiDicomGroup]:
+        """Return contained groups."""
+        return self._groups
 
     @property
     def uids(self) -> Optional[BaseUids]:
-        """Return uids"""
+        """Return uids."""
         return self._uids
 
     @property
     def mpps(self) -> List[SizeMm]:
-        """Return contained mpp (um/px)"""
-        return [stack.mpp for stack in self.stacks]
+        """Return contained mpp (um/px)."""
+        return [group.mpp for group in self.groups]
 
     @property
     def files(self) -> List[WsiDicomFile]:
-        """Return contained files"""
-        series_files = [series.files for series in self.stacks]
+        """Return contained files."""
+        series_files = [series.files for series in self.groups]
         return [file for sublist in series_files for file in sublist]
 
     @property
     def contained_datasets(self) -> List[Dataset]:
         """Return contained datasets."""
-        series_datasets = [
-            series.contained_datasets for series in self.stacks
-        ]
-        return [dataset for sublist in series_datasets for dataset in sublist]
 
+        series_datasets = [
+            series.contained_datasets for series in self.groups
+        ]
+        return [
+            dataset for sublist in series_datasets for dataset in sublist
+        ]
     @property
     def instances(self) -> List[WsiInstance]:
         """Return contained instances"""
         series_instances = [
-            series.instances.values() for series in self.stacks
+            series.instances.values() for series in self.groups
         ]
         return [
             instance for sublist in series_instances for instance in sublist
@@ -2519,17 +2517,17 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     def _validate_series(
             self,
-            stacks: Union[List[WsiDicomStack], List[WsiDicomLevel]]
+            groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
     ) -> Optional[BaseUids]:
-        """Check that no files or instances in series is duplicate, all stacks
-        in series matches and that the optical manager matches by base uid.
+        """Check that no files or instances in series is duplicate and that
+        all groups in series matches.
         Raises WsiDicomMatchError otherwise.
-        Returns the matching base uid. If list of stacks is empty, return None.
+        Returns the matching base uid. If list of groups is empty, return None.
 
         Parameters
         ----------
-        stacks: Union[List[WsiDicomStack], List[WsiDicomLevel]]
-            List of stacks to check
+        groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
+            List of groups or levels to check
 
         Returns
         ----------
@@ -2540,24 +2538,24 @@ class WsiDicomSeries(metaclass=ABCMeta):
         WsiDicomInstance.check_duplicate_instance(self.instances, self)
 
         try:
-            base_stack = stacks[0]
-            if base_stack.wsi_type != self.wsi_type:
+            base_group = groups[0]
+            if base_group.wsi_type != self.wsi_type:
                 raise WsiDicomMatchError(
-                    str(base_stack), str(self)
+                    str(base_group), str(self)
                 )
-            for stack in stacks[1:]:
-                if not stack.matches(base_stack):
+            for group in groups[1:]:
+                if not group.matches(base_group):
                     raise WsiDicomMatchError(
-                        str(stack), str(self)
+                        str(group), str(self)
                     )
-            return base_stack.uids
+            return base_group.uids
         except IndexError:
             return None
 
     def close(self) -> None:
-        """Close all stacks in the series."""
-        for stack in self.stacks:
-            stack.close()
+        """Close all groups in the series."""
+        for group in self.groups:
+            group.close()
 
     def save(
         self,
@@ -2581,8 +2579,8 @@ class WsiDicomSeries(metaclass=ABCMeta):
             Optical paths to save.
         """
 
-        for stack in self.stacks:
-            stack.save(path, optical, focal_planes, optical_paths)
+        for group in self.groups:
+            group.save(path, optical, focal_planes, optical_paths)
 
 
 class WsiDicomLabels(WsiDicomSeries):
@@ -2605,7 +2603,7 @@ class WsiDicomLabels(WsiDicomSeries):
         WsiDicomLabels
             Created label series
         """
-        labels = WsiDicomStack.open(instances)
+        labels = WsiDicomGroup.open(instances)
         return WsiDicomLabels(labels)
 
 
@@ -2629,7 +2627,7 @@ class WsiDicomOverviews(WsiDicomSeries):
         WsiDicomOverviews
             Created overview series
         """
-        overviews = WsiDicomStack.open(instances)
+        overviews = WsiDicomGroup.open(instances)
         return WsiDicomOverviews(overviews)
 
 
@@ -2641,15 +2639,15 @@ class WsiDicomLevels(WsiDicomSeries):
 
         Parameters
         ----------
-        stacks: List[WsiDicomLevel]
-            List of level stacks to include in series
+        levels: List[WsiDicomLevel]
+            List of levels to include in series
         """
         self._levels = OrderedDict(
             (level.level, level)
             for level in sorted(levels, key=lambda level: level.level)
         )
-        if len(self.stacks) != 0 and self.stacks[0].uids is not None:
-            self._uids = self._validate_series(self.stacks)
+        if len(self.groups) != 0 and self.groups[0].uids is not None:
+            self._uids = self._validate_series(self.groups)
         else:
             self._uids = None
 
@@ -2665,8 +2663,8 @@ class WsiDicomLevels(WsiDicomSeries):
         )
 
     @property
-    def stacks(self) -> List[WsiDicomStack]:
-        """Return contained stacks"""
+    def groups(self) -> List[WsiDicomGroup]:
+        """Return contained groups"""
         return list(self._levels.values())
 
     @property
@@ -2732,7 +2730,7 @@ class WsiDicomLevels(WsiDicomSeries):
             levels = self.levels
 
         levels_to_save = [
-            level_stack for (level, level_stack) in self._levels.items()
+            level_group for (level, level_group) in self._levels.items()
             if level in levels
         ]
 
@@ -2820,7 +2818,7 @@ class WsiDicomLevels(WsiDicomSeries):
         WsiDicomLevel
             The level with size closest to searched size
         """
-        closest_size = self.stacks[0].size
+        closest_size = self.groups[0].size
         closest = None
         for wsi_level in self._levels.values():
             if((size.width <= wsi_level.size.width) and
@@ -2863,19 +2861,29 @@ class WsiDicomLevels(WsiDicomSeries):
         return closest
 
 
-class TileManager(metaclass=ABCMeta):
+class FileImporter(metaclass=ABCMeta):
     def __init__(
         self,
-        filepaths: List[Path],
-        optical_paths: List[str],
-        focal_planes: List[float]
+        filepath: Path,
+        base_dataset: Dataset,
+        include_series: Dict[str, Tuple[int, List[Union[str, Dataset]]]],
+        transfer_syntax: Uid
     ):
-        self.filepaths = filepaths
-        self.optical_paths = optical_paths
-        self.focal_planes = focal_planes
+        self.filepath = filepath
+        self.base_dataset = base_dataset
+        self.include_series = include_series
+        self.transfer_syntax = transfer_syntax
 
     @abstractmethod
     def level_instances(self) -> List[WsiGenericInstance]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def label_instances(self) -> List[WsiGenericInstance]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def overview_instances(self) -> List[WsiGenericInstance]:
         raise NotImplementedError
 
 
@@ -2907,6 +2915,7 @@ class WsiDicom:
             )
         else:
             self.uids = None
+
         self.optical = OpticalManager.open(
             levels.instances + labels.instances + overviews.instances
         )
@@ -2979,52 +2988,8 @@ class WsiDicom:
                 return string
         return (
             string + ' of levels:\n'
-            + list_pretty_str(self.levels.stacks, indent, depth, 0, 2)
+            + list_pretty_str(self.levels.groups, indent, depth, 0, 2)
         )
-
-    @staticmethod
-    def create_test_base_dataset() -> Dataset:
-        ds = Dataset()
-        ds.StudyInstanceUID = pydicom.uid.generate_uid()
-        ds.SeriesInstanceUID = pydicom.uid.generate_uid()
-        ds.FrameOfReferenceUID = pydicom.uid.generate_uid()
-        ds.Modality = 'SM'
-        ds.SOPClassUID = '1.2.840.10008.5.1.4.1.1.77.1.6'
-        ds.Manufacturer = 'Manufacturer'
-        ds.ManufacturerModelName = 'ManufacturerModelName'
-        ds.DeviceSerialNumber = 'DeviceSerialNumber'
-        ds.SoftwareVersions = ['SoftwareVersions']
-
-        ds.ContainerIdentifier = 'ContainerIdentifier'
-        specimen_description_sequence = Dataset()
-        specimen_description_sequence.SpecimenIdentifier = 'SpecimenIdentifier'
-        specimen_description_sequence.SpecimenUID = pydicom.uid.generate_uid()
-        ds.SpecimenDescriptionSequence = DicomSequence(
-            [specimen_description_sequence]
-        )
-        optical_path_sequence = Dataset()
-
-        illumination_type_code_sequence = Dataset()
-        illumination_type_code_sequence.CodeValue = '111744'
-        illumination_type_code_sequence.CodingSchemeDesignator = 'DCM'
-        illumination_type_code_sequence.CodeMeaning = (
-            'Brightfield illumination'
-        )
-        optical_path_sequence.IlluminationTypeCodeSequence = DicomSequence(
-            [illumination_type_code_sequence]
-        )
-
-        illumination_color_code_sequence = Dataset()
-        illumination_color_code_sequence.CodeValue = 'R-102C0'
-        illumination_color_code_sequence.CodingSchemeDesignator = 'SRT'
-        illumination_color_code_sequence.CodeMeaning = 'Full Spectrum'
-        optical_path_sequence.IlluminationColorCodeSequence = DicomSequence(
-            [illumination_color_code_sequence]
-        )
-
-        ds.OpticalPathSequence = DicomSequence([optical_path_sequence])
-
-        return ds
 
     @classmethod
     def open(cls, path: Union[str, List[str]]) -> 'WsiDicom':
@@ -3075,10 +3040,10 @@ class WsiDicom:
         return WsiDicom(levels, labels, overviews)
 
     @classmethod
-    def import_wsi(cls, tile_manager: TileManager) -> 'WsiDicom':
-        levels = WsiDicomLevels.open(tile_manager.level_instances)
-        labels = WsiDicomLabels.open(tile_manager.label_instances)
-        overviews = WsiDicomOverviews.open(tile_manager.overview_instances)
+    def import_wsi(cls, file_importer: FileImporter) -> 'WsiDicom':
+        levels = WsiDicomLevels.open(file_importer.level_instances())
+        labels = WsiDicomLabels.open(file_importer.label_instances())
+        overviews = WsiDicomOverviews.open(file_importer.overview_instances())
         return cls(levels, labels, overviews)
 
     @staticmethod
@@ -3220,6 +3185,7 @@ class WsiDicom:
             levels
         )
         series: List[WsiDicomSeries] = [self.labels, self.overviews]
+
         for item in series:
             item.save(path, self.optical, focal_planes, optical_paths)
 
