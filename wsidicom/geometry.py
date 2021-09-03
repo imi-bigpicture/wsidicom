@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Generator
 
 
 @dataclass
@@ -142,6 +142,19 @@ class Size:
     def from_tuple(tuple: Tuple[int, int]) -> 'Size':
         return Size(width=tuple[0], height=tuple[1])
 
+    @staticmethod
+    def max(size_1: 'Size', size_2: 'Size'):
+        return Size(
+            width=max(size_1.width, size_2.width),
+            height=max(size_1.height, size_2.height)
+        )
+
+    def ceil(self) -> 'Size':
+        return Size(
+            width=int(math.ceil(self.width)),
+            height=int(math.ceil(self.height))
+        )
+
 
 @dataclass
 class Point:
@@ -151,7 +164,11 @@ class Point:
     def __str__(self):
         return f'{self.x},{self.y}'
 
+    def __hash__(self) -> int:
+        return hash((self.x, self.y))
+
     def __mul__(self, factor):
+        print("mul")
         if isinstance(factor, (int, float)):
             return Point(int(factor*self.x), int(factor*self.y))
         elif isinstance(factor, Size):
@@ -163,6 +180,8 @@ class Point:
     def __floordiv__(self, divider):
         if isinstance(divider, (int, float)):
             return Point(int(self.x/divider), int(self.y/divider))
+        if isinstance(divider, Point):
+            return Point(int(self.x/divider.x), int(self.y/divider.y))
         if isinstance(divider, (Size, SizeMm)):
             return Point(int(self.x/divider.width), int(self.y/divider.height))
         return NotImplemented
@@ -254,10 +273,10 @@ class Region:
     def box_from_origin(self) -> Tuple[int, int, int, int]:
         return 0, 0, self.size.width, self.size.height
 
-    def iterate_all(self, include_end=False):
+    def iterate_all(self, include_end=False) -> Generator[Point, None, None]:
         offset = 1 if include_end else 0
         return (
-            (x, y)
+            Point(x, y)
             for y in range(self.start.y, self.end.y + offset)
             for x in range(self.start.x, self.end.x + offset)
         )

@@ -798,8 +798,7 @@ class WsiInstance(metaclass=ABCMeta):
         image = Image.new(mode=self._image_mode, size=region.size.to_tuple())
         write_index = Point(x=0, y=0)
         tile = stitching_tiles.position
-        for x, y in stitching_tiles.iterate_all(include_end=True):
-            tile = Point(x=x, y=y)
+        for tile in stitching_tiles.iterate_all(include_end=True):
             tile_image = self.get_tile(tile, z, path)
             tile_crop = self.crop_tile(tile, region)
             tile_image = tile_image.crop(box=tile_crop.box)
@@ -1084,6 +1083,16 @@ class WsiGenericInstance(WsiInstance):
         self._focal_planes = tile_index.focal_planes
         self._optical_paths = tile_index.optical_paths
 
+    def __str__(self) -> str:
+        return f"WsiGenericInstance of {self.tiler}"
+
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: int = None
+    ) -> str:
+        return f"WsiGenericInstance of {self.tiler}"
+
     @property
     def dataset(self) -> WsiDataset:
         return self._dataset
@@ -1189,7 +1198,7 @@ class WsiGenericInstance(WsiInstance):
             SOP instance uid to include in file.
         """
         meta_ds = pydicom.dataset.FileMetaDataset()
-        meta_ds.TransferSyntaxUID = self.default_instance._transfer_syntax
+        meta_ds.TransferSyntaxUID = self._transfer_syntax
         meta_ds.MediaStorageSOPInstanceUID = uid
         meta_ds.MediaStorageSOPClassUID = WSI_SOP_CLASS_UID
         pydicom.dataset.validate_file_meta(meta_ds)
@@ -1236,10 +1245,10 @@ class WsiGenericInstance(WsiInstance):
         tile_geometry = Region(Point(0, 0), self.plane_size)
         # Generator for the tiles
         tiles = (
-            self.get_encoded_tile(Point(x_tile, y_tile), z, path, False)
+            self.get_encoded_tile(tile, z, path, False)
             for path in optical_paths
             for z in focal_planes
-            for x_tile, y_tile in tile_geometry.iterate_all()
+            for tile in tile_geometry.iterate_all()
         )
 
         pixel_data_element = pydicom.dataset.DataElement(
