@@ -10,7 +10,7 @@ from pydicom.uid import UID as Uid
 
 from .errors import WsiDicomError, WsiDicomFileError, WsiDicomUidDuplicateError
 from .geometry import Size, SizeMm
-from .uid import BaseUids, FileUids
+from .uid import BaseUids, FileUids, WSI_SOP_CLASS_UID
 
 
 class WsiDataset(Dataset):
@@ -35,8 +35,6 @@ class WsiDataset(Dataset):
             True if file is wsi dicom SOP class and all required attributes
             are available
         """
-        WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
-
         REQURED_GENERAL_STUDY_MODULE_ATTRIBUTES = [
             "StudyInstanceUID"
         ]
