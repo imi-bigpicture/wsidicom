@@ -168,7 +168,6 @@ class Point:
         return hash((self.x, self.y))
 
     def __mul__(self, factor):
-        print("mul")
         if isinstance(factor, (int, float)):
             return Point(int(factor*self.x), int(factor*self.y))
         elif isinstance(factor, Size):
