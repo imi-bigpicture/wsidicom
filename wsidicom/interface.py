@@ -1010,6 +1010,39 @@ class WsiInstance(metaclass=ABCMeta):
             return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
         return (WHITE, WHITE, WHITE)
 
+    @staticmethod
+    def _image_settings(
+        transfer_syntax: pydicom.uid
+    ) -> Tuple[str, Dict[str, int]]:
+        """Return image format and options for creating encoded tiles as in the
+        used transfer syntax.
+
+        Parameters
+        ----------
+        transfer_syntax: pydicom.uid
+            Transfer syntax to match image format and options to
+
+        Returns
+        ----------
+        tuple[str, dict[str, int]]
+            image format and image options
+
+        """
+        if(transfer_syntax == pydicom.uid.JPEGBaseline8Bit):
+            image_format = 'jpeg'
+            image_options = {'quality': 95}
+        elif(transfer_syntax == pydicom.uid.JPEG2000):
+            image_format = 'jpeg2000'
+            image_options = {'irreversible': True}
+        elif(transfer_syntax == pydicom.uid.JPEG2000Lossless):
+            image_format = 'jpeg2000'
+            image_options = {'irreversible': False}
+        else:
+            raise NotImplementedError(
+                "Only supports jpeg and jpeg2000"
+            )
+        return (image_format, image_options)
+
     @abstractmethod
     def get_tile(self, tile: Point, z: float, path: str) -> Image:
         raise NotImplementedError
@@ -1173,10 +1206,11 @@ class WsiGenericInstance(WsiInstance):
         self._write_preamble(fp)
         self._write_file_meta(fp, self.dataset.instance_uid)
         self._write_base(fp, self.dataset)
-        self._write_pixel_data(fp, self.focal_planes, self.optical_paths)
+        self._write_pixel_data(fp)
 
         # close the file
         fp.close()
+        print(f"Wrote file {file_path}")
 
     @staticmethod
     def _write_preamble(fp: pydicom.filebase.DicomFileLike):
@@ -1227,18 +1261,13 @@ class WsiGenericInstance(WsiInstance):
         dataset.ContentDate = datetime.date(now).strftime('%Y%m%d')
         dataset.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
         dataset.NumberOfFrames = (
-            self.tiler.tiled_size.width
-            * self.tiler.tiled_size.height
-            * len(self.focal_planes)
-            * len(self.optical_paths)
+            self.plane_size.width * self.plane_size.height
         )
         pydicom.filewriter.write_dataset(fp, dataset)
 
     def _write_pixel_data(
         self,
-        fp: pydicom.filebase.DicomFileLike,
-        focal_planes: List[float],
-        optical_paths: List[str]
+        fp: pydicom.filebase.DicomFileLike
     ):
         """Writes pixel data to file.
 
@@ -1247,20 +1276,7 @@ class WsiGenericInstance(WsiInstance):
         fp: pydicom.filebase.DicomFileLike
             Filepointer to file to write.
         focal_planes: List[float]
-            List of focal planes to include in file.
-        optical_paths: List[str]
-            List of optical paths to include in file.
         """
-        tile_geometry = Region(Point(0, 0), self.plane_size)
-        # Generator for the tiles
-        thread_results = (
-            self.tiler.get_encoded_tiles(
-                tile_geometry.iterate_all()
-            )
-            # for path in optical_paths
-            # for z in focal_planes
-        )
-
         pixel_data_element = pydicom.dataset.DataElement(
             0x7FE00010,
             'OB',
@@ -1282,11 +1298,22 @@ class WsiGenericInstance(WsiInstance):
         fp.write_tag(pydicom.tag.ItemTag)
         fp.write_UL(0)
 
-        # itemize and and write the tiles
-        for thread_result in thread_results:
-            for tile in thread_result:
-                for frame in pydicom.encaps.itemize_frame(tile, 1):
-                    fp.write(frame)
+        tile_geometry = Region(Point(0, 0), self.plane_size)
+        # Generator for the tiles
+        # tile_jobs = (
+        #     self.tiler.get_encoded_tiles(tile_geometry.iterate_all())
+        # )
+        # # itemize and and write the tiles
+        # for tile_job in tile_jobs:
+        #     for tile in tile_job:
+        #         for frame in pydicom.encaps.itemize_frame(tile, 1):
+        #             fp.write(frame)
+
+        # This method tests faster, but also writes all data at once
+        # (takes a lot of memory)
+        fp.write(
+            self.tiler.get_encapsulated_tiles(tile_geometry.iterate_all())
+        )
 
         # end sequence
         fp.write_tag(pydicom.tag.SequenceDelimiterTag)
@@ -1628,39 +1655,6 @@ class WsiDicomInstance(WsiInstance):
         if(base_dataset.tile_type == 'TILED_FULL'):
             return FullTileIndex(datasets)
         return SparseTileIndex(datasets)
-
-    @staticmethod
-    def _image_settings(
-        transfer_syntax: pydicom.uid
-    ) -> Tuple[str, Dict[str, int]]:
-        """Return image format and options for creating encoded tiles as in the
-        used transfer syntax.
-
-        Parameters
-        ----------
-        transfer_syntax: pydicom.uid
-            Transfer syntax to match image format and options to
-
-        Returns
-        ----------
-        tuple[str, dict[str, int]]
-            image format and image options
-
-        """
-        if(transfer_syntax == pydicom.uid.JPEGBaseline8Bit):
-            image_format = 'jpeg'
-            image_options = {'quality': 95}
-        elif(transfer_syntax == pydicom.uid.JPEG2000):
-            image_format = 'jpeg2000'
-            image_options = {'irreversible': True}
-        elif(transfer_syntax == pydicom.uid.JPEG2000Lossless):
-            image_format = 'jpeg2000'
-            image_options = {'irreversible': False}
-        else:
-            raise NotImplementedError(
-                "Only supports jpeg and jpeg2000"
-            )
-        return (image_format, image_options)
 
     def _get_file(self, frame_index: int) -> WsiDicomFile:
         """Return file contaning frame index. Raises WsiDicomNotFoundError if
@@ -2721,7 +2715,7 @@ class FileImporter(metaclass=ABCMeta):
         self,
         filepath: Path,
         base_dataset: Dataset,
-        include_series: Dict[str, Tuple[int, List[Union[str, Dataset]]]],
+        include_series: Dict[str, Tuple[int, Dict[int, Union[str, Dataset]]]],
         transfer_syntax: Uid
     ):
         self.filepath = filepath
@@ -2739,6 +2733,10 @@ class FileImporter(metaclass=ABCMeta):
 
     @abstractmethod
     def overview_instances(self) -> List[WsiGenericInstance]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def close(self) -> None:
         raise NotImplementedError
 
 
@@ -2895,7 +2893,11 @@ class WsiDicom:
         return WsiDicom(levels, labels, overviews)
 
     @classmethod
-    def import_wsi(cls, file_importer: FileImporter) -> 'WsiDicom':
+    def import_wsi(
+        cls,
+        file_importer: FileImporter,
+        levels: List[int] = None
+    ) -> 'WsiDicom':
         levels = WsiDicomLevels.open(file_importer.level_instances())
         labels = WsiDicomLabels.open(file_importer.label_instances())
         overviews = WsiDicomOverviews.open(file_importer.overview_instances())
@@ -2906,29 +2908,25 @@ class WsiDicom:
         cls,
         output_path: Path,
         file_importer: FileImporter,
-        levels: List[int] = None
     ) -> None:
-        """Saves wsi to files in path. Optionaly only included selected
-        levels, focal planes, and/or optical paths.
+        """Convert file using file_importer to output path.
 
         Parameters
         ----------
-        path: Path
+        output_path: Path
             Folder path to save files to.
-        focal_planes: List[float]
-            Focal planes to save
-        optical_paths: List[str]
-            Optical paths to save.
-        levels: List[int]
-            Levels to save.
+        file_importer: FileImporter
+            FileImporter defining file to me converted.
         """
         instances: List[WsiGenericInstance] = (
-            file_importer.level_instances(levels) +
+            file_importer.level_instances() +
             file_importer.label_instances() +
             file_importer.overview_instances()
         )
         for instance in instances:
             instance.save(output_path)
+
+        file_importer.close()
 
     @staticmethod
     def _get_filepaths(path: Union[str, List[str]]) -> List[Path]:
