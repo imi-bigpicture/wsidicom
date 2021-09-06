@@ -1123,7 +1123,7 @@ class WsiGenericInstance(WsiInstance):
 
     @property
     def plane_size(self) -> Size:
-        return self.size//self.tile_size
+        return (self.size / self.tile_size).ceil()
 
     def get_tile(
         self,
@@ -1166,12 +1166,12 @@ class WsiGenericInstance(WsiInstance):
         path: Path
             Path to directory to write to.
         """
+
         file_path = os.path.join(path, self.dataset.instance_uid+'.dcm')
 
         fp = self._create_filepointer(file_path)
         self._write_preamble(fp)
         self._write_file_meta(fp, self.dataset.instance_uid)
-
         self._write_base(fp, self.dataset)
         self._write_pixel_data(fp, self.focal_planes, self.optical_paths)
 
@@ -1251,7 +1251,6 @@ class WsiGenericInstance(WsiInstance):
         optical_paths: List[str]
             List of optical paths to include in file.
         """
-        print("its updated")
         tile_geometry = Region(Point(0, 0), self.plane_size)
         # Generator for the tiles
         thread_results = (
@@ -1294,7 +1293,7 @@ class WsiGenericInstance(WsiInstance):
         fp.write_UL(0)
 
     @staticmethod
-    def _create_filepointer(path: Path) -> pydicom.filebase.DicomFileLike:
+    def _create_filepointer(path: Path) -> pydicom.filebase.DicomFile:
         """Return a dicom filepointer.
 
         Parameters
@@ -1303,7 +1302,7 @@ class WsiGenericInstance(WsiInstance):
             Path to filepointer.
         Returns
         ----------
-        pydicom.filebase.DicomFileLike
+        pydicom.filebase.DicomFile
             Created filepointer.
         """
         fp = pydicom.filebase.DicomFile(path, mode='wb')
@@ -2923,7 +2922,7 @@ class WsiDicom:
         levels: List[int]
             Levels to save.
         """
-        instances = (
+        instances: List[WsiGenericInstance] = (
             file_importer.level_instances(levels) +
             file_importer.label_instances() +
             file_importer.overview_instances()
