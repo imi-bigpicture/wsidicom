@@ -567,6 +567,11 @@ class Tiler(metaclass=ABCMeta):
     def get_encoded_tile(self, tile: Point) -> bytes:
         raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def tiled_size(self) -> Size:
+        raise NotImplementedError
+
 
 class WsiInstance(metaclass=ABCMeta):
     def __init__(
@@ -1079,9 +1084,8 @@ class WsiGenericInstance(WsiInstance):
         self._dataset = WsiDataset(dataset)
         super().__init__(self._dataset, transfer_syntax)
         self.tiler = tiler
-        tile_index = FullTileIndex(self.contained_datasets)
-        self._focal_planes = tile_index.focal_planes
-        self._optical_paths = tile_index.optical_paths
+        self._focal_planes = [0]
+        self._optical_paths = ['1']
 
     def __str__(self) -> str:
         return f"WsiGenericInstance of {self.tiler}"
@@ -1155,7 +1159,7 @@ class WsiGenericInstance(WsiInstance):
         return tile_region
 
     def save(self, path: Path) -> None:
-        """Writes instance to file. File is written as TILED_FULL.
+        """Write instance to file. File is written as TILED_FULL.
 
         Parameters
         ----------
@@ -1222,7 +1226,12 @@ class WsiGenericInstance(WsiInstance):
         now = datetime.now()
         dataset.ContentDate = datetime.date(now).strftime('%Y%m%d')
         dataset.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
-
+        dataset.NumberOfFrames = (
+            self.tiler.tiled_size.width
+            * self.tiler.tiled_size.height
+            * len(self.focal_planes)
+            * len(self.optical_paths)
+        )
         pydicom.filewriter.write_dataset(fp, dataset)
 
     def _write_pixel_data(
@@ -1242,13 +1251,15 @@ class WsiGenericInstance(WsiInstance):
         optical_paths: List[str]
             List of optical paths to include in file.
         """
+        print("its updated")
         tile_geometry = Region(Point(0, 0), self.plane_size)
         # Generator for the tiles
-        tiles = (
-            self.get_encoded_tile(tile, z, path, False)
-            for path in optical_paths
-            for z in focal_planes
-            for tile in tile_geometry.iterate_all()
+        thread_results = (
+            self.tiler.get_encoded_tiles(
+                tile_geometry.iterate_all()
+            )
+            # for path in optical_paths
+            # for z in focal_planes
         )
 
         pixel_data_element = pydicom.dataset.DataElement(
@@ -1273,9 +1284,10 @@ class WsiGenericInstance(WsiInstance):
         fp.write_UL(0)
 
         # itemize and and write the tiles
-        for tile in tiles:
-            for frame in pydicom.encaps.itemize_frame(tile, 1):
-                fp.write(frame)
+        for thread_result in thread_results:
+            for tile in thread_result:
+                for frame in pydicom.encaps.itemize_frame(tile, 1):
+                    fp.write(frame)
 
         # end sequence
         fp.write_tag(pydicom.tag.SequenceDelimiterTag)
@@ -2891,7 +2903,12 @@ class WsiDicom:
         return cls(levels, labels, overviews)
 
     @classmethod
-    def convert(cls, output_path: Path, file_importer: FileImporter) -> None:
+    def convert(
+        cls,
+        output_path: Path,
+        file_importer: FileImporter,
+        levels: List[int] = None
+    ) -> None:
         """Saves wsi to files in path. Optionaly only included selected
         levels, focal planes, and/or optical paths.
 
@@ -2907,7 +2924,7 @@ class WsiDicom:
             Levels to save.
         """
         instances = (
-            file_importer.level_instances() +
+            file_importer.level_instances(levels) +
             file_importer.label_instances() +
             file_importer.overview_instances()
         )
