@@ -634,16 +634,6 @@ class WsiInstance(metaclass=ABCMeta):
         return self._blank_color
 
     @property
-    def blank_tile(self) -> Image:
-        """Return background tile"""
-        return self._blank_tile
-
-    @property
-    def blank_encoded_tile(self) -> bytes:
-        """Return encoded background tile"""
-        return self._blank_encoded_tile
-
-    @property
     def size(self) -> Size:
         """Return image size in pixels"""
         return self._size
@@ -969,47 +959,6 @@ class WsiInstance(metaclass=ABCMeta):
             index.y += previous_size.height
         return index
 
-    def _create_blank_tile(self) -> Image:
-        """Create blank tile for instance.
-
-        Returns
-        ----------
-        Image
-            Blank tile image
-        """
-        if(self._samples_per_pixel == 1):
-            self._image_mode = "L"
-        else:
-            self._image_mode = "RGB"
-        return Image.new(
-            mode=self._image_mode,
-            size=self.tile_size.to_tuple(),
-            color=self.blank_color[:self._samples_per_pixel]
-        )
-
-    @staticmethod
-    def _get_blank_color(
-        photometric_interpretation: str
-    ) -> Tuple[int, int, int]:
-        """Return color to use blank tiles.
-
-        Parameters
-        ----------
-        photometric_interpretation: str
-            The photomoetric interpretation of the dataset
-
-        Returns
-        ----------
-        int, int, int
-            RGB color
-
-        """
-        BLACK = 0
-        WHITE = 255
-        if(photometric_interpretation == "MONOCHROME2"):
-            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
-        return (WHITE, WHITE, WHITE)
-
     @staticmethod
     def _image_settings(
         transfer_syntax: pydicom.uid
@@ -1105,6 +1054,29 @@ class WsiInstance(metaclass=ABCMeta):
             base_dataset.uids.identifier,
             base_dataset.uids.base,
         )
+
+    @staticmethod
+    def _get_blank_color(
+        photometric_interpretation: str
+    ) -> Tuple[int, int, int]:
+        """Return color to use blank tiles.
+
+        Parameters
+        ----------
+        photometric_interpretation: str
+            The photomoetric interpretation of the dataset
+
+        Returns
+        ----------
+        int, int, int
+            RGB color
+
+        """
+        BLACK = 0
+        WHITE = 255
+        if(photometric_interpretation == "MONOCHROME2"):
+            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
+        return (WHITE, WHITE, WHITE)
 
 
 class WsiGenericInstance(WsiInstance):
@@ -1419,6 +1391,16 @@ class WsiDicomInstance(WsiInstance):
         """Return list of files"""
         return list(self._files.values())
 
+    @property
+    def blank_tile(self) -> Image:
+        """Return background tile"""
+        return self._blank_tile
+
+    @property
+    def blank_encoded_tile(self) -> bytes:
+        """Return encoded background tile"""
+        return self._blank_encoded_tile
+
     @classmethod
     def open(
         cls,
@@ -1728,6 +1710,24 @@ class WsiDicomInstance(WsiInstance):
             return False
         except WsiDicomSparse:
             return True
+
+    def _create_blank_tile(self) -> Image:
+        """Create blank tile for instance.
+
+        Returns
+        ----------
+        Image
+            Blank tile image
+        """
+        if(self._samples_per_pixel == 1):
+            self._image_mode = "L"
+        else:
+            self._image_mode = "RGB"
+        return Image.new(
+            mode=self._image_mode,
+            size=self.tile_size.to_tuple(),
+            color=self.blank_color[:self._samples_per_pixel]
+        )
 
 
 class WsiDicomGroup(metaclass=ABCMeta):
