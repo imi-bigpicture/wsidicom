@@ -562,7 +562,7 @@ class SparseTileIndex(TileIndex):
         return tile, z
 
 
-class Tiler(metaclass=ABCMeta):
+class TiledLevel(metaclass=ABCMeta):
     @abstractmethod
     def get_encoded_tile(self, tile: Point) -> bytes:
         raise NotImplementedError
@@ -1082,7 +1082,7 @@ class WsiInstance(metaclass=ABCMeta):
 class WsiGenericInstance(WsiInstance):
     def __init__(
         self,
-        tiler: Tiler,
+        tiler: TiledLevel,
         dataset: Dataset,
         transfer_syntax: Uid
     ):
