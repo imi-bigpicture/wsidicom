@@ -141,7 +141,7 @@ class WsiDataset(Dataset):
                         # warnings.warn(
                         #     f' is missing {key} attribute {attribute}'
                         # )
-                        print(f' is missing {key} attribute {attribute}')
+                        # print(f' is missing {key} attribute {attribute}')
                         passed[key] = False
 
         sop_class_uid = getattr(ds, "SOPClassUID", "")
