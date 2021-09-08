@@ -1,10 +1,12 @@
+import copy
 import io
 import math
 import os
 from abc import ABCMeta, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
+from typing import (Callable, Dict, List, Optional, OrderedDict, Set, Tuple,
+                    Union)
 
 import numpy as np
 import pydicom
@@ -13,10 +15,10 @@ from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import UID as Uid
 
-from .errors import (WsiDicomError, WsiDicomMatchError,
-                     WsiDicomNotFoundError, WsiDicomOutOfBondsError,
-                     WsiDicomSparse, WsiDicomUidDuplicateError)
-from .file import WsiDicomFile, WsiDataset, WSI_SOP_CLASS_UID
+from .errors import (WsiDicomError, WsiDicomMatchError, WsiDicomNotFoundError,
+                     WsiDicomOutOfBondsError, WsiDicomSparse,
+                     WsiDicomUidDuplicateError)
+from .file import WSI_SOP_CLASS_UID, WsiDataset, WsiDicomFile
 from .geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from .optical import OpticalManager
 from .stringprinting import dict_pretty_str, list_pretty_str, str_indent
@@ -570,6 +572,21 @@ class TiledLevel(metaclass=ABCMeta):
     @property
     @abstractmethod
     def tiled_size(self) -> Size:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def tile_size(self) -> Size:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def level_size(self) -> Size:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def mpp(self) -> SizeMm:
         raise NotImplementedError
 
 
@@ -1272,20 +1289,20 @@ class WsiGenericInstance(WsiInstance):
 
         tile_geometry = Region(Point(0, 0), self.plane_size)
         # Generator for the tiles
-        # tile_jobs = (
-        #     self.tiler.get_encoded_tiles(tile_geometry.iterate_all())
-        # )
-        # # itemize and and write the tiles
-        # for tile_job in tile_jobs:
-        #     for tile in tile_job:
-        #         for frame in pydicom.encaps.itemize_frame(tile, 1):
-        #             fp.write(frame)
+        tile_jobs = (
+            self.tiler.get_encoded_tiles(tile_geometry.iterate_all())
+        )
+        # itemize and and write the tiles
+        for tile_job in tile_jobs:
+            for tile in tile_job:
+                for frame in pydicom.encaps.itemize_frame(tile, 1):
+                    fp.write(frame)
 
         # This method tests faster, but also writes all data at once
         # (takes a lot of memory)
-        fp.write(
-            self.tiler.get_encapsulated_tiles(tile_geometry.iterate_all())
-        )
+        # fp.write(
+        #     self.tiler.get_encapsulated_tiles(tile_geometry.iterate_all())
+        # )
 
         # end sequence
         fp.write_tag(pydicom.tag.SequenceDelimiterTag)
@@ -2710,34 +2727,118 @@ class WsiDicomLevels(WsiDicomSeries):
         return closest
 
 
+class Tiler(metaclass=ABCMeta):
+    pass
+
+
 class FileImporter(metaclass=ABCMeta):
     def __init__(
         self,
-        filepath: Path,
+        tiler: Tiler,
         base_dataset: Dataset,
-        include_series: Dict[str, Tuple[int, Dict[int, Union[str, Dataset]]]],
-        transfer_syntax: Uid
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
+        include_levels: List[int] = None,
+        include_label: bool = True,
+        include_overview: bool = True,
+        transfer_syntax: Uid = pydicom.uid.JPEGBaseline8Bit
     ):
-        self.filepath = filepath
+        self.tiler = tiler
         self.base_dataset = base_dataset
-        self.include_series = include_series
+        self.include_levels = include_levels
+        self.include_label = include_label
+        self.include_overview = include_overview
         self.transfer_syntax = transfer_syntax
+        self.uid_generator = uid_generator
 
-    @abstractmethod
-    def level_instances(self) -> List[WsiGenericInstance]:
-        raise NotImplementedError
+    def level_instances(self):
+        instances = []
+        if self.include_levels is not None:
+            include_levels = self.include_levels
+        else:
+            include_levels = range(len(self.tiler.levels))
+        for level_index in include_levels:
+            level = self.tiler.get_level(level_index)
+            instance_dataset = self._create_instance_dataset(
+                'VOLUME',
+                level_index,
+                level
+            )
 
-    @abstractmethod
-    def label_instances(self) -> List[WsiGenericInstance]:
-        raise NotImplementedError
+            instance = WsiGenericInstance(
+                level,
+                instance_dataset,
+                self.transfer_syntax
+            )
+            instances.append(instance)
+        return instances
 
-    @abstractmethod
-    def overview_instances(self) -> List[WsiGenericInstance]:
-        raise NotImplementedError
+    def label_instances(self):
+        return []
 
-    @abstractmethod
+    def overview_instances(self):
+        return []
+
     def close(self) -> None:
-        raise NotImplementedError
+        self.tiler.close()
+
+    @staticmethod
+    def _get_image_type(image_flavor: str, level_index: int) -> List[str]:
+        if image_flavor == 'VOLUME' and level_index == 0:
+            return ['ORGINAL', 'PRIMARY', 'VOLUME', 'NONE']
+        return ['DERIVED', 'PRIMARY', 'VOLUME', 'RESAMPLED']
+
+    def _create_instance_dataset(
+        self,
+        image_flavour: str,
+        level_index: int,
+        level: TiledLevel,
+    ) -> Dataset:
+        dataset = copy.deepcopy(self.base_dataset)
+        dataset.ImageType = self._get_image_type(image_flavour, level_index)
+        dataset.SOPInstanceUID = self.uid_generator()
+
+        shared_functional_group_sequence = Dataset()
+        pixel_measure_sequence = Dataset()
+        pixel_measure_sequence.PixelSpacing = [
+            level.mpp.width,
+            level.mpp.height
+        ]
+        pixel_measure_sequence.SpacingBetweenSlices = 0.0
+        pixel_measure_sequence.SliceThickness = 0.0
+        shared_functional_group_sequence.PixelMeasuresSequence = (
+            DicomSequence([pixel_measure_sequence])
+        )
+        dataset.SharedFunctionalGroupsSequence = DicomSequence(
+            [shared_functional_group_sequence]
+        )
+        dataset.TotalPixelMatrixColumns = level.level_size.width
+        dataset.TotalPixelMatrixRows = level.level_size.height
+        dataset.Columns = level.tile_size.width
+        dataset.Rows = level.tile_size.height
+        dataset.ImagedVolumeWidth = (
+            level.level_size.width * level.mpp.width
+        )
+        dataset.ImagedVolumeHeight = (
+            level.level_size.height * level.mpp.height
+        )
+        dataset.ImagedVolumeDepth = 0.0
+        # If PhotometricInterpretation is YBR and no subsampling
+        dataset.SamplesPerPixel = 3
+        dataset.PhotometricInterpretation = 'YBR_FULL'
+        # If transfer syntax pydicom.uid.JPEGBaseline8Bit
+        dataset.BitsAllocated = 8
+        dataset.BitsStored = 8
+        dataset.HighBit = 8
+        dataset.PixelRepresentation = 0
+        dataset.LossyImageCompression = '01'
+        dataset.LossyImageCompressionRatio = 1
+        dataset.LossyImageCompressionMethod = 'ISO_10918_1'
+
+        # Should be incremented
+        dataset.InstanceNumber = 0
+        dataset.FocusMethod = 'AUTO'
+        dataset.ExtendedDepthOfField = 'NO'
+        return dataset
 
 
 class WsiDicom:
@@ -2895,8 +2996,7 @@ class WsiDicom:
     @classmethod
     def import_wsi(
         cls,
-        file_importer: FileImporter,
-        levels: List[int] = None
+        file_importer: FileImporter
     ) -> 'WsiDicom':
         levels = WsiDicomLevels.open(file_importer.level_instances())
         labels = WsiDicomLabels.open(file_importer.label_instances())
