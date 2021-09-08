@@ -2021,7 +2021,7 @@ class AnnotationInstance:
                 else:
                     raise NotImplementedError("Unsupported Graphic type")
                 groups.append(annotation)
-        return AnnotationInstance(groups, frame_of_reference)
+        return cls(groups, frame_of_reference)
 
     def __getitem__(
         self,

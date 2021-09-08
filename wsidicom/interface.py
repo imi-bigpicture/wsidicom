@@ -87,28 +87,16 @@ class WsiDicomFile:
                 ds.PhotometricInterpretation
                 )
             self._optical_path_sequence = ds.OpticalPathSequence
-
+            self._shared_frame_sequence = ds.SharedFunctionalGroupsSequence
+            self._per_frame_sequence = getattr(
+                ds,
+                'PerFrameFunctionalGroupsSequence',
+                None
+            )
             if self.tile_type == 'TILED_FULL':
-                try:
-                    self._frame_sequence = ds.SharedFunctionalGroupsSequence
-                except AttributeError:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        'Tiled full file missing shared functional'
-                        'group sequence'
-                    )
                 self._focal_planes = int(
                     getattr(ds, 'TotalPixelMatrixFocalPlanes', 1)
                 )
-            else:
-                try:
-                    self._frame_sequence = ds.PerFrameFunctionalGroupsSequence
-                except AttributeError:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        'Tiled sparse file missing per frame functional'
-                        'group sequence'
-                    )
 
             self._frame_positions = self._parse_pixel_data()
 
@@ -202,11 +190,16 @@ class WsiDicomFile:
         return self._optical_path_sequence
 
     @property
-    def frame_sequence(self) -> DicomSequence:
-        """Return DICOM Shared functional group sequence if TILED_FULL or
-        Per frame functional groups sequence if TILED_SPARSE.
+    def shared_frame_sequence(self) -> DicomSequence:
+        """Return DICOM Shared functional group sequence.
         """
-        return self._frame_sequence
+        return self._shared_frame_sequence
+
+    @property
+    def per_frame_sequence(self) -> Optional[DicomSequence]:
+        """Return DICOM Per frame functional groups sequence.
+        """
+        return self._per_frame_sequence
 
     @property
     def focal_planes(self) -> int:
@@ -444,7 +437,7 @@ class WsiDicomFile:
         )
         if not syntax_supported:
             warnings.warn(
-                "Non-supported transfer syntax"
+                "Non-supported transfer syntax "
                 f"{transfer_syntax_uid}"
             )
         if image_type_supported and syntax_supported:
@@ -1036,7 +1029,7 @@ class FullTileIndex(TileIndex):
         DECIMALS = 3
         focal_planes: List[float] = []
         for file in files.values():
-            sequence = file.frame_sequence[0]
+            sequence = file.shared_frame_sequence[0]
             spacing = getattr(
                 sequence.PixelMeasuresSequence[0],
                 'SpacingBetweenSlices',
@@ -1183,10 +1176,15 @@ class SparseTileIndex(TileIndex):
         """
         focal_planes: List[float] = []
         for file in files.values():
-            for frame in file.frame_sequence:
+            if 'PlanePositionSlideSequence' in file.shared_frame_sequence[0]:
+                frame_sequence = file.shared_frame_sequence
+            else:
+                frame_sequence = file.per_frame_sequence
+            for frame in frame_sequence:
                 try:
                     (tile, z) = self._get_frame_coordinates(frame)
                 except AttributeError:
+                    print(frame)
                     raise WsiDicomFileError(
                         file.filepath,
                         "Invalid plane position slide sequence"
@@ -1214,7 +1212,11 @@ class SparseTileIndex(TileIndex):
         planes: Dict[Tuple[float, str], SparseTilePlane] = {}
 
         for file_offset, file in files.items():
-            for i, frame in enumerate(file.frame_sequence):
+            if 'PlanePositionSlideSequence' in file.shared_frame_sequence[0]:
+                frame_sequence = file.shared_frame_sequence
+            else:
+                frame_sequence = file.per_frame_sequence
+            for i, frame in enumerate(frame_sequence):
                 (tile, z) = self._get_frame_coordinates(frame)
                 optical_sequence = getattr(
                     frame,
@@ -1257,8 +1259,8 @@ class SparseTileIndex(TileIndex):
             )
 
     def _get_frame_coordinates(
-            self,
-            frame: DicomSequence
+        self,
+        frame: DicomSequence
     ) -> Tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
         In the Plane Position Slide Sequence x and y are defined in mm and z in
@@ -2791,7 +2793,7 @@ class WsiDicomLabels(WsiDicomSeries):
             base_file.uids.base,
         )
         labels = WsiDicomStack.open(filtered_files, optical)
-        return WsiDicomLabels(labels)
+        return cls(labels)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
@@ -2825,7 +2827,7 @@ class WsiDicomOverviews(WsiDicomSeries):
             base_file.uids.base,
         )
         overviews = WsiDicomStack.open(filtered_files, optical)
-        return WsiDicomOverviews(overviews)
+        return cls(overviews)
 
 
 class WsiDicomLevels(WsiDicomSeries):
@@ -2905,7 +2907,7 @@ class WsiDicomLevels(WsiDicomSeries):
             base_file.tile_size
         )
         levels = WsiDicomLevel.open_levels(filtered_files, optical)
-        return WsiDicomLevels(levels)
+        return cls(levels)
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -3051,18 +3053,18 @@ class WsiDicom:
         self._levels: WsiDicomLevels = self._assign(series, 'levels')
         self._labels: WsiDicomLabels = self._assign(series, 'labels')
         self._overviews: WsiDicomOverviews = self._assign(series, 'overviews')
+        self.annotations: AnnotationInstance = annotations
 
         self.uids = self._validate_collection(
             [self.levels, self.labels, self.overviews],
             optical
         )
         self.optical = optical
+
         if (
-            annotations is not None and
-            annotations.frame_of_reference == self.uids.frame_of_reference
+            self.annotations.frame_of_reference is not None and
+            self.annotations.frame_of_reference != self.uids.frame_of_reference
         ):
-            self.annotations: AnnotationInstance = annotations
-        else:
             warnings.warn("Annotations frame of referance does not match")
         base = self.levels.base_level.default_instance
         self.ds = base.create_ds()
@@ -3071,7 +3073,7 @@ class WsiDicom:
     def __enter__(self):
         return self
 
-    def __exit__(self):
+    def __exit__(self, type, value, traceback):
         self.close()
 
     def __str__(self) -> str:
@@ -3175,8 +3177,7 @@ class WsiDicom:
         labels = WsiDicomLabels.open(label_files, optical, base_file)
         overviews = WsiDicomOverviews.open(overview_files, optical, base_file)
         annotations = AnnotationInstance.open(annotation_files)
-
-        return WsiDicom(
+        return cls(
             [levels, labels, overviews],
             optical=optical,
             annotations=annotations
