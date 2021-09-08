@@ -1,7 +1,7 @@
 import warnings
 from functools import cached_property
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import pydicom
 from pydicom.dataset import Dataset
@@ -190,11 +190,12 @@ class WsiDataset(Dataset):
             self.uids.match(other_dataset.uids) and
             self.image_size == other_dataset.image_size and
             self.tile_size == other_dataset.tile_size and
-            self.tile_type == other_dataset.tile_type and
-            (
-                self.get_supported_wsi_dicom_type()
-                == other_dataset.get_supported_wsi_dicom_type()
-            )
+            self.tile_type == other_dataset.tile_type
+            # and
+            # (
+            #     self.get_supported_wsi_dicom_type()
+            #     == other_dataset.get_supported_wsi_dicom_type()
+            # )
         )
 
     def matches_series(self, uids: BaseUids, tile_size: Size = None) -> bool:
@@ -459,25 +460,30 @@ class WsiDataset(Dataset):
             return self.mm_depth
 
     @staticmethod
-    def create_test_base_dataset() -> Dataset:
-        ds = Dataset()
-        ds.StudyInstanceUID = pydicom.uid.generate_uid()
-        ds.SeriesInstanceUID = pydicom.uid.generate_uid()
-        ds.FrameOfReferenceUID = pydicom.uid.generate_uid()
-        ds.Modality = 'SM'
-        ds.SOPClassUID = '1.2.840.10008.5.1.4.1.1.77.1.6'
-        ds.Manufacturer = 'Manufacturer'
-        ds.ManufacturerModelName = 'ManufacturerModelName'
-        ds.DeviceSerialNumber = 'DeviceSerialNumber'
-        ds.SoftwareVersions = ['SoftwareVersions']
+    def create_test_base_dataset(
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+    ) -> Dataset:
+        dataset = Dataset()
+        dataset.StudyInstanceUID = uid_generator()
+        dataset.SeriesInstanceUID = uid_generator()
+        dataset.FrameOfReferenceUID = uid_generator()
+        dataset.Modality = 'SM'
+        dataset.SOPClassUID = '1.2.840.10008.5.1.4.1.1.77.1.6'
+        dataset.Manufacturer = 'Manufacturer'
+        dataset.ManufacturerModelName = 'ManufacturerModelName'
+        dataset.DeviceSerialNumber = 'DeviceSerialNumber'
+        dataset.SoftwareVersions = ['SoftwareVersions']
 
-        ds.ContainerIdentifier = 'ContainerIdentifier'
+        # Generic specimen sequence
+        dataset.ContainerIdentifier = 'ContainerIdentifier'
         specimen_description_sequence = Dataset()
         specimen_description_sequence.SpecimenIdentifier = 'SpecimenIdentifier'
-        specimen_description_sequence.SpecimenUID = pydicom.uid.generate_uid()
-        ds.SpecimenDescriptionSequence = DicomSequence(
+        specimen_description_sequence.SpecimenUID = uid_generator()
+        dataset.SpecimenDescriptionSequence = DicomSequence(
             [specimen_description_sequence]
         )
+
+        # Generic optical path sequence
         optical_path_sequence = Dataset()
         optical_path_sequence.OpticalPathIdentifier = '1'
         illumination_type_code_sequence = Dataset()
@@ -489,7 +495,6 @@ class WsiDataset(Dataset):
         optical_path_sequence.IlluminationTypeCodeSequence = DicomSequence(
             [illumination_type_code_sequence]
         )
-
         illumination_color_code_sequence = Dataset()
         illumination_color_code_sequence.CodeValue = 'R-102C0'
         illumination_color_code_sequence.CodingSchemeDesignator = 'SRT'
@@ -497,10 +502,35 @@ class WsiDataset(Dataset):
         optical_path_sequence.IlluminationColorCodeSequence = DicomSequence(
             [illumination_color_code_sequence]
         )
+        dataset.OpticalPathSequence = DicomSequence([optical_path_sequence])
 
-        ds.OpticalPathSequence = DicomSequence([optical_path_sequence])
+        # Generic dimension organization sequence
+        dimension_organization_uid = uid_generator()
+        dimension_organization_sequence = Dataset()
+        dimension_organization_sequence.DimensionOrganizationUID = (
+            dimension_organization_uid
+        )
+        dataset.DimensionOrganizationSequence = DicomSequence(
+            [dimension_organization_sequence]
+        )
 
-        return ds
+        # Generic dimension index sequence
+        dimension_index_sequence = Dataset()
+        dimension_index_sequence.DimensionOrganizationUID = (
+            dimension_organization_uid
+        )
+        dimension_index_sequence.DimensionIndexPointer = (
+            pydicom.tag.Tag('PlanePositionSlideSequence')
+        )
+        dataset.DimensionIndexSequence = DicomSequence(
+            [dimension_index_sequence]
+        )
+
+        dataset.BurnedInAnnotation = 'NO'
+        dataset.BurnedInAnnotation = 'NO'
+        dataset.SpecimenLabelInImage = 'NO'
+        dataset.VolumetricProperties = 'VOLUME'
+        return dataset
 
 
 class WsiDicomFile:
