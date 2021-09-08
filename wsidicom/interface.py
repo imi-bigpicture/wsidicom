@@ -3026,8 +3026,6 @@ class WsiDicom:
         for instance in instances:
             instance.save(output_path)
 
-        file_importer.close()
-
     @staticmethod
     def _get_filepaths(path: Union[str, List[str]]) -> List[Path]:
         """Return file paths to files in path.
