@@ -770,29 +770,6 @@ class WsiInstance(metaclass=ABCMeta):
         """Return base uids"""
         return self._uids
 
-    def create_base_dataset(self) -> Dataset:
-        """Create a base pydicom dataset based on first file in instance.
-
-        Returns
-        ----------
-        Dataset
-            Pydicom dataset with common attributes for the levels.
-        """
-        INCLUDE = [0x0002, 0x0008, 0x0010, 0x0018, 0x0020, 0x0040]
-        DELETE = ['ImageType', 'SOPInstanceUID', 'ContentTime',
-                  'InstanceNumber', 'DimensionOrganizationSequence']
-
-        base_ds = self.contained_datasets[0]
-        ds = Dataset()
-        for group in INCLUDE:
-            group_ds = base_ds.group_dataset(group)
-            for element in group_ds.iterall():
-                ds.add(element)
-        for delete in DELETE:
-            if delete in ds:
-                ds.pop(delete)
-        return ds
-
     def stitch_tiles(self, region: Region, path: str, z: float) -> Image:
         """Stitches tiles together to form requested image.
 
@@ -2952,8 +2929,6 @@ class WsiDicom:
         self.optical = OpticalManager.open(
             levels.instances + labels.instances + overviews.instances
         )
-        base = self.levels.base_level.default_instance
-        self.base_dataset = base.create_base_dataset()
         self.__enter__()
 
     def __enter__(self):
