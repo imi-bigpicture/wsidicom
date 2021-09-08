@@ -569,6 +569,10 @@ class TiledLevel(metaclass=ABCMeta):
     def get_encoded_tile(self, tile: Point) -> bytes:
         raise NotImplementedError
 
+    @abstractmethod
+    def get_tile(self, tile: Point) -> bytes:
+        raise NotImplementedError
+
     @property
     @abstractmethod
     def tiled_size(self) -> Size:
@@ -2465,6 +2469,8 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         try:
             base_group = groups[0]
+            # print(base_group.wsi_type)
+            # print(self.wsi_type)
             if base_group.wsi_type != self.wsi_type:
                 raise WsiDicomMatchError(
                     str(base_group), str(self)
@@ -2728,7 +2734,44 @@ class WsiDicomLevels(WsiDicomSeries):
 
 
 class Tiler(metaclass=ABCMeta):
-    pass
+    @property
+    @abstractmethod
+    def level_count(self) -> int:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def label_count(self) -> int:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def overview_count(self) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_level(self, level: int) -> TiledLevel:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_label(self, index: int = 0) -> TiledLevel:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_overview(self, index: int = 0) -> TiledLevel:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_tile(
+        self,
+        level: int,
+        tile_position: Tuple[int, int]
+    ) -> bytes:
+        raise NotImplementedError
+
+    @abstractmethod
+    def close() -> None:
+        raise NotImplementedError
 
 
 class FileImporter(metaclass=ABCMeta):
@@ -2755,7 +2798,7 @@ class FileImporter(metaclass=ABCMeta):
         if self.include_levels is not None:
             include_levels = self.include_levels
         else:
-            include_levels = range(len(self.tiler.levels))
+            include_levels = range(self.tiler.level_count)
         for level_index in include_levels:
             level = self.tiler.get_level(level_index)
             instance_dataset = self._create_instance_dataset(
@@ -2763,7 +2806,6 @@ class FileImporter(metaclass=ABCMeta):
                 level_index,
                 level
             )
-
             instance = WsiGenericInstance(
                 level,
                 instance_dataset,
@@ -2773,10 +2815,40 @@ class FileImporter(metaclass=ABCMeta):
         return instances
 
     def label_instances(self):
-        return []
+        instances = []
+        if self.include_label:
+            for label_index in range(self.tiler.label_count):
+                label = self.tiler.get_label(label_index)
+                instance_dataset = self._create_instance_dataset(
+                    'LABEL',
+                    label_index,
+                    label
+                )
+                instance = WsiGenericInstance(
+                    label,
+                    instance_dataset,
+                    self.transfer_syntax
+                )
+                instances.append(instance)
+        return instances
 
     def overview_instances(self):
-        return []
+        instances = []
+        if self.include_overview:
+            for overview_index in range(self.tiler.overview_count):
+                overview = self.tiler.get_overview(overview_index)
+                instance_dataset = self._create_instance_dataset(
+                    'OVERVIEW',
+                    overview_index,
+                    overview
+                )
+                instance = WsiGenericInstance(
+                    overview,
+                    instance_dataset,
+                    self.transfer_syntax
+                )
+                instances.append(instance)
+        return instances
 
     def close(self) -> None:
         self.tiler.close()
@@ -2784,8 +2856,11 @@ class FileImporter(metaclass=ABCMeta):
     @staticmethod
     def _get_image_type(image_flavor: str, level_index: int) -> List[str]:
         if image_flavor == 'VOLUME' and level_index == 0:
-            return ['ORGINAL', 'PRIMARY', 'VOLUME', 'NONE']
-        return ['DERIVED', 'PRIMARY', 'VOLUME', 'RESAMPLED']
+            resampled = 'NONE'
+        else:
+            resampled = 'RESAMPLED'
+
+        return ['ORGINAL', 'PRIMARY', image_flavor, resampled]
 
     def _create_instance_dataset(
         self,
