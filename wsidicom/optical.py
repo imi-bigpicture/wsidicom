@@ -231,7 +231,7 @@ class OpticalFilter(metaclass=ABCMeta):
         if self.nominal is not None:
             ds.LightPathFilterPassBand = self.nominal
         if self.low_pass is not None and self.high_pass is not None:
-            ds.LightPathFilterPassThroughwavelengthh = [
+            ds.LightPathFilterPassThroughwavelength = [
                 self.low_pass,
                 self.high_pass
             ]
@@ -462,16 +462,10 @@ class OpticalPath:
         self.lenses = lenses
 
     def __str__(self):
-        return self.pretty_str()
-
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: int = None
-    ) -> str:
-        if(self.description == ''):
-            return self.identifier
-        return self.identifier + ':' + self.description
+        string = self.identifier
+        if self.description is not None:
+            string += ' - ' + self.description
+        return string
 
     def to_ds(self) -> Dataset:
         ds = Dataset()
@@ -567,6 +561,7 @@ class OpticalManager:
                             dataset.PhotometricInterpretation
                         )
                         optical_paths[identifier] = path
+                        print(path)
         return OpticalManager(optical_paths.values())
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
