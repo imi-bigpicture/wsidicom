@@ -564,7 +564,7 @@ class SparseTileIndex(TileIndex):
         return tile, z
 
 
-class TiledLevel(metaclass=ABCMeta):
+class TiledImage(metaclass=ABCMeta):
     @abstractmethod
     def get_encoded_tile(self, tile: Point) -> bytes:
         raise NotImplementedError
@@ -1103,25 +1103,29 @@ class WsiInstance(metaclass=ABCMeta):
 class WsiGenericInstance(WsiInstance):
     def __init__(
         self,
-        tiler: TiledLevel,
+        image: TiledImage,
         dataset: Dataset,
         transfer_syntax: Uid
     ):
         self._dataset = WsiDataset(dataset)
         super().__init__(self._dataset, transfer_syntax)
-        self.tiler = tiler
+        self._image = image
         self._focal_planes = [0]
         self._optical_paths = ['1']
 
     def __str__(self) -> str:
-        return f"WsiGenericInstance of {self.tiler}"
+        return f"WsiGenericInstance of {self.image}"
 
     def pretty_str(
         self,
         indent: int = 0,
         depth: int = None
     ) -> str:
-        return f"WsiGenericInstance of {self.tiler}"
+        return f"WsiGenericInstance of {self.image}"
+
+    @property
+    def image(self) -> TiledImage:
+        return self._image
 
     @property
     def dataset(self) -> WsiDataset:
@@ -1157,7 +1161,7 @@ class WsiGenericInstance(WsiInstance):
         z: float,
         path: str
     ) -> Image:
-        tile_frame = self.tiler.get_encoded_tile(tile)
+        tile_frame = self.image.get_encoded_tile(tile)
         image = Image.open(io.BytesIO(tile_frame))
         return self.crop_tile_to_level(tile, image)
 
@@ -1168,7 +1172,7 @@ class WsiGenericInstance(WsiInstance):
         path: str,
         crop: bool = True
     ) -> bytes:
-        tile_frame = self.tiler.get_encoded_tile(tile)
+        tile_frame = self.image.get_encoded_tile(tile)
         if not crop:
             return tile_frame
         return self.crop_encoded_tile_to_level(tile, tile_frame)
@@ -1294,7 +1298,7 @@ class WsiGenericInstance(WsiInstance):
         tile_geometry = Region(Point(0, 0), self.plane_size)
         # Generator for the tiles
         tile_jobs = (
-            self.tiler.get_encoded_tiles(tile_geometry.iterate_all())
+            self.image.get_encoded_tiles(tile_geometry.iterate_all())
         )
         # itemize and and write the tiles
         for tile_job in tile_jobs:
@@ -2750,15 +2754,15 @@ class Tiler(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def get_level(self, level: int) -> TiledLevel:
+    def get_level(self, level: int) -> TiledImage:
         raise NotImplementedError
 
     @abstractmethod
-    def get_label(self, index: int = 0) -> TiledLevel:
+    def get_label(self, index: int = 0) -> TiledImage:
         raise NotImplementedError
 
     @abstractmethod
-    def get_overview(self, index: int = 0) -> TiledLevel:
+    def get_overview(self, index: int = 0) -> TiledImage:
         raise NotImplementedError
 
     @abstractmethod
@@ -2866,7 +2870,7 @@ class FileImporter(metaclass=ABCMeta):
         self,
         image_flavour: str,
         level_index: int,
-        level: TiledLevel,
+        level: TiledImage,
     ) -> Dataset:
         dataset = copy.deepcopy(self.base_dataset)
         dataset.ImageType = self._get_image_type(image_flavour, level_index)
