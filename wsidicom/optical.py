@@ -561,7 +561,6 @@ class OpticalManager:
                             dataset.PhotometricInterpretation
                         )
                         optical_paths[identifier] = path
-                        print(path)
         return OpticalManager(optical_paths.values())
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
