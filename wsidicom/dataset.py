@@ -1,3 +1,4 @@
+import copy
 import warnings
 from functools import cached_property
 from typing import Callable, List, Optional, Tuple
@@ -9,7 +10,7 @@ from pydicom.uid import UID as Uid
 
 from .errors import WsiDicomError, WsiDicomFileError, WsiDicomUidDuplicateError
 from .geometry import Size, SizeMm
-from .uid import BaseUids, FileUids, WSI_SOP_CLASS_UID
+from .uid import WSI_SOP_CLASS_UID, BaseUids, FileUids
 
 
 class WsiDataset(Dataset):
@@ -529,4 +530,64 @@ class WsiDataset(Dataset):
         dataset.BurnedInAnnotation = 'NO'
         dataset.SpecimenLabelInImage = 'NO'
         dataset.VolumetricProperties = 'VOLUME'
+        return dataset
+
+    @staticmethod
+    def _get_image_type(image_flavor: str, level_index: int) -> List[str]:
+        if image_flavor == 'VOLUME' and level_index == 0:
+            resampled = 'NONE'
+        else:
+            resampled = 'RESAMPLED'
+
+        return ['ORGINAL', 'PRIMARY', image_flavor, resampled]
+
+    @classmethod
+    def create_instance_dataset(
+        cls,
+        base_dataset: Dataset,
+        image_flavour: str,
+        level_index: int,
+        image_size: Size,
+        tile_size: Size,
+        mpp: SizeMm,
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+    ) -> Dataset:
+        dataset = copy.deepcopy(base_dataset)
+        dataset.ImageType = cls._get_image_type(image_flavour, level_index)
+        dataset.SOPInstanceUID = uid_generator()
+
+        shared_functional_group_sequence = Dataset()
+        pixel_measure_sequence = Dataset()
+        pixel_measure_sequence.PixelSpacing = [mpp.width, mpp.height]
+        pixel_measure_sequence.SpacingBetweenSlices = 0.0
+        pixel_measure_sequence.SliceThickness = 0.0
+        shared_functional_group_sequence.PixelMeasuresSequence = (
+            DicomSequence([pixel_measure_sequence])
+        )
+        dataset.SharedFunctionalGroupsSequence = DicomSequence(
+            [shared_functional_group_sequence]
+        )
+        dataset.TotalPixelMatrixColumns = image_size.width
+        dataset.TotalPixelMatrixRows = image_size.height
+        dataset.Columns = tile_size.width
+        dataset.Rows = tile_size.height
+        dataset.ImagedVolumeWidth = image_size.width * mpp.width
+        dataset.ImagedVolumeHeight = image_size.height * mpp.height
+        dataset.ImagedVolumeDepth = 0.0
+        # If PhotometricInterpretation is YBR and no subsampling
+        dataset.SamplesPerPixel = 3
+        dataset.PhotometricInterpretation = 'YBR_FULL'
+        # If transfer syntax pydicom.uid.JPEGBaseline8Bit
+        dataset.BitsAllocated = 8
+        dataset.BitsStored = 8
+        dataset.HighBit = 8
+        dataset.PixelRepresentation = 0
+        dataset.LossyImageCompression = '01'
+        dataset.LossyImageCompressionRatio = 1
+        dataset.LossyImageCompressionMethod = 'ISO_10918_1'
+
+        # Should be incremented
+        dataset.InstanceNumber = 0
+        dataset.FocusMethod = 'AUTO'
+        dataset.ExtendedDepthOfField = 'NO'
         return dataset
