@@ -10,7 +10,7 @@ from wsidicom.errors import (WsiDicomNotFoundError, WsiDicomOutOfBondsError,
                              WsiDicomSparse)
 from wsidicom.file import WsiDicomFile
 from wsidicom.dataset import WsiDataset
-from wsidicom.geometry import Point, Region, Size
+from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.optical import OpticalManager
 
 
@@ -31,6 +31,11 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def tiled_size(self) -> Size:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def pixel_spacing(self) -> SizeMm:
         raise NotImplementedError
 
     @property
@@ -103,6 +108,159 @@ class ImageData(metaclass=ABCMeta):
             (z in self.focal_planes) and
             (path in self.optical_paths)
         )
+
+
+class DicomImageData(ImageData):
+    """Class reading image data from dicom file(s). Image data can
+    be sparsly or fully tiled-"""
+    def __init__(self, files: List[WsiDicomFile]) -> None:
+        # Key is frame offset
+        self._files = OrderedDict(
+            (file.frame_offset, file) for file
+            in sorted(files, key=lambda file: file.frame_offset)
+        )
+
+        base_file = files[0]
+        datasets = [file.dataset for file in self._files.values()]
+        if base_file.dataset.tile_type == 'TILED_FULL':
+            self.tiles = FullTileIndex(datasets)
+        else:
+            self.tiles = SparseTileIndex(datasets)
+
+        self._pixel_spacing = base_file.dataset.pixel_spacing
+
+    @property
+    def image_size(self) -> Size:
+        return self.tiles.image_size
+
+    @property
+    def tile_size(self) -> Size:
+        return self.tiles.tile_size
+
+    @property
+    def tiled_size(self) -> Size:
+        return self.tiles.tiled_size
+
+    @property
+    def focal_planes(self) -> List[float]:
+        return self.tiles.focal_planes
+
+    @property
+    def optical_paths(self) -> List[str]:
+        return self.tiles.optical_paths
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
+        return self._pixel_spacing
+
+    def get_tile(self, tile: Point, z: float, path: str) -> bytes:
+        frame_index = self._get_frame_index(tile, z, path)
+        return self._get_tile_frame(frame_index)
+
+    def get_filepointer(
+        self,
+        tile: Point,
+        z: float,
+        path: str
+    ) -> Tuple[pydicom.filebase.DicomFileLike, int, int]:
+        """Return file pointer, frame position, and frame lenght for tile with
+        z and path. If frame is inside tile geometry but no tile exists in
+        frame data (sparse) WsiDicomSparse is raised.
+
+        Parameters
+        ----------
+        tile: Point
+            Tile coordinate to get.
+        z: float
+            z coordinate to get tile for.
+        path: str
+            Optical path to get tile for.
+
+        Returns
+        ----------
+        Tuple[pydicom.filebase.DicomFileLike, int, int]:
+            File pointer, frame offset and frame lenght in number of bytes.
+        """
+        frame_index = self._get_frame_index(tile, z, path)
+        file = self._get_file(frame_index)
+        return file.get_filepointer(frame_index)
+
+    def _get_file(self, frame_index: int) -> WsiDicomFile:
+        """Return file contaning frame index. Raises WsiDicomNotFoundError if
+        frame is not found.
+
+        Parameters
+        ----------
+        frame_index: int
+             Frame index to get
+
+        Returns
+        ----------
+        WsiDicomFile
+            File containing the frame
+        """
+        for frame_offset, file in self._files.items():
+            if (frame_index < frame_offset + file.frame_count and
+                    frame_index >= frame_offset):
+                return file
+
+        raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
+
+    def _get_tile_frame(self, frame_index: int) -> bytes:
+        """Return tile frame for frame index.
+
+        Parameters
+        ----------
+        frame_index: int
+             Frame index to get
+
+        Returns
+        ----------
+        bytes
+            The frame in bytes
+        """
+        file = self._get_file(frame_index)
+        tile_frame = file._read_frame(frame_index)
+        return tile_frame
+
+    def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
+        """Return frame index for tile. Raises WsiDicomOutOfBondsError if
+        tile, z, or path is not valid. Raises WsiDicomSparse if index is sparse
+        and tile is not in frame data.
+
+        Parameters
+        ----------
+        tile: Point
+             Tile coordiante
+        z: float
+            Z coordiante
+        path: str
+            Optical identifier
+
+        Returns
+        ----------
+        int
+            Tile frame index
+        """
+        tile_region = Region(position=tile, size=Size(0, 0))
+        if not self.valid_tiles(tile_region, z, path):
+            raise WsiDicomOutOfBondsError(
+                f"Tile region {tile_region}",
+                f"plane {self.tiles.tiled_size}"
+            )
+        frame_index = self.tiles.get_frame_index(tile, z, path)
+        return frame_index
+
+    def is_sparse(self, tile: Point, z: float, path: str) -> bool:
+        try:
+            self.tiles.get_frame_index(tile, z, path)
+            return False
+        except WsiDicomSparse:
+            return True
+
+    def close(self) -> None:
+        for file in self._files.values():
+            file.close()
 
 
 class SparseTilePlane:
@@ -512,7 +670,6 @@ class SparseTileIndex(TileIndex):
         for dataset in datasets:
             file_offset = dataset.file_offset
             frame_sequence = dataset.frame_sequence
-
             for i, frame in enumerate(frame_sequence):
                 (tile, z) = self._read_frame_coordinates(frame)
                 identifier = dataset.read_optical_path_identifier(frame)
@@ -550,153 +707,6 @@ class SparseTileIndex(TileIndex):
         z = round(float(position.ZOffsetInSlideCoordinateSystem), DECIMALS)
         tile = Point(x=x, y=y) // self.tile_size
         return tile, z
-
-
-class DicomImageData(ImageData):
-    """Generic class reading image data from dicom file(s). Image data can
-    be sparsly or fully tiled-"""
-    def __init__(self, files: List[WsiDicomFile]) -> None:
-        # Key is frame offset
-        self._files = OrderedDict(
-            (file.frame_offset, file) for file
-            in sorted(files, key=lambda file: file.frame_offset)
-        )
-
-        base_file = files[0]
-        datasets = [file.dataset for file in self._files.values()]
-        if base_file.dataset.tile_type == 'TILED_FULL':
-            self.tiles = FullTileIndex(datasets)
-        else:
-            self.tiles = SparseTileIndex(datasets)
-
-    @property
-    def image_size(self) -> Size:
-        return self.tiles.image_size
-
-    @property
-    def tile_size(self) -> Size:
-        return self.tiles.tile_size
-
-    @property
-    def tiled_size(self) -> Size:
-        return self.tiles.tiled_size
-
-    @property
-    def focal_planes(self) -> List[float]:
-        return self.tiles.focal_planes
-
-    @property
-    def optical_paths(self) -> List[str]:
-        return self.tiles.optical_paths
-
-    def get_tile(self, tile: Point, z: float, path: str) -> bytes:
-        frame_index = self._get_frame_index(tile, z, path)
-        return self._get_tile_frame(frame_index)
-
-    def get_filepointer(
-        self,
-        tile: Point,
-        z: float,
-        path: str
-    ) -> Tuple[pydicom.filebase.DicomFileLike, int, int]:
-        """Return file pointer, frame position, and frame lenght for tile with
-        z and path. If frame is inside tile geometry but no tile exists in
-        frame data (sparse) WsiDicomSparse is raised.
-
-        Parameters
-        ----------
-        tile: Point
-            Tile coordinate to get.
-        z: float
-            z coordinate to get tile for.
-        path: str
-            Optical path to get tile for.
-
-        Returns
-        ----------
-        Tuple[pydicom.filebase.DicomFileLike, int, int]:
-            File pointer, frame offset and frame lenght in number of bytes.
-        """
-        frame_index = self._get_frame_index(tile, z, path)
-        file = self._get_file(frame_index)
-        return file.get_filepointer(frame_index)
-
-    def _get_file(self, frame_index: int) -> WsiDicomFile:
-        """Return file contaning frame index. Raises WsiDicomNotFoundError if
-        frame is not found.
-
-        Parameters
-        ----------
-        frame_index: int
-             Frame index to get
-
-        Returns
-        ----------
-        WsiDicomFile
-            File containing the frame
-        """
-        for frame_offset, file in self._files.items():
-            if (frame_index < frame_offset + file.frame_count and
-                    frame_index >= frame_offset):
-                return file
-
-        raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
-
-    def _get_tile_frame(self, frame_index: int) -> bytes:
-        """Return tile frame for frame index.
-
-        Parameters
-        ----------
-        frame_index: int
-             Frame index to get
-
-        Returns
-        ----------
-        bytes
-            The frame in bytes
-        """
-        file = self._get_file(frame_index)
-        tile_frame = file._read_frame(frame_index)
-        return tile_frame
-
-    def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Return frame index for tile. Raises WsiDicomOutOfBondsError if
-        tile, z, or path is not valid. Raises WsiDicomSparse if index is sparse
-        and tile is not in frame data.
-
-        Parameters
-        ----------
-        tile: Point
-             Tile coordiante
-        z: float
-            Z coordiante
-        path: str
-            Optical identifier
-
-        Returns
-        ----------
-        int
-            Tile frame index
-        """
-        tile_region = Region(position=tile, size=Size(0, 0))
-        if not self.valid_tiles(tile_region, z, path):
-            raise WsiDicomOutOfBondsError(
-                f"Tile region {tile_region}",
-                f"plane {self.tiles.tiled_size}"
-            )
-        frame_index = self.tiles.get_frame_index(tile, z, path)
-        return frame_index
-
-    def is_sparse(self, tile: Point, z: float, path: str) -> bool:
-        try:
-            self.tiles.get_frame_index(tile, z, path)
-            return False
-        except WsiDicomSparse:
-            return True
-
-    def close(self) -> None:
-        for file in self._files.values():
-            file.close()
 
 
 class Tiler(metaclass=ABCMeta):
