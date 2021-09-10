@@ -8,7 +8,8 @@ from pydicom.sequence import Sequence as DicomSequence
 
 from wsidicom.errors import (WsiDicomNotFoundError, WsiDicomOutOfBondsError,
                              WsiDicomSparse)
-from wsidicom.file import WsiDicomFile, WsiDataset
+from wsidicom.file import WsiDicomFile
+from wsidicom.dataset import WsiDataset
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.optical import OpticalManager
 
