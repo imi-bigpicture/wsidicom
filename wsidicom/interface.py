@@ -2,7 +2,6 @@ import copy
 import io
 import math
 import os
-from abc import ABCMeta, abstractmethod
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
@@ -18,12 +17,13 @@ from pydicom.uid import UID as Uid
 from .errors import (WsiDicomError, WsiDicomMatchError, WsiDicomNotFoundError,
                      WsiDicomOutOfBondsError, WsiDicomSparse,
                      WsiDicomUidDuplicateError)
-from .file import WSI_SOP_CLASS_UID, WsiDataset, WsiDicomFile
+from .file import WsiDicomFile
 from .geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
-from .image_data import DicomImageData, ImageData
+from .image_data import DicomImageData, ImageData, Tiler
 from .optical import OpticalManager
 from .stringprinting import dict_pretty_str, list_pretty_str, str_indent
-from .uid import BaseUids
+from .uid import BaseUids, WSI_SOP_CLASS_UID
+from .dataset import WsiDataset
 
 
 class WsiInstance:
@@ -697,7 +697,7 @@ class WsiInstance:
         tile_geometry = Region(Point(0, 0), self.tiled_size)
         # Generator for the tiles
         tile_jobs = (
-            self.image.get_encoded_tiles(tile_geometry.iterate_all())
+            self._image_data.get_encoded_tiles(tile_geometry.iterate_all())
         )
         # itemize and and write the tiles
         for tile_job in tile_jobs:
@@ -789,7 +789,7 @@ class WsiInstance:
         self._image_data.close()
 
 
-class WsiDicomGroup(metaclass=ABCMeta):
+class WsiDicomGroup:
     def __init__(
         self,
         instances: List[WsiInstance]
@@ -1408,7 +1408,7 @@ class WsiDicomLevel(WsiDicomGroup):
         return level
 
 
-class WsiDicomSeries(metaclass=ABCMeta):
+class WsiDicomSeries:
     wsi_type: str
 
     def __init__(self, groups: List[WsiDicomGroup]):
@@ -1771,48 +1771,7 @@ class WsiDicomLevels(WsiDicomSeries):
         return closest
 
 
-class Tiler(metaclass=ABCMeta):
-    @property
-    @abstractmethod
-    def level_count(self) -> int:
-        raise NotImplementedError
-
-    @property
-    @abstractmethod
-    def label_count(self) -> int:
-        raise NotImplementedError
-
-    @property
-    @abstractmethod
-    def overview_count(self) -> int:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_level(self, level: int) -> ImageData:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_label(self, index: int = 0) -> ImageData:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_overview(self, index: int = 0) -> ImageData:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_tile(
-        self,
-        level: int,
-        tile_position: Tuple[int, int]
-    ) -> bytes:
-        raise NotImplementedError
-
-    @abstractmethod
-    def close() -> None:
-        raise NotImplementedError
-
-
-class FileImporter(metaclass=ABCMeta):
+class FileImporter:
     def __init__(
         self,
         tiler: Tiler,
@@ -1838,15 +1797,15 @@ class FileImporter(metaclass=ABCMeta):
         else:
             include_levels = range(self.tiler.level_count)
         for level_index in include_levels:
-            level = self.tiler.get_level(level_index)
+            image_data = self.tiler.get_level(level_index)
             instance_dataset = self._create_instance_dataset(
                 'VOLUME',
                 level_index,
-                level
+                image_data
             )
             instance = WsiInstance(
-                level,
-                instance_dataset,
+                WsiDataset(instance_dataset),
+                image_data,
                 self.transfer_syntax
             )
             instances.append(instance)
@@ -1856,15 +1815,15 @@ class FileImporter(metaclass=ABCMeta):
         instances = []
         if self.include_label:
             for label_index in range(self.tiler.label_count):
-                label = self.tiler.get_label(label_index)
+                image_data = self.tiler.get_label(label_index)
                 instance_dataset = self._create_instance_dataset(
                     'LABEL',
                     label_index,
-                    label
+                    image_data
                 )
                 instance = WsiInstance(
-                    label,
-                    instance_dataset,
+                    WsiDataset(instance_dataset),
+                    image_data,
                     self.transfer_syntax
                 )
                 instances.append(instance)
@@ -1874,15 +1833,15 @@ class FileImporter(metaclass=ABCMeta):
         instances = []
         if self.include_overview:
             for overview_index in range(self.tiler.overview_count):
-                overview = self.tiler.get_overview(overview_index)
+                image_data = self.tiler.get_overview(overview_index)
                 instance_dataset = self._create_instance_dataset(
                     'OVERVIEW',
                     overview_index,
-                    overview
+                    image_data
                 )
                 instance = WsiInstance(
-                    overview,
-                    instance_dataset,
+                    WsiDataset(instance_dataset),
+                    image_data,
                     self.transfer_syntax
                 )
                 instances.append(instance)
@@ -1924,15 +1883,15 @@ class FileImporter(metaclass=ABCMeta):
         dataset.SharedFunctionalGroupsSequence = DicomSequence(
             [shared_functional_group_sequence]
         )
-        dataset.TotalPixelMatrixColumns = level.level_size.width
-        dataset.TotalPixelMatrixRows = level.level_size.height
+        dataset.TotalPixelMatrixColumns = level.image_size.width
+        dataset.TotalPixelMatrixRows = level.image_size.height
         dataset.Columns = level.tile_size.width
         dataset.Rows = level.tile_size.height
         dataset.ImagedVolumeWidth = (
-            level.level_size.width * level.mpp.width
+            level.image_size.width * level.mpp.width
         )
         dataset.ImagedVolumeHeight = (
-            level.level_size.height * level.mpp.height
+            level.image_size.height * level.mpp.height
         )
         dataset.ImagedVolumeDepth = 0.0
         # If PhotometricInterpretation is YBR and no subsampling

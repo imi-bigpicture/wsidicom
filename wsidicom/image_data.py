@@ -689,3 +689,44 @@ class DicomImageData(ImageData):
     def close(self) -> None:
         for file in self._files.values():
             file.close()
+
+
+class Tiler(metaclass=ABCMeta):
+    @property
+    @abstractmethod
+    def level_count(self) -> int:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def label_count(self) -> int:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def overview_count(self) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_level(self, level: int) -> ImageData:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_label(self, index: int = 0) -> ImageData:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_overview(self, index: int = 0) -> ImageData:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_tile(
+        self,
+        level: int,
+        tile_position: Tuple[int, int]
+    ) -> bytes:
+        raise NotImplementedError
+
+    @abstractmethod
+    def close() -> None:
+        raise NotImplementedError
