@@ -10,6 +10,13 @@ class BaseUids:
     series_instance: Uid
     frame_of_reference: Uid
 
+    def __str__(self) -> str:
+        return (
+            f"BaseUids study: {self.study_instance}, "
+            f"series: {self.series_instance}, "
+            f"frame of reference {self.frame_of_reference}"
+        )
+
 
 @dataclass
 class FileUids:

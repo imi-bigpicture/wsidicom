@@ -1,7 +1,7 @@
 import warnings
 from functools import cached_property
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Dict
 
 import pydicom
 from pydicom.dataset import Dataset
@@ -244,7 +244,7 @@ class WsiDataset(Dataset):
             return image_type
         return ""
 
-    def get_optical_path_identifier(self, frame: Dataset) -> str:
+    def read_optical_path_identifier(self, frame: Dataset) -> str:
         """Return optical path identifier from frame, or from self if not
         found."""
         optical_sequence = getattr(
@@ -765,3 +765,66 @@ class WsiDicomFile:
                 )
             )
         return frame_positions
+
+    @staticmethod
+    def _filter_files(
+        files: List['WsiDicomFile'],
+        series_uids: BaseUids,
+        series_tile_size: Size = None
+    ) -> List['WsiDicomFile']:
+        """Filter list of wsi dicom files to only include matching uids and
+        tile size if defined.
+
+        Parameters
+        ----------
+        files: List['WsiDicomFile']
+            Wsi files to filter.
+        series_uids: Uids
+            Uids to check against.
+        series_tile_size: Size
+            Tile size to check against.
+
+        Returns
+        ----------
+        List['WsiDicomFile']
+            List of matching wsi dicom files.
+        """
+        valid_files: List[WsiDicomFile] = []
+
+        for file in files:
+            if file.dataset.matches_series(series_uids, series_tile_size):
+                valid_files.append(file)
+            else:
+                warnings.warn(
+                    f'{file.filepath} with uids {file.uids.base} '
+                    f'did not match series with {series_uids} '
+                    f'and tile size {series_tile_size}'
+                )
+                file.close()
+
+        return valid_files
+
+    @classmethod
+    def _group_files(
+        cls,
+        files: List['WsiDicomFile']
+    ) -> Dict[str, List['WsiDicomFile']]:
+        """Return files grouped by instance identifier (instances).
+
+        Parameters
+        ----------
+        files: List[WsiDicomFile]
+            Files to group into instances
+
+        Returns
+        ----------
+        Dict[str, List[WsiDicomFile]]
+            Files grouped by instance, with instance identifier as key.
+        """
+        grouped_files: Dict[str, List[WsiDicomFile]] = {}
+        for file in files:
+            try:
+                grouped_files[file.uids.identifier].append(file)
+            except KeyError:
+                grouped_files[file.uids.identifier] = [file]
+        return grouped_files
