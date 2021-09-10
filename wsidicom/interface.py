@@ -1,4 +1,3 @@
-import copy
 import io
 import math
 import os
@@ -11,19 +10,17 @@ from typing import (Callable, Dict, List, Optional, OrderedDict, Tuple,
 import pydicom
 from PIL import Image
 from pydicom.dataset import Dataset
-from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import UID as Uid
 
 from .errors import (WsiDicomError, WsiDicomMatchError, WsiDicomNotFoundError,
                      WsiDicomOutOfBondsError, WsiDicomSparse,
                      WsiDicomUidDuplicateError)
-from .file import WsiDicomFile
+from .file import WsiDicomFile, WsiDataset
 from .geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from .image_data import DicomImageData, ImageData, Tiler
 from .optical import OpticalManager
 from .stringprinting import dict_pretty_str, list_pretty_str, str_indent
 from .uid import BaseUids, WSI_SOP_CLASS_UID
-from .dataset import WsiDataset
 
 
 class WsiInstance:
@@ -1771,148 +1768,6 @@ class WsiDicomLevels(WsiDicomSeries):
         return closest
 
 
-class FileImporter:
-    def __init__(
-        self,
-        tiler: Tiler,
-        base_dataset: Dataset,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
-        include_levels: List[int] = None,
-        include_label: bool = True,
-        include_overview: bool = True,
-        transfer_syntax: Uid = pydicom.uid.JPEGBaseline8Bit
-    ):
-        self.tiler = tiler
-        self.base_dataset = base_dataset
-        self.include_levels = include_levels
-        self.include_label = include_label
-        self.include_overview = include_overview
-        self.transfer_syntax = transfer_syntax
-        self.uid_generator = uid_generator
-
-    def level_instances(self):
-        instances = []
-        if self.include_levels is not None:
-            include_levels = self.include_levels
-        else:
-            include_levels = range(self.tiler.level_count)
-        for level_index in include_levels:
-            image_data = self.tiler.get_level(level_index)
-            instance_dataset = self._create_instance_dataset(
-                'VOLUME',
-                level_index,
-                image_data
-            )
-            instance = WsiInstance(
-                WsiDataset(instance_dataset),
-                image_data,
-                self.transfer_syntax
-            )
-            instances.append(instance)
-        return instances
-
-    def label_instances(self):
-        instances = []
-        if self.include_label:
-            for label_index in range(self.tiler.label_count):
-                image_data = self.tiler.get_label(label_index)
-                instance_dataset = self._create_instance_dataset(
-                    'LABEL',
-                    label_index,
-                    image_data
-                )
-                instance = WsiInstance(
-                    WsiDataset(instance_dataset),
-                    image_data,
-                    self.transfer_syntax
-                )
-                instances.append(instance)
-        return instances
-
-    def overview_instances(self):
-        instances = []
-        if self.include_overview:
-            for overview_index in range(self.tiler.overview_count):
-                image_data = self.tiler.get_overview(overview_index)
-                instance_dataset = self._create_instance_dataset(
-                    'OVERVIEW',
-                    overview_index,
-                    image_data
-                )
-                instance = WsiInstance(
-                    WsiDataset(instance_dataset),
-                    image_data,
-                    self.transfer_syntax
-                )
-                instances.append(instance)
-        return instances
-
-    def close(self) -> None:
-        self.tiler.close()
-
-    @staticmethod
-    def _get_image_type(image_flavor: str, level_index: int) -> List[str]:
-        if image_flavor == 'VOLUME' and level_index == 0:
-            resampled = 'NONE'
-        else:
-            resampled = 'RESAMPLED'
-
-        return ['ORGINAL', 'PRIMARY', image_flavor, resampled]
-
-    def _create_instance_dataset(
-        self,
-        image_flavour: str,
-        level_index: int,
-        level: ImageData,
-    ) -> Dataset:
-        dataset = copy.deepcopy(self.base_dataset)
-        dataset.ImageType = self._get_image_type(image_flavour, level_index)
-        dataset.SOPInstanceUID = self.uid_generator()
-
-        shared_functional_group_sequence = Dataset()
-        pixel_measure_sequence = Dataset()
-        pixel_measure_sequence.PixelSpacing = [
-            level.mpp.width,
-            level.mpp.height
-        ]
-        pixel_measure_sequence.SpacingBetweenSlices = 0.0
-        pixel_measure_sequence.SliceThickness = 0.0
-        shared_functional_group_sequence.PixelMeasuresSequence = (
-            DicomSequence([pixel_measure_sequence])
-        )
-        dataset.SharedFunctionalGroupsSequence = DicomSequence(
-            [shared_functional_group_sequence]
-        )
-        dataset.TotalPixelMatrixColumns = level.image_size.width
-        dataset.TotalPixelMatrixRows = level.image_size.height
-        dataset.Columns = level.tile_size.width
-        dataset.Rows = level.tile_size.height
-        dataset.ImagedVolumeWidth = (
-            level.image_size.width * level.mpp.width
-        )
-        dataset.ImagedVolumeHeight = (
-            level.image_size.height * level.mpp.height
-        )
-        dataset.ImagedVolumeDepth = 0.0
-        # If PhotometricInterpretation is YBR and no subsampling
-        dataset.SamplesPerPixel = 3
-        dataset.PhotometricInterpretation = 'YBR_FULL'
-        # If transfer syntax pydicom.uid.JPEGBaseline8Bit
-        dataset.BitsAllocated = 8
-        dataset.BitsStored = 8
-        dataset.HighBit = 8
-        dataset.PixelRepresentation = 0
-        dataset.LossyImageCompression = '01'
-        dataset.LossyImageCompressionRatio = 1
-        dataset.LossyImageCompressionMethod = 'ISO_10918_1'
-
-        # Should be incremented
-        dataset.InstanceNumber = 0
-        dataset.FocusMethod = 'AUTO'
-        dataset.ExtendedDepthOfField = 'NO'
-        return dataset
-
-
 class WsiDicom:
     def __init__(
         self,
@@ -2064,37 +1919,159 @@ class WsiDicom:
         return WsiDicom(levels, labels, overviews)
 
     @classmethod
+    def open_tiler(
+        cls,
+        tiler: Tiler,
+        base_dataset: Dataset,
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
+        transfer_syntax: Uid = pydicom.uid.JPEGBaseline8Bit,
+        include_levels: List[int] = None,
+        include_label: bool = True,
+        include_overview: bool = True
+    ) -> Tuple[List[WsiInstance], List[WsiInstance], List[WsiInstance]]:
+        """Open tiler to produce WsiInstances.
+
+        Parameters
+        ----------
+        tiler: Tiler
+            Tiler that can produce WsiInstances.
+        base_dataset: Dataset
+            Base dataset to include in files.
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+            Function that can gernerate unique identifiers.
+        transfer_syntax: Uid = pydicom.uid.JPEGBaseline8Bit
+            Transfer syntax.
+        include_levels: List[int] = None
+            Optional list of levels to include. Include all levels if None.
+        include_label: bool = True
+            Include label(s), default true.
+        include_overwiew: bool = True
+            Include overview(s), default true.
+        """
+        level_instances = []
+        if include_levels is None:
+            include_levels = range(tiler.level_count)
+        for level_index in include_levels:
+            image_data = tiler.get_level(level_index)
+            instance_dataset = WsiDataset.create_instance_dataset(
+                base_dataset,
+                'VOLUME',
+                level_index,
+                image_data.image_size,
+                image_data.tile_size,
+                image_data.mpp,
+                uid_generator
+            )
+            instance = WsiInstance(
+                WsiDataset(instance_dataset),
+                image_data,
+                transfer_syntax
+            )
+            level_instances.append(instance)
+
+        label_instances = []
+        if include_label:
+            for label_index in range(tiler.label_count):
+                image_data = tiler.get_label(label_index)
+                instance_dataset = WsiDataset.create_instance_dataset(
+                    base_dataset,
+                    'LABEL',
+                    level_index,
+                    image_data.image_size,
+                    image_data.tile_size,
+                    image_data.mpp,
+                    uid_generator
+                )
+                instance = WsiInstance(
+                    WsiDataset(instance_dataset),
+                    image_data,
+                    transfer_syntax
+                )
+                label_instances.append(instance)
+
+        overview_instances = []
+        if include_overview:
+            for overview_index in range(tiler.overview_count):
+                image_data = tiler.get_overview(overview_index)
+                image_data = tiler.get_label(label_index)
+                instance_dataset = WsiDataset.create_instance_dataset(
+                    base_dataset,
+                    'OVERVIEW',
+                    level_index,
+                    image_data.image_size,
+                    image_data.tile_size,
+                    image_data.mpp,
+                    uid_generator
+                )
+                instance = WsiInstance(
+                    WsiDataset(instance_dataset),
+                    image_data,
+                    transfer_syntax
+                )
+                overview_instances.append(instance)
+
+        return level_instances, label_instances, overview_instances
+
+    @classmethod
     def import_wsi(
         cls,
-        file_importer: FileImporter
+        tiler: Tiler,
+        base_dataset: Dataset = None,
     ) -> 'WsiDicom':
-        levels = WsiDicomLevels.open(file_importer.level_instances())
-        labels = WsiDicomLabels.open(file_importer.label_instances())
-        overviews = WsiDicomOverviews.open(file_importer.overview_instances())
-        return cls(levels, labels, overviews)
+        """Open data in tiler as WsiDicom object.
+
+        Parameters
+        ----------
+        tiler: Tiler
+            Tiler that can produce WsiInstances.
+        base_dataset: Dataset
+            Base dataset to use in files. If none, use test dataset.
+        """
+        if base_dataset is None:
+            base_dataset = WsiDataset.create_test_base_dataset()
+        return cls(cls.open_tiler(tiler, base_dataset))
 
     @classmethod
     def convert(
         cls,
         output_path: Path,
-        file_importer: FileImporter,
+        tiler: Tiler,
+        base_dataset: Dataset,
+        include_levels: List[int] = None,
+        include_label: bool = True,
+        include_overview: bool = True
     ) -> None:
-        """Convert file using file_importer to output path.
+        """Convert data in tiler to Dicom files in output path.
 
         Parameters
         ----------
         output_path: Path
             Folder path to save files to.
-        file_importer: FileImporter
-            FileImporter defining file to me converted.
+        tiler: Tiler
+            Tiler that can produce WsiInstances.
+        base_dataset: Dataset
+            Base dataset to include in files.
+        include_levels: List[int]
+            Optional list of levels to include. Include all levels if None.
+        include_label: bool
+            Include label(s), default true.
+        include_overwiew: bool
+            Include overview(s), default true.
         """
-        instances: List[WsiInstance] = (
-            file_importer.level_instances() +
-            file_importer.label_instances() +
-            file_importer.overview_instances()
+        level_instances, label_instances, overview_instances = (
+            cls.open_tiler(
+                tiler,
+                base_dataset,
+                include_levels=include_levels,
+                include_label=include_label,
+                include_overview=include_overview
+            )
         )
-        for instance in instances:
+
+        for instance in level_instances+label_instances+overview_instances:
             instance.save(output_path)
+
+        tiler.close()
 
     @staticmethod
     def _get_filepaths(path: Union[str, List[str]]) -> List[Path]:

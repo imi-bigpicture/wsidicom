@@ -1,6 +1,6 @@
 import warnings
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 import pydicom
 from pydicom.uid import UID as Uid
