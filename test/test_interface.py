@@ -16,6 +16,7 @@ from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.interface import (Point, PointMm, Region, RegionMm, Size, SizeMm,
                                 WsiDicom)
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
+from wsidicom.image_data import ImageData, DicomImageData
 
 from .data_gen import create_layer_file, create_main_dataset
 
@@ -76,47 +77,50 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_get_frame_number(self):
         base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
-        number = instance.tiles.get_frame_index(Point(0, 0), 0, '0')
+        image_data: DicomImageData = instance._image_data
+        number = image_data.tiles.get_frame_index(Point(0, 0), 0, '0')
         self.assertEqual(number, 0)
 
     def test_get_blank_color(self):
         base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         color = instance._get_blank_color(
-            instance._photometric_interpretation)
+            instance.photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
 
     def test_get_frame_file(self):
         base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
-        file = instance._get_file(0)
-        self.assertEqual(file, (instance._files[0]))
+        image_data: DicomImageData = instance._image_data
+        file = image_data._get_file(0)
+        self.assertEqual(file, (image_data._files[0]))
 
         self.assertRaises(
             WsiDicomNotFoundError,
-            instance._get_file,
+            image_data._get_file,
             10
         )
 
     def test_valid_tiles(self):
         base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
-        test = instance.tiles.valid_tiles(
+        image_data: DicomImageData = instance._image_data
+        test = image_data.valid_tiles(
             Region(Point(0, 0), Size(0, 0)), 0, '0'
         )
         self.assertTrue(test)
 
-        test = instance.tiles.valid_tiles(
+        test = image_data.valid_tiles(
             Region(Point(0, 0), Size(0, 2)), 0, '0'
         )
         self.assertFalse(test)
 
-        test = instance.tiles.valid_tiles(
+        test = image_data.valid_tiles(
             Region(Point(0, 0), Size(0, 0)), 1, '0'
         )
         self.assertFalse(test)
 
-        test = instance.tiles.valid_tiles(
+        test = image_data.valid_tiles(
             Region(Point(0, 0), Size(0, 0)), 0, '1'
         )
         self.assertFalse(test)
@@ -188,7 +192,6 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         base_level = self.wsi.levels.get_level(0)
         instance, _, _ = base_level.get_instance()
         image_size = base_level.size
-        tile_size = instance.tile_size
         region = Region(
             position=Point(0, 0),
             size=Size(100, 100)

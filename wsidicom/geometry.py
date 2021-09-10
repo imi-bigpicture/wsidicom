@@ -155,6 +155,10 @@ class Size:
             height=int(math.ceil(self.height))
         )
 
+    @property
+    def area(self) -> int:
+        return self.width * self.height
+
 
 @dataclass
 class Point:

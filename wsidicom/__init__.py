@@ -1,2 +1,3 @@
-from .interface import WsiDicom, TiledImage, FileImporter
+from .interface import WsiDicom, FileImporter
 from .file import WsiDataset
+from .image_data import ImageData

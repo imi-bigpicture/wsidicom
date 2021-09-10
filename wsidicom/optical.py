@@ -551,7 +551,7 @@ class OpticalManager:
         """
         optical_paths: Dict[str, OpticalPath] = {}
         for instance in instances:
-            for dataset in instance.contained_datasets:
+            for dataset in instance.datasets:
                 optical_path_sequence = dataset.OpticalPathSequence
                 for optical_path in optical_path_sequence:
                     identifier = str(optical_path.OpticalPathIdentifier)
@@ -561,7 +561,6 @@ class OpticalManager:
                             dataset.PhotometricInterpretation
                         )
                         optical_paths[identifier] = path
-                        print(path)
         return OpticalManager(optical_paths.values())
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
