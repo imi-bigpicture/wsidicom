@@ -2036,7 +2036,7 @@ class WsiDicom:
         return level_instances, label_instances, overview_instances
 
     @classmethod
-    def import_wsi(
+    def import_tiler(
         cls,
         tiler: Tiler,
         base_dataset: Dataset = None,
