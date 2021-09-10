@@ -329,7 +329,7 @@ class WsiDataset(Dataset):
 
     @cached_property
     def pixel_spacing(self) -> SizeMm:
-        """Read pixel spacing from dicom file.
+        """Read pixel spacing from dicom dataset.
 
         Parameters
         ----------
@@ -339,7 +339,7 @@ class WsiDataset(Dataset):
         Returns
         ----------
         SizeMm
-            The pixel spacing
+            The pixel spacing in mm/pixel.
         """
         pixel_measure = self.pixel_measure
         pixel_spacing: Tuple[float, float] = pixel_measure.PixelSpacing
