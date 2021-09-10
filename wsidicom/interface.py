@@ -113,7 +113,7 @@ class WsiInstance:
     @property
     def pixel_spacing(self) -> SizeMm:
         """Return pixel spacing in mm/pixel."""
-        return self.dataset.pixel_spacing
+        return self._image_data.pixel_spacing
 
     @property
     def mm_size(self) -> SizeMm:
@@ -1256,7 +1256,7 @@ class WsiDicomLevel(WsiDicomGroup):
         """Return string representatin of the level"""
         return (
             f'Level [{self.level}]'
-            f' tiles: {self.default_instance.tiles.tiled_size},'
+            f' tiles: {self.default_instance.tiled_size},'
             f' size: {self.size}, mpp: {self.mpp} um/px'
         )
 
@@ -1982,7 +1982,7 @@ class WsiDicom:
                 level_index,
                 image_data.image_size,
                 image_data.tile_size,
-                image_data.mpp,
+                image_data.pixel_spacing,
                 uid_generator
             )
             instance = WsiInstance(
@@ -2002,7 +2002,7 @@ class WsiDicom:
                     level_index,
                     image_data.image_size,
                     image_data.tile_size,
-                    image_data.mpp,
+                    image_data.pixel_spacing,
                     uid_generator
                 )
                 instance = WsiInstance(
@@ -2023,7 +2023,7 @@ class WsiDicom:
                     level_index,
                     image_data.image_size,
                     image_data.tile_size,
-                    image_data.mpp,
+                    image_data.pixel_spacing,
                     uid_generator
                 )
                 instance = WsiInstance(
