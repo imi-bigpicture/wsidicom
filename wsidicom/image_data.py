@@ -56,6 +56,13 @@ class ImageData(metaclass=ABCMeta):
     def close(self) -> None:
         raise NotImplementedError
 
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: int = None
+    ) -> str:
+        return str(self)
+
     @cached_property
     def default_z(self) -> float:
         """Return default focal plane in um."""

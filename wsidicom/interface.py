@@ -47,6 +47,27 @@ class WsiInstance:
                     "Instance Missing DistanceBetweenFocalPlanes"
                 )
 
+    def __str__(self) -> str:
+        return self.pretty_str()
+
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: int = None
+    ) -> str:
+        string = (
+            f"default z: {self.default_z} "
+            f"default path: { self.default_path}"
+        )
+        if depth is not None:
+            depth -= 1
+            if(depth < 0):
+                return string
+        string += (
+            ' ImageData ' + self._image_data.pretty_str(indent+1, depth)
+        )
+        return string
+
     @cached_property
     def wsi_type(self) -> str:
         """Return wsi type."""
@@ -1225,7 +1246,9 @@ class WsiDicomLevel(WsiDicomGroup):
             depth -= 1
             if(depth < 0):
                 return string
-        string += dict_pretty_str(self.instances, indent, depth)
+        string += (
+            ' Instances: ' + dict_pretty_str(self.instances, indent, depth)
+        )
         return string
 
     @property
@@ -2029,7 +2052,16 @@ class WsiDicom:
         """
         if base_dataset is None:
             base_dataset = WsiDataset.create_test_base_dataset()
-        return cls(cls.open_tiler(tiler, base_dataset))
+
+        (
+            level_instances,
+            label_instances,
+            overview_instances
+        ) = cls.open_tiler(tiler, base_dataset)
+        levels = WsiDicomLevels.open(level_instances)
+        labels = WsiDicomLabels.open(label_instances)
+        overviews = WsiDicomOverviews.open(overview_instances)
+        return cls(levels, labels, overviews)
 
     @classmethod
     def convert(
