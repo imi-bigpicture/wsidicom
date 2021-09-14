@@ -13,10 +13,9 @@ from wsidicom.conceptcode import (AnnotationCategoryCode, AnnotationTypeCode,
                                   ImagePathFilterCode, LenseCode,
                                   LightPathFilterCode, MeasurementCode)
 from wsidicom.errors import WsiDicomNotFoundError
-from wsidicom.interface import (Point, PointMm, Region, RegionMm, Size, SizeMm,
-                                WsiDicom)
+from wsidicom.interface import (DicomImageData, Point, PointMm,
+                                Region, RegionMm, Size, SizeMm, WsiDicom)
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
-from wsidicom.image_data import ImageData, DicomImageData
 
 from .data_gen import create_layer_file, create_main_dataset
 
