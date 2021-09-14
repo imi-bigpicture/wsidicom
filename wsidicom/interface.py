@@ -1600,35 +1600,37 @@ class SparseTileIndex(TileIndex):
 class Tiler(metaclass=ABCMeta):
     @property
     @abstractmethod
-    def level_count(self) -> int:
+    def levels(self) -> List[ImageData]:
         raise NotImplementedError
 
     @property
     @abstractmethod
-    def label_count(self) -> int:
+    def labels(self) -> List[ImageData]:
         raise NotImplementedError
 
     @property
     @abstractmethod
-    def overview_count(self) -> int:
+    def overviews(self) -> List[ImageData]:
         raise NotImplementedError
 
     @abstractmethod
-    def get_level(self, level: int) -> ImageData:
+    def get_level(self, level: int, page: int = 0) -> ImageData:
         raise NotImplementedError
 
     @abstractmethod
-    def get_label(self, index: int = 0) -> ImageData:
+    def get_label(self, index: int = 0, page: int = 0) -> ImageData:
         raise NotImplementedError
 
     @abstractmethod
-    def get_overview(self, index: int = 0) -> ImageData:
+    def get_overview(self, index: int = 0, page: int = 0) -> ImageData:
         raise NotImplementedError
 
     @abstractmethod
     def get_tile(
         self,
+        series: int,
         level: int,
+        page: int,
         tile_position: Tuple[int, int]
     ) -> bytes:
         raise NotImplementedError
@@ -2330,7 +2332,7 @@ class WsiInstance:
         tile_geometry = Region(Point(0, 0), self.tiled_size)
         # Generator for the tiles
         tile_jobs = (
-            self._image_data.get_encoded_tiles(tile_geometry.iterate_all())
+            self._image_data.get_tiles(tile_geometry.iterate_all())
         )
         # itemize and and write the tiles
         for tile_job in tile_jobs:
@@ -3587,63 +3589,61 @@ class WsiDicom:
             Include overview(s), default true.
         """
         level_instances = []
-        if include_levels is None:
-            include_levels = range(tiler.level_count)
-        for level_index in include_levels:
-            image_data = tiler.get_level(level_index)
-            instance_dataset = WsiDataset.create_instance_dataset(
-                base_dataset,
-                'VOLUME',
-                level_index,
-                image_data.image_size,
-                image_data.tile_size,
-                image_data.pixel_spacing,
-                uid_generator
-            )
-            instance = WsiInstance(
-                WsiDataset(instance_dataset),
-                image_data,
-                transfer_syntax
-            )
-            level_instances.append(instance)
-
-        label_instances = []
-        if include_label:
-            for label_index in range(tiler.label_count):
-                image_data = tiler.get_label(label_index)
+        for level in tiler.levels:
+            if (
+                include_levels is None or
+                level.pyramid_index in include_levels
+            ):
                 instance_dataset = WsiDataset.create_instance_dataset(
                     base_dataset,
-                    'LABEL',
-                    level_index,
-                    image_data.image_size,
-                    image_data.tile_size,
-                    image_data.pixel_spacing,
+                    'VOLUME',
+                    level.pyramid_index,
+                    level.image_size,
+                    level.tile_size,
+                    level.pixel_spacing,
                     uid_generator
                 )
                 instance = WsiInstance(
                     WsiDataset(instance_dataset),
-                    image_data,
+                    level,
+                    transfer_syntax
+                )
+                level_instances.append(instance)
+
+        label_instances = []
+        if include_label:
+            for label in tiler.labels:
+                instance_dataset = WsiDataset.create_instance_dataset(
+                    base_dataset,
+                    'LABEL',
+                    label.pyramid_index,
+                    label.image_size,
+                    label.tile_size,
+                    label.pixel_spacing,
+                    uid_generator
+                )
+                instance = WsiInstance(
+                    WsiDataset(instance_dataset),
+                    label,
                     transfer_syntax
                 )
                 label_instances.append(instance)
 
         overview_instances = []
         if include_overview:
-            for overview_index in range(tiler.overview_count):
-                image_data = tiler.get_overview(overview_index)
-                image_data = tiler.get_label(label_index)
+            for overview in tiler.overviews:
                 instance_dataset = WsiDataset.create_instance_dataset(
                     base_dataset,
                     'OVERVIEW',
-                    level_index,
-                    image_data.image_size,
-                    image_data.tile_size,
-                    image_data.pixel_spacing,
+                    overview.pyramid_index,
+                    overview.image_size,
+                    overview.tile_size,
+                    overview.pixel_spacing,
                     uid_generator
                 )
                 instance = WsiInstance(
                     WsiDataset(instance_dataset),
-                    image_data,
+                    overview,
                     transfer_syntax
                 )
                 overview_instances.append(instance)
