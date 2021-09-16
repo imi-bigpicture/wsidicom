@@ -20,11 +20,21 @@ class SizeMm:
             return SizeMm(factor.x*self.width, factor.y*self.height)
         return NotImplemented
 
+    def __truediv__(self, divider):
+        if isinstance(divider, (int, float)):
+            return SizeMm(self.width/divider, self.height/divider)
+        if isinstance(divider, SizeMm):
+            return SizeMm(
+                self.width/divider.width,
+                self.height/divider.height
+            )
+        return NotImplemented
+
     def __floordiv__(self, divider):
         if isinstance(divider, (int, float)):
             return SizeMm(int(self.width/divider), int(self.height/divider))
         if isinstance(divider, SizeMm):
-            return Size(
+            return SizeMm(
                 int(self.width/divider.width),
                 int(self.height/divider.height)
             )
@@ -32,6 +42,9 @@ class SizeMm:
 
     def to_int_tuple(self) -> Tuple[int, int]:
         return int(self.width), int(self.height)
+
+    def to_tuple(self) -> Tuple[float, float]:
+        return self.width, self.height
 
     @staticmethod
     def from_tuple(tuple: Tuple[float, float]) -> 'SizeMm':
