@@ -1,12 +1,10 @@
-import copy
 import io
 import math
 import warnings
 from abc import ABCMeta, abstractmethod
 from functools import cached_property
 from pathlib import Path
-from typing import (Callable, Dict, List, Optional, OrderedDict, Set, Tuple,
-                    Union)
+from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
 
 import numpy as np
 import pydicom
@@ -465,139 +463,6 @@ class WsiDataset(Dataset):
         except AttributeError:
             # This might not be correct if multiple focal planes
             return self.mm_depth
-
-    @staticmethod
-    def create_test_base_dataset(
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
-    ) -> Dataset:
-        dataset = Dataset()
-        dataset.StudyInstanceUID = uid_generator()
-        dataset.SeriesInstanceUID = uid_generator()
-        dataset.FrameOfReferenceUID = uid_generator()
-        dataset.Modality = 'SM'
-        dataset.SOPClassUID = '1.2.840.10008.5.1.4.1.1.77.1.6'
-        dataset.Manufacturer = 'Manufacturer'
-        dataset.ManufacturerModelName = 'ManufacturerModelName'
-        dataset.DeviceSerialNumber = 'DeviceSerialNumber'
-        dataset.SoftwareVersions = ['SoftwareVersions']
-
-        # Generic specimen sequence
-        dataset.ContainerIdentifier = 'ContainerIdentifier'
-        specimen_description_sequence = Dataset()
-        specimen_description_sequence.SpecimenIdentifier = 'SpecimenIdentifier'
-        specimen_description_sequence.SpecimenUID = uid_generator()
-        dataset.SpecimenDescriptionSequence = DicomSequence(
-            [specimen_description_sequence]
-        )
-
-        # Generic optical path sequence
-        optical_path_sequence = Dataset()
-        optical_path_sequence.OpticalPathIdentifier = '1'
-        illumination_type_code_sequence = Dataset()
-        illumination_type_code_sequence.CodeValue = '111744'
-        illumination_type_code_sequence.CodingSchemeDesignator = 'DCM'
-        illumination_type_code_sequence.CodeMeaning = (
-            'Brightfield illumination'
-        )
-        optical_path_sequence.IlluminationTypeCodeSequence = DicomSequence(
-            [illumination_type_code_sequence]
-        )
-        illumination_color_code_sequence = Dataset()
-        illumination_color_code_sequence.CodeValue = 'R-102C0'
-        illumination_color_code_sequence.CodingSchemeDesignator = 'SRT'
-        illumination_color_code_sequence.CodeMeaning = 'Full Spectrum'
-        optical_path_sequence.IlluminationColorCodeSequence = DicomSequence(
-            [illumination_color_code_sequence]
-        )
-        dataset.OpticalPathSequence = DicomSequence([optical_path_sequence])
-
-        # Generic dimension organization sequence
-        dimension_organization_uid = uid_generator()
-        dimension_organization_sequence = Dataset()
-        dimension_organization_sequence.DimensionOrganizationUID = (
-            dimension_organization_uid
-        )
-        dataset.DimensionOrganizationSequence = DicomSequence(
-            [dimension_organization_sequence]
-        )
-
-        # Generic dimension index sequence
-        dimension_index_sequence = Dataset()
-        dimension_index_sequence.DimensionOrganizationUID = (
-            dimension_organization_uid
-        )
-        dimension_index_sequence.DimensionIndexPointer = (
-            pydicom.tag.Tag('PlanePositionSlideSequence')
-        )
-        dataset.DimensionIndexSequence = DicomSequence(
-            [dimension_index_sequence]
-        )
-
-        dataset.BurnedInAnnotation = 'NO'
-        dataset.BurnedInAnnotation = 'NO'
-        dataset.SpecimenLabelInImage = 'NO'
-        dataset.VolumetricProperties = 'VOLUME'
-        return dataset
-
-    @staticmethod
-    def _get_image_type(image_flavor: str, level_index: int) -> List[str]:
-        if image_flavor == 'VOLUME' and level_index == 0:
-            resampled = 'NONE'
-        else:
-            resampled = 'RESAMPLED'
-
-        return ['ORGINAL', 'PRIMARY', image_flavor, resampled]
-
-    @classmethod
-    def create_instance_dataset(
-        cls,
-        base_dataset: Dataset,
-        image_flavour: str,
-        level_index: int,
-        image_size: Size,
-        tile_size: Size,
-        mpp: SizeMm,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
-    ) -> Dataset:
-        dataset = copy.deepcopy(base_dataset)
-        dataset.ImageType = cls._get_image_type(image_flavour, level_index)
-        dataset.SOPInstanceUID = uid_generator()
-
-        shared_functional_group_sequence = Dataset()
-        pixel_measure_sequence = Dataset()
-        pixel_measure_sequence.PixelSpacing = [mpp.width, mpp.height]
-        pixel_measure_sequence.SpacingBetweenSlices = 0.0
-        pixel_measure_sequence.SliceThickness = 0.0
-        shared_functional_group_sequence.PixelMeasuresSequence = (
-            DicomSequence([pixel_measure_sequence])
-        )
-        dataset.SharedFunctionalGroupsSequence = DicomSequence(
-            [shared_functional_group_sequence]
-        )
-        dataset.TotalPixelMatrixColumns = image_size.width
-        dataset.TotalPixelMatrixRows = image_size.height
-        dataset.Columns = tile_size.width
-        dataset.Rows = tile_size.height
-        dataset.ImagedVolumeWidth = image_size.width * mpp.width
-        dataset.ImagedVolumeHeight = image_size.height * mpp.height
-        dataset.ImagedVolumeDepth = 0.0
-        # If PhotometricInterpretation is YBR and no subsampling
-        dataset.SamplesPerPixel = 3
-        dataset.PhotometricInterpretation = 'YBR_FULL'
-        # If transfer syntax pydicom.uid.JPEGBaseline8Bit
-        dataset.BitsAllocated = 8
-        dataset.BitsStored = 8
-        dataset.HighBit = 8
-        dataset.PixelRepresentation = 0
-        dataset.LossyImageCompression = '01'
-        dataset.LossyImageCompressionRatio = 1
-        dataset.LossyImageCompressionMethod = 'ISO_10918_1'
-
-        # Should be incremented
-        dataset.InstanceNumber = 0
-        dataset.FocusMethod = 'AUTO'
-        dataset.ExtendedDepthOfField = 'NO'
-        return dataset
 
 
 class WsiDicomFile:
