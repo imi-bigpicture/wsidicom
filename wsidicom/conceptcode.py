@@ -47,6 +47,15 @@ class ConceptCode(metaclass=ABCMeta):
     def list(cls) -> List[str]:
         raise NotImplementedError
 
+    @property
+    def code(self) -> Code:
+        return Code(
+            value=self.value,
+            scheme_designator=self.scheme_designator,
+            meaning=self.meaning,
+            scheme_version=self.scheme_version
+        )
+
     def to_ds(self) -> Dataset:
         """Codes code into DICOM dataset.
 
@@ -366,4 +375,53 @@ class ChannelDescriptionCode(CidConceptCode, SingleConceptCode):
     """
     sequence_name = 'ChannelDescriptionCodeSequence'
     cid = codes.cid8122.concepts  # Microscopy Illuminator and Sensor Color
+
+
+class SpecimenCollectionProcedureCode(CidConceptCode, SingleConceptCode):
+    sequence_name = 'ConceptCodeSequence'
+    cid = codes.cid8109.concepts
+
+
+class SpecimenSamplingProcedureCode(CidConceptCode, SingleConceptCode):
+    sequence_name = 'ConceptCodeSequence'
+    cid = codes.cid8110.concepts
+
+
+class SpecimenPreparationProcedureCode(CidConceptCode, SingleConceptCode):
+    sequence_name = 'ConceptCodeSequence'
+    cid = codes.cid8111.concepts
+
+
+class SpecimenStainsCode(CidConceptCode, SingleConceptCode):
+    sequence_name = 'ConceptCodeSequence'
+    cid = codes.cid8112.concepts
+
+
+class SpecimenPreparationStepsCode(CidConceptCode, SingleConceptCode):
+    sequence_name = 'ConceptCodeSequence'
+    cid = codes.cid8113.concepts
+
+
+class SpecimenFixativesCode(CidConceptCode, SingleConceptCode):
+    sequence_name = 'ConceptCodeSequence'
+    cid = codes.cid8114.concepts
+
+
+class SpecimenEmbeddingMediaCode(CidConceptCode, SingleConceptCode):
+    sequence_name = 'ConceptCodeSequence'
+    cid = codes.cid8115.concepts
+
+
+class AnatomicPathologySpecimenTypesCode(CidConceptCode, SingleConceptCode):
+    sequence_name = 'ConceptCodeSequence'
+    cid = codes.cid8103.concepts
+
+
+class ConceptNameCode(SingleConceptCode):
+    sequence_name = 'ConceptNameCodeSequence'
+
+    @classmethod
+    def list(cls) -> List[str]:
+        return []
+
 
