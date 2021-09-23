@@ -1,4 +1,5 @@
 import struct
+import warnings
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
@@ -441,15 +442,14 @@ class OpticalPath:
         channel_description: List[ChannelDescriptionCode] = None,
         lenses: Lenses = None,
     ):
-        # Should ICC profile be required?
-        # ICC profile required if not MONOCHROME2 or lut present
-        # if photometric_interpretation != 'MONOCHROME2' and icc_profile is None:
-        #     raise ValueError(
-        #         "Icc profile required if photometric is "
-        #         f"{photometric_interpretation}"
-        #     )
-        # if lut is not None and icc_profile is None:
-        #     raise ValueError("Icc profile required if lut is present")
+
+        if photometric_interpretation != 'MONOCHROME2' and icc_profile is None:
+            warnings.warn(
+                "Icc profile required if photometric is "
+                f"{photometric_interpretation}"
+            )
+        if lut is not None and icc_profile is None:
+            warnings.warn("Icc profile required if lut is present")
 
         self.identifier = identifier
         self.illumination = illumination
