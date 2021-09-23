@@ -25,9 +25,10 @@ from wsidicom.uid import WSI_SOP_CLASS_UID, BaseUids, FileUids
 
 
 class WsiDataset(Dataset):
-    """Extend pydicom.dataset.Dataset with simple parsers for attributes
-    specific for WSI data. Use snake case to avoid name collision with dicom
-    fields (that are handled by pydicom.dataset.Dataset)."""
+    """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
+    parsers for attributes specific for WSI. Use snake case to avoid name
+    collision with dicom fields (that are handled by pydicom.dataset.Dataset).
+    """
 
     def is_wsi_dicom(self) -> bool:
         """Check if dataset is dicom wsi type and that required attributes
@@ -763,32 +764,59 @@ class WsiDicomFile:
 
 
 class ImageData(metaclass=ABCMeta):
-    """Generic class for image data. Abstract functions for getting tile and
-    abstract functions for presenting image properties."""
+    """Generic class for image data that can be inherited to implement support
+    for other image/file formats. Subclasses should implement properties to get
+    transfer_syntax, image_size, tile_size, and pixel_spacing and methods
+    get_tile() and close(). Additionally properties focal_planes and/or
+    optical_paths should be overridden if multiple focal planes or optical
+    paths are implemented."""
+
+    @property
+    @abstractmethod
+    def transfer_syntax(self) -> Uid:
+        """Should return the uid of the transfer syntax of the image."""
+        raise NotImplementedError
 
     @property
     @abstractmethod
     def image_size(self) -> Size:
-        """The pixel size of the image."""
+        """Should return the pixel size of the image."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def tile_size(self) -> Size:
-        """The pixel tile size of the image."""
+        """Should return the pixel tile size of the image, or pixel size of
+        the image if not tiled."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def pixel_spacing(self) -> SizeMm:
+        """Should return the size of the pixels in mm/pixel."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str
+    ) -> bytes:
+        """Should return image bytes for tile defined by tile (x, y), z,
+        and optical path."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def close(self) -> None:
+        """Should close any open files."""
         raise NotImplementedError
 
     @property
     def tiled_size(self) -> Size:
         """The size of the image when divided into tiles, e.g. number of
-        columns and rows of tiles."""
+        columns and rows of tiles. Equals (1, 1) if image is not tiled."""
         return self.image_size / self.tile_size
-
-    @property
-    @abstractmethod
-    def pixel_spacing(self) -> SizeMm:
-        """Size of the pixels in mm/pixel."""
-        raise NotImplementedError
 
     @property
     def focal_planes(self) -> List[float]:
@@ -799,19 +827,6 @@ class ImageData(metaclass=ABCMeta):
     def optical_paths(self) -> List[str]:
         """Optical paths avaiable in the image."""
         raise ['0']
-
-    @abstractmethod
-    def get_tile(
-        self,
-        tile: Point,
-        z: float,
-        path: str
-    ) -> bytes:
-        raise NotImplementedError
-
-    @abstractmethod
-    def close(self) -> None:
-        raise NotImplementedError
 
     def pretty_str(
         self,
@@ -890,6 +905,12 @@ class DicomImageData(ImageData):
             self.tiles = SparseTileIndex(datasets)
 
         self._pixel_spacing = base_file.dataset.pixel_spacing
+        self._transfer_syntax = base_file.transfer_syntax
+
+    @property
+    def transfer_syntax(self) -> Uid:
+        """The uid of the transfer syntax of the image."""
+        return self._transfer_syntax
 
     @property
     def image_size(self) -> Size:
@@ -1488,8 +1509,7 @@ class WsiInstance:
     def __init__(
         self,
         datasets: Union[WsiDataset, List[WsiDataset]],
-        image_data: ImageData,
-        transfer_syntax_uid: Uid
+        image_data: ImageData
     ):
         """Create a WsiInstance from datasets with metadata and image data.
 
@@ -1499,14 +1519,11 @@ class WsiInstance:
             Single dataset or list of datasets.
         image_data: ImageData
             Image data.
-        transfer_syntax_uid: Uid
-            Transfer syntax used in image_data.
         """
         if not isinstance(datasets, list):
             datasets = [datasets]
         self._datasets = datasets
 
-        self._transfer_syntax = transfer_syntax_uid
         self._image_data = image_data
 
         self._identifier, self._uids = self._validate_instance(self.datasets)
@@ -1544,7 +1561,7 @@ class WsiInstance:
     def wsi_type(self) -> str:
         """Return wsi type."""
         return self.dataset.get_supported_wsi_dicom_type(
-            self._transfer_syntax
+            self._image_data.transfer_syntax
         )
 
     @property
@@ -1705,8 +1722,7 @@ class WsiInstance:
         return [
             WsiInstance(
                 [file.dataset for file in instance_files],
-                DicomImageData(instance_files),
-                instance_files[0].transfer_syntax
+                DicomImageData(instance_files)
             )
             for instance_files in files_grouped_by_instance.values()
         ]
@@ -1815,7 +1831,7 @@ class WsiInstance:
 
         """
         (image_format, image_options) = self._image_settings(
-            self._transfer_syntax
+            self._image_data.transfer_syntax
         )
         with io.BytesIO() as buffer:
             image.save(buffer, format=image_format, **image_options)
