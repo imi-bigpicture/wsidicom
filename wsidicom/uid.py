@@ -7,13 +7,22 @@ ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.91.1'
 
 @dataclass
 class BaseUids:
+    """Represents the UIDs that should be common for all files in the wsi."""
     study_instance: Uid
     series_instance: Uid
     frame_of_reference: Uid
 
+    def __str__(self) -> str:
+        return (
+            f"BaseUids study: {self.study_instance}, "
+            f"series: {self.series_instance}, "
+            f"frame of reference {self.frame_of_reference}"
+        )
+
 
 @dataclass
 class FileUids:
+    """Represents the UIDs in a DICOM-file."""
     instance: Uid
     concatenation: Uid
     base: BaseUids

@@ -2,8 +2,9 @@ import io
 import math
 import warnings
 from abc import ABCMeta, abstractmethod
+from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Optional, OrderedDict, Tuple, Union
+from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
 
 import numpy as np
 import pydicom
@@ -12,274 +13,30 @@ from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import UID as Uid
 
-from .errors import (WsiDicomFileError, WsiDicomMatchError,
-                     WsiDicomNotFoundError, WsiDicomOutOfBondsError,
-                     WsiDicomSparse, WsiDicomUidDuplicateError)
-from .geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
-from .stringprinting import dict_pretty_str, list_pretty_str, str_indent
-from .uid import BaseUids, FileUids, WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID
-from .optical import OpticalManager
-from .graphical_annotations import AnnotationInstance
+from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
+                             WsiDicomMatchError, WsiDicomNotFoundError,
+                             WsiDicomOutOfBoundsError, WsiDicomSparse,
+                             WsiDicomUidDuplicateError)
+from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
+from wsidicom.graphical_annotations import AnnotationInstance
+from wsidicom.optical import OpticalManager
+from wsidicom.stringprinting import (dict_pretty_str, list_pretty_str,
+                                     str_indent)
+from wsidicom.uid import (ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, BaseUids,
+                          FileUids)
 
 
-class WsiDicomFile:
-    def __init__(self, filepath: Path):
-        """Open dicom file in filepath. If valid wsi type read required
-        parameters. Parses frames in pixel data but does not read the frames.
+class WsiDataset(Dataset):
+    """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
+    parsers for attributes specific for WSI. Use snake case to avoid name
+    collision with dicom fields (that are handled by pydicom.dataset.Dataset).
+    """
 
-        Parameters
-        ----------
-        filepath: Path
-            Path to file to open
-        """
-        self._filepath = filepath
-
-        if not pydicom.misc.is_dicom(self.filepath):
-            raise WsiDicomFileError(self.filepath, "is not a DICOM file")
-
-        file_meta = pydicom.filereader.read_file_meta_info(self.filepath)
-        transfer_syntax_uid = Uid(file_meta.TransferSyntaxUID)
-
-        self._fp = pydicom.filebase.DicomFile(self.filepath, mode='rb')
-        self._fp.is_little_endian = transfer_syntax_uid.is_little_endian
-        self._fp.is_implicit_VR = transfer_syntax_uid.is_implicit_VR
-        ds = pydicom.dcmread(self._fp, stop_before_pixels=True)
-        self._pixel_data_position = self._fp.tell()
-
-        if self.is_wsi_dicom(self.filepath, ds):
-            instance_uid = Uid(ds.SOPInstanceUID)
-            concatenation_uid: Uid = getattr(
-                ds,
-                'SOPInstanceUIDOfConcatenationSource',
-                None
-            )
-            base_uids = BaseUids(
-                ds.StudyInstanceUID,
-                ds.SeriesInstanceUID,
-                ds.FrameOfReferenceUID,
-            )
-            self._uids = FileUids(instance_uid, concatenation_uid, base_uids)
-
-            if concatenation_uid is not None:
-                try:
-                    self._frame_offset = int(ds.ConcatenationFrameOffsetNumber)
-                except AttributeError:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        'Concatenated file missing concatenation frame offset'
-                        'number'
-                    )
-            else:
-                self._frame_offset = 0
-            self._wsi_type = self.get_supported_wsi_dicom_type(
-                ds,
-                transfer_syntax_uid
-            )
-            self._pixel_spacing = self._get_pixel_spacing(ds)
-            self._image_size = self._get_image_size(ds)
-            self._mm_size = self._get_mm_size(ds)
-            self._frame_count = int(getattr(ds, 'NumberOfFrames', 1))
-            self._tile_size = self._get_tile_size(ds)
-            self._tile_type = self._get_tile_type(ds)
-            self._samples_per_pixel = int(ds.SamplesPerPixel)
-            self._transfer_syntax = Uid(ds.file_meta.TransferSyntaxUID)
-            self._photometric_interpretation = str(
-                ds.PhotometricInterpretation
-                )
-            self._optical_path_sequence = ds.OpticalPathSequence
-            self._shared_frame_sequence = ds.SharedFunctionalGroupsSequence
-            self._per_frame_sequence = getattr(
-                ds,
-                'PerFrameFunctionalGroupsSequence',
-                None
-            )
-            if self.tile_type == 'TILED_FULL':
-                self._focal_planes = int(
-                    getattr(ds, 'TotalPixelMatrixFocalPlanes', 1)
-                )
-
-            self._frame_positions = self._parse_pixel_data()
-
-        else:
-            self._wsi_type = "None"
-
-    def __repr__(self) -> str:
-        return f"WsiDicomFile('{self.filepath}')"
-
-    def __str__(self) -> str:
-        return self.pretty_str()
-
-    @property
-    def filepath(self) -> Path:
-        """Return filepath"""
-        return self._filepath
-
-    @property
-    def wsi_type(self) -> str:
-        """Return wsi flavour"""
-        return self._wsi_type
-
-    @property
-    def mpp(self) -> SizeMm:
-        """Return pixel spacing in um/pixel"""
-        return self.pixel_spacing*1000.0
-
-    @property
-    def pixel_spacing(self) -> SizeMm:
-        """Return pixel spacing in mm/pixel"""
-        return self._pixel_spacing
-
-    @property
-    def image_size(self) -> Size:
-        """Return image size in pixels"""
-        return self._image_size
-
-    @property
-    def mm_size(self) -> SizeMm:
-        """Return image size in mm"""
-        return self._mm_size
-
-    @property
-    def tile_size(self) -> Size:
-        """Return tile size in pixels"""
-        return self._tile_size
-
-    @property
-    def tile_type(self) -> str:
-        """Return tiling type (TILED_FULL or TILED_SPARSE)"""
-        return self._tile_type
-
-    @property
-    def uids(self) -> FileUids:
-        """Return uids"""
-        return self._uids
-
-    @property
-    def samples_per_pixel(self) -> int:
-        """Return samples per pixel (1 or 3)"""
-        return self._samples_per_pixel
-
-    @property
-    def transfer_syntax(self) -> Uid:
-        """Return transfer syntax uid"""
-        return self._transfer_syntax
-
-    @property
-    def photometric_interpretation(self) -> str:
-        """Return photometric interpretation"""
-        return self._photometric_interpretation
-
-    @property
-    def frame_offset(self) -> int:
-        """Return frame offset (for concatenated file, 0 otherwise)"""
-        return self._frame_offset
-
-    @property
-    def frame_positions(self) -> List[Tuple[int, int]]:
-        """Return frame positions and lengths"""
-        return self._frame_positions
-
-    @property
-    def frame_count(self) -> int:
-        """Return number of frames"""
-        return self._frame_count
-
-    @property
-    def optical_path_sequence(self) -> DicomSequence:
-        """Return DICOM Optical path sequence"""
-        return self._optical_path_sequence
-
-    @property
-    def shared_frame_sequence(self) -> DicomSequence:
-        """Return DICOM Shared functional group sequence.
-        """
-        return self._shared_frame_sequence
-
-    @property
-    def per_frame_sequence(self) -> Optional[DicomSequence]:
-        """Return DICOM Per frame functional groups sequence.
-        """
-        return self._per_frame_sequence
-
-    @property
-    def focal_planes(self) -> int:
-        """Return number of focal planes"""
-        return self._focal_planes
-
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: int = None
-    ) -> str:
-        return f"File with path: {self.filepath}"
-
-    def matches_series(self, uids: BaseUids, tile_size: Size = None) -> bool:
-        """Check if instance is valid (Uids and tile size match).
-        Base uids should match for instances in all types of series,
-        tile size should only match for level series.
-        """
-        if tile_size is not None and tile_size != self.tile_size:
-            return False
-        return uids == self.uids.base
-
-    def matches_instance(self, other_file: 'WsiDicomFile') -> bool:
-        """Return true if other file is of the same instance as self.
-
-        Parameters
-        ----------
-        other_file: WsiDicomFile
-            File to check.
-
-        Returns
-        ----------
-        bool
-            True if same instance.
-        """
-        return (
-            self.uids.match(other_file.uids) and
-            self.image_size == other_file.image_size and
-            self.tile_size == other_file.tile_size and
-            self.tile_type == other_file.tile_type and
-            self.wsi_type == other_file.wsi_type
-        )
-
-    @staticmethod
-    def check_duplicate_file(
-        files: List['WsiDicomFile'],
-        caller: object
-    ) -> None:
-        """Check for duplicates in list of files. Files are duplicate if file
-        instance uids match. Stops at first found duplicate and raises
-        WsiDicomUidDuplicateError.
-
-        Parameters
-        ----------
-        files: List[WsiDicomFile]
-            List of files to check.
-        caller: Object
-            Object that the files belongs to.
-        """
-        instance_uids: List[str] = []
-        for file in files:
-            instance_uid = file.uids.instance
-            if instance_uid not in instance_uids:
-                instance_uids.append(file.uids.identifier)
-            else:
-                raise WsiDicomUidDuplicateError(str(file), str(caller))
-
-    @staticmethod
-    def is_wsi_dicom(filepath: Path, ds: Dataset) -> bool:
-        """Check if file is dicom wsi type and that required attributes
+    def is_wsi_dicom(self) -> bool:
+        """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
         Warn if attribute listed as requierd in the library or required in the
         standard is missing.
-
-        Parameters
-        ----------
-        filepath: Path
-            Path to file
-        ds: Dataset
-            Dataset of file
 
         Returns
         ----------
@@ -320,11 +77,8 @@ class WsiDicomFile:
         ]
         REQURED_WHOLE_SLIDE_MICROSCOPY_MODULE_ATTRIBUTES = [
             "ImageType",
-            "ImagedVolumeWidth",
-            "ImagedVolumeHeight",
-            "ImagedVolumeDepth",
             "TotalPixelMatrixColumns",
-            "TotalPixelMatrixRows",
+            "TotalPixelMatrixRows"
         ]
         STANDARD_WHOLE_SLIDE_MICROSCOPY_MODULE_ATTRIBUTES = [
             "TotalPixelMatrixOriginSequence",
@@ -335,7 +89,7 @@ class WsiDicomFile:
             "LossyImageCompression",
             "VolumetricProperties",
             "SpecimenLabelInImage",
-            "BurnedInAnnotation",
+            "BurnedInAnnotation"
         ]
         REQURED_MULTI_FRAME_FUNCTIONAL_GROUPS_MODULE_ATTRIBUTES = [
             "NumberOfFrames",
@@ -389,33 +143,82 @@ class WsiDicomFile:
             'required': True,
             'standard': True
         }
-
         for key, module_attributes in TO_TEST.items():
             for module in module_attributes:
                 for attribute in module:
-                    if attribute not in ds:
+                    if attribute not in self:
                         warnings.warn(
-                            f'File {filepath} is missing {key}'
-                            f' attribute {attribute}'
+                            f' is missing {key} attribute {attribute}'
                         )
                         passed[key] = False
 
-        sop_class_uid = getattr(ds, "SOPClassUID", "")
+        sop_class_uid = getattr(self, "SOPClassUID", "")
         sop_class_uid_check = (sop_class_uid == WSI_SOP_CLASS_UID)
         return passed['required'] and sop_class_uid_check
 
     @staticmethod
+    def check_duplicate_dataset(
+        datasets: List[Dataset],
+        caller: object
+    ) -> None:
+        """Check for duplicates in a list of datasets. Datasets are duplicate
+        if instance uids match. Stops at first found duplicate and raises
+        WsiDicomUidDuplicateError.
+
+        Parameters
+        ----------
+        datasets: List[Dataset]
+            List of datasets to check.
+        caller: Object
+            Object that the files belongs to.
+        """
+        instance_uids: List[Uid] = []
+
+        for dataset in datasets:
+            instance_uid = Uid(dataset.SOPInstanceUID)
+            if instance_uid not in instance_uids:
+                instance_uids.append(instance_uid)
+            else:
+                raise WsiDicomUidDuplicateError(str(dataset), str(caller))
+
+    def matches_instance(self, other_dataset: 'WsiDataset') -> bool:
+        """Return true if other file is of the same instance as self.
+
+        Parameters
+        ----------
+        other_dataset: 'WsiDataset
+            Dataset to check.
+
+        Returns
+        ----------
+        bool
+            True if same instance.
+        """
+        return (
+            self.uids.match(other_dataset.uids) and
+            self.image_size == other_dataset.image_size and
+            self.tile_size == other_dataset.tile_size and
+            self.tile_type == other_dataset.tile_type
+        )
+
+    def matches_series(self, uids: BaseUids, tile_size: Size = None) -> bool:
+        """Check if instance is valid (Uids and tile size match).
+        Base uids should match for instances in all types of series,
+        tile size should only match for level series.
+        """
+        if tile_size is not None and tile_size != self.tile_size:
+            return False
+        return uids == self.base_uids
+
     def get_supported_wsi_dicom_type(
-        ds: Dataset,
+        self,
         transfer_syntax_uid: Uid
     ) -> str:
-        """Check image flavor and transfer syntax of dicom file.
+        """Check image flavor and transfer syntax of dicom dataset.
         Return image flavor if file valid.
 
         Parameters
         ----------
-        ds: Dataset
-            Pydicom dataset to check.
         transfer_syntax_uid: Uid'
             Transfer syntax uid for file.
 
@@ -425,8 +228,8 @@ class WsiDicomFile:
             WSI image flavor
         """
         SUPPORTED_IMAGE_TYPES = ['VOLUME', 'LABEL', 'OVERVIEW']
-        IMAGE_FLAVOR = 2
-        image_type: str = ds.ImageType[IMAGE_FLAVOR]
+        IMAGE_FLAVOR_INDEX_IN_IMAGE_TYPE = 2
+        image_type: str = self.ImageType[IMAGE_FLAVOR_INDEX_IN_IMAGE_TYPE]
         image_type_supported = image_type in SUPPORTED_IMAGE_TYPES
         if not image_type_supported:
             warnings.warn(f"Non-supported image type {image_type}")
@@ -443,6 +246,319 @@ class WsiDicomFile:
         if image_type_supported and syntax_supported:
             return image_type
         return ""
+
+    def read_optical_path_identifier(self, frame: Dataset) -> str:
+        """Return optical path identifier from frame, or from self if not
+        found."""
+        optical_sequence = getattr(
+            frame,
+            'OpticalPathIdentificationSequence',
+            self.OpticalPathSequence
+        )
+        return getattr(optical_sequence[0], 'OpticalPathIdentifier', '0')
+
+    @cached_property
+    def instance_uid(self) -> Uid:
+        return Uid(self.SOPInstanceUID)
+
+    @cached_property
+    def concatenation_uid(self) -> Optional[Uid]:
+        return getattr(
+            self,
+            'SOPInstanceUIDOfConcatenationSource',
+            None
+        )
+
+    @cached_property
+    def base_uids(self) -> BaseUids:
+        return BaseUids(
+            self.StudyInstanceUID,
+            self.SeriesInstanceUID,
+            self.FrameOfReferenceUID,
+        )
+
+    @cached_property
+    def uids(self) -> FileUids:
+        return FileUids(
+            self.instance_uid,
+            self.concatenation_uid,
+            self.base_uids
+        )
+
+    @cached_property
+    def frame_offset(self) -> int:
+        if self.concatenation_uid is None:
+            return 0
+        try:
+            return int(self.ConcatenationFrameOffsetNumber)
+        except AttributeError:
+            raise WsiDicomError(
+                'Concatenated file missing concatenation frame offset'
+                'number'
+            )
+
+    @cached_property
+    def frame_count(self) -> int:
+        return int(getattr(self, 'NumberOfFrames', 1))
+
+    @cached_property
+    def tile_type(self) -> str:
+        """Return tiling type from dataset. Raises WsiDicomError if type
+        is undetermined.
+
+        Parameters
+        ----------
+        ds: Dataset
+            Pydicom dataset.
+
+        Returns
+        ----------
+        str
+            Tiling type
+        """
+        if(getattr(self, 'DimensionOrganizationType', '') == 'TILED_FULL'):
+            return 'TILED_FULL'
+        elif 'PerFrameFunctionalGroupsSequence' in self:
+            return 'TILED_SPARSE'
+        raise WsiDicomError("undetermined tile type")
+
+    @cached_property
+    def frame_count(self) -> int:
+        return int(getattr(self, 'NumberOfFrames', 1))
+
+    @cached_property
+    def pixel_measure(self) -> Dataset:
+        return self.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[0]
+
+    @cached_property
+    def pixel_spacing(self) -> SizeMm:
+        """Read pixel spacing from dicom dataset.
+
+        Parameters
+        ----------
+        ds: Dataset
+            Pydicom dataset
+
+        Returns
+        ----------
+        SizeMm
+            The pixel spacing in mm/pixel.
+        """
+        pixel_measure = self.pixel_measure
+        pixel_spacing: Tuple[float, float] = pixel_measure.PixelSpacing
+        if any([spacing == 0 for spacing in pixel_spacing]):
+            raise WsiDicomError("Pixel spacing is zero")
+        return SizeMm(width=pixel_spacing[0], height=pixel_spacing[1])
+
+    @cached_property
+    def spacing_between_slices(self) -> float:
+        pixel_measure = self.pixel_measure
+        return getattr(pixel_measure, 'SpacingBetweenSlices', 0.0)
+
+    @cached_property
+    def number_of_focal_planes(self) -> int:
+        return getattr(self, 'TotalPixelMatrixFocalPlanes', 1)
+
+    @cached_property
+    def file_offset(self) -> int:
+        return int(getattr(self, 'ConcatenationFrameOffsetNumber', 0))
+
+    @cached_property
+    def frame_sequence(self) -> DicomSequence:
+        if (
+            'PerFrameFunctionalGroupsSequence' in self and
+            (
+                'PlanePositionSlideSequence' in
+                self.PerFrameFunctionalGroupsSequence[0]
+            )
+        ):
+            return self.PerFrameFunctionalGroupsSequence
+
+        return self.SharedFunctionalGroupsSequence
+
+    @cached_property
+    def ext_depth_of_field(self) -> bool:
+        return self.ExtendedDepthOfField == 'YES'
+
+    @cached_property
+    def ext_depth_of_field_planes(self) -> Optional[int]:
+        return getattr(self, 'NumberOfFocalPlanes', None)
+
+    @cached_property
+    def ext_depth_of_field_plane_distance(self) -> Optional[int]:
+        return getattr(self, 'DistanceBetweenFocalPlanes', None)
+
+    @cached_property
+    def focus_method(self) -> str:
+        return str(self.FocusMethod)
+
+    @cached_property
+    def image_size(self) -> Size:
+        """Read total pixel size from dataset.
+
+        Returns
+        ----------
+        Size
+            The image size
+        """
+        width = int(self.TotalPixelMatrixColumns)
+        height = int(self.TotalPixelMatrixRows)
+        if width == 0 or height == 0:
+            raise WsiDicomFileError(self.filepath, "Image size is zero")
+        return Size(width=width, height=height)
+
+    @cached_property
+    def mm_size(self) -> SizeMm:
+        """Read mm size from dataset.
+
+        Returns
+        ----------
+        SizeMm
+            The size of the image in mm
+        """
+        width = float(self.ImagedVolumeWidth)
+        height = float(self.ImagedVolumeHeight)
+        return SizeMm(width=width, height=height)
+
+    @cached_property
+    def mm_depth(self) -> float:
+        return self.ImagedVolumeDepth
+
+    @cached_property
+    def tile_size(self) -> Size:
+        """Read tile size from from dataset.
+
+        Returns
+        ----------
+        Size
+            The tile size
+        """
+        width = int(self.Columns)
+        height = int(self.Rows)
+        return Size(width=width, height=height)
+
+    @cached_property
+    def samples_per_pixel(self) -> int:
+        return int(self.SamplesPerPixel)
+
+    @cached_property
+    def photophotometric_interpretation(self) -> str:
+        return self.PhotometricInterpretation
+
+    @cached_property
+    def instance_number(self) -> str:
+        return self.InstanceNumber
+
+    @cached_property
+    def optical_path_sequence(self) -> DicomSequence:
+        return self.OpticalPathSequence
+
+    @cached_property
+    def slice_thickness(self) -> float:
+        try:
+            pixel_measure = self.pixel_measure
+            return float(pixel_measure.SliceThickness)
+        except AttributeError:
+            # This might not be correct if multiple focal planes
+            return self.mm_depth
+
+
+class WsiDicomFile:
+    """Represents a DICOM file (potentially) containing WSI image and metadata.
+    """
+    def __init__(self, filepath: Path):
+        """Open dicom file in filepath. If valid wsi type read required
+        parameters. Parses frames in pixel data but does not read the frames.
+
+        Parameters
+        ----------
+        filepath: Path
+            Path to file to open
+        """
+        self._filepath = filepath
+
+        if not pydicom.misc.is_dicom(self.filepath):
+            raise WsiDicomFileError(self.filepath, "is not a DICOM file")
+
+        file_meta = pydicom.filereader.read_file_meta_info(self.filepath)
+        self._transfer_syntax_uid = Uid(file_meta.TransferSyntaxUID)
+
+        self._fp = pydicom.filebase.DicomFile(self.filepath, mode='rb')
+        self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
+        self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
+
+        dataset = pydicom.dcmread(self._fp, stop_before_pixels=True)
+        self._pixel_data_position = self._fp.tell()
+
+        self._dataset = WsiDataset(dataset)
+        if self.dataset.is_wsi_dicom():
+            self._wsi_type = self.dataset.get_supported_wsi_dicom_type(
+                self.transfer_syntax
+            )
+            instance_uid = self.dataset.instance_uid
+            concatenation_uid = self.dataset.concatenation_uid
+            base_uids = self.dataset.base_uids
+            self._uids = FileUids(instance_uid, concatenation_uid, base_uids)
+            # If supported wsi type and transfer syntax, parse pixel data.
+            if self._wsi_type != '':
+                self._frame_offset = self.dataset.frame_offset
+                self._frame_count = self.dataset.frame_count
+                self._frame_positions = self._parse_pixel_data()
+        else:
+            self._wsi_type = ''
+            warnings.warn(f"Non-supported file {filepath}")
+
+    def __repr__(self) -> str:
+        return f"WsiDicomFile('{self.filepath}')"
+
+    def __str__(self) -> str:
+        return self.pretty_str()
+
+    @property
+    def dataset(self) -> WsiDataset:
+        """Return pydicom dataset of file."""
+        return self._dataset
+
+    @property
+    def filepath(self) -> Path:
+        """Return filepath"""
+        return self._filepath
+
+    @property
+    def wsi_type(self) -> str:
+        return self._wsi_type
+
+    @property
+    def uids(self) -> FileUids:
+        """Return uids"""
+        return self._uids
+
+    @property
+    def transfer_syntax(self) -> Uid:
+        """Return transfer syntax uid"""
+        return self._transfer_syntax_uid
+
+    @property
+    def frame_offset(self) -> int:
+        """Return frame offset (for concatenated file, 0 otherwise)"""
+        return self._frame_offset
+
+    @property
+    def frame_positions(self) -> List[Tuple[int, int]]:
+        """Return frame positions and lengths"""
+        return self._frame_positions
+
+    @property
+    def frame_count(self) -> int:
+        """Return number of frames"""
+        return self._frame_count
+
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: int = None
+    ) -> str:
+        return f"File with path: {self.filepath}"
 
     def get_filepointer(
         self,
@@ -468,104 +584,6 @@ class WsiDicomFile:
     def close(self) -> None:
         """Close the file."""
         self._fp.close()
-
-    def _get_mm_size(self, ds: Dataset) -> SizeMm:
-        """Read mm size from dicom file.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset
-
-        Returns
-        ----------
-        SizeMm
-            The size of the image in mm
-        """
-        width = float(ds.ImagedVolumeWidth)
-        height = float(ds.ImagedVolumeHeight)
-        if width == 0 or height == 0:
-            raise WsiDicomFileError(self.filepath, "Image mm size is zero")
-        return SizeMm(width=width, height=height)
-
-    def _get_pixel_spacing(self, ds: Dataset) -> SizeMm:
-        """Read pixel spacing from dicom file.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset
-
-        Returns
-        ----------
-        SizeMm
-            The pixel spacing
-        """
-        pixel_spacing: Tuple[float, float] = (
-            ds.SharedFunctionalGroupsSequence[0].
-            PixelMeasuresSequence[0].PixelSpacing
-        )
-        if any([spacing == 0 for spacing in pixel_spacing]):
-            raise WsiDicomFileError(self.filepath, "Pixel spacing is zero")
-        return SizeMm(width=pixel_spacing[0], height=pixel_spacing[1])
-
-    def _get_tile_size(self, ds: Dataset) -> Size:
-        """Read tile size from from dicom file.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset
-
-        Returns
-        ----------
-        Size
-            The tile size
-        """
-        width = int(ds.Columns)
-        height = int(ds.Rows)
-        if width == 0 or height == 0:
-            raise WsiDicomFileError(self.filepath, "Tile size is zero")
-        return Size(width=width, height=height)
-
-    def _get_image_size(self, ds: Dataset) -> Size:
-        """Read total pixel size from dicom file.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset
-
-        Returns
-        ----------
-        Size
-            The image size
-        """
-        width = int(ds.TotalPixelMatrixColumns)
-        height = int(ds.TotalPixelMatrixRows)
-        if width == 0 or height == 0:
-            raise WsiDicomFileError(self.filepath, "Image size is zero")
-        return Size(width=width, height=height)
-
-    def _get_tile_type(self, ds: Dataset) -> str:
-        """Return tiling type from dataset. Raises WsiDicomFileError if type
-        is undetermined.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset.
-
-        Returns
-        ----------
-        str
-            Tiling type
-        """
-        if(getattr(ds, 'DimensionOrganizationType', '') == 'TILED_FULL'):
-            return 'TILED_FULL'
-        elif 'PerFrameFunctionalGroupsSequence' in ds:
-            return 'TILED_SPARSE'
-        raise WsiDicomFileError(self.filepath, "undetermined tile type")
 
     def _read_bot(self) -> None:
         """Read (skips over) basic table offset (BOT). The BOT can contain
@@ -683,18 +701,369 @@ class WsiDicomFile:
             )
         return frame_positions
 
-
-class SparseTilePlane:
-    def __init__(self, plane_size: Size):
-        """Hold frame indices for the tiles in a sparse tiled file.
-        Empty (sparse) frames are represented by -1.
+    @staticmethod
+    def _filter_files(
+        files: List['WsiDicomFile'],
+        series_uids: BaseUids,
+        series_tile_size: Size = None
+    ) -> List['WsiDicomFile']:
+        """Filter list of wsi dicom files to only include matching uids and
+        tile size if defined.
 
         Parameters
         ----------
-        plane_size: Size
+        files: List['WsiDicomFile']
+            Wsi files to filter.
+        series_uids: Uids
+            Uids to check against.
+        series_tile_size: Size
+            Tile size to check against.
+
+        Returns
+        ----------
+        List['WsiDicomFile']
+            List of matching wsi dicom files.
+        """
+        valid_files: List[WsiDicomFile] = []
+
+        for file in files:
+            if file.dataset.matches_series(series_uids, series_tile_size):
+                valid_files.append(file)
+            else:
+                warnings.warn(
+                    f'{file.filepath} with uids {file.uids.base} '
+                    f'did not match series with {series_uids} '
+                    f'and tile size {series_tile_size}'
+                )
+                file.close()
+
+        return valid_files
+
+    @classmethod
+    def _group_files(
+        cls,
+        files: List['WsiDicomFile']
+    ) -> Dict[str, List['WsiDicomFile']]:
+        """Return files grouped by instance identifier (instances).
+
+        Parameters
+        ----------
+        files: List[WsiDicomFile]
+            Files to group into instances
+
+        Returns
+        ----------
+        Dict[str, List[WsiDicomFile]]
+            Files grouped by instance, with instance identifier as key.
+        """
+        grouped_files: Dict[str, List[WsiDicomFile]] = {}
+        for file in files:
+            try:
+                grouped_files[file.uids.identifier].append(file)
+            except KeyError:
+                grouped_files[file.uids.identifier] = [file]
+        return grouped_files
+
+
+class ImageData(metaclass=ABCMeta):
+    """Generic class for image data that can be inherited to implement support
+    for other image/file formats. Subclasses should implement properties to get
+    transfer_syntax, image_size, tile_size, and pixel_spacing and methods
+    get_tile() and close(). Additionally properties focal_planes and/or
+    optical_paths should be overridden if multiple focal planes or optical
+    paths are implemented."""
+
+    @property
+    @abstractmethod
+    def transfer_syntax(self) -> Uid:
+        """Should return the uid of the transfer syntax of the image."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def image_size(self) -> Size:
+        """Should return the pixel size of the image."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def tile_size(self) -> Size:
+        """Should return the pixel tile size of the image, or pixel size of
+        the image if not tiled."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def pixel_spacing(self) -> SizeMm:
+        """Should return the size of the pixels in mm/pixel."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str
+    ) -> bytes:
+        """Should return image bytes for tile defined by tile (x, y), z,
+        and optical path."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def close(self) -> None:
+        """Should close any open files."""
+        raise NotImplementedError
+
+    @property
+    def tiled_size(self) -> Size:
+        """The size of the image when divided into tiles, e.g. number of
+        columns and rows of tiles. Equals (1, 1) if image is not tiled."""
+        return self.image_size / self.tile_size
+
+    @property
+    def focal_planes(self) -> List[float]:
+        """Focal planes avaiable in the image defined in um."""
+        return [0.0]
+
+    @property
+    def optical_paths(self) -> List[str]:
+        """Optical paths avaiable in the image."""
+        raise ['0']
+
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: int = None
+    ) -> str:
+        return str(self)
+
+    @cached_property
+    def default_z(self) -> float:
+        """Return single defined focal plane (in um) if only one focal plane
+        defined. Return the middle focal plane if several focal planes are
+        defined."""
+        default = 0
+        if(len(self.focal_planes) > 1):
+            smallest = min(self.focal_planes)
+            largest = max(self.focal_planes)
+            middle = (largest - smallest)/2
+            default = min(range(len(self.focal_planes)),
+                          key=lambda i: abs(self.focal_planes[i]-middle))
+
+        return self.focal_planes[default]
+
+    @property
+    def default_path(self) -> str:
+        """Return the first defined optical path as default optical path
+        identifier."""
+        return self.optical_paths[0]
+
+    @cached_property
+    def plane_region(self) -> Region:
+        return Region(position=Point(0, 0), size=self.tiled_size - 1)
+
+    def valid_tiles(self, region: Region, z: float, path: str) -> bool:
+        """Check if tile region is inside tile geometry and z coordinate and
+        optical path exists.
+
+        Parameters
+        ----------
+        region: Region
+            Tile region.
+        z: float
+            Z coordiante.
+        path: str
+            Optical path.
+        """
+        return (
+            region.is_inside(self.plane_region) and
+            (z in self.focal_planes) and
+            (path in self.optical_paths)
+        )
+
+
+class DicomImageData(ImageData):
+    """Represents image data read from dicom file(s). Image data can
+    be sparsly or fully tiled and/or concatenated."""
+    def __init__(self, files: Union[WsiDicomFile, List[WsiDicomFile]]) -> None:
+        """Create DicomImageData from frame data in files.
+
+        Parameters
+        ----------
+        files: Union[WsiDicomFile, List[WsiDicomFile]]
+            Single or list of WsiDicomFiles containing frame data.
+        """
+        if not isinstance(files, list):
+            files = [files]
+
+        # Key is frame offset
+        self._files = OrderedDict(
+            (file.frame_offset, file) for file
+            in sorted(files, key=lambda file: file.frame_offset)
+        )
+
+        base_file = files[0]
+        datasets = [file.dataset for file in self._files.values()]
+        if base_file.dataset.tile_type == 'TILED_FULL':
+            self.tiles = FullTileIndex(datasets)
+        else:
+            self.tiles = SparseTileIndex(datasets)
+
+        self._pixel_spacing = base_file.dataset.pixel_spacing
+        self._transfer_syntax = base_file.transfer_syntax
+
+    @property
+    def transfer_syntax(self) -> Uid:
+        """The uid of the transfer syntax of the image."""
+        return self._transfer_syntax
+
+    @property
+    def image_size(self) -> Size:
+        """The pixel size of the image."""
+        return self.tiles.image_size
+
+    @property
+    def tile_size(self) -> Size:
+        """The pixel tile size of the image."""
+        return self.tiles.tile_size
+
+    @property
+    def focal_planes(self) -> List[float]:
+        """Focal planes avaiable in the image defined in um."""
+        return self.tiles.focal_planes
+
+    @property
+    def optical_paths(self) -> List[str]:
+        """Optical paths avaiable in the image."""
+        return self.tiles.optical_paths
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
+        """Size of the pixels in mm/pixel."""
+        return self._pixel_spacing
+
+    def get_tile(self, tile: Point, z: float, path: str) -> bytes:
+        frame_index = self._get_frame_index(tile, z, path)
+        return self._get_tile_frame(frame_index)
+
+    def get_filepointer(
+        self,
+        tile: Point,
+        z: float,
+        path: str
+    ) -> Tuple[pydicom.filebase.DicomFileLike, int, int]:
+        """Return file pointer, frame position, and frame lenght for tile with
+        z and path. If frame is inside tile geometry but no tile exists in
+        frame data (sparse) WsiDicomSparse is raised.
+
+        Parameters
+        ----------
+        tile: Point
+            Tile coordinate to get.
+        z: float
+            z coordinate to get tile for.
+        path: str
+            Optical path to get tile for.
+
+        Returns
+        ----------
+        Tuple[pydicom.filebase.DicomFileLike, int, int]:
+            File pointer, frame offset and frame lenght in number of bytes.
+        """
+        frame_index = self._get_frame_index(tile, z, path)
+        file = self._get_file(frame_index)
+        return file.get_filepointer(frame_index)
+
+    def _get_file(self, frame_index: int) -> WsiDicomFile:
+        """Return file contaning frame index. Raises WsiDicomNotFoundError if
+        frame is not found.
+
+        Parameters
+        ----------
+        frame_index: int
+             Frame index to get
+
+        Returns
+        ----------
+        WsiDicomFile
+            File containing the frame
+        """
+        for frame_offset, file in self._files.items():
+            if (frame_index < frame_offset + file.frame_count and
+                    frame_index >= frame_offset):
+                return file
+
+        raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
+
+    def _get_tile_frame(self, frame_index: int) -> bytes:
+        """Return tile frame for frame index.
+
+        Parameters
+        ----------
+        frame_index: int
+             Frame index to get
+
+        Returns
+        ----------
+        bytes
+            The frame in bytes
+        """
+        file = self._get_file(frame_index)
+        tile_frame = file._read_frame(frame_index)
+        return tile_frame
+
+    def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
+        """Return frame index for tile. Raises WsiDicomOutOfBoundsError if
+        tile, z, or path is not valid. Raises WsiDicomSparse if index is sparse
+        and tile is not in frame data.
+
+        Parameters
+        ----------
+        tile: Point
+             Tile coordiante
+        z: float
+            Z coordiante
+        path: str
+            Optical identifier
+
+        Returns
+        ----------
+        int
+            Tile frame index
+        """
+        tile_region = Region(position=tile, size=Size(0, 0))
+        if not self.valid_tiles(tile_region, z, path):
+            raise WsiDicomOutOfBoundsError(
+                f"Tile region {tile_region}",
+                f"plane {self.tiles.tiled_size}"
+            )
+        frame_index = self.tiles.get_frame_index(tile, z, path)
+        return frame_index
+
+    def is_sparse(self, tile: Point, z: float, path: str) -> bool:
+        try:
+            self.tiles.get_frame_index(tile, z, path)
+            return False
+        except WsiDicomSparse:
+            return True
+
+    def close(self) -> None:
+        for file in self._files.values():
+            file.close()
+
+
+class SparseTilePlane:
+    """Hold frame indices for the tiles in a sparse tiled file. Empty (sparse)
+    frames are represented by -1."""
+    def __init__(self, tiled_size: Size):
+        """Create a SparseTilePlane of specified size.
+
+        Parameters
+        ----------
+        tiled_size: Size
             Size of the tiling
         """
-        self.plane = np.full(plane_size.to_tuple(), -1, dtype=int)
+        self.plane = np.full(tiled_size.to_tuple(), -1, dtype=int)
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -738,73 +1107,57 @@ class SparseTilePlane:
 
 
 class TileIndex(metaclass=ABCMeta):
+    """Index for mapping tile position to frame number. Is subclassed into
+    FullTileIndex and SparseTileIndex."""
     def __init__(
         self,
-        files: Dict[int, WsiDicomFile],
-        optical: OpticalManager
+        datasets: List[WsiDataset]
     ):
-        """Index for the tiling of pixel data.
-        Requires same tile size for all tile planes
+        """Create tile index for frames in datasets. Requires equal tile
+        size for all tile planes.
 
         Parameters
         ----------
-        files: Dict[int, WsiDicomFile]
-            Dict of file frame offset and wsi file.
-        Optical: OpticalManager
-            Optical manager to add optical paths to.
+        datasets: List[WsiDataset]
+            List of datasets containing tiled image data.
 
         """
-        self._image_size = files[0].image_size
-        self._tile_size = files[0].tile_size
-        self._plane_size: Size = self.image_size / self.tile_size
-        self._frame_count = self._get_frame_count_from_files(files)
-        self._focal_planes = self._get_focal_planes_from_files(files)
-        self._optical_paths = self._get_optical_paths_from_files(
-            files,
-            optical
-        )
-        self._default_z: float = self._select_default_z(self.focal_planes)
-        self._default_path = self.optical_paths[0]
+        base_dataset = datasets[0]
+        self._image_size = base_dataset.image_size
+        self._tile_size = base_dataset.tile_size
+        self._frame_count = self._read_frame_count_from_datasets(datasets)
+        self._optical_paths = self._read_optical_paths_from_datasets(datasets)
 
     @property
-    def tile_size(self) -> Size:
-        """Return tile size in pixels"""
-        return self._tile_size
-
-    @property
-    def plane_size(self) -> Size:
-        """Return size of tiling (columns x rows)"""
-        return self._plane_size
-
-    @property
-    def default_z(self) -> float:
-        """Return default focal plane in um"""
-        return self._default_z
-
-    @property
-    def default_path(self) -> str:
-        """Return default optical path identifier"""
-        return self._default_path
-
-    @property
-    def frame_count(self) -> int:
-        """Return total number of frames"""
-        return self._frame_count
-
-    @property
+    @abstractmethod
     def focal_planes(self) -> List[float]:
-        """Return total number of focal planes"""
-        return self._focal_planes
-
-    @property
-    def optical_paths(self) -> List[str]:
-        """Return total number of optical paths"""
-        return self._optical_paths
+        """Return list of focal planes in index."""
+        raise NotImplementedError
 
     @property
     def image_size(self) -> Size:
-        """Return image size in pixels"""
+        """Return image size in pixels."""
         return self._image_size
+
+    @property
+    def tile_size(self) -> Size:
+        """Return tile size in pixels."""
+        return self._tile_size
+
+    @cached_property
+    def tiled_size(self) -> Size:
+        """Return size of tiling (columns x rows)."""
+        return self.image_size / self.tile_size
+
+    @property
+    def frame_count(self) -> int:
+        """Return total number of frames in index."""
+        return self._frame_count
+
+    @property
+    def optical_paths(self) -> List[str]:
+        """Return list of optical paths in index."""
+        return self._optical_paths
 
     @abstractmethod
     def pretty_str(
@@ -819,142 +1172,76 @@ class TileIndex(metaclass=ABCMeta):
         """Abstract method for getting the frame index for a tile"""
         raise NotImplementedError
 
-    @abstractmethod
-    def _get_focal_planes_from_files(
-        self,
-        files: Dict[int, WsiDicomFile]
-    ) -> List[float]:
-        """Abstract method for getting focal planes from file"""
-        raise NotImplementedError
-
-    def valid_tiles(self, region: Region, z: float, path: str) -> bool:
-        """Check if tile region is inside tile geometry and z coordinate and
-        optical path exists.
-
-        Parameters
-        ----------
-        region: Region
-            Tile region
-        z: float
-            z coordiante
-        path: str
-            optical path
-        """
-        plane_region = Region(
-            position=Point(0, 0),
-            size=self.plane_size - 1
-        )
-        return (
-            region.is_inside(plane_region) and
-            (z in self.focal_planes) and
-            (path in self.optical_paths)
-        )
-
-    def get_range(self, pixel_region: Region, z: float, path: str) -> Region:
-        """Return range of tiles to cover pixel region.
-
-        Parameters
-        ----------
-        pixel_region: Region
-            Pixel region of tiles to get
-        z: float
-            Z coordinate of tiles to get
-        path: str
-            Optical path identifier of tiles to get
-
-        Returns
-        ----------
-        Region
-            Region of tiles for stitching image
-        """
-        start = pixel_region.start // self.tile_size
-        end = pixel_region.end / self.tile_size - 1
-        tile_region = Region.from_points(start, end)
-        if not self.valid_tiles(tile_region, z, path):
-            raise WsiDicomOutOfBondsError(
-                f"Tile region {tile_region}", f"plane {self.plane_size}"
-            )
-        return tile_region
-
     @staticmethod
-    def _select_default_z(focal_planes: List[float]) -> float:
-        """Select default z coordinate to use if specific plane not set.
-        If more than one focal plane available the middle one is selected.
-
-        Parameters
-        ----------
-        focal_planes: List[float]
-           List of focal planes to select from
-
-        Returns
-        ----------
-        float
-            Default z coordinate
-
-        """
-        default = 0
-        if(len(focal_planes) > 1):
-            smallest = min(focal_planes)
-            largest = max(focal_planes)
-            middle = (largest - smallest)/2
-            default = min(range(len(focal_planes)),
-                          key=lambda i: abs(focal_planes[i]-middle))
-        return focal_planes[default]
-
-    @staticmethod
-    def _get_frame_count_from_files(
-        files: Dict[int, WsiDicomFile]
+    def _read_frame_count_from_datasets(
+        datasets: List[WsiDataset]
     ) -> int:
         """Return total frame count from files.
 
         Parameters
         ----------
-        files: Dict[int, WsiDicomFile]
-           Dict of wsi dicom files
+        datasets: List[WsiDataset]
+           List of datasets.
 
         Returns
         ----------
         int
-            Total frame count
+            Total frame count.
 
         """
         count = 0
-        for file in files.values():
-            count += file.frame_count
+        for dataset in datasets:
+            count += dataset.frame_count
         return count
 
     @staticmethod
-    def _get_optical_paths_from_files(
-        files: Dict[int, WsiDicomFile],
-        optical: OpticalManager
+    def _read_optical_paths_from_datasets(
+        datasets: List[WsiDataset]
     ) -> List[str]:
         """Return list of optical path identifiers from files.
 
         Parameters
         ----------
-        files: Dict[int, WsiDicomFile]
-           Dict of wsi dicom files
-        optical: OpticalManager
-            Optical manager to add optical paths to.
+        datasets: List[WsiDataset]
+           List of datasets.
 
         Returns
         ----------
         List[str]
-            Optical identifiers
+            Optical identifiers.
 
         """
-        paths: List[str] = []
-        for file in files.values():
-            paths += optical.add(file.optical_path_sequence)
-        return paths
+        paths: Set[str] = set()
+        for dataset in datasets:
+            paths.update(OpticalManager.get_path_identifers(
+                dataset.optical_path_sequence
+            ))
+        return list(paths)
 
 
 class FullTileIndex(TileIndex):
-    """Index for full tiled pixel data.
-    Requires same tile size for all tile planes.
-    Pixel data tiles are ordered by colum, row, z and path, thus
-    the frame index for a tile can directly be calculated.
-    """
+    """Index for mapping tile position to frame number for datasets containing
+    full tiles. Pixel data tiles are ordered by colum, row, z and path, thus
+    the frame index for a tile can directly be calculated."""
+    def __init__(
+        self,
+        datasets: List[WsiDataset]
+    ):
+        """Create full tile index for frames in datasets. Requires equal tile
+        size for all tile planes.
+
+        Parameters
+        ----------
+        datasets: List[WsiDataset]
+            List of datasets containing full tiled image data.
+        """
+        super().__init__(datasets)
+        self._focal_planes = self._read_focal_planes_from_datasets(datasets)
+
+    @property
+    def focal_planes(self) -> List[float]:
+        return self._focal_planes
+
     def __str__(self) -> str:
         return self.pretty_str()
 
@@ -965,7 +1252,7 @@ class FullTileIndex(TileIndex):
     ) -> str:
         string = (
             f"Full tile index tile size: {self.tile_size}"
-            f", plane size: {self.plane_size}"
+            f", plane size: {self.tiled_size}"
         )
         if depth is not None:
             depth -= 1
@@ -978,74 +1265,63 @@ class FullTileIndex(TileIndex):
         return string
 
     def get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Return frame index for a Point tile, z coordinate,
-        and optical path from full tile index. Assumes that tile, z, and path
-        are valid.
+        """Return frame index for a Point tile, z coordinate, and optical path
+        from full tile index. Assumes that tile, z, and path are valid.
 
         Parameters
         ----------
         tile: Point
-            tile xy to get
+            Tile xy to get.
         z: float
-            z coordinate to get
+            Z coordinate to get.
         path: str
-            ID of optical path to get
+            ID of optical path to get.
 
         Returns
         ----------
         int
-            Frame index
+            Frame index.
         """
-        z_index = self._focal_plane_index(z)
-        plane_offset = tile.x + self.plane_size.width*tile.y
-        tiles_in_plane = self.plane_size.width * self.plane_size.height
-        z_offset = z_index * tiles_in_plane
-        path_index = self._optical_path_index(path)
+        plane_offset = tile.x + self.tiled_size.width * tile.y
+        z_offset = self._get_focal_plane_index(z) * self.tiled_size.area
         path_offset = (
-            path_index * len(self._focal_planes) * tiles_in_plane
+            self._get_optical_path_index(path)
+            * len(self._focal_planes) * self.tiled_size.area
         )
         return plane_offset + z_offset + path_offset
 
-    def _get_focal_planes_from_files(
+    def _read_focal_planes_from_datasets(
         self,
-        files: Dict[int, WsiDicomFile]
+        datasets: List[WsiDataset]
     ) -> List[float]:
-        """Return list of focal planes from files.
-        Values in Pixel Measures Sequene are in mm.
+        """Return list of focal planes in datasets. Values in Pixel Measures
+        Sequene are in mm.
 
         Parameters
         ----------
-        files: Dict[int, WsiDicomFile]
-           Dict of wsi dicom files
+        datasets: List[WsiDataset]
+           List of datasets to read focal planes from.
 
         Returns
         ----------
         List[float]
-            Focal planes
+            Focal planes, specified in um.
 
         """
         MM_TO_MICRON = 1000.0
         DECIMALS = 3
-        focal_planes: List[float] = []
-        for file in files.values():
-            sequence = file.shared_frame_sequence[0]
-            spacing = getattr(
-                sequence.PixelMeasuresSequence[0],
-                'SpacingBetweenSlices',
-                0
-            )
-            if spacing == 0 and file.focal_planes != 1:
-                raise WsiDicomFileError(
-                    file.filepath,
-                    "Multipe focal planes and zero plane spacing"
-                )
-            for plane in range(file.focal_planes):
-                z = round(plane * spacing * MM_TO_MICRON, DECIMALS)
-                if z not in focal_planes:
-                    focal_planes.append(z)
-        return focal_planes
+        focal_planes: Set[float] = set()
+        for dataset in datasets:
+            slice_spacing = dataset.spacing_between_slices
+            number_of_focal_planes = dataset.number_of_focal_planes
+            if slice_spacing == 0 and number_of_focal_planes != 1:
+                raise ValueError
+            for plane in range(number_of_focal_planes):
+                z = round(plane * slice_spacing * MM_TO_MICRON, DECIMALS)
+                focal_planes.add(z)
+        return list(focal_planes)
 
-    def _optical_path_index(self, path: str) -> int:
+    def _get_optical_path_index(self, path: str) -> int:
         """Return index of the optical path in instance.
         This assumes that all files in a concatenated set contains all the
         optical path identifiers of the set.
@@ -1053,13 +1329,13 @@ class FullTileIndex(TileIndex):
         Parameters
         ----------
         path: str
-            Optical path identifier
+            Optical path identifier to search for.
 
         Returns
         ----------
         int
             The index of the optical path identifier in the optical path
-            sequence
+            sequence.
         """
         try:
             return next(
@@ -1067,59 +1343,56 @@ class FullTileIndex(TileIndex):
                  if plane_path == path)
             )
         except StopIteration:
-            raise WsiDicomNotFoundError(
-                f"Optical path {path}",
-                "full tile index"
-            )
+            raise WsiDicomNotFoundError(f"Optical path {path}", self)
 
-    def _focal_plane_index(self, z: float) -> int:
+    def _get_focal_plane_index(self, z: float) -> int:
         """Return index of the focal plane of z.
 
         Parameters
         ----------
         z: float
-            The z coordinate to search for
+            The z coordinate (in um) to search for.
 
         Returns
         ----------
         int
-            Focal plane index
+            Focal plane index for z coordiante.
         """
         try:
             return next(index for index, plane in enumerate(self.focal_planes)
                         if plane == z)
         except StopIteration:
-            raise WsiDicomNotFoundError(
-                f"Z {z} in instance", "full tile index"
-            )
+            raise WsiDicomNotFoundError(f"Z {z} in instance", self)
 
 
 class SparseTileIndex(TileIndex):
+    """Index for mapping tile position to frame number for datasets containing
+    sparse tiles. Frame indices are retrieved from tile position, z, and path
+    by finding the corresponding matching SparseTilePlane (z and path) and
+    returning the frame index at tile position. If the tile is missing (due to
+    the sparseness), -1 is returned."""
     def __init__(
         self,
-        files: Dict[int, WsiDicomFile],
-        optical: OpticalManager
+        datasets: List[WsiDataset]
     ):
-        """Index for sparse tiled pixel data.
-        Requires same tile size for all tile planes.
-        Pixel data tiles are identified by the Per Frame Functional Groups
-        Sequence that contains tile colum, row, z, path, and frame index. These
-        are stored in a SparseTilePlane (one plane for every combination of z
-        and path). Frame indices are retrieved from tile position, z, and path
-        by finding the corresponding matching SparseTilePlane (z and path) and
-        returning the frame index at tile position. If the tile is missing (due
-        to the sparseness), -1 is returned.
+        """Create sparse tile index for frames in datasets. Requires equal tile
+        size for all tile planes. Pixel data tiles are identified by the Per
+        Frame Functional Groups Sequence that contains tile colum, row, z,
+        path, and frame index. These are stored in a SparseTilePlane
+        (one plane for every combination of z and path).
 
         Parameters
         ----------
-        files: Dict[int, WsiDicomFile]
-            Dict of file frame offset and wsi file.
-        Optical: OpticalManager
-            Optical manager to add optical paths to.
-
+        datasets: List[WsiDataset]
+            List of datasets containing sparse tiled image data.
         """
-        super().__init__(files, optical)
-        self._planes = self._get_planes_from_files(files)
+        super().__init__(datasets)
+        self._planes = self._read_planes_from_datasets(datasets)
+        self._focal_planes = self._get_focal_planes()
+
+    @property
+    def focal_planes(self) -> List[float]:
+        return self._focal_planes
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -1131,7 +1404,7 @@ class SparseTileIndex(TileIndex):
     ) -> str:
         string = (
             f"Sparse tile index tile size: {self.tile_size}"
-            f", plane size: {self.plane_size}"
+            f", plane size: {self.tiled_size}"
         )
         return string
 
@@ -1142,66 +1415,49 @@ class SparseTileIndex(TileIndex):
         Parameters
         ----------
         tile: Point
-            tile xy to get
+            Tile xy to get.
         z: float
-            z coordinate to get
+            Z coordinate to get.
         path: str
-            ID of optical path to get
+            ID of optical path to get.
 
         Returns
         ----------
         int
-            Frame index
+            Frame index.
         """
-        plane = self._get_plane(z, path)
+        try:
+            plane = self._planes[(z, path)]
+        except KeyError:
+            raise WsiDicomNotFoundError(
+                f"Plane with z {z}, path {path}", self
+            )
         frame_index = plane[tile]
         return frame_index
 
-    def _get_focal_planes_from_files(
-        self,
-        files: Dict[int, WsiDicomFile]
-    ) -> List[float]:
-        """Return list of focal planes from files.
-
-        Parameters
-        ----------
-        files: Dict[int, WsiDicomFile]
-           Dict of wsi dicom files
+    def _get_focal_planes(self) -> List[float]:
+        """Return list of focal planes defiend in planes.
 
         Returns
         ----------
         List[float]
-            Focal planes
+            Focal planes, specified in um.
         """
-        focal_planes: List[float] = []
-        for file in files.values():
-            if 'PlanePositionSlideSequence' in file.shared_frame_sequence[0]:
-                frame_sequence = file.shared_frame_sequence
-            else:
-                frame_sequence = file.per_frame_sequence
-            for frame in frame_sequence:
-                try:
-                    (tile, z) = self._get_frame_coordinates(frame)
-                except AttributeError:
-                    print(frame)
-                    raise WsiDicomFileError(
-                        file.filepath,
-                        "Invalid plane position slide sequence"
-                    )
-                if z not in focal_planes:
-                    focal_planes.append(z)
-        return focal_planes
+        focal_planes: Set[float] = set()
+        for z, path in self._planes.keys():
+            focal_planes.add(z)
+        return list(focal_planes)
 
-    def _get_planes_from_files(
+    def _read_planes_from_datasets(
         self,
-        files: Dict[int, WsiDicomFile]
+        datasets: List[WsiDataset]
     ) -> Dict[Tuple[float, str], SparseTilePlane]:
-        """Return SparseTilePlane from planes read from files.
+        """Return SparseTilePlane from planes in datasets.
 
         Parameters
         ----------
-        files: Dict[int, WsiDicomFile]
-           Dict of wsi dicom files
+        datasets: List[WsiDataset]
+           List of datasets to read planes from.
 
         Returns
         ----------
@@ -1210,56 +1466,26 @@ class SparseTileIndex(TileIndex):
         """
         planes: Dict[Tuple[float, str], SparseTilePlane] = {}
 
-        for file_offset, file in files.items():
-            if 'PlanePositionSlideSequence' in file.shared_frame_sequence[0]:
-                frame_sequence = file.shared_frame_sequence
-            else:
-                frame_sequence = file.per_frame_sequence
+        for dataset in datasets:
+            file_offset = dataset.file_offset
+            frame_sequence = dataset.frame_sequence
             for i, frame in enumerate(frame_sequence):
-                (tile, z) = self._get_frame_coordinates(frame)
-                optical_sequence = getattr(
-                    frame,
-                    'OpticalPathIdentificationSequence',
-                    file.optical_path_sequence
-                )
-                identifier = getattr(
-                    optical_sequence[0],
-                    'OpticalPathIdentifier',
-                    '0'
-                )
+                (tile, z) = self._read_frame_coordinates(frame)
+                identifier = dataset.read_optical_path_identifier(frame)
+
                 try:
                     plane = planes[(z, identifier)]
                 except KeyError:
-                    plane = SparseTilePlane(self.plane_size)
+                    plane = SparseTilePlane(self.tiled_size)
                     planes[(z, identifier)] = plane
                 plane[tile] = i + file_offset
+
         return planes
 
-    def _get_plane(self, z: float, path: str) -> SparseTilePlane:
-        """Return plane with z coordinate and optical path.
+    def _read_frame_coordinates(
+            self,
+            frame: DicomSequence
 
-        Parameters
-        ----------
-        z: float
-            Z coordinate to search for
-        path: str
-            Optical path identifer to search for
-
-        Returns
-        ----------
-        SparseTilePlane
-            The plane for z coordinate and path
-        """
-        try:
-            return self._planes[(z, path)]
-        except KeyError:
-            raise WsiDicomNotFoundError(
-                f"Plane with z {z}, path {path}", "sparse tile index"
-            )
-
-    def _get_frame_coordinates(
-        self,
-        frame: DicomSequence
     ) -> Tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
         In the Plane Position Slide Sequence x and y are defined in mm and z in
@@ -1268,7 +1494,7 @@ class SparseTileIndex(TileIndex):
         Parameters
         ----------
         frame: DicomSequence
-            Pydicom frame sequence
+            Pydicom frame sequence.
 
         Returns
         ----------
@@ -1284,50 +1510,38 @@ class SparseTileIndex(TileIndex):
         return tile, z
 
 
-class WsiDicomInstance:
-    def __init__(self, files: List[WsiDicomFile], optical: OpticalManager):
-        """Represents a single SOP instance or a concatenated SOP instance.
-        The instance can contain multiple focal planes and optical paths.
-
-        Files needs to match in UIDs and have the same image and tile size.
+class WsiInstance:
+    """Represents a level, label, or overview wsi image, containing image data
+    and datasets with metadata."""
+    def __init__(
+        self,
+        datasets: Union[WsiDataset, List[WsiDataset]],
+        image_data: ImageData
+    ):
+        """Create a WsiInstance from datasets with metadata and image data.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to include in the instance.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
+        datasets: Union[WsiDataset, List[WsiDataset]]
+            Single dataset or list of datasets.
+        image_data: ImageData
+            Image data.
         """
-        # Key is frame offset
-        self._files = OrderedDict(
-            (file.frame_offset, file) for file
-            in sorted(files, key=lambda file: file.frame_offset)
-        )
-        (
-            self._identifier,
-            self._uids,
-            self._wsi_type
-        ) = self._validate_instance(optical)
+        if not isinstance(datasets, list):
+            datasets = [datasets]
+        self._datasets = datasets
 
-        self.tiles = self._create_tileindex(self._files, optical)
+        self._image_data = image_data
 
-        base_file = files[0]
-        self._size = base_file.image_size
-        self._pixel_spacing = base_file.pixel_spacing
-        self._tile_size = base_file.tile_size
-        self._samples_per_pixel = base_file.samples_per_pixel
-        self._transfer_syntax = base_file.transfer_syntax
-        self._photometric_interpretation = base_file.photometric_interpretation
+        self._identifier, self._uids = self._validate_instance(self.datasets)
 
-        self._blank_color = self._get_blank_color(
-            self._photometric_interpretation
-        )
-        if(self._samples_per_pixel == 1):
-            self._image_mode = "L"
-        else:
-            self._image_mode = "RGB"
-        self._blank_tile = self._create_blank_tile()
-        self._blank_encoded_tile = self._encode_tile(self._blank_tile)
+        if self.ext_depth_of_field:
+            if self.ext_depth_of_field_planes is None:
+                raise WsiDicomError("Instance Missing NumberOfFocalPlanes")
+            if self.ext_depth_of_field_plane_distance is None:
+                raise WsiDicomError(
+                    "Instance Missing DistanceBetweenFocalPlanes"
+                )
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -1338,201 +1552,188 @@ class WsiDicomInstance:
         depth: int = None
     ) -> str:
         string = (
-            f"Instance default z: {self.tiles.default_z}"
-            f" default path: { self.tiles.default_path}"
+            f"default z: {self.default_z} "
+            f"default path: { self.default_path}"
+
         )
         if depth is not None:
             depth -= 1
             if(depth < 0):
                 return string
         string += (
-            '\n' + str_indent(indent) + 'Files'
-            + dict_pretty_str(self._files, indent+1, depth, 1, 1) + '\n'
-            + str_indent(indent) + self.tiles.pretty_str(indent+1, depth)
+            ' ImageData ' + self._image_data.pretty_str(indent+1, depth)
         )
         return string
 
-    @property
-    def default_z(self) -> float:
-        return self.tiles.default_z
-
-    @property
-    def default_path(self) -> str:
-        return self.tiles.default_path
-
-    @property
-    def files(self) -> List[WsiDicomFile]:
-        """Return list of files"""
-        return list(self._files.values())
-
-    @property
+    @cached_property
     def wsi_type(self) -> str:
-        """Return wsi flavour"""
-        return self._wsi_type
+        """Return wsi type."""
+        return self.dataset.get_supported_wsi_dicom_type(
+            self._image_data.transfer_syntax
+        )
 
     @property
     def blank_color(self) -> Tuple[int, int, int]:
-        """Return RGB background color"""
-        return self._blank_color
+        """Return RGB background color."""
+        return self._get_blank_color(self.photometric_interpretation)
+
+    @cached_property
+    def image_mode(self) -> str:
+        if(self.samples_per_pixel == 1):
+            return "L"
+        else:
+            return "RGB"
 
     @property
-    def blank_tile(self) -> Image:
-        """Return background tile"""
-        return self._blank_tile
+    def datasets(self) -> List[WsiDataset]:
+        return self._datasets
 
     @property
-    def blank_encoded_tile(self) -> bytes:
-        """Return encoded background tile"""
-        return self._blank_encoded_tile
-
-    @property
-    def uids(self) -> BaseUids:
-        """Return base uids"""
-        return self._uids
+    def dataset(self) -> WsiDataset:
+        return self.datasets[0]
 
     @property
     def size(self) -> Size:
-        """Return image size in pixels"""
-        return self._size
+        """Return image size in pixels."""
+        return self._image_data.image_size
 
     @property
     def tile_size(self) -> Size:
-        """Return tile size in pixels"""
-        return self._tile_size
+        """Return tile size in pixels."""
+        return self._image_data.tile_size
 
     @property
     def mpp(self) -> SizeMm:
-        """Return pixel spacing in um/pixel"""
+        """Return pixel spacing in um/pixel."""
         return self.pixel_spacing*1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
-        """Return pixel spacing in mm/pixel"""
-        return self._pixel_spacing
+        """Return pixel spacing in mm/pixel."""
+        return self._image_data.pixel_spacing
+
+    @property
+    def mm_size(self) -> SizeMm:
+        """Return slide size in mm."""
+        return self.dataset.mm_size
+
+    @property
+    def mm_depth(self) -> float:
+        """Return imaged depth in mm."""
+        return self.dataset.mm_depth
+
+    @property
+    def slice_thickness(self) -> float:
+        """Return slice thickness."""
+        return self.dataset.slice_thickness
+
+    @property
+    def slice_spacing(self) -> float:
+        """Return slice spacing."""
+        return self.dataset.spacing_between_slices
+
+    @property
+    def focus_method(self) -> str:
+        return self.dataset.focus_method
+
+    @property
+    def ext_depth_of_field(self) -> bool:
+        return self.dataset.ext_depth_of_field
+
+    @property
+    def ext_depth_of_field_planes(self) -> Optional[int]:
+        return self.dataset.ext_depth_of_field_planes
+
+    @property
+    def ext_depth_of_field_plane_distance(self) -> Optional[float]:
+        return self.dataset.ext_depth_of_field_plane_distance
+
+    @property
+    def photometric_interpretation(self) -> str:
+        """Return photometric interpretation."""
+        return self.dataset.photophotometric_interpretation
+
+    @property
+    def samples_per_pixel(self) -> int:
+        """Return samples per pixel (1 or 3)."""
+        return self.dataset.samples_per_pixel
 
     @property
     def identifier(self) -> Uid:
         """Return identifier (instance uid for single file instance or
-        concatenation uid for multiple file instance)"""
+        concatenation uid for multiple file instance)."""
         return self._identifier
 
-    @staticmethod
-    def check_duplicate_instance(
-        instances: List['WsiDicomInstance'],
-        self: object
-    ) -> None:
-        """Check for duplicates in list of instances. Instances are duplicate
-        if instance identifier (file instance uid or concatenation uid) match.
-        Stops at first found duplicate and raises WsiDicomUidDuplicateError.
+    @property
+    def instance_number(self) -> int:
+        return self.dataset.instance_number
 
-        Parameters
-        ----------
-        instances: List['WsiDicomInstance']
-            List of instances to check.
-        caller: Object
-            Object that the instances belongs to.
-        """
-        instance_identifiers: List[str] = []
-        for instance in instances:
-            instance_identifier = instance.identifier
-            if instance_identifier not in instance_identifiers:
-                instance_identifiers.append(instance_identifier)
-            else:
-                raise WsiDicomUidDuplicateError(str(instance), str(self))
+    @property
+    def default_z(self) -> float:
+        return self._image_data.default_z
+
+    @property
+    def default_path(self) -> str:
+        return self._image_data.default_path
+
+    @property
+    def focal_planes(self) -> List[float]:
+        return self._image_data.focal_planes
+
+    @property
+    def optical_paths(self) -> List[str]:
+        return self._image_data.optical_paths
+
+    @property
+    def tiled_size(self) -> Size:
+        return self._image_data.tiled_size
+
+    @property
+    def datasets(self) -> List[WsiDataset]:
+        return self._datasets
+
+    @property
+    def uids(self) -> Optional[BaseUids]:
+        """Return base uids"""
+        return self._uids
 
     @classmethod
     def open(
         cls,
         files: List[WsiDicomFile],
-        optical: OpticalManager
-    ) -> List['WsiDicomInstance']:
-        """Return list of instances created from files.
+        series_uids: BaseUids,
+        series_tile_size: Size = None
+    ) -> List['WsiInstance']:
+        """Create instances from Dicom files. Only files with matching series
+        uid and tile size, if defined, are used. Other files are closed.
 
         Parameters
         ----------
         files: List[WsiDicomFile]
             Files to create instances from.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
+        series_uids: BaseUids
+            Uid to match against.
+        series_tile_size: Size
+            Tile size to match against (for level instances).
 
         Returns
         ----------
-        List[WsiDicomInstance]
+        List[WsiInstancece]
             List of created instances.
         """
-        instances: List[WsiDicomInstance] = []
-        files_grouped_by_instance = cls._group_files(files)
-
-        for instance_files in files_grouped_by_instance.values():
-            new_instance = WsiDicomInstance(instance_files, optical)
-            instances.append(new_instance)
-
-        return instances
-
-    def matches(self, other_instance: 'WsiDicomInstance') -> bool:
-        """Return true if other instance is of the same stack as self.
-
-        Parameters
-        ----------
-        other_instance: WsiDicomInstance
-            Instance to check
-
-        Returns
-        ----------
-        bool
-            True if instanes are of same stack.
-
-        """
-        return (
-            self.uids == other_instance.uids and
-            self.size == other_instance.size and
-            self.tile_size == other_instance.tile_size and
-            self.wsi_type == other_instance.wsi_type
+        filtered_files = WsiDicomFile._filter_files(
+            files,
+            series_uids,
+            series_tile_size
         )
-
-    def create_ds(self) -> Dataset:
-        """Create a base pydicom dataset based on first file in instance.
-
-        Returns
-        ----------
-        pydicom.dataset
-            Pydicom dataset with common attributes for the levels.
-        """
-        INCLUDE = [0x0002, 0x0008, 0x0010, 0x0018, 0x0020, 0x0040]
-        DELETE = ['ImageType', 'SOPInstanceUID', 'ContentTime',
-                  'InstanceNumber', 'DimensionOrganizationSequence']
-
-        base_file_path = self._files[0].filepath
-        base_ds = pydicom.dcmread(base_file_path, stop_before_pixels=True)
-        ds = pydicom.Dataset()
-        for group in INCLUDE:
-            group_ds = base_ds.group_dataset(group)
-            for element in group_ds.iterall():
-                ds.add(element)
-        for delete in DELETE:
-            ds.pop(delete)
-        return ds
-
-    def encode(self, image: Image) -> bytes:
-        """Encode image using transfer syntax.
-
-        Parameters
-        ----------
-        image: Image
-            Image to encode
-
-        Returns
-        ----------
-        bytes
-            Encoded image as bytes
-
-        """
-        (image_format, image_options) = self._image_settings(
-            self._transfer_syntax
-        )
-        with io.BytesIO() as buffer:
-            image.save(buffer, format=image_format, **image_options)
-            return buffer.getvalue()
+        files_grouped_by_instance = WsiDicomFile._group_files(filtered_files)
+        return [
+            WsiInstance(
+                [file.dataset for file in instance_files],
+                DicomImageData(instance_files)
+            )
+            for instance_files in files_grouped_by_instance.values()
+        ]
 
     def stitch_tiles(
         self,
@@ -1560,12 +1761,12 @@ class WsiDicomInstance:
             z = self.default_z
         if path is None:
             path = self.default_path
-        stitching_tiles = self.tiles.get_range(region, z, path)
-        image = Image.new(mode=self._image_mode, size=region.size.to_tuple())
+        stitching_tiles = self.get_tile_range(region, z, path)
+        image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
+
         write_index = Point(x=0, y=0)
         tile = stitching_tiles.position
-        for x, y in stitching_tiles.iterate_all(include_end=True):
-            tile = Point(x=x, y=y)
+        for tile in stitching_tiles.iterate_all(include_end=True):
             tile_image = self.get_tile(tile, z, path)
             tile_crop = self.crop_tile(tile, region)
             tile_image = tile_image.crop(box=tile_crop.box)
@@ -1577,82 +1778,43 @@ class WsiDicomInstance:
             )
         return image
 
-    def get_tile(
+    def get_tile_range(
         self,
-        tile: Point,
-        z: float = None,
-        path: str = None
-    ) -> Image:
-        """Get tile image at tile coordinate x, y.
-        If frame is inside tile geometry but no tile exists in
-        frame data (sparse) returns blank image
+        pixel_region: Region,
+        z: float,
+        path: str
+    ) -> Region:
+        """Return range of tiles to cover pixel region.
 
         Parameters
         ----------
-        tile: Point
-            Tile x, y coordinate
+        pixel_region: Region
+            Pixel region of tiles to get
         z: float
-            Z coordinate
+            Z coordinate of tiles to get
         path: str
-            Optical path
+            Optical path identifier of tiles to get
 
         Returns
         ----------
-        Image
-            Tile image
+        Region
+            Region of tiles for stitching image
         """
-        if z is None:
-            z = self.default_z
-        if path is None:
-            path = self.default_path
-        try:
-            frame_index = self._get_frame_index(tile, z, path)
-            tile_frame = self._get_tile_frame(frame_index)
-            image = Image.open(io.BytesIO(tile_frame))
-        except WsiDicomSparse:
-            image = self.blank_tile
+        start = pixel_region.start // self._image_data.tile_size
+        end = pixel_region.end / self._image_data.tile_size - 1
+        tile_region = Region.from_points(start, end)
+        if not self._image_data.valid_tiles(tile_region, z, path):
+            raise WsiDicomOutOfBoundsError(
+                f"Tile region {tile_region}",
+                f"tiled size {self._image_data.tiled_size}"
+            )
+        return tile_region
 
-        # Check if tile is an edge tile that should be croped
-        cropped_tile_region = self.crop_to_level_size(tile)
-        if cropped_tile_region.size != self.tile_size:
-            image = image.crop(box=cropped_tile_region.box_from_origin)
-        return image
-
-    def get_encoded_tile(
+    def crop_encoded_tile_to_level(
         self,
         tile: Point,
-        z: float = None,
-        path: str = None
+        tile_frame: bytes
     ) -> bytes:
-        """Get tile bytes at tile coordinate x, y
-        If frame is inside tile geometry but no tile exists in
-        frame data (sparse) returns encoded blank image.
-
-        Parameters
-        ----------
-        tile: Point
-            Tile x, y coordinate
-        z: float
-            Z coordinate
-        path: str
-            Optical path
-
-        Returns
-        ----------
-        bytes
-            Tile image as bytes
-        """
-        if z is None:
-            z = self.default_z
-        if path is None:
-            path = self.default_path
-        try:
-            frame_index = self._get_frame_index(tile, z, path)
-            tile_frame = self._get_tile_frame(frame_index)
-        except WsiDicomSparse:
-            tile_frame = self.blank_encoded_tile
-
-        # Check if tile is an edge tile that should be croped
         cropped_tile_region = self.crop_to_level_size(tile)
         if cropped_tile_region.size != self.tile_size:
             image = Image.open(io.BytesIO(tile_frame))
@@ -1660,33 +1822,38 @@ class WsiDicomInstance:
             tile_frame = self.encode(image)
         return tile_frame
 
-    def get_filepointer(
+    def crop_tile_to_level(
         self,
         tile: Point,
-        z: float,
-        path: str
-    ) -> Tuple[pydicom.filebase.DicomFileLike, int, int]:
-        """Return file pointer, frame position, and frame lenght for tile with
-        z and path. If frame is inside tile geometry but no tile exists in
-        frame data (sparse) WsiDicomSparse is raised.
+        tile_image: Image
+    ) -> Image:
+        cropped_tile_region = self.crop_to_level_size(tile)
+        if cropped_tile_region.size != self.tile_size:
+            tile_image = tile_image.crop(
+                box=cropped_tile_region.box_from_origin
+            )
+        return tile_image
+
+    def encode(self, image: Image) -> bytes:
+        """Encode image using transfer syntax.
 
         Parameters
         ----------
-        tile: Point
-            Tile coordinate to get.
-        z: float
-            z coordinate to get tile for.
-        path: str
-            Optical path to get tile for.
+        image: Image
+            Image to encode
 
         Returns
         ----------
-        Tuple[pydicom.filebase.DicomFileLike, int, int]:
-            File pointer, frame offset and frame lenght in number of bytes
+        bytes
+            Encoded image as bytes
+
         """
-        frame_index = self._get_frame_index(tile, z, path)
-        file = self._get_file(frame_index)
-        return file.get_filepointer(frame_index)
+        (image_format, image_options) = self._image_settings(
+            self._image_data.transfer_syntax
+        )
+        with io.BytesIO() as buffer:
+            image.save(buffer, format=image_format, **image_options)
+            return buffer.getvalue()
 
     def crop_tile(self, tile: Point, stitching: Region) -> Region:
         """Crop tile at edge of stitching region so that the tile after croping
@@ -1736,137 +1903,35 @@ class WsiDicomInstance:
             return self.crop_tile(item, level_region)
         return level_region.crop(item)
 
-    def close(self) -> None:
-        """Close all files in the instance."""
-        for file in self._files.values():
-            file.close()
-
-    def _validate_instance(
-        self,
-        optical: OpticalManager
-    ) -> Tuple[str, BaseUids, str]:
-        """Check that no files in instance are duplicate, that all files in
-        instance matches (uid, type and size) and that the optical manager
-        matches by base uid. Raises WsiDicomMatchError otherwise.
-        Returns the matching file uid.
-
-        Parameters
-        ----------
-        optical: OpticalManager
-            Optical manager to check
-
-        Returns
-        ----------
-        Tuple[str, BaseUids, str]
-            Instance identifier uid, base uids and wsi type
-        """
-        WsiDicomFile.check_duplicate_file(self.files, self)
-        base_file = self.files[0]
-        if not base_file.uids.base == optical.uids:
-            raise WsiDicomMatchError(
-                str(base_file.filepath), str(self)
-            )
-        for file in self.files[1:]:
-            if not base_file.matches_instance(file):
-                raise WsiDicomMatchError(
-                    str(file.filepath), str(self)
-                )
-        return (
-            base_file.uids.identifier,
-            base_file.uids.base,
-            base_file.wsi_type
-        )
-
-    @classmethod
-    def _group_files(
-        cls,
-        files: List[WsiDicomFile]
-    ) -> Dict[str, List[WsiDicomFile]]:
-        """Return files grouped by instance identifier (instances).
-
-        Parameters
-        ----------
-        files: List[WsiDicomFile]
-            Files to group into instances
-
-        Returns
-        ----------
-        Dict[str, List[WsiDicomFile]]
-            Files grouped by instance, with instance identifier as key.
-        """
-        grouped_files: Dict[str, List[WsiDicomFile]] = {}
-        for file in files:
-            try:
-                grouped_files[file.uids.identifier].append(file)
-            except KeyError:
-                grouped_files[file.uids.identifier] = [file]
-        return grouped_files
-
-    def _create_blank_tile(self) -> Image:
-        """Create blank tile for instance.
-
-        Returns
-        ----------
-        Image
-            Blank tile image
-        """
-        if(self._samples_per_pixel == 1):
-            self._image_mode = "L"
-        else:
-            self._image_mode = "RGB"
-        return Image.new(
-            mode=self._image_mode,
-            size=self.tile_size.to_tuple(),
-            color=self.blank_color[:self._samples_per_pixel]
-        )
-
     @staticmethod
-    def _get_blank_color(
-        photometric_interpretation: str
-    ) -> Tuple[int, int, int]:
-        """Return color to use blank tiles.
+    def _write_indexer(
+        index: Point,
+        previous_size: Size,
+        image_size: Size
+    ) -> Point:
+        """Increment index in x by previous width until index x exceds image
+        size. Then resets index x to 0 and increments index y by previous
+        height. Requires that tiles are scanned row by row.
 
         Parameters
         ----------
-        photometric_interpretation: str
-            The photomoetric interpretation of the dataset
+        index: Point
+            The last write index position
+        previouis_size: Size
+            The size of the last written last tile
+        image_size: Size
+            The size of the image to be written
 
         Returns
         ----------
-        int, int, int
-            RGB color
-
+        Point
+            The position (upper right) in image to insert the next tile into
         """
-        BLACK = 0
-        WHITE = 255
-        if(photometric_interpretation == "MONOCHROME2"):
-            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
-        return (WHITE, WHITE, WHITE)
-
-    @staticmethod
-    def _create_tileindex(
-        files: Dict[int, WsiDicomFile],
-        optical: OpticalManager
-    ) -> TileIndex:
-        """Return a tile index created from files. Add optical paths to optical
-        manager.
-
-        Parameters
-        ----------
-        files: Dict[int, WsiDicomFile]
-            Files to add
-        optical: OpticalManager
-            Optical manager to add new optical paths to
-
-        Returns
-        ----------w
-        TileIndex
-            Created tile index
-        """
-        base_file = files[0]
-        if(base_file.tile_type == 'TILED_FULL'):
-            return FullTileIndex(files, optical)
-        return SparseTileIndex(files, optical)
+        index.x += previous_size.width
+        if(index.x >= image_size.width):
+            index.x = 0
+            index.y += previous_size.height
+        return index
 
     @staticmethod
     def _image_settings(
@@ -1901,152 +1966,271 @@ class WsiDicomInstance:
             )
         return (image_format, image_options)
 
-    def _encode_tile(
+    def get_tile(
         self,
-        tile: Image,
-    ) -> bytes:
-        """Encode tile using transfer syntax.
-
-        Parameters
-        ----------
-        tile: Image
-            Tile image to encode
-
-        Returns
-        ----------
-        bytes
-            Encoded tile as bytes
-        """
-        (image_format, image_options) = self._image_settings(
-            self._transfer_syntax
-        )
-
-        with io.BytesIO() as buffer:
-            tile.save(buffer, format=image_format, **image_options)
-            return buffer.getvalue()
-
-    @staticmethod
-    def _write_indexer(
-        index: Point,
-        previous_size: Size,
-        image_size: Size
-    ) -> Point:
-        """Increment index in x by previous width until index x exceds image
-        size. Then resets index x to 0 and increments index y by previous
-        height. Requires that tiles are scanned row by row.
-
-        Parameters
-        ----------
-        index: Point
-            The last write index position
-        previouis_size: Size
-            The size of the last written last tile
-        image_size: Size
-            The size of the image to be written
-
-        Returns
-        ----------
-        Point
-            The position (upper right) in image to insert the next tile into
-        """
-        index.x += previous_size.width
-        if(index.x >= image_size.width):
-            index.x = 0
-            index.y += previous_size.height
-        return index
-
-    def _get_file(self, frame_index: int) -> WsiDicomFile:
-        """Return file contaning frame index. Raises WsiDicomNotFoundError if
-        frame is not found.
-
-        Parameters
-        ----------
-        frame_index: int
-             Frame index to get
-
-        Returns
-        ----------
-        WsiDicomFile
-            File containing the frame
-        """
-        for frame_offset, file in self._files.items():
-            if (frame_index < frame_offset + file.frame_count and
-                    frame_index >= frame_offset):
-                return file
-
-        raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
-
-    def _get_tile_frame(self, frame_index: int) -> bytes:
-        """Return tile frame for frame index.
-
-        Parameters
-        ----------
-        frame_index: int
-             Frame index to get
-
-        Returns
-        ----------
-        bytes
-            The frame in bytes
-        """
-        file = self._get_file(frame_index)
-        tile_frame = file._read_frame(frame_index)
-        return tile_frame
-
-    def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Return frame index for tile. Raises WsiDicomOutOfBondsError if
-        tile, z, or path is not valid. Raises WsiDicomSparse if index is sparse
-        and tile is not in frame data.
+        tile: Point,
+        z: float = None,
+        path: str = None
+    ) -> Image:
+        """Get tile image at tile coordinate x, y.
+        If frame is inside tile geometry but no tile exists in
+        frame data (sparse) returns blank image.
 
         Parameters
         ----------
         tile: Point
-             Tile coordiante
+            Tile x, y coordinate.
         z: float
-            Z coordiante
+            Z coordinate.
         path: str
-            Optical identifier
+            Optical path.
 
         Returns
         ----------
-        int
-            Tile frame index
+        Image
+            Tile image.
         """
-        tile_region = Region(position=tile, size=Size(0, 0))
-        if not self.tiles.valid_tiles(tile_region, z, path):
-            raise WsiDicomOutOfBondsError(
-                f"Tile region {tile_region}",
-                f"plane {self.tiles.plane_size}"
-            )
-        frame_index = self.tiles.get_frame_index(tile, z, path)
-        return frame_index
+        if z is None:
+            z = self.default_z
+        if path is None:
+            path = self.default_path
+        try:
+            tile_frame = self._image_data.get_tile(tile, z, path)
+            image = Image.open(io.BytesIO(tile_frame))
+        except WsiDicomSparse:
+            image = self.blank_tile
+        return self.crop_tile_to_level(tile, image)
 
-
-class WsiDicomStack(metaclass=ABCMeta):
-    def __init__(
+    def get_encoded_tile(
         self,
-        instances: List[WsiDicomInstance]
-    ):
-        """Represents a stack of instances having the same size,
-        but possibly different z coordinate and/or optical path.
-        Instances should match in the common uids, wsi type, and tile size.
+        tile: Point,
+        z: float,
+        path: str
+    ) -> bytes:
+        """Get tile bytes at tile coordinate x, y
+        If frame is inside tile geometry but no tile exists in
+        frame data (sparse) returns encoded blank image.
 
         Parameters
         ----------
-        instances: List[WsiDicomInstance]
-            Instances to build the stack
+        tile: Point
+            Tile x, y coordinate.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        crop: bool
+            If the tile should be croped to image region.
+
+        Returns
+        ----------
+        bytes
+            Tile image as bytes.
+        """
+        if z is None:
+            z = self.default_z
+        if path is None:
+            path = self.default_path
+        try:
+            tile_frame = self._image_data.get_tile(tile, z, path)
+        except WsiDicomSparse:
+            tile_frame = self.blank_encoded_tile
+
+        # Check if tile is an edge tile that should be croped
+        cropped_tile_region = self.crop_to_level_size(tile)
+        if cropped_tile_region.size != self.tile_size:
+            image = Image.open(io.BytesIO(tile_frame))
+            image.crop(box=cropped_tile_region.box_from_origin)
+            tile_frame = self.encode(image)
+        return tile_frame
+
+    @staticmethod
+    def check_duplicate_instance(
+        instances: List['WsiInstance'],
+        self: object
+    ) -> None:
+        """Check for duplicates in list of instances. Instances are duplicate
+        if instance identifier (file instance uid or concatenation uid) match.
+        Stops at first found duplicate and raises WsiDicomUidDuplicateError.
+
+        Parameters
+        ----------
+        instances: List['WsiInstance']
+            List of instances to check.
+        caller: Object
+            Object that the instances belongs to.
+        """
+        instance_identifiers: List[str] = []
+        for instance in instances:
+            instance_identifier = instance.identifier
+            if instance_identifier not in instance_identifiers:
+                instance_identifiers.append(instance_identifier)
+            else:
+                raise WsiDicomUidDuplicateError(str(instance), str(self))
+
+    def _validate_instance(
+        self,
+        datasets: List[WsiDataset]
+    ) -> Tuple[str, BaseUids, str]:
+        """Check that no files in instance are duplicate, that all files in
+        instance matches (uid, type and size).
+        Raises WsiDicomMatchError otherwise.
+        Returns the matching file uid.
+
+
+        Returns
+        ----------
+        Tuple[str, BaseUids, str]
+            Instance identifier uid and base uids
+        """
+        WsiDataset.check_duplicate_dataset(datasets, self)
+
+        base_dataset = datasets[0]
+        for dataset in datasets[1:]:
+            if not base_dataset.matches_instance(dataset):
+                raise WsiDicomError()
+        return (
+            base_dataset.uids.identifier,
+            base_dataset.uids.base,
+        )
+
+    @staticmethod
+    def _get_blank_color(
+        photometric_interpretation: str
+    ) -> Tuple[int, int, int]:
+        """Return color to use blank tiles.
+
+        Parameters
+        ----------
+        photometric_interpretation: str
+            The photomoetric interpretation of the dataset
+
+        Returns
+        ----------
+        int, int, int
+            RGB color
+
+        """
+        BLACK = 0
+        WHITE = 255
+        if(photometric_interpretation == "MONOCHROME2"):
+            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
+        return (WHITE, WHITE, WHITE)
+
+    def get_tile_range(
+        self,
+        pixel_region: Region,
+        z: float,
+        path: str
+    ) -> Region:
+        start = pixel_region.start // self.tile_size
+        end = pixel_region.end / self.tile_size - 1
+        tile_region = Region.from_points(start, end)
+        return tile_region
+
+    @staticmethod
+    def _create_filepointer(path: Path) -> pydicom.filebase.DicomFile:
+        """Return a dicom filepointer.
+
+        Parameters
+        ----------
+        path: Path
+            Path to filepointer.
+        Returns
+        ----------
+        pydicom.filebase.DicomFile
+            Created filepointer.
+        """
+        fp = pydicom.filebase.DicomFile(path, mode='wb')
+        fp.is_little_endian = True
+        fp.is_implicit_VR = False
+        return fp
+
+    @cached_property
+    def blank_tile(self) -> Image:
+        """Return background tile."""
+        return self._create_blank_tile()
+
+    @cached_property
+    def blank_encoded_tile(self) -> bytes:
+        """Return encoded background tile."""
+        return self.encode(self.blank_tile)
+
+    def matches(self, other_instance: 'WsiInstance') -> bool:
+        """Return true if other instance is of the same group as self.
+
+        Parameters
+        ----------
+        other_instance: WsiInstance
+            Instance to check.
+
+        Returns
+        ----------
+        bool
+            True if instanes are of same group.
+
+        """
+        return (
+            self.uids == other_instance.uids and
+            self.size == other_instance.size and
+            self.tile_size == other_instance.tile_size and
+            self.wsi_type == other_instance.wsi_type
+        )
+
+    def is_sparse(self, tile: Point, z: float, path: str) -> bool:
+        try:
+            self._image_data.get_tile(tile, z, path)
+            return False
+        except WsiDicomSparse:
+            return True
+
+    def _create_blank_tile(self) -> Image:
+        """Create blank tile for instance.
+
+        Returns
+        ----------
+        Image
+            Blank tile image
+        """
+        return Image.new(
+            mode=self.image_mode,
+            size=self.tile_size.to_tuple(),
+            color=self.blank_color[:self.samples_per_pixel]
+        )
+
+    def close(self) -> None:
+        self._image_data.close()
+
+
+class WsiDicomGroup:
+    """Represents a group of instances having the same size, but possibly
+    different z coordinate and/or optical path."""
+    def __init__(
+        self,
+        instances: List[WsiInstance]
+    ):
+        """Create a group of WsiInstances. Instances should match in the common
+        uids, wsi type, and tile size.
+
+        Parameters
+        ----------
+        instances: List[WsiInstance]
+            Instances to build the group.
         """
         self._instances = {  # key is identifier (str)
             instance.identifier: instance for instance in instances
         }
-        self._uids, self._wsi_type = self._validate_stack()
+        self._validate_group()
 
         base_instance = instances[0]
+        self._wsi_type = base_instance.wsi_type
+        self._uids = base_instance.uids
+
         self._size = base_instance.size
         self._pixel_spacing = base_instance.pixel_spacing
         self._default_instance_uid: str = base_instance.identifier
 
-    def __getitem__(self, index) -> WsiDicomInstance:
+    def __getitem__(self, index) -> WsiInstance:
         return self.instances[index]
 
     @property
@@ -2056,7 +2240,7 @@ class WsiDicomStack(metaclass=ABCMeta):
 
     @property
     def wsi_type(self) -> str:
-        """Return wsi flavour"""
+        """Return wsi type"""
         return self._wsi_type
 
     @property
@@ -2075,12 +2259,12 @@ class WsiDicomStack(metaclass=ABCMeta):
         return self._pixel_spacing
 
     @property
-    def instances(self) -> Dict[str, WsiDicomInstance]:
+    def instances(self) -> Dict[str, WsiInstance]:
         """Return contained instances"""
         return self._instances
 
     @property
-    def default_instance(self) -> WsiDicomInstance:
+    def default_instance(self) -> WsiInstance:
         """Return default instance"""
         return self.instances[self._default_instance_uid]
 
@@ -2092,49 +2276,70 @@ class WsiDicomStack(metaclass=ABCMeta):
         ]
         return [file for sublist in instance_files for file in sublist]
 
+    @property
+    def datasets(self) -> List[Dataset]:
+        """Return contained datasets."""
+        instance_datasets = [
+            instance.datasets for instance in self.instances.values()
+        ]
+        return [
+            dataset for sublist in instance_datasets for dataset in sublist
+        ]
+
+    @property
+    def optical_paths(self) -> List[str]:
+        return list({
+            path
+            for instance in self.instances.values()
+            for path in instance.optical_paths
+        })
+
+    @property
+    def focal_planes(self) -> List[float]:
+        return list({
+            focal_plane
+            for innstance in self.instances.values()
+            for focal_plane in innstance.focal_planes
+        })
+
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager
-    ) -> List['WsiDicomStack']:
-        """Return list of stacks created from wsi files.
+        instances: List[WsiInstance],
+    ) -> List['WsiDicomGroup']:
+        """Return list of groups created from wsi instances.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to create stacks from.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
+        files: List[WsiInstance]
+            Instances to create groups from.
 
         Returns
         ----------
-        List[WsiDicomStack]
-            List of created stacks.
+        List[WsiDicomGroup]
+            List of created groups.
 
         """
-        stacks: List[WsiDicomStack] = []
+        groups: List[WsiDicomGroup] = []
 
-        instances = WsiDicomInstance.open(files, optical)
-        instances_grouped_by_stack = cls._group_instances(instances)
+        grouped_instances = cls._group_instances(instances)
 
-        for instance_group in instances_grouped_by_stack.values():
-            new_stack = WsiDicomStack(instance_group)
-            stacks.append(new_stack)
+        for group in grouped_instances.values():
+            groups.append(WsiDicomGroup(group))
 
-        return stacks
+        return groups
 
-    def matches(self, other_stack: 'WsiDicomStack') -> bool:
-        """Check if stack is valid (Uids and tile size match).
+    def matches(self, other_group: 'WsiDicomGroup') -> bool:
+        """Check if group is valid (Uids and tile size match).
         The common Uids should match for all series.
         """
         return (
-            other_stack.uids == self.uids and
-            other_stack.wsi_type == self.wsi_type
+            other_group.uids == self.uids and
+            other_group.wsi_type == self.wsi_type
         )
 
     def valid_pixels(self, region: Region) -> bool:
-        """Check if pixel region is withing the size of the stack image size.
+        """Check if pixel region is withing the size of the group image size.
 
         Parameters
         ----------
@@ -2154,7 +2359,7 @@ class WsiDicomStack(metaclass=ABCMeta):
         self,
         z: float = None,
         path: str = None
-    ) -> WsiDicomInstance:
+    ) -> WsiInstance:
         """Search for instance fullfilling the parameters.
         The behavior when z and/or path is none could be made more
         clear.
@@ -2168,39 +2373,43 @@ class WsiDicomStack(metaclass=ABCMeta):
 
         Returns
         ----------
-        WsiDicomInstance
-            The instance containing selected path and z coordinate.
+        WsiInstance
+            The instance containing selected path and z coordinate
         """
         if z is None and path is None:
             instance = self.default_instance
-            z = instance.tiles.default_z
-            path = instance.tiles.default_path
+            z = instance.default_z
+            path = instance.default_path
+
             return self.default_instance
 
         # Sort instances by number of focal planes (prefer simplest instance)
         sorted_instances = sorted(
             list(self._instances.values()),
-            key=lambda i: len(i.tiles.focal_planes)
+            key=lambda i: len(i.focal_planes)
         )
         try:
             if z is None:
                 # Select the instance with selected optical path
                 instance = next(i for i in sorted_instances if
-                                path in i.tiles.optical_paths)
+                                path in i.optical_paths)
             elif path is None:
                 # Select the instance with selected z
                 instance = next(i for i in sorted_instances
-                                if z in i.tiles.focal_planes)
+                                if z in i.focal_planes)
             else:
                 # Select by both path and z
                 instance = next(i for i in sorted_instances
-                                if (z in i.tiles.focal_planes and
-                                    path in i.tiles.optical_paths))
+                                if (z in i.focal_planes and
+                                    path in i.optical_paths))
         except StopIteration:
             raise WsiDicomNotFoundError(
-                f"Instance for path: {path}, z: {z}",
-                "stack"
+                f"Instance for path: {path}, z: {z}", "group"
             )
+        if z is None:
+            z = instance.default_z
+        if path is None:
+            path = instance.default_path
         return instance
 
     def get_default_full(self) -> Image:
@@ -2209,11 +2418,11 @@ class WsiDicomStack(metaclass=ABCMeta):
         Returns
         ----------
         Image
-            Full image of the stack
+            Full image of the group.
         """
         instance = self.default_instance
-        z = instance.tiles.default_z
-        path = instance.tiles.default_path
+        z = instance.default_z
+        path = instance.default_path
         region = Region(position=Point(x=0, y=0), size=self.size)
         image = self.get_region(region, z, path)
         return image
@@ -2324,7 +2533,6 @@ class WsiDicomStack(metaclass=ABCMeta):
             The tile as bytes
         """
         instance = self.get_instance(z, path)
-
         return instance.get_encoded_tile(tile, z, path)
 
     def mm_to_pixel(self, region: RegionMm) -> Region:
@@ -2345,57 +2553,48 @@ class WsiDicomStack(metaclass=ABCMeta):
             size=region.size // self.pixel_spacing
         )
         if not self.valid_pixels(pixel_region):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Region {region}", f"level size {self.size}"
             )
         return pixel_region
 
     def close(self) -> None:
-        """Close all instances on the stack."""
+        """Close all instances on the group."""
         for instance in self._instances.values():
             instance.close()
 
-    def _validate_stack(
-        self,
-    ) -> Tuple[BaseUids, str]:
-        """Check that no file or instance in stack is duplicate, instances in
-        stack matches and that the optical manager matches by base uid.
+    def _validate_group(self):
+        """Check that no file or instance in group is duplicate, instances in
+        group matches and that the optical manager matches by base uid.
         Raises WsiDicomMatchError otherwise.
-        Returns the matching base uid.
-
-        Returns
-        ----------
-        Tuple[BaseUids, str]
-            Matching uids and wsi type
         """
+        WsiDataset.check_duplicate_dataset(self.datasets, self)
         instances = list(self.instances.values())
-        WsiDicomFile.check_duplicate_file(self.files, self)
-        WsiDicomInstance.check_duplicate_instance(instances, self)
         base_instance = instances[0]
         for instance in instances[1:]:
             if not base_instance.matches(instance):
                 raise WsiDicomMatchError(str(instance), str(self))
-        return base_instance.uids, base_instance.wsi_type
+        WsiInstance.check_duplicate_instance(instances, self)
 
     @classmethod
     def _group_instances(
         cls,
-        instances: List[WsiDicomInstance]
-    ) -> Dict[Size, List[WsiDicomInstance]]:
-        """Return instances grouped by image size (stacks).
+        instances: List[WsiInstance]
+    ) -> Dict[Size, List[WsiInstance]]:
+        """Return instances grouped by image size.
 
         Parameters
         ----------
-        instances: List[WsiDicomInstance]
-            Instances to group into stacks.
+        instances: List[WsiInstance]
+            Instances to group by image size.
 
         Returns
         ----------
-        Dict[Size, List[WsiDicomInstance]]:
+        Dict[Size, List[WsiInstance]]:
             Instances grouped by size, with size as key.
 
         """
-        grouped_instances: Dict[Size, List[WsiDicomInstance]] = {}
+        grouped_instances: Dict[Size, List[WsiInstance]] = {}
         for instance in instances:
             try:
                 grouped_instances[instance.size].append(instance)
@@ -2404,21 +2603,23 @@ class WsiDicomStack(metaclass=ABCMeta):
         return grouped_instances
 
 
-class WsiDicomLevel(WsiDicomStack):
+class WsiDicomLevel(WsiDicomGroup):
+    """Represents a level in the pyramid and contains one or more instances
+    having the same pyramid level index, pixel spacing, and size but possibly
+    different focal planes and/or optical paths.
+    """
     def __init__(
         self,
-        instances: List[WsiDicomInstance],
+        instances: List[WsiInstance],
         base_pixel_spacing: SizeMm
     ):
-        """Represents a level in the pyramid and contains one or more
-        instances having the same level, pixel spacing, and size but possibly
-        different focal planes and/or optical paths and present in
-        different files.
+        """Create a level from list of WsiInstances. Asign the pyramid level
+        index from pixel spacing of base level.
 
         Parameters
         ----------
-        instances: List[WsiDicomInstance]
-            Instances to build the stack.
+        instances: List[WsiInstance]
+            Instances to build the level.
         base_pixel_spacing: SizeMm
             Pixel spacing of base level.
         """
@@ -2440,7 +2641,9 @@ class WsiDicomLevel(WsiDicomStack):
             depth -= 1
             if(depth < 0):
                 return string
-        string += dict_pretty_str(self.instances, indent, depth)
+        string += (
+            ' Instances: ' + dict_pretty_str(self.instances, indent, depth)
+        )
         return string
 
     @property
@@ -2448,7 +2651,7 @@ class WsiDicomLevel(WsiDicomStack):
         """Return string representation of the level"""
         return (
             f'Level [{self.level}]'
-            f' tiles: {self.default_instance.tiles.plane_size},'
+            f' tiles: {self.default_instance.tiled_size},'
             f' size: {self.size}, mpp: {self.mpp} um/px'
         )
 
@@ -2464,46 +2667,41 @@ class WsiDicomLevel(WsiDicomStack):
     @classmethod
     def open_levels(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager
+        instances: List[WsiInstance],
     ) -> List['WsiDicomLevel']:
-        """Return list of level stacks created wsi files.
+        """Return list of levels created wsi files.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to create stacks from
-        optical: OpticalManager
-            Optical manager to add optical paths to.
+        files: List[WsiInstance]
+            Instances to create levels from.
 
         Returns
         ----------
         List[WsiDicomLevel]
-            List of created level stacks.
+            List of created levels.
 
         """
         levels: List[WsiDicomLevel] = []
-        instances = WsiDicomInstance.open(files, optical)
-        instances_grouped_by_stack = cls._group_instances(instances)
-        largest_size = max(instances_grouped_by_stack.keys())
-        base_group = instances_grouped_by_stack[largest_size]
+        instances_grouped_by_level = cls._group_instances(instances)
+        largest_size = max(instances_grouped_by_level.keys())
+        base_group = instances_grouped_by_level[largest_size]
         base_pixel_spacing = base_group[0].pixel_spacing
-        for level_group in instances_grouped_by_stack.values():
-            new_level = WsiDicomLevel(level_group, base_pixel_spacing)
-            levels.append(new_level)
+        for level in instances_grouped_by_level.values():
+            levels.append(WsiDicomLevel(level, base_pixel_spacing))
 
         return levels
 
-    def matches(self, other_stack: 'WsiDicomStack') -> bool:
-        """Check if stack is valid (Uids and tile size match).
+    def matches(self, other_group: 'WsiDicomGroup') -> bool:
+        """Check if group is valid (Uids and tile size match).
         The common Uids should match for all series. For level series the tile
-        size should also match. It is assumed that the instances in the stacks
+        size should also match. It is assumed that the instances in the groups
         are matching each other.
         """
-        other_instance = other_stack.default_instance
+        other_instance = other_group.default_instance
         this_instance = self.default_instance
         return (
-            other_stack.uids == self.uids and
+            other_group.uids == self.uids and
             other_instance.tile_size == this_instance.tile_size
         )
 
@@ -2550,7 +2748,7 @@ class WsiDicomLevel(WsiDicomStack):
         scaled_region = Region.from_tile(tile, instance.tile_size) * scale
         cropped_region = instance.crop_to_level_size(scaled_region)
         if not self.valid_pixels(cropped_region):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Region {cropped_region}", f"level size {self.size}"
             )
         image = self.get_region(cropped_region, z, path)
@@ -2630,21 +2828,28 @@ class WsiDicomLevel(WsiDicomStack):
 
 
 class WsiDicomSeries(metaclass=ABCMeta):
+    """Represents a series of WsiDicomGroups with the same image flavor, e.g.
+    pyramidal levels, lables, or overviews.
+    """
     wsi_type: str
 
-    def __init__(self, stacks: List[WsiDicomStack]):
-        """Holds a series of stacks of same image flavor
+    def __init__(self, groups: List[WsiDicomGroup]):
+        """Create a WsiDicomSeries from list of WsiDicomGroups.
 
         Parameters
         ----------
-        stacks: List[WsiDicomStack]
-            List of stacks to include in the series
+        groups: List[WsiDicomGroup]
+            List of groups to include in the series.
         """
-        self._stacks: List[WsiDicomStack] = stacks
-        self._uids = self._validate_series(self.stacks)
+        self._groups: List[WsiDicomGroup] = groups
 
-    def __getitem__(self, index: int) -> WsiDicomStack:
-        """Get stack by index.
+        if len(self.groups) != 0 and self.groups[0].uids is not None:
+            self._uids = self._validate_series(self.groups)
+        else:
+            self._uids = None
+
+    def __getitem__(self, index: int) -> WsiDicomGroup:
+        """Get group by index.
 
         Parameters
         ----------
@@ -2653,40 +2858,51 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         Returns
         ----------
-        WsiDicomStack
-            The stack at index in the series
+        WsiDicomGroup
+            The group at index in the series
         """
-        return self.stacks[index]
+        return self.groups[index]
 
     def __len__(self) -> int:
         return len(self.stacks)
 
     @property
-    def stacks(self) -> List[WsiDicomStack]:
-        """Return contained stacks"""
-        return self._stacks
+    def groups(self) -> List[WsiDicomGroup]:
+        """Return contained groups."""
+        return self._groups
 
     @property
     def uids(self) -> Optional[BaseUids]:
-        """Return uids"""
+        """Return uids."""
         return self._uids
 
     @property
     def mpps(self) -> List[SizeMm]:
-        """Return contained mpp (um/px)"""
-        return [stack.mpp for stack in self.stacks]
+        """Return contained mpp (um/px)."""
+        return [group.mpp for group in self.groups]
 
     @property
     def files(self) -> List[WsiDicomFile]:
-        """Return contained files"""
-        series_files = [series.files for series in self.stacks]
+        """Return contained files."""
+        series_files = [series.files for series in self.groups]
         return [file for sublist in series_files for file in sublist]
 
     @property
-    def instances(self) -> List[WsiDicomInstance]:
+    def datasets(self) -> List[Dataset]:
+        """Return contained datasets."""
+
+        series_datasets = [
+            series.datasets for series in self.groups
+        ]
+        return [
+            dataset for sublist in series_datasets for dataset in sublist
+        ]
+
+    @property
+    def instances(self) -> List[WsiInstance]:
         """Return contained instances"""
         series_instances = [
-            series.instances.values() for series in self.stacks
+            series.instances.values() for series in self.groups
         ]
         return [
             instance for sublist in series_instances for instance in sublist
@@ -2694,149 +2910,102 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     def _validate_series(
             self,
-            stacks: Union[List[WsiDicomStack], List[WsiDicomLevel]]
+            groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
     ) -> Optional[BaseUids]:
-        """Check that no files or instances in series is duplicate, all stacks
-        in series matches and that the optical manager matches by base uid.
+        """Check that no files or instances in series is duplicate and that
+        all groups in series matches.
         Raises WsiDicomMatchError otherwise.
-        Returns the matching base uid. If list of stacks is empty, return None.
+        Returns the matching base uid. If list of groups is empty, return None.
 
         Parameters
         ----------
-        stacks: Union[List[WsiDicomStack], List[WsiDicomLevel]]
-            List of stacks to check
-        optical: OpticalManager
-            Optical manager to check
+        groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
+            List of groups or levels to check
 
         Returns
         ----------
         Optional[BaseUids]:
             Matching uids
         """
-        WsiDicomFile.check_duplicate_file(self.files, self)
-        WsiDicomInstance.check_duplicate_instance(self.instances, self)
+        WsiDataset.check_duplicate_dataset(self.datasets, self)
+        WsiInstance.check_duplicate_instance(self.instances, self)
 
         try:
-            base_stack = stacks[0]
-            if base_stack.wsi_type != self.wsi_type:
+            base_group = groups[0]
+            # print(base_group.wsi_type)
+            # print(self.wsi_type)
+            if base_group.wsi_type != self.wsi_type:
                 raise WsiDicomMatchError(
-                    str(base_stack), str(self)
+                    str(base_group), str(self)
                 )
-            for stack in stacks[1:]:
-                if not stack.matches(base_stack):
+            for group in groups[1:]:
+                if not group.matches(base_group):
                     raise WsiDicomMatchError(
-                        str(stack), str(self)
+                        str(group), str(self)
                     )
-            return base_stack.uids
+            return base_group.uids
         except IndexError:
             return None
 
-    @staticmethod
-    def _filter_files(
-        files: List[WsiDicomFile],
-        series_uids: BaseUids,
-        series_tile_size: Size = None
-    ) -> List[WsiDicomFile]:
-        """Filter list of wsi dicom files to only include matching uids and
-        tile size if defined.
-
-        Parameters
-        ----------
-        files: List[WsiDicomFile]
-            Wsi files to filter
-        series_uids: Uids
-            Uids to check against
-        series_tile_size: Size
-            Tile size to check against
-
-        Returns
-        ----------
-        List[WsiDicomFile]
-            List of matching wsi dicom files
-        """
-        valid_files: List[WsiDicomFile] = []
-        for file in files:
-            if file.matches_series(series_uids, series_tile_size):
-                valid_files.append(file)
-            else:
-                file.close()
-        return valid_files
-
     def close(self) -> None:
-        """Close all stacks in the series."""
-        for stack in self.stacks:
-            stack.close()
+        """Close all groups in the series."""
+        for group in self.groups:
+            group.close()
 
 
 class WsiDicomLabels(WsiDicomSeries):
+    """Represents a series of WsiDicomGroups of the label wsi flavor."""
     wsi_type = 'LABEL'
 
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager,
-        base_file: WsiDicomFile
+        instances: List[WsiInstance]
     ) -> 'WsiDicomLabels':
         """Return label series created from wsi files.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to create labels from.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
-        base_file: WsiDicomFile
-            File that defines valid files to add.
+        instances: List[WsiInstance]
+            Instances to create levels from.
 
         Returns
         ----------
         WsiDicomLabels
             Created label series
         """
-        filtered_files = cls._filter_files(
-            files,
-            base_file.uids.base,
-        )
-        labels = WsiDicomStack.open(filtered_files, optical)
-        return cls(labels)
+        labels = WsiDicomGroup.open(instances)
+        return WsiDicomLabels(labels)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
+    """Represents a series of WsiDicomGroups of the overview wsi flavor."""
     wsi_type = 'OVERVIEW'
 
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager,
-        base_file: WsiDicomFile
+        instances: List[WsiInstance]
     ) -> 'WsiDicomOverviews':
         """Return overview series created from wsi files.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to create overviews from.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
-        base_file: WsiDicomFile
-            File that defines valid files to add.
+        instances: List[WsiInstance]
+            Instances to create levels from.
 
         Returns
         ----------
         WsiDicomOverviews
             Created overview series
         """
-        filtered_files = cls._filter_files(
-            files,
-            base_file.uids.base,
-        )
-        overviews = WsiDicomStack.open(filtered_files, optical)
-        return cls(overviews)
+        overviews = WsiDicomGroup.open(instances)
+        return WsiDicomOverviews(overviews)
 
 
 class WsiDicomLevels(WsiDicomSeries):
+    """Represents a series of WsiDicomGroups of the volume (e.g. pyramidal
+    level) wsi flavor."""
     wsi_type = 'VOLUME'
 
     def __init__(self, levels: List[WsiDicomLevel]):
@@ -2844,14 +3013,17 @@ class WsiDicomLevels(WsiDicomSeries):
 
         Parameters
         ----------
-        stacks: List[WsiDicomLevel]
-            List of level stacks to include in series
+        levels: List[WsiDicomLevel]
+            List of levels to include in series
         """
         self._levels = OrderedDict(
             (level.level, level)
             for level in sorted(levels, key=lambda level: level.level)
         )
-        self._uids = self._validate_series(self.stacks)
+        if len(self.groups) != 0 and self.groups[0].uids is not None:
+            self._uids = self._validate_series(self.groups)
+        else:
+            self._uids = None
 
     @property
     def pyramid(self) -> str:
@@ -2865,8 +3037,8 @@ class WsiDicomLevels(WsiDicomSeries):
         )
 
     @property
-    def stacks(self) -> List[WsiDicomStack]:
-        """Return contained stacks"""
+    def groups(self) -> List[WsiDicomGroup]:
+        """Return contained groups"""
         return list(self._levels.values())
 
     @property
@@ -2887,33 +3059,22 @@ class WsiDicomLevels(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
-        optical: OpticalManager,
-        base_file: WsiDicomFile
+        instances: List[WsiInstance]
     ) -> 'WsiDicomLevels':
-        """Return level series created from wsi files.
+        """Return level series created from wsi instances.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            Files to create levels from.
-        optical: OpticalManager
-            Optical manager to add optical paths to.
-        base_file: WsiDicomFile
-            File that defines valid files to add.
+        instances: List[WsiInstance]
+            Instances to create levels from.
 
         Returns
         ----------
         WsiDicomLevels
             Created level series
         """
-        filtered_files = cls._filter_files(
-            files,
-            base_file.uids.base,
-            base_file.tile_size
-        )
-        levels = WsiDicomLevel.open_levels(filtered_files, optical)
-        return cls(levels)
+        levels = WsiDicomLevel.open_levels(instances)
+        return WsiDicomLevels(levels)
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -2966,7 +3127,7 @@ class WsiDicomLevels(WsiDicomSeries):
             The level closest to searched level
         """
         if not self.valid_level(level):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Level {level}", f"maximum level {self.highest_level}"
             )
         closest_level = 0
@@ -2996,7 +3157,7 @@ class WsiDicomLevels(WsiDicomSeries):
         WsiDicomLevel
             The level with size closest to searched size
         """
-        closest_size = self.stacks[0].size
+        closest_size = self.groups[0].size
         closest = None
         for wsi_level in self._levels.values():
             if((size.width <= wsi_level.size.width) and
@@ -3040,46 +3201,59 @@ class WsiDicomLevels(WsiDicomSeries):
 
 
 class WsiDicom:
+    """Represent a wsi slide containing pyramidal levels and optionally
+    labels and/or overviews."""
     def __init__(
         self,
-        series: List[WsiDicomSeries],
-        optical: OpticalManager,
+        levels: WsiDicomLevels,
+        labels: WsiDicomLabels,
+        overviews: WsiDicomOverviews,
         annotations: AnnotationInstance = None
+
     ):
         """Holds wsi dicom levels, labels and overviews.
 
         Parameters
         ----------
-        series: List[WsiDicomSeries]
-            List of series (levels, labels, overviews).
-        optical: OpticalManager
-            Manager for optical paths.
+        levels: WsiDicomLevels
+            Series of pyramidal levels.
+        labels: WsiDicomLabels
+            Series of label images.
+        overviews: WsiDicomOverviews
+            Series of overview images
+        annotations: AnnotationInstance = None
+            Sup-222 annotation instance.
         """
 
-        self._levels: WsiDicomLevels = self._assign(series, 'levels')
-        self._labels: WsiDicomLabels = self._assign(series, 'labels')
-        self._overviews: WsiDicomOverviews = self._assign(series, 'overviews')
-        self.annotations: AnnotationInstance = annotations
+        self._levels = levels
+        self._labels = labels
+        self._overviews = overviews
+        self.annotations = annotations
 
-        self.uids = self._validate_collection(
-            [self.levels, self.labels, self.overviews],
-            optical
+        if self.levels.uids is not None:
+            self.uids = self._validate_collection(
+                [self.levels, self.labels, self.overviews],
+            )
+        else:
+            self.uids = None
+
+        self.optical = OpticalManager.open(
+            levels.instances + labels.instances + overviews.instances
         )
-        self.optical = optical
 
         if (
             self.annotations.frame_of_reference is not None and
             self.annotations.frame_of_reference != self.uids.frame_of_reference
         ):
             warnings.warn("Annotations frame of referance does not match")
-        base = self.levels.base_level.default_instance
-        self.ds = base.create_ds()
+
         self.__enter__()
 
     def __enter__(self):
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exc_type, exc_val, exc_tb):
+
         self.close()
 
     def __str__(self) -> str:
@@ -3126,7 +3300,16 @@ class WsiDicom:
         return self.levels.files + self.labels.files + self.overviews.files
 
     @property
-    def instances(self) -> List[WsiDicomInstance]:
+    def datasets(self) -> List[Dataset]:
+        """Return contained datasets."""
+        return (
+            self.levels.datasets
+            + self.labels.datasets
+            + self.overviews.datasets
+        )
+
+    @property
+    def instances(self) -> List[WsiInstance]:
         """Return contained instances"""
         return (
             self.levels.instances
@@ -3150,7 +3333,7 @@ class WsiDicom:
                 return string
         return (
             string + ' of levels:\n'
-            + list_pretty_str(self.levels.stacks, indent, depth, 0, 2)
+            + list_pretty_str(self.levels.groups, indent, depth, 0, 2)
         )
 
     @classmethod
@@ -3189,19 +3372,23 @@ class WsiDicom:
             elif sop_class_uid == ANN_SOP_CLASS_UID:
                 annotation_files.append(filepath)
 
-        base_file = cls._get_base_file(level_files)
-
-        optical = OpticalManager(base_file.uids.base)
-
-        levels = WsiDicomLevels.open(level_files, optical, base_file)
-        labels = WsiDicomLabels.open(label_files, optical, base_file)
-        overviews = WsiDicomOverviews.open(overview_files, optical, base_file)
-        annotations = AnnotationInstance.open(annotation_files)
-        return cls(
-            [levels, labels, overviews],
-            optical=optical,
-            annotations=annotations
+        base_dataset = cls._get_base_dataset(level_files)
+        base_uids = base_dataset.base_uids
+        base_tile_size = base_dataset.tile_size
+        level_instances = WsiInstance.open(
+            level_files,
+            base_uids,
+            base_tile_size
         )
+        label_instances = WsiInstance.open(label_files, base_uids)
+        overview_instances = WsiInstance.open(overview_files, base_uids)
+
+        levels = WsiDicomLevels.open(level_instances)
+        labels = WsiDicomLabels.open(label_instances)
+        overviews = WsiDicomOverviews.open(overview_instances)
+        annotations = AnnotationInstance.open(annotation_files)
+
+        return WsiDicom(levels, labels, overviews, annotations)
 
     @staticmethod
     def _get_sop_class_uid(path: Path) -> Uid:
@@ -3245,28 +3432,28 @@ class WsiDicom:
         raise WsiDicomNotFoundError("No files found", str(path))
 
     @staticmethod
-    def _get_base_file(
+    def _get_base_dataset(
         files: List[WsiDicomFile]
-    ) -> WsiDicomFile:
+    ) -> WsiDataset:
         """Return file with largest image (width) from list of files.
 
         Parameters
         ----------
         files: List[WsiDicomFile]
-            Wsi files to check.
+           List of files.
 
         Returns
         ----------
-        WsiDicomFile
-            Base layer file.
+        WsiDataset
+            Base layer dataset.
         """
         base_size = Size(0, 0)
-        base_file: WsiDicomFile
+        base_dataset: WsiDataset
         for file in files:
-            if file.image_size.width > base_size.width:
-                base_file = file
-                base_size = file.image_size
-        return base_file
+            if file.dataset.image_size.width > base_size.width:
+                base_dataset = file.dataset
+                base_size = file.dataset.image_size
+        return base_dataset
 
     @staticmethod
     def _filter_paths(filepaths: List[Path]) -> List[Path]:
@@ -3289,28 +3476,24 @@ class WsiDicom:
 
     def _validate_collection(
         self,
-        series: List[WsiDicomSeries],
-        optical: OpticalManager
+        series: List[WsiDicomSeries]
     ) -> BaseUids:
         """Check that no files or instance in collection is duplicate, that all
-        series and optical manager all have the same base uids.
-        Raises WsiDicomMatchError otherwise.
-        Returns the matching base uid.
+        series have the same base uids. Raises WsiDicomMatchError otherwise.
+        Returns base uid for collection.
 
         Parameters
         ----------
         series: List[WsiDicomSeries]
             List of series to check
-        optical: OpticalManager
-            Optical manager to check
 
         Returns
         ----------
         BaseUids
             Matching uids
         """
-        WsiDicomFile.check_duplicate_file(self.files, self)
-        WsiDicomInstance.check_duplicate_instance(self.instances, self)
+        WsiDataset.check_duplicate_dataset(self.datasets, self)
+        WsiInstance.check_duplicate_instance(self.instances, self)
 
         try:
             base_uids = next(
@@ -3318,43 +3501,10 @@ class WsiDicom:
             )
         except StopIteration:
             raise WsiDicomNotFoundError("Valid series", "in collection")
-        for i, item in enumerate(series):
+        for item in series:
             if item.uids is not None and item.uids != base_uids:
                 raise WsiDicomMatchError(str(item), str(self))
-        if base_uids != optical.uids:
-            raise WsiDicomMatchError(str(optical), str(self))
         return base_uids
-
-    @staticmethod
-    def _assign(series: List[WsiDicomSeries], assign_as: str):
-        """Returns first series in list that matches assign as parameter.
-        Returns None if none found.
-
-        Parameters
-        ----------
-        series: List[WsiDicomSeries]
-            List of series to check
-        assign_as: str
-            Type of series to get
-
-        Returns
-        ----------
-        Optional[
-            WsiDicomLevels,
-            WsiDicomLabels,
-            WsiDicomOverviews
-        ]
-            Series of assign as type
-        """
-        series_types = {
-            'levels': WsiDicomLevels,
-            'labels': WsiDicomLabels,
-            'overviews': WsiDicomOverviews
-        }
-        return next(
-            (item for item in series
-             if type(item) == series_types[assign_as]), None
-        )
 
     def read_label(self, index: int = 0) -> Image:
         """Read label image of the whole slide. If several label
@@ -3462,7 +3612,7 @@ class WsiDicom:
         ) * scale_factor
 
         if not wsi_level.valid_pixels(scaled_region):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
         image = wsi_level.get_region(scaled_region, z, path)
@@ -3525,7 +3675,7 @@ class WsiDicom:
         location: float, float
             Upper left corner of region in mm
         mpp: float
-            Requested pixel spacing (um/mm)
+            Requested pixel spacing (um/pixel)
         size: float
             Size of region in mm
         z: float
@@ -3548,7 +3698,7 @@ class WsiDicom:
         )
         image = wsi_level.get_region_mm(region, z, path)
         image_size = SizeMm(width=size[0], height=size[1]) // pixel_spacing
-        return image.resize(image_size.to_int_tuple(), resample=Image.BILINEAR)
+        return image.resize(image_size.to_tuple(), resample=Image.BILINEAR)
 
     def read_tile(
         self,
@@ -3633,7 +3783,8 @@ class WsiDicom:
         level: int,
         z: float = None,
         path: str = None
-    ) -> WsiDicomInstance:
+    ) -> WsiInstance:
+
         """Return instance fullfilling level, z and/or path.
 
         Parameters
@@ -3647,7 +3798,7 @@ class WsiDicom:
 
         Returns
         ----------
-        WsiDicomInstance
+        WsiInstance:
             Instance
         """
         wsi_level = self.levels.get_level(level)
