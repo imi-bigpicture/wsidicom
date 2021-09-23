@@ -31,11 +31,11 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         dirpath = Path(cls.tempdir.name)
         test_file_path = dirpath.joinpath("test_im.dcm")
         create_layer_file(test_file_path)
-        cls.wsi = WsiDicom.open(cls.tempdir.name)
+        cls.slide = WsiDicom.open(cls.tempdir.name)
 
     @classmethod
     def tearDownClass(cls):
-        cls.wsi.close()
+        cls.slide.close()
         cls.tempdir.cleanup()
 
     def test_mm_to_pixel(self):
@@ -72,21 +72,21 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
     def test_get_frame_number(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         image_data: DicomImageData = instance._image_data
         number = image_data.tiles.get_frame_index(Point(0, 0), 0, '0')
         self.assertEqual(number, 0)
 
     def test_get_blank_color(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         color = instance._get_blank_color(
             instance.photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
 
     def test_get_frame_file(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         image_data: DicomImageData = instance._image_data
         file = image_data._get_file(0)
         self.assertEqual(file, (image_data._files[0]))
@@ -99,7 +99,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
     def test_valid_tiles(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         image_data: DicomImageData = instance._image_data
         test = image_data.valid_tiles(
             Region(Point(0, 0), Size(0, 0)), 0, '0'
@@ -123,7 +123,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
     def test_crop_tile(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         region = Region(
             position=Point(x=0, y=0),
             size=Size(width=100, height=100)
@@ -159,7 +159,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
     def test_get_tiles(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         region = Region(
             position=Point(0, 0),
             size=Size(100, 100)
@@ -186,7 +186,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
     def test_crop_region_to_level_size(self):
         base_level = self.slide.levels.get_level(0)
-        instance, _, _ = base_level.get_instance()
+        instance = base_level.get_instance()
         image_size = base_level.size
         region = Region(
             position=Point(0, 0),
@@ -257,7 +257,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
     def test_write_indexer(self):
         wsi_level = self.slide.levels.get_level(0)
-        instance, _, _ = wsi_level.get_instance()
+        instance = wsi_level.get_instance()
 
         write_index = Point(0, 0)
         tile = Point(0, 0)
@@ -329,11 +329,11 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
     def test_get_instance(self):
         wsi_level = self.slide.levels.get_level(0)
-        instance, _, _ = wsi_level.get_instance()
+        instance = wsi_level.get_instance()
         self.assertEqual(instance, wsi_level.default_instance)
-        instance, _, _ = wsi_level.get_instance(path='0')
+        instance = wsi_level.get_instance(path='0')
         self.assertEqual(instance, wsi_level.default_instance)
-        instance, _, _ = wsi_level.get_instance(z=0)
+        instance = wsi_level.get_instance(z=0)
         self.assertEqual(instance, wsi_level.default_instance)
 
     def test_parse_lut(self):

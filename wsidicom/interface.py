@@ -1730,7 +1730,12 @@ class WsiInstance:
             for instance_files in files_grouped_by_instance.values()
         ]
 
-    def stitch_tiles(self, region: Region, path: str, z: float) -> Image:
+    def stitch_tiles(
+        self,
+        region: Region,
+        path: str = None,
+        z: float = None
+    ) -> Image:
         """Stitches tiles together to form requested image.
 
         Parameters
@@ -1747,6 +1752,10 @@ class WsiInstance:
         Image
             Stitched image
         """
+        if z is None:
+            z = self.default_z
+        if path is None:
+            path = self.default_path
         stitching_tiles = self.get_tile_range(region, z, path)
         image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
         write_index = Point(x=0, y=0)
@@ -1951,7 +1960,12 @@ class WsiInstance:
             )
         return (image_format, image_options)
 
-    def get_tile(self, tile: Point, z: float, path: str) -> Image:
+    def get_tile(
+        self,
+        tile: Point,
+        z: float = None,
+        path: str = None
+    ) -> Image:
         """Get tile image at tile coordinate x, y.
         If frame is inside tile geometry but no tile exists in
         frame data (sparse) returns blank image.
@@ -1970,6 +1984,10 @@ class WsiInstance:
         Image
             Tile image.
         """
+        if z is None:
+            z = self.default_z
+        if path is None:
+            path = self.default_path
         try:
             tile_frame = self._image_data.get_tile(tile, z, path)
             image = Image.open(io.BytesIO(tile_frame))
@@ -1981,8 +1999,7 @@ class WsiInstance:
         self,
         tile: Point,
         z: float,
-        path: str,
-        crop: bool
+        path: str
     ) -> bytes:
         """Get tile bytes at tile coordinate x, y
         If frame is inside tile geometry but no tile exists in
@@ -2004,13 +2021,22 @@ class WsiInstance:
         bytes
             Tile image as bytes.
         """
+        if z is None:
+            z = self.default_z
+        if path is None:
+            path = self.default_path
         try:
             tile_frame = self._image_data.get_tile(tile, z, path)
         except WsiDicomSparse:
             tile_frame = self.blank_encoded_tile
-        if not crop:
-            return tile_frame
-        return self.crop_encoded_tile_to_level(tile, tile_frame)
+
+        # Check if tile is an edge tile that should be croped
+        cropped_tile_region = self.crop_to_level_size(tile)
+        if cropped_tile_region.size != self.tile_size:
+            image = Image.open(io.BytesIO(tile_frame))
+            image.crop(box=cropped_tile_region.box_from_origin)
+            tile_frame = self.encode(image)
+        return tile_frame
 
     @staticmethod
     def check_duplicate_instance(
@@ -2327,7 +2353,7 @@ class WsiDicomGroup:
         self,
         z: float = None,
         path: str = None
-    ) -> Tuple[WsiInstance, float, str]:
+    ) -> WsiInstance:
         """Search for instance fullfilling the parameters.
         The behavior when z and/or path is none could be made more
         clear.
@@ -2341,15 +2367,14 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        WsiInstance, float, str
-            The instance containing selected path and z coordinate,
-            selected or default focal plane and optical path
+        WsiInstance
+            The instance containing selected path and z coordinate
         """
         if z is None and path is None:
             instance = self.default_instance
             z = instance.default_z
             path = instance.default_path
-            return self.default_instance, z, path
+            return self.default_instance
 
         # Sort instances by number of focal planes (prefer simplest instance)
         sorted_instances = sorted(
@@ -2378,7 +2403,7 @@ class WsiDicomGroup:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        return instance, z, path
+        return instance
 
     def get_default_full(self) -> Image:
         """Read full image using default z coordinate and path.
@@ -2420,7 +2445,7 @@ class WsiDicomGroup:
             Region as image
         """
 
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
         image = instance.stitch_tiles(region, path, z)
         return image
 
@@ -2475,15 +2500,14 @@ class WsiDicomGroup:
             The tile as image
         """
 
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
         return instance.get_tile(tile, z, path)
 
     def get_encoded_tile(
         self,
         tile: Point,
         z: float = None,
-        path: str = None,
-        crop: bool = True
+        path: str = None
     ) -> bytes:
         """Return tile at tile coordinate x, y as bytes.
 
@@ -2495,16 +2519,14 @@ class WsiDicomGroup:
             Z coordinate
         path: str
             Optical path
-        crop: bool
-            If the tile should be croped to image region.
 
         Returns
         ----------
         bytes
             The tile as bytes
         """
-        (instance, z, path) = self.get_instance(z, path)
-        return instance.get_encoded_tile(tile, z, path, crop)
+        instance = self.get_instance(z, path)
+        return instance.get_encoded_tile(tile, z, path)
 
     def mm_to_pixel(self, region: RegionMm) -> Region:
         """Convert region in mm to pixel region.
@@ -2711,7 +2733,7 @@ class WsiDicomLevel(WsiDicomGroup):
             A tile image
         """
         scale = self.calculate_scale(level)
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
         scaled_region = Region.from_tile(tile, instance.tile_size) * scale
         cropped_region = instance.crop_to_level_size(scaled_region)
         if not self.valid_pixels(cropped_region):
@@ -2752,7 +2774,7 @@ class WsiDicomLevel(WsiDicomGroup):
             A transfer syntax encoded tile
         """
         image = self.get_scaled_tile(tile, scale, z, path)
-        (instance, z, path) = self.get_instance(z, path)
+        instance = self.get_instance(z, path)
         return instance.encode(image)
 
     def calculate_scale(self, level_to: int) -> int:
@@ -3702,7 +3724,7 @@ class WsiDicom:
         level: int,
         z: float = None,
         path: str = None
-    ) -> Tuple[WsiInstance, float, str]:
+    ) -> WsiInstance:
         """Return instance fullfilling level, z and/or path.
 
         Parameters
@@ -3716,8 +3738,8 @@ class WsiDicom:
 
         Returns
         ----------
-        Tuple[WsiInstance, float, str]:
-            Instance, selected z and path
+        WsiInstance:
+            Instance
         """
         wsi_level = self.levels.get_level(level)
         return wsi_level.get_instance(z, path)
