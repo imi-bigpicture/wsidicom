@@ -29,6 +29,7 @@ class SizeMm:
                 self.height/divider.height
             )
         return NotImplemented
+
     def __floordiv__(self, divider):
         if isinstance(divider, (int, float)):
             return Size(int(self.width/divider), int(self.height/divider))

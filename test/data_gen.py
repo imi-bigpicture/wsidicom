@@ -6,6 +6,7 @@ from pydicom.sequence import Sequence
 
 from pathlib import Path
 
+
 def create_main_dataset() -> Dataset:
     # Main data elements
     ds = Dataset()

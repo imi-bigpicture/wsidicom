@@ -18,11 +18,12 @@ from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomOutOfBoundsError, WsiDicomSparse,
                              WsiDicomUidDuplicateError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
+from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.optical import OpticalManager
 from wsidicom.stringprinting import (dict_pretty_str, list_pretty_str,
                                      str_indent)
-from wsidicom.uid import WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID, BaseUids, FileUids
-from wsidicom.graphical_annotations import AnnotationInstance
+from wsidicom.uid import (ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, BaseUids,
+                          FileUids)
 
 
 class WsiDataset(Dataset):
@@ -443,7 +444,6 @@ class WsiDataset(Dataset):
     @cached_property
     def photophotometric_interpretation(self) -> str:
         return self.PhotometricInterpretation
-
 
     @cached_property
     def instance_number(self) -> str:
@@ -1447,7 +1447,6 @@ class SparseTileIndex(TileIndex):
         for z, path in self._planes.keys():
             focal_planes.add(z)
         return list(focal_planes)
-
 
     def _read_planes_from_datasets(
         self,
@@ -3077,7 +3076,6 @@ class WsiDicomLevels(WsiDicomSeries):
         levels = WsiDicomLevel.open_levels(instances)
         return WsiDicomLevels(levels)
 
-
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
         (1x1 pixel level).
@@ -3223,24 +3221,25 @@ class WsiDicom:
             Series of label images.
         overviews: WsiDicomOverviews
             Series of overview images
+        annotations: AnnotationInstance = None
+            Sup-222 annotation instance.
         """
 
         self._levels = levels
         self._labels = labels
         self._overviews = overviews
+        self.annotations = annotations
+
         if self.levels.uids is not None:
             self.uids = self._validate_collection(
                 [self.levels, self.labels, self.overviews],
             )
         else:
             self.uids = None
-        self.annotations: AnnotationInstance = annotations
-
 
         self.optical = OpticalManager.open(
             levels.instances + labels.instances + overviews.instances
         )
-
 
         if (
             self.annotations.frame_of_reference is not None and
