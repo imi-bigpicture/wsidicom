@@ -61,4 +61,4 @@ class FileUids:
                 self.concatenation == other.concatenation and
                 self.base == other.base
             )
-        raise NotImplementedError
+        return NotImplemented

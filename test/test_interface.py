@@ -60,9 +60,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_size(self):
-        closest_level = self.slide.levels.get_closest_by_size(
-            Size(100, 100)
-        )
+        closest_level = self.slide.levels.get_closest_by_size(Size(100, 100))
         self.assertEqual(closest_level.level, 0)
 
     def test_calculate_scale(self):
@@ -102,6 +100,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         instance = base_level.get_instance()
         image_data: DicomImageData = instance._image_data
         test = image_data.valid_tiles(
+
             Region(Point(0, 0), Size(0, 0)), 0, '0'
         )
         self.assertTrue(test)

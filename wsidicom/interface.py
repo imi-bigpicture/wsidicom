@@ -21,7 +21,8 @@ from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.optical import OpticalManager
 from wsidicom.stringprinting import (dict_pretty_str, list_pretty_str,
                                      str_indent)
-from wsidicom.uid import WSI_SOP_CLASS_UID, BaseUids, FileUids
+from wsidicom.uid import WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID, BaseUids, FileUids
+from wsidicom.graphical_annotations import AnnotationInstance
 
 
 class WsiDataset(Dataset):
@@ -238,7 +239,7 @@ class WsiDataset(Dataset):
         )
         if not syntax_supported:
             warnings.warn(
-                "Non-supported transfer syntax"
+                "Non-supported transfer syntax "
                 f"{transfer_syntax_uid}"
             )
         if image_type_supported and syntax_supported:
@@ -442,6 +443,7 @@ class WsiDataset(Dataset):
     @cached_property
     def photophotometric_interpretation(self) -> str:
         return self.PhotometricInterpretation
+
 
     @cached_property
     def instance_number(self) -> str:
@@ -1446,6 +1448,7 @@ class SparseTileIndex(TileIndex):
             focal_planes.add(z)
         return list(focal_planes)
 
+
     def _read_planes_from_datasets(
         self,
         datasets: List[WsiDataset]
@@ -1470,6 +1473,7 @@ class SparseTileIndex(TileIndex):
             for i, frame in enumerate(frame_sequence):
                 (tile, z) = self._read_frame_coordinates(frame)
                 identifier = dataset.read_optical_path_identifier(frame)
+
                 try:
                     plane = planes[(z, identifier)]
                 except KeyError:
@@ -1482,6 +1486,7 @@ class SparseTileIndex(TileIndex):
     def _read_frame_coordinates(
             self,
             frame: DicomSequence
+
     ) -> Tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
         In the Plane Position Slide Sequence x and y are defined in mm and z in
@@ -1550,6 +1555,7 @@ class WsiInstance:
         string = (
             f"default z: {self.default_z} "
             f"default path: { self.default_path}"
+
         )
         if depth is not None:
             depth -= 1
@@ -1758,6 +1764,7 @@ class WsiInstance:
             path = self.default_path
         stitching_tiles = self.get_tile_range(region, z, path)
         image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
+
         write_index = Point(x=0, y=0)
         tile = stitching_tiles.position
         for tile in stitching_tiles.iterate_all(include_end=True):
@@ -2374,6 +2381,7 @@ class WsiDicomGroup:
             instance = self.default_instance
             z = instance.default_z
             path = instance.default_path
+
             return self.default_instance
 
         # Sort instances by number of focal planes (prefer simplest instance)
@@ -2641,12 +2649,16 @@ class WsiDicomLevel(WsiDicomGroup):
 
     @property
     def pyramid(self) -> str:
-        """Return string representatin of the level"""
+        """Return string representation of the level"""
         return (
             f'Level [{self.level}]'
             f' tiles: {self.default_instance.tiled_size},'
             f' size: {self.size}, mpp: {self.mpp} um/px'
         )
+
+    @property
+    def tile_size(self) -> Size:
+        return self.default_instance.tile_size
 
     @property
     def level(self) -> int:
@@ -2851,6 +2863,9 @@ class WsiDicomSeries(metaclass=ABCMeta):
             The group at index in the series
         """
         return self.groups[index]
+
+    def __len__(self) -> int:
+        return len(self.stacks)
 
     @property
     def groups(self) -> List[WsiDicomGroup]:
@@ -3062,6 +3077,7 @@ class WsiDicomLevels(WsiDicomSeries):
         levels = WsiDicomLevel.open_levels(instances)
         return WsiDicomLevels(levels)
 
+
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
         (1x1 pixel level).
@@ -3193,7 +3209,9 @@ class WsiDicom:
         self,
         levels: WsiDicomLevels,
         labels: WsiDicomLabels,
-        overviews: WsiDicomOverviews
+        overviews: WsiDicomOverviews,
+        annotations: AnnotationInstance = None
+
     ):
         """Holds wsi dicom levels, labels and overviews.
 
@@ -3216,20 +3234,45 @@ class WsiDicom:
             )
         else:
             self.uids = None
+        self.annotations: AnnotationInstance = annotations
+
 
         self.optical = OpticalManager.open(
             levels.instances + labels.instances + overviews.instances
         )
+
+
+        if (
+            self.annotations.frame_of_reference is not None and
+            self.annotations.frame_of_reference != self.uids.frame_of_reference
+        ):
+            warnings.warn("Annotations frame of referance does not match")
+
         self.__enter__()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+
         self.close()
 
     def __str__(self) -> str:
         return self.pretty_str()
+
+    @property
+    def base_level(self) -> WsiDicomLevel:
+        return self.levels.base_level
+
+    @property
+    def size(self) -> Size:
+        """Return pixel size of base level."""
+        return self.base_level.size
+
+    @property
+    def tile_size(self) -> Size:
+        """Return tile size of levels."""
+        return self.base_level.tile_size
 
     @property
     def levels(self) -> WsiDicomLevels:
@@ -3275,6 +3318,10 @@ class WsiDicom:
             + self.overviews.instances
         )
 
+    @property
+    def frame_of_reference(self) -> Uid:
+        return self.uids.frame_of_reference
+
     def pretty_str(
         self,
         indent: int = 0,
@@ -3309,17 +3356,22 @@ class WsiDicom:
         level_files: List[WsiDicomFile] = []
         label_files: List[WsiDicomFile] = []
         overview_files: List[WsiDicomFile] = []
+        annotation_files: List[Path] = []
 
         for filepath in cls._filter_paths(filepaths):
-            dicom_file = WsiDicomFile(filepath)
-            if(dicom_file.wsi_type == 'VOLUME'):
-                level_files.append(dicom_file)
-            elif(dicom_file.wsi_type == 'LABEL'):
-                label_files.append(dicom_file)
-            elif(dicom_file.wsi_type == 'OVERVIEW'):
-                overview_files.append(dicom_file)
-            else:
-                dicom_file.close()
+            sop_class_uid = cls._get_sop_class_uid(filepath)
+            if sop_class_uid == WSI_SOP_CLASS_UID:
+                wsi_file = WsiDicomFile(filepath)
+                if(wsi_file.wsi_type == 'VOLUME'):
+                    level_files.append(wsi_file)
+                elif(wsi_file.wsi_type == 'LABEL'):
+                    label_files.append(wsi_file)
+                elif(wsi_file.wsi_type == 'OVERVIEW'):
+                    overview_files.append(wsi_file)
+                else:
+                    wsi_file.close()
+            elif sop_class_uid == ANN_SOP_CLASS_UID:
+                annotation_files.append(filepath)
 
         base_dataset = cls._get_base_dataset(level_files)
         base_uids = base_dataset.base_uids
@@ -3335,8 +3387,16 @@ class WsiDicom:
         levels = WsiDicomLevels.open(level_instances)
         labels = WsiDicomLabels.open(label_instances)
         overviews = WsiDicomOverviews.open(overview_instances)
+        annotations = AnnotationInstance.open(annotation_files)
 
-        return WsiDicom(levels, labels, overviews)
+        return WsiDicom(levels, labels, overviews, annotations)
+
+    @staticmethod
+    def _get_sop_class_uid(path: Path) -> Uid:
+        metadata: pydicom.dataset.FileMetaDataset = (
+            pydicom.filereader.read_file_meta_info(path)
+        )
+        return metadata.MediaStorageSOPClassUID
 
     @staticmethod
     def _get_filepaths(path: Union[str, List[str]]) -> List[Path]:
@@ -3725,6 +3785,7 @@ class WsiDicom:
         z: float = None,
         path: str = None
     ) -> WsiInstance:
+
         """Return instance fullfilling level, z and/or path.
 
         Parameters
