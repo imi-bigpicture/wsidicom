@@ -68,7 +68,7 @@ class WsiDicomNotFoundError(Exception):
         return f"{self.item} not found in {self.not_found_in}"
 
 
-class WsiDicomOutOfBondsError(Exception):
+class WsiDicomOutOfBoundsError(Exception):
     """Raised if requested item is out of bonds"""
 
     def __init__(self, error: str, bonds: str):
