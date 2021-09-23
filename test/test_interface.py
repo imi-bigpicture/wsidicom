@@ -7,14 +7,11 @@ import pydicom
 import pytest
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
-from wsidicom.conceptcode import (AnnotationCategoryCode, AnnotationTypeCode,
-                                  ChannelDescriptionCode, IlluminationCode,
-                                  IlluminationColorCode, IlluminatorCode,
-                                  ImagePathFilterCode, LenseCode,
-                                  LightPathFilterCode, MeasurementCode)
+from wsidicom.conceptcode import (CidConceptCode, IlluminationCode,
+                                  IlluminationColorCode)
 from wsidicom.errors import WsiDicomNotFoundError
-from wsidicom.interface import (DicomImageData, Point, PointMm,
-                                Region, RegionMm, Size, SizeMm, WsiDicom)
+from wsidicom.interface import (DicomImageData, Point, PointMm, Region,
+                                RegionMm, Size, SizeMm, WsiDicom)
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 from .data_gen import create_layer_file, create_main_dataset
@@ -400,13 +397,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(optical.get('1'), path)
 
     def test_concept_codes(self):
-        code_classes = [
-            MeasurementCode, AnnotationTypeCode, AnnotationCategoryCode,
-            IlluminationCode, LenseCode, LightPathFilterCode,
-            ImagePathFilterCode, IlluminationColorCode, IlluminatorCode,
-            ChannelDescriptionCode
-        ]
-        for code_class in code_classes:
+        for code_class in CidConceptCode.__subclasses__():
             print(code_class)
             available_codes = code_class.cid.values()
             for available_code in available_codes:
