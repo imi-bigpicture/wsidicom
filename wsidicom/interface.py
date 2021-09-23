@@ -883,14 +883,17 @@ class ImageData(metaclass=ABCMeta):
 class DicomImageData(ImageData):
     """Represents image data read from dicom file(s). Image data can
     be sparsly or fully tiled and/or concatenated."""
-    def __init__(self, files: List[WsiDicomFile]) -> None:
+    def __init__(self, files: Union[WsiDicomFile, List[WsiDicomFile]]) -> None:
         """Create DicomImageData from frame data in files.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            List of of WsiDicomFiles containing frame data.
+        files: Union[WsiDicomFile, List[WsiDicomFile]]
+            Single or list of WsiDicomFiles containing frame data.
         """
+        if not isinstance(files, list):
+            files = [files]
+
         # Key is frame offset
         self._files = OrderedDict(
             (file.frame_offset, file) for file
