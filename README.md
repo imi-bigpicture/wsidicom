@@ -98,6 +98,70 @@ instance = WsiInstance(dataset, image_data)
 ```
 The created instances can then be arranged into levels etc, and opened as a WsiDicom-object as described in 'Data structure'.
 
+## Annotation usage
+Annotations are structured in a hierarchy:
+- AnnotationInstance
+    Represents a collection of AnnotationGroups. All the groups have the same frame of reference, i.e. annotations are from the same wsi stack.
+- AnnotationGroup
+    Represents a group of annotations. All annotations in the group are of the same type (e.g. PointAnnotation), have the same label, description and category and type. The category and type are codes that are used to define the annotated feature. A good resource for working with codes is avaiable [here](https://qiicr.gitbook.io/dcmqi-guide/opening/coding_schemes).
+- Annotation
+    Represents a annotation. An Annotation has a geometry (currently Point, Polyline, Polygon) and an optional list of Measurements.
+- Measurement
+    Represents a measurement for an Annotation. A Measurement consists of a type-code (e.g. "Area"), a value and a unit-code ("mm")
+
+Codes that are defined in the 222-draft can be created using the create(source, type) function of the ConceptCode-class.
+
+***Load a WSI dataset from files in folder.***
+```python
+from wsidicom import WsiDicom
+slide = WsiDicom.open(path_to_folder)
+```
+***Create a point annotation at x=10.0, y=20.0 mm.***
+```python
+from wsidicom import Annotation, Point
+point_annotation = Annotation(Point(10.0, 20.0))
+```
+
+***Create a point annotation with a measurement.***
+```python
+from wsidicom import Coder, Measurement
+# A measurement is defined by a type code ('Area'), a value (25.0) and a unit code ('Pixels).
+area = ConceptCode.measurement('Area')
+pixels = ConceptCode.unit('Pixels')
+measurement = Measurement(area, 25.0, pixels)
+point_annotation_with_measurment = Annotation(Point(10.0, 20.0), [measurement])
+```
+
+***Create a group of the annotations.***
+```python
+from wsidicom import PointAnnotationGroup
+# The 222 suplement requires groups to have a label, a category and a type
+group = PointAnnotationGroup(
+    annotations=[point_annotation, point_annotation_with_measurment],
+    label='group label',
+    categorycode=ConceptCode.category('Tissue'),
+    typecode=ConceptCode.type('Nucleus'),
+    description='description'
+)
+```
+
+***Create a collection of annotation groups.***
+```python
+from wsidicom import AnnotationInstance
+annotations = AnnotationInstance([group], slide.frame_of_reference)
+```
+
+***Save the collection to file.***
+```python
+annotations.save('path_to_dicom_dir/annotation.dcm')
+```
+
+***Reopen the slide and access the annotation instance.***
+```python
+slide = WsiDicom.open(path_to_folder)
+annotations = slide.annotations
+```
+
 ## Advanced frame access
 It is possible to get direct access to the pydicom filepointer for faster frame readout. To do so, first get the instance of interest:
 ```python
