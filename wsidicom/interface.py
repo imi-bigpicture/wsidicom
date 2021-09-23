@@ -143,10 +143,9 @@ class WsiDataset(Dataset):
             for module in module_attributes:
                 for attribute in module:
                     if attribute not in self:
-                        # warnings.warn(
-                        #     f' is missing {key} attribute {attribute}'
-                        # )
-                        # print(f' is missing {key} attribute {attribute}')
+                        warnings.warn(
+                            f' is missing {key} attribute {attribute}'
+                        )
                         passed[key] = False
 
         sop_class_uid = getattr(self, "SOPClassUID", "")
@@ -158,8 +157,8 @@ class WsiDataset(Dataset):
         datasets: List[Dataset],
         caller: object
     ) -> None:
-        """Check for duplicates in list of datasets. Datasets are duplicate if
-        instance uids match. Stops at first found duplicate and raises
+        """Check for duplicates in a list of datasets. Datasets are duplicate
+        if instance uids match. Stops at first found duplicate and raises
         WsiDicomUidDuplicateError.
 
         Parameters
@@ -196,11 +195,6 @@ class WsiDataset(Dataset):
             self.image_size == other_dataset.image_size and
             self.tile_size == other_dataset.tile_size and
             self.tile_type == other_dataset.tile_type
-            # and
-            # (
-            #     self.get_supported_wsi_dicom_type()
-            #     == other_dataset.get_supported_wsi_dicom_type()
-            # )
         )
 
     def matches_series(self, uids: BaseUids, tile_size: Size = None) -> bool:
@@ -230,8 +224,8 @@ class WsiDataset(Dataset):
             WSI image flavor
         """
         SUPPORTED_IMAGE_TYPES = ['VOLUME', 'LABEL', 'OVERVIEW']
-        IMAGE_FLAVOR = 2
-        image_type: str = self.ImageType[IMAGE_FLAVOR]
+        IMAGE_FLAVOR_INDEX_IN_IMAGE_TYPE = 2
+        image_type: str = self.ImageType[IMAGE_FLAVOR_INDEX_IN_IMAGE_TYPE]
         image_type_supported = image_type in SUPPORTED_IMAGE_TYPES
         if not image_type_supported:
             warnings.warn(f"Non-supported image type {image_type}")
@@ -821,7 +815,9 @@ class ImageData(metaclass=ABCMeta):
 
     @cached_property
     def default_z(self) -> float:
-        """Return default focal plane in um."""
+        """Return single defined focal plane (in um) if only one focal plane
+        defined. Return the middle focal plane if several focal planes are
+        defined."""
         default = 0
         if(len(self.focal_planes) > 1):
             smallest = min(self.focal_planes)
@@ -834,7 +830,8 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     def default_path(self) -> str:
-        """Return default optical path identifier."""
+        """Return the first defined optical path as default optical path
+        identifier."""
         return self.optical_paths[0]
 
     @cached_property
