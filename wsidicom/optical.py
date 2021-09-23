@@ -16,8 +16,9 @@ from .errors import WsiDicomNotFoundError
 
 
 class Lut:
+    """Represents a LUT."""
     def __init__(self, lut_sequence: DicomSequence):
-        """Stores RGB lookup tables.
+        """Read LUT from a DICOM LUT sequence.
 
         Parameters
         ----------
@@ -440,8 +441,34 @@ class OpticalPath:
         light_path_filter: LightPathFilter = None,
         image_path_filter: ImagePathFilter = None,
         channel_description: List[ChannelDescriptionCode] = None,
-        lenses: Lenses = None,
+        lenses: Lenses = None
     ):
+        """Create a OpticalPath from identifier, illumination, photometric
+        interpretation, and optional attributes.
+
+        Parameters
+        ----------
+        identifier: str
+            String identifier for the optical path.
+        illumination: Illumination
+            The illumination condition used in the optical path.
+        photometric_interpretation: str
+            The photometric interpretation of the optical path.
+        description: str = None
+            Optional description of the optical path.
+        icc_profile: bytes = None
+            Optional ICC profile for the optical path.
+        lut: Lut = None
+            Optional Look-up table for the optical path.
+        light_path_filter: LightPathFilter = None
+            Optional light path filter description for the optical path.
+        image_path_filter: ImagePathFilter = None
+            Optional image path filter description for the optical path.
+        channel_description: List[ChannelDescriptionCode] = None
+            Optional channel description for the optical path.
+        lenses: Lenses = None
+            Optional lens description for the optical path.
+        """
 
         if photometric_interpretation != 'MONOCHROME2' and icc_profile is None:
             warnings.warn(
@@ -529,6 +556,13 @@ class OpticalManager:
         self,
         optical_paths: List[OpticalPath] = None,
     ):
+        """Create a OpticalManager from list of OpticalPaths.
+
+        Parameters
+        ----------
+        optical_paths: List[OpticalPath] = None
+            List of OpticalPaths.
+        """
         self._optical_paths: Dict[str, OpticalPath] = {
             optical_path.identifier: optical_path
             for optical_path in optical_paths

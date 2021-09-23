@@ -6,6 +6,7 @@ WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
 
 @dataclass
 class BaseUids:
+    """Represents the UIDs that should be common for all files in the wsi."""
     study_instance: Uid
     series_instance: Uid
     frame_of_reference: Uid
@@ -20,6 +21,7 @@ class BaseUids:
 
 @dataclass
 class FileUids:
+    """Represents the UIDs in a DICOM-file."""
     instance: Uid
     concatenation: Uid
     base: BaseUids
