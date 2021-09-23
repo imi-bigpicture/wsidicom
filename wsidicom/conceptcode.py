@@ -423,5 +423,3 @@ class ConceptNameCode(SingleConceptCode):
     @classmethod
     def list(cls) -> List[str]:
         return []
-
-
