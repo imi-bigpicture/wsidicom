@@ -792,16 +792,14 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError
 
     @property
-    @abstractmethod
     def focal_planes(self) -> List[float]:
-        """Focal planes avaiable in the image."""
-        raise NotImplementedError
+        """Focal planes avaiable in the image defined in um."""
+        return [0.0]
 
     @property
-    @abstractmethod
     def optical_paths(self) -> List[str]:
         """Optical paths avaiable in the image."""
-        raise NotImplementedError
+        raise ['0']
 
     @abstractmethod
     def get_tile(
@@ -896,26 +894,33 @@ class DicomImageData(ImageData):
 
     @property
     def image_size(self) -> Size:
+        """The pixel size of the image."""
         return self.tiles.image_size
 
     @property
     def tile_size(self) -> Size:
+        """The pixel tile size of the image."""
         return self.tiles.tile_size
 
     @property
     def tiled_size(self) -> Size:
+        """The size of the image when divided into tiles, e.g. number of
+        columns and rows of tiles."""
         return self.tiles.tiled_size
 
     @property
     def focal_planes(self) -> List[float]:
+        """Focal planes avaiable in the image defined in um."""
         return self.tiles.focal_planes
 
     @property
     def optical_paths(self) -> List[str]:
+        """Optical paths avaiable in the image."""
         return self.tiles.optical_paths
 
     @property
     def pixel_spacing(self) -> SizeMm:
+        """Size of the pixels in mm/pixel."""
         return self._pixel_spacing
 
     def get_tile(self, tile: Point, z: float, path: str) -> bytes:
@@ -2789,7 +2794,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         Parameters
         ----------
         groups: List[WsiDicomGroup]
-            List of groups to include in the series
+            List of groups to include in the series.
         """
         self._groups: List[WsiDicomGroup] = groups
 
