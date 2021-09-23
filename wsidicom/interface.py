@@ -779,11 +779,10 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError
 
     @property
-    @abstractmethod
     def tiled_size(self) -> Size:
         """The size of the image when divided into tiles, e.g. number of
         columns and rows of tiles."""
-        raise NotImplementedError
+        self.image_size / self.tile_size
 
     @property
     @abstractmethod
@@ -891,22 +890,6 @@ class DicomImageData(ImageData):
             self.tiles = SparseTileIndex(datasets)
 
         self._pixel_spacing = base_file.dataset.pixel_spacing
-
-    @property
-    def image_size(self) -> Size:
-        """The pixel size of the image."""
-        return self.tiles.image_size
-
-    @property
-    def tile_size(self) -> Size:
-        """The pixel tile size of the image."""
-        return self.tiles.tile_size
-
-    @property
-    def tiled_size(self) -> Size:
-        """The size of the image when divided into tiles, e.g. number of
-        columns and rows of tiles."""
-        return self.tiles.tiled_size
 
     @property
     def focal_planes(self) -> List[float]:
