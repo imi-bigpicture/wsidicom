@@ -15,7 +15,7 @@ from pydicom.uid import UID as Uid
 
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomMatchError, WsiDicomNotFoundError,
-                             WsiDicomOutOfBondsError, WsiDicomSparse,
+                             WsiDicomOutOfBoundsError, WsiDicomSparse,
                              WsiDicomUidDuplicateError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.optical import OpticalManager
@@ -972,7 +972,7 @@ class DicomImageData(ImageData):
         return tile_frame
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Return frame index for tile. Raises WsiDicomOutOfBondsError if
+        """Return frame index for tile. Raises WsiDicomOutOfBoundsError if
         tile, z, or path is not valid. Raises WsiDicomSparse if index is sparse
         and tile is not in frame data.
 
@@ -992,7 +992,7 @@ class DicomImageData(ImageData):
         """
         tile_region = Region(position=tile, size=Size(0, 0))
         if not self.valid_tiles(tile_region, z, path):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Tile region {tile_region}",
                 f"plane {self.tiles.tiled_size}"
             )
@@ -1732,7 +1732,7 @@ class WsiInstance:
         end = pixel_region.end / self._image_data.tile_size - 1
         tile_region = Region.from_points(start, end)
         if not self._image_data.valid_tiles(tile_region, z, path):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Tile region {tile_region}",
                 f"tiled size {self._image_data.tiled_size}"
             )
@@ -2466,7 +2466,7 @@ class WsiDicomGroup:
             size=region.size // self.pixel_spacing
         )
         if not self.valid_pixels(pixel_region):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Region {region}", f"level size {self.size}"
             )
         return pixel_region
@@ -2655,7 +2655,7 @@ class WsiDicomLevel(WsiDicomGroup):
         scaled_region = Region.from_tile(tile, instance.tile_size) * scale
         cropped_region = instance.crop_to_level_size(scaled_region)
         if not self.valid_pixels(cropped_region):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Region {cropped_region}", f"level size {self.size}"
             )
         image = self.get_region(cropped_region, z, path)
@@ -3024,7 +3024,7 @@ class WsiDicomLevels(WsiDicomSeries):
             The level closest to searched level
         """
         if not self.valid_level(level):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Level {level}", f"maximum level {self.highest_level}"
             )
         closest_level = 0
@@ -3462,7 +3462,7 @@ class WsiDicom:
         ) * scale_factor
 
         if not wsi_level.valid_pixels(scaled_region):
-            raise WsiDicomOutOfBondsError(
+            raise WsiDicomOutOfBoundsError(
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
         image = wsi_level.get_region(scaled_region, z, path)
@@ -3548,7 +3548,7 @@ class WsiDicom:
         )
         image = wsi_level.get_region_mm(region, z, path)
         image_size = SizeMm(width=size[0], height=size[1]) // pixel_spacing
-        return image.resize(image_size.to_int_tuple(), resample=Image.BILINEAR)
+        return image.resize(image_size.to_tuple(), resample=Image.BILINEAR)
 
     def read_tile(
         self,

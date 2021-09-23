@@ -32,9 +32,9 @@ class SizeMm:
 
     def __floordiv__(self, divider):
         if isinstance(divider, (int, float)):
-            return SizeMm(int(self.width/divider), int(self.height/divider))
+            return Size(int(self.width/divider), int(self.height/divider))
         if isinstance(divider, SizeMm):
-            return SizeMm(
+            return Size(
                 int(self.width/divider.width),
                 int(self.height/divider.height)
             )
