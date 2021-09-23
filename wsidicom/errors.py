@@ -2,6 +2,16 @@ from pathlib import Path
 from .geometry import Point
 
 
+class WsiDicomError(Exception):
+    """Raised for general error."""
+
+    def __init__(self, error: str):
+        self.error = error
+
+    def __str__(self):
+        return self.error
+
+
 class WsiDicomFileError(Exception):
     """Raised if read file data is incorrect."""
 
@@ -58,7 +68,7 @@ class WsiDicomNotFoundError(Exception):
         return f"{self.item} not found in {self.not_found_in}"
 
 
-class WsiDicomOutOfBondsError(Exception):
+class WsiDicomOutOfBoundsError(Exception):
     """Raised if requested item is out of bonds"""
 
     def __init__(self, error: str, bonds: str):

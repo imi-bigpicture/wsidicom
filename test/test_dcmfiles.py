@@ -21,10 +21,10 @@ class WsiFolder(TypedDict):
 
 
 @pytest.mark.integration
-class WsiDicomTests(unittest.TestCase):
+class WsiDicomFilesTests(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(WsiDicomTests, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.test_folders: Dict[Path, WsiDicom]
 
     @classmethod
