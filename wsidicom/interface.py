@@ -25,8 +25,9 @@ from wsidicom.uid import WSI_SOP_CLASS_UID, BaseUids, FileUids
 
 
 class WsiDataset(Dataset):
-    """Extend pydicom dataset with simple parsers for attributes. Use snake
-    case to avoid name collision with dicom fields."""
+    """Extend pydicom.dataset.Dataset with simple parsers for attributes
+    specific for WSI data. Use snake case to avoid name collision with dicom
+    fields (that are handled by pydicom.dataset.Dataset)."""
 
     def is_wsi_dicom(self) -> bool:
         """Check if dataset is dicom wsi type and that required attributes
@@ -460,6 +461,8 @@ class WsiDataset(Dataset):
 
 
 class WsiDicomFile:
+    """Represents a DICOM file (potentially) containing WSI image and metadata.
+    """
     def __init__(self, filepath: Path):
         """Open dicom file in filepath. If valid wsi type read required
         parameters. Parses frames in pixel data but does not read the frames.
@@ -766,31 +769,38 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def image_size(self) -> Size:
+        """The pixel size of the image."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def tile_size(self) -> Size:
+        """The pixel tile size of the image."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def tiled_size(self) -> Size:
+        """The size of the image when divided into tiles, e.g. number of
+        columns and rows of tiles."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def pixel_spacing(self) -> SizeMm:
+        """Size of the pixels in mm/pixel."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def focal_planes(self) -> List[float]:
+        """Focal planes avaiable in the image."""
         raise NotImplementedError
 
     @property
     @abstractmethod
     def optical_paths(self) -> List[str]:
+        """Optical paths avaiable in the image."""
         raise NotImplementedError
 
     @abstractmethod
@@ -859,9 +869,16 @@ class ImageData(metaclass=ABCMeta):
 
 
 class DicomImageData(ImageData):
-    """Class reading image data from dicom file(s). Image data can
-    be sparsly or fully tiled-"""
+    """Represents image data read from dicom file(s). Image data can
+    be sparsly or fully tiled and/or concatenated."""
     def __init__(self, files: List[WsiDicomFile]) -> None:
+        """Create DicomImageData from frame data in files.
+
+        Parameters
+        ----------
+        files: List[WsiDicomFile]
+            List of of WsiDicomFiles containing frame data.
+        """
         # Key is frame offset
         self._files = OrderedDict(
             (file.frame_offset, file) for file
@@ -1012,9 +1029,10 @@ class DicomImageData(ImageData):
 
 
 class SparseTilePlane:
+    """Hold frame indices for the tiles in a sparse tiled file. Empty (sparse)
+    frames are represented by -1."""
     def __init__(self, tiled_size: Size):
-        """Hold frame indices for the tiles in a sparse tiled file.
-        Empty (sparse) frames are represented by -1.
+        """Create a SparseTilePlane of specified size.
 
         Parameters
         ----------
@@ -1065,11 +1083,13 @@ class SparseTilePlane:
 
 
 class TileIndex(metaclass=ABCMeta):
+    """Index for mapping tile position to frame number. Is subclassed into
+    FullTileIndex and SparseTileIndex."""
     def __init__(
         self,
         datasets: List[WsiDataset]
     ):
-        """Index for tiling of pixel data in datasets. Requires equal tile
+        """Create tile index for frames in datasets. Requires equal tile
         size for all tile planes.
 
         Parameters
@@ -1176,14 +1196,20 @@ class TileIndex(metaclass=ABCMeta):
 
 
 class FullTileIndex(TileIndex):
+    """Index for mapping tile position to frame number for datasets containing
+    full tiles. Pixel data tiles are ordered by colum, row, z and path, thus
+    the frame index for a tile can directly be calculated."""
     def __init__(
         self,
         datasets: List[WsiDataset]
     ):
-        """Index for tiling of full tiled pixel data in datasets. Requires
-        equal tile size for all tile planes. Pixel data tiles are ordered by
-        colum, row, z and path, thus the frame index for a tile can directly be
-        calculated.
+        """Create full tile index for frames in datasets. Requires equal tile
+        size for all tile planes.
+
+        Parameters
+        ----------
+        datasets: List[WsiDataset]
+            List of datasets containing full tiled image data.
         """
         super().__init__(datasets)
         self._focal_planes = self._read_focal_planes_from_datasets(datasets)
@@ -1316,19 +1342,20 @@ class FullTileIndex(TileIndex):
 
 
 class SparseTileIndex(TileIndex):
+    """Index for mapping tile position to frame number for datasets containing
+    sparse tiles. Frame indices are retrieved from tile position, z, and path
+    by finding the corresponding matching SparseTilePlane (z and path) and
+    returning the frame index at tile position. If the tile is missing (due to
+    the sparseness), -1 is returned."""
     def __init__(
         self,
         datasets: List[WsiDataset]
     ):
-        """Index for sparse tiled pixel data in datasets. Requires equal tile
-        size for all tile planes Pixel data tiles are identified by the Per
+        """Create sparse tile index for frames in datasets. Requires equal tile
+        size for all tile planes. Pixel data tiles are identified by the Per
         Frame Functional Groups Sequence that contains tile colum, row, z,
         path, and frame index. These are stored in a SparseTilePlane
-        (one plane for every combination of z and path). Frame indices are
-        retrieved from tile position, z, and path by finding the corresponding
-        matching SparseTilePlane (z and path) and returning the frame index at
-        tile position. If the tile is missing (due to the sparseness), -1 is
-        returned.
+        (one plane for every combination of z and path).
 
         Parameters
         ----------
@@ -1458,12 +1485,25 @@ class SparseTileIndex(TileIndex):
 
 
 class WsiInstance:
+    """Represents a level, label, or overview wsi image, containing image data
+    and datasets with metadata."""
     def __init__(
         self,
         datasets: Union[WsiDataset, List[WsiDataset]],
         image_data: ImageData,
         transfer_syntax_uid: Uid
     ):
+        """Create a WsiInstance from datasets with metadata and image data.
+
+        Parameters
+        ----------
+        datasets: Union[WsiDataset, List[WsiDataset]]
+            Single dataset or list of datasets.
+        image_data: ImageData
+            Image data.
+        transfer_syntax_uid: Uid
+            Transfer syntax used in image_data.
+        """
         if not isinstance(datasets, list):
             datasets = [datasets]
         self._datasets = datasets
@@ -2114,13 +2154,14 @@ class WsiInstance:
 
 
 class WsiDicomGroup:
+    """Represents a group of instances having the same size, but possibly
+    different z coordinate and/or optical path."""
     def __init__(
         self,
         instances: List[WsiInstance]
     ):
-        """Represents a group of instances having the same size,
-        but possibly different z coordinate and/or optical path.
-        Instances should match in the common uids, wsi type, and tile size.
+        """Create a group of WsiInstances. Instances should match in the common
+        uids, wsi type, and tile size.
 
         Parameters
         ----------
@@ -2517,15 +2558,17 @@ class WsiDicomGroup:
 
 
 class WsiDicomLevel(WsiDicomGroup):
+    """Represents a level in the pyramid and contains one or more instances
+    having the same pyramid level index, pixel spacing, and size but possibly
+    different focal planes and/or optical paths.
+    """
     def __init__(
         self,
         instances: List[WsiInstance],
         base_pixel_spacing: SizeMm
     ):
-        """Represents a level in the pyramid and contains one or more
-        instances having the same level, pixel spacing, and size but possibly
-        different focal planes and/or optical paths and present in
-        different files.
+        """Create a level from list of WsiInstances. Asign the pyramid level
+        index from pixel spacing of base level.
 
         Parameters
         ----------
@@ -2734,11 +2777,14 @@ class WsiDicomLevel(WsiDicomGroup):
         return level
 
 
-class WsiDicomSeries:
+class WsiDicomSeries(metaclass=ABCMeta):
+    """Represents a series of WsiDicomGroups with the same image flavor, e.g.
+    pyramidal levels, lables, or overviews.
+    """
     wsi_type: str
 
     def __init__(self, groups: List[WsiDicomGroup]):
-        """Holds a series of image groups of same image flavor
+        """Create a WsiDicomSeries from list of WsiDicomGroups.
 
         Parameters
         ----------
@@ -2855,6 +2901,7 @@ class WsiDicomSeries:
 
 
 class WsiDicomLabels(WsiDicomSeries):
+    """Represents a series of WsiDicomGroups of the label wsi flavor."""
     wsi_type = 'LABEL'
 
     @classmethod
@@ -2879,6 +2926,7 @@ class WsiDicomLabels(WsiDicomSeries):
 
 
 class WsiDicomOverviews(WsiDicomSeries):
+    """Represents a series of WsiDicomGroups of the overview wsi flavor."""
     wsi_type = 'OVERVIEW'
 
     @classmethod
@@ -2903,6 +2951,8 @@ class WsiDicomOverviews(WsiDicomSeries):
 
 
 class WsiDicomLevels(WsiDicomSeries):
+    """Represents a series of WsiDicomGroups of the volume (e.g. pyramidal
+    level) wsi flavor."""
     wsi_type = 'VOLUME'
 
     def __init__(self, levels: List[WsiDicomLevel]):
@@ -3098,6 +3148,8 @@ class WsiDicomLevels(WsiDicomSeries):
 
 
 class WsiDicom:
+    """Represent a wsi slide containing pyramidal levels and optionally
+    labels and/or overviews."""
     def __init__(
         self,
         levels: WsiDicomLevels,
