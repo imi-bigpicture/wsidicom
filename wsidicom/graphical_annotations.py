@@ -1017,7 +1017,7 @@ class AnnotationGroup:
         Returns
         ----------
         np.ndarray
-            Coordiantes in annotation group.
+            Coordinates in annotation group.
         """
         coordinate_list: List[float] = []
         for annotation in self.annotations:
@@ -1188,7 +1188,7 @@ class AnnotationGroup:
     def _is_ds_double(
         ds: Dataset
     ) -> bool:
-        """Return true if group in dataset stores coordiantes as double float.
+        """Return true if group in dataset stores coordinates as double float.
 
         Parameters
         ----------
@@ -1493,7 +1493,7 @@ class AnnotationGroup:
             ds.ReferencedOpticalPathIdentifier = self._optical_paths
         return ds
 
-    def _set_coordiantes_data_in_ds(
+    def _set_coordinates_data_in_ds(
         self,
         ds: Dataset
     ) -> Dataset:
@@ -1566,7 +1566,7 @@ class AnnotationGroup:
             ds.AnnotationGroupDescription = self.description
         ds.AnnotationPropertyCategoryCodeSequence = self.categorycode.sequence
         ds.AnnotationPropertyTypeCodeSequence = self.typecode.sequence
-        ds = self._set_coordiantes_data_in_ds(ds)
+        ds = self._set_coordinates_data_in_ds(ds)
         ds = self._set_planes_in_ds(ds)
         ds = self._set_optical_paths_in_ds(ds)
         ds = self._set_measurement_sequence_in_ds(ds)
@@ -1722,7 +1722,7 @@ class PointAnnotationGroup(AnnotationGroup):
         """
         coordinate_list = cls._get_coordinates_from_ds(ds)
         points = [
-            Point.from_coords(coordiantes) for coordiantes in coordinate_list
+            Point.from_coords(coordinates) for coordinates in coordinate_list
         ]
         return points
 
@@ -1795,7 +1795,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
     ) -> List[int]:
         """Return line start indices from sup 222 dataset. Indices are stored
         starting at with value 1, and are in relation to non-pared coordinates.
-        Returned list starts at 0 and is in relation to paired coordiantes.
+        Returned list starts at 0 and is in relation to paired coordinates.
 
         Parameters
         ----------
