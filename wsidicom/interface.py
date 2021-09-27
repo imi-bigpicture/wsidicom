@@ -871,7 +871,7 @@ class ImageData(metaclass=ABCMeta):
         region: Region
             Tile region.
         z: float
-            Z coordiante.
+            Z coordinate.
         path: str
             Optical path.
         """
@@ -1020,9 +1020,9 @@ class DicomImageData(ImageData):
         Parameters
         ----------
         tile: Point
-             Tile coordiante
+             Tile coordinate
         z: float
-            Z coordiante
+            Z coordinate
         path: str
             Optical identifier
 
@@ -1356,7 +1356,7 @@ class FullTileIndex(TileIndex):
         Returns
         ----------
         int
-            Focal plane index for z coordiante.
+            Focal plane index for z coordinate.
         """
         try:
             return next(index for index, plane in enumerate(self.focal_planes)
