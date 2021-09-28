@@ -114,6 +114,12 @@ class WsiDataset(Dataset):
             # This might not be correct if multiple focal planes
             self._slice_thickness = self.mm_depth
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self})"
+
+    def __str__(self) -> str:
+        return f"{type(self).__name__} of dataset {self.instance_uid}"
+
     def is_wsi_dicom(self) -> bool:
         """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
@@ -559,7 +565,7 @@ class WsiDicomFile:
             warnings.warn(f"Non-supported file {filepath}")
 
     def __repr__(self) -> str:
-        return f"WsiDicomFile('{self.filepath}')"
+        return f"{type(self).__name__}({self.filepath})"
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -979,6 +985,12 @@ class DicomImageData(ImageData):
         self._transfer_syntax = base_file.transfer_syntax
         self._default_z: float = None
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self._files.values()})"
+
+    def __str__(self) -> str:
+        return f"{type(self).__name__} of files {self._files.values()}"
+
     @property
     def transfer_syntax(self) -> Uid:
         """The uid of the transfer syntax of the image."""
@@ -1132,6 +1144,9 @@ class SparseTilePlane:
         """
         self.plane = np.full(tiled_size.to_tuple(), -1, dtype=int)
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({Size.from_tuple(self.plane.shape)})"
+
     def __str__(self) -> str:
         return self.pretty_str()
 
@@ -1170,7 +1185,7 @@ class SparseTilePlane:
         indent: int = 0,
         depth: int = None
     ) -> str:
-        return ("Sparse tile plane")
+        return "Sparse tile plane"
 
 
 class TileIndex(metaclass=ABCMeta):
@@ -1195,6 +1210,15 @@ class TileIndex(metaclass=ABCMeta):
         self._frame_count = self._read_frame_count_from_datasets(datasets)
         self._optical_paths = self._read_optical_paths_from_datasets(datasets)
         self._tiled_size = self.image_size / self.tile_size
+
+    def __str__(self) -> str:
+        return (
+            f"{type(self).__name__} with image size {self.image_size}, "
+            f"tile size {self.tile_size}, tiled size {self.tiled_size}, "
+            f"optical paths {self.optical_paths}, "
+            f"focal planes {self.focal_planes}, "
+            f"and frame count {self.frame_count}"
+        )
 
     @property
     @abstractmethod
@@ -1470,11 +1494,10 @@ class SparseTileIndex(TileIndex):
         indent: int = 0,
         depth: int = None
     ) -> str:
-        string = (
-            f"Sparse tile index tile size: {self.tile_size}"
-            f", plane size: {self.tiled_size}"
+        return (
+            f"Sparse tile index tile size: {self.tile_size}, "
+            f"plane size: {self.tiled_size}"
         )
-        return string
 
     def get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """Return frame index for a Point tile, z coordinate, and optical
@@ -1618,6 +1641,9 @@ class WsiInstance:
                     "Instance Missing DistanceBetweenFocalPlanes"
                 )
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.dataset}, {self.image_data})"
+
     def __str__(self) -> str:
         return self.pretty_str()
 
@@ -1661,6 +1687,10 @@ class WsiInstance:
     @property
     def dataset(self) -> WsiDataset:
         return self.datasets[0]
+
+    @property
+    def image_data(self) -> ImageData:
+        return self._image_data
 
     @property
     def size(self) -> Size:
@@ -2304,6 +2334,29 @@ class WsiDicomGroup:
         self._pixel_spacing = base_instance.pixel_spacing
         self._default_instance_uid: str = base_instance.identifier
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.instances.values()})"
+
+    def __str__(self) -> str:
+        return self.pretty_str()
+
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: int = None
+    ) -> str:
+        string = (
+            f'Image: size: {self.size} px, mpp: {self.mpp} um/px'
+        )
+        if depth is not None:
+            depth -= 1
+            if(depth < 0):
+                return string
+        string += (
+            ' Instances: ' + dict_pretty_str(self.instances, indent, depth)
+        )
+        return string
+
     def __getitem__(self, index) -> WsiInstance:
         return self.instances[index]
 
@@ -2698,7 +2751,14 @@ class WsiDicomLevel(WsiDicomGroup):
             Pixel spacing of base level.
         """
         super().__init__(instances)
-        self._level = self._assign_level(base_pixel_spacing)
+        self._base_pixel_spacing = base_pixel_spacing
+        self._level = self._assign_level(self._base_pixel_spacing)
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}({self.instances}, "
+            f"{self._base_pixel_spacing})"
+        )
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -2922,6 +2982,12 @@ class WsiDicomSeries(metaclass=ABCMeta):
             self._uids = self._validate_series(self.groups)
         else:
             self._uids = None
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.groups})"
+
+    def __str__(self) -> str:
+        return f"{type(self).__name__} of groups {self.groups}"
 
     def __getitem__(self, index: int) -> WsiDicomGroup:
         """Get group by index.
@@ -3287,8 +3353,13 @@ class WsiDicom:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-
         self.close()
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}({self.levels}, {self.labels}"
+            f"{self.overviews}, {self.annotations})"
+        )
 
     def __str__(self) -> str:
         return self.pretty_str()
