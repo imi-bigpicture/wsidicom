@@ -1728,7 +1728,7 @@ class WsiInstance:
         )
         files_grouped_by_instance = WsiDicomFile._group_files(filtered_files)
         return [
-            WsiInstance(
+            cls(
                 [file.dataset for file in instance_files],
                 DicomImageData(instance_files)
             )
@@ -2217,7 +2217,7 @@ class WsiDicomGroup:
         instances: List[WsiInstance]
             Instances to build the group.
         """
-        self._instances = {  # key is identifier (str)
+        self._instances = {  # key is identifier (Uid)
             instance.identifier: instance for instance in instances
         }
         self._validate_group()
@@ -2320,12 +2320,12 @@ class WsiDicomGroup:
             List of created groups.
 
         """
-        groups: List[WsiDicomGroup] = []
+        groups: List[cls] = []
 
         grouped_instances = cls._group_instances(instances)
 
         for group in grouped_instances.values():
-            groups.append(WsiDicomGroup(group))
+            groups.append(cls(group))
 
         return groups
 
@@ -2682,13 +2682,13 @@ class WsiDicomLevel(WsiDicomGroup):
             List of created levels.
 
         """
-        levels: List[WsiDicomLevel] = []
+        levels: List[cls] = []
         instances_grouped_by_level = cls._group_instances(instances)
         largest_size = max(instances_grouped_by_level.keys())
         base_group = instances_grouped_by_level[largest_size]
         base_pixel_spacing = base_group[0].pixel_spacing
         for level in instances_grouped_by_level.values():
-            levels.append(WsiDicomLevel(level, base_pixel_spacing))
+            levels.append(cls(level, base_pixel_spacing))
 
         return levels
 
@@ -2932,8 +2932,6 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         try:
             base_group = groups[0]
-            # print(base_group.wsi_type)
-            # print(self.wsi_type)
             if base_group.wsi_type != self.wsi_type:
                 raise WsiDicomMatchError(
                     str(base_group), str(self)
@@ -2956,6 +2954,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 class WsiDicomLabels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the label wsi flavor."""
     wsi_type = 'LABEL'
+    group_class = WsiDicomGroup
 
     @classmethod
     def open(
@@ -2974,13 +2973,14 @@ class WsiDicomLabels(WsiDicomSeries):
         WsiDicomLabels
             Created label series
         """
-        labels = WsiDicomGroup.open(instances)
-        return WsiDicomLabels(labels)
+        labels = cls.group_class.open(instances)
+        return cls(labels)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the overview wsi flavor."""
     wsi_type = 'OVERVIEW'
+    group_class = WsiDicomGroup
 
     @classmethod
     def open(
@@ -2999,14 +2999,15 @@ class WsiDicomOverviews(WsiDicomSeries):
         WsiDicomOverviews
             Created overview series
         """
-        overviews = WsiDicomGroup.open(instances)
-        return WsiDicomOverviews(overviews)
+        overviews = cls.group_class.open(instances)
+        return cls(overviews)
 
 
 class WsiDicomLevels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the volume (e.g. pyramidal
     level) wsi flavor."""
     wsi_type = 'VOLUME'
+    group_class = WsiDicomLevel
 
     def __init__(self, levels: List[WsiDicomLevel]):
         """Holds a stack of levels.
@@ -3073,8 +3074,8 @@ class WsiDicomLevels(WsiDicomSeries):
         WsiDicomLevels
             Created level series
         """
-        levels = WsiDicomLevel.open_levels(instances)
-        return WsiDicomLevels(levels)
+        levels = cls.group_class.open_levels(instances)
+        return cls(levels)
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -3388,7 +3389,7 @@ class WsiDicom:
         overviews = WsiDicomOverviews.open(overview_instances)
         annotations = AnnotationInstance.open(annotation_files)
 
-        return WsiDicom(levels, labels, overviews, annotations)
+        return cls(levels, labels, overviews, annotations)
 
     @staticmethod
     def _get_sop_class_uid(path: Path) -> Uid:
