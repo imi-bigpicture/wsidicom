@@ -862,6 +862,18 @@ class ImageData(metaclass=ABCMeta):
     def plane_region(self) -> Region:
         return Region(position=Point(0, 0), size=self.tiled_size - 1)
 
+    def get_tiles(
+        self,
+        tiles: List[Point],
+        z: float,
+        path: str
+    ) -> List[bytes]:
+        """Return image bytes for tile defined by tile (x, y), z, and optical
+        path."""
+        return [
+            self.get_tile(tile, z, path) for tile in tiles
+        ]
+
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
         """Check if tile region is inside tile geometry and z coordinate and
         optical path exists.
