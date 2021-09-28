@@ -2,7 +2,6 @@ import io
 import math
 import warnings
 from abc import ABCMeta, abstractmethod
-from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
 
@@ -31,6 +30,92 @@ class WsiDataset(Dataset):
     parsers for attributes specific for WSI. Use snake case to avoid name
     collision with dicom fields (that are handled by pydicom.dataset.Dataset).
     """
+    def __init__(self, dataset: Dataset):
+        super().__init__(dataset)
+        self._instance_uid = Uid(self.SOPInstanceUID)
+        self._concatenation_uid = getattr(
+            self, 'SOPInstanceUIDOfConcatenationSource', None
+        )
+        self._base_uids = BaseUids(
+            self.StudyInstanceUID,
+            self.SeriesInstanceUID,
+            self.FrameOfReferenceUID,
+        )
+        self._uids = FileUids(
+            self.instance_uid,
+            self.concatenation_uid,
+            self.base_uids
+        )
+        if self.concatenation_uid is None:
+            self._frame_offset = 0
+        else:
+            try:
+                self._frame_offset = int(self.ConcatenationFrameOffsetNumber)
+            except AttributeError:
+                raise WsiDicomError(
+                    'Concatenated file missing concatenation frame offset'
+                    'number'
+                )
+        self._frame_count = int(getattr(self, 'NumberOfFrames', 1))
+        if(getattr(self, 'DimensionOrganizationType', '') == 'TILED_FULL'):
+            self._tile_type = 'TILED_FULL'
+        elif 'PerFrameFunctionalGroupsSequence' in self:
+            self._tile_type = 'TILED_SPARSE'
+        else:
+            WsiDicomError("undetermined tile type")
+        self._pixel_measure = (
+            self.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[0]
+        )
+        pixel_spacing: Tuple[float, float] = self.pixel_measure.PixelSpacing
+        if any([spacing == 0 for spacing in pixel_spacing]):
+            raise WsiDicomError("Pixel spacing is zero")
+        self._pixel_spacing = SizeMm(pixel_spacing[0], pixel_spacing[1])
+        self._spacing_between_slices = getattr(
+            self.pixel_measure, 'SpacingBetweenSlices', 0.0
+        )
+        self._number_of_focal_planes = getattr(
+            self, 'TotalPixelMatrixFocalPlanes', 1
+        )
+        self._file_offset = getattr(
+                self, 'ConcatenationFrameOffsetNumber', 0
+        )
+        if (
+            'PerFrameFunctionalGroupsSequence' in self and
+            (
+                'PlanePositionSlideSequence' in
+                self.PerFrameFunctionalGroupsSequence[0]
+            )
+        ):
+            self._frame_sequence = self.PerFrameFunctionalGroupsSequence
+        else:
+            self._frame_sequence = self.SharedFunctionalGroupsSequence
+        self._ext_depth_of_field = self.ExtendedDepthOfField == 'YES'
+        self._ext_depth_of_field_planes = getattr(
+            self, 'NumberOfFocalPlanes', None
+        )
+        self._ext_depth_of_field_plane_distance = getattr(
+            self, 'DistanceBetweenFocalPlanes', None
+        )
+        self._focus_method = str(self.FocusMethod)
+        self._image_size = Size(
+            self.TotalPixelMatrixColumns,
+            self.TotalPixelMatrixRows
+        )
+        if self.image_size.width == 0 or self.image_size.height == 0:
+            raise WsiDicomFileError(self.filepath, "Image size is zero")
+
+        self._mm_size = SizeMm(self.ImagedVolumeWidth, self.ImagedVolumeHeight)
+        self._mm_depth = self.ImagedVolumeDepth
+        self._tile_size = Size(self.Columns, self.Rows)
+        self._samples_per_pixel = self.SamplesPerPixel
+        self._photophotometric_interpretation = self.PhotometricInterpretation
+        self._instance_number = self.InstanceNumber
+        self._optical_path_sequence = self.OpticalPathSequence
+        try:
+            self._slice_thickness = self.pixel_measure.SliceThickness
+        except AttributeError:
+            # This might not be correct if multiple focal planes
+            self._slice_thickness = self.mm_depth
 
     def is_wsi_dicom(self) -> bool:
         """Check if dataset is dicom wsi type and that required attributes
@@ -257,51 +342,31 @@ class WsiDataset(Dataset):
         )
         return getattr(optical_sequence[0], 'OpticalPathIdentifier', '0')
 
-    @cached_property
+    @property
     def instance_uid(self) -> Uid:
-        return Uid(self.SOPInstanceUID)
+        return self._instance_uid
 
-    @cached_property
+    @property
     def concatenation_uid(self) -> Optional[Uid]:
-        return getattr(
-            self,
-            'SOPInstanceUIDOfConcatenationSource',
-            None
-        )
+        return self._concatenation_uid
 
-    @cached_property
+    @property
     def base_uids(self) -> BaseUids:
-        return BaseUids(
-            self.StudyInstanceUID,
-            self.SeriesInstanceUID,
-            self.FrameOfReferenceUID,
-        )
+        return self._base_uids
 
-    @cached_property
+    @property
     def uids(self) -> FileUids:
-        return FileUids(
-            self.instance_uid,
-            self.concatenation_uid,
-            self.base_uids
-        )
+        return self._uids
 
-    @cached_property
+    @property
     def frame_offset(self) -> int:
-        if self.concatenation_uid is None:
-            return 0
-        try:
-            return int(self.ConcatenationFrameOffsetNumber)
-        except AttributeError:
-            raise WsiDicomError(
-                'Concatenated file missing concatenation frame offset'
-                'number'
-            )
+        return self._frame_offset
 
-    @cached_property
+    @property
     def frame_count(self) -> int:
-        return int(getattr(self, 'NumberOfFrames', 1))
+        return self._frame_count
 
-    @cached_property
+    @property
     def tile_type(self) -> str:
         """Return tiling type from dataset. Raises WsiDicomError if type
         is undetermined.
@@ -316,21 +381,13 @@ class WsiDataset(Dataset):
         str
             Tiling type
         """
-        if(getattr(self, 'DimensionOrganizationType', '') == 'TILED_FULL'):
-            return 'TILED_FULL'
-        elif 'PerFrameFunctionalGroupsSequence' in self:
-            return 'TILED_SPARSE'
-        raise WsiDicomError("undetermined tile type")
+        return self._tile_type
 
-    @cached_property
-    def frame_count(self) -> int:
-        return int(getattr(self, 'NumberOfFrames', 1))
-
-    @cached_property
+    @property
     def pixel_measure(self) -> Dataset:
-        return self.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[0]
+        return self._pixel_measure
 
-    @cached_property
+    @property
     def pixel_spacing(self) -> SizeMm:
         """Read pixel spacing from dicom dataset.
 
@@ -344,55 +401,41 @@ class WsiDataset(Dataset):
         SizeMm
             The pixel spacing in mm/pixel.
         """
-        pixel_measure = self.pixel_measure
-        pixel_spacing: Tuple[float, float] = pixel_measure.PixelSpacing
-        if any([spacing == 0 for spacing in pixel_spacing]):
-            raise WsiDicomError("Pixel spacing is zero")
-        return SizeMm(width=pixel_spacing[0], height=pixel_spacing[1])
+        return self._pixel_spacing
 
-    @cached_property
+    @property
     def spacing_between_slices(self) -> float:
-        pixel_measure = self.pixel_measure
-        return getattr(pixel_measure, 'SpacingBetweenSlices', 0.0)
+        return self._spacing_between_slices
 
-    @cached_property
+    @property
     def number_of_focal_planes(self) -> int:
-        return getattr(self, 'TotalPixelMatrixFocalPlanes', 1)
+        return self._number_of_focal_planes
 
-    @cached_property
+    @property
     def file_offset(self) -> int:
-        return int(getattr(self, 'ConcatenationFrameOffsetNumber', 0))
+        return self._file_offset
 
-    @cached_property
+    @property
     def frame_sequence(self) -> DicomSequence:
-        if (
-            'PerFrameFunctionalGroupsSequence' in self and
-            (
-                'PlanePositionSlideSequence' in
-                self.PerFrameFunctionalGroupsSequence[0]
-            )
-        ):
-            return self.PerFrameFunctionalGroupsSequence
+        return self._frame_sequence
 
-        return self.SharedFunctionalGroupsSequence
-
-    @cached_property
+    @property
     def ext_depth_of_field(self) -> bool:
-        return self.ExtendedDepthOfField == 'YES'
+        return self._ext_depth_of_field
 
-    @cached_property
+    @property
     def ext_depth_of_field_planes(self) -> Optional[int]:
-        return getattr(self, 'NumberOfFocalPlanes', None)
+        return self._ext_depth_of_field_planes
 
-    @cached_property
+    @property
     def ext_depth_of_field_plane_distance(self) -> Optional[int]:
-        return getattr(self, 'DistanceBetweenFocalPlanes', None)
+        return self._ext_depth_of_field_plane_distance
 
-    @cached_property
+    @property
     def focus_method(self) -> str:
-        return str(self.FocusMethod)
+        return self._focus_method
 
-    @cached_property
+    @property
     def image_size(self) -> Size:
         """Read total pixel size from dataset.
 
@@ -401,13 +444,9 @@ class WsiDataset(Dataset):
         Size
             The image size
         """
-        width = int(self.TotalPixelMatrixColumns)
-        height = int(self.TotalPixelMatrixRows)
-        if width == 0 or height == 0:
-            raise WsiDicomFileError(self.filepath, "Image size is zero")
-        return Size(width=width, height=height)
+        return self._image_size
 
-    @cached_property
+    @property
     def mm_size(self) -> SizeMm:
         """Read mm size from dataset.
 
@@ -416,15 +455,13 @@ class WsiDataset(Dataset):
         SizeMm
             The size of the image in mm
         """
-        width = float(self.ImagedVolumeWidth)
-        height = float(self.ImagedVolumeHeight)
-        return SizeMm(width=width, height=height)
+        return self._mm_size
 
-    @cached_property
+    @property
     def mm_depth(self) -> float:
-        return self.ImagedVolumeDepth
+        return self._mm_depth
 
-    @cached_property
+    @property
     def tile_size(self) -> Size:
         """Read tile size from from dataset.
 
@@ -433,34 +470,27 @@ class WsiDataset(Dataset):
         Size
             The tile size
         """
-        width = int(self.Columns)
-        height = int(self.Rows)
-        return Size(width=width, height=height)
+        return self._tile_size
 
-    @cached_property
+    @property
     def samples_per_pixel(self) -> int:
-        return int(self.SamplesPerPixel)
+        return self._samples_per_pixel
 
-    @cached_property
+    @property
     def photophotometric_interpretation(self) -> str:
-        return self.PhotometricInterpretation
+        return self._photophotometric_interpretation
 
-    @cached_property
+    @property
     def instance_number(self) -> str:
-        return self.InstanceNumber
+        return self._instance_number
 
-    @cached_property
+    @property
     def optical_path_sequence(self) -> DicomSequence:
-        return self.OpticalPathSequence
+        return self._optical_path_sequence
 
-    @cached_property
+    @property
     def slice_thickness(self) -> float:
-        try:
-            pixel_measure = self.pixel_measure
-            return float(pixel_measure.SliceThickness)
-        except AttributeError:
-            # This might not be correct if multiple focal planes
-            return self.mm_depth
+        return self._slice_thickness
 
 
 class WsiDicomFile:
@@ -772,6 +802,7 @@ class ImageData(metaclass=ABCMeta):
     get_tile() and close(). Additionally properties focal_planes and/or
     optical_paths should be overridden if multiple focal planes or optical
     paths are implemented."""
+    default_z: float = None
 
     @property
     @abstractmethod
@@ -837,20 +868,23 @@ class ImageData(metaclass=ABCMeta):
     ) -> str:
         return str(self)
 
-    @cached_property
+    @property
     def default_z(self) -> float:
         """Return single defined focal plane (in um) if only one focal plane
         defined. Return the middle focal plane if several focal planes are
         defined."""
-        default = 0
-        if(len(self.focal_planes) > 1):
-            smallest = min(self.focal_planes)
-            largest = max(self.focal_planes)
-            middle = (largest - smallest)/2
-            default = min(range(len(self.focal_planes)),
-                          key=lambda i: abs(self.focal_planes[i]-middle))
+        if self._default_z is None:
+            default = 0
+            if(len(self.focal_planes) > 1):
+                smallest = min(self.focal_planes)
+                largest = max(self.focal_planes)
+                middle = (largest - smallest)/2
+                default = min(range(len(self.focal_planes)),
+                              key=lambda i: abs(self.focal_planes[i]-middle))
 
-        return self.focal_planes[default]
+            self._default_z = self.focal_planes[default]
+
+        return self._default_z
 
     @property
     def default_path(self) -> str:
@@ -858,7 +892,7 @@ class ImageData(metaclass=ABCMeta):
         identifier."""
         return self.optical_paths[0]
 
-    @cached_property
+    @property
     def plane_region(self) -> Region:
         return Region(position=Point(0, 0), size=self.tiled_size - 1)
 
@@ -1139,6 +1173,7 @@ class TileIndex(metaclass=ABCMeta):
         self._tile_size = base_dataset.tile_size
         self._frame_count = self._read_frame_count_from_datasets(datasets)
         self._optical_paths = self._read_optical_paths_from_datasets(datasets)
+        self._tiled_size = self.image_size / self.tile_size
 
     @property
     @abstractmethod
@@ -1156,10 +1191,10 @@ class TileIndex(metaclass=ABCMeta):
         """Return tile size in pixels."""
         return self._tile_size
 
-    @cached_property
+    @property
     def tiled_size(self) -> Size:
         """Return size of tiling (columns x rows)."""
-        return self.image_size / self.tile_size
+        return self._tiled_size
 
     @property
     def frame_count(self) -> int:
@@ -1542,10 +1577,18 @@ class WsiInstance:
         if not isinstance(datasets, list):
             datasets = [datasets]
         self._datasets = datasets
-
         self._image_data = image_data
-
         self._identifier, self._uids = self._validate_instance(self.datasets)
+        self._wsi_type = self.dataset.get_supported_wsi_dicom_type(
+            self._image_data.transfer_syntax
+        )
+        if(self.samples_per_pixel == 1):
+            self._image_mode = "L"
+        else:
+            self._image_mode = "RGB"
+
+        self._blank_tile = None
+        self._encoded_blank_tile = None
 
         if self.ext_depth_of_field:
             if self.ext_depth_of_field_planes is None:
@@ -1577,24 +1620,19 @@ class WsiInstance:
         )
         return string
 
-    @cached_property
+    @property
     def wsi_type(self) -> str:
         """Return wsi type."""
-        return self.dataset.get_supported_wsi_dicom_type(
-            self._image_data.transfer_syntax
-        )
+        return self._wsi_type
 
     @property
     def blank_color(self) -> Tuple[int, int, int]:
         """Return RGB background color."""
         return self._get_blank_color(self.photometric_interpretation)
 
-    @cached_property
+    @property
     def image_mode(self) -> str:
-        if(self.samples_per_pixel == 1):
-            return "L"
-        else:
-            return "RGB"
+        return self._image_mode
 
     @property
     def datasets(self) -> List[WsiDataset]:
@@ -2158,15 +2196,19 @@ class WsiInstance:
         fp.is_implicit_VR = False
         return fp
 
-    @cached_property
+    @property
     def blank_tile(self) -> Image:
         """Return background tile."""
-        return self._create_blank_tile()
+        if self._blank_tile is None:
+            self._blank_tile = self._create_blank_tile()
+        return self._blank_tile
 
-    @cached_property
+    @property
     def blank_encoded_tile(self) -> bytes:
         """Return encoded background tile."""
-        return self.encode(self.blank_tile)
+        if self._encoded_blank_tile is None:
+            self._encoded_blank_tile = self.encode(self.blank_tile)
+        return self._encoded_blank_tile
 
     def matches(self, other_instance: 'WsiInstance') -> bool:
         """Return true if other instance is of the same group as self.
