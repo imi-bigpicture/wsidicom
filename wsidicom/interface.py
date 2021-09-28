@@ -957,6 +957,7 @@ class DicomImageData(ImageData):
 
         self._pixel_spacing = base_file.dataset.pixel_spacing
         self._transfer_syntax = base_file.transfer_syntax
+        self._default_z: float = None
 
     @property
     def transfer_syntax(self) -> Uid:
