@@ -76,9 +76,6 @@ class WsiDataset(Dataset):
         self._number_of_focal_planes = getattr(
             self, 'TotalPixelMatrixFocalPlanes', 1
         )
-        self._file_offset = getattr(
-                self, 'ConcatenationFrameOffsetNumber', 0
-        )
         if (
             'PerFrameFunctionalGroupsSequence' in self and
             (
@@ -344,26 +341,36 @@ class WsiDataset(Dataset):
 
     @property
     def instance_uid(self) -> Uid:
+        """Return instance uid from dataset."""
         return self._instance_uid
 
     @property
     def concatenation_uid(self) -> Optional[Uid]:
+        """Return concatenation uid, if defined, from dataset. An instance that
+        is concatenated (split into several files) should have the same
+        concatenation uid."""
         return self._concatenation_uid
 
     @property
     def base_uids(self) -> BaseUids:
+        """Return base uids (study, series, and frame of reference Uids)."""
         return self._base_uids
 
     @property
     def uids(self) -> FileUids:
+        """Return instance, concatenation, and base Uids."""
         return self._uids
 
     @property
     def frame_offset(self) -> int:
+        """Return frame offset (offset to first frame in instance if
+        concatenated). Is zero if non-catenated instance or first instance
+        in concatenated instance."""
         return self._frame_offset
 
     @property
     def frame_count(self) -> int:
+        """Return number of frames in instance."""
         return self._frame_count
 
     @property
@@ -385,6 +392,7 @@ class WsiDataset(Dataset):
 
     @property
     def pixel_measure(self) -> Dataset:
+        """Return pixel measure from dataset."""
         return self._pixel_measure
 
     @property
@@ -405,34 +413,40 @@ class WsiDataset(Dataset):
 
     @property
     def spacing_between_slices(self) -> float:
+        """Return spacing between slices."""
         return self._spacing_between_slices
 
     @property
     def number_of_focal_planes(self) -> int:
+        """Return number of focal planes."""
         return self._number_of_focal_planes
 
     @property
-    def file_offset(self) -> int:
-        return self._file_offset
-
-    @property
     def frame_sequence(self) -> DicomSequence:
+        """Return frame sequence from dataset."""
         return self._frame_sequence
 
     @property
     def ext_depth_of_field(self) -> bool:
+        """Return true if instance has extended depth of field
+        (several focal planes are combined to one plane)."""
         return self._ext_depth_of_field
 
     @property
     def ext_depth_of_field_planes(self) -> Optional[int]:
+        """Return number of focal planes used for extended depth of
+        field."""
         return self._ext_depth_of_field_planes
 
     @property
     def ext_depth_of_field_plane_distance(self) -> Optional[int]:
+        """Return total focal depth used for extended depth of field.
+        """
         return self._ext_depth_of_field_plane_distance
 
     @property
     def focus_method(self) -> str:
+        """Return focus method."""
         return self._focus_method
 
     @property
@@ -459,6 +473,7 @@ class WsiDataset(Dataset):
 
     @property
     def mm_depth(self) -> float:
+        """Return depth of image in mm."""
         return self._mm_depth
 
     @property
@@ -474,22 +489,27 @@ class WsiDataset(Dataset):
 
     @property
     def samples_per_pixel(self) -> int:
+        """Return samples per pixel (3 for RGB)."""
         return self._samples_per_pixel
 
     @property
     def photophotometric_interpretation(self) -> str:
+        """Return photometric interpretation."""
         return self._photophotometric_interpretation
 
     @property
     def instance_number(self) -> str:
+        """Return instance number."""
         return self._instance_number
 
     @property
     def optical_path_sequence(self) -> DicomSequence:
+        """Return optical path sequence from dataset."""
         return self._optical_path_sequence
 
     @property
     def slice_thickness(self) -> float:
+        """Return slice thickness."""
         return self._slice_thickness
 
 
@@ -1515,7 +1535,6 @@ class SparseTileIndex(TileIndex):
         planes: Dict[Tuple[float, str], SparseTilePlane] = {}
 
         for dataset in datasets:
-            file_offset = dataset.file_offset
             frame_sequence = dataset.frame_sequence
             for i, frame in enumerate(frame_sequence):
                 (tile, z) = self._read_frame_coordinates(frame)
@@ -1526,7 +1545,7 @@ class SparseTileIndex(TileIndex):
                 except KeyError:
                     plane = SparseTilePlane(self.tiled_size)
                     planes[(z, identifier)] = plane
-                plane[tile] = i + file_offset
+                plane[tile] = i + dataset.frame_offset
 
         return planes
 
@@ -2720,7 +2739,7 @@ class WsiDicomLevel(WsiDicomGroup):
         return self._level
 
     @classmethod
-    def open_levels(
+    def open(
         cls,
         instances: List[WsiInstance],
     ) -> List['WsiDicomLevel']:
@@ -2887,6 +2906,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
     pyramidal levels, lables, or overviews.
     """
     wsi_type: str
+    group_class = WsiDicomGroup
 
     def __init__(self, groups: List[WsiDicomGroup]):
         """Create a WsiDicomSeries from list of WsiDicomGroups.
@@ -2963,6 +2983,26 @@ class WsiDicomSeries(metaclass=ABCMeta):
             instance for sublist in series_instances for instance in sublist
         ]
 
+    @classmethod
+    def open(
+        cls,
+        instances: List[WsiInstance]
+    ) -> 'WsiDicomSeries':
+        """Return series created from wsi files.
+
+        Parameters
+        ----------
+        instances: List[WsiInstance]
+            Instances to create series from.
+
+        Returns
+        ----------
+        WsiDicomSeries
+            Created series.
+        """
+        labels = cls.group_class.open(instances)
+        return cls(labels)
+
     def _validate_series(
             self,
             groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
@@ -3009,53 +3049,11 @@ class WsiDicomSeries(metaclass=ABCMeta):
 class WsiDicomLabels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the label wsi flavor."""
     wsi_type = 'LABEL'
-    group_class = WsiDicomGroup
-
-    @classmethod
-    def open(
-        cls,
-        instances: List[WsiInstance]
-    ) -> 'WsiDicomLabels':
-        """Return label series created from wsi files.
-
-        Parameters
-        ----------
-        instances: List[WsiInstance]
-            Instances to create levels from.
-
-        Returns
-        ----------
-        WsiDicomLabels
-            Created label series
-        """
-        labels = cls.group_class.open(instances)
-        return cls(labels)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the overview wsi flavor."""
     wsi_type = 'OVERVIEW'
-    group_class = WsiDicomGroup
-
-    @classmethod
-    def open(
-        cls,
-        instances: List[WsiInstance]
-    ) -> 'WsiDicomOverviews':
-        """Return overview series created from wsi files.
-
-        Parameters
-        ----------
-        instances: List[WsiInstance]
-            Instances to create levels from.
-
-        Returns
-        ----------
-        WsiDicomOverviews
-            Created overview series
-        """
-        overviews = cls.group_class.open(instances)
-        return cls(overviews)
 
 
 class WsiDicomLevels(WsiDicomSeries):
@@ -3111,26 +3109,6 @@ class WsiDicomLevels(WsiDicomSeries):
     def base_level(self) -> WsiDicomLevel:
         """Return the base level of the pyramid"""
         return self._levels[0]
-
-    @classmethod
-    def open(
-        cls,
-        instances: List[WsiInstance]
-    ) -> 'WsiDicomLevels':
-        """Return level series created from wsi instances.
-
-        Parameters
-        ----------
-        instances: List[WsiInstance]
-            Instances to create levels from.
-
-        Returns
-        ----------
-        WsiDicomLevels
-            Created level series
-        """
-        levels = cls.group_class.open_levels(instances)
-        return cls(levels)
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
