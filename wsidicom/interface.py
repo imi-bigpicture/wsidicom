@@ -4,6 +4,8 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pydicom
@@ -120,7 +122,8 @@ class WsiDataset(Dataset):
     def __str__(self) -> str:
         return f"{type(self).__name__} of dataset {self.instance_uid}"
 
-    def is_wsi_dicom(self) -> bool:
+    @classmethod
+    def is_wsi_dicom(self, datset: Dataset) -> bool:
         """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
         Warn if attribute listed as requierd in the library or required in the
@@ -234,13 +237,13 @@ class WsiDataset(Dataset):
         for key, module_attributes in TO_TEST.items():
             for module in module_attributes:
                 for attribute in module:
-                    if attribute not in self:
+                    if attribute not in datset:
                         warnings.warn(
                             f' is missing {key} attribute {attribute}'
                         )
                         passed[key] = False
 
-        sop_class_uid = getattr(self, "SOPClassUID", "")
+        sop_class_uid = getattr(datset, "SOPClassUID", "")
         sop_class_uid_check = (sop_class_uid == WSI_SOP_CLASS_UID)
         return passed['required'] and sop_class_uid_check
 
@@ -546,8 +549,8 @@ class WsiDicomFile:
         dataset = pydicom.dcmread(self._fp, stop_before_pixels=True)
         self._pixel_data_position = self._fp.tell()
 
-        self._dataset = WsiDataset(dataset)
-        if self.dataset.is_wsi_dicom():
+        if WsiDataset.is_wsi_dicom(dataset):
+            self._dataset = WsiDataset(dataset)
             self._wsi_type = self.dataset.get_supported_wsi_dicom_type(
                 self.transfer_syntax
             )
@@ -1893,22 +1896,31 @@ class WsiInstance:
             z = self.default_z
         if path is None:
             path = self.default_path
-        stitching_tiles = self.get_tile_range(region, z, path)
+
         image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
 
-        write_index = Point(x=0, y=0)
-        tile = stitching_tiles.position
-        for tile in stitching_tiles.iterate_all(include_end=True):
-            tile_image = self.get_tile(tile, z, path)
-            tile_crop = self.crop_tile(tile, region)
-            tile_image = tile_image.crop(box=tile_crop.box)
-            image.paste(tile_image, write_index.to_tuple())
-            write_index = self._write_indexer(
-                write_index,
-                tile_crop.size,
-                region.size
-            )
-        return image
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
+            def thread(tile_point: Point) -> Image.Image:
+                tile = self._image_data.get_decoded_tile(tile_point, z, path)
+                tile_crop = self.crop_tile(tile_point, region)
+                tile = tile.crop(box=tile_crop.box)
+                return tile
+
+            tiles = self.get_tile_range(
+                region,
+                z,
+                path
+            ).iterate_all(include_end=True)
+            tile_images = pool.map(thread, tiles)
+            write_index = Point(x=0, y=0)
+            for tile_image in tile_images:
+                image.paste(tile_image, write_index.to_tuple())
+                write_index = self._write_indexer(
+                    write_index,
+                    Size.from_tuple(tile_image.size),
+                    region.size
+                )
+            return image
 
     def get_tile_range(
         self,
