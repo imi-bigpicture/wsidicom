@@ -856,7 +856,18 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def get_tile(
+    def get_decoded_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str
+    ) -> Image.Image:
+        """Should return Image for tile defined by tile (x, y), z,
+        and optical path."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_encoded_tile(
         self,
         tile: Point,
         z: float,
@@ -885,7 +896,7 @@ class ImageData(metaclass=ABCMeta):
     @property
     def optical_paths(self) -> List[str]:
         """Optical paths avaiable in the image."""
-        raise ['0']
+        return ['0']
 
     def pretty_str(
         self,
@@ -922,7 +933,19 @@ class ImageData(metaclass=ABCMeta):
     def plane_region(self) -> Region:
         return Region(position=Point(0, 0), size=self.tiled_size - 1)
 
-    def get_tiles(
+    def get_decoded_tiles(
+        self,
+        tiles: List[Point],
+        z: float,
+        path: str
+    ) -> List[Image.Image]:
+        """Return Images for tile defined by tile (x, y), z, and optical
+        path."""
+        return [
+            self.get_decoded_tile(tile, z, path) for tile in tiles
+        ]
+
+    def get_encoded_tiles(
         self,
         tiles: List[Point],
         z: float,
@@ -931,7 +954,7 @@ class ImageData(metaclass=ABCMeta):
         """Return image bytes for tile defined by tile (x, y), z, and optical
         path."""
         return [
-            self.get_tile(tile, z, path) for tile in tiles
+            self.get_encoded_tile(tile, z, path) for tile in tiles
         ]
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
@@ -1021,9 +1044,18 @@ class DicomImageData(ImageData):
         """Size of the pixels in mm/pixel."""
         return self._pixel_spacing
 
-    def get_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         frame_index = self._get_frame_index(tile, z, path)
         return self._get_tile_frame(frame_index)
+
+    def get_decoded_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str
+    ) -> Image.Image:
+        tile_frame = self.get_encoded_tile(tile, z, path)
+        return Image.open(io.BytesIO(tile_frame))
 
     def get_filepointer(
         self,
@@ -1840,7 +1872,7 @@ class WsiInstance:
         region: Region,
         path: str = None,
         z: float = None
-    ) -> Image:
+    ) -> Image.Image:
         """Stitches tiles together to form requested image.
 
         Parameters
@@ -1854,7 +1886,7 @@ class WsiInstance:
 
         Returns
         ----------
-        Image
+        Image.Image
             Stitched image
         """
         if z is None:
@@ -1925,8 +1957,8 @@ class WsiInstance:
     def crop_tile_to_level(
         self,
         tile: Point,
-        tile_image: Image
-    ) -> Image:
+        tile_image: Image.Image
+    ) -> Image.Image:
         cropped_tile_region = self.crop_to_level_size(tile)
         if cropped_tile_region.size != self.tile_size:
             tile_image = tile_image.crop(
@@ -1934,12 +1966,12 @@ class WsiInstance:
             )
         return tile_image
 
-    def encode(self, image: Image) -> bytes:
+    def encode(self, image: Image.Image) -> bytes:
         """Encode image using transfer syntax.
 
         Parameters
         ----------
-        image: Image
+        image: Image.Image
             Image to encode
 
         Returns
@@ -2071,7 +2103,7 @@ class WsiInstance:
         tile: Point,
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Get tile image at tile coordinate x, y.
         If frame is inside tile geometry but no tile exists in
         frame data (sparse) returns blank image.
@@ -2087,7 +2119,7 @@ class WsiInstance:
 
         Returns
         ----------
-        Image
+        Image.Image
             Tile image.
         """
         if z is None:
@@ -2095,8 +2127,7 @@ class WsiInstance:
         if path is None:
             path = self.default_path
         try:
-            tile_frame = self._image_data.get_tile(tile, z, path)
-            image = Image.open(io.BytesIO(tile_frame))
+            image = self._image_data.get_decoded_tile(tile, z, path)
         except WsiDicomSparse:
             image = self.blank_tile
         return self.crop_tile_to_level(tile, image)
@@ -2132,7 +2163,7 @@ class WsiInstance:
         if path is None:
             path = self.default_path
         try:
-            tile_frame = self._image_data.get_tile(tile, z, path)
+            tile_frame = self._image_data.get_encoded_tile(tile, z, path)
         except WsiDicomSparse:
             tile_frame = self.blank_encoded_tile
 
@@ -2247,7 +2278,7 @@ class WsiInstance:
         return fp
 
     @property
-    def blank_tile(self) -> Image:
+    def blank_tile(self) -> Image.Image:
         """Return background tile."""
         if self._blank_tile is None:
             self._blank_tile = self._create_blank_tile()
@@ -2288,12 +2319,12 @@ class WsiInstance:
         except WsiDicomSparse:
             return True
 
-    def _create_blank_tile(self) -> Image:
+    def _create_blank_tile(self) -> Image.Image:
         """Create blank tile for instance.
 
         Returns
         ----------
-        Image
+        Image.Image
             Blank tile image
         """
         return Image.new(
@@ -2539,12 +2570,12 @@ class WsiDicomGroup:
             path = instance.default_path
         return instance
 
-    def get_default_full(self) -> Image:
+    def get_default_full(self) -> Image.Image:
         """Read full image using default z coordinate and path.
 
         Returns
         ----------
-        Image
+        Image.Image
             Full image of the group.
         """
         instance = self.default_instance
@@ -2559,7 +2590,7 @@ class WsiDicomGroup:
         region: Region,
         z: float = None,
         path: str = None,
-    ) -> Image:
+    ) -> Image.Image:
         """Read region defined by pixels.
 
         Parameters
@@ -2575,7 +2606,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image
+        Image.Image
             Region as image
         """
 
@@ -2588,7 +2619,7 @@ class WsiDicomGroup:
         region: RegionMm,
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Read region defined by mm.
 
         Parameters
@@ -2604,7 +2635,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image
+        Image.Image
             Region as image
         """
         pixel_region = self.mm_to_pixel(region)
@@ -2616,7 +2647,7 @@ class WsiDicomGroup:
         tile: Point,
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Return tile at tile coordinate x, y as image.
 
         Parameters
@@ -2630,7 +2661,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image
+        Image.Image
             The tile as image
         """
 
@@ -2856,7 +2887,7 @@ class WsiDicomLevel(WsiDicomGroup):
         level: int,
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
         to remove part outside of the image (as defiend by level size).
@@ -2874,7 +2905,7 @@ class WsiDicomLevel(WsiDicomGroup):
 
         Returns
         ----------
-        Image
+        Image.Image
             A tile image
         """
         scale = self.calculate_scale(level)
@@ -2957,7 +2988,7 @@ class WsiDicomLevel(WsiDicomGroup):
         level = int(round(float_level))
         TOLERANCE = 1e-2
         if not math.isclose(float_level, level, rel_tol=TOLERANCE):
-            raise NotImplementedError("Levels needs to be integer")
+            raise NotImplementedError(f"Levels needs to be integer")
         return level
 
 
@@ -3611,7 +3642,7 @@ class WsiDicom:
                 raise WsiDicomMatchError(str(item), str(self))
         return base_uids
 
-    def read_label(self, index: int = 0) -> Image:
+    def read_label(self, index: int = 0) -> Image.Image:
         """Read label image of the whole slide. If several label
         images are present, index can be used to select a specific image.
 
@@ -3622,7 +3653,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image
+        Image.Image
             label as image
         """
         try:
@@ -3631,7 +3662,7 @@ class WsiDicom:
         except IndexError:
             raise WsiDicomNotFoundError("label", "series")
 
-    def read_overview(self, index: int = 0) -> Image:
+    def read_overview(self, index: int = 0) -> Image.Image:
         """Read overview image of the whole slide. If several overview
         images are present, index can be used to select a specific image.
 
@@ -3642,7 +3673,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image
+        Image.Image
             Overview as image
         """
         try:
@@ -3656,7 +3687,7 @@ class WsiDicom:
         size: Tuple[int, int],
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Read thumbnail image of the whole slide with dimensions
         no larger than given size.
 
@@ -3671,7 +3702,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image
+        Image.Image
             Thumbnail as image
         """
         thumbnail_size = Size.from_tuple(size)
@@ -3688,7 +3719,7 @@ class WsiDicom:
         size: Tuple[int, int],
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Read region defined by pixels.
 
         Parameters
@@ -3706,7 +3737,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image
+        Image.Image
             Region as image
         """
         wsi_level = self.levels.get_closest_by_level(level)
@@ -3732,7 +3763,7 @@ class WsiDicom:
         size: Tuple[float, float],
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Read image from region defined in mm.
 
         Parameters
@@ -3750,7 +3781,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image
+        Image.Image
             Region as image
         """
         wsi_level = self.levels.get_closest_by_level(level)
@@ -3772,7 +3803,7 @@ class WsiDicom:
         size: Tuple[float, float],
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Read image from region defined in mm with set pixel spacing.
 
         Parameters
@@ -3790,7 +3821,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image
+        Image.Image
             Region as image
         """
         pixel_spacing = mpp/1000.0
@@ -3811,7 +3842,7 @@ class WsiDicom:
         tile: Tuple[int, int],
         z: float = None,
         path: str = None
-    ) -> Image:
+    ) -> Image.Image:
         """Read tile in pyramid level as image.
 
         Parameters
@@ -3827,7 +3858,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image
+        Image.Image
             Tile as image
         """
         tile_point = Point.from_tuple(tile)
