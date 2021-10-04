@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
 import os
 from concurrent.futures import ThreadPoolExecutor
+import threading
 
 import numpy as np
 import pydicom
@@ -535,6 +536,7 @@ class WsiDicomFile:
             Path to file to open
         """
         self._filepath = filepath
+        self._lock = threading.Lock()
 
         if not pydicom.misc.is_dicom(self.filepath):
             raise WsiDicomFileError(self.filepath, "is not a DICOM file")
@@ -735,8 +737,9 @@ class WsiDicomFile:
             The frame as bytes
         """
         fp, frame_position, frame_length = self.get_filepointer(frame_index)
-        fp.seek(frame_position, 0)
-        frame: bytes = fp.read(frame_length)
+        with self._lock:
+            fp.seek(frame_position, 0)
+            frame: bytes = fp.read(frame_length)
         return frame
 
     def _parse_pixel_data(self) -> List[Tuple[int, int]]:
