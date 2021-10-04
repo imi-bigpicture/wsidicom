@@ -78,8 +78,9 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_get_blank_color(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        color = instance._get_blank_color(
-            instance.photometric_interpretation)
+        image_data: DicomImageData = instance.image_data
+        color = image_data._get_blank_color(
+            image_data.photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
 
     def test_get_frame_file(self):
