@@ -107,7 +107,7 @@ class WsiDataset(Dataset):
         self._mm_depth = self.ImagedVolumeDepth
         self._tile_size = Size(self.Columns, self.Rows)
         self._samples_per_pixel = self.SamplesPerPixel
-        self._photophotometric_interpretation = self.PhotometricInterpretation
+        self._photometric_interpretation = self.PhotometricInterpretation
         self._instance_number = self.InstanceNumber
         self._optical_path_sequence = self.OpticalPathSequence
         try:
@@ -502,9 +502,9 @@ class WsiDataset(Dataset):
         return self._samples_per_pixel
 
     @property
-    def photophotometric_interpretation(self) -> str:
+    def photometric_interpretation(self) -> str:
         """Return photometric interpretation."""
-        return self._photophotometric_interpretation
+        return self._photometric_interpretation
 
     @property
     def instance_number(self) -> str:
@@ -827,10 +827,10 @@ class WsiDicomFile:
 class ImageData(metaclass=ABCMeta):
     """Generic class for image data that can be inherited to implement support
     for other image/file formats. Subclasses should implement properties to get
-    transfer_syntax, image_size, tile_size, and pixel_spacing and methods
-    get_tile() and close(). Additionally properties focal_planes and/or
-    optical_paths should be overridden if multiple focal planes or optical
-    paths are implemented."""
+    transfer_syntax, image_size, tile_size, pixel_spacing,  samples_per_pixel,
+    and photometric_interpretation and methods get_tile() and close().
+    Additionally properties focal_planes and/or optical_paths should be
+    overridden if multiple focal planes or optical paths are implemented."""
     default_z: float = None
 
     @property
@@ -856,6 +856,19 @@ class ImageData(metaclass=ABCMeta):
     @abstractmethod
     def pixel_spacing(self) -> SizeMm:
         """Should return the size of the pixels in mm/pixel."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def samples_per_pixel(self) -> int:
+        """Should return number of samples per pixel (e.g. 3 for RGB."""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def photometric_interpretation(self) -> str:
+        """Should return the photophotometric interpretation of the image
+        data."""
         raise NotImplementedError
 
     @abstractmethod
@@ -900,6 +913,20 @@ class ImageData(metaclass=ABCMeta):
     def optical_paths(self) -> List[str]:
         """Optical paths avaiable in the image."""
         return ['0']
+
+    @property
+    def image_mode(self) -> str:
+        """Return Pillow image mode (e.g. RGB) for image data"""
+        if(self.samples_per_pixel == 1):
+            return "L"
+        elif(self.samples_per_pixel == 3):
+            return "RGB"
+        raise NotImplementedError
+
+    @property
+    def blank_color(self) -> Tuple[int, int, int]:
+        """Return RGB background color."""
+        return self._get_blank_color(self.photometric_interpretation)
 
     def pretty_str(
         self,
@@ -979,6 +1006,83 @@ class ImageData(metaclass=ABCMeta):
             (path in self.optical_paths)
         )
 
+    def encode(self, image: Image.Image) -> bytes:
+        """Encode image using transfer syntax.
+
+        Parameters
+        ----------
+        image: Image.Image
+            Image to encode
+
+        Returns
+        ----------
+        bytes
+            Encoded image as bytes
+
+        """
+        image_format, image_options = self._image_settings(
+            self.transfer_syntax
+        )
+        with io.BytesIO() as buffer:
+            image.save(buffer, format=image_format, **image_options)
+            return buffer.getvalue()
+
+    @staticmethod
+    def _image_settings(
+        transfer_syntax: pydicom.uid
+    ) -> Tuple[str, Dict[str, int]]:
+        """Return image format and options for creating encoded tiles as in the
+        used transfer syntax.
+
+        Parameters
+        ----------
+        transfer_syntax: pydicom.uid
+            Transfer syntax to match image format and options to
+
+        Returns
+        ----------
+        tuple[str, dict[str, int]]
+            image format and image options
+
+        """
+        if(transfer_syntax == pydicom.uid.JPEGBaseline8Bit):
+            image_format = 'jpeg'
+            image_options = {'quality': 95}
+        elif(transfer_syntax == pydicom.uid.JPEG2000):
+            image_format = 'jpeg2000'
+            image_options = {'irreversible': True}
+        elif(transfer_syntax == pydicom.uid.JPEG2000Lossless):
+            image_format = 'jpeg2000'
+            image_options = {'irreversible': False}
+        else:
+            raise NotImplementedError(
+                "Only supports jpeg and jpeg2000"
+            )
+        return (image_format, image_options)
+
+    @staticmethod
+    def _get_blank_color(
+        photometric_interpretation: str
+    ) -> Tuple[int, int, int]:
+        """Return color to use blank tiles.
+
+        Parameters
+        ----------
+        photometric_interpretation: str
+            The photomoetric interpretation of the dataset
+
+        Returns
+        ----------
+        int, int, int
+            RGB color
+
+        """
+        BLACK = 0
+        WHITE = 255
+        if(photometric_interpretation == "MONOCHROME2"):
+            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
+        return (WHITE, WHITE, WHITE)
+
 
 class DicomImageData(ImageData):
     """Represents image data read from dicom file(s). Image data can
@@ -1007,9 +1111,16 @@ class DicomImageData(ImageData):
         else:
             self.tiles = SparseTileIndex(datasets)
 
-        self._pixel_spacing = base_file.dataset.pixel_spacing
+        self._pixel_spacing = datasets[0].pixel_spacing
         self._transfer_syntax = base_file.transfer_syntax
         self._default_z: float = None
+        self._photometric_interpretation = (
+            datasets[0].photometric_interpretation
+        )
+        self._samples_per_pixel = datasets[0].samples_per_pixel
+
+        self._blank_tile = None
+        self._encoded_blank_tile = None
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._files.values()})"
@@ -1047,8 +1158,34 @@ class DicomImageData(ImageData):
         """Size of the pixels in mm/pixel."""
         return self._pixel_spacing
 
+    @property
+    def photometric_interpretation(self) -> str:
+        """Return photometric interpretation."""
+        return self._photometric_interpretation
+
+    @property
+    def samples_per_pixel(self) -> int:
+        """Return samples per pixel (1 or 3)."""
+        return self._samples_per_pixel
+
+    @property
+    def blank_tile(self) -> Image.Image:
+        """Return background tile."""
+        if self._blank_tile is None:
+            self._blank_tile = self._create_blank_tile()
+        return self._blank_tile
+
+    @property
+    def blank_encoded_tile(self) -> bytes:
+        """Return encoded background tile."""
+        if self._encoded_blank_tile is None:
+            self._encoded_blank_tile = self.encode(self.blank_tile)
+        return self._encoded_blank_tile
+
     def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         frame_index = self._get_frame_index(tile, z, path)
+        if frame_index == -1:
+            return self.blank_encoded_tile
         return self._get_tile_frame(frame_index)
 
     def get_decoded_tile(
@@ -1057,8 +1194,11 @@ class DicomImageData(ImageData):
         z: float,
         path: str
     ) -> Image.Image:
-        tile_frame = self.get_encoded_tile(tile, z, path)
-        return Image.open(io.BytesIO(tile_frame))
+        frame_index = self._get_frame_index(tile, z, path)
+        if frame_index == -1:
+            return self.blank_tile
+        frame = self._get_tile_frame(frame_index)
+        return Image.open(io.BytesIO(frame))
 
     def get_filepointer(
         self,
@@ -1155,11 +1295,21 @@ class DicomImageData(ImageData):
         return frame_index
 
     def is_sparse(self, tile: Point, z: float, path: str) -> bool:
-        try:
-            self.tiles.get_frame_index(tile, z, path)
-            return False
-        except WsiDicomSparse:
-            return True
+        return (self.tiles.get_frame_index(tile, z, path) == -1)
+
+    def _create_blank_tile(self) -> Image.Image:
+        """Create blank tile for instance.
+
+        Returns
+        ----------
+        Image.Image
+            Blank tile image
+        """
+        return Image.new(
+            mode=self.image_mode,
+            size=self.tile_size.to_tuple(),
+            color=self.blank_color[:self.samples_per_pixel]
+        )
 
     def close(self) -> None:
         for file in self._files.values():
@@ -1199,8 +1349,6 @@ class SparseTilePlane:
             Frame index
         """
         frame_index = int(self.plane[position.x, position.y])
-        if frame_index == -1:
-            raise WsiDicomSparse(position)
         return frame_index
 
     def __setitem__(self, position: Point, frame_index: int):
@@ -1658,15 +1806,8 @@ class WsiInstance:
         self._image_data = image_data
         self._identifier, self._uids = self._validate_instance(self.datasets)
         self._wsi_type = self.dataset.get_supported_wsi_dicom_type(
-            self._image_data.transfer_syntax
+            self.image_data.transfer_syntax
         )
-        if(self.samples_per_pixel == 1):
-            self._image_mode = "L"
-        else:
-            self._image_mode = "RGB"
-
-        self._blank_tile = None
-        self._encoded_blank_tile = None
 
         if self.ext_depth_of_field:
             if self.ext_depth_of_field_planes is None:
@@ -1705,15 +1846,6 @@ class WsiInstance:
     def wsi_type(self) -> str:
         """Return wsi type."""
         return self._wsi_type
-
-    @property
-    def blank_color(self) -> Tuple[int, int, int]:
-        """Return RGB background color."""
-        return self._get_blank_color(self.photometric_interpretation)
-
-    @property
-    def image_mode(self) -> str:
-        return self._image_mode
 
     @property
     def datasets(self) -> List[WsiDataset]:
@@ -1782,16 +1914,6 @@ class WsiInstance:
     @property
     def ext_depth_of_field_plane_distance(self) -> Optional[float]:
         return self.dataset.ext_depth_of_field_plane_distance
-
-    @property
-    def photometric_interpretation(self) -> str:
-        """Return photometric interpretation."""
-        return self.dataset.photophotometric_interpretation
-
-    @property
-    def samples_per_pixel(self) -> int:
-        """Return samples per pixel (1 or 3)."""
-        return self.dataset.samples_per_pixel
 
     @property
     def identifier(self) -> Uid:
@@ -1897,7 +2019,25 @@ class WsiInstance:
         if path is None:
             path = self.default_path
 
-        image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
+        image = Image.new(
+            mode=self.image_data.image_mode,
+            size=region.size.to_tuple()
+        )
+        # stitching_tiles = self.get_tile_range(region, z, path)
+
+        # write_index = Point(x=0, y=0)
+        # tile = stitching_tiles.position
+        # for tile in stitching_tiles.iterate_all(include_end=True):
+        #     tile_image = self.get_tile(tile, z, path)
+        #     tile_crop = self.crop_tile(tile, region)
+        #     tile_image = tile_image.crop(box=tile_crop.box)
+        #     image.paste(tile_image, write_index.to_tuple())
+        #     write_index = self._write_indexer(
+        #         write_index,
+        #         tile_crop.size,
+        #         region.size
+        #     )
+        # return image
 
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
             def thread(tile_point: Point) -> Image.Image:
@@ -1977,27 +2117,6 @@ class WsiInstance:
                 box=cropped_tile_region.box_from_origin
             )
         return tile_image
-
-    def encode(self, image: Image.Image) -> bytes:
-        """Encode image using transfer syntax.
-
-        Parameters
-        ----------
-        image: Image.Image
-            Image to encode
-
-        Returns
-        ----------
-        bytes
-            Encoded image as bytes
-
-        """
-        (image_format, image_options) = self._image_settings(
-            self._image_data.transfer_syntax
-        )
-        with io.BytesIO() as buffer:
-            image.save(buffer, format=image_format, **image_options)
-            return buffer.getvalue()
 
     def crop_tile(self, tile: Point, stitching: Region) -> Region:
         """Crop tile at edge of stitching region so that the tile after croping
@@ -2138,10 +2257,7 @@ class WsiInstance:
             z = self.default_z
         if path is None:
             path = self.default_path
-        try:
-            image = self._image_data.get_decoded_tile(tile, z, path)
-        except WsiDicomSparse:
-            image = self.blank_tile
+        image = self.image_data.get_decoded_tile(tile, z, path)
         return self.crop_tile_to_level(tile, image)
 
     def get_encoded_tile(
@@ -2174,17 +2290,14 @@ class WsiInstance:
             z = self.default_z
         if path is None:
             path = self.default_path
-        try:
-            tile_frame = self._image_data.get_encoded_tile(tile, z, path)
-        except WsiDicomSparse:
-            tile_frame = self.blank_encoded_tile
+        tile_frame = self.image_data.get_encoded_tile(tile, z, path)
 
         # Check if tile is an edge tile that should be croped
         cropped_tile_region = self.crop_to_level_size(tile)
         if cropped_tile_region.size != self.tile_size:
             image = Image.open(io.BytesIO(tile_frame))
             image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.encode(image)
+            tile_frame = self.image_data.encode(image)
         return tile_frame
 
     @staticmethod
@@ -2237,29 +2350,6 @@ class WsiInstance:
             base_dataset.uids.base,
         )
 
-    @staticmethod
-    def _get_blank_color(
-        photometric_interpretation: str
-    ) -> Tuple[int, int, int]:
-        """Return color to use blank tiles.
-
-        Parameters
-        ----------
-        photometric_interpretation: str
-            The photomoetric interpretation of the dataset
-
-        Returns
-        ----------
-        int, int, int
-            RGB color
-
-        """
-        BLACK = 0
-        WHITE = 255
-        if(photometric_interpretation == "MONOCHROME2"):
-            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
-        return (WHITE, WHITE, WHITE)
-
     def get_tile_range(
         self,
         pixel_region: Region,
@@ -2270,38 +2360,6 @@ class WsiInstance:
         end = pixel_region.end / self.tile_size - 1
         tile_region = Region.from_points(start, end)
         return tile_region
-
-    @staticmethod
-    def _create_filepointer(path: Path) -> pydicom.filebase.DicomFile:
-        """Return a dicom filepointer.
-
-        Parameters
-        ----------
-        path: Path
-            Path to filepointer.
-        Returns
-        ----------
-        pydicom.filebase.DicomFile
-            Created filepointer.
-        """
-        fp = pydicom.filebase.DicomFile(path, mode='wb')
-        fp.is_little_endian = True
-        fp.is_implicit_VR = False
-        return fp
-
-    @property
-    def blank_tile(self) -> Image.Image:
-        """Return background tile."""
-        if self._blank_tile is None:
-            self._blank_tile = self._create_blank_tile()
-        return self._blank_tile
-
-    @property
-    def blank_encoded_tile(self) -> bytes:
-        """Return encoded background tile."""
-        if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self.encode(self.blank_tile)
-        return self._encoded_blank_tile
 
     def matches(self, other_instance: 'WsiInstance') -> bool:
         """Return true if other instance is of the same group as self.
@@ -2322,27 +2380,6 @@ class WsiInstance:
             self.size == other_instance.size and
             self.tile_size == other_instance.tile_size and
             self.wsi_type == other_instance.wsi_type
-        )
-
-    def is_sparse(self, tile: Point, z: float, path: str) -> bool:
-        try:
-            self._image_data.get_tile(tile, z, path)
-            return False
-        except WsiDicomSparse:
-            return True
-
-    def _create_blank_tile(self) -> Image.Image:
-        """Create blank tile for instance.
-
-        Returns
-        ----------
-        Image.Image
-            Blank tile image
-        """
-        return Image.new(
-            mode=self.image_mode,
-            size=self.tile_size.to_tuple(),
-            color=self.blank_color[:self.samples_per_pixel]
         )
 
     def close(self) -> None:
@@ -2963,7 +3000,7 @@ class WsiDicomLevel(WsiDicomGroup):
         """
         image = self.get_scaled_tile(tile, scale, z, path)
         instance = self.get_instance(z, path)
-        return instance.encode(image)
+        return instance.image_data.encode(image)
 
     def calculate_scale(self, level_to: int) -> int:
         """Return scaling factor to given level.
