@@ -2,39 +2,21 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import (DefaultDict, Dict, Generator, List, Optional, Tuple,
-                    Union, Set, Any)
 from pathlib import Path
+from typing import (Any, Callable, DefaultDict, Dict, Generator, List,
+                    Optional, Set, Tuple, Union)
 
 import numpy as np
 import pydicom
+from pydicom import config
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import Code, codes
-from pydicom.uid import UID as Uid
-from .uid import ANN_SOP_CLASS_UID
 
-# MICROSCOPY BULK SIMPLE ANNOTATIONS MODULE ATTRIBUTES
-# Each dict entry is Tag: (VR, VM, Name, Retired, Keyword)
-annotation_dict_items = {
-    0x00660022: ('OD', '1', "Double Point Coordinates Data", '', 'DoublePointCoordinatesData'),  # noqa
-    0x006A0001: ('CS', '1', "Annotation Coordinate Type", '', 'AnnotationCoordinateType'),  # noqa
-    0x006A0002: ('SQ', '1', "Annotation Group Sequence", '',  'AnnotationGroupSequence'),  # noqa
-    0x006A0003: ('UI', '1', "Annotation Group UID", '', 'AnnotationGroupUID'),  # noqa
-    0x006A0005: ('LO', '1', "Annotation Group Label", '', 'AnnotationGroupLabel'),  # noqa
-    0x006A0006: ('UT', '1', "Annotation Group Description", '', 'AnnotationGroupDescription'),  # noqa
-    0x006A0007: ('CS', '1', "Annotation Group Generation Type", '', 'AnnotationGroupGenerationType'),  # noqa
-    0x006A0008: ('SQ', '1', "Annotation Group Algorithm Identification Sequence", '', 'AnnotationGroupAlgorithmIdentificationSequence'),  # noqa
-    0x006A0009: ('SQ', '1', "Annotation Property Category Code Sequence", '', 'AnnotationPropertyCategoryCodeSequence'),  # noqa
-    0x006A000A: ('SQ', '1', "Annotation Property Type Code Sequence", '', 'AnnotationPropertyTypeCodeSequence'),  # noqa
-    0x006A000B: ('SQ', '1', "Annotation Property Type Modifier Code Sequence", '', 'AnnotationPropertyTypeModifierCodeSequence'),  # noqa
-    0x006A000C: ('UL', '1', "Number of Annotations", '', 'NumberOfAnnotations'),  # noqa
-    0x006A000D: ('CS', '1', "Annotation Applies to All Z Planes", '', 'AnnotationAppliesToAllZPlanes'),  # noqa
-    0x006A000E: ('SH', '1-n', "Referenced Optical Path Identifier", '', 'ReferencedOpticalPathIdentifier'),  # noqa
-    0x006A000F: ('CS', '1', "Annotation Applies to All Optical Paths", '', 'AnnotationAppliesToAllOpticalPaths'),  # noqa
-    0x006A0010: ('FD', '1-n', "Common Z Coordinate Value", '', 'CommonZCoordinateValue'),  # noqa
-    0x006A0011: ('OL', '1', "Annotation Index List", '', 'AnnotationIndexList'),  # noqa
-}
+from .uid import ANN_SOP_CLASS_UID, BaseUids, Uid
+
+config.enforce_valid_values = True
+config.future_behavior()
 
 
 @dataclass
@@ -1899,7 +1881,7 @@ class AnnotationInstance:
     def __init__(
         self,
         groups: List[AnnotationGroup],
-        frame_of_reference: Uid
+        base_uids: BaseUids
     ):
         """Reoresents a collection of annotation groups.
 
@@ -1910,10 +1892,9 @@ class AnnotationInstance:
         frame_of_referenc: Uid
             Frame of reference uid of image that the annotations belong to
         """
-        pydicom.datadict.add_dict_entries(annotation_dict_items)
         self.groups = groups
         self.coordinate_type = '3D'
-        self.frame_of_reference = frame_of_reference
+        self.base_uids = base_uids
         self.datetime = datetime.now()
         self.modality = 'ANN'
         self.series_number: int
@@ -1921,14 +1902,15 @@ class AnnotationInstance:
     def __repr__(self) -> str:
         return (
             f"AnnotationInstance({self.groups}, "
-            f"{self.frame_of_reference})"
+            f"{self.base_uids})"
         )
 
     def save(
         self,
         path: str,
         little_endian: bool = True,
-        implicit_vr: bool = False
+        implicit_vr: bool = False,
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
     ):
         """Write annotations to DICOM file according to sup 222.
         Note that the file will miss important DICOM attributes that has not
@@ -1956,7 +1938,11 @@ class AnnotationInstance:
                 )
         ds.AnnotationGroupSequence = bulk_sequence
         ds.AnnotationCoordinateType = self.coordinate_type
-        ds.FrameOfReferenceUID = self.frame_of_reference
+        ds.FrameOfReferenceUID = self.base_uids.frame_of_reference
+        ds.StudyInstanceUID = self.base_uids.study_instance
+        ds.SeriesInstanceUID = self.base_uids.series_instance
+        ds.SOPInstanceUID = uid_generator()
+        ds.SOPClassUID = ANN_SOP_CLASS_UID
 
         meta_ds = pydicom.dataset.FileMetaDataset()
         if little_endian and implicit_vr:
@@ -1969,7 +1955,7 @@ class AnnotationInstance:
             raise NotImplementedError("Unsupported transfer syntax")
 
         meta_ds.TransferSyntaxUID = transfer_syntax
-        meta_ds.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
+        meta_ds.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
         meta_ds.MediaStorageSOPClassUID = ANN_SOP_CLASS_UID
         meta_ds.FileMetaInformationGroupLength = 0  # Updated on write
         pydicom.dataset.validate_file_meta(meta_ds)
@@ -1993,7 +1979,7 @@ class AnnotationInstance:
             Paths to DICOM annotation files to read.
         """
         groups: List[AnnotationGroup] = []
-        frame_of_reference: Uid = None
+        base_uids: BaseUids = None
         for path in paths:
             ds = pydicom.filereader.dcmread(path)
             if ds.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
@@ -2004,12 +1990,25 @@ class AnnotationInstance:
                 raise NotImplementedError(
                     "Only support annotations of '3D' type"
                 )
-
-            if frame_of_reference is None:
-                frame_of_reference = ds.FrameOfReferenceUID
+            base_uids = BaseUids(
+                ds.StudyInstanceUID,
+                ds.SeriesInstanceUID,
+                ds.FrameOfReferenceUID
+            )
+            instance = ds.SOPInstanceUID
+            if base_uids is None:
+                base_uids = BaseUids(
+                    ds.StudyInstanceUID,
+                    ds.SeriesInstanceUID,
+                    ds.FrameOfReferenceUID
+                )
             else:
-                if frame_of_reference != ds.FrameOfReferenceUID:
-                    raise ValueError("Frame of reference should match")
+                if base_uids != BaseUids(
+                    ds.StudyInstanceUID,
+                    ds.SeriesInstanceUID,
+                    ds.FrameOfReferenceUID
+                ):
+                    raise ValueError("Base uids should match")
             for annotation in ds.AnnotationGroupSequence:
                 annotation_type = annotation.GraphicType
                 if(annotation_type == 'POINT'):
@@ -2021,7 +2020,7 @@ class AnnotationInstance:
                 else:
                     raise NotImplementedError("Unsupported Graphic type")
                 groups.append(annotation)
-        return cls(groups, frame_of_reference)
+        return cls(groups, base_uids)
 
     def __getitem__(
         self,
