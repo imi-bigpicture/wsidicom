@@ -45,18 +45,6 @@ class WsiDicomUidDuplicateError(Exception):
         return f"{self.item} is duplicated in {self.group}"
 
 
-class WsiDicomSparse(Exception):
-    """Raised for sparsed index if requested frame is valid but not in
-    pixel data.
-    """
-
-    def __init__(self, tile: Point):
-        self.tile = tile
-
-    def __str__(self):
-        return f"{self.tile} not found in pixel data"
-
-
 class WsiDicomNotFoundError(Exception):
     """Raised if requested item is not found"""
 
