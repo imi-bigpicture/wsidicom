@@ -2027,44 +2027,21 @@ class WsiInstance:
             mode=self.image_data.image_mode,
             size=region.size.to_tuple()
         )
-        # stitching_tiles = self.get_tile_range(region, z, path)
+        stitching_tiles = self.get_tile_range(region, z, path)
 
-        # write_index = Point(x=0, y=0)
-        # tile = stitching_tiles.position
-        # for tile in stitching_tiles.iterate_all(include_end=True):
-        #     tile_image = self.get_tile(tile, z, path)
-        #     tile_crop = self.crop_tile(tile, region)
-        #     tile_image = tile_image.crop(box=tile_crop.box)
-        #     image.paste(tile_image, write_index.to_tuple())
-        #     write_index = self._write_indexer(
-        #         write_index,
-        #         tile_crop.size,
-        #         region.size
-        #     )
-        # return image
-
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
-            def thread(tile_point: Point) -> Image.Image:
-                tile = self._image_data.get_decoded_tile(tile_point, z, path)
-                tile_crop = self.crop_tile(tile_point, region)
-                tile = tile.crop(box=tile_crop.box)
-                return tile
-
-            tiles = self.get_tile_range(
-                region,
-                z,
-                path
-            ).iterate_all(include_end=True)
-            tile_images = pool.map(thread, tiles)
-            write_index = Point(x=0, y=0)
-            for tile_image in tile_images:
-                image.paste(tile_image, write_index.to_tuple())
-                write_index = self._write_indexer(
-                    write_index,
-                    Size.from_tuple(tile_image.size),
-                    region.size
-                )
-            return image
+        write_index = Point(x=0, y=0)
+        tile = stitching_tiles.position
+        for tile in stitching_tiles.iterate_all(include_end=True):
+            tile_image = self.get_tile(tile, z, path)
+            tile_crop = self.crop_tile(tile, region)
+            tile_image = tile_image.crop(box=tile_crop.box)
+            image.paste(tile_image, write_index.to_tuple())
+            write_index = self._write_indexer(
+                write_index,
+                tile_crop.size,
+                region.size
+            )
+        return image
 
     def get_tile_range(
         self,
