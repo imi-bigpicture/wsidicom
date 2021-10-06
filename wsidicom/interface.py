@@ -1,12 +1,12 @@
 import io
 import math
+import os
+import threading
 import warnings
 from abc import ABCMeta, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
-import os
-from concurrent.futures import ThreadPoolExecutor
-import threading
 
 import numpy as np
 import pydicom
@@ -17,7 +17,7 @@ from pydicom.uid import UID as Uid
 
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomMatchError, WsiDicomNotFoundError,
-                             WsiDicomOutOfBoundsError, WsiDicomSparse,
+                             WsiDicomOutOfBoundsError,
                              WsiDicomUidDuplicateError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
@@ -1208,10 +1208,10 @@ class DicomImageData(ImageData):
         tile: Point,
         z: float,
         path: str
-    ) -> Tuple[pydicom.filebase.DicomFileLike, int, int]:
+    ) -> Optional[Tuple[pydicom.filebase.DicomFileLike, int, int]]:
         """Return file pointer, frame position, and frame lenght for tile with
         z and path. If frame is inside tile geometry but no tile exists in
-        frame data (sparse) WsiDicomSparse is raised.
+        frame data None is returned.
 
         Parameters
         ----------
@@ -1224,10 +1224,12 @@ class DicomImageData(ImageData):
 
         Returns
         ----------
-        Tuple[pydicom.filebase.DicomFileLike, int, int]:
+        Optional[Tuple[pydicom.filebase.DicomFileLike, int, int]]:
             File pointer, frame offset and frame lenght in number of bytes.
         """
         frame_index = self._get_frame_index(tile, z, path)
+        if frame_index == -1:
+            return None
         file = self._get_file(frame_index)
         return file.get_filepointer(frame_index)
 
@@ -1271,8 +1273,7 @@ class DicomImageData(ImageData):
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """Return frame index for tile. Raises WsiDicomOutOfBoundsError if
-        tile, z, or path is not valid. Raises WsiDicomSparse if index is sparse
-        and tile is not in frame data.
+        tile, z, or path is not valid.
 
         Parameters
         ----------
