@@ -900,6 +900,8 @@ class Annotation:
 
 
 class AnnotationGroup:
+    _geometry_type: type
+
     def __init__(
         self,
         annotations: List[Annotation],
@@ -908,7 +910,8 @@ class AnnotationGroup:
         typecode: ConceptCode,
         description: str = None,
         color: LabColor = None,
-        is_double: bool = True
+        is_double: bool = True,
+        instance: Uid = None
     ):
         """Represents a group of annotations of the same type.
 
@@ -922,12 +925,15 @@ class AnnotationGroup:
             Group categorycode.
         typecode: ConceptCode
             Group typecode.
+        instance: Uid
+            Uid this group was created from.
+        description: str
+            Group description.
         color: LabColor
             Recommended CIELAB color.
         is_double: bool
             If group is stored with double float
         """
-        self._geometry_type: type
         self.validate_type(annotations, self._geometry_type)
         self._z_planes: List[float] = []
         self._optical_paths: List[str] = []
@@ -944,6 +950,7 @@ class AnnotationGroup:
         self._label = label
         self._description = description
         self._color = color
+        self._instance = instance
 
     def __len__(self) -> int:
         return len(self.annotations)
@@ -1030,7 +1037,8 @@ class AnnotationGroup:
     @classmethod
     def from_ds(
         cls,
-        ds: Dataset
+        ds: Dataset,
+        instance: Uid
     ) -> 'AnnotationGroup':
         """Return annotation group from Annotation Group Sequence dataset.
 
@@ -1038,6 +1046,8 @@ class AnnotationGroup:
         ----------
         ds: Dataset
             Dataset containing annotation group.
+        instance: Uid
+            Uid this group was created from.
 
         Returns
         ----------
@@ -1058,7 +1068,8 @@ class AnnotationGroup:
             typecode,
             description,
             color,
-            is_double
+            is_double,
+            instance
         )
 
     @staticmethod
@@ -1644,43 +1655,6 @@ class PointAnnotationGroup(AnnotationGroup):
     """Point annotation group"""
     _geometry_type = Point
 
-    def __init__(
-        self,
-        annotations: List[Annotation],
-        label: str,
-        categorycode: ConceptCode,
-        typecode: ConceptCode,
-        description: str = None,
-        color: LabColor = None,
-        is_double: bool = True
-    ):
-        """Represents a group of point annotations.
-
-        Parameters
-        ----------
-        annotations: List[Annotation]
-            Annotations in the group.
-        label: str
-            Group label
-        categorycode: ConceptCode
-            Group categorycode.
-        typecode: ConceptCode
-            Group typecode.
-        color: LabColor
-            Recommended CIELAB color.
-        is_double: bool
-            If group is stored with double float
-        """
-        super().__init__(
-            annotations,
-            label,
-            categorycode,
-            typecode,
-            description,
-            color,
-            is_double
-        )
-
     @property
     def annotation_type(self) -> str:
         return "POINT"
@@ -1712,43 +1686,6 @@ class PointAnnotationGroup(AnnotationGroup):
 class PolylineAnnotationGroupMeta(AnnotationGroup):
     """Meta class for line annotation goup"""
     _geometry_type: type
-
-    def __init__(
-        self,
-        annotations: List[Annotation],
-        label: str,
-        categorycode: ConceptCode,
-        typecode: ConceptCode,
-        description: str = None,
-        color: LabColor = None,
-        is_double: bool = True
-    ):
-        """Represents a group of line annotations.
-
-        Parameters
-        ----------
-        annotations: List[Annotation]
-            Annotations in the group.
-        label: str
-            Group label
-        categorycode: ConceptCode
-            Group categorycode.
-        typecode: ConceptCode
-            Group typecode.
-        color: LabColor
-            Recommended CIELAB color.
-        is_double: bool
-            If group is stored with double float
-        """
-        super().__init__(
-            annotations,
-            label,
-            categorycode,
-            typecode,
-            description,
-            color,
-            is_double
-        )
 
     @property
     def annotation_type(self) -> str:
@@ -2009,16 +1946,17 @@ class AnnotationInstance:
                     ds.FrameOfReferenceUID
                 ):
                     raise ValueError("Base uids should match")
-            for annotation in ds.AnnotationGroupSequence:
-                annotation_type = annotation.GraphicType
+            for annotation_ds in ds.AnnotationGroupSequence:
+                annotation_type = annotation_ds.GraphicType
                 if(annotation_type == 'POINT'):
-                    annotation = PointAnnotationGroup.from_ds(annotation)
+                    annotation_class = PointAnnotationGroup
                 elif(annotation_type == 'POLYLINE'):
-                    annotation = PolylineAnnotationGroup.from_ds(annotation)
+                    annotation_class = PolylineAnnotationGroup
                 elif(annotation_type == 'POLYGON'):
-                    annotation = PolygonAnnotationGroup.from_ds(annotation)
+                    annotation_class = PolygonAnnotationGroup
                 else:
                     raise NotImplementedError("Unsupported Graphic type")
+                annotation = annotation_class.from_ds(annotation_ds, instance)
                 groups.append(annotation)
         return cls(groups, base_uids)
 
