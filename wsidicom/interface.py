@@ -4,7 +4,6 @@ import os
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
 
