@@ -1338,6 +1338,14 @@ class DicomWsiFileWriter:
         self._fp.is_little_endian = True
         self._fp.is_implicit_VR = False
 
+        self.__enter__()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def write_preamble(self) -> None:
         """Writes file preamble to file."""
         preamble = b'\x00' * 128
@@ -3018,16 +3026,17 @@ class WsiDicomGroup:
             filepath = os.path.join(output_path, uid + '.dcm')
             transfer_syntax = instances[0]._image_data.transfer_syntax
             dataset = deepcopy(instances[0].dataset)
-            wsi_file = DicomWsiFileWriter(filepath)
-            wsi_file.write_preamble()
-            wsi_file.write_file_meta(uid, transfer_syntax)
-            dataset.SOPInstanceUID = uid
-            wsi_file.write_base(dataset)
-            wsi_file.write_pixel_data_start()
-            for (path, z), image_data in self._list_image_data(instances):
-                wsi_file.write_pixel_data(image_data, z, path)
-            wsi_file.write_pixel_data_end()
-            wsi_file.close()
+            with DicomWsiFileWriter(filepath) as wsi_file:
+                wsi_file = DicomWsiFileWriter(filepath)
+                wsi_file.write_preamble()
+                wsi_file.write_file_meta(uid, transfer_syntax)
+                dataset.SOPInstanceUID = uid
+                wsi_file.write_base(dataset)
+                wsi_file.write_pixel_data_start()
+                for (path, z), image_data in self._list_image_data(instances):
+                    wsi_file.write_pixel_data(image_data, z, path)
+                wsi_file.write_pixel_data_end()
+                wsi_file.close()
             filepaths.append(filepath)
         return filepaths
 
