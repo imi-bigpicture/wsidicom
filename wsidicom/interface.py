@@ -3025,8 +3025,6 @@ class WsiDicomSeries(metaclass=ABCMeta):
     """Represents a series of WsiDicomGroups with the same image flavor, e.g.
     pyramidal levels, lables, or overviews.
     """
-    wsi_type: str
-    group_class = WsiDicomGroup
 
     def __init__(self, groups: List[WsiDicomGroup]):
         """Create a WsiDicomSeries from list of WsiDicomGroups.
@@ -3066,6 +3064,19 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     def __len__(self) -> int:
         return len(self.stacks)
+
+    @property
+    @abstractmethod
+    def wsi_type(self) -> str:
+        """Should return the wsi type of the series ('VOLUME', 'LABEL', or
+        'OVERVIEW'"""
+        raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
+    def group_open(instances: List[WsiInstance]) -> List[WsiDicomGroup]:
+        """Should return WsiDicomGroups created from instances."""
+        raise NotImplementedError
 
     @property
     def groups(self) -> List[WsiDicomGroup]:
@@ -3126,7 +3137,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         WsiDicomSeries
             Created series.
         """
-        labels = cls.group_class.open(instances)
+        labels = cls.group_open(instances)
         return cls(labels)
 
     def _validate_series(
@@ -3174,19 +3185,36 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
 class WsiDicomLabels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the label wsi flavor."""
-    wsi_type = 'LABEL'
+    @property
+    def wsi_type(self) -> str:
+        return 'LABEL'
+
+    @staticmethod
+    def group_open(instances: List[WsiInstance]) -> List[WsiDicomGroup]:
+        return WsiDicomGroup.open(instances)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the overview wsi flavor."""
-    wsi_type = 'OVERVIEW'
+    @property
+    def wsi_type(self) -> str:
+        return 'OVERVIEW'
+
+    @staticmethod
+    def group_open(instances: List[WsiInstance]) -> List[WsiDicomGroup]:
+        return WsiDicomGroup.open(instances)
 
 
 class WsiDicomLevels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the volume (e.g. pyramidal
     level) wsi flavor."""
-    wsi_type = 'VOLUME'
-    group_class = WsiDicomLevel
+    @property
+    def wsi_type(self) -> str:
+        return 'VOLUME'
+
+    @staticmethod
+    def group_open(instances: List[WsiInstance]) -> List[WsiDicomGroup]:
+        return WsiDicomLevel.open(instances)
 
     def __init__(self, levels: List[WsiDicomLevel]):
         """Holds a stack of levels.
