@@ -1409,7 +1409,9 @@ class DicomWsiFileWriter:
         self,
         image_data: ImageData,
         z: float,
-        path: str
+        path: str,
+        workers: int = os.cpu_count(),
+        chunk_size: int = 100
     ) -> None:
         """Writes pixel data to file.
 
@@ -1421,25 +1423,24 @@ class DicomWsiFileWriter:
             Focal plane to write.
         path: str
             Optical path to write.
+        workers: int = os.cpu_count()
+            Maximum number of thread workers to use.
+        chunk_size: int = 100
+            Chunk size (number of tiles) to process at a time. Actual chunk
+            size also depends on minimun_chunk_size from image_data.
         """
-        # Single get_tile method
-        # tile_points = Region(
-        #     Point(0, 0),
-        #     image_data.tiled_size
-        # ).iterate_all()
-        # for tile_point in tile_points:
-        #     tile = image_data.get_tile(tile_point, z, path)
-        #     for frame in pydicom.encaps.itemize_frame(tile, 1):
-        #         fp.write(frame)
         minimum_chunk_size = getattr(
             image_data,
             'suggested_minimum_chunk_size',
             1
         )
-        #
-        number_of_chunks = 10
-
-        chunk_size = number_of_chunks*minimum_chunk_size
+        # If chunk_size is less than minimum_chunk_size, use minimum_chunk_size
+        # Otherwise, set chunk_size to highest even multiple of
+        # minimum_chunk_size
+        chunk_size = max(
+            minimum_chunk_size,
+            chunk_size//minimum_chunk_size * minimum_chunk_size
+        )
 
         # Divide the image tiles up into chunk_size chunks (up to tiled size)
         chunked_tile_points = (
@@ -1450,14 +1451,17 @@ class DicomWsiFileWriter:
             for y in range(image_data.tiled_size.height)
             for x in range(0, image_data.tiled_size.width, chunk_size)
         )
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
-            def thread(tile_points: List[Point]) -> List[bytes]:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            def get_tiles_thread(tile_points: List[Point]) -> List[bytes]:
                 # Thread that takes a chunk of tile points and returns list of
                 # tile bytes
                 return image_data.get_encoded_tiles(tile_points, z, path)
 
             # Each thread result is a list of tiles that is itemized and writen
-            for thread_result in pool.map(thread, chunked_tile_points):
+            for thread_result in pool.map(
+                get_tiles_thread,
+                chunked_tile_points
+            ):
                 for tile in thread_result:
                     for frame in pydicom.encaps.itemize_frame(tile, 1):
                         self._fp.write(frame)
@@ -2996,7 +3000,9 @@ class WsiDicomGroup:
     def save(
         self,
         output_path: str,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
+        workers: int = os.cpu_count(),
+        chunk_size: int = 100
     ) -> List[Path]:
         """Save a WsiDicomGroup to files in output_path. Instances are grouped
         by properties that can differ in the same file:
@@ -3011,9 +3017,13 @@ class WsiDicomGroup:
         ----------
         output_path: str
             Folder path to save files to.
-
         uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
             Uid generator to use.
+        workers: int = os.cpu_count()
+            Maximum number of thread workers to use.
+        chunk_size: int = 100
+            Chunk size (number of tiles) to process at a time. Actual chunk
+            size also depends on minimun_chunk_size from image_data.
 
         Returns
         ----------
@@ -3034,7 +3044,13 @@ class WsiDicomGroup:
                 wsi_file.write_base(dataset)
                 wsi_file.write_pixel_data_start()
                 for (path, z), image_data in self._list_image_data(instances):
-                    wsi_file.write_pixel_data(image_data, z, path)
+                    wsi_file.write_pixel_data(
+                        image_data,
+                        z,
+                        path,
+                        workers,
+                        chunk_size
+                    )
                 wsi_file.write_pixel_data_end()
                 wsi_file.close()
             filepaths.append(filepath)
@@ -3436,7 +3452,9 @@ class WsiDicomSeries(metaclass=ABCMeta):
     def save(
         self,
         output_path: str,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
+        workers: int = os.cpu_count(),
+        chunk_size: int = 100
     ) -> List[str]:
         """Save WsiDicomSeries as DICOM-files in path.
 
@@ -3445,6 +3463,11 @@ class WsiDicomSeries(metaclass=ABCMeta):
         output_path: str
         uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
              Function that can gernerate unique identifiers.
+        workers: int = os.cpu_count()
+            Maximum number of thread workers to use.
+        chunk_size: int = 100
+            Chunk size (number of tiles) to process at a time. Actual chunk
+            size also depends on minimun_chunk_size from image_data.
 
         Returns
         ----------
@@ -3455,7 +3478,9 @@ class WsiDicomSeries(metaclass=ABCMeta):
         for group in self.groups:
             group_file_paths = group.save(
                 output_path,
-                uid_generator
+                uid_generator,
+                workers,
+                chunk_size
             )
             filepaths.extend(group_file_paths)
         return filepaths
@@ -4283,7 +4308,9 @@ class WsiDicom:
     def save(
         self,
         output_path: str,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
+        workers: int = os.cpu_count(),
+        chunk_size: int = 100
     ) -> List[str]:
         """Save wsi as DICOM-files in path.
 
@@ -4292,6 +4319,11 @@ class WsiDicom:
         output_path: str
         uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
              Function that can gernerate unique identifiers.
+        workers: int = os.cpu_count()
+            Maximum number of thread workers to use.
+        chunk_size: int = 100
+            Chunk size (number of tiles) to process at a time. Actual chunk
+            size also depends on minimun_chunk_size from image_data.
 
         Returns
         ----------
@@ -4306,7 +4338,9 @@ class WsiDicom:
         for collection in collections:
             collection_filepaths = collection.save(
                 output_path,
-                uid_generator
+                uid_generator,
+                workers,
+                chunk_size
             )
             filepaths.extend(collection_filepaths)
         return filepaths
