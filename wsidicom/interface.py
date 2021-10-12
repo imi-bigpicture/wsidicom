@@ -3734,7 +3734,7 @@ class WsiDicom:
 
         if (
             self.annotations is not None and
-            self.annotations.frame_of_reference != self.uids.frame_of_reference
+            self.annotations.base_uids != self.uids
         ):
             warnings.warn("Annotations frame of referance does not match")
 
