@@ -1863,8 +1863,8 @@ class AnnotationInstance:
         uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
     ):
         """Write annotations to DICOM file according to sup 222.
-        Note that the file will miss important DICOM attributes that has not
-        yet been implemented.
+        Note that the file will miss DICOM attributes that has not yet been
+        implemented.
 
         Parameters
         ----------
@@ -1888,7 +1888,8 @@ class AnnotationInstance:
                 )
         ds.AnnotationGroupSequence = bulk_sequence
         ds.AnnotationCoordinateType = self.coordinate_type
-        ds.FrameOfReferenceUID = self.base_uids.frame_of_reference
+        if self.base_uids.frame_of_reference is not None:
+            ds.FrameOfReferenceUID = self.base_uids.frame_of_reference
         ds.StudyInstanceUID = self.base_uids.study_instance
         ds.SeriesInstanceUID = self.base_uids.series_instance
         ds.SOPInstanceUID = uid_generator()
@@ -1954,8 +1955,8 @@ class AnnotationInstance:
 
         if dataset.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
             raise ValueError("SOP Class UID of file is wrong")
-        coordinate_type = dataset.AnnotationCoordinateType
         frame_of_reference_uid = getattr(dataset, 'FrameOfReferenceUID', None)
+        coordinate_type = dataset.AnnotationCoordinateType
         if coordinate_type == '3D' and frame_of_reference_uid is None:
             raise ValueError(
                 '3D annotation corrindate type requires frame of reference'
