@@ -291,7 +291,7 @@ class WsiDataset(Dataset):
             True if same instance.
         """
         return (
-            self.uids.match(other_dataset.uids) and
+            self.uids == other_dataset.uids and
             self.image_size == other_dataset.image_size and
             self.tile_size == other_dataset.tile_size and
             self.tile_type == other_dataset.tile_type
