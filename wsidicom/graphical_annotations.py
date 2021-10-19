@@ -14,7 +14,7 @@ from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import Code, codes
 
 from .uid import ANN_SOP_CLASS_UID, BaseUids, Uid
-
+from .geometry import PointMm, RegionMm, SizeMm
 config.enforce_valid_values = True
 config.future_behavior()
 
@@ -479,6 +479,11 @@ class Geometry(metaclass=ABCMeta):
         """Return geometry content as a list of floats"""
         raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def box(self) -> RegionMm:
+        """Return Region that contains the geometry."""
+
     @abstractmethod
     def to_coords(self) -> List[Tuple[float, float]]:
         """Return geometry content as a list of tuple of floats"""
@@ -668,6 +673,10 @@ class Point(Geometry):
     def data(self) -> List[float]:
         return [self.x, self.y]
 
+    @property
+    def box(self) -> RegionMm:
+        return RegionMm(PointMm(self.x, self.y), SizeMm(0, 0))
+
     def __str__(self) -> str:
         return f"x: {self.x}, y: {self.y}"
 
@@ -749,6 +758,26 @@ class Polyline(Geometry):
     @property
     def data(self) -> List[float]:
         return [value for point in self.points for value in point.data]
+
+    @property
+    def box(self) -> RegionMm:
+        top: float = self.points[0].y
+        left: float = self.points[0].x
+        bottom: float = self.points[0].y
+        right: float = self.points[0].x
+        for point in self.points[1:]:
+            if point.y > top:
+                top = point.y
+            elif point.y < bottom:
+                bottom = point.y
+            if point.x > right:
+                right = point.x
+            elif point.y < left:
+                left = point.x
+        return RegionMm(
+            PointMm(left, bottom),
+            SizeMm(right-left, top-bottom)
+        )
 
     @classmethod
     def from_coords(
