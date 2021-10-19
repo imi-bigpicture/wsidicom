@@ -206,7 +206,10 @@ class ConceptCode(Code):
             Code created from sequence in dataset.
 
         """
-        code_ds = getattr(ds, sequence_name)[0]
+        try:
+            code_ds = getattr(ds, sequence_name)[0]
+        except IndexError:
+            raise ValueError("ConceptCode expected in sequence")
         value = code_ds.CodeValue
         scheme = code_ds.CodingSchemeDesignator
         meaning = code_ds.CodeMeaning
@@ -1109,7 +1112,12 @@ class AnnotationGroup:
         """
         if ds.AnnotationAppliesToAllZPlanes == 'YES':
             return []
-        z_planes: List[float] = ds.CommonZCoordinateValue
+        try:
+            z_planes: List[float] = ds.CommonZCoordinateValue
+        except AttributeError:
+            raise NotImplementedError(
+                'Only co-planar 3D annotations supported'
+            )
         return z_planes
 
     @staticmethod
@@ -1818,6 +1826,7 @@ class AnnotationInstance:
     def __init__(
         self,
         groups: List[AnnotationGroup],
+        coordinate_type: str,
         base_uids: BaseUids
     ):
         """Reoresents a collection of annotation groups.
@@ -1826,11 +1835,15 @@ class AnnotationInstance:
         ----------
         annotations: List[AnnotationGroup]
             List of annotations group
+        coordinate_type: str
+            If coordinates are volume-related ('3D') or image-related ('2D').
         frame_of_referenc: Uid
             Frame of reference uid of image that the annotations belong to
         """
         self.groups = groups
-        self.coordinate_type = '3D'
+        if coordinate_type not in ['2D', '3D']:
+            raise ValueError("Coordiante type should be '2D' or '3D'")
+        self.coordinate_type = coordinate_type
         self.base_uids = base_uids
         self.datetime = datetime.now()
         self.modality = 'ANN'
@@ -1907,7 +1920,7 @@ class AnnotationInstance:
         pydicom.filewriter.dcmwrite(path, file_ds)
 
     @classmethod
-    def open(cls, paths: List[Path]) -> 'AnnotationInstance':
+    def open(cls, paths: List[Path]) -> List['AnnotationInstance']:
         """Read annotations from DICOM file according to sup 222.
 
         Parameters
@@ -1915,50 +1928,66 @@ class AnnotationInstance:
         paths: List[Path]
             Paths to DICOM annotation files to read.
         """
-        groups: List[AnnotationGroup] = []
-        base_uids: BaseUids = None
+        instances: List['AnnotationInstance'] = []
         for path in paths:
             ds = pydicom.filereader.dcmread(path)
-            if ds.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
-                raise ValueError("SOP Class UID of file is wrong")
+            instances.append(cls.open_dataset(ds))
 
-            is_3D = (ds.AnnotationCoordinateType == '3D')
-            if not is_3D:
-                raise NotImplementedError(
-                    "Only support annotations of '3D' type"
-                )
-            base_uids = BaseUids(
-                ds.StudyInstanceUID,
-                ds.SeriesInstanceUID,
-                ds.FrameOfReferenceUID
+        return instances
+
+    @classmethod
+    def open_dataset(cls, dataset: Dataset) -> 'AnnotationInstance':
+        """Read annotations from DICOM dataset according to sup 222.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            DICOM annotation dataset to read.
+
+        Returns
+        ----------
+        List[AnnotationGroup]
+            Annotation groups read from dataset.
+        """
+        groups: List[AnnotationGroup] = []
+        base_uids: BaseUids = None
+
+        if dataset.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
+            raise ValueError("SOP Class UID of file is wrong")
+        coordinate_type = dataset.AnnotationCoordinateType
+        frame_of_reference_uid = getattr(dataset, 'FrameOfReferenceUID', None)
+        if coordinate_type == '3D' and frame_of_reference_uid is None:
+            raise ValueError(
+                '3D annotation corrindate type requires frame of reference'
             )
-            instance = ds.SOPInstanceUID
-            if base_uids is None:
-                base_uids = BaseUids(
-                    ds.StudyInstanceUID,
-                    ds.SeriesInstanceUID,
-                    ds.FrameOfReferenceUID
-                )
+
+        instance = dataset.SOPInstanceUID
+        if base_uids is None:
+            base_uids = BaseUids(
+                dataset.StudyInstanceUID,
+                dataset.SeriesInstanceUID,
+                frame_of_reference_uid
+            )
+        else:
+            if base_uids != BaseUids(
+                dataset.StudyInstanceUID,
+                dataset.SeriesInstanceUID,
+                frame_of_reference_uid
+            ):
+                raise ValueError("Base uids should match")
+        for annotation_ds in dataset.AnnotationGroupSequence:
+            annotation_type = annotation_ds.GraphicType
+            if(annotation_type == 'POINT'):
+                annotation_class = PointAnnotationGroup
+            elif(annotation_type == 'POLYLINE'):
+                annotation_class = PolylineAnnotationGroup
+            elif(annotation_type == 'POLYGON'):
+                annotation_class = PolygonAnnotationGroup
             else:
-                if base_uids != BaseUids(
-                    ds.StudyInstanceUID,
-                    ds.SeriesInstanceUID,
-                    ds.FrameOfReferenceUID
-                ):
-                    raise ValueError("Base uids should match")
-            for annotation_ds in ds.AnnotationGroupSequence:
-                annotation_type = annotation_ds.GraphicType
-                if(annotation_type == 'POINT'):
-                    annotation_class = PointAnnotationGroup
-                elif(annotation_type == 'POLYLINE'):
-                    annotation_class = PolylineAnnotationGroup
-                elif(annotation_type == 'POLYGON'):
-                    annotation_class = PolygonAnnotationGroup
-                else:
-                    raise NotImplementedError("Unsupported Graphic type")
-                annotation = annotation_class.from_ds(annotation_ds, instance)
-                groups.append(annotation)
-        return cls(groups, base_uids)
+                raise NotImplementedError("Unsupported Graphic type")
+            annotation = annotation_class.from_ds(annotation_ds, instance)
+            groups.append(annotation)
+        return cls(groups, coordinate_type, base_uids)
 
     def __getitem__(
         self,

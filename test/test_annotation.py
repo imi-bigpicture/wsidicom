@@ -99,7 +99,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         filename = "annotation_round_trip.dcm"
         dcm_path = str(dirpath.joinpath(filename))
         dicom.save(dcm_path)
-        read_annotations = AnnotationInstance.open([dcm_path])
+        read_annotations = AnnotationInstance.open([dcm_path])[0]
         tempdir.cleanup()
         return read_annotations
 
@@ -139,7 +139,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     categorycode=categorycode,
                     typecode=typecode
                 )
-                dicom = AnnotationInstance([group], base_uids)
+                dicom = AnnotationInstance([group], '3D', base_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
                 geometry_type, coordinates = (
@@ -230,6 +230,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 # Make a group collection and do dicom round-trip
                 dicom = AnnotationInstance(
                     annotation_groups,
+                    '3D',
                     base_uids
                 )
                 dicom = self.dicom_round_trip(dicom)
@@ -304,7 +305,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     categorycode=categorycode,
                     typecode=typecode
                 )
-                dicom = AnnotationInstance([group], base_uids)
+                dicom = AnnotationInstance([group], '3D', base_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
                 output_dict = deepcopy(input_dict)
@@ -361,7 +362,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     categorycode=categorycode,
                     typecode=typecode
                 )
-                dicom = AnnotationInstance([group], base_uids)
+                dicom = AnnotationInstance([group], '3D', base_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
                 output_annotation = output_group[0]
@@ -394,7 +395,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     categorycode=categorycode,
                     typecode=typecode
                 )
-                dicom = AnnotationInstance([group], base_uids)
+                dicom = AnnotationInstance([group], '3D', base_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
                 output_annotation = output_group[0]
@@ -440,7 +441,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 categorycode=categorycode,
                 typecode=typecode
             )
-            dicom = AnnotationInstance([group], base_uids)
+            dicom = AnnotationInstance([group], '3D', base_uids)
             dicom = self.dicom_round_trip(dicom)
             output_group = dicom[0]
             output_annotation = output_group[0]
@@ -527,7 +528,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             is_double=False
         )
 
-        dicom = AnnotationInstance([group], base_uids)
+        dicom = AnnotationInstance([group], '3D', base_uids)
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]
 
@@ -547,7 +548,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             typecode,
             is_double=True
         )
-        dicom = AnnotationInstance([group], base_uids)
+        dicom = AnnotationInstance([group], '3D', base_uids)
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]
 
@@ -568,7 +569,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             typecode,
             is_double=True
         )
-        dicom = AnnotationInstance([group], base_uids)
+        dicom = AnnotationInstance([group], '3D', base_uids)
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]
 
@@ -590,7 +591,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             is_double=False
         )
 
-        dicom = AnnotationInstance([group], base_uids)
+        dicom = AnnotationInstance([group], '3D', base_uids)
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]
 
@@ -673,7 +674,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             typecode
         )
 
-        dicom = AnnotationInstance([annotation_group], base_uids)
+        dicom = AnnotationInstance([annotation_group], '3D', base_uids)
         dicom = self.dicom_round_trip(dicom)
 
         output_group = dicom[0]
@@ -703,6 +704,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
 
         dicom = AnnotationInstance(
                 [group],
+                '3D',
                 base_uids
         )
         dicom = self.dicom_round_trip(dicom)
@@ -725,6 +727,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         )
         annotations = AnnotationInstance(
             [group],
+            '3D',
             self.slide.uids
         )
         dirpath = Path(self.tempdir.name)
@@ -732,6 +735,6 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         annotations.save(annotation_file_path)
 
         slide = WsiDicom.open(self.tempdir.name)
-        output_group = slide.annotations[0]
+        output_group = slide.annotations[0][0]
         slide.close()
         self.assertEqual(output_group, group)
