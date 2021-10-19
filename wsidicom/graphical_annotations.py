@@ -1116,7 +1116,7 @@ class AnnotationGroup:
             z_planes: List[float] = ds.CommonZCoordinateValue
         except AttributeError:
             raise NotImplementedError(
-                'Only co-planar 3D annotations supported'
+                'Only 3D annotations with common z coordinate is supported'
             )
         return z_planes
 
@@ -1823,26 +1823,33 @@ class PolygonAnnotationGroup(PolylineAnnotationGroupMeta):
 
 
 class AnnotationInstance:
+    """Class for handling microscope bulk simple annotations according to
+    sup-222. Point, polyline, and polygon graphic types are implemented,
+    ellipse and rectangle graphic types are not implemented. Annotation must
+    have common z-coordinate or apply to all z planes (annotation with 3D
+    PointCoordinateData is not implemented.)
+    """
     def __init__(
         self,
         groups: List[AnnotationGroup],
         coordinate_type: str,
         base_uids: BaseUids
     ):
-        """Reoresents a collection of annotation groups.
+        """Represents a collection of annotation groups.
 
         Parameters
         ----------
         annotations: List[AnnotationGroup]
             List of annotations group
         coordinate_type: str
-            If coordinates are volume-related ('3D') or image-related ('2D').
+            If coordinates are volume-related ('volume') or image-related
+            ('image').
         frame_of_referenc: Uid
             Frame of reference uid of image that the annotations belong to
         """
         self.groups = groups
-        if coordinate_type not in ['2D', '3D']:
-            raise ValueError("Coordiante type should be '2D' or '3D'")
+        if coordinate_type not in ['image', 'volume']:
+            raise ValueError("Coordiante type should be 'image' or 'volume'")
         self.coordinate_type = coordinate_type
         self.base_uids = base_uids
         self.datetime = datetime.now()
@@ -1887,7 +1894,10 @@ class AnnotationInstance:
                     f"Group type: {type(annotation_group)} not supported"
                 )
         ds.AnnotationGroupSequence = bulk_sequence
-        ds.AnnotationCoordinateType = self.coordinate_type
+        if self.coordinate_type == 'image':
+            ds.AnnotationCoordinateType = '2D'
+        elif self.coordinate_type == 'volume':
+            ds.AnnotationCoordinateType = '3D'
         if self.base_uids.frame_of_reference is not None:
             ds.FrameOfReferenceUID = self.base_uids.frame_of_reference
         ds.StudyInstanceUID = self.base_uids.study_instance
@@ -1956,10 +1966,13 @@ class AnnotationInstance:
         if dataset.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
             raise ValueError("SOP Class UID of file is wrong")
         frame_of_reference_uid = getattr(dataset, 'FrameOfReferenceUID', None)
-        coordinate_type = dataset.AnnotationCoordinateType
-        if coordinate_type == '3D' and frame_of_reference_uid is None:
+        if dataset.AnnotationCoordinateType == '2D':
+            coordinate_type = 'image'
+        elif dataset.AnnotationCoordinateType == '3D':
+            coordinate_type = 'volume'
+        if coordinate_type == 'volume' and frame_of_reference_uid is None:
             raise ValueError(
-                '3D annotation corrindate type requires frame of reference'
+                'volume annotation corrindate type requires frame of reference'
             )
 
         instance = dataset.SOPInstanceUID
