@@ -10,7 +10,7 @@ class BaseUids:
     """Represents the UIDs that should be common for all files in the wsi."""
     study_instance: Uid
     series_instance: Uid
-    frame_of_reference: Uid
+    frame_of_reference: Uid = None
 
     def __str__(self) -> str:
         return (
@@ -18,6 +18,19 @@ class BaseUids:
             f"series: {self.series_instance}, "
             f"frame of reference {self.frame_of_reference}"
         )
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, BaseUids):
+            return (
+                self.study_instance == other.study_instance and
+                self.series_instance == other.series_instance and
+                (
+                    self.frame_of_reference == other.frame_of_reference or
+                    self.frame_of_reference is None or
+                    other.frame_of_reference is None
+                )
+            )
+        return NotImplemented
 
 
 @dataclass
@@ -41,9 +54,9 @@ class FileUids:
             return self.concatenation
         return self.instance
 
-    def match(self, other: 'FileUids') -> bool:
+    def __eq__(self, other) -> bool:
         """Return true if concatenation uid is not none, matches other
-        concantenatin uid and base uids match.
+        concatenation uid and base uids match.
 
         Parameters
         ----------
