@@ -291,7 +291,7 @@ class WsiDataset(Dataset):
             True if same instance.
         """
         return (
-            self.uids.match(other_dataset.uids) and
+            self.uids == other_dataset.uids and
             self.image_size == other_dataset.image_size and
             self.tile_size == other_dataset.tile_size and
             self.tile_type == other_dataset.tile_type
@@ -3699,7 +3699,7 @@ class WsiDicom:
         levels: WsiDicomLevels,
         labels: WsiDicomLabels,
         overviews: WsiDicomOverviews,
-        annotations: AnnotationInstance = None
+        annotations: List[AnnotationInstance] = []
 
     ):
         """Holds wsi dicom levels, labels and overviews.
@@ -3712,8 +3712,8 @@ class WsiDicom:
             Series of label images.
         overviews: WsiDicomOverviews
             Series of overview images
-        annotations: AnnotationInstance = None
-            Sup-222 annotation instance.
+        annotations: List[AnnotationInstance] = []
+            Sup-222 annotation instances.
         """
 
         self._levels = levels
@@ -3732,11 +3732,10 @@ class WsiDicom:
             levels.instances + labels.instances + overviews.instances
         )
 
-        if (
-            self.annotations is not None and
-            self.annotations.base_uids != self.uids
-        ):
-            warnings.warn("Annotations frame of referance does not match")
+        if self.annotations != []:
+            for annotation in self.annotations:
+                if annotation.base_uids != self.uids:
+                    warnings.warn("Annotations uids does not match")
 
         self.__enter__()
 
