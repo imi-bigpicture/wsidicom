@@ -3033,7 +3033,11 @@ class WsiDicomGroup:
         filepaths: List[Path] = []
         for instances in self._group_instances_to_file():
             uid = uid_generator()
-            filepath = os.path.join(output_path, uid + '.dcm')
+            if output_path == os.devnull:
+                filepath = output_path
+            else:
+                filepath = os.path.join(output_path, uid + '.dcm')
+
             transfer_syntax = instances[0]._image_data.transfer_syntax
             dataset = deepcopy(instances[0].dataset)
             with DicomWsiFileWriter(filepath) as wsi_file:
