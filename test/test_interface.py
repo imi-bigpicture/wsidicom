@@ -10,8 +10,8 @@ from pydicom.sequence import Sequence as DicomSequence
 from wsidicom.conceptcode import (CidConceptCode, IlluminationCode,
                                   IlluminationColorCode)
 from wsidicom.errors import WsiDicomNotFoundError
-from wsidicom.interface import (DicomImageData, Point, PointMm, Region,
-                                RegionMm, Size, SizeMm, WsiDicom)
+from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
+from wsidicom import WsiDicom
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 from .data_gen import create_layer_file, create_main_dataset
