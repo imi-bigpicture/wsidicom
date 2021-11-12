@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import make_dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, List, NamedTuple, Tuple, Union, get_origin
+from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 import pydicom
@@ -20,7 +20,7 @@ from wsidicom.graphical_annotations import (Annotation, AnnotationGroup,
                                             Point, PointAnnotationGroup,
                                             Polygon, PolygonAnnotationGroup,
                                             Polyline, PolylineAnnotationGroup)
-from wsidicom.interface import WsiDicom
+from wsidicom import WsiDicom
 from wsidicom.uid import BaseUids
 
 from .data_gen import create_layer_file
