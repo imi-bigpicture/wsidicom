@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Tuple, Generator
+from typing import Generator, List, Tuple, Union
 
 
 @dataclass
@@ -43,9 +43,13 @@ class SizeMm:
     def to_tuple(self) -> Tuple[float, float]:
         return self.width, self.height
 
-    @staticmethod
-    def from_tuple(tuple: Tuple[float, float]) -> 'SizeMm':
-        return SizeMm(width=tuple[0], height=tuple[1])
+    @classmethod
+    def from_tuple(cls, input: Union[Tuple, List]) -> 'SizeMm':
+        try:
+            return cls(input[0], input[1])
+        except IndexError:
+            raise ValueError("input did not contain two values")
+
 
 
 @dataclass
@@ -92,9 +96,13 @@ class PointMm:
             return PointMm(self.x - value.x, self.y - value.y)
         return NotImplemented
 
-    @staticmethod
-    def from_tuple(tuple: Tuple[float, float]) -> 'PointMm':
-        return PointMm(x=tuple[0], y=tuple[1])
+    @classmethod
+    def from_tuple(cls, input: Union[Tuple, List]) -> 'PointMm':
+        try:
+            return cls(input[0], input[1])
+        except IndexError:
+            raise ValueError("input did not contain two values")
+
 
     def to_tuple(self) -> Tuple[float, float]:
         return (self.x, self.y)
@@ -166,23 +174,23 @@ class Size:
         if isinstance(item, Size):
             return self.width < item.width
 
-    @staticmethod
-    def from_points(point_1: 'Point', point_2: 'Point'):
-        return Size(point_2.x-point_1.x, point_2.y-point_1.y)
+    @classmethod
+    def from_points(cls, point_1: 'Point', point_2: 'Point'):
+        return cls(point_2.x-point_1.x, point_2.y-point_1.y)
 
     def to_tuple(self) -> Tuple[int, int]:
         return (self.width, self.height)
 
-    @staticmethod
-    def from_tuple(input: Tuple) -> 'Size':
+    @classmethod
+    def from_tuple(cls, input: Union[Tuple, List]) -> 'Size':
         try:
-            return Size(input[0], input[1])
+            return cls(input[0], input[1])
         except IndexError:
             raise ValueError("input did not contain two values")
 
-    @staticmethod
-    def max(size_1: 'Size', size_2: 'Size'):
-        return Size(
+    @classmethod
+    def max(cls, size_1: 'Size', size_2: 'Size'):
+        return cls(
             width=max(size_1.width, size_2.width),
             height=max(size_1.height, size_2.height)
         )
@@ -265,20 +273,23 @@ class Point:
             return Point(self.x - value.x, self.y - value.y)
         return NotImplemented
 
-    @staticmethod
-    def max(point_1: 'Point', point_2: 'Point'):
-        return Point(x=max(point_1.x, point_2.x), y=max(point_1.y, point_2.y))
+    @classmethod
+    def max(cls, point_1: 'Point', point_2: 'Point') -> 'Point':
+        return cls(x=max(point_1.x, point_2.x), y=max(point_1.y, point_2.y))
 
-    @staticmethod
-    def min(point_1: 'Point', point_2: 'Point'):
-        return Point(x=min(point_1.x, point_2.x), y=min(point_1.y, point_2.y))
+    @classmethod
+    def min(cls, point_1: 'Point', point_2: 'Point') -> 'Point':
+        return cls(x=min(point_1.x, point_2.x), y=min(point_1.y, point_2.y))
 
     def to_tuple(self) -> Tuple[int, int]:
         return (self.x, self.y)
 
-    @staticmethod
-    def from_tuple(tuple: Tuple[int, int]) -> 'Point':
-        return Point(x=tuple[0], y=tuple[1])
+    @classmethod
+    def from_tuple(cls, input: Union[Tuple, List]) -> 'Point':
+        try:
+            return cls(input[0], input[1])
+        except IndexError:
+            raise ValueError("input did not contain two values")
 
 
 @dataclass
@@ -319,9 +330,9 @@ class Region:
             for x in range(self.start.x, self.end.x + offset)
         )
 
-    @staticmethod
-    def from_points(point_1: 'Point', point_2: 'Point') -> 'Region':
-        return Region(
+    @classmethod
+    def from_points(cls, point_1: 'Point', point_2: 'Point') -> 'Region':
+        return cls(
             position=point_1,
             size=Size(
                 width=point_2.x-point_1.x,
@@ -329,9 +340,9 @@ class Region:
             )
         )
 
-    @staticmethod
-    def from_tile(tile: 'Point', size: 'Size'):
-        return Region(
+    @classmethod
+    def from_tile(cls, tile: 'Point', size: 'Size') -> 'Region':
+        return cls(
             position=tile*size,
             size=size
         )
