@@ -1,6 +1,5 @@
 # Coded version of DICOM file 'C:\temp\example_dicom_image\example_dicom_image\test_im\10_0'
 # Produced by pydicom codify utility script
-import pydicom
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.sequence import Sequence
 

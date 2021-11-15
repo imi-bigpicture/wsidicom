@@ -39,11 +39,6 @@ class ConceptCode(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def from_ds(cls, ds: Dataset):
-        raise NotImplementedError
-
-    @classmethod
-    @abstractmethod
     def list(cls) -> List[str]:
         raise NotImplementedError
 
@@ -99,7 +94,7 @@ class ConceptCode(metaclass=ABCMeta):
     def _from_ds(
         cls,
         ds: Dataset,
-    ) -> Optional[List[Code]]:
+    ) -> Optional[List['ConceptCode']]:
         """Return list of ConceptCode from sequence in dataset.
 
         Parameters
@@ -153,7 +148,7 @@ class SingleConceptCode(ConceptCode):
 class MultipleConceptCode(ConceptCode):
     """Code for concepts that allow multiple items"""
     @classmethod
-    def from_ds(cls, ds: Dataset) -> Optional[List['ConceptCode']]:
+    def from_ds(cls, ds: Dataset) -> List['ConceptCode']:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
@@ -168,10 +163,13 @@ class MultipleConceptCode(ConceptCode):
             Measurement code created from value.
 
         """
-        return cls._from_ds(ds)
+        codes = cls._from_ds(ds)
+        if codes is None:
+            return []
+        return codes
 
 
-class CidConceptCode(ConceptCode, metaclass=ABCMeta):
+class CidConceptCode(ConceptCode):
     """Code for concepts defined in Context groups"""
     cid: Dict[str, Code]
 
@@ -368,7 +366,7 @@ class IlluminatorCode(CidConceptCode, SingleConceptCode):
     cid = codes.cid8125.concepts  # Microscopy Illuminator Type
 
 
-class ChannelDescriptionCode(CidConceptCode, SingleConceptCode):
+class ChannelDescriptionCode(CidConceptCode, MultipleConceptCode):
     """
     Concept code for channel descriptor.
     From CID 8122 Microscopy Illuminator and Sensor Color

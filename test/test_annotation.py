@@ -3,13 +3,15 @@ import os
 import unittest
 from collections import OrderedDict
 from copy import deepcopy
-from dataclasses import make_dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, List, Tuple, Union
+from pydicom.dataset import FileDataset
+
+from pydicom.uid import generate_uid
 
 import numpy as np
-import pydicom
 import pytest
 import shapely
 import xmltodict
@@ -31,9 +33,9 @@ data_dir = wsidicom_test_data_dir + '/' + sub_data_dir
 typecode = ConceptCode.type('Nucleus')
 categorycode = ConceptCode.category('Tissue')
 base_uids = BaseUids(
-    study_instance=pydicom.uid.generate_uid(),
-    series_instance=pydicom.uid.generate_uid(),
-    frame_of_reference=pydicom.uid.generate_uid()
+    study_instance=generate_uid(),
+    series_instance=generate_uid(),
+    frame_of_reference=generate_uid()
 )
 
 
@@ -106,12 +108,21 @@ class WsiDicomAnnotationTests(unittest.TestCase):
     @staticmethod
     def annotation_group_to_qupath(
         group: AnnotationGroup
-    ) -> Tuple[str, List[Union[float, List[float]]]]:
-        coordinates: List[Union[float, List[float]]]
+    ) -> Tuple[str, Union[
+            List[float],
+            List[List[float]],
+            List[List[List[float]]]
+    ]]:
+        coordinates: Union[
+            List[float],
+            List[List[float]],
+            List[List[List[float]]]
+        ]
         if(isinstance(group, PointAnnotationGroup)):
             if len(group) == 1:
                 geometry_type = 'Point'
-                coordinates = group[0].geometry.to_list_coords()[0]
+                annotation = group.annotations[0]
+                coordinates = annotation.geometry.to_list_coords()[0]
             else:
                 geometry_type = 'MultiPoint'
                 coordinates = []
@@ -119,10 +130,12 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     coordinates += annotation.geometry.to_list_coords()
         elif(isinstance(group, PolylineAnnotationGroup)):
             geometry_type = 'LineString'
-            coordinates = group[0].geometry.to_list_coords()
+            annotation = group.annotations[0]
+            coordinates = annotation.geometry.to_list_coords()
         elif(isinstance(group, PolygonAnnotationGroup)):
             geometry_type = 'Polygon'
-            coordinates = [group[0].geometry.to_list_coords()]
+            annotation = group.annotations[0]
+            coordinates = [annotation.geometry.to_list_coords()]
         else:
             raise NotImplementedError
         return (geometry_type, coordinates)
@@ -173,24 +186,18 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 print(file_path)
                 input_dict: Dict = json.load(f)
                 # Group annotations by type and type using key
-                Key = make_dataclass(
-                    'Key',
-                    [
-                        ('annotation_type', type),
-                        ('typecode', str)
-                    ],
-                    unsafe_hash=True
-                )
 
-                # Each group has a label, color and list of geometries
-                Value = make_dataclass(
-                    'Value',
-                    [
-                        ('label', str),
-                        ('color', LabColor),
-                        ('geometrires', List[Geometry])
-                    ]
-                )
+                @dataclass(unsafe_hash=True)
+                class Key:
+                    annotation_type: type
+                    typecode: ConceptCode
+
+                @dataclass(unsafe_hash=True)
+                class Value:
+                    label: str
+                    color: LabColor
+                    geometries: List[Geometry]
+
                 grouped_annotations: Dict[Key, Value] = {}
 
                 # For each annotation, make a type-category key and insert the
@@ -209,23 +216,28 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     try:
                         group = grouped_annotations[group_key]
                     except KeyError:
-                        group = {
-                            'label': self.qupath_get_label(input_annotation),
-                            'geometries': []
-                        }
-                    group['geometries'] += geometries
+                        group = Value(
+                            label=self.qupath_get_label(input_annotation),
+                            color=LabColor(0, 0, 0),
+                            geometries=[]
+                        )
+                        grouped_annotations[group_key] = group
+                    group.geometries += geometries
+
+                self.assertNotEqual(grouped_annotations, {})
 
                 # For each group of annotations (same type and category) make
                 # an annotation group
                 annotation_groups: List[AnnotationGroup] = []
                 for group_keys, group_values in grouped_annotations.items():
                     annotation_group = AnnotationGroup.from_geometries(
-                        geometries=group_values['geometries'],
-                        label=group_values['label'],
+                        geometries=group_values.geometries,
+                        label=group_values.label,
                         categorycode=categorycode,
-                        typecode=group_keys.type
+                        typecode=group_keys.typecode
                     )
                     annotation_groups.append(annotation_group)
+                self.assertNotEqual(annotation_groups, [])
 
                 # Make a group collection and do dicom round-trip
                 dicom = AnnotationInstance(
@@ -235,18 +247,24 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 )
                 dicom = self.dicom_round_trip(dicom)
 
+                self.assertNotEqual(dicom.groups, [])
                 # For each annotation group, produce a type-categorycode key.
                 # Get the original group using the key and check that the
                 # annotations are the same.
-                for output_group in dicom:
+                for output_group in dicom.groups:
+                    self.assertNotEqual(output_group.annotations, [])
                     key = Key(
-                        annotation_typecode=typecode(output_group[0].geometry),
-                        type=output_group.specifc_categorycode
+                        annotation_type=output_group.geometry_type,
+                        typecode=output_group.typecode
                     )
                     input_group = grouped_annotations[key]
-                    for i, output_annotation in enumerate(output_group):
-                        input_annotation = input_group['annotations'][i]
-                        self.assertEqual(output_annotation, input_annotation)
+                    output = enumerate(output_group.annotations)
+                    for i, output_annotation in output:
+                        input_annotation = input_group.geometries[i]
+                        self.assertEqual(
+                            output_annotation.geometry,
+                            input_annotation
+                        )
 
     @staticmethod
     def asap_annotation_group_to_geometries(
@@ -353,7 +371,9 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         for file_path in files:
             with open(file_path) as f:
                 print(file_path)
-                input_dict: Dict[str, any] = json.load(f)
+                input_dict: Union[Dict[str, Any], List[Dict[str, Any]]] = (
+                    json.load(f)
+                )
                 if(isinstance(input_dict, list)):
                     input_dict = input_dict[0]
                 group = AnnotationGroup.from_geometries(
@@ -365,7 +385,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 dicom = AnnotationInstance([group], 'volume', base_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
-                output_annotation = output_group[0]
+                output_annotation = output_group.annotations[0]
                 geometry_type, result_coordinates = (
                     self.annotation_to_sectra(output_annotation)
                 )
@@ -398,7 +418,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 dicom = AnnotationInstance([group], 'volume', base_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
-                output_annotation = output_group[0]
+                output_annotation = output_group.annotations[0]
                 output_geometry = self.annotation_to_shapely(output_annotation)
                 output_dict = deepcopy(input_dict)
                 output_dict["annotation"]["location"] = output_geometry.wkt
@@ -444,7 +464,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             dicom = AnnotationInstance([group], 'volume', base_uids)
             dicom = self.dicom_round_trip(dicom)
             output_group = dicom[0]
-            output_annotation = output_group[0]
+            output_annotation = output_group.annotations[0]
             output_geometry = self.annotation_to_shapely(output_annotation)
             self.assertEqual(input_geometry, output_geometry)
 
@@ -533,7 +553,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         output_group = dicom[0]
 
         if(isinstance(output_group, AnnotationGroup)):
-            output_point = output_group[0].geometry.to_coords()[0]
+            output_point = output_group.annotations[0].geometry.to_coords()[0]
             np_output = np.array(output_point, dtype=np.float32)
             self.assertEqual(np_input.all(), np_output.all())
 
@@ -553,7 +573,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         output_group = dicom[0]
 
         if(isinstance(output_group, AnnotationGroup)):
-            output_point = output_group[0].geometry.to_coords()[0]
+            output_point = output_group.annotations[0].geometry.to_coords()[0]
             np_output = np.array(output_point, dtype=np.float32)
             self.assertEqual(np_input.all(), np_output.all())
 
@@ -574,7 +594,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         output_group = dicom[0]
 
         if(isinstance(output_group, AnnotationGroup)):
-            output_point = output_group[0].geometry.to_coords()[0]
+            output_point = output_group.annotations[0].geometry.to_coords()[0]
             np_output = np.array(output_point, dtype=np.float64)
             self.assertEqual(np_input.all(), np_output.all())
 
@@ -596,7 +616,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         output_group = dicom[0]
 
         if(isinstance(output_group, AnnotationGroup)):
-            output_point = output_group[0].geometry.to_coords()[0]
+            output_point = output_group.annotations[0].geometry.to_coords()[0]
             np_output = np.array(output_point, dtype=np.float64)
             self.assertEqual(np_input.all(), np_output.all())
 
@@ -680,7 +700,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         output_group = dicom[0]
 
         if(isinstance(output_group, PointAnnotationGroup)):
-            annotation0 = output_group[0]
+            annotation0 = output_group.annotations[0]
 
             self.assertEqual(
                 measurement0,
@@ -713,7 +733,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             for i in range(count):
                 self.assertEqual(
                     Point(float(i), float(i)),
-                    output_group[i].geometry
+                    output_group.annotations[i].geometry
                 )
 
     def test_make_annotated_wsi_slide(self):

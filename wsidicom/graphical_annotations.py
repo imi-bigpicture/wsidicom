@@ -4,17 +4,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import (Any, Callable, DefaultDict, Dict, Generator, List,
-                    Optional, Set, Tuple, Union)
+                    Optional, Set, Tuple, Union, Type)
 
 import numpy as np
-import pydicom
 from pydicom import config
-from pydicom.dataset import Dataset
+from pydicom.dataset import (Dataset, FileDataset, FileMetaDataset,
+                             validate_file_meta)
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.sr.codedict import Code, codes
-
-from .uid import ANN_SOP_CLASS_UID, BaseUids, Uid
+from pydicom.sr.codedict import codes
+from pydicom.sr.coding import Code
+from pydicom.uid import (ExplicitVRBigEndian, ExplicitVRLittleEndian,
+                         ImplicitVRLittleEndian, generate_uid)
+from pydicom.values import convert_numbers
+from pydicom.filewriter import dcmwrite
+from pydicom.filereader import dcmread
 from .geometry import PointMm, RegionMm, SizeMm
+from .uid import ANN_SOP_CLASS_UID, BaseUids, Uid
+
 config.enforce_valid_values = True
 config.future_behavior()
 
@@ -41,7 +47,7 @@ def dcm_to_list(item: bytes, type: str) -> List:
     List
         List of values
     """
-    converted = pydicom.values.convert_numbers(
+    converted = convert_numbers(
         item,
         is_little_endian=True,
         struct_format=type
@@ -517,7 +523,7 @@ class Geometry(metaclass=ABCMeta):
         raise NotImplementedError
 
     @classmethod
-    def list_to_coords(self, data: List[float]) -> List[Tuple[float, float]]:
+    def list_to_coords(cls, data: List[float]) -> List[Tuple[float, float]]:
         """Return cordinates in list of floats as list of tuple of floats
 
         Parameters
@@ -643,13 +649,13 @@ class Geometry(metaclass=ABCMeta):
             points: List[float] = coordinates
             return [Point.from_list(points)]
         elif(annotation_type == 'MultiPoint'):
-            points: List[List[float]] = coordinates
-            return [Point.from_list(point) for point in points]
+            multipoints: List[List[float]] = coordinates
+            return [Point.from_list(point) for point in multipoints]
         elif(annotation_type == 'Polygon'):
-            polylines: List[List[List[float]]] = coordinates
+            polylines: List[List[Tuple[float, float]]] = coordinates
             return [Polygon.from_coords(polylines[0])]
         elif(annotation_type == 'LineString'):
-            polyline: List[List[float]] = coordinates
+            polyline: List[Tuple[float, float]] = coordinates
             return [Polyline.from_coords(polyline)]
         raise NotImplementedError("Not supported geojson geometry")
 
@@ -871,7 +877,7 @@ class Annotation:
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Annotation):
-            raise NotImplemented(other)
+            return NotImplemented
         return (
             self.geometry == other.geometry and
             self.measurements == other.measurements
@@ -969,7 +975,7 @@ class AnnotationGroup:
         self.validate_type(annotations, self._geometry_type)
         self._z_planes: List[float] = []
         self._optical_paths: List[str] = []
-        self._uid = pydicom.uid.generate_uid()
+        self._uid = generate_uid()
         self._categorycode = categorycode
         self._typecode = typecode
         self._is_double = is_double
@@ -996,7 +1002,7 @@ class AnnotationGroup:
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, AnnotationGroup):
-            raise NotImplemented(other)
+            return NotImplemented
         return (
             self.annotations == other.annotations and
             self.label == other.label and
@@ -1055,6 +1061,10 @@ class AnnotationGroup:
             Number of annotations in group.
         """
         return len(self.annotations)
+
+    @property
+    def geometry_type(self) -> Type:
+        return self._geometry_type
 
     @property
     @abstractmethod
@@ -1893,10 +1903,10 @@ class AnnotationInstance:
 
     def save(
         self,
-        path: str,
+        path: Union[str, Path],
         little_endian: bool = True,
         implicit_vr: bool = False,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+        uid_generator: Callable[..., Uid] = generate_uid
     ):
         """Write annotations to DICOM file according to sup 222.
         Note that the file will miss DICOM attributes that has not yet been
@@ -1904,7 +1914,7 @@ class AnnotationInstance:
 
         Parameters
         ----------
-        path: Path
+        path: Union[str, Path]
             Path to write DICOM file to
         little_endian: bool
             Write DICOM file as little endian
@@ -1934,22 +1944,22 @@ class AnnotationInstance:
         ds.SOPInstanceUID = uid_generator()
         ds.SOPClassUID = ANN_SOP_CLASS_UID
 
-        meta_ds = pydicom.dataset.FileMetaDataset()
+        meta_ds = FileMetaDataset()
         if little_endian and implicit_vr:
-            transfer_syntax = pydicom.uid.ImplicitVRLittleEndian
+            transfer_syntax = ImplicitVRLittleEndian
         elif little_endian and not implicit_vr:
-            transfer_syntax = pydicom.uid.ExplicitVRLittleEndian
+            transfer_syntax = ExplicitVRLittleEndian
         elif not little_endian and not implicit_vr:
-            transfer_syntax = pydicom.uid.ExplicitVRBigEndian
+            transfer_syntax = ExplicitVRBigEndian
         else:
             raise NotImplementedError("Unsupported transfer syntax")
 
         meta_ds.TransferSyntaxUID = transfer_syntax
         meta_ds.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
-        meta_ds.MediaStorageSOPClassUID = ANN_SOP_CLASS_UID
+        meta_ds.MediaStorageSOPClassUID = Uid(ANN_SOP_CLASS_UID)
         meta_ds.FileMetaInformationGroupLength = 0  # Updated on write
-        pydicom.dataset.validate_file_meta(meta_ds)
-        file_ds = pydicom.dataset.FileDataset(
+        validate_file_meta(meta_ds)
+        file_ds = FileDataset(
             preamble=b'\x00' * 128,
             filename_or_obj=path,
             file_meta=meta_ds,
@@ -1957,20 +1967,23 @@ class AnnotationInstance:
             is_implicit_VR=implicit_vr,
             is_little_endian=little_endian
         )
-        pydicom.filewriter.dcmwrite(path, file_ds)
+        dcmwrite(path, file_ds)
 
     @classmethod
-    def open(cls, paths: List[Path]) -> List['AnnotationInstance']:
+    def open(
+        cls,
+        paths: Union[List[str], List[Path]]
+    ) -> List['AnnotationInstance']:
         """Read annotations from DICOM file according to sup 222.
 
         Parameters
         ----------
-        paths: List[Path]
+        paths: List[str]
             Paths to DICOM annotation files to read.
         """
         instances: List['AnnotationInstance'] = []
         for path in paths:
-            ds = pydicom.filereader.dcmread(path)
+            ds = dcmread(path)
             instances.append(cls.open_dataset(ds))
 
         return instances
@@ -1990,7 +2003,7 @@ class AnnotationInstance:
             Annotation groups read from dataset.
         """
         groups: List[AnnotationGroup] = []
-        base_uids: BaseUids = None
+        base_uids: Optional[BaseUids] = None
 
         if dataset.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
             raise ValueError("SOP Class UID of file is wrong")
@@ -1999,6 +2012,8 @@ class AnnotationInstance:
             coordinate_type = 'image'
         elif dataset.AnnotationCoordinateType == '3D':
             coordinate_type = 'volume'
+        else:
+            raise ValueError("Unkown coordiante type")
         if coordinate_type == 'volume' and frame_of_reference_uid is None:
             raise ValueError(
                 'volume annotation corrindate type requires frame of reference'

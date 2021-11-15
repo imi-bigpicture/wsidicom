@@ -3,7 +3,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
-import pydicom
 import pytest
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
@@ -12,6 +11,7 @@ from wsidicom.conceptcode import (CidConceptCode, IlluminationCode,
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom import WsiDicom
+from wsidicom.instance import WsiDicomImageData
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 from .data_gen import create_layer_file, create_main_dataset
@@ -71,14 +71,15 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_get_frame_number(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        image_data: DicomImageData = instance._image_data
+        image_data = instance._image_data
+        assert(isinstance(image_data, WsiDicomImageData))
         number = image_data.tiles.get_frame_index(Point(0, 0), 0, '0')
         self.assertEqual(number, 0)
 
     def test_get_blank_color(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        image_data: DicomImageData = instance.image_data
+        image_data = instance.image_data
         color = image_data._get_blank_color(
             image_data.photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
@@ -86,7 +87,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_get_frame_file(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        image_data: DicomImageData = instance._image_data
+        image_data = instance._image_data
+        assert(isinstance(image_data, WsiDicomImageData))
         file = image_data._get_file(0)
         self.assertEqual(file, (image_data._files[0]))
 
@@ -99,7 +101,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_valid_tiles(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        image_data: DicomImageData = instance._image_data
+        image_data = instance._image_data
         test = image_data.valid_tiles(
 
             Region(Point(0, 0), Size(0, 0)), 0, '0'
@@ -337,7 +339,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(instance, wsi_level.default_instance)
 
     def test_parse_lut(self):
-        ds = pydicom.dataset.Dataset()
+        ds = Dataset()
         ds.RedPaletteColorLookupTableDescriptor = [256, 0, 8]
         ds.SegmentedRedPaletteColorLookupTableData = (
             b'\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00'
@@ -355,7 +357,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         print(test)
         self.assertTrue(np.array_equal(lut.get(), test))
 
-        ds = pydicom.dataset.Dataset()
+        ds = Dataset()
         ds.RedPaletteColorLookupTableDescriptor = [256, 0, 16]
         ds.SegmentedRedPaletteColorLookupTableData = (
             b'\x01\x00\x00\x01\xff\xff'
