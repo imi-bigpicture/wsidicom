@@ -174,8 +174,11 @@ class Size:
         return (self.width, self.height)
 
     @staticmethod
-    def from_tuple(tuple: Tuple[int, int]) -> 'Size':
-        return Size(width=tuple[0], height=tuple[1])
+    def from_tuple(input: Tuple) -> 'Size':
+        try:
+            return Size(input[0], input[1])
+        except IndexError:
+            raise ValueError("input did not contain two values")
 
     @staticmethod
     def max(size_1: 'Size', size_2: 'Size'):
@@ -371,13 +374,9 @@ class RegionMm:
     def __add__(self, value):
         if isinstance(value, PointMm):
             return RegionMm(self.position + value, self.size)
-        elif isinstance(value, SizeMm):
-            return RegionMm(self.position, self.size + value)
         return NotImplemented
 
     def __sub__(self, value):
         if isinstance(value, PointMm):
             return RegionMm(self.position - value, self.size)
-        elif isinstance(value, SizeMm):
-            return RegionMm(self.position, self.size - value)
         return NotImplemented

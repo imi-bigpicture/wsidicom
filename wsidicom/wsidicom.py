@@ -5,15 +5,15 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from copy import deepcopy
 from pathlib import Path
-from typing import (Callable, DefaultDict, Dict, List, Optional, OrderedDict,
-                    Tuple, Union)
+from typing import (Any, Callable, DefaultDict, Dict, List, Optional,
+                    OrderedDict, Tuple, Union)
 
-import pydicom
 from PIL import Image
-from pydicom.dataset import Dataset
-from pydicom.uid import UID as Uid
+from pydicom.dataset import FileMetaDataset
+from pydicom.filereader import read_file_meta_info
+from pydicom.misc import is_dicom
+from pydicom.uid import UID, generate_uid
 
-from wsidicom.instance import WsiDataset
 from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
@@ -52,7 +52,7 @@ class WsiDicomGroup:
 
         self._size = base_instance.size
         self._pixel_spacing = base_instance.pixel_spacing
-        self._default_instance_uid: str = base_instance.identifier
+        self._default_instance_uid: UID = base_instance.identifier
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.instances.values()})"
@@ -106,7 +106,7 @@ class WsiDicomGroup:
         return self._pixel_spacing
 
     @property
-    def instances(self) -> Dict[str, WsiInstance]:
+    def instances(self) -> Dict[UID, WsiInstance]:
         """Return contained instances"""
         return self._instances
 
@@ -116,15 +116,15 @@ class WsiDicomGroup:
         return self.instances[self._default_instance_uid]
 
     @property
-    def files(self) -> List[WsiDicomFile]:
+    def files(self) -> List[Path]:
         """Return contained files"""
         instance_files = [
-            instance.files for instance in self.instances.values()
+            instance.image_data.files for instance in self.instances.values()
         ]
         return [file for sublist in instance_files for file in sublist]
 
     @property
-    def datasets(self) -> List[Dataset]:
+    def datasets(self) -> List[WsiDataset]:
         """Return contained datasets."""
         instance_datasets = [
             instance.datasets for instance in self.instances.values()
@@ -167,7 +167,7 @@ class WsiDicomGroup:
             List of created groups.
 
         """
-        groups: List[cls] = []
+        groups: List['WsiDicomGroup'] = []
 
         grouped_instances = cls._group_instances(instances)
 
@@ -427,8 +427,8 @@ class WsiDicomGroup:
     def _group_instances(
         cls,
         instances: List[WsiInstance]
-    ) -> Dict[Size, List[WsiInstance]]:
-        """Return instances grouped by image size.
+    ) -> OrderedDict[Size, List[WsiInstance]]:
+        """Return instances grouped and sorted by image size.
 
         Parameters
         ----------
@@ -437,7 +437,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Dict[Size, List[WsiInstance]]:
+        OrderedDict[Size, List[WsiInstance]]:
             Instances grouped by size, with size as key.
 
         """
@@ -447,7 +447,11 @@ class WsiDicomGroup:
                 grouped_instances[instance.size].append(instance)
             except KeyError:
                 grouped_instances[instance.size] = [instance]
-        return grouped_instances
+        return OrderedDict(sorted(
+            grouped_instances.items(),
+            key=lambda item: item[0].width,
+            reverse=True)
+        )
 
     def _group_instances_to_file(
         self,
@@ -460,7 +464,9 @@ class WsiDicomGroup:
         List[List[WsiInstance]]
             Instances grouped by common properties.
         """
-        groups: DefaultDict[Union[str, Uid], List[str]] = defaultdict(list)
+        groups: DefaultDict[Any, List[WsiInstance]] = (
+            defaultdict(list)
+        )
         for instance in self.instances.values():
             groups[
                 instance.image_data.photometric_interpretation,
@@ -478,8 +484,8 @@ class WsiDicomGroup:
     @staticmethod
     def _list_image_data(
         instances: List[WsiInstance]
-    ) -> Tuple[Tuple[str, float], List[ImageData]]:
-        """List and sort ImageData in instances by optical path and focal
+    ) -> List[Tuple[Tuple[str, float], ImageData]]:
+        """Sort ImageData in instances by optical path and focal
         plane.
 
         Parameters
@@ -490,8 +496,8 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Tuple[Tuple[str, float], List[ImageData]]
-            ImageData listed and sorted by optical path and focal plane.
+        Tuple[Tuple[str, float], ImageData]
+            ImageData sorted by optical path and focal plane.
         """
         output: Dict[Tuple[str, float], ImageData] = {}
         for instance in instances:
@@ -499,14 +505,14 @@ class WsiDicomGroup:
                 for z in instance.focal_planes:
                     if (optical_path, z) not in output:
                         output[optical_path, z] = instance._image_data
-        return OrderedDict(output).items()
+        return list(OrderedDict(output).items())
 
     def save(
         self,
         output_path: str,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
-        workers: int = os.cpu_count(),
-        chunk_size: int = 100
+        uid_generator: Callable[..., UID],
+        workers: int,
+        chunk_size: int
     ) -> List[Path]:
         """Save a WsiDicomGroup to files in output_path. Instances are grouped
         by properties that can differ in the same file:
@@ -521,11 +527,11 @@ class WsiDicomGroup:
         ----------
         output_path: str
             Folder path to save files to.
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+        uid_generator: Callable[..., UID]
             Uid generator to use.
-        workers: int = os.cpu_count()
+        workers: int
             Maximum number of thread workers to use.
-        chunk_size: int = 100
+        chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
 
@@ -538,14 +544,13 @@ class WsiDicomGroup:
         for instances in self._group_instances_to_file():
             uid = uid_generator()
             if output_path == os.devnull:
-                filepath = output_path
+                filepath = Path(output_path)
             else:
-                filepath = os.path.join(output_path, uid + '.dcm')
+                filepath = Path(os.path.join(output_path, uid + '.dcm'))
 
             transfer_syntax = instances[0].image_data.transfer_syntax
             dataset = deepcopy(instances[0].dataset)
             with WsiDicomFileWriter(filepath) as wsi_file:
-                wsi_file = WsiDicomFileWriter(filepath)
                 wsi_file.write_preamble()
                 wsi_file.write_file_meta(uid, transfer_syntax)
                 dataset.SOPInstanceUID = uid
@@ -651,10 +656,10 @@ class WsiDicomLevel(WsiDicomGroup):
             List of created levels.
 
         """
-        levels: List[cls] = []
+        levels: List['WsiDicomLevel'] = []
         instances_grouped_by_level = cls._group_instances(instances)
-        largest_size = max(instances_grouped_by_level.keys())
-        base_group = instances_grouped_by_level[largest_size]
+
+        base_group = list(instances_grouped_by_level.values())[0]
         base_pixel_spacing = base_group[0].pixel_spacing
         for level in instances_grouped_by_level.values():
             levels.append(cls(level, base_pixel_spacing))
@@ -838,19 +843,13 @@ class WsiDicomSeries(metaclass=ABCMeta):
         return self.groups[index]
 
     def __len__(self) -> int:
-        return len(self.stacks)
+        return len(self.groups)
 
     @property
     @abstractmethod
     def wsi_type(self) -> str:
         """Should return the wsi type of the series ('VOLUME', 'LABEL', or
         'OVERVIEW'"""
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def group_open(instances: List[WsiInstance]) -> List[WsiDicomGroup]:
-        """Should return WsiDicomGroups created from instances."""
         raise NotImplementedError
 
     @property
@@ -869,13 +868,13 @@ class WsiDicomSeries(metaclass=ABCMeta):
         return [group.mpp for group in self.groups]
 
     @property
-    def files(self) -> List[WsiDicomFile]:
+    def files(self) -> List[Path]:
         """Return contained files."""
         series_files = [series.files for series in self.groups]
         return [file for sublist in series_files for file in sublist]
 
     @property
-    def datasets(self) -> List[Dataset]:
+    def datasets(self) -> List[WsiDataset]:
         """Return contained datasets."""
 
         series_datasets = [
@@ -896,24 +895,9 @@ class WsiDicomSeries(metaclass=ABCMeta):
         ]
 
     @classmethod
-    def open(
-        cls,
-        instances: List[WsiInstance]
-    ) -> 'WsiDicomSeries':
-        """Return series created from wsi files.
-
-        Parameters
-        ----------
-        instances: List[WsiInstance]
-            Instances to create series from.
-
-        Returns
-        ----------
-        WsiDicomSeries
-            Created series.
-        """
-        labels = cls.group_open(instances)
-        return cls(labels)
+    @abstractmethod
+    def open(cls, instances: List[WsiInstance]) -> 'WsiDicomSeries':
+        raise NotImplementedError
 
     def _validate_series(
             self,
@@ -960,29 +944,29 @@ class WsiDicomSeries(metaclass=ABCMeta):
     def save(
         self,
         output_path: str,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
-        workers: int = os.cpu_count(),
-        chunk_size: int = 100
-    ) -> List[str]:
+        uid_generator: Callable[..., UID],
+        workers: int,
+        chunk_size: int
+    ) -> List[Path]:
         """Save WsiDicomSeries as DICOM-files in path.
 
         Parameters
         ----------
         output_path: str
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+        uid_generator: Callable[..., UID]
              Function that can gernerate unique identifiers.
-        workers: int = os.cpu_count()
+        workers: int
             Maximum number of thread workers to use.
-        chunk_size: int = 100
+        chunk_size:
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
 
         Returns
         ----------
-        List[str]
+        List[Path]
             List of paths of created files.
         """
-        filepaths: List[str] = []
+        filepaths: List[Path] = []
         for group in self.groups:
             group_file_paths = group.save(
                 output_path,
@@ -1000,9 +984,22 @@ class WsiDicomLabels(WsiDicomSeries):
     def wsi_type(self) -> str:
         return 'LABEL'
 
-    @staticmethod
-    def group_open(instances: List[WsiInstance]) -> List[WsiDicomGroup]:
-        return WsiDicomGroup.open(instances)
+    @classmethod
+    def open(cls, instances: List[WsiInstance]) -> 'WsiDicomLabels':
+        """Return labels created from wsi files.
+
+        Parameters
+        ----------
+        instances: List[WsiInstance]
+            Instances to create labels from.
+
+        Returns
+        ----------
+        WsiDicomOverviews
+            Created labels.
+        """
+        labels = WsiDicomGroup.open(instances)
+        return cls(labels)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
@@ -1011,9 +1008,22 @@ class WsiDicomOverviews(WsiDicomSeries):
     def wsi_type(self) -> str:
         return 'OVERVIEW'
 
-    @staticmethod
-    def group_open(instances: List[WsiInstance]) -> List[WsiDicomGroup]:
-        return WsiDicomGroup.open(instances)
+    @classmethod
+    def open(cls, instances: List[WsiInstance]) -> 'WsiDicomOverviews':
+        """Return overviews created from wsi files.
+
+        Parameters
+        ----------
+        instances: List[WsiInstance]
+            Instances to create overviews from.
+
+        Returns
+        ----------
+        WsiDicomOverviews
+            Created overviews.
+        """
+        overviews = WsiDicomGroup.open(instances)
+        return cls(overviews)
 
 
 class WsiDicomLevels(WsiDicomSeries):
@@ -1023,9 +1033,22 @@ class WsiDicomLevels(WsiDicomSeries):
     def wsi_type(self) -> str:
         return 'VOLUME'
 
-    @staticmethod
-    def group_open(instances: List[WsiInstance]) -> List[WsiDicomGroup]:
-        return WsiDicomLevel.open(instances)
+    @classmethod
+    def open(cls, instances: List[WsiInstance]) -> 'WsiDicomLevels':
+        """Return overviews created from wsi files.
+
+        Parameters
+        ----------
+        instances: List[WsiInstance]
+            Instances to create levels from.
+
+        Returns
+        ----------
+        WsiDicomOverviews
+            Created levels.
+        """
+        levels = WsiDicomLevel.open(instances)
+        return cls(levels)
 
     def __init__(self, levels: List[WsiDicomLevel]):
         """Holds a stack of levels.
@@ -1229,12 +1252,9 @@ class WsiDicom:
         self._overviews = overviews
         self.annotations = annotations
 
-        if self.levels.uids is not None:
-            self.uids = self._validate_collection(
-                [self.levels, self.labels, self.overviews],
-            )
-        else:
-            self.uids = None
+        self.uids = self._validate_collection(
+            [self.levels, self.labels, self.overviews],
+        )
 
         self.optical = OpticalManager.open(
             levels.instances + labels.instances + overviews.instances
@@ -1298,12 +1318,12 @@ class WsiDicom:
         raise WsiDicomNotFoundError("overviews", str(self))
 
     @property
-    def files(self) -> List[WsiDicomFile]:
+    def files(self) -> List[Path]:
         """Return contained files"""
         return self.levels.files + self.labels.files + self.overviews.files
 
     @property
-    def datasets(self) -> List[Dataset]:
+    def datasets(self) -> List[WsiDataset]:
         """Return contained datasets."""
         return (
             self.levels.datasets
@@ -1321,7 +1341,7 @@ class WsiDicom:
         )
 
     @property
-    def frame_of_reference(self) -> Uid:
+    def frame_of_reference(self) -> Optional[UID]:
         return self.uids.frame_of_reference
 
     def pretty_str(
@@ -1340,13 +1360,16 @@ class WsiDicom:
         )
 
     @classmethod
-    def open(cls, path: Union[str, List[str]]) -> 'WsiDicom':
+    def open(
+        cls,
+        path: Union[str, List[str], Path, List[Path]]
+    ) -> 'WsiDicom':
         """Open valid wsi dicom files in path and return a WsiDicom object.
         Non-valid files are ignored.
 
         Parameters
         ----------
-        paths: List[Path]
+        path: Union[str, List[str], Path, List[Path]]
             Path to files to open
 
         Returns
@@ -1699,16 +1722,16 @@ class WsiDicom:
     def save(
         self,
         output_path: str,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid,
-        workers: int = os.cpu_count(),
+        uid_generator: Callable[..., UID] = generate_uid,
+        workers: Optional[int] = None,
         chunk_size: int = 100
-    ) -> List[str]:
+    ) -> List[Path]:
         """Save wsi as DICOM-files in path.
 
         Parameters
         ----------
         output_path: str
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+        uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
              Function that can gernerate unique identifiers.
         workers: int = os.cpu_count()
             Maximum number of thread workers to use.
@@ -1718,14 +1741,20 @@ class WsiDicom:
 
         Returns
         ----------
-        List[str]
+        List[Path]
             List of paths of created files.
         """
+        if workers is None:
+            cpus = os.cpu_count()
+            if cpus is None:
+                workers = 1
+            else:
+                workers = cpus
         collections: List[WsiDicomSeries] = [
             self.levels, self.labels, self.overviews
         ]
 
-        filepaths: List[str] = []
+        filepaths: List[Path] = []
         for collection in collections:
             collection_filepaths = collection.save(
                 output_path,
@@ -1737,14 +1766,12 @@ class WsiDicom:
         return filepaths
 
     @staticmethod
-    def _get_sop_class_uid(path: Path) -> Uid:
-        metadata: pydicom.dataset.FileMetaDataset = (
-            pydicom.filereader.read_file_meta_info(path)
-        )
+    def _get_sop_class_uid(path: Path) -> UID:
+        metadata: FileMetaDataset = read_file_meta_info(path)
         return metadata.MediaStorageSOPClassUID
 
     @staticmethod
-    def _get_filepaths(path: Union[str, List[str]]) -> List[Path]:
+    def _get_filepaths(path: Union[str, List[str], Path, List[Path]]):
         """Return file paths to files in path.
         If path is folder, return list of folder files in path.
         If path is single file, return list of that path.
@@ -1753,7 +1780,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        path: Union[str, List[str]]
+        path: path: Union[str, List[str], Path, List[Path]]
             Path to folder, file or list of files
 
         Returns
@@ -1761,7 +1788,7 @@ class WsiDicom:
         List[Path]
             List of found file paths
         """
-        if isinstance(path, str):
+        if isinstance(path, (str, Path)):
             single_path = Path(path)
             if single_path.is_dir():
                 return list(single_path.iterdir())
@@ -1794,8 +1821,8 @@ class WsiDicom:
             Base layer dataset.
         """
         base_size = Size(0, 0)
-        base_dataset: WsiDataset
-        for file in files:
+        base_dataset = files[0].dataset
+        for file in files[1:]:
             if file.dataset.image_size.width > base_size.width:
                 base_dataset = file.dataset
                 base_size = file.dataset.image_size
@@ -1816,8 +1843,7 @@ class WsiDicom:
             List of paths with dicom files
         """
         return [
-            path for path in filepaths
-            if path.is_file() and pydicom.misc.is_dicom(path)
+            path for path in filepaths if path.is_file() and is_dicom(path)
         ]
 
     def _validate_collection(

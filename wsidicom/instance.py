@@ -1,19 +1,28 @@
 import io
-import os
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, OrderedDict, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, OrderedDict, Set, Tuple, Union
 
 import numpy as np
 import pydicom
 from PIL import Image
-from pydicom.dataset import Dataset
+from pydicom.dataelem import DataElement
+from pydicom.dataset import (Dataset, FileMetaDataset,
+                             validate_file_meta)
+from pydicom.filebase import DicomFile, DicomFileLike
+from pydicom.filereader import (data_element_offset_to_value,
+                                read_file_meta_info)
+from pydicom.filewriter import write_dataset, write_file_meta_info
+from pydicom.misc import is_dicom
+from pydicom.pixel_data_handlers import pillow_handler
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.uid import UID as Uid
+from pydicom.tag import ItemTag, SequenceDelimiterTag
+from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
+from pydicom.encaps import itemise_frame
 
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
@@ -30,7 +39,7 @@ class WsiDataset(Dataset):
     """
     def __init__(self, dataset: Dataset):
         super().__init__(dataset)
-        self._instance_uid = Uid(self.SOPInstanceUID)
+        self._instance_uid = UID(self.SOPInstanceUID)
         self._concatenation_uid = getattr(
             self, 'SOPInstanceUIDOfConcatenationSource', None
         )
@@ -119,7 +128,7 @@ class WsiDataset(Dataset):
         return f"{type(self).__name__} of dataset {self.instance_uid}"
 
     @classmethod
-    def is_wsi_dicom(self, datset: Dataset) -> bool:
+    def is_wsi_dicom(cls, datset: Dataset) -> bool:
         """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
         Warn if attribute listed as requierd in the library or required in the
@@ -245,7 +254,7 @@ class WsiDataset(Dataset):
 
     @staticmethod
     def check_duplicate_dataset(
-        datasets: List[Dataset],
+        datasets: List['WsiDataset'],
         caller: object
     ) -> None:
         """Check for duplicates in a list of datasets. Datasets are duplicate
@@ -259,10 +268,10 @@ class WsiDataset(Dataset):
         caller: Object
             Object that the files belongs to.
         """
-        instance_uids: List[Uid] = []
+        instance_uids: List[UID] = []
 
         for dataset in datasets:
-            instance_uid = Uid(dataset.SOPInstanceUID)
+            instance_uid = UID(dataset.SOPInstanceUID)
             if instance_uid not in instance_uids:
                 instance_uids.append(instance_uid)
             else:
@@ -299,14 +308,14 @@ class WsiDataset(Dataset):
 
     def get_supported_wsi_dicom_type(
         self,
-        transfer_syntax_uid: Uid
+        transfer_syntax_uid: UID
     ) -> str:
         """Check image flavor and transfer syntax of dicom dataset.
         Return image flavor if file valid.
 
         Parameters
         ----------
-        transfer_syntax_uid: Uid'
+        transfer_syntax_uid: UID
             Transfer syntax uid for file.
 
         Returns
@@ -322,8 +331,7 @@ class WsiDataset(Dataset):
             warnings.warn(f"Non-supported image type {image_type}")
 
         syntax_supported = (
-            pydicom.pixel_data_handlers.pillow_handler.
-            supports_transfer_syntax(transfer_syntax_uid)
+            pillow_handler.supports_transfer_syntax(transfer_syntax_uid)
         )
         if not syntax_supported:
             warnings.warn(
@@ -340,17 +348,17 @@ class WsiDataset(Dataset):
         optical_sequence = getattr(
             frame,
             'OpticalPathIdentificationSequence',
-            self.OpticalPathSequence
+            self.optical_path_sequence
         )
         return getattr(optical_sequence[0], 'OpticalPathIdentifier', '0')
 
     @property
-    def instance_uid(self) -> Uid:
+    def instance_uid(self) -> UID:
         """Return instance uid from dataset."""
         return self._instance_uid
 
     @property
-    def concatenation_uid(self) -> Optional[Uid]:
+    def concatenation_uid(self) -> Optional[UID]:
         """Return concatenation uid, if defined, from dataset. An instance that
         is concatenated (split into several files) should have the same
         concatenation uid."""
@@ -533,13 +541,13 @@ class WsiDicomFile:
         self._filepath = filepath
         self._lock = threading.Lock()
 
-        if not pydicom.misc.is_dicom(self.filepath):
+        if not is_dicom(self.filepath):
             raise WsiDicomFileError(self.filepath, "is not a DICOM file")
 
-        file_meta = pydicom.filereader.read_file_meta_info(self.filepath)
-        self._transfer_syntax_uid = Uid(file_meta.TransferSyntaxUID)
+        file_meta = read_file_meta_info(self.filepath)
+        self._transfer_syntax_uid = UID(file_meta.TransferSyntaxUID)
 
-        self._fp = pydicom.filebase.DicomFile(self.filepath, mode='rb')
+        self._fp = DicomFile(self.filepath, mode='rb')
         self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
 
@@ -590,7 +598,7 @@ class WsiDicomFile:
         return self._uids
 
     @property
-    def transfer_syntax(self) -> Uid:
+    def transfer_syntax(self) -> UID:
         """Return transfer syntax uid"""
         return self._transfer_syntax_uid
 
@@ -619,7 +627,7 @@ class WsiDicomFile:
     def get_filepointer(
         self,
         frame_index: int
-    ) -> Tuple[pydicom.filebase.DicomFileLike, int, int]:
+    ) -> Tuple[DicomFileLike, int, int]:
         """Return file pointer, frame position, and frame lenght for frame
         number.
 
@@ -630,7 +638,7 @@ class WsiDicomFile:
 
         Returns
         ----------
-        Tuple[pydicom.filebase.DicomFileLike, int, int]:
+        Tuple[DicomFileLike, int, int]:
             File pointer, frame offset and frame lenght in number of bytes
         """
         frame_index -= self.frame_offset
@@ -649,14 +657,14 @@ class WsiDicomFile:
         BOT by checking the actual frame sequence, we just skip over it.
         """
         # Jump to BOT
-        offset_to_value = pydicom.filereader.data_element_offset_to_value(
+        offset_to_value = data_element_offset_to_value(
             self._fp.is_implicit_VR,
             'OB'
         )
         self._fp.seek(offset_to_value, 1)
         # has_BOT, offset_table = pydicom.encaps.get_frame_offsets(self._fp)
         # Read the BOT lenght and skip over the BOT
-        if(self._fp.read_tag() != pydicom.tag.ItemTag):
+        if(self._fp.read_tag() != ItemTag):
             raise WsiDicomFileError(self.filepath, 'No item tag after BOT')
         length = self._fp.read_UL()
         self._fp.seek(length, 1)
@@ -681,7 +689,7 @@ class WsiDicomFile:
         positions: List[Tuple[int, int]] = []
         frame_position = self._fp.tell()
         # Read items until sequence delimiter
-        while(self._fp.read_tag() == pydicom.tag.ItemTag):
+        while(self._fp.read_tag() == ItemTag):
             # Read item length
             length = self._fp.read_UL()
             if length == 0 or length % 2:
@@ -700,7 +708,7 @@ class WsiDicomFile:
         """
         TAG_BYTES = 4
         self._fp.seek(-TAG_BYTES, 1)
-        if(self._fp.read_tag() != pydicom.tag.SequenceDelimiterTag):
+        if(self._fp.read_tag() != SequenceDelimiterTag):
             raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
 
     def _read_frame_positions(self) -> List[Tuple[int, int]]:
@@ -829,11 +837,16 @@ class ImageData(metaclass=ABCMeta):
     and photometric_interpretation and methods get_tile() and close().
     Additionally properties focal_planes and/or optical_paths should be
     overridden if multiple focal planes or optical paths are implemented."""
-    default_z: float = None
+    _default_z: Optional[float] = None
 
     @property
     @abstractmethod
-    def transfer_syntax(self) -> Uid:
+    def files(self) -> List[Path]:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def transfer_syntax(self) -> UID:
         """Should return the uid of the transfer syntax of the image."""
         raise NotImplementedError
 
@@ -916,9 +929,9 @@ class ImageData(metaclass=ABCMeta):
     def image_mode(self) -> str:
         """Return Pillow image mode (e.g. RGB) for image data"""
         if(self.samples_per_pixel == 1):
-            return "L"
+            return 'L'
         elif(self.samples_per_pixel == 3):
-            return "RGB"
+            return 'RGB'
         raise NotImplementedError
 
     @property
@@ -1027,8 +1040,8 @@ class ImageData(metaclass=ABCMeta):
 
     @staticmethod
     def _image_settings(
-        transfer_syntax: pydicom.uid
-    ) -> Tuple[str, Dict[str, int]]:
+        transfer_syntax: UID
+    ) -> Tuple[str, Dict[str, Any]]:
         """Return image format and options for creating encoded tiles as in the
         used transfer syntax.
 
@@ -1043,15 +1056,15 @@ class ImageData(metaclass=ABCMeta):
             image format and image options
 
         """
-        if(transfer_syntax == pydicom.uid.JPEGBaseline8Bit):
+        if(transfer_syntax == JPEGBaseline8Bit):
             image_format = 'jpeg'
             image_options = {'quality': 95}
-        elif(transfer_syntax == pydicom.uid.JPEG2000):
+        elif(transfer_syntax == JPEG2000):
             image_format = 'jpeg2000'
-            image_options = {'irreversible': True}
-        elif(transfer_syntax == pydicom.uid.JPEG2000Lossless):
+            image_options = {"irreversible": True}
+        elif(transfer_syntax == JPEG2000Lossless):
             image_format = 'jpeg2000'
-            image_options = {'irreversible': False}
+            image_options = {"irreversible": False}
         else:
             raise NotImplementedError(
                 "Only supports jpeg and jpeg2000"
@@ -1111,7 +1124,7 @@ class WsiDicomImageData(ImageData):
 
         self._pixel_spacing = datasets[0].pixel_spacing
         self._transfer_syntax = base_file.transfer_syntax
-        self._default_z: float = None
+        self._default_z: Optional[float] = None
         self._photometric_interpretation = (
             datasets[0].photometric_interpretation
         )
@@ -1127,7 +1140,11 @@ class WsiDicomImageData(ImageData):
         return f"{type(self).__name__} of files {self._files.values()}"
 
     @property
-    def transfer_syntax(self) -> Uid:
+    def files(self) -> List[Path]:
+        return [file.filepath for file in self._files.values()]
+
+    @property
+    def transfer_syntax(self) -> UID:
         """The uid of the transfer syntax of the image."""
         return self._transfer_syntax
 
@@ -1203,7 +1220,7 @@ class WsiDicomImageData(ImageData):
         tile: Point,
         z: float,
         path: str
-    ) -> Optional[Tuple[pydicom.filebase.DicomFileLike, int, int]]:
+    ) -> Optional[Tuple[DicomFileLike, int, int]]:
         """Return file pointer, frame position, and frame lenght for tile with
         z and path. If frame is inside tile geometry but no tile exists in
         frame data None is returned.
@@ -1305,7 +1322,7 @@ class WsiDicomImageData(ImageData):
             Blank tile image
         """
         return Image.new(
-            mode=self.image_mode,
+            mode=self.image_mode,  # type: ignore
             size=self.tile_size.to_tuple(),
             color=self.blank_color[:self.samples_per_pixel]
         )
@@ -1326,7 +1343,7 @@ class SparseTilePlane:
         tiled_size: Size
             Size of the tiling
         """
-        self.plane = np.full(tiled_size.to_tuple(), -1, dtype=int)
+        self.plane = np.full(tiled_size.to_tuple(), -1, dtype=np.dtype(int))
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({Size.from_tuple(self.plane.shape)})"
@@ -1617,7 +1634,7 @@ class FullTileIndex(TileIndex):
                  if plane_path == path)
             )
         except StopIteration:
-            raise WsiDicomNotFoundError(f"Optical path {path}", self)
+            raise WsiDicomNotFoundError(f"Optical path {path}", str(self))
 
     def _get_focal_plane_index(self, z: float) -> int:
         """Return index of the focal plane of z.
@@ -1636,7 +1653,7 @@ class FullTileIndex(TileIndex):
             return next(index for index, plane in enumerate(self.focal_planes)
                         if plane == z)
         except StopIteration:
-            raise WsiDicomNotFoundError(f"Z {z} in instance", self)
+            raise WsiDicomNotFoundError(f"Z {z} in instance", str(self))
 
 
 class SparseTileIndex(TileIndex):
@@ -1703,7 +1720,7 @@ class SparseTileIndex(TileIndex):
             plane = self._planes[(z, path)]
         except KeyError:
             raise WsiDicomNotFoundError(
-                f"Plane with z {z}, path {path}", self
+                f"Plane with z {z}, path {path}", str(self)
             )
         frame_index = plane[tile]
         return frame_index
@@ -1756,7 +1773,7 @@ class SparseTileIndex(TileIndex):
 
     def _read_frame_coordinates(
             self,
-            frame: DicomSequence
+            frame: Dataset
 
     ) -> Tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
@@ -1765,7 +1782,7 @@ class SparseTileIndex(TileIndex):
 
         Parameters
         ----------
-        frame: DicomSequence
+        frame: Dataset
             Pydicom frame sequence.
 
         Returns
@@ -1792,7 +1809,7 @@ class WsiDicomFileWriter:
             Path to filepointer.
 
         """
-        self._fp = pydicom.filebase.DicomFile(path, mode='wb')
+        self._fp = DicomFile(path, mode='wb')
         self._fp.is_little_endian = True
         self._fp.is_implicit_VR = False
 
@@ -1810,22 +1827,22 @@ class WsiDicomFileWriter:
         self._fp.write(preamble)
         self._fp.write(b'DICM')
 
-    def write_file_meta(self, uid: Uid, transfer_syntax: Uid) -> None:
+    def write_file_meta(self, uid: UID, transfer_syntax: UID) -> None:
         """Writes file meta dataset to file.
 
         Parameters
         ----------
-        uid: Uid
+        uid: UID
             SOP instance uid to include in file.
-        transfer_syntax: Uid
+        transfer_syntax: UID
             Transfer syntax used in file.
         """
-        meta_ds = pydicom.dataset.FileMetaDataset()
+        meta_ds = FileMetaDataset()
         meta_ds.TransferSyntaxUID = transfer_syntax
         meta_ds.MediaStorageSOPInstanceUID = uid
-        meta_ds.MediaStorageSOPClassUID = WSI_SOP_CLASS_UID
-        pydicom.dataset.validate_file_meta(meta_ds)
-        pydicom.filewriter.write_file_meta_info(self._fp, meta_ds)
+        meta_ds.MediaStorageSOPClassUID = UID(WSI_SOP_CLASS_UID)
+        validate_file_meta(meta_ds)
+        write_file_meta_info(self._fp, meta_ds)
 
     def write_base(self, dataset: WsiDataset) -> None:
         """Writes base dataset to file.
@@ -1838,11 +1855,11 @@ class WsiDicomFileWriter:
         now = datetime.now()
         dataset.ContentDate = datetime.date(now).strftime('%Y%m%d')
         dataset.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
-        pydicom.filewriter.write_dataset(self._fp, dataset)
+        write_dataset(self._fp, dataset)
 
     def write_pixel_data_start(self) -> None:
         """Writes tags starting pixel data."""
-        pixel_data_element = pydicom.dataset.DataElement(
+        pixel_data_element = DataElement(
             0x7FE00010,
             'OB',
             0,
@@ -1860,7 +1877,7 @@ class WsiDicomFileWriter:
         self._fp.write_UL(0xFFFFFFFF)
 
         # Write item tag and (empty) length for BOT
-        self._fp.write_tag(pydicom.tag.ItemTag)
+        self._fp.write_tag(ItemTag)
         self._fp.write_UL(0)
 
     def write_pixel_data(
@@ -1868,8 +1885,8 @@ class WsiDicomFileWriter:
         image_data: ImageData,
         z: float,
         path: str,
-        workers: int = os.cpu_count(),
-        chunk_size: int = 100
+        workers: int,
+        chunk_size: int,
     ) -> None:
         """Writes pixel data to file.
 
@@ -1881,9 +1898,9 @@ class WsiDicomFileWriter:
             Focal plane to write.
         path: str
             Optical path to write.
-        workers: int = os.cpu_count()
+        workers: int
             Maximum number of thread workers to use.
-        chunk_size: int = 100
+        chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
         """
@@ -1921,12 +1938,12 @@ class WsiDicomFileWriter:
                 chunked_tile_points
             ):
                 for tile in thread_result:
-                    for frame in pydicom.encaps.itemize_frame(tile, 1):
+                    for frame in itemise_frame(tile, 1):
                         self._fp.write(frame)
 
     def write_pixel_data_end(self) -> None:
         """Writes tags ending pixel data."""
-        self._fp.write_tag(pydicom.tag.SequenceDelimiterTag)
+        self._fp.write_tag(SequenceDelimiterTag)
         self._fp.write_UL(0)
 
     def close(self) -> None:
@@ -2066,14 +2083,14 @@ class WsiInstance:
         return self.dataset.ext_depth_of_field_plane_distance
 
     @property
-    def identifier(self) -> Uid:
+    def identifier(self) -> UID:
         """Return identifier (instance uid for single file instance or
         concatenation uid for multiple file instance)."""
         return self._identifier
 
     @property
     def instance_number(self) -> int:
-        return self.dataset.instance_number
+        return int(self.dataset.instance_number)
 
     @property
     def default_z(self) -> float:
@@ -2096,11 +2113,7 @@ class WsiInstance:
         return self._image_data.tiled_size
 
     @property
-    def datasets(self) -> List[WsiDataset]:
-        return self._datasets
-
-    @property
-    def uids(self) -> Optional[BaseUids]:
+    def uids(self) -> BaseUids:
         """Return base uids"""
         return self._uids
 
@@ -2170,7 +2183,7 @@ class WsiInstance:
             path = self.default_path
 
         image = Image.new(
-            mode=self.image_data.image_mode,
+            mode=self.image_data.image_mode,  # type: ignore
             size=region.size.to_tuple()
         )
         stitching_tiles = self.get_tile_range(region, z, path)
@@ -2230,7 +2243,7 @@ class WsiInstance:
         if cropped_tile_region.size != self.tile_size:
             image = Image.open(io.BytesIO(tile_frame))
             image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.encode(image)
+            tile_frame = self.image_data.encode(image)
         return tile_frame
 
     def crop_tile_to_level(
@@ -2323,39 +2336,6 @@ class WsiInstance:
             index.y += previous_size.height
         return index
 
-    @staticmethod
-    def _image_settings(
-        transfer_syntax: pydicom.uid
-    ) -> Tuple[str, Dict[str, int]]:
-        """Return image format and options for creating encoded tiles as in the
-        used transfer syntax.
-
-        Parameters
-        ----------
-        transfer_syntax: pydicom.uid
-            Transfer syntax to match image format and options to
-
-        Returns
-        ----------
-        tuple[str, dict[str, int]]
-            image format and image options
-
-        """
-        if(transfer_syntax == pydicom.uid.JPEGBaseline8Bit):
-            image_format = 'jpeg'
-            image_options = {'quality': 95}
-        elif(transfer_syntax == pydicom.uid.JPEG2000):
-            image_format = 'jpeg2000'
-            image_options = {'irreversible': True}
-        elif(transfer_syntax == pydicom.uid.JPEG2000Lossless):
-            image_format = 'jpeg2000'
-            image_options = {'irreversible': False}
-        else:
-            raise NotImplementedError(
-                "Only supports jpeg and jpeg2000"
-            )
-        return (image_format, image_options)
-
     def get_tile(
         self,
         tile: Point,
@@ -2390,8 +2370,8 @@ class WsiInstance:
     def get_encoded_tile(
         self,
         tile: Point,
-        z: float,
-        path: str
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> bytes:
         """Get tile bytes at tile coordinate x, y
         If frame is inside tile geometry but no tile exists in
@@ -2401,12 +2381,10 @@ class WsiInstance:
         ----------
         tile: Point
             Tile x, y coordinate.
-        z: float
+        z: Optional[float]
             Z coordinate.
-        path: str
+        path: Optional[str]
             Optical path.
-        crop: bool
-            If the tile should be croped to image region.
 
         Returns
         ----------
@@ -2454,16 +2432,15 @@ class WsiInstance:
     def _validate_instance(
         self,
         datasets: List[WsiDataset]
-    ) -> Tuple[str, BaseUids, str]:
+    ) -> Tuple[UID, BaseUids]:
         """Check that no files in instance are duplicate, that all files in
         instance matches (uid, type and size).
         Raises WsiDicomMatchError otherwise.
         Returns the matching file uid.
 
-
         Returns
         ----------
-        Tuple[str, BaseUids, str]
+        Tuple[UID, BaseUids]
             Instance identifier uid and base uids
         """
         WsiDataset.check_duplicate_dataset(datasets, self)
@@ -2471,22 +2448,11 @@ class WsiInstance:
         base_dataset = datasets[0]
         for dataset in datasets[1:]:
             if not base_dataset.matches_instance(dataset):
-                raise WsiDicomError()
+                raise WsiDicomError("Datasets in instances does not match")
         return (
             base_dataset.uids.identifier,
             base_dataset.uids.base,
         )
-
-    def get_tile_range(
-        self,
-        pixel_region: Region,
-        z: float,
-        path: str
-    ) -> Region:
-        start = pixel_region.start // self.tile_size
-        end = pixel_region.end / self.tile_size - 1
-        tile_region = Region.from_points(start, end)
-        return tile_region
 
     def matches(self, other_instance: 'WsiInstance') -> bool:
         """Return true if other instance is of the same group as self.
