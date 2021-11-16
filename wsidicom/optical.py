@@ -214,7 +214,7 @@ class OpticalFilter(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def from_ds(cls, ds: Dataset):
+    def from_ds(cls, ds: Dataset) -> 'OpticalFilter':
         raise NotImplementedError
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
@@ -310,9 +310,9 @@ class Illumination:
     def __init__(
         self,
         illumination_method: List[ConceptCode] = [],
-        illumination_wavelength: float = None,
-        illumination_color: ConceptCode = None,
-        illuminator: ConceptCode = None
+        illumination_wavelength: Optional[float] = None,
+        illumination_color: Optional[ConceptCode] = None,
+        illuminator: Optional[ConceptCode] = None
     ):
         if illumination_color is None and illumination_wavelength is None:
             raise ValueError("Illumination color or wavelenght need to be set")
@@ -436,13 +436,13 @@ class OpticalPath:
         identifier: str,
         illumination: Illumination,
         photometric_interpretation: str,
-        description: str = None,
-        icc_profile: bytes = None,
-        lut: Lut = None,
-        light_path_filter: LightPathFilter = None,
-        image_path_filter: ImagePathFilter = None,
-        channel_description: List[ConceptCode] = None,
-        lenses: Lenses = None
+        description: Optional[str] = None,
+        icc_profile: Optional[bytes] = None,
+        lut: Optional[Lut] = None,
+        light_path_filter: Optional[LightPathFilter] = None,
+        image_path_filter: Optional[ImagePathFilter] = None,
+        channel_description: Optional[List[ConceptCode]] = None,
+        lenses: Optional[Lenses] = None
     ):
         """Create a OpticalPath from identifier, illumination, photometric
         interpretation, and optional attributes.
@@ -596,7 +596,7 @@ class OpticalManager:
                             dataset.PhotometricInterpretation
                         )
                         optical_paths[identifier] = path
-        return OpticalManager(list(optical_paths.values()))
+        return cls(list(optical_paths.values()))
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
         """Codes and insert object into dataset.

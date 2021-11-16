@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, List, Tuple, Union
-from pydicom.dataset import FileDataset
 
 from pydicom.uid import generate_uid
 
@@ -302,7 +301,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         if(annotation_type == 'Dot'):
             return [Point.from_dict(coordinate_dict, "@X", "@Y")]
         elif(annotation_type == 'PointSet'):
-            return Point.multiple_from_dict(coordinate_dict, "@X", "@Y")
+            points = Point.multiple_from_dict(coordinate_dict, "@X", "@Y")
+            return points  # type: ignore
         elif(annotation_type == 'Polygon'):
             return [Polygon.from_dict(coordinate_dict, "@X", "@Y")]
 

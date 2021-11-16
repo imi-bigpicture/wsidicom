@@ -297,7 +297,11 @@ class WsiDataset(Dataset):
             self.tile_type == other_dataset.tile_type
         )
 
-    def matches_series(self, uids: BaseUids, tile_size: Size = None) -> bool:
+    def matches_series(
+        self,
+        uids: BaseUids,
+        tile_size: Optional[Size] = None
+    ) -> bool:
         """Check if instance is valid (Uids and tile size match).
         Base uids should match for instances in all types of series,
         tile size should only match for level series.
@@ -620,7 +624,7 @@ class WsiDicomFile:
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         return f"File with path: {self.filepath}"
 
@@ -666,7 +670,7 @@ class WsiDicomFile:
         # Read the BOT lenght and skip over the BOT
         if(self._fp.read_tag() != ItemTag):
             raise WsiDicomFileError(self.filepath, 'No item tag after BOT')
-        length = self._fp.read_UL()
+        length: int = self._fp.read_UL()
         self._fp.seek(length, 1)
 
     def _read_positions(self) -> List[Tuple[int, int]]:
@@ -691,7 +695,7 @@ class WsiDicomFile:
         # Read items until sequence delimiter
         while(self._fp.read_tag() == ItemTag):
             # Read item length
-            length = self._fp.read_UL()
+            length: int = self._fp.read_UL()
             if length == 0 or length % 2:
                 raise WsiDicomFileError(self.filepath, 'Invalid frame length')
             # Frame position
@@ -726,7 +730,7 @@ class WsiDicomFile:
         self._fp.seek(self._pixel_data_position, 0)  # Wind back to start
         return positions
 
-    def _read_frame(self, frame_index: int) -> bytes:
+    def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
 
         Parameters
@@ -767,10 +771,10 @@ class WsiDicomFile:
         return frame_positions
 
     @staticmethod
-    def _filter_files(
+    def filter_files(
         files: List['WsiDicomFile'],
         series_uids: BaseUids,
-        series_tile_size: Size = None
+        series_tile_size: Optional[Size] = None
     ) -> List['WsiDicomFile']:
         """Filter list of wsi dicom files to only include matching uids and
         tile size if defined.
@@ -805,7 +809,7 @@ class WsiDicomFile:
         return valid_files
 
     @classmethod
-    def _group_files(
+    def group_files(
         cls,
         files: List['WsiDicomFile']
     ) -> Dict[str, List['WsiDicomFile']]:
@@ -942,7 +946,7 @@ class ImageData(metaclass=ABCMeta):
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         return str(self)
 
@@ -1280,7 +1284,7 @@ class WsiDicomImageData(ImageData):
             The frame in bytes
         """
         file = self._get_file(frame_index)
-        tile_frame = file._read_frame(frame_index)
+        tile_frame = file.read_frame(frame_index)
         return tile_frame
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
@@ -1382,7 +1386,7 @@ class SparseTilePlane:
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         return "Sparse tile plane"
 
@@ -1454,7 +1458,7 @@ class TileIndex(metaclass=ABCMeta):
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         raise NotImplementedError()
 
@@ -1539,7 +1543,7 @@ class FullTileIndex(TileIndex):
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         string = (
             f"Full tile index tile size: {self.tile_size}"
@@ -1691,7 +1695,7 @@ class SparseTileIndex(TileIndex):
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         return (
             f"Sparse tile index tile size: {self.tile_size}, "
@@ -1734,7 +1738,7 @@ class SparseTileIndex(TileIndex):
             Focal planes, specified in um.
         """
         focal_planes: Set[float] = set()
-        for z, path in self._planes.keys():
+        for z, _ in self._planes.keys():
             focal_planes.add(z)
         return list(focal_planes)
 
@@ -1993,7 +1997,7 @@ class WsiInstance:
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         string = (
             f"default z: {self.default_z} "
@@ -2122,7 +2126,7 @@ class WsiInstance:
         cls,
         files: List[WsiDicomFile],
         series_uids: BaseUids,
-        series_tile_size: Size = None
+        series_tile_size: Optional[Size] = None
     ) -> List['WsiInstance']:
         """Create instances from Dicom files. Only files with matching series
         uid and tile size, if defined, are used. Other files are closed.
@@ -2141,12 +2145,12 @@ class WsiInstance:
         List[WsiInstancece]
             List of created instances.
         """
-        filtered_files = WsiDicomFile._filter_files(
+        filtered_files = WsiDicomFile.filter_files(
             files,
             series_uids,
             series_tile_size
         )
-        files_grouped_by_instance = WsiDicomFile._group_files(filtered_files)
+        files_grouped_by_instance = WsiDicomFile.group_files(filtered_files)
         return [
             cls(
                 [file.dataset for file in instance_files],
@@ -2158,8 +2162,8 @@ class WsiInstance:
     def stitch_tiles(
         self,
         region: Region,
-        path: str = None,
-        z: float = None
+        path: Optional[str] = None,
+        z: Optional[float] = None
     ) -> Image.Image:
         """Stitches tiles together to form requested image.
 
@@ -2339,8 +2343,8 @@ class WsiInstance:
     def get_tile(
         self,
         tile: Point,
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Get tile image at tile coordinate x, y.
         If frame is inside tile geometry but no tile exists in

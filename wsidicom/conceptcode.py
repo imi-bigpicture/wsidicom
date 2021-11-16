@@ -22,7 +22,7 @@ class ConceptCode(metaclass=ABCMeta):
         meaning: str,
         value: str,
         scheme_designator: str,
-        scheme_version: str = None
+        scheme_version: Optional[str] = None
     ):
         self.meaning = meaning
         self.value = value
@@ -49,6 +49,18 @@ class ConceptCode(metaclass=ABCMeta):
             scheme_designator=self.scheme_designator,
             meaning=self.meaning,
             scheme_version=self.scheme_version
+        )
+
+    @classmethod
+    def from_code(
+        cls,
+        code: Code
+    ) -> 'ConceptCode':
+        return cls(
+            code.value,
+            code.scheme_designator,
+            code.meaning,
+            code.scheme_version
         )
 
     def to_ds(self) -> Dataset:
@@ -176,9 +188,9 @@ class CidConceptCode(ConceptCode):
     def __init__(
         self,
         meaning: str,
-        value: str = None,
-        scheme_designator: str = None,
-        scheme_version: str = None
+        value: Optional[str] = None,
+        scheme_designator: Optional[str] = None,
+        scheme_version: Optional[str] = None
     ):
         if value is None or scheme_designator is None:
             code = self._from_cid(meaning)
@@ -233,9 +245,9 @@ class UnitCode(SingleConceptCode):
     def __init__(
         self,
         meaning: str,
-        value: str = None,
-        scheme_designator: str = None,
-        scheme_version: str = None
+        value: Optional[str] = None,
+        scheme_designator: Optional[str] = None,
+        scheme_version: Optional[str] = None
     ):
         if value is None or scheme_designator is None:
             code = self._from_ucum(meaning)
