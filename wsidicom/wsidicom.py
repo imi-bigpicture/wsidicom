@@ -63,7 +63,7 @@ class WsiDicomGroup:
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         string = (
             f'Image: size: {self.size} px, mpp: {self.mpp} um/px'
@@ -77,7 +77,7 @@ class WsiDicomGroup:
         )
         return string
 
-    def __getitem__(self, index) -> WsiInstance:
+    def __getitem__(self, index: UID) -> WsiInstance:
         return self.instances[index]
 
     @property
@@ -204,8 +204,8 @@ class WsiDicomGroup:
 
     def get_instance(
         self,
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> WsiInstance:
         """Search for instance fullfilling the parameters.
         The behavior when z and/or path is none could be made more
@@ -277,8 +277,8 @@ class WsiDicomGroup:
     def get_region(
         self,
         region: Region,
-        z: float = None,
-        path: str = None,
+        z: Optional[float] = None,
+        path: Optional[str] = None,
     ) -> Image.Image:
         """Read region defined by pixels.
 
@@ -306,8 +306,8 @@ class WsiDicomGroup:
     def get_region_mm(
         self,
         region: RegionMm,
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Read region defined by mm.
 
@@ -334,8 +334,8 @@ class WsiDicomGroup:
     def get_tile(
         self,
         tile: Point,
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Return tile at tile coordinate x, y as image.
 
@@ -360,8 +360,8 @@ class WsiDicomGroup:
     def get_encoded_tile(
         self,
         tile: Point,
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> bytes:
         """Return tile at tile coordinate x, y as bytes.
 
@@ -504,7 +504,7 @@ class WsiDicomGroup:
             for optical_path in instance.optical_paths:
                 for z in instance.focal_planes:
                     if (optical_path, z) not in output:
-                        output[optical_path, z] = instance._image_data
+                        output[optical_path, z] = instance.image_data
         return list(OrderedDict(output).items())
 
     def save(
@@ -606,7 +606,7 @@ class WsiDicomLevel(WsiDicomGroup):
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         string = (
             f'Level: {self.level}, size: {self.size} px, mpp: {self.mpp} um/px'
@@ -694,8 +694,8 @@ class WsiDicomLevel(WsiDicomGroup):
         self,
         tile: Point,
         level: int,
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
@@ -737,8 +737,8 @@ class WsiDicomLevel(WsiDicomGroup):
         self,
         tile: Point,
         scale: int,
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> bytes:
         """Return encoded tile in another level by scaling a region.
 
@@ -1347,7 +1347,7 @@ class WsiDicom:
     def pretty_str(
         self,
         indent: int = 0,
-        depth: int = None
+        depth: Optional[int] = None
     ) -> str:
         string = self.__class__.__name__
         if depth is not None:
@@ -1459,8 +1459,8 @@ class WsiDicom:
     def read_thumbnail(
         self,
         size: Tuple[int, int],
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Read thumbnail image of the whole slide with dimensions
         no larger than given size.
@@ -1491,8 +1491,8 @@ class WsiDicom:
         location: Tuple[int, int],
         level: int,
         size: Tuple[int, int],
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Read region defined by pixels.
 
@@ -1535,8 +1535,8 @@ class WsiDicom:
         location: Tuple[float, float],
         level: int,
         size: Tuple[float, float],
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Read image from region defined in mm.
 
@@ -1575,8 +1575,8 @@ class WsiDicom:
         location: Tuple[float, float],
         mpp: float,
         size: Tuple[float, float],
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Read image from region defined in mm with set pixel spacing.
 
@@ -1614,8 +1614,8 @@ class WsiDicom:
         self,
         level: int,
         tile: Tuple[int, int],
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> Image.Image:
         """Read tile in pyramid level as image.
 
@@ -1652,8 +1652,8 @@ class WsiDicom:
         self,
         level: int,
         tile: Tuple[int, int],
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> bytes:
         """Read tile in pyramid level as encoded bytes. For non-existing levels
         the tile is scaled down from a lower level, using the similar encoding.
@@ -1691,8 +1691,8 @@ class WsiDicom:
     def get_instance(
         self,
         level: int,
-        z: float = None,
-        path: str = None
+        z: Optional[float] = None,
+        path: Optional[str] = None
     ) -> WsiInstance:
 
         """Return instance fullfilling level, z and/or path.

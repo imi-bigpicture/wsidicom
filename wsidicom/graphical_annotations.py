@@ -32,7 +32,7 @@ class LabColor:
     b: int
 
 
-def dcm_to_list(item: bytes, type: str) -> List:
+def dcm_to_list(item: bytes, type: str) -> List[Any]:
     """Convert item to list of values using specified type format.
 
     Parameters
@@ -44,7 +44,7 @@ def dcm_to_list(item: bytes, type: str) -> List:
 
     Returns
     ----------
-    List
+    List[Any]
         List of values
     """
     converted = convert_numbers(
@@ -512,13 +512,13 @@ class Geometry(metaclass=ABCMeta):
     def from_coords(
         cls,
         coords: Union[Tuple[float, float], List[Tuple[float, float]]]
-    ):
+    ) -> 'Geometry':
         """Return geometry object created from list of coordinates"""
         raise NotImplementedError
 
     @classmethod
     @abstractmethod
-    def from_list(cls, list: List[float]):
+    def from_list(cls, list: List[float]) -> 'Geometry':
         """Return geometry object created from list of floats"""
         raise NotImplementedError
 
@@ -591,11 +591,11 @@ class Geometry(metaclass=ABCMeta):
         ],
         x: str,
         y: str,
-    ):
+    ) -> 'Geometry':
         raise NotImplementedError
 
     @classmethod
-    def from_shapely_like(cls, object) -> 'Geometry':
+    def from_shapely_like(cls, object: Any) -> 'Geometry':
         """Return Geometry from shapely-like object. Object needs to have
         shapely-like attributes.
 
@@ -667,7 +667,7 @@ class Point(Geometry):
         self.x = float(x)
         self.y = float(y)
 
-    def __eq__(self, point) -> bool:
+    def __eq__(self, point: 'Point') -> bool:
         if isinstance(point, Point):
             return (
                 self.x == point.x and self.y == point.y
@@ -725,7 +725,7 @@ class Point(Geometry):
         y: str,
     ) -> List['Point']:
         coords = cls._coordinates_from_dict(dictionary, x, y)
-        return [cls(*point) for point in coords]
+        return [cls.from_coords(point) for point in coords]
 
     @classmethod
     def from_dict(
@@ -854,7 +854,7 @@ class Annotation:
     def __init__(
         self,
         geometry: Geometry,
-        measurements: List[Measurement] = None
+        measurements: Optional[List[Measurement]] = None
     ):
         """Represents an annotation, with geometry and an optional list of
         measurements.
@@ -875,7 +875,7 @@ class Annotation:
     def __repr__(self) -> str:
         return f"Annotation({self.geometry}, {self.measurements})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: 'Annotation') -> bool:
         if not isinstance(other, Annotation):
             return NotImplemented
         return (
@@ -938,7 +938,7 @@ class Annotation:
 
 
 class AnnotationGroup:
-    _geometry_type: type
+    _geometry_type: Type[Geometry]
 
     def __init__(
         self,
@@ -946,10 +946,10 @@ class AnnotationGroup:
         label: str,
         categorycode: ConceptCode,
         typecode: ConceptCode,
-        description: str = None,
-        color: LabColor = None,
+        description: Optional[str] = None,
+        color: Optional[LabColor] = None,
         is_double: bool = True,
-        instance: Uid = None
+        instance: Optional[Uid] = None
     ):
         """Represents a group of annotations of the same type.
 
@@ -1000,7 +1000,7 @@ class AnnotationGroup:
             f"{self.description}, {self._is_double})"
         )
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: 'AnnotationGroup') -> bool:
         if not isinstance(other, AnnotationGroup):
             return NotImplemented
         return (
@@ -1063,7 +1063,7 @@ class AnnotationGroup:
         return len(self.annotations)
 
     @property
-    def geometry_type(self) -> Type:
+    def geometry_type(self) -> Type[Geometry]:
         return self._geometry_type
 
     @property
@@ -1071,9 +1071,12 @@ class AnnotationGroup:
     def annotation_type(self) -> str:
         raise NotImplementedError
 
-    def __getitem__(self, index: Union[int, List[int]]):
+    def __getitem__(
+        self,
+        index: Union[int, List[int]]
+    ) -> Union[Annotation, List[Annotation]]:
         if isinstance(index, list):
-            return [self[i] for i in index]
+            return [self.annotations[i] for i in index]
         return self.annotations[index]
 
     @classmethod
@@ -1270,7 +1273,7 @@ class AnnotationGroup:
     def _get_geometries_from_ds(
         cls,
         ds: Dataset
-    ):
+    ) -> List[Geometry]:
         """Abstract method for getting geometries from dataset.
 
         Parameters
@@ -1639,7 +1642,10 @@ class AnnotationGroup:
                 )
 
     @classmethod
-    def _get_group_type_by_geometry(cls, geometry_type: type):
+    def _get_group_type_by_geometry(
+        cls,
+        geometry_type: Type[Geometry]
+    ) -> Type['AnnotationGroup']:
         """Return AnnotationGroup class for geometry type.
 
         Parameters
@@ -1732,7 +1738,7 @@ class PointAnnotationGroup(AnnotationGroup):
 
 class PolylineAnnotationGroupMeta(AnnotationGroup):
     """Meta class for line annotation goup"""
-    _geometry_type: type
+    _geometry_type: Type[Geometry]
 
     @property
     def annotation_type(self) -> str:
@@ -1749,7 +1755,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
             List of indices in annotation group
         """
         index = 1
-        indices = []
+        indices: List[int] = []
         for annotation in self.annotations:
             indices.append(index)
             index += len(annotation.geometry.data)
@@ -1816,7 +1822,9 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
 
     @staticmethod
     @abstractmethod
-    def _get_line_geometry_from_coords(coords: List[Tuple[float, float]]):
+    def _get_line_geometry_from_coords(
+        coords: List[Tuple[float, float]]
+    ) -> Geometry:
         raise NotImplementedError
 
     def to_ds(self, group_number: int) -> Dataset:
