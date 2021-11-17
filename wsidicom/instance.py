@@ -889,7 +889,7 @@ class ImageData(metaclass=ABCMeta):
     @abstractmethod
     def get_decoded_tile(
         self,
-        tile: Point,
+        tile_point: Point,
         z: float,
         path: str
     ) -> Image.Image:
@@ -1209,11 +1209,11 @@ class WsiDicomImageData(ImageData):
 
     def get_decoded_tile(
         self,
-        tile: Point,
+        tile_point: Point,
         z: float,
         path: str
     ) -> Image.Image:
-        frame_index = self._get_frame_index(tile, z, path)
+        frame_index = self._get_frame_index(tile_point, z, path)
         if frame_index == -1:
             return self.blank_tile
         frame = self._get_tile_frame(frame_index)
