@@ -5,14 +5,15 @@ from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, OrderedDict, Set, Tuple, Union
+from typing import (Any, Dict, Generator, List, Optional, OrderedDict, Set,
+                    Tuple, Union)
 
 import numpy as np
 import pydicom
 from PIL import Image
 from pydicom.dataelem import DataElement
-from pydicom.dataset import (Dataset, FileMetaDataset,
-                             validate_file_meta)
+from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
+from pydicom.encaps import itemise_frame
 from pydicom.filebase import DicomFile, DicomFileLike
 from pydicom.filereader import (data_element_offset_to_value,
                                 read_file_meta_info)
@@ -22,13 +23,11 @@ from pydicom.pixel_data_handlers import pillow_handler
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.tag import ItemTag, SequenceDelimiterTag
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
-from pydicom.encaps import itemise_frame
 
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
                              WsiDicomUidDuplicateError)
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.optical import OpticalManager
 from wsidicom.uid import WSI_SOP_CLASS_UID, BaseUids, FileUids
 
 
@@ -842,6 +841,8 @@ class ImageData(metaclass=ABCMeta):
     Additionally properties focal_planes and/or optical_paths should be
     overridden if multiple focal planes or optical paths are implemented."""
     _default_z: Optional[float] = None
+    _blank_tile: Optional[Image.Image] = None
+    _encoded_blank_tile: Optional[bytes] = None
 
     @property
     @abstractmethod
@@ -978,6 +979,20 @@ class ImageData(metaclass=ABCMeta):
     def plane_region(self) -> Region:
         return Region(position=Point(0, 0), size=self.tiled_size - 1)
 
+    @property
+    def blank_tile(self) -> Image.Image:
+        """Return background tile."""
+        if self._blank_tile is None:
+            self._blank_tile = self._create_blank_tile()
+        return self._blank_tile
+
+    @property
+    def blank_encoded_tile(self) -> bytes:
+        """Return encoded background tile."""
+        if self._encoded_blank_tile is None:
+            self._encoded_blank_tile = self.encode(self.blank_tile)
+        return self._encoded_blank_tile
+
     def get_decoded_tiles(
         self,
         tiles: List[Point],
@@ -1001,6 +1016,72 @@ class ImageData(metaclass=ABCMeta):
         return [
             self.get_encoded_tile(tile, z, path) for tile in tiles
         ]
+
+    def get_encoded_scaled_tiles(
+        self,
+        scaled_tile_points: List[Point],
+        z: float,
+        path: str,
+        scale: int,
+        image_format: str,
+        image_options: Dict[str, Any]
+    ) -> List[bytes]:
+        scaled_tiles: List[bytes] = []
+        for scaled_tile_point in scaled_tile_points:
+            # For each tile point in the target scale
+            image = Image.new(
+                mode=self.image_mode,  # type: ignore
+                size=(self.tile_size * scale).to_tuple()
+            )
+            # Get decoded tiles for the region covering the scaled tile
+            # in the image data
+            tile_points = Region(
+                scaled_tile_point*scale,
+                Size(1, 1) * scale
+            ).iterate_all()
+            tiles: List[Image.Image] = []
+            for tile_point in tile_points:
+                if (
+                    (tile_point.x < self.tiled_size.width) and
+                    (tile_point.y < self.tiled_size.height)
+                ):
+                    tile = self.get_decoded_tile(
+                        tile_point,
+                        z,
+                        path
+                    )
+                else:
+                    tile = self.blank_tile
+                tiles.append(tile)
+
+            # Paste the unscalled images into a large tile
+            for y in range(scale):
+                for x in range(scale):
+                    tile_index = y*scale + x
+                    tile_point = Point(x, y)
+                    image_coordinate = (
+                        (tile_point * self.tile_size)
+                    )
+                    image.paste(
+                        tiles[tile_index],
+                        image_coordinate.to_tuple()
+                    )
+            # Resize the tile
+            image = image.resize(
+                self.tile_size.to_tuple(),
+                resample=Image.BILINEAR
+            )
+            # Compress the tile and add to created tiles
+            with io.BytesIO() as buffer:
+                image.save(
+                    buffer,
+                    format=image_format,
+                    **image_options
+                )
+                scaled_tiles.append(buffer.getvalue())
+
+        # Return created tiles
+        return scaled_tiles
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
         """Check if tile region is inside tile geometry and z coordinate and
@@ -1098,6 +1179,20 @@ class ImageData(metaclass=ABCMeta):
             return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
         return (WHITE, WHITE, WHITE)
 
+    def _create_blank_tile(self) -> Image.Image:
+        """Create blank tile for instance.
+
+        Returns
+        ----------
+        Image.Image
+            Blank tile image
+        """
+        return Image.new(
+            mode=self.image_mode,  # type: ignore
+            size=self.tile_size.to_tuple(),
+            color=self.blank_color[:self.samples_per_pixel]
+        )
+
 
 class WsiDicomImageData(ImageData):
     """Represents image data read from dicom file(s). Image data can
@@ -1133,9 +1228,6 @@ class WsiDicomImageData(ImageData):
             datasets[0].photometric_interpretation
         )
         self._samples_per_pixel = datasets[0].samples_per_pixel
-
-        self._blank_tile = None
-        self._encoded_blank_tile = None
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._files.values()})"
@@ -1186,20 +1278,6 @@ class WsiDicomImageData(ImageData):
     def samples_per_pixel(self) -> int:
         """Return samples per pixel (1 or 3)."""
         return self._samples_per_pixel
-
-    @property
-    def blank_tile(self) -> Image.Image:
-        """Return background tile."""
-        if self._blank_tile is None:
-            self._blank_tile = self._create_blank_tile()
-        return self._blank_tile
-
-    @property
-    def blank_encoded_tile(self) -> bytes:
-        """Return encoded background tile."""
-        if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self.encode(self.blank_tile)
-        return self._encoded_blank_tile
 
     def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         frame_index = self._get_frame_index(tile, z, path)
@@ -1317,20 +1395,6 @@ class WsiDicomImageData(ImageData):
     def is_sparse(self, tile: Point, z: float, path: str) -> bool:
         return (self.tiles.get_frame_index(tile, z, path) == -1)
 
-    def _create_blank_tile(self) -> Image.Image:
-        """Create blank tile for instance.
-
-        Returns
-        ----------
-        Image.Image
-            Blank tile image
-        """
-        return Image.new(
-            mode=self.image_mode,  # type: ignore
-            size=self.tile_size.to_tuple(),
-            color=self.blank_color[:self.samples_per_pixel]
-        )
-
     def close(self) -> None:
         for file in self._files.values():
             file.close()
@@ -1347,10 +1411,11 @@ class SparseTilePlane:
         tiled_size: Size
             Size of the tiling
         """
+        self._shape = tiled_size
         self.plane = np.full(tiled_size.to_tuple(), -1, dtype=np.dtype(int))
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({Size.from_tuple(self.plane.shape)})"
+        return f"{type(self).__name__}({self._shape})"
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -1489,8 +1554,9 @@ class TileIndex(metaclass=ABCMeta):
             count += dataset.frame_count
         return count
 
-    @staticmethod
+    @classmethod
     def _read_optical_paths_from_datasets(
+        cls,
         datasets: List[WsiDataset]
     ) -> List[str]:
         """Return list of optical path identifiers from files.
@@ -1508,10 +1574,32 @@ class TileIndex(metaclass=ABCMeta):
         """
         paths: Set[str] = set()
         for dataset in datasets:
-            paths.update(OpticalManager.get_path_identifers(
+            paths.update(cls._get_path_identifers(
                 dataset.optical_path_sequence
             ))
         return list(paths)
+
+    @staticmethod
+    def _get_path_identifers(
+        optical_path_sequence: DicomSequence
+    ) -> List[str]:
+        """Parse optical path sequence and return list of optical path
+        identifiers
+
+        Parameters
+        ----------
+        optical_path_sequence: DicomSequence
+            Optical path sequence.
+
+        Returns
+        ----------
+        List[str]
+            List of optical path identifiers.
+        """
+        return list({
+            str(optical_ds.OpticalPathIdentifier)
+            for optical_ds in optical_path_sequence
+        })
 
 
 class FullTileIndex(TileIndex):
@@ -1848,12 +1936,12 @@ class WsiDicomFileWriter:
         validate_file_meta(meta_ds)
         write_file_meta_info(self._fp, meta_ds)
 
-    def write_base(self, dataset: WsiDataset) -> None:
+    def write_base(self, dataset: Dataset) -> None:
         """Writes base dataset to file.
 
         Parameters
         ----------
-        dataset: WsiDataset
+        dataset: Dataset
 
         """
         now = datetime.now()
@@ -1891,6 +1979,9 @@ class WsiDicomFileWriter:
         path: str,
         workers: int,
         chunk_size: int,
+        scale: int = 1,
+        image_format: str = 'jpeg',
+        image_options: Dict[str, Any] = {'quality': 95}
     ) -> None:
         """Writes pixel data to file.
 
@@ -1907,7 +1998,52 @@ class WsiDicomFileWriter:
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
+        scale: int
+        image_format: str = 'jpeg'
+        image_options: Dict[str, Any] = {'quality': 95}
         """
+        chunked_tile_points = self._chunk_tile_points(
+            image_data,
+            chunk_size,
+            scale
+        )
+
+        if scale is None:
+            def get_scaled_tiles_thread(
+                scaled_tile_points: List[Point]
+            ) -> List[bytes]:
+                return image_data.get_encoded_scaled_tiles(
+                    scaled_tile_points,
+                    z,
+                    path,
+                    scale,
+                    image_format,
+                    image_options
+                )
+            get_tiles = get_scaled_tiles_thread
+        else:
+            def get_tiles_thread(tile_points: List[Point]) -> List[bytes]:
+                # Thread that takes a chunk of tile points and returns list of
+                # tile bytes
+                return image_data.get_encoded_tiles(tile_points, z, path)
+            get_tiles = get_tiles_thread
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            # Each thread result is a list of tiles that is itemized and writen
+            for thread_result in pool.map(
+                get_tiles,
+                chunked_tile_points
+            ):
+                for tile in thread_result:
+                    for frame in itemise_frame(tile, 1):
+                        self._fp.write(frame)
+
+    def _chunk_tile_points(
+        self,
+        image_data: ImageData,
+        chunk_size: int,
+        scale: int = 1
+    ) -> Generator[Generator[Point, None, None], None, None]:
         minimum_chunk_size = getattr(
             image_data,
             'suggested_minimum_chunk_size',
@@ -1921,29 +2057,17 @@ class WsiDicomFileWriter:
             chunk_size//minimum_chunk_size * minimum_chunk_size
         )
 
+        new_tiled_size = image_data.tiled_size / scale
         # Divide the image tiles up into chunk_size chunks (up to tiled size)
         chunked_tile_points = (
             Region(
                 Point(x, y),
-                Size(min(chunk_size, image_data.tiled_size.width - x), 1)
+                Size(min(chunk_size, new_tiled_size.width - x), 1)
             ).iterate_all()
-            for y in range(image_data.tiled_size.height)
-            for x in range(0, image_data.tiled_size.width, chunk_size)
+            for y in range(new_tiled_size.height)
+            for x in range(0, new_tiled_size.width, chunk_size)
         )
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            def get_tiles_thread(tile_points: List[Point]) -> List[bytes]:
-                # Thread that takes a chunk of tile points and returns list of
-                # tile bytes
-                return image_data.get_encoded_tiles(tile_points, z, path)
-
-            # Each thread result is a list of tiles that is itemized and writen
-            for thread_result in pool.map(
-                get_tiles_thread,
-                chunked_tile_points
-            ):
-                for tile in thread_result:
-                    for frame in itemise_frame(tile, 1):
-                        self._fp.write(frame)
+        return chunked_tile_points
 
     def write_pixel_data_end(self) -> None:
         """Writes tags ending pixel data."""
