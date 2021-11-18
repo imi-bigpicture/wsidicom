@@ -9,6 +9,8 @@ from PIL import Image
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
+from wsidicom.instance import WsiInstance
+
 from .conceptcode import (ChannelDescriptionCode, ConceptCode,
                           IlluminationCode, IlluminationColorCode,
                           IlluminatorCode, ImagePathFilterCode, LenseCode,
@@ -570,14 +572,14 @@ class OpticalManager:
         }
 
     @classmethod
-    def open(cls, instances: List) -> 'OpticalManager':
-        """Parse optical path sequence in listed files and create an
+    def open(cls, instances: List[WsiInstance]) -> 'OpticalManager':
+        """Parse optical path sequence in listed instances and create an
         OpticalManager out of the found (unique) OpticalPaths.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            List of WsiDicom files to parse
+        files: List[WsiInstance]
+            List of WsiDicom instances to parse
 
         Returns
         ----------
@@ -654,23 +656,3 @@ class OpticalManager:
         # if(image.mode == 'L'):
         #     image = image.convert('RGB')
         return image.point(lut.array(image.mode))
-
-    @staticmethod
-    def get_path_identifers(optical_path_sequence: DicomSequence) -> List[str]:
-        """Parse optical path sequence and return list of optical path
-        identifiers
-
-        Parameters
-        ----------
-        optical_path_sequence: DicomSequence
-            Optical path sequence.
-
-        Returns
-        ----------
-        List[str]
-            List of optical path identifiers.
-        """
-        return list({
-            str(optical_ds.OpticalPathIdentifier)
-            for optical_ds in optical_path_sequence
-        })

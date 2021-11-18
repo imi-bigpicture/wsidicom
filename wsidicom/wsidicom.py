@@ -19,7 +19,8 @@ from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import (ImageData, WsiDataset, WsiDicomFile,
-                               WsiDicomFileWriter, WsiInstance)
+                               WsiDicomFileWriter, WsiDicomImageData,
+                               WsiInstance)
 from wsidicom.optical import OpticalManager
 from wsidicom.stringprinting import (dict_pretty_str, list_pretty_str,
                                      str_indent)
@@ -800,6 +801,74 @@ class WsiDicomLevel(WsiDicomGroup):
             raise NotImplementedError(f"Levels needs to be integer")
         return level
 
+    def create_child(
+        self,
+        scale: int,
+        uid_generator: Callable[..., UID],
+        workers: int,
+        chunk_size: int
+    ) -> 'WsiDicomLevel':
+        filepaths: List[Path] = []
+        if not isinstance(scale, int) or scale < 2:
+            raise ValueError(
+                "Scale must be integer and larger than 2"
+            )
+        if not isinstance(
+            self.default_instance.image_data,
+            WsiDicomImageData
+        ):
+            raise NotImplementedError(
+                "Can only construct pyramid from DICOM WSI files"
+            )
+        output_path = (
+            self.default_instance.image_data._files[0].filepath.parent
+        )
+        new_tiled_size = self.default_instance.tiled_size / scale
+        new_image_size = self.default_instance.size / scale
+        for instances in self._group_instances_to_file():
+            uid = uid_generator()
+            filepath = Path(os.path.join(output_path, uid + '.dcm'))
+            transfer_syntax = instances[0].image_data.transfer_syntax
+            dataset = deepcopy(instances[0].dataset)
+            # Modify dataset to reflect scaled data
+            dataset.NumberOfFrames = (
+                new_tiled_size.width * new_tiled_size.height
+            )
+            dataset.TotalPixelMatrixColumns = new_image_size.width
+            dataset.TotalPixelMatrixRows = new_image_size.height
+
+            new_pixel_spacing = self.pixel_spacing * scale
+            (
+                dataset.SharedFunctionalGroupsSequence[0].
+                PixelMeasuresSequence[0].PixelSpacing
+            ) = list(new_pixel_spacing.to_tuple())
+            with WsiDicomFileWriter(filepath) as wsi_file:
+                wsi_file = WsiDicomFileWriter(filepath)
+                wsi_file.write_preamble()
+                wsi_file.write_file_meta(uid, transfer_syntax)
+                dataset.SOPInstanceUID = uid
+                wsi_file.write_base(dataset)
+                wsi_file.write_pixel_data_start()
+                for (path, z), image_data in self._list_image_data(instances):
+                    wsi_file.write_pixel_data(
+                        image_data,
+                        z,
+                        path,
+                        workers,
+                        chunk_size,
+                        scale
+                    )
+                wsi_file.write_pixel_data_end()
+                wsi_file.close()
+            filepaths.append(filepath)
+
+        created_instances = WsiInstance.open(
+            [WsiDicomFile(filepath) for filepath in filepaths],
+            self.uids,
+            self.tile_size
+        )
+        return WsiDicomLevel(created_instances, self._base_pixel_spacing)
+
 
 class WsiDicomSeries(metaclass=ABCMeta):
     """Represents a series of WsiDicomGroups with the same image flavor, e.g.
@@ -1220,6 +1289,56 @@ class WsiDicomLevels(WsiDicomSeries):
             raise WsiDicomNotFoundError(
                 f"Level for pixel spacing {pixel_spacing}", "level series")
         return closest
+
+    def construct_pyramid(
+        self,
+        highest_level: int,
+        uid_generator: Callable[..., UID] = generate_uid,
+        workers: Optional[int] = None,
+        chunk_size: int = 100
+    ) -> List[Path]:
+        """Construct missing pyramid levels from excisting levels.
+
+        Parameters
+        ----------
+        highest_level: int
+        uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
+             Function that can gernerate unique identifiers.
+        workers: int = os.cpu_count()
+            Maximum number of thread workers to use.
+        chunk_size: int = 100
+            Chunk size (number of tiles) to process at a time. Actual chunk
+            size also depends on minimun_chunk_size from image_data.
+
+        Returns
+        ----------
+        List[Path]
+            List of paths of created files.
+        """
+        if workers is None:
+            cpus = os.cpu_count()
+            if cpus is None:
+                workers = 1
+            else:
+                workers = cpus
+
+        filepaths: List[Path] = []
+
+        for pyramid_level in range(highest_level):
+            if pyramid_level not in self._levels.keys():
+                # Find the closest larger level for missing level
+                closest_level = self.get_closest_by_level(pyramid_level)
+                # Create scaled level
+                new_level = closest_level.create_child(
+                    scale=2,
+                    uid_generator=uid_generator,
+                    workers=workers,
+                    chunk_size=chunk_size
+                )
+                # Add level to available levels
+                self._levels[new_level.level] = new_level
+                filepaths += new_level.files
+        return filepaths
 
 
 class WsiDicom:
