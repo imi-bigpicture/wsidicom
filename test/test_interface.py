@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from PIL.Image import Image
 
 import numpy as np
 import pytest
@@ -130,7 +131,10 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(x=0, y=0),
             size=Size(width=100, height=100)
         )
-        cropped_region = instance.crop_tile(Point(x=0, y=0), region)
+        cropped_region = region.inside_crop(
+            Point(0, 0),
+            instance.tile_size
+        )
         expected = Region(
             position=Point(0, 0),
             size=Size(100, 100)
@@ -141,7 +145,10 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(x=0, y=0),
             size=Size(width=1500, height=1500)
         )
-        cropped_region = instance.crop_tile(Point(x=0, y=0), region)
+        cropped_region = region.inside_crop(
+            Point(0, 0),
+            instance.tile_size
+        )
         expected = Region(
             position=Point(0, 0),
             size=Size(1024, 1024)
@@ -152,7 +159,10 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(x=1200, y=1200),
             size=Size(width=300, height=300)
         )
-        cropped_region = instance.crop_tile(Point(x=1, y=1), region)
+        cropped_region = region.inside_crop(
+            Point(1, 1),
+            instance.tile_size
+        )
         expected = Region(
             position=Point(176, 176),
             size=Size(300, 300)
@@ -166,7 +176,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(100, 100)
         )
-        get_tiles = instance.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
@@ -174,7 +184,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(1024, 1024)
         )
-        get_tiles = instance.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
@@ -182,31 +192,30 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(300, 400),
             size=Size(500, 500)
         )
-        get_tiles = instance.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
     def test_crop_region_to_level_size(self):
         base_level = self.slide.levels.get_level(0)
-        instance = base_level.get_instance()
         image_size = base_level.size
         region = Region(
             position=Point(0, 0),
             size=Size(100, 100)
         )
-        cropped_region = instance.crop_to_level_size(region)
+        cropped_region = region.crop(image_size)
         self.assertEqual(region.size, cropped_region.size)
         region = Region(
             position=Point(0, 0),
             size=Size(2000, 2000)
         )
-        cropped_region = instance.crop_to_level_size(region)
+        cropped_region = region.crop(image_size)
         self.assertEqual(image_size - region.position, cropped_region.size)
         region = Region(
             position=Point(200, 300),
             size=Size(100, 100)
         )
-        cropped_region = instance.crop_to_level_size(region)
+        cropped_region = region.crop(image_size)
         self.assertEqual(Size(0, 0), cropped_region.size)
 
     def test_size_class(self):
@@ -267,8 +276,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(2048, 2048)
         )
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -276,8 +285,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(1024, 0))
 
         tile = Point(1, 0)
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -285,8 +294,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(0, 1024))
 
         tile = Point(0, 1)
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -299,8 +308,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(512, 512),
             size=Size(1024, 1024)
         )
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -308,8 +317,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(512, 0))
 
         tile = Point(1, 0)
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -317,8 +326,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(0, 512))
 
         tile = Point(0, 1)
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,

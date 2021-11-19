@@ -888,7 +888,7 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def get_decoded_tile(
+    def _get_decoded_tile(
         self,
         tile_point: Point,
         z: float,
@@ -899,7 +899,7 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def get_encoded_tile(
+    def _get_encoded_tile(
         self,
         tile: Point,
         z: float,
@@ -919,6 +919,10 @@ class ImageData(metaclass=ABCMeta):
         """The size of the image when divided into tiles, e.g. number of
         columns and rows of tiles. Equals (1, 1) if image is not tiled."""
         return self.image_size / self.tile_size
+
+    @property
+    def image_region(self) -> Region:
+        return Region(Point(0, 0), self.image_size)
 
     @property
     def focal_planes(self) -> List[float]:
@@ -1002,7 +1006,7 @@ class ImageData(metaclass=ABCMeta):
         """Return Images for tile defined by tile (x, y), z, and optical
         path."""
         return [
-            self.get_decoded_tile(tile, z, path) for tile in tiles
+            self._get_decoded_tile(tile, z, path) for tile in tiles
         ]
 
     def get_encoded_tiles(
@@ -1014,7 +1018,7 @@ class ImageData(metaclass=ABCMeta):
         """Return image bytes for tile defined by tile (x, y), z, and optical
         path."""
         return [
-            self.get_encoded_tile(tile, z, path) for tile in tiles
+            self._get_encoded_tile(tile, z, path) for tile in tiles
         ]
 
     def get_encoded_scaled_tiles(
@@ -1045,7 +1049,7 @@ class ImageData(metaclass=ABCMeta):
                     (tile_point.x < self.tiled_size.width) and
                     (tile_point.y < self.tiled_size.height)
                 ):
-                    tile = self.get_decoded_tile(
+                    tile = self._get_decoded_tile(
                         tile_point,
                         z,
                         path
@@ -1193,6 +1197,189 @@ class ImageData(metaclass=ABCMeta):
             color=self.blank_color[:self.samples_per_pixel]
         )
 
+    def stitch_tiles(
+        self,
+        region: Region,
+        path: str,
+        z: float
+    ) -> Image.Image:
+        """Stitches tiles together to form requested image.
+
+        Parameters
+        ----------
+        region: Region
+             Pixel region to stitch to image
+        path: str
+            Optical path
+        z: float
+            Z coordinate
+
+        Returns
+        ----------
+        Image.Image
+            Stitched image
+        """
+
+        image = Image.new(
+            mode=self.image_mode,  # type: ignore
+            size=region.size.to_tuple()
+        )
+        stitching_tiles = self.get_tile_range(region, z, path)
+
+        write_index = Point(x=0, y=0)
+        tile = stitching_tiles.position
+        for tile in stitching_tiles.iterate_all(include_end=True):
+            tile_image = self.get_tile(tile, z, path, region)
+            image.paste(tile_image, write_index.to_tuple())
+            write_index = self._write_indexer(
+                write_index,
+                Size.from_tuple(tile_image.size),
+                region.size
+            )
+        return image
+
+    def get_tile_range(
+        self,
+        pixel_region: Region,
+        z: float,
+        path: str
+    ) -> Region:
+        """Return range of tiles to cover pixel region.
+
+        Parameters
+        ----------
+        pixel_region: Region
+            Pixel region of tiles to get
+        z: float
+            Z coordinate of tiles to get
+        path: str
+            Optical path identifier of tiles to get
+
+        Returns
+        ----------
+        Region
+            Region of tiles for stitching image
+        """
+        start = pixel_region.start // self.tile_size
+        end = pixel_region.end / self.tile_size - 1
+        tile_region = Region.from_points(start, end)
+        if not self.valid_tiles(tile_region, z, path):
+            raise WsiDicomOutOfBoundsError(
+                f"Tile region {tile_region}",
+                f"tiled size {self.tiled_size}"
+            )
+        return tile_region
+
+    @staticmethod
+    def _write_indexer(
+        index: Point,
+        previous_size: Size,
+        image_size: Size
+    ) -> Point:
+        """Increment index in x by previous width until index x exceds image
+        size. Then resets index x to 0 and increments index y by previous
+        height. Requires that tiles are scanned row by row.
+
+        Parameters
+        ----------
+        index: Point
+            The last write index position
+        previouis_size: Size
+            The size of the last written last tile
+        image_size: Size
+            The size of the image to be written
+
+        Returns
+        ----------
+        Point
+            The position (upper right) in image to insert the next tile into
+        """
+        index.x += previous_size.width
+        if(index.x >= image_size.width):
+            index.x = 0
+            index.y += previous_size.height
+        return index
+
+    def get_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str,
+        crop: Union[bool, Region] = True
+    ) -> Image.Image:
+        """Get tile image at tile coordinate x, y. If frame is inside tile
+        geometry but no tile exists in frame data (sparse) returns blank image.
+        Optional crop tile to crop_region.
+
+        Parameters
+        ----------
+        tile: Point
+            Tile x, y coordinate.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        crop: Union[bool, Region] = True
+            If to crop tile to image size (True, default) or to region.
+
+        Returns
+        ----------
+        Image.Image
+            Tile image.
+        """
+        image = self._get_decoded_tile(tile, z, path)
+        if crop is False:
+            return image
+
+        if isinstance(crop, bool):
+            crop = self.image_region
+        tile_crop = crop.inside_crop(tile, self.tile_size)
+        if tile_crop.size == self.tile_size:
+            return image
+
+        return image.crop(box=tile_crop.box)
+
+    def get_encoded_tile(
+        self,
+        tile: Point,
+        z: float,
+        path: str,
+        crop: Union[bool, Region] = True
+    ) -> bytes:
+        """Get tile bytes at tile coordinate x, y
+        If frame is inside tile geometry but no tile exists in
+        frame data (sparse) returns encoded blank image.
+
+        Parameters
+        ----------
+        tile: Point
+            Tile x, y coordinate.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        crop: Union[bool, Region] = True
+            If to crop tile to image size (True, default) or to region.
+
+        Returns
+        ----------
+        bytes
+            Tile image as bytes.
+        """
+        tile_frame = self._get_encoded_tile(tile, z, path)
+        if crop is False:
+            return tile_frame
+
+        if isinstance(crop, bool):
+            crop = self.image_region
+        # Check if tile is an edge tile that should be croped
+        cropped_tile_region = crop.inside_crop(tile, self.tile_size)
+        if cropped_tile_region.size != self.tile_size:
+            image = Image.open(io.BytesIO(tile_frame))
+            image.crop(box=cropped_tile_region.box_from_origin)
+            tile_frame = self.encode(image)
+        return tile_frame
+
 
 class WsiDicomImageData(ImageData):
     """Represents image data read from dicom file(s). Image data can
@@ -1279,13 +1466,13 @@ class WsiDicomImageData(ImageData):
         """Return samples per pixel (1 or 3)."""
         return self._samples_per_pixel
 
-    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:
             return self.blank_encoded_tile
         return self._get_tile_frame(frame_index)
 
-    def get_decoded_tile(
+    def _get_decoded_tile(
         self,
         tile_point: Point,
         z: float,
@@ -2133,7 +2320,7 @@ class WsiInstance:
             if(depth < 0):
                 return string
         string += (
-            ' ImageData ' + self._image_data.pretty_str(indent+1, depth)
+            ' ImageData ' + self.image_data.pretty_str(indent+1, depth)
         )
         return string
 
@@ -2282,256 +2469,6 @@ class WsiInstance:
             )
             for instance_files in files_grouped_by_instance.values()
         ]
-
-    def stitch_tiles(
-        self,
-        region: Region,
-        path: Optional[str] = None,
-        z: Optional[float] = None
-    ) -> Image.Image:
-        """Stitches tiles together to form requested image.
-
-        Parameters
-        ----------
-        region: Region
-             Pixel region to stitch to image
-        path: str
-            Optical path
-        z: float
-            Z coordinate
-
-        Returns
-        ----------
-        Image.Image
-            Stitched image
-        """
-        if z is None:
-            z = self.default_z
-        if path is None:
-            path = self.default_path
-
-        image = Image.new(
-            mode=self.image_data.image_mode,  # type: ignore
-            size=region.size.to_tuple()
-        )
-        stitching_tiles = self.get_tile_range(region, z, path)
-
-        write_index = Point(x=0, y=0)
-        tile = stitching_tiles.position
-        for tile in stitching_tiles.iterate_all(include_end=True):
-            tile_image = self.get_tile(tile, z, path)
-            tile_crop = self.crop_tile(tile, region)
-            tile_image = tile_image.crop(box=tile_crop.box)
-            image.paste(tile_image, write_index.to_tuple())
-            write_index = self._write_indexer(
-                write_index,
-                tile_crop.size,
-                region.size
-            )
-        return image
-
-    def get_tile_range(
-        self,
-        pixel_region: Region,
-        z: float,
-        path: str
-    ) -> Region:
-        """Return range of tiles to cover pixel region.
-
-        Parameters
-        ----------
-        pixel_region: Region
-            Pixel region of tiles to get
-        z: float
-            Z coordinate of tiles to get
-        path: str
-            Optical path identifier of tiles to get
-
-        Returns
-        ----------
-        Region
-            Region of tiles for stitching image
-        """
-        start = pixel_region.start // self._image_data.tile_size
-        end = pixel_region.end / self._image_data.tile_size - 1
-        tile_region = Region.from_points(start, end)
-        if not self._image_data.valid_tiles(tile_region, z, path):
-            raise WsiDicomOutOfBoundsError(
-                f"Tile region {tile_region}",
-                f"tiled size {self._image_data.tiled_size}"
-            )
-        return tile_region
-
-    def crop_encoded_tile_to_level(
-        self,
-        tile: Point,
-        tile_frame: bytes
-    ) -> bytes:
-        cropped_tile_region = self.crop_to_level_size(tile)
-        if cropped_tile_region.size != self.tile_size:
-            image = Image.open(io.BytesIO(tile_frame))
-            image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.image_data.encode(image)
-        return tile_frame
-
-    def crop_tile_to_level(
-        self,
-        tile: Point,
-        tile_image: Image.Image
-    ) -> Image.Image:
-        cropped_tile_region = self.crop_to_level_size(tile)
-        if cropped_tile_region.size != self.tile_size:
-            tile_image = tile_image.crop(
-                box=cropped_tile_region.box_from_origin
-            )
-        return tile_image
-
-    def crop_tile(self, tile: Point, stitching: Region) -> Region:
-        """Crop tile at edge of stitching region so that the tile after croping
-        is inside the stitching region.
-
-        Parameters
-        ----------
-        tile: Point
-            Position of tile to crop
-        stitching : Region
-            Region of stitched image
-
-        Returns
-        ----------
-        Region
-            Region of tile inside stitching region
-        """
-        tile_region = Region(
-            position=tile * self.tile_size,
-            size=self.tile_size
-        )
-        cropped_tile_region = stitching.crop(tile_region)
-        cropped_tile_region.position = (
-            cropped_tile_region.position % self.tile_size
-        )
-        return cropped_tile_region
-
-    def crop_to_level_size(self, item: Union[Point, Region]) -> Region:
-        """Crop tile or region so that the tile (Point) or region (Region)
-        after cropping is inside the image size of the level.
-
-        Parameters
-        ----------
-        item: Union[Point, Region]
-            Position of tile or region to crop
-
-        Returns
-        ----------
-        Region
-            Region of tile or region inside level image
-        """
-        level_region = Region(
-            position=Point(x=0, y=0),
-            size=self.size
-        )
-        if isinstance(item, Point):
-            return self.crop_tile(item, level_region)
-        return level_region.crop(item)
-
-    @staticmethod
-    def _write_indexer(
-        index: Point,
-        previous_size: Size,
-        image_size: Size
-    ) -> Point:
-        """Increment index in x by previous width until index x exceds image
-        size. Then resets index x to 0 and increments index y by previous
-        height. Requires that tiles are scanned row by row.
-
-        Parameters
-        ----------
-        index: Point
-            The last write index position
-        previouis_size: Size
-            The size of the last written last tile
-        image_size: Size
-            The size of the image to be written
-
-        Returns
-        ----------
-        Point
-            The position (upper right) in image to insert the next tile into
-        """
-        index.x += previous_size.width
-        if(index.x >= image_size.width):
-            index.x = 0
-            index.y += previous_size.height
-        return index
-
-    def get_tile(
-        self,
-        tile: Point,
-        z: Optional[float] = None,
-        path: Optional[str] = None
-    ) -> Image.Image:
-        """Get tile image at tile coordinate x, y.
-        If frame is inside tile geometry but no tile exists in
-        frame data (sparse) returns blank image.
-
-        Parameters
-        ----------
-        tile: Point
-            Tile x, y coordinate.
-        z: float
-            Z coordinate.
-        path: str
-            Optical path.
-
-        Returns
-        ----------
-        Image.Image
-            Tile image.
-        """
-        if z is None:
-            z = self.default_z
-        if path is None:
-            path = self.default_path
-        image = self.image_data.get_decoded_tile(tile, z, path)
-        return self.crop_tile_to_level(tile, image)
-
-    def get_encoded_tile(
-        self,
-        tile: Point,
-        z: Optional[float] = None,
-        path: Optional[str] = None
-    ) -> bytes:
-        """Get tile bytes at tile coordinate x, y
-        If frame is inside tile geometry but no tile exists in
-        frame data (sparse) returns encoded blank image.
-
-        Parameters
-        ----------
-        tile: Point
-            Tile x, y coordinate.
-        z: Optional[float]
-            Z coordinate.
-        path: Optional[str]
-            Optical path.
-
-        Returns
-        ----------
-        bytes
-            Tile image as bytes.
-        """
-        if z is None:
-            z = self.default_z
-        if path is None:
-            path = self.default_path
-        tile_frame = self.image_data.get_encoded_tile(tile, z, path)
-
-        # Check if tile is an edge tile that should be croped
-        cropped_tile_region = self.crop_to_level_size(tile)
-        if cropped_tile_region.size != self.tile_size:
-            image = Image.open(io.BytesIO(tile_frame))
-            image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.image_data.encode(image)
-        return tile_frame
 
     @staticmethod
     def check_duplicate_instance(
