@@ -37,7 +37,7 @@ def list_pretty_str(
         List of items to pretty-print
     indent: int
         Identation for the string and list
-    depth: int
+    depth: Optional[int] = None
         Depth to print, if item contains list
     pre_new_lines: int
         Number of new lines at begining of string
@@ -84,7 +84,7 @@ def dict_pretty_str(
         List of items to pretty-print
     indent: int
         Identation for the string and list
-    depth: int
+    depth: Optional[int] = None
         Depth to print, if item contains list
     pre_new_lines: int
         Number of new lines at begining of string

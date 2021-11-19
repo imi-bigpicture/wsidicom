@@ -116,7 +116,7 @@ class ConceptCode(metaclass=ABCMeta):
 
         Returns
         ----------
-        List[ConceptCode]
+        Optional[List['ConceptCode']]
             Codes created from sequence in dataset.
 
         """
@@ -147,7 +147,7 @@ class SingleConceptCode(ConceptCode):
 
         Returns
         ----------
-        ConceptCode
+        Optional['ConceptCode']
             Measurement code created from value.
 
         """
