@@ -784,7 +784,7 @@ class WsiDicomFile:
             Wsi files to filter.
         series_uids: Uids
             Uids to check against.
-        series_tile_size: Size
+        series_tile_size: Optional[Size] = None
             Tile size to check against.
 
         Returns
@@ -2448,7 +2448,7 @@ class WsiInstance:
             Files to create instances from.
         series_uids: BaseUids
             Uid to match against.
-        series_tile_size: Size
+        series_tile_size: Optional[Size]
             Tile size to match against (for level instances).
 
         Returns
