@@ -214,9 +214,9 @@ class WsiDicomGroup:
 
         Parameters
         ----------
-        z: float
+        z: Optional[float] = None
             Z coordinate of the searched instance
-        path: str
+        path: Optional[str] = None
             Optical path of the searched instance
 
         Returns
@@ -289,9 +289,9 @@ class WsiDicomGroup:
             Upper left corner of region in pixels
         size: int
             Size of region in pixels
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path: str
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -322,9 +322,9 @@ class WsiDicomGroup:
             Upper left corner of region in mm
         size: float
             Size of region in mm
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path:
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -348,9 +348,9 @@ class WsiDicomGroup:
         ----------
         tile: Point
             Tile x, y coordinate
-        z: float
+        z: Optional[float] = None
             Z coordinate
-        path: str
+        path: Optional[str] = None
             Optical path
 
         Returns
@@ -378,9 +378,9 @@ class WsiDicomGroup:
         ----------
         tile: Point
             Tile x, y coordinate
-        z: float
+        z: Optional[float] = None
             Z coordinate
-        path: str
+        path: Optional[str] = None
             Optical path
 
         Returns
@@ -720,9 +720,9 @@ class WsiDicomLevel(WsiDicomGroup):
             Non scaled tile coordinate
         level: int
             Level to scale from
-        z: float
+        z: Optional[float] = None
             Z coordinate
-        path: str
+        path: Optional[str] = None
             Optical path
 
         Returns
@@ -761,9 +761,9 @@ class WsiDicomLevel(WsiDicomGroup):
             Non scaled tile coordinate
         level: int
            Level to scale from
-        z: float
+        z: Optional[float] = None
             Z coordinate
-        path: str
+        path: Optional[str] = None
             Optical path
 
         Returns
@@ -1316,7 +1316,7 @@ class WsiDicomLevels(WsiDicomSeries):
         highest_level: int
         uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
              Function that can gernerate unique identifiers.
-        workers: int = os.cpu_count()
+        workers: Optional[int] = None
             Maximum number of thread workers to use.
         chunk_size: int = 100
             Chunk size (number of tiles) to process at a time. Actual chunk
@@ -1600,9 +1600,9 @@ class WsiDicom:
         ----------
         size: int, int
             Upper size limit for thumbnail
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path:
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -1635,9 +1635,9 @@ class WsiDicom:
             Level in pyramid
         size: int
             Size of region in pixels
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path:
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -1679,9 +1679,9 @@ class WsiDicom:
             Level in pyramid
         size: float
             Size of region in mm
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path:
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -1719,9 +1719,9 @@ class WsiDicom:
             Requested pixel spacing (um/pixel)
         size: float
             Size of region in mm
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path:
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -1756,9 +1756,9 @@ class WsiDicom:
             Pyramid level
         tile: int, int
             tile xy coordinate
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path:
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -1795,9 +1795,9 @@ class WsiDicom:
             Pyramid level
         tile: int, int
             tile xy coordinate
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path:
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -1832,9 +1832,9 @@ class WsiDicom:
         ----------
         level: int
             Pyramid level
-        z: float
+        z: Optional[float] = None
             Z coordinate, optional
-        path:
+        path: Optional[str] = None
             optical path, optional
 
         Returns
@@ -1855,7 +1855,7 @@ class WsiDicom:
         output_path: str,
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
-        chunk_size: int = 100
+        chunk_size: Optional[int] = None
     ) -> List[Path]:
         """Save wsi as DICOM-files in path.
 
@@ -1864,9 +1864,9 @@ class WsiDicom:
         output_path: str
         uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
              Function that can gernerate unique identifiers.
-        workers: int = os.cpu_count()
+        workers: Optional[int] = None
             Maximum number of thread workers to use.
-        chunk_size: int = 100
+        chunk_size: Optional[int] = None
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
 
@@ -1881,6 +1881,9 @@ class WsiDicom:
                 workers = 1
             else:
                 workers = cpus
+        if chunk_size is None:
+            chunk_size = 100
+
         collections: List[WsiDicomSeries] = [
             self.levels, self.labels, self.overviews
         ]
