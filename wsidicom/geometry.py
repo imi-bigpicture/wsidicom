@@ -379,17 +379,55 @@ class Region:
             (self.end.y <= test_region.end.y)
         )
 
-    def crop(self, region: 'Region') -> 'Region':
+    def crop(self, other_region: Union[Size, 'Region']) -> 'Region':
+        """Crop other_region to be inside this region. If the other_region is
+        'Size', a region starting from Point(0, 0) is created.
+
+        Parameters
+        ----------
+        other_region: Union[Size, 'Region']
+            Region to be cropped.
+
+        Returns
+        ----------
+        Region
+            Cropped region.
+        """
+        if isinstance(other_region, Size):
+            other_region = Region(Point(0, 0), other_region)
         start = Point.min(
-            Point.max(region.position, self.position),
+            Point.max(other_region.position, self.position),
             self.end
         )
         end = Point.max(
-            Point.min(region.end, self.end),
+            Point.min(other_region.end, self.end),
             self.position
         )
         size = Size.from_points(start, end)
         return Region(position=start, size=size)
+
+    def inside_crop(self, point: Point, tile_size: Size) -> 'Region':
+        """Crop point to be inside and with the same origin as this region.
+
+        Parameters
+        ----------
+        point: Point
+            Point to be cropped.
+
+        Returns
+        ----------
+        Region
+            Cropped region.
+        """
+        tile_region = Region(
+            position=point * tile_size,
+            size=tile_size
+        )
+        cropped_tile_region = self.crop(tile_region)
+        cropped_tile_region.position = (
+            cropped_tile_region.position % tile_size
+        )
+        return cropped_tile_region
 
 
 @dataclass

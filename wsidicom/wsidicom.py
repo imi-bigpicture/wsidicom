@@ -301,7 +301,11 @@ class WsiDicomGroup:
         """
 
         instance = self.get_instance(z, path)
-        image = instance.stitch_tiles(region, path, z)
+        if z is None:
+            z = instance.default_z
+        if path is None:
+            path = instance.default_path
+        image = instance.image_data.stitch_tiles(region, path, z)
         return image
 
     def get_region_mm(
@@ -356,7 +360,11 @@ class WsiDicomGroup:
         """
 
         instance = self.get_instance(z, path)
-        return instance.get_tile(tile, z, path)
+        if z is None:
+            z = instance.default_z
+        if path is None:
+            path = instance.default_path
+        return instance.image_data.get_tile(tile, z, path)
 
     def get_encoded_tile(
         self,
@@ -381,7 +389,11 @@ class WsiDicomGroup:
             The tile as bytes
         """
         instance = self.get_instance(z, path)
-        return instance.get_encoded_tile(tile, z, path)
+        if z is None:
+            z = instance.default_z
+        if path is None:
+            path = instance.default_path
+        return instance.image_data.get_encoded_tile(tile, z, path)
 
     def mm_to_pixel(self, region: RegionMm) -> Region:
         """Convert region in mm to pixel region.
@@ -721,7 +733,7 @@ class WsiDicomLevel(WsiDicomGroup):
         scale = self.calculate_scale(level)
         instance = self.get_instance(z, path)
         scaled_region = Region.from_tile(tile, instance.tile_size) * scale
-        cropped_region = instance.crop_to_level_size(scaled_region)
+        cropped_region = scaled_region.crop(instance.image_data.image_size)
         if not self.valid_pixels(cropped_region):
             raise WsiDicomOutOfBoundsError(
                 f"Region {cropped_region}", f"level size {self.size}"
