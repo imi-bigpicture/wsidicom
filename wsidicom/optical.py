@@ -457,19 +457,19 @@ class OpticalPath:
             The illumination condition used in the optical path.
         photometric_interpretation: str
             The photometric interpretation of the optical path.
-        description: str = None
+        description: Optional[str] = None
             Optional description of the optical path.
-        icc_profile: bytes = None
+        icc_profile: Optional[bytes] = None
             Optional ICC profile for the optical path.
-        lut: Lut = None
+        lut: Optional[Lut] = None
             Optional Look-up table for the optical path.
-        light_path_filter: LightPathFilter = None
+        light_path_filter: Optional[LightPathFilter] = None
             Optional light path filter description for the optical path.
-        image_path_filter: ImagePathFilter = None
+        image_path_filter: Optional[ImagePathFilter] = None
             Optional image path filter description for the optical path.
-        channel_description: List[ConceptCode] = None
+        channel_description: Optional[List[ConceptCode]] = None
             Optional channel description for the optical path.
-        lenses: Lenses = None
+        lenses: Optional[Lenses] = None
             Optional lens description for the optical path.
         """
 

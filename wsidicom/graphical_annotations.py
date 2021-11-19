@@ -863,7 +863,7 @@ class Annotation:
         ----------
         geometry: Geometry
             Geometry of the annotation.
-        measurements: List[Measurement]
+        measurements: Optional[List[Measurement]]
             Optional measurements of the annotation.
         """
 
@@ -963,14 +963,15 @@ class AnnotationGroup:
             Group categorycode.
         typecode: ConceptCode
             Group typecode.
-        instance: Uid
-            Uid this group was created from.
-        description: str
+        description: Optional[str] = None
             Group description.
-        color: LabColor
+        color: Optional[LabColor] = None
             Recommended CIELAB color.
         is_double: bool
             If group is stored with double float
+        instance: Optional[Uid]
+            Uid this group was created from.
+
         """
         self.validate_type(annotations, self._geometry_type)
         self._z_planes: List[float] = []
