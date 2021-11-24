@@ -22,7 +22,7 @@ class ConceptCode(metaclass=ABCMeta):
         meaning: str,
         value: str,
         scheme_designator: str,
-        scheme_version: str = None
+        scheme_version: Optional[str] = None
     ):
         self.meaning = meaning
         self.value = value
@@ -39,11 +39,6 @@ class ConceptCode(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def from_ds(cls, ds: Dataset):
-        raise NotImplementedError
-
-    @classmethod
-    @abstractmethod
     def list(cls) -> List[str]:
         raise NotImplementedError
 
@@ -54,6 +49,18 @@ class ConceptCode(metaclass=ABCMeta):
             scheme_designator=self.scheme_designator,
             meaning=self.meaning,
             scheme_version=self.scheme_version
+        )
+
+    @classmethod
+    def from_code(
+        cls,
+        code: Code
+    ) -> 'ConceptCode':
+        return cls(
+            code.value,
+            code.scheme_designator,
+            code.meaning,
+            code.scheme_version
         )
 
     def to_ds(self) -> Dataset:
@@ -99,7 +106,7 @@ class ConceptCode(metaclass=ABCMeta):
     def _from_ds(
         cls,
         ds: Dataset,
-    ) -> Optional[List[Code]]:
+    ) -> Optional[List['ConceptCode']]:
         """Return list of ConceptCode from sequence in dataset.
 
         Parameters
@@ -109,7 +116,7 @@ class ConceptCode(metaclass=ABCMeta):
 
         Returns
         ----------
-        List[ConceptCode]
+        Optional[List['ConceptCode']]
             Codes created from sequence in dataset.
 
         """
@@ -140,7 +147,7 @@ class SingleConceptCode(ConceptCode):
 
         Returns
         ----------
-        ConceptCode
+        Optional['ConceptCode']
             Measurement code created from value.
 
         """
@@ -153,7 +160,7 @@ class SingleConceptCode(ConceptCode):
 class MultipleConceptCode(ConceptCode):
     """Code for concepts that allow multiple items"""
     @classmethod
-    def from_ds(cls, ds: Dataset) -> Optional[List['ConceptCode']]:
+    def from_ds(cls, ds: Dataset) -> List['ConceptCode']:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
@@ -168,19 +175,22 @@ class MultipleConceptCode(ConceptCode):
             Measurement code created from value.
 
         """
-        return cls._from_ds(ds)
+        codes = cls._from_ds(ds)
+        if codes is None:
+            return []
+        return codes
 
 
-class CidConceptCode(ConceptCode, metaclass=ABCMeta):
+class CidConceptCode(ConceptCode):
     """Code for concepts defined in Context groups"""
     cid: Dict[str, Code]
 
     def __init__(
         self,
         meaning: str,
-        value: str = None,
-        scheme_designator: str = None,
-        scheme_version: str = None
+        value: Optional[str] = None,
+        scheme_designator: Optional[str] = None,
+        scheme_version: Optional[str] = None
     ):
         if value is None or scheme_designator is None:
             code = self._from_cid(meaning)
@@ -235,9 +245,9 @@ class UnitCode(SingleConceptCode):
     def __init__(
         self,
         meaning: str,
-        value: str = None,
-        scheme_designator: str = None,
-        scheme_version: str = None
+        value: Optional[str] = None,
+        scheme_designator: Optional[str] = None,
+        scheme_version: Optional[str] = None
     ):
         if value is None or scheme_designator is None:
             code = self._from_ucum(meaning)
@@ -368,7 +378,7 @@ class IlluminatorCode(CidConceptCode, SingleConceptCode):
     cid = codes.cid8125.concepts  # Microscopy Illuminator Type
 
 
-class ChannelDescriptionCode(CidConceptCode, SingleConceptCode):
+class ChannelDescriptionCode(CidConceptCode, MultipleConceptCode):
     """
     Concept code for channel descriptor.
     From CID 8122 Microscopy Illuminator and Sensor Color

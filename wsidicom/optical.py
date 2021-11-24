@@ -2,16 +2,19 @@ import struct
 import warnings
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 import numpy as np
 from PIL import Image
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
-from .conceptcode import (ChannelDescriptionCode, IlluminationCode,
-                          IlluminationColorCode, IlluminatorCode,
-                          ImagePathFilterCode, LenseCode, LightPathFilterCode)
+from wsidicom.instance import WsiInstance
+
+from .conceptcode import (ChannelDescriptionCode, ConceptCode,
+                          IlluminationCode, IlluminationColorCode,
+                          IlluminatorCode, ImagePathFilterCode, LenseCode,
+                          LightPathFilterCode)
 from .errors import WsiDicomNotFoundError
 
 
@@ -31,12 +34,11 @@ class Lut:
         length, first, bits = \
             self._lut_item.RedPaletteColorLookupTableDescriptor
         self._length = length
-        self._type: type
         self._bits = bits
         if bits == 8:
-            self._type = np.uint8
+            self._type = np.dtype(np.uint8)
         else:
-            self._type = np.uint16
+            self._type = np.dtype(np.uint16)
         self._byte_format = 'HHH'  # Do we need to set endianess?
         self.table = self._parse_lut(self._lut_item)
 
@@ -75,7 +77,8 @@ class Lut:
             Dataset with object inserted.
 
         """
-        ds.PaletteColorLookupTableSequence = DicomSequence[self._lut_item]
+        ds.PaletteColorLookupTableSequence = DicomSequence([self._lut_item])
+        return ds
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> Optional['Lut']:
@@ -120,12 +123,12 @@ class Lut:
                 raise NotImplementedError("Unkown lut segment type")
         return parsed_table
 
-    def _parse_lut(self, lut: DicomSequence) -> np.ndarray:
+    def _parse_lut(self, lut: Dataset) -> np.ndarray:
         """Parse a dicom Palette Color Lookup Table Sequence item.
 
         Parameters
         ----------
-        lut: DicomSequence
+        lut: Dataset
             A Palette Color Lookup Table Sequence item
         """
         tables = [
@@ -206,14 +209,14 @@ class Lut:
 @dataclass
 class OpticalFilter(metaclass=ABCMeta):
     """Metaclass for filter conditions for optical path"""
-    filters: Optional[Union[LightPathFilterCode, ImagePathFilterCode]]
+    filters: Optional[List[ConceptCode]]
     nominal: Optional[float]
     low_pass: Optional[float]
     high_pass: Optional[float]
 
     @classmethod
     @abstractmethod
-    def from_ds(cls, ds: Dataset):
+    def from_ds(cls, ds: Dataset) -> 'OpticalFilter':
         raise NotImplementedError
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
@@ -246,7 +249,7 @@ class OpticalFilter(metaclass=ABCMeta):
 @dataclass
 class LightPathFilter(OpticalFilter):
     """Set of light path filter conditions for optical path"""
-    filters: Optional[List[LightPathFilterCode]]
+    filters: Optional[List[ConceptCode]]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'LightPathFilter':
@@ -276,7 +279,7 @@ class LightPathFilter(OpticalFilter):
 @dataclass
 class ImagePathFilter(OpticalFilter):
     """Set of image path filter conditions for optical path"""
-    filters: Optional[List[ImagePathFilterCode]]
+    filters: Optional[List[ConceptCode]]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'ImagePathFilter':
@@ -308,10 +311,10 @@ class Illumination:
     """Set of illumination conditions for optical path"""
     def __init__(
         self,
-        illumination_method: List[IlluminationCode],
-        illumination_wavelength: float = None,
-        illumination_color: IlluminationColorCode = None,
-        illuminator: IlluminatorCode = None
+        illumination_method: List[ConceptCode] = [],
+        illumination_wavelength: Optional[float] = None,
+        illumination_color: Optional[ConceptCode] = None,
+        illuminator: Optional[ConceptCode] = None
     ):
         if illumination_color is None and illumination_wavelength is None:
             raise ValueError("Illumination color or wavelenght need to be set")
@@ -373,7 +376,7 @@ class Illumination:
 @dataclass
 class Lenses:
     """Set of lens conditions for optical path"""
-    lenses: Optional[List[LenseCode]]
+    lenses: Optional[List[ConceptCode]]
     condenser_power: Optional[float]
     objective_power: Optional[float]
     objective_na: Optional[float]
@@ -435,13 +438,13 @@ class OpticalPath:
         identifier: str,
         illumination: Illumination,
         photometric_interpretation: str,
-        description: str = None,
-        icc_profile: bytes = None,
-        lut: Lut = None,
-        light_path_filter: LightPathFilter = None,
-        image_path_filter: ImagePathFilter = None,
-        channel_description: List[ChannelDescriptionCode] = None,
-        lenses: Lenses = None
+        description: Optional[str] = None,
+        icc_profile: Optional[bytes] = None,
+        lut: Optional[Lut] = None,
+        light_path_filter: Optional[LightPathFilter] = None,
+        image_path_filter: Optional[ImagePathFilter] = None,
+        channel_description: Optional[List[ConceptCode]] = None,
+        lenses: Optional[Lenses] = None
     ):
         """Create a OpticalPath from identifier, illumination, photometric
         interpretation, and optional attributes.
@@ -454,19 +457,19 @@ class OpticalPath:
             The illumination condition used in the optical path.
         photometric_interpretation: str
             The photometric interpretation of the optical path.
-        description: str = None
+        description: Optional[str] = None
             Optional description of the optical path.
-        icc_profile: bytes = None
+        icc_profile: Optional[bytes] = None
             Optional ICC profile for the optical path.
-        lut: Lut = None
+        lut: Optional[Lut] = None
             Optional Look-up table for the optical path.
-        light_path_filter: LightPathFilter = None
+        light_path_filter: Optional[LightPathFilter] = None
             Optional light path filter description for the optical path.
-        image_path_filter: ImagePathFilter = None
+        image_path_filter: Optional[ImagePathFilter] = None
             Optional image path filter description for the optical path.
-        channel_description: List[ChannelDescriptionCode] = None
+        channel_description: Optional[List[ConceptCode]] = None
             Optional channel description for the optical path.
-        lenses: Lenses = None
+        lenses: Optional[Lenses] = None
             Optional lens description for the optical path.
         """
 
@@ -507,7 +510,7 @@ class OpticalPath:
         if self.light_path_filter is not None:
             ds = self.light_path_filter.insert_into_ds(ds)
         if self.image_path_filter is not None:
-            ds = self.light_path_filter.insert_into_ds(ds)
+            ds = self.image_path_filter.insert_into_ds(ds)
         if self.channel_description is not None:
             for item in self.channel_description:
                 ds = item.insert_into_ds(ds)
@@ -554,13 +557,13 @@ class OpticalManager:
     """Store optical paths loaded from dicom files."""
     def __init__(
         self,
-        optical_paths: List[OpticalPath] = None,
+        optical_paths: List[OpticalPath] = [],
     ):
         """Create a OpticalManager from list of OpticalPaths.
 
         Parameters
         ----------
-        optical_paths: List[OpticalPath] = None
+        optical_paths: List[OpticalPath] = []
             List of OpticalPaths.
         """
         self._optical_paths: Dict[str, OpticalPath] = {
@@ -569,14 +572,14 @@ class OpticalManager:
         }
 
     @classmethod
-    def open(cls, instances: List) -> 'OpticalManager':
-        """Parse optical path sequence in listed files and create an
+    def open(cls, instances: List[WsiInstance]) -> 'OpticalManager':
+        """Parse optical path sequence in listed instances and create an
         OpticalManager out of the found (unique) OpticalPaths.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
-            List of WsiDicom files to parse
+        files: List[WsiInstance]
+            List of WsiDicom instances to parse
 
         Returns
         ----------
@@ -595,7 +598,7 @@ class OpticalManager:
                             dataset.PhotometricInterpretation
                         )
                         optical_paths[identifier] = path
-        return OpticalManager(optical_paths.values())
+        return cls(list(optical_paths.values()))
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
         """Codes and insert object into dataset.
@@ -627,12 +630,12 @@ class OpticalManager:
                 "optical path manager"
             )
 
-    def apply_lut(self, image: Image, identifier: str) -> Image:
+    def apply_lut(self, image: Image.Image, identifier: str) -> Image.Image:
         """Apply LUT of identifier to image. Converts gray scale image to RGB.
 
         Parameters
         ----------
-        image: Image
+        image: Image.Image
             Pillow image to apply LUT to.
         identifier: str
             The identifier of the LUT to apply
@@ -653,23 +656,3 @@ class OpticalManager:
         # if(image.mode == 'L'):
         #     image = image.convert('RGB')
         return image.point(lut.array(image.mode))
-
-    @staticmethod
-    def get_path_identifers(optical_path_sequence: DicomSequence) -> List[str]:
-        """Parse optical path sequence and return list of optical path
-        identifiers
-
-        Parameters
-        ----------
-        optical_path_sequence: DicomSequence
-            Optical path sequence.
-
-        Returns
-        ----------
-        List[str]
-            List of optical path identifiers.
-        """
-        return list({
-            str(optical_ds.OpticalPathIdentifier)
-            for optical_ds in optical_path_sequence
-        })

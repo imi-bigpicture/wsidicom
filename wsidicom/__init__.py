@@ -3,4 +3,6 @@ from .graphical_annotations import (Annotation, AnnotationGroup,
                                     Measurement, Point, PointAnnotationGroup,
                                     Polygon, PolygonAnnotationGroup, Polyline,
                                     PolylineAnnotationGroup)
-from .interface import WsiDicom
+from .instance import WsiDataset, WsiInstance
+from .wsidicom import (WsiDicom, WsiDicomLabels, WsiDicomLevels,
+                       WsiDicomOverviews, ImageData)

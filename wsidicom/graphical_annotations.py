@@ -4,17 +4,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import (Any, Callable, DefaultDict, Dict, Generator, List,
-                    Optional, Set, Tuple, Union)
+                    Optional, Set, Tuple, Union, Type)
 
 import numpy as np
-import pydicom
 from pydicom import config
-from pydicom.dataset import Dataset
+from pydicom.dataset import (Dataset, FileDataset, FileMetaDataset,
+                             validate_file_meta)
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.sr.codedict import Code, codes
-
-from .uid import ANN_SOP_CLASS_UID, BaseUids, Uid
+from pydicom.sr.codedict import codes
+from pydicom.sr.coding import Code
+from pydicom.uid import (ExplicitVRBigEndian, ExplicitVRLittleEndian,
+                         ImplicitVRLittleEndian, generate_uid)
+from pydicom.values import convert_numbers
+from pydicom.filewriter import dcmwrite
+from pydicom.filereader import dcmread
 from .geometry import PointMm, RegionMm, SizeMm
+from .uid import ANN_SOP_CLASS_UID, BaseUids, Uid
+
 config.enforce_valid_values = True
 config.future_behavior()
 
@@ -26,7 +32,7 @@ class LabColor:
     b: int
 
 
-def dcm_to_list(item: bytes, type: str) -> List:
+def dcm_to_list(item: bytes, type: str) -> List[Any]:
     """Convert item to list of values using specified type format.
 
     Parameters
@@ -38,10 +44,10 @@ def dcm_to_list(item: bytes, type: str) -> List:
 
     Returns
     ----------
-    List
+    List[Any]
         List of values
     """
-    converted = pydicom.values.convert_numbers(
+    converted = convert_numbers(
         item,
         is_little_endian=True,
         struct_format=type
@@ -506,18 +512,18 @@ class Geometry(metaclass=ABCMeta):
     def from_coords(
         cls,
         coords: Union[Tuple[float, float], List[Tuple[float, float]]]
-    ):
+    ) -> 'Geometry':
         """Return geometry object created from list of coordinates"""
         raise NotImplementedError
 
     @classmethod
     @abstractmethod
-    def from_list(cls, list: List[float]):
+    def from_list(cls, list: List[float]) -> 'Geometry':
         """Return geometry object created from list of floats"""
         raise NotImplementedError
 
     @classmethod
-    def list_to_coords(self, data: List[float]) -> List[Tuple[float, float]]:
+    def list_to_coords(cls, data: List[float]) -> List[Tuple[float, float]]:
         """Return cordinates in list of floats as list of tuple of floats
 
         Parameters
@@ -585,11 +591,11 @@ class Geometry(metaclass=ABCMeta):
         ],
         x: str,
         y: str,
-    ):
+    ) -> 'Geometry':
         raise NotImplementedError
 
     @classmethod
-    def from_shapely_like(cls, object) -> 'Geometry':
+    def from_shapely_like(cls, object: Any) -> 'Geometry':
         """Return Geometry from shapely-like object. Object needs to have
         shapely-like attributes.
 
@@ -643,13 +649,13 @@ class Geometry(metaclass=ABCMeta):
             points: List[float] = coordinates
             return [Point.from_list(points)]
         elif(annotation_type == 'MultiPoint'):
-            points: List[List[float]] = coordinates
-            return [Point.from_list(point) for point in points]
+            multipoints: List[List[float]] = coordinates
+            return [Point.from_list(point) for point in multipoints]
         elif(annotation_type == 'Polygon'):
-            polylines: List[List[List[float]]] = coordinates
+            polylines: List[List[Tuple[float, float]]] = coordinates
             return [Polygon.from_coords(polylines[0])]
         elif(annotation_type == 'LineString'):
-            polyline: List[List[float]] = coordinates
+            polyline: List[Tuple[float, float]] = coordinates
             return [Polyline.from_coords(polyline)]
         raise NotImplementedError("Not supported geojson geometry")
 
@@ -661,7 +667,7 @@ class Point(Geometry):
         self.x = float(x)
         self.y = float(y)
 
-    def __eq__(self, point) -> bool:
+    def __eq__(self, point: 'Point') -> bool:
         if isinstance(point, Point):
             return (
                 self.x == point.x and self.y == point.y
@@ -719,7 +725,7 @@ class Point(Geometry):
         y: str,
     ) -> List['Point']:
         coords = cls._coordinates_from_dict(dictionary, x, y)
-        return [cls(*point) for point in coords]
+        return [cls.from_coords(point) for point in coords]
 
     @classmethod
     def from_dict(
@@ -848,7 +854,7 @@ class Annotation:
     def __init__(
         self,
         geometry: Geometry,
-        measurements: List[Measurement] = None
+        measurements: Optional[List[Measurement]] = None
     ):
         """Represents an annotation, with geometry and an optional list of
         measurements.
@@ -857,7 +863,7 @@ class Annotation:
         ----------
         geometry: Geometry
             Geometry of the annotation.
-        measurements: List[Measurement]
+        measurements: Optional[List[Measurement]]
             Optional measurements of the annotation.
         """
 
@@ -869,9 +875,9 @@ class Annotation:
     def __repr__(self) -> str:
         return f"Annotation({self.geometry}, {self.measurements})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: 'Annotation') -> bool:
         if not isinstance(other, Annotation):
-            raise NotImplemented(other)
+            return NotImplemented
         return (
             self.geometry == other.geometry and
             self.measurements == other.measurements
@@ -932,7 +938,7 @@ class Annotation:
 
 
 class AnnotationGroup:
-    _geometry_type: type
+    _geometry_type: Type[Geometry]
 
     def __init__(
         self,
@@ -940,10 +946,10 @@ class AnnotationGroup:
         label: str,
         categorycode: ConceptCode,
         typecode: ConceptCode,
-        description: str = None,
-        color: LabColor = None,
+        description: Optional[str] = None,
+        color: Optional[LabColor] = None,
         is_double: bool = True,
-        instance: Uid = None
+        instance: Optional[Uid] = None
     ):
         """Represents a group of annotations of the same type.
 
@@ -957,19 +963,20 @@ class AnnotationGroup:
             Group categorycode.
         typecode: ConceptCode
             Group typecode.
-        instance: Uid
-            Uid this group was created from.
-        description: str
+        description: Optional[str] = None
             Group description.
-        color: LabColor
+        color: Optional[LabColor] = None
             Recommended CIELAB color.
         is_double: bool
             If group is stored with double float
+        instance: Optional[Uid]
+            Uid this group was created from.
+
         """
         self.validate_type(annotations, self._geometry_type)
         self._z_planes: List[float] = []
         self._optical_paths: List[str] = []
-        self._uid = pydicom.uid.generate_uid()
+        self._uid = generate_uid()
         self._categorycode = categorycode
         self._typecode = typecode
         self._is_double = is_double
@@ -994,9 +1001,9 @@ class AnnotationGroup:
             f"{self.description}, {self._is_double})"
         )
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: 'AnnotationGroup') -> bool:
         if not isinstance(other, AnnotationGroup):
-            raise NotImplemented(other)
+            return NotImplemented
         return (
             self.annotations == other.annotations and
             self.label == other.label and
@@ -1057,13 +1064,20 @@ class AnnotationGroup:
         return len(self.annotations)
 
     @property
+    def geometry_type(self) -> Type[Geometry]:
+        return self._geometry_type
+
+    @property
     @abstractmethod
     def annotation_type(self) -> str:
         raise NotImplementedError
 
-    def __getitem__(self, index: Union[int, List[int]]):
+    def __getitem__(
+        self,
+        index: Union[int, List[int]]
+    ) -> Union[Annotation, List[Annotation]]:
         if isinstance(index, list):
-            return [self[i] for i in index]
+            return [self.annotations[i] for i in index]
         return self.annotations[index]
 
     @classmethod
@@ -1260,7 +1274,7 @@ class AnnotationGroup:
     def _get_geometries_from_ds(
         cls,
         ds: Dataset
-    ):
+    ) -> List[Geometry]:
         """Abstract method for getting geometries from dataset.
 
         Parameters
@@ -1629,7 +1643,10 @@ class AnnotationGroup:
                 )
 
     @classmethod
-    def _get_group_type_by_geometry(cls, geometry_type: type):
+    def _get_group_type_by_geometry(
+        cls,
+        geometry_type: Type[Geometry]
+    ) -> Type['AnnotationGroup']:
         """Return AnnotationGroup class for geometry type.
 
         Parameters
@@ -1722,7 +1739,7 @@ class PointAnnotationGroup(AnnotationGroup):
 
 class PolylineAnnotationGroupMeta(AnnotationGroup):
     """Meta class for line annotation goup"""
-    _geometry_type: type
+    _geometry_type: Type[Geometry]
 
     @property
     def annotation_type(self) -> str:
@@ -1739,7 +1756,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
             List of indices in annotation group
         """
         index = 1
-        indices = []
+        indices: List[int] = []
         for annotation in self.annotations:
             indices.append(index)
             index += len(annotation.geometry.data)
@@ -1806,7 +1823,9 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
 
     @staticmethod
     @abstractmethod
-    def _get_line_geometry_from_coords(coords: List[Tuple[float, float]]):
+    def _get_line_geometry_from_coords(
+        coords: List[Tuple[float, float]]
+    ) -> Geometry:
         raise NotImplementedError
 
     def to_ds(self, group_number: int) -> Dataset:
@@ -1893,10 +1912,10 @@ class AnnotationInstance:
 
     def save(
         self,
-        path: str,
+        path: Union[str, Path],
         little_endian: bool = True,
         implicit_vr: bool = False,
-        uid_generator: Callable[..., Uid] = pydicom.uid.generate_uid
+        uid_generator: Callable[..., Uid] = generate_uid
     ):
         """Write annotations to DICOM file according to sup 222.
         Note that the file will miss DICOM attributes that has not yet been
@@ -1904,7 +1923,7 @@ class AnnotationInstance:
 
         Parameters
         ----------
-        path: Path
+        path: Union[str, Path]
             Path to write DICOM file to
         little_endian: bool
             Write DICOM file as little endian
@@ -1934,22 +1953,22 @@ class AnnotationInstance:
         ds.SOPInstanceUID = uid_generator()
         ds.SOPClassUID = ANN_SOP_CLASS_UID
 
-        meta_ds = pydicom.dataset.FileMetaDataset()
+        meta_ds = FileMetaDataset()
         if little_endian and implicit_vr:
-            transfer_syntax = pydicom.uid.ImplicitVRLittleEndian
+            transfer_syntax = ImplicitVRLittleEndian
         elif little_endian and not implicit_vr:
-            transfer_syntax = pydicom.uid.ExplicitVRLittleEndian
+            transfer_syntax = ExplicitVRLittleEndian
         elif not little_endian and not implicit_vr:
-            transfer_syntax = pydicom.uid.ExplicitVRBigEndian
+            transfer_syntax = ExplicitVRBigEndian
         else:
             raise NotImplementedError("Unsupported transfer syntax")
 
         meta_ds.TransferSyntaxUID = transfer_syntax
         meta_ds.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
-        meta_ds.MediaStorageSOPClassUID = ANN_SOP_CLASS_UID
+        meta_ds.MediaStorageSOPClassUID = Uid(ANN_SOP_CLASS_UID)
         meta_ds.FileMetaInformationGroupLength = 0  # Updated on write
-        pydicom.dataset.validate_file_meta(meta_ds)
-        file_ds = pydicom.dataset.FileDataset(
+        validate_file_meta(meta_ds)
+        file_ds = FileDataset(
             preamble=b'\x00' * 128,
             filename_or_obj=path,
             file_meta=meta_ds,
@@ -1957,20 +1976,23 @@ class AnnotationInstance:
             is_implicit_VR=implicit_vr,
             is_little_endian=little_endian
         )
-        pydicom.filewriter.dcmwrite(path, file_ds)
+        dcmwrite(path, file_ds)
 
     @classmethod
-    def open(cls, paths: List[Path]) -> List['AnnotationInstance']:
+    def open(
+        cls,
+        paths: Union[List[str], List[Path]]
+    ) -> List['AnnotationInstance']:
         """Read annotations from DICOM file according to sup 222.
 
         Parameters
         ----------
-        paths: List[Path]
+        paths: List[str]
             Paths to DICOM annotation files to read.
         """
         instances: List['AnnotationInstance'] = []
         for path in paths:
-            ds = pydicom.filereader.dcmread(path)
+            ds = dcmread(path)
             instances.append(cls.open_dataset(ds))
 
         return instances
@@ -1990,7 +2012,7 @@ class AnnotationInstance:
             Annotation groups read from dataset.
         """
         groups: List[AnnotationGroup] = []
-        base_uids: BaseUids = None
+        base_uids: Optional[BaseUids] = None
 
         if dataset.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
             raise ValueError("SOP Class UID of file is wrong")
@@ -1999,6 +2021,8 @@ class AnnotationInstance:
             coordinate_type = 'image'
         elif dataset.AnnotationCoordinateType == '3D':
             coordinate_type = 'volume'
+        else:
+            raise ValueError("Unkown coordiante type")
         if coordinate_type == 'volume' and frame_of_reference_uid is None:
             raise ValueError(
                 'volume annotation corrindate type requires frame of reference'

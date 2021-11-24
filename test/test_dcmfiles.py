@@ -4,11 +4,11 @@ import json
 import os
 import unittest
 from pathlib import Path
-from typing import Sequence, Tuple, TypedDict, Dict
+from typing import TypedDict, Dict
 
 import pytest
 from PIL import Image, ImageChops
-from wsidicom.interface import WsiDicom
+from wsidicom import WsiDicom
 
 wsidicom_test_data_dir = os.environ.get("WSIDICOM_TESTDIR", "C:/temp/wsidicom")
 sub_data_dir = "interface"

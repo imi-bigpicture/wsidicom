@@ -1,17 +1,18 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from PIL.Image import Image
 
 import numpy as np
-import pydicom
 import pytest
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from wsidicom.conceptcode import (CidConceptCode, IlluminationCode,
                                   IlluminationColorCode)
 from wsidicom.errors import WsiDicomNotFoundError
-from wsidicom.interface import (DicomImageData, Point, PointMm, Region,
-                                RegionMm, Size, SizeMm, WsiDicom)
+from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
+from wsidicom import WsiDicom
+from wsidicom.instance import WsiDicomImageData
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 from .data_gen import create_layer_file, create_main_dataset
@@ -71,14 +72,15 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_get_frame_number(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        image_data: DicomImageData = instance._image_data
+        image_data = instance._image_data
+        assert(isinstance(image_data, WsiDicomImageData))
         number = image_data.tiles.get_frame_index(Point(0, 0), 0, '0')
         self.assertEqual(number, 0)
 
     def test_get_blank_color(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        image_data: DicomImageData = instance.image_data
+        image_data = instance.image_data
         color = image_data._get_blank_color(
             image_data.photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
@@ -86,7 +88,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_get_frame_file(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        image_data: DicomImageData = instance._image_data
+        image_data = instance._image_data
+        assert(isinstance(image_data, WsiDicomImageData))
         file = image_data._get_file(0)
         self.assertEqual(file, (image_data._files[0]))
 
@@ -99,7 +102,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_valid_tiles(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        image_data: DicomImageData = instance._image_data
+        image_data = instance._image_data
         test = image_data.valid_tiles(
 
             Region(Point(0, 0), Size(0, 0)), 0, '0'
@@ -128,7 +131,10 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(x=0, y=0),
             size=Size(width=100, height=100)
         )
-        cropped_region = instance.crop_tile(Point(x=0, y=0), region)
+        cropped_region = region.inside_crop(
+            Point(0, 0),
+            instance.tile_size
+        )
         expected = Region(
             position=Point(0, 0),
             size=Size(100, 100)
@@ -139,7 +145,10 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(x=0, y=0),
             size=Size(width=1500, height=1500)
         )
-        cropped_region = instance.crop_tile(Point(x=0, y=0), region)
+        cropped_region = region.inside_crop(
+            Point(0, 0),
+            instance.tile_size
+        )
         expected = Region(
             position=Point(0, 0),
             size=Size(1024, 1024)
@@ -150,7 +159,10 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(x=1200, y=1200),
             size=Size(width=300, height=300)
         )
-        cropped_region = instance.crop_tile(Point(x=1, y=1), region)
+        cropped_region = region.inside_crop(
+            Point(1, 1),
+            instance.tile_size
+        )
         expected = Region(
             position=Point(176, 176),
             size=Size(300, 300)
@@ -164,7 +176,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(100, 100)
         )
-        get_tiles = instance.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
@@ -172,7 +184,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(1024, 1024)
         )
-        get_tiles = instance.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
@@ -180,31 +192,30 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(300, 400),
             size=Size(500, 500)
         )
-        get_tiles = instance.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
     def test_crop_region_to_level_size(self):
         base_level = self.slide.levels.get_level(0)
-        instance = base_level.get_instance()
         image_size = base_level.size
         region = Region(
             position=Point(0, 0),
             size=Size(100, 100)
         )
-        cropped_region = instance.crop_to_level_size(region)
+        cropped_region = region.crop(image_size)
         self.assertEqual(region.size, cropped_region.size)
         region = Region(
             position=Point(0, 0),
             size=Size(2000, 2000)
         )
-        cropped_region = instance.crop_to_level_size(region)
+        cropped_region = region.crop(image_size)
         self.assertEqual(image_size - region.position, cropped_region.size)
         region = Region(
             position=Point(200, 300),
             size=Size(100, 100)
         )
-        cropped_region = instance.crop_to_level_size(region)
+        cropped_region = region.crop(image_size)
         self.assertEqual(Size(0, 0), cropped_region.size)
 
     def test_size_class(self):
@@ -265,8 +276,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(2048, 2048)
         )
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -274,8 +285,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(1024, 0))
 
         tile = Point(1, 0)
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -283,8 +294,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(0, 1024))
 
         tile = Point(0, 1)
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -297,8 +308,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(512, 512),
             size=Size(1024, 1024)
         )
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -306,8 +317,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(512, 0))
 
         tile = Point(1, 0)
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -315,8 +326,8 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(write_index, Point(0, 512))
 
         tile = Point(0, 1)
-        tile_crop = instance.crop_tile(tile, region)
-        write_index = instance._write_indexer(
+        tile_crop = region.inside_crop(tile, instance.tile_size)
+        write_index = instance.image_data._write_indexer(
             write_index,
             tile_crop.size,
             region.size,
@@ -337,7 +348,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(instance, wsi_level.default_instance)
 
     def test_parse_lut(self):
-        ds = pydicom.dataset.Dataset()
+        ds = Dataset()
         ds.RedPaletteColorLookupTableDescriptor = [256, 0, 8]
         ds.SegmentedRedPaletteColorLookupTableData = (
             b'\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00'
@@ -355,7 +366,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         print(test)
         self.assertTrue(np.array_equal(lut.get(), test))
 
-        ds = pydicom.dataset.Dataset()
+        ds = Dataset()
         ds.RedPaletteColorLookupTableDescriptor = [256, 0, 16]
         ds.SegmentedRedPaletteColorLookupTableData = (
             b'\x01\x00\x00\x01\xff\xff'
