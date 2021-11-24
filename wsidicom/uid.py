@@ -1,5 +1,6 @@
 from pydicom.uid import UID as Uid
 from dataclasses import dataclass
+from typing import Optional
 
 WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
 ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.91.1'
@@ -10,7 +11,7 @@ class BaseUids:
     """Represents the UIDs that should be common for all files in the wsi."""
     study_instance: Uid
     series_instance: Uid
-    frame_of_reference: Uid = None
+    frame_of_reference: Optional[Uid] = None
 
     def __str__(self) -> str:
         return (
@@ -19,7 +20,7 @@ class BaseUids:
             f"frame of reference {self.frame_of_reference}"
         )
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: 'BaseUids') -> bool:
         if isinstance(other, BaseUids):
             return (
                 self.study_instance == other.study_instance and
@@ -37,7 +38,7 @@ class BaseUids:
 class FileUids:
     """Represents the UIDs in a DICOM-file."""
     instance: Uid
-    concatenation: Uid
+    concatenation: Optional[Uid]
     base: BaseUids
 
     @property
@@ -54,7 +55,7 @@ class FileUids:
             return self.concatenation
         return self.instance
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: 'FileUids') -> bool:
         """Return true if concatenation uid is not none, matches other
         concatenation uid and base uids match.
 

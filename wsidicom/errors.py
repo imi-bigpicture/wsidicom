@@ -1,5 +1,4 @@
 from pathlib import Path
-from .geometry import Point
 
 
 class WsiDicomError(Exception):
