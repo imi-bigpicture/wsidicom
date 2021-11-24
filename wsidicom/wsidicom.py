@@ -520,6 +520,29 @@ class WsiDicomGroup:
                         output[optical_path, z] = instance.image_data
         return list(OrderedDict(output).items())
 
+    @staticmethod
+    def _get_number_of_frames(
+        instances: List[WsiInstance]
+    ) -> int:
+        """
+
+        Parameters
+        ----------
+        instances: List[WsiInstance]
+
+
+        Returns
+        ----------
+        int
+        """
+        frames = 0
+        for instance in instances:
+            tiles = instance.image_data.tiled_size.area
+            optical_paths = len(instance.optical_paths)
+            focal_planes = len(instance.focal_planes)
+            frames += tiles*optical_paths*focal_planes
+        return frames
+
     def save(
         self,
         output_path: str,
@@ -563,24 +586,50 @@ class WsiDicomGroup:
 
             transfer_syntax = instances[0].image_data.transfer_syntax
             dataset = deepcopy(instances[0].dataset)
-            with WsiDicomFileWriter(filepath) as wsi_file:
-                wsi_file.write_preamble()
-                wsi_file.write_file_meta(uid, transfer_syntax)
-                dataset.SOPInstanceUID = uid
-                wsi_file.write_base(dataset)
-                wsi_file.write_pixel_data_start()
-                for (path, z), image_data in self._list_image_data(instances):
-                    wsi_file.write_pixel_data(
-                        image_data,
-                        z,
-                        path,
-                        workers,
-                        chunk_size
-                    )
-                wsi_file.write_pixel_data_end()
-                wsi_file.close()
+            frames = self._get_number_of_frames(instances)
+            dataset.NumberOfFrames = frames
+            self._write_file(
+                filepath,
+                uid,
+                transfer_syntax,
+                dataset,
+                instances,
+                workers,
+                chunk_size
+            )
             filepaths.append(filepath)
         return filepaths
+
+    @classmethod
+    def _write_file(
+        cls,
+        filepath: Path,
+        uid: UID,
+        transfer_syntax: UID,
+        dataset: WsiDataset,
+        instances: List[WsiInstance],
+        workers: int,
+        chunk_size: int
+    ) -> None:
+        with WsiDicomFileWriter(filepath) as wsi_file:
+            wsi_file.write_preamble()
+            wsi_file.write_file_meta(uid, transfer_syntax)
+            dataset.SOPInstanceUID = uid
+            wsi_file.write_base(dataset)
+            frames = dataset.NumberOfFrames
+            bot_start, bot_end = wsi_file.write_pixel_data_start(frames)
+            frame_positions: List[int] = []
+            for (path, z), image_data in cls._list_image_data(instances):
+                frame_positions += wsi_file.write_pixel_data(
+                    image_data,
+                    z,
+                    path,
+                    workers,
+                    chunk_size
+                )
+            wsi_file.write_pixel_data_end()
+            wsi_file.write_bot(bot_start, bot_end, frame_positions)
+            wsi_file.close()
 
 
 class WsiDicomLevel(WsiDicomGroup):
@@ -820,6 +869,26 @@ class WsiDicomLevel(WsiDicomGroup):
         workers: int,
         chunk_size: int
     ) -> 'WsiDicomLevel':
+        """Creates a new WsiDicomLevel from this level by scaling the image
+        data. File is saved in same folder as parent.
+
+        Parameters
+        ----------
+        scale: int
+            Scale factor.
+        uid_generator: Callable[..., UID]
+            Uid generator to use.
+        workers: int
+            Maximum number of thread workers to use.
+        chunk_size: int
+            Chunk size (number of tiles) to process at a time. Actual chunk
+            size also depends on minimun_chunk_size from image_data.
+
+        Returns
+        ----------
+        'WsiDicomLevel'
+            Created scaled level.
+        """
         filepaths: List[Path] = []
         if not isinstance(scale, int) or scale < 2:
             raise ValueError(
@@ -835,17 +904,16 @@ class WsiDicomLevel(WsiDicomGroup):
         output_path = (
             self.default_instance.image_data._files[0].filepath.parent
         )
-        new_tiled_size = self.default_instance.tiled_size / scale
         new_image_size = self.default_instance.size / scale
         for instances in self._group_instances_to_file():
             uid = uid_generator()
             filepath = Path(os.path.join(output_path, uid + '.dcm'))
             transfer_syntax = instances[0].image_data.transfer_syntax
             dataset = deepcopy(instances[0].dataset)
+            frames = self._get_number_of_frames(instances)
             # Modify dataset to reflect scaled data
-            dataset.NumberOfFrames = (
-                new_tiled_size.width * new_tiled_size.height
-            )
+            frames = frames // (scale*scale)
+            dataset.NumberOfFrames = frames
             dataset.TotalPixelMatrixColumns = new_image_size.width
             dataset.TotalPixelMatrixRows = new_image_size.height
 
@@ -854,24 +922,15 @@ class WsiDicomLevel(WsiDicomGroup):
                 dataset.SharedFunctionalGroupsSequence[0].
                 PixelMeasuresSequence[0].PixelSpacing
             ) = list(new_pixel_spacing.to_tuple())
-            with WsiDicomFileWriter(filepath) as wsi_file:
-                wsi_file = WsiDicomFileWriter(filepath)
-                wsi_file.write_preamble()
-                wsi_file.write_file_meta(uid, transfer_syntax)
-                dataset.SOPInstanceUID = uid
-                wsi_file.write_base(dataset)
-                wsi_file.write_pixel_data_start()
-                for (path, z), image_data in self._list_image_data(instances):
-                    wsi_file.write_pixel_data(
-                        image_data,
-                        z,
-                        path,
-                        workers,
-                        chunk_size,
-                        scale
-                    )
-                wsi_file.write_pixel_data_end()
-                wsi_file.close()
+            self._write_file(
+                filepath,
+                uid,
+                transfer_syntax,
+                dataset,
+                instances,
+                workers,
+                chunk_size
+            )
             filepaths.append(filepath)
 
         created_instances = WsiInstance.open(
