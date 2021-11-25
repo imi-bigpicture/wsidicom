@@ -2246,6 +2246,12 @@ class WsiDicomFileWriter:
             List of file positions for frames, relative to file start
 
         """
+        # Check that last BOT entry is not over 2^32 - 1
+        last_entry = frame_positions[-1] - bot_end
+        if last_entry > pow(2, 32) - 1:
+            raise NotImplementedError(
+                "Image data exceeds 2^32 - 1 bytes "
+                "An extended offset table should be used")
         TAG_BYTES = 4
         LENGHT_BYTES = 4
         # Go to first BOT entry
