@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import List, Dict, Optional
-from abc import ABCMeta, abstractmethod
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
@@ -9,12 +8,10 @@ from pydicom.sr.coding import Code
 
 
 @dataclass
-class ConceptCode(metaclass=ABCMeta):
+class ConceptCode:
     """Help functions for handling SR codes.
     Provides functions for converting between Code and dicom dataset.
-    For CIDs that are not-yet standardized, functions for creating Code from
-    code meaning is provided using the CID definitions in the sup 222 draft.
-    For standardized CIDs one can use pydicom.sr.codedict to create codes."""
+    """
     sequence_name: str
 
     def __init__(
@@ -36,11 +33,6 @@ class ConceptCode(metaclass=ABCMeta):
             self.meaning,
             self.scheme_version
         ))
-
-    @classmethod
-    @abstractmethod
-    def list(cls) -> List[str]:
-        raise NotImplementedError
 
     @property
     def code(self) -> Code:
