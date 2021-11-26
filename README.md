@@ -2,9 +2,9 @@
 *wsidicom* is a Python package for reading [DICOM WSI](http://dicom.nema.org/Dicom/DICOMWSI/) file sets.
 
 ## Installing *wsidicom*
-*wsidicom* is **not yet** available on PyPI:
+*wsidicom* is available on PyPI:
 ```console
-$ python -m pip git+https://github.com/imi-bigpicture/wsidicom.git
+$ python -m pip wsidicom
 ```
 
 ## Important note
