@@ -753,10 +753,10 @@ class WsiDicomFile:
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
 
-        self._read_sequence_delimeter()
+        self._read_sequence_delimiter()
         return positions
 
-    def _read_sequence_delimeter(self):
+    def _read_sequence_delimiter(self):
         """Check if last read tag was a sequence delimter.
         Raises WsiDicomFileError otherwise.
         """
@@ -2248,10 +2248,13 @@ class WsiDicomFileWriter:
         """
         # Check that last BOT entry is not over 2^32 - 1
         last_entry = frame_positions[-1] - bot_end
-        if last_entry > pow(2, 32) - 1:
+        # Files larger than 4 GB will fail on this.
+        # TODO either split larger files or use extended offset table
+        if last_entry > 2**32 - 1:
             raise NotImplementedError(
                 "Image data exceeds 2^32 - 1 bytes "
-                "An extended offset table should be used")
+                "An extended offset table should be used"
+            )
         TAG_BYTES = 4
         LENGHT_BYTES = 4
         # Go to first BOT entry
