@@ -7,13 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import (Any, Dict, Generator, List, Optional, OrderedDict, Set,
                     Tuple, Union)
+from struct import unpack
 
 import numpy as np
 import pydicom
 from PIL import Image
 from pydicom.dataelem import DataElement
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
-from pydicom.encaps import itemise_frame
+from pydicom.encaps import itemize_frame
 from pydicom.filebase import DicomFile, DicomFileLike
 from pydicom.filereader import (data_element_offset_to_value,
                                 read_file_meta_info)
@@ -652,29 +653,77 @@ class WsiDicomFile:
         """Close the file."""
         self._fp.close()
 
-    def _read_bot(self) -> None:
-        """Read (skips over) basic table offset (BOT). The BOT can contain
-        frame positions, and the BOT should always be present but does not need
-        to contain any data (exept lenght), and sometimes the content is
-        corrupt. As we in that case anyway need to check the validity of the
-        BOT by checking the actual frame sequence, we just skip over it.
+    def _read_positions_from_bot(self) -> List[Tuple[int, int]]:
+        """Read basic table offset (BOT). The BOT always starts with an ItemTag
+        followed by a length. If t he BOT length is zero the BOT is empty.
+        Otherwise the BOT contains file positions, in relation to the BOT end,
+        of frames in the file. fp needs to be positioned before the BOT.
+
+        Returns
+        ----------
+        list[tuple[int, int]]
+            A list with frame positions and frame lengths. Is empty if BOT is
+            empty.
         """
+        TAG_BYTES = 4
+        LENGHT_BYTES = 4
+        BOT_BYTES = 4
+        if not self._fp.is_little_endian:
+            raise ValueError("fp must be little endian")
         # Jump to BOT
         offset_to_value = data_element_offset_to_value(
             self._fp.is_implicit_VR,
             'OB'
         )
         self._fp.seek(offset_to_value, 1)
-        # has_BOT, offset_table = pydicom.encaps.get_frame_offsets(self._fp)
-        # Read the BOT lenght and skip over the BOT
-        if(self._fp.read_tag() != ItemTag):
-            raise WsiDicomFileError(self.filepath, 'No item tag after BOT')
-        length: int = self._fp.read_UL()
-        self._fp.seek(length, 1)
 
-    def _read_positions(self) -> List[Tuple[int, int]]:
+        positions: List[Tuple[int, int]] = []
+        if self._fp.read_tag() != ItemTag:
+            raise WsiDicomFileError(
+                self.filepath,
+                "BOT did not start with an ItemTag"
+            )
+        bot_length = self._fp.read_UL()
+        if bot_length == 0:
+            self._fp.seek(bot_length, 1)
+            return positions
+        elif bot_length % BOT_BYTES:
+            raise WsiDicomFileError(
+                self.filepath,
+                f"BOT length should be a multiple of {BOT_BYTES}"
+            )
+
+        # Read the BOT into bytes
+        bot = self._fp.read(bot_length)
+        bot_end = self._fp.tell()
+
+        # Read through BOT to get offset and length for all but last item
+        this_bot_offset: int = unpack(b"<L", bot[0:BOT_BYTES])[0]
+        for index in range(BOT_BYTES, bot_length, BOT_BYTES):
+            next_bot_offset = unpack(b"<L", bot[index:index+BOT_BYTES])[0]
+            offset = this_bot_offset+TAG_BYTES+LENGHT_BYTES
+            length = next_bot_offset - offset
+            positions.append((bot_end+offset, length))
+            this_bot_offset = next_bot_offset
+
+        # Go to last frame in pixel data and read the length of the frame
+        self._fp.seek(bot_end+this_bot_offset)
+        if self._fp.read_tag() != ItemTag:
+            raise WsiDicomFileError(
+                self.filepath,
+                "Excepcted ItemTag in PixelData"
+            )
+        length: int = self._fp.read_UL()
+        if length == 0 or length % 2:
+            raise WsiDicomFileError(self.filepath, 'Invalid frame length')
+        offset = this_bot_offset+TAG_BYTES+LENGHT_BYTES
+        positions.append((bot_end+offset, length))
+
+        return positions
+
+    def _read_positions_from_pixeldata(self) -> List[Tuple[int, int]]:
         """Get frame positions and length from sequence of frames that ends
-        with a tag not equal to itemtag. fp needs to be positioned after the
+        with a tag not equal to ItemTag. fp needs to be positioned after the
         BOT.
         Each frame contains:
         item tag (4 bytes)
@@ -703,9 +752,11 @@ class WsiDicomFile:
             # Jump to end of item
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
+
+        self._read_sequence_delimiter()
         return positions
 
-    def _read_sequence_delimeter(self):
+    def _read_sequence_delimiter(self):
         """Check if last read tag was a sequence delimter.
         Raises WsiDicomFileError otherwise.
         """
@@ -723,10 +774,12 @@ class WsiDicomFile:
         list[tuple[int, int]]
             A list with frame positions and frame lengths
         """
-        self._read_bot()
-        positions = self._read_positions()
-        self._read_sequence_delimeter()
-        self._fp.seek(self._pixel_data_position, 0)  # Wind back to start
+        # First read BOT
+        positions = self._read_positions_from_bot()
+        # If BOT is empty read positions from PixelData (slow)
+        if positions == []:
+            positions = self._read_positions_from_pixeldata()
+
         return positions
 
     def read_frame(self, frame_index: int) -> bytes:
@@ -2136,8 +2189,19 @@ class WsiDicomFileWriter:
         dataset.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
         write_dataset(self._fp, dataset)
 
-    def write_pixel_data_start(self) -> None:
-        """Writes tags starting pixel data."""
+    def write_pixel_data_start(self, frames: int) -> Tuple[int, int]:
+        """Writes tags starting pixel data and reserves space for BOT.
+
+        Parameters
+        ----------
+        frames: int
+            Number of frames to reserve space for in BOT
+
+        Returns
+        ----------
+        Tuple[int, int]
+            Start and end of BOT.
+        """
         pixel_data_element = DataElement(
             0x7FE00010,
             'OB',
@@ -2155,9 +2219,48 @@ class WsiDicomFileWriter:
         # Write unspecific length
         self._fp.write_UL(0xFFFFFFFF)
 
-        # Write item tag and (empty) length for BOT
+        # Write item tag and length of BOT, and fill with dummy values
+        bot_start = self._fp.tell()
         self._fp.write_tag(ItemTag)
-        self._fp.write_UL(0)
+        self._fp.write_UL(4*frames)
+        for index in range(frames):
+            self._fp.write_UL(0)
+        bot_end = self._fp.tell()
+        return bot_start, bot_end
+
+    def write_bot(
+        self,
+        bot_start: int,
+        bot_end: int,
+        frame_positions: List[int]
+    ) -> None:
+        """Writes BOT to file.
+
+        Parameters
+        ----------
+        bot_start: int
+            File position of BOT start
+        bot_end: int
+            File position of BOT end
+        frame_positions: List[int]
+            List of file positions for frames, relative to file start
+
+        """
+        # Check that last BOT entry is not over 2^32 - 1
+        last_entry = frame_positions[-1] - bot_end
+        # Files larger than 4 GB will fail on this.
+        # TODO either split larger files or use extended offset table
+        if last_entry > 2**32 - 1:
+            raise NotImplementedError(
+                "Image data exceeds 2^32 - 1 bytes "
+                "An extended offset table should be used"
+            )
+        TAG_BYTES = 4
+        LENGHT_BYTES = 4
+        # Go to first BOT entry
+        self._fp.seek(bot_start + TAG_BYTES + LENGHT_BYTES)
+        for frame_position in frame_positions:
+            self._fp.write_UL(frame_position-bot_end)
 
     def write_pixel_data(
         self,
@@ -2169,7 +2272,7 @@ class WsiDicomFileWriter:
         scale: int = 1,
         image_format: str = 'jpeg',
         image_options: Dict[str, Any] = {'quality': 95}
-    ) -> None:
+    ) -> List[int]:
         """Writes pixel data to file.
 
         Parameters
@@ -2186,8 +2289,16 @@ class WsiDicomFileWriter:
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
         scale: int
+            Scale factor (1 = No scaling).
         image_format: str = 'jpeg'
+            Image format if scaling.
         image_options: Dict[str, Any] = {'quality': 95}
+            Image options if scaling.
+
+        Returns
+        ----------
+        List[int]
+            List of frame positions, relative to start of file.
         """
         chunked_tile_points = self._chunk_tile_points(
             image_data,
@@ -2217,13 +2328,17 @@ class WsiDicomFileWriter:
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
             # Each thread result is a list of tiles that is itemized and writen
+            frame_positions: List[int] = []
             for thread_result in pool.map(
                 get_tiles,
                 chunked_tile_points
             ):
                 for tile in thread_result:
-                    for frame in itemise_frame(tile, 1):
+                    for frame in itemize_frame(tile, 1):
+                        frame_positions.append(self._fp.tell())
                         self._fp.write(frame)
+
+        return frame_positions
 
     def _chunk_tile_points(
         self,
@@ -2231,6 +2346,22 @@ class WsiDicomFileWriter:
         chunk_size: int,
         scale: int = 1
     ) -> Generator[Generator[Point, None, None], None, None]:
+        """Divides tile positions in image_data into chunks.
+
+        Parameters
+        ----------
+        image_data: ImageData
+            Image data with tiles to chunk.
+        chunk_size: int
+            Requested chunk size
+        scale: int = 1
+            Scaling factor (1 = no scaling).
+
+        Returns
+        ----------
+        Generator[Generator[Point, None, None], None, None]
+            Chunked tile positions
+        """
         minimum_chunk_size = getattr(
             image_data,
             'suggested_minimum_chunk_size',
