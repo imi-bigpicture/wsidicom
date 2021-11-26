@@ -551,7 +551,7 @@ class WsiDicomGroup:
         chunk_size: int
     ) -> List[Path]:
         """Save a WsiDicomGroup to files in output_path. Instances are grouped
-        by properties that can differ in the same file:
+        by properties that cant differ in the same file:
             - photometric interpretation
             - transfer syntax
             - extended depth of field (and planes and distance)
@@ -1916,7 +1916,11 @@ class WsiDicom:
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None
     ) -> List[Path]:
-        """Save wsi as DICOM-files in path.
+        """Save wsi as DICOM-files in path. Instances for the same pyramid
+        level will be combined when possible to one file (e.g. not split
+        for optical paths or focal planes). If instances are sparse tiled they
+        will be converted to full tiled by inserting blank tiles. The PixelData
+        will contain a basic offset table. All instance uids will be changed.
 
         Parameters
         ----------
