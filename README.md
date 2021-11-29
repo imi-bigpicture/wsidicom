@@ -1,10 +1,13 @@
 # *wsidicom*
-*wsidicom* is a Python package for reading [DICOM WSI](http://dicom.nema.org/Dicom/DICOMWSI/) file sets.
+*wsidicom* is a Python package for reading [DICOM WSI](http://dicom.nema.org/Dicom/DICOMWSI/) file sets. The aims with the projects are:
+- Easy to use interface for reading and writing WSI DICOM images and annotations using the DICOM Media Storage Model.
+- Support the latest and upcomming DICOM standards.
+- Platform independent installation via PyPI.
 
 ## Installing *wsidicom*
-*wsidicom* is **not yet** available on PyPI:
+*wsidicom* is available on PyPI:
 ```console
-$ python -m pip git+https://github.com/imi-bigpicture/wsidicom.git
+$ pip install wsidicom
 ```
 
 ## Important note
@@ -162,18 +165,6 @@ slide = WsiDicom.open(path_to_folder)
 annotations = slide.annotations
 ```
 
-## Advanced frame access
-It is possible to get direct access to the pydicom filepointer for faster frame readout. To do so, first get the instance of interest:
-```python
-from wsidicom import WsiDicom
-slide = WsiDicom.open(path_to_folder)
-instance, z, path = slide.get_instance(level, z, path)
-```
-And then get the filepointer, frame position and frame lenght for a specific tile, z, and path:
-```python
-fp, position, lenght = instance.get_filepointer(tile, z, path)
-```
-
 ## Setup environment for development
 Requires poetry and pytest and pytest-watch installed in the virtual environment.
 
@@ -193,6 +184,20 @@ To run integration tests, set the WSIDICOM_TESTDIR environment varible to your t
 ```console
 $ poetry run pytest -m integration
 ```
+Unfortunately due to data sharing restrictions the default WSI DICOM test files can't be shared. We are working on a solution, please disregard the integration tests at the moment.
+
+## Other DICOM python tools
+- [pydicom](https://pydicom.github.io/)
+- [highdicom](https://github.com/MGHComputationalPathology/highdicom)
+
+## Contributing
+We welcome any contributions to help improve this tool for the WSI DICOM community!
+
+We recommend first creating an issue before creating potential contributions to check that the contribution is in line with the goals of the project. To submit your contribution, please issue a pull request on the imi-bigpicture/wsidicom repository with your changes for review.
+
+Our aim is to provide constructive and positive code reviews for all submissions. The project relies on gradual typing and roughly follows PEP8. However, we are not dogmatic. Most important is that the code is easy to read and understand.
 
 ## Acknowledgement
+*wsidicom*: Copyright 2021 Sectra AB, licensed under Apache 2.0.
+
 This project is part of a project that has received funding from the Innovative Medicines Initiative 2 Joint Undertaking under grant agreement No 945358. This Joint Undertaking receives support from the European Union’s Horizon 2020 research and innovation programme and EFPIA. IMI website: www.imi.europa.eu

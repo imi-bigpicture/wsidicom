@@ -1,3 +1,17 @@
+#    Copyright 2021 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
 import math
 import os
 import warnings
@@ -551,7 +565,7 @@ class WsiDicomGroup:
         chunk_size: int
     ) -> List[Path]:
         """Save a WsiDicomGroup to files in output_path. Instances are grouped
-        by properties that can differ in the same file:
+        by properties that cant differ in the same file:
             - photometric interpretation
             - transfer syntax
             - extended depth of field (and planes and distance)
@@ -1916,7 +1930,11 @@ class WsiDicom:
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None
     ) -> List[Path]:
-        """Save wsi as DICOM-files in path.
+        """Save wsi as DICOM-files in path. Instances for the same pyramid
+        level will be combined when possible to one file (e.g. not split
+        for optical paths or focal planes). If instances are sparse tiled they
+        will be converted to full tiled by inserting blank tiles. The PixelData
+        will contain a basic offset table. All instance uids will be changed.
 
         Parameters
         ----------
