@@ -1,5 +1,0 @@
-List of things that (likely) will be implemented:
-- Store parsed tile indices to file for faster subsequent loading
-- Crop layer and create a new pyramid
-- Create pyramid layers from other formats (by tile)
-- Save, read, and use annotations
