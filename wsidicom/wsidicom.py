@@ -642,7 +642,8 @@ class WsiDicomGroup:
                     chunk_size
                 )
             wsi_file.write_pixel_data_end()
-            wsi_file.write_bot(bot_start, bot_end, frame_positions)
+            if filepath != Path(os.devnull):
+                wsi_file.write_bot(bot_start, bot_end, frame_positions)
             wsi_file.close()
 
 
