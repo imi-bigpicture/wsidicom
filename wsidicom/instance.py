@@ -13,15 +13,16 @@
 #    limitations under the License.
 
 import io
+import os
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from struct import unpack, pack
 from typing import (Any, Dict, Generator, List, Optional, OrderedDict, Set,
                     Tuple, Union)
-from struct import unpack
 
 import numpy as np
 import pydicom
@@ -36,7 +37,7 @@ from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.pixel_data_handlers import pillow_handler
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.tag import ItemTag, SequenceDelimiterTag
+from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
 
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
@@ -2155,7 +2156,7 @@ class WsiDicomFileWriter:
             Path to filepointer.
 
         """
-        self._fp = DicomFile(path, mode='wb')
+        self._fp = DicomFile(path, mode='w+b')
         self._fp.is_little_endian = True
         self._fp.is_implicit_VR = False
 
@@ -2167,13 +2168,76 @@ class WsiDicomFileWriter:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def write_preamble(self) -> None:
+    def write(
+        self,
+        uid: UID,
+        transfer_syntax: UID,
+        dataset: WsiDataset,
+        data: List[Tuple[Tuple[str, float], ImageData]],
+        workers: int,
+        chunk_size: int,
+        use_eot: bool
+    ) -> None:
+        """Writes data to file.
+
+        Parameters
+        ----------
+        uid: UID
+            Instance UID for file.
+        transfer_syntax: UID.
+            Transfer syntax for file
+        dataset: WsiDataset
+            Dataset to write (exluding pixel data).
+        data: List[Tuple[Tuple[str, float], ImageData]]
+            Pixel data to write.
+        workers: int
+            Number of workers to use for writing pixel data.
+        chunk_size: int
+            Number of frames to give each worker.
+        use_eot: bool
+            If to use extended offset table instead of basic offset table.
+
+        """
+        self._write_preamble()
+        self._write_file_meta(uid, transfer_syntax)
+        dataset.SOPInstanceUID = uid
+        self._write_base(dataset)
+        frames = dataset.NumberOfFrames
+        table_start, pixels_start = self._write_pixel_data_start(
+            frames,
+            use_eot
+        )
+        frame_positions: List[int] = []
+        for (path, z), image_data in data:
+            frame_positions += self._write_pixel_data(
+                image_data,
+                z,
+                path,
+                workers,
+                chunk_size
+            )
+        pixels_end = self._fp.tell()
+        self._write_pixel_data_end()
+
+        if self != Path(os.devnull):
+            if use_eot:
+                self._write_eot(
+                    table_start,
+                    pixels_start,
+                    frame_positions,
+                    pixels_end
+                )
+            else:
+                self._write_bot(table_start, pixels_start, frame_positions)
+        self.close()
+
+    def _write_preamble(self) -> None:
         """Writes file preamble to file."""
         preamble = b'\x00' * 128
         self._fp.write(preamble)
         self._fp.write(b'DICM')
 
-    def write_file_meta(self, uid: UID, transfer_syntax: UID) -> None:
+    def _write_file_meta(self, uid: UID, transfer_syntax: UID) -> None:
         """Writes file meta dataset to file.
 
         Parameters
@@ -2190,7 +2254,7 @@ class WsiDicomFileWriter:
         validate_file_meta(meta_ds)
         write_file_meta_info(self._fp, meta_ds)
 
-    def write_base(self, dataset: Dataset) -> None:
+    def _write_base(self, dataset: Dataset) -> None:
         """Writes base dataset to file.
 
         Parameters
@@ -2203,49 +2267,114 @@ class WsiDicomFileWriter:
         dataset.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
         write_dataset(self._fp, dataset)
 
-    def write_pixel_data_start(self, frames: int) -> Tuple[int, int]:
-        """Writes tags starting pixel data and reserves space for BOT.
+    def _write_tag(
+        self,
+        tag: str,
+        value_representation: str,
+        length: Optional[int] = None
+    ):
+        """Write tag, tag VR and length.
 
         Parameters
         ----------
-        frames: int
-            Number of frames to reserve space for in BOT
+        tag: str
+            Name of tag to write.
+        value_representation: str.
+            Value representation (VR) of tag to write.
+        length: Optional[int] = None
+            Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
+
+        """
+        self._fp.write_tag(Tag(tag))
+        self._fp.write(bytes(value_representation, "iso8859"))
+        self._fp.write_US(0)
+        if length is not None:
+            self._fp.write_UL(length)
+        else:
+            self._fp.write_UL(0xFFFFFFFF)
+
+    def _reserve_eot(
+        self,
+        number_of_frames: int
+    ):
+        """Reserve space in file for extended offset table.
+
+        Parameters
+        ----------
+        number_of_frames: int
+            Number of frames to reserve space for.
+
+        """
+        BYTES_PER_ITEM = 8
+        eot_length = BYTES_PER_ITEM * number_of_frames
+        self._write_tag('ExtendedOffsetTable', 'OV', eot_length)
+        for index in range(number_of_frames):
+            self._write_unsigned_long_long(0)
+        self._write_tag('ExtendedOffsetTableLengths', 'OV', eot_length)
+        for index in range(number_of_frames):
+            self._write_unsigned_long_long(0)
+
+    def _reserve_bot(
+        self,
+        number_of_frames: int
+    ):
+        """Reserve space in file for basic offset table.
+
+        Parameters
+        ----------
+        number_of_frames: int
+            Number of frames to reserve space for.
+
+        """
+        BYTES_PER_ITEM = 4
+        tag_lengths = BYTES_PER_ITEM * number_of_frames
+        self._fp.write_UL(tag_lengths)
+        for index in range(number_of_frames):
+            self._fp.write_UL(0)
+
+    def _write_pixel_data_start(
+        self,
+        number_of_frames: int,
+        use_eot: bool
+    ) -> Tuple[int, int]:
+        """Writes tags starting pixel data and reserves space for BOT or EOT.
+
+        Parameters
+        ----------
+        number_of_frames: int
+            Number of frames to reserve space for in BOT or EOT.
+        use_eot: bool
+            If to use EOT instead of BOT.
 
         Returns
         ----------
         Tuple[int, int]
-            Start and end of BOT.
+            Start of table (BOT or EOT) and start of pixel data (after BOT).
         """
-        pixel_data_element = DataElement(
-            0x7FE00010,
-            'OB',
-            0,
-            is_undefined_length=True
-            )
+        table_start = self._fp.tell()
+        if use_eot:
+            self._reserve_eot(number_of_frames)
 
         # Write pixel data tag
-        self._fp.write_tag(pixel_data_element.tag)
+        self._write_tag('PixelData', 'OB')
 
-        if not self._fp.is_implicit_VR:
-            # Write pixel data VR (OB), two empty bytes (PS3.5 7.1.2)
-            self._fp.write(bytes(pixel_data_element.VR, "iso8859"))
-            self._fp.write_US(0)
-        # Write unspecific length
-        self._fp.write_UL(0xFFFFFFFF)
-
-        # Write item tag and length of BOT, and fill with dummy values
+        # Write item tag for BOT (must be present even if EOT used)
         bot_start = self._fp.tell()
         self._fp.write_tag(ItemTag)
-        self._fp.write_UL(4*frames)
-        for index in range(frames):
-            self._fp.write_UL(0)
-        bot_end = self._fp.tell()
-        return bot_start, bot_end
+        if not use_eot:
+            table_start = bot_start
+            self._reserve_bot(number_of_frames)
+        else:
+            self._fp.write_UL(0)  # Empty BOT
 
-    def write_bot(
+        pixel_data_start = self._fp.tell()
+
+        return table_start, pixel_data_start
+
+    def _write_bot(
         self,
         bot_start: int,
-        bot_end: int,
+        pixel_data_start: int,
         frame_positions: List[int]
     ) -> None:
         """Writes BOT to file.
@@ -2260,20 +2389,115 @@ class WsiDicomFileWriter:
             List of file positions for frames, relative to file start
 
         """
+        BYTES_PER_ITEM = 4
         # Check that last BOT entry is not over 2^32 - 1
-        last_entry = frame_positions[-1] - bot_end
-        if last_entry > pow(2, 32) - 1:
+        last_entry = frame_positions[-1] - pixel_data_start
+        if last_entry > 2**32 - 1:
             raise NotImplementedError(
                 "Image data exceeds 2^32 - 1 bytes "
                 "An extended offset table should be used")
+
+        self._fp.seek(bot_start)  # Go to first BOT entry
+        self._check_tag_and_length(
+            ItemTag,
+            BYTES_PER_ITEM*len(frame_positions)
+        )
+
+        for frame_position in frame_positions:  # Write BOT
+            self._fp.write_UL(frame_position-pixel_data_start)
+
+    def _write_unsigned_long_long(
+        self,
+        value: int
+    ):
+        """Write unsigned long long integer (64 bits) as little endian.
+
+        Parameters
+        ----------
+        value: int
+            Value to write.
+
+        """
+        self._fp.write(pack('<Q', value))
+
+    def _check_tag_and_length(
+        self,
+        tag: BaseTag,
+        length: int
+    ) -> None:
+        """Check if tag at position is expected tag with expected length.
+
+        Parameters
+        ----------
+        tag: BaseTag
+            Expected tag.
+        length: int
+            Expected length.
+
+        """
+        read_tag = self._fp.read_tag()
+        if tag != read_tag:
+            raise ValueError(f"Found tag {read_tag} expected {tag}")
+        read_length = self._fp.read_UL()
+        if length != read_length:
+            raise ValueError(f"Found length {read_length} expected {length}")
+
+    def _write_eot(
+        self,
+        eot_start: int,
+        pixel_data_start: int,
+        frame_positions: List[int],
+        last_frame_end: int
+    ) -> None:
+        """Writes EOT to file.
+
+        Parameters
+        ----------
+        bot_start: int
+            File position of EOT start
+        pixel_data_start: int
+            File position of EOT end
+        frame_positions: List[int]
+            List of file positions for frames, relative to file start
+        last_frame_end: int
+            Position of last frame end.
+
+        """
+        BYTES_PER_ITEM = 8
+        # Check that last BOT entry is not over 2^64 - 1
+        last_entry = frame_positions[-1] - pixel_data_start
+        if last_entry > 2**64 - 1:
+            raise ValueError(
+                "Image data exceeds 2^64 - 1 bytes, likely something is wrong"
+            )
+        self._fp.seek(eot_start)  # Go to EOT table
+        self._check_tag_and_length(
+            Tag('ExtendedOffsetTable'),
+            BYTES_PER_ITEM*len(frame_positions)
+        )
+        for frame_position in frame_positions:  # Write EOT
+            relative_position = frame_position-pixel_data_start
+            self._write_unsigned_long_long(relative_position)
+
+        # EOT LENGTHS
+        self._check_tag_and_length(
+            Tag('ExtendedOffsetTableLengths'),
+            BYTES_PER_ITEM*len(frame_positions)
+        )
+        frame_start = frame_positions[0]
+        for frame_end in frame_positions[1:]:  # Write EOT lengths
+            frame_length = frame_end - frame_start
+            self._write_unsigned_long_long(frame_length)
+            frame_start = frame_end
+
+        # Last frame length, end does not include tag and length
         TAG_BYTES = 4
         LENGHT_BYTES = 4
-        # Go to first BOT entry
-        self._fp.seek(bot_start + TAG_BYTES + LENGHT_BYTES)
-        for frame_position in frame_positions:
-            self._fp.write_UL(frame_position-bot_end)
+        last_frame_start = frame_start + TAG_BYTES + LENGHT_BYTES
+        last_frame_length = last_frame_end - last_frame_start
+        self._write_unsigned_long_long(last_frame_length)
 
-    def write_pixel_data(
+    def _write_pixel_data(
         self,
         image_data: ImageData,
         z: float,
@@ -2398,7 +2622,7 @@ class WsiDicomFileWriter:
         )
         return chunked_tile_points
 
-    def write_pixel_data_end(self) -> None:
+    def _write_pixel_data_end(self) -> None:
         """Writes tags ending pixel data."""
         self._fp.write_tag(SequenceDelimiterTag)
         self._fp.write_UL(0)
