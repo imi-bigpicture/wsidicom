@@ -20,9 +20,9 @@ from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from struct import unpack, pack
-from typing import (Any, Dict, Generator, List, Optional, OrderedDict, Set,
-                    Tuple, Union)
+from struct import pack, unpack
+from typing import (Any, BinaryIO, Dict, Generator, List, Optional,
+                    OrderedDict, Set, Tuple, Union, cast)
 
 import numpy as np
 import pydicom
@@ -32,7 +32,7 @@ from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
 from pydicom.filebase import DicomFile, DicomFileLike
 from pydicom.filereader import (data_element_offset_to_value,
-                                read_file_meta_info)
+                                read_file_meta_info, read_partial)
 from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.pixel_data_handlers import pillow_handler
@@ -569,8 +569,25 @@ class WsiDicomFile:
         self._fp = DicomFile(self.filepath, mode='rb')
         self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
+        pixel_data_tags = {
+            Tag('PixelData'),
+            Tag('ExtendedOffsetTable')
+        }
 
-        dataset = pydicom.dcmread(self._fp, stop_before_pixels=True)
+        def _stop_at(
+            tag: BaseTag,
+            VR: Optional[str],
+            length: int
+        ) -> bool:
+            return tag in pixel_data_tags
+        dataset = read_partial(
+            cast(BinaryIO, self._fp),
+            _stop_at,
+            defer_size=None,
+            force=False,
+            specific_tags=None,
+        )
+        # dataset = pydicom.dcmread(self._fp, stop_before_pixels=True)
         self._pixel_data_position = self._fp.tell()
 
         if WsiDataset.is_wsi_dicom(dataset):
@@ -668,31 +685,18 @@ class WsiDicomFile:
         """Close the file."""
         self._fp.close()
 
-    def _read_positions_from_bot(self) -> List[Tuple[int, int]]:
-        """Read basic table offset (BOT). The BOT always starts with an ItemTag
-        followed by a length. If t he BOT length is zero the BOT is empty.
-        Otherwise the BOT contains file positions, in relation to the BOT end,
-        of frames in the file. fp needs to be positioned before the BOT.
+    def _read_bot(self) -> Optional[bytes]:
+        """Read basic table offset (BOT). Returns None if BOT is empty
 
         Returns
         ----------
-        list[tuple[int, int]]
-            A list with frame positions and frame lengths. Is empty if BOT is
-            empty.
+        Optional[bytes]
+            BOT in bytes.
         """
-        TAG_BYTES = 4
-        LENGHT_BYTES = 4
         BOT_BYTES = 4
         if not self._fp.is_little_endian:
             raise ValueError("fp must be little endian")
-        # Jump to BOT
-        offset_to_value = data_element_offset_to_value(
-            self._fp.is_implicit_VR,
-            'OB'
-        )
-        self._fp.seek(offset_to_value, 1)
 
-        positions: List[Tuple[int, int]] = []
         if self._fp.read_tag() != ItemTag:
             raise WsiDicomFileError(
                 self.filepath,
@@ -700,8 +704,7 @@ class WsiDicomFile:
             )
         bot_length = self._fp.read_UL()
         if bot_length == 0:
-            self._fp.seek(bot_length, 1)
-            return positions
+            return None
         elif bot_length % BOT_BYTES:
             raise WsiDicomFileError(
                 self.filepath,
@@ -710,19 +713,86 @@ class WsiDicomFile:
 
         # Read the BOT into bytes
         bot = self._fp.read(bot_length)
-        bot_end = self._fp.tell()
+        return bot
 
-        # Read through BOT to get offset and length for all but last item
-        this_bot_offset: int = unpack(b"<L", bot[0:BOT_BYTES])[0]
-        for index in range(BOT_BYTES, bot_length, BOT_BYTES):
-            next_bot_offset = unpack(b"<L", bot[index:index+BOT_BYTES])[0]
-            offset = this_bot_offset+TAG_BYTES+LENGHT_BYTES
-            length = next_bot_offset - offset
-            positions.append((bot_end+offset, length))
-            this_bot_offset = next_bot_offset
+    def _read_eot(self) -> bytes:
+        """Read extended table offset (EOT).
+
+        Returns
+        ----------
+        bytes
+            EOT in bytes.
+        """
+        EOT_BYTES = 8
+        if not self._fp.is_little_endian:
+            raise ValueError("fp must be little endian")
+
+        eot_length = self._fp.read_UL()
+        if eot_length == 0:
+            raise WsiDicomFileError(
+                self.filepath,
+                "EOT present but empty"
+            )
+        elif eot_length % EOT_BYTES:
+            raise WsiDicomFileError(
+                self.filepath,
+                f"BOT length should be a multiple of {EOT_BYTES}"
+            )
+
+        # Read the EOT into bytes
+        eot = self._fp.read(EOT_BYTES)
+
+        # Read EOT lengths
+        tag = self._fp.read_tag()
+        if tag != Tag('ExtendedOffsetTableLengths'):
+            raise WsiDicomFileError(
+                self.filepath,
+                "Expected EOT lengths after EOT"
+            )
+        vr = self._fp.read_UL()
+        length = self._fp.read_UL()
+        # Jump over EOT lengths for now
+        self._fp.seek(length, 1)
+
+        return eot
+
+    def _parse_table(
+        self,
+        table: bytes,
+        bytes_per_item: int,
+        pixels_start: int
+    ) -> List[Tuple[int, int]]:
+        """Parse table with offsets (BOT or EOT).
+
+        Parameters
+        ----------
+        table: bytes
+            BOT or EOT as bytes
+        bytes_per_item: int
+            Bytes per table item.
+        pixels_start: int
+            Position of pixel start.
+
+        Returns
+        ----------
+        List[Tuple[int, int]]
+            A list with frame positions and frame lengths.
+        """
+        table_length = len(table)
+        TAG_BYTES = 4
+        LENGHT_BYTES = 4
+        positions: List[Tuple[int, int]] = []
+        # Read through table to get offset and length for all but last item
+        this_offset: int = unpack(b"<L", table[0:bytes_per_item])[0]
+        for index in range(bytes_per_item, table_length, bytes_per_item):
+            next_offset = unpack(b"<L", table[index:index+bytes_per_item])[0]
+            offset = this_offset+TAG_BYTES+LENGHT_BYTES
+            length = next_offset - offset
+            positions.append((pixels_start+offset, length))
+            this_offset = next_offset
 
         # Go to last frame in pixel data and read the length of the frame
-        self._fp.seek(bot_end+this_bot_offset)
+        self._fp.seek(pixels_start+this_offset)
         if self._fp.read_tag() != ItemTag:
             raise WsiDicomFileError(
                 self.filepath,
@@ -731,8 +801,8 @@ class WsiDicomFile:
         length: int = self._fp.read_UL()
         if length == 0 or length % 2:
             raise WsiDicomFileError(self.filepath, 'Invalid frame length')
-        offset = this_bot_offset+TAG_BYTES+LENGHT_BYTES
-        positions.append((bot_end+offset, length))
+        offset = this_offset+TAG_BYTES+LENGHT_BYTES
+        positions.append((pixels_start+offset, length))
 
         return positions
 
@@ -780,23 +850,6 @@ class WsiDicomFile:
         if(self._fp.read_tag() != SequenceDelimiterTag):
             raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
 
-    def _read_frame_positions(self) -> List[Tuple[int, int]]:
-        """Parse pixel data to get frame positions (relative to end of BOT)
-        and frame lenght.
-
-        Returns
-        ----------
-        list[tuple[int, int]]
-            A list with frame positions and frame lengths
-        """
-        # First read BOT
-        positions = self._read_positions_from_bot()
-        # If BOT is empty read positions from PixelData (slow)
-        if positions == []:
-            positions = self._read_positions_from_pixeldata()
-
-        return positions
-
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
 
@@ -818,23 +871,68 @@ class WsiDicomFile:
 
     def _parse_pixel_data(self) -> List[Tuple[int, int]]:
         """Parse file pixel data, reads frame positions.
-        Note that fp needs to be positionend at pixel data.
+        Note that fp needs to be positionend at Extended offset table
+        or Pixel data.
 
         Returns
         ----------
         List[Tuple[int, int]]
             List of frame positions and lenghts
         """
-        frame_positions = self._read_frame_positions()
-        fragment_count = len(frame_positions)
+        tag = self._fp.read_tag()
+        vr = self._fp.read_UL()
+        length = self._fp.read_UL()
+        frame_positions = []
+        table = None
+        table_item_length = 4
+        if tag == Tag('ExtendedOffsetTable'):
+            table_item_length = 8
+            table = self._read_eot()
+            tag = self._fp.read_tag()
+            vr = self._fp.read_UL()
+            length = self._fp.read_UL()
+
+        if tag == Tag('PixelData'):
+            if length != 0xFFFFFFFF:
+                raise WsiDicomFileError(
+                    self.filepath,
+                    "Expected undefined length when reading Pixel data"
+                )
+            bot = self._read_bot()
+            pixels_start = self._fp.tell()
+
+            if bot is not None:
+                if table is not None:
+                    raise WsiDicomFileError(
+                        self.filepath,
+                        "Both BOT and EOT present"
+                    )
+                table = bot
+
+            if table is None:
+                frame_positions = self._read_positions_from_pixeldata()
+            else:
+                frame_positions = self._parse_table(
+                    table,
+                    table_item_length,
+                    pixels_start
+                )
+        else:
+            WsiDicomFileError(
+                self.filepath,
+                "Expected PixelData tag"
+            )
+
         if(self.frame_count != len(frame_positions)):
             raise WsiDicomFileError(
                 self.filepath,
                 (
-                    f"Frames {self.frame_count} != Fragments {fragment_count}."
+                    f"Frame count {self.frame_count} "
+                    f"!= Fragments {len(frame_positions)}."
                     " Fragmented frames are not supported"
                 )
             )
+
         return frame_positions
 
     @staticmethod
