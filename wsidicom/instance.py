@@ -25,20 +25,18 @@ from typing import (Any, BinaryIO, Dict, Generator, List, Optional,
                     OrderedDict, Set, Tuple, Union, cast)
 
 import numpy as np
-import pydicom
 from PIL import Image
-from pydicom.dataelem import DataElement
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
 from pydicom.filebase import DicomFile, DicomFileLike
-from pydicom.filereader import (data_element_offset_to_value,
-                                read_file_meta_info, read_partial)
+from pydicom.filereader import read_file_meta_info, read_partial
 from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.pixel_data_handlers import pillow_handler
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
+from pydicom.valuerep import DSfloat
 
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
@@ -545,7 +543,79 @@ class WsiDataset(Dataset):
         return self._slice_thickness
 
 
-class WsiDicomFile:
+class MetaWsiDicomFile(metaclass=ABCMeta):
+    def __init__(self, filepath: Path, mode: str):
+        self._filepath = filepath
+        self._fp = DicomFile(filepath, mode=mode)
+        self.__enter__()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.filepath})"
+
+    def __str__(self) -> str:
+        return self.pretty_str()
+
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: Optional[int] = None
+    ) -> str:
+        return f"File with path: {self.filepath}"
+
+    @property
+    def filepath(self) -> Path:
+        """Return filepath"""
+        return self._filepath
+
+    def _read_tag_length(self, with_vr: bool = True) -> int:
+        if (not self._fp.is_implicit_VR) and with_vr:
+            VR = self._fp.read_UL()
+        return self._fp.read_UL()
+
+    def _check_tag_and_length(
+        self,
+        tag: BaseTag,
+        length: int,
+        with_vr: bool = True
+    ) -> None:
+        """Check if tag at position is expected tag with expected length.
+
+        Parameters
+        ----------
+        tag: BaseTag
+            Expected tag.
+        length: int
+            Expected length.
+
+        """
+        read_tag = self._fp.read_tag()
+        if tag != read_tag:
+            raise ValueError(f"Found tag {read_tag} expected {tag}")
+        read_length = self._read_tag_length(with_vr)
+        if length != read_length:
+            raise ValueError(f"Found length {read_length} expected {length}")
+
+    def _read_sequence_delimeter(self):
+        """Check if last read tag was a sequence delimter.
+        Raises WsiDicomFileError otherwise.
+        """
+        TAG_BYTES = 4
+        self._fp.seek(-TAG_BYTES, 1)
+        if(self._fp.read_tag() != SequenceDelimiterTag):
+            raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
+
+    def close(self) -> None:
+        """Close the file."""
+        self._fp.close()
+
+
+class WsiDicomFile(MetaWsiDicomFile):
     """Represents a DICOM file (potentially) containing WSI image and metadata.
     """
     def __init__(self, filepath: Path):
@@ -557,16 +627,15 @@ class WsiDicomFile:
         filepath: Path
             Path to file to open
         """
-        self._filepath = filepath
         self._lock = threading.Lock()
 
-        if not is_dicom(self.filepath):
-            raise WsiDicomFileError(self.filepath, "is not a DICOM file")
+        if not is_dicom(filepath):
+            raise WsiDicomFileError(filepath, "is not a DICOM file")
 
-        file_meta = read_file_meta_info(self.filepath)
+        file_meta = read_file_meta_info(filepath)
         self._transfer_syntax_uid = UID(file_meta.TransferSyntaxUID)
 
-        self._fp = DicomFile(self.filepath, mode='rb')
+        super().__init__(filepath, mode='rb')
         self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
         pixel_data_tags = {
@@ -620,11 +689,6 @@ class WsiDicomFile:
         return self._dataset
 
     @property
-    def filepath(self) -> Path:
-        """Return filepath"""
-        return self._filepath
-
-    @property
     def wsi_type(self) -> str:
         return self._wsi_type
 
@@ -653,13 +717,6 @@ class WsiDicomFile:
         """Return number of frames"""
         return self._frame_count
 
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
-        return f"File with path: {self.filepath}"
-
     def get_filepointer(
         self,
         frame_index: int
@@ -681,10 +738,6 @@ class WsiDicomFile:
         frame_position, frame_length = self.frame_positions[frame_index]
         return self._fp, frame_position, frame_length
 
-    def close(self) -> None:
-        """Close the file."""
-        self._fp.close()
-
     def _read_bot(self) -> Optional[bytes]:
         """Read basic table offset (BOT). Returns None if BOT is empty
 
@@ -694,9 +747,6 @@ class WsiDicomFile:
             BOT in bytes.
         """
         BOT_BYTES = 4
-        if not self._fp.is_little_endian:
-            raise ValueError("fp must be little endian")
-
         if self._fp.read_tag() != ItemTag:
             raise WsiDicomFileError(
                 self.filepath,
@@ -710,13 +760,12 @@ class WsiDicomFile:
                 self.filepath,
                 f"BOT length should be a multiple of {BOT_BYTES}"
             )
-
         # Read the BOT into bytes
         bot = self._fp.read(bot_length)
         return bot
 
     def _read_eot(self) -> bytes:
-        """Read extended table offset (EOT).
+        """Read extended table offset (EOT) and EOT lengths.
 
         Returns
         ----------
@@ -724,10 +773,8 @@ class WsiDicomFile:
             EOT in bytes.
         """
         EOT_BYTES = 8
-        if not self._fp.is_little_endian:
-            raise ValueError("fp must be little endian")
 
-        eot_length = self._fp.read_UL()
+        eot_length = self._read_tag_length()
         if eot_length == 0:
             raise WsiDicomFileError(
                 self.filepath,
@@ -738,28 +785,24 @@ class WsiDicomFile:
                 self.filepath,
                 f"BOT length should be a multiple of {EOT_BYTES}"
             )
-
         # Read the EOT into bytes
-        eot = self._fp.read(EOT_BYTES)
-
+        eot = self._fp.read(eot_length)
         # Read EOT lengths
         tag = self._fp.read_tag()
         if tag != Tag('ExtendedOffsetTableLengths'):
             raise WsiDicomFileError(
                 self.filepath,
-                "Expected EOT lengths after EOT"
+                f"Expected EOT lengths after EOT, found {tag}"
             )
-        vr = self._fp.read_UL()
-        length = self._fp.read_UL()
+        length = self._read_tag_length()
         # Jump over EOT lengths for now
         self._fp.seek(length, 1)
-
         return eot
 
     def _parse_table(
         self,
         table: bytes,
-        bytes_per_item: int,
+        table_type: str,
         pixels_start: int
     ) -> List[Tuple[int, int]]:
         """Parse table with offsets (BOT or EOT).
@@ -768,8 +811,8 @@ class WsiDicomFile:
         ----------
         table: bytes
             BOT or EOT as bytes
-        bytes_per_item: int
-            Bytes per table item.
+        table_type: str
+            Type of table, 'bot' or 'eot'.
         pixels_start: int
             Position of pixel start.
 
@@ -778,16 +821,30 @@ class WsiDicomFile:
         List[Tuple[int, int]]
             A list with frame positions and frame lengths.
         """
+        if self._fp.is_little_endian:
+            mode = '<'
+        else:
+            mode = '>'
+        if table_type == 'bot':
+            bytes_per_item = 4
+            mode += 'L'
+        elif table_type == 'eot':
+            bytes_per_item = 8
+            mode = 'Q'
+        else:
+            raise ValueError("table type should be 'bot' or 'eot'")
         table_length = len(table)
         TAG_BYTES = 4
         LENGHT_BYTES = 4
         positions: List[Tuple[int, int]] = []
         # Read through table to get offset and length for all but last item
-        this_offset: int = unpack(b"<L", table[0:bytes_per_item])[0]
+        this_offset: int = unpack(mode, table[0:bytes_per_item])[0]
         for index in range(bytes_per_item, table_length, bytes_per_item):
-            next_offset = unpack(b"<L", table[index:index+bytes_per_item])[0]
+            next_offset = unpack(mode, table[index:index+bytes_per_item])[0]
             offset = this_offset+TAG_BYTES+LENGHT_BYTES
             length = next_offset - offset
+            if length == 0 or length % 2:
+                raise WsiDicomFileError(self.filepath, 'Invalid frame length')
             positions.append((pixels_start+offset, length))
             this_offset = next_offset
 
@@ -831,24 +888,13 @@ class WsiDicomFile:
             length: int = self._fp.read_UL()
             if length == 0 or length % 2:
                 raise WsiDicomFileError(self.filepath, 'Invalid frame length')
-            # Frame position
-            position = frame_position
-            positions.append((position+TAG_BYTES+LENGHT_BYTES, length))
-            # Jump to end of item
+            positions.append((frame_position+TAG_BYTES+LENGHT_BYTES, length))
+            # Jump to end of frame
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
 
         self._read_sequence_delimeter()
         return positions
-
-    def _read_sequence_delimeter(self):
-        """Check if last read tag was a sequence delimter.
-        Raises WsiDicomFileError otherwise.
-        """
-        TAG_BYTES = 4
-        self._fp.seek(-TAG_BYTES, 1)
-        if(self._fp.read_tag() != SequenceDelimiterTag):
-            raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
 
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
@@ -871,28 +917,27 @@ class WsiDicomFile:
 
     def _parse_pixel_data(self) -> List[Tuple[int, int]]:
         """Parse file pixel data, reads frame positions.
-        Note that fp needs to be positionend at Extended offset table
-        or Pixel data.
+        Note that fp needs to be positionend at Extended offset table (EOT)
+        or Pixel data. An EOT can be present before the pixel data, and must
+        then not be empty. A BOT most always be the first item in the Pixel
+        data, but can be empty (zero length). If EOT is used BOT must be empty.
 
         Returns
         ----------
         List[Tuple[int, int]]
             List of frame positions and lenghts
         """
-        tag = self._fp.read_tag()
-        vr = self._fp.read_UL()
-        length = self._fp.read_UL()
+        tag = self._fp.read_tag()  # Either EOT or Pixel data tag
         frame_positions = []
         table = None
-        table_item_length = 4
+        table_type = 'bot'
         if tag == Tag('ExtendedOffsetTable'):
-            table_item_length = 8
+            table_type = 'eot'
             table = self._read_eot()
             tag = self._fp.read_tag()
-            vr = self._fp.read_UL()
-            length = self._fp.read_UL()
 
         if tag == Tag('PixelData'):
+            length = self._read_tag_length()
             if length != 0xFFFFFFFF:
                 raise WsiDicomFileError(
                     self.filepath,
@@ -914,7 +959,7 @@ class WsiDicomFile:
             else:
                 frame_positions = self._parse_table(
                     table,
-                    table_item_length,
+                    table_type,
                     pixels_start
                 )
         else:
@@ -2244,27 +2289,19 @@ class SparseTileIndex(TileIndex):
         return tile, z
 
 
-class WsiDicomFileWriter:
-    def __init__(self, path: Path) -> None:
+class WsiDicomFileWriter(MetaWsiDicomFile):
+    def __init__(self, filepath: Path) -> None:
         """Return a dicom filepointer.
 
         Parameters
         ----------
-        path: Path
+        filepath: Path
             Path to filepointer.
 
         """
-        self._fp = DicomFile(path, mode='w+b')
+        super().__init__(filepath, mode='w+b')
         self._fp.is_little_endian = True
         self._fp.is_implicit_VR = False
-
-        self.__enter__()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
 
     def write(
         self,
@@ -2299,8 +2336,10 @@ class WsiDicomFileWriter:
         self._write_preamble()
         self._write_file_meta(uid, transfer_syntax)
         dataset.SOPInstanceUID = uid
-        self._write_base(dataset)
+        dataset = self._set_dataset_as_tiled_full(dataset, data)
+
         frames = dataset.NumberOfFrames
+        self._write_base(dataset)
         table_start, pixels_start = self._write_pixel_data_start(
             frames,
             use_eot
@@ -2328,6 +2367,70 @@ class WsiDicomFileWriter:
             else:
                 self._write_bot(table_start, pixels_start, frame_positions)
         self.close()
+
+    def _set_dataset_as_tiled_full(
+        self,
+        dataset: WsiDataset,
+        image_data: List[Tuple[Tuple[str, float], ImageData]]
+    ) -> WsiDataset:
+        """Set dataset as a tiled full dataset. Make a new Shared functional
+        group sequence and Pixel measure sequence if not in dataset, otherwise
+        update the Pixel measure sequence. Remove Per Frame functional groups
+        sequence. Set number of frames as per tiled size and number of
+        optical paths and focal planes.
+        """
+        dataset.DimensionOrganizationType = 'TILED_FULL'
+        shared_functional_group = getattr(
+            dataset,
+            'SharedFunctionalGroupsSequence',
+            Dataset()
+        )
+        pixel_measure = getattr(
+            shared_functional_group,
+            'PixelMeasuresSequence',
+            Dataset()
+        )
+        pixel_measure.PixelSpacing = [
+            DSfloat(dataset.pixel_spacing.width, True),
+            DSfloat(dataset.pixel_spacing.height, True)
+        ]
+        pixel_measure.SpacingBetweenSlices = dataset.spacing_between_slices
+        pixel_measure.SliceThickness = dataset.slice_thickness
+        if 'PixelMeasuresSequence' not in shared_functional_group:
+            shared_functional_group.PixelMeasuresSequence = (
+                DicomSequence([pixel_measure])
+            )
+        if 'SharedFunctionalGroupsSequence' not in dataset:
+            dataset.SharedFunctionalGroupsSequence = DicomSequence(
+                [shared_functional_group]
+            )
+        del dataset['PerFrameFunctionalGroupsSequence']
+        focal_planes, optical_paths, tile_count = (
+            self._get_frame_information(image_data)
+        )
+        dataset.TotalPixelMatrixFocalPlanes = focal_planes
+        dataset.NumberOfOpticalPaths = optical_paths
+        dataset.NumberOfFrames = tile_count*focal_planes*optical_paths
+        return dataset
+
+    @staticmethod
+    def _get_frame_information(
+        data: List[Tuple[Tuple[str, float], ImageData]]
+    ) -> Tuple[int, int, int]:
+        """Return number of focal planes, number of optical paths, and
+        number of tiles per plane.
+        """
+        focal_planes: Set[float] = set()
+        optical_paths: Set[str] = set()
+        tiled_sizes: Set[Size] = set()
+        for (optical_path, focal_plane), image_data in data:
+            optical_paths.add(optical_path)
+            focal_planes.add(focal_plane)
+            tiled_sizes.add(image_data.tiled_size)
+        if len(tiled_sizes) != 1:
+            raise ValueError('Expected only one tiled size')
+        tiled_size = list(tiled_sizes)[0]
+        return len(focal_planes), len(optical_paths), tiled_size.area
 
     def _write_preamble(self) -> None:
         """Writes file preamble to file."""
@@ -2498,7 +2601,8 @@ class WsiDicomFileWriter:
         self._fp.seek(bot_start)  # Go to first BOT entry
         self._check_tag_and_length(
             ItemTag,
-            BYTES_PER_ITEM*len(frame_positions)
+            BYTES_PER_ITEM*len(frame_positions),
+            False
         )
 
         for frame_position in frame_positions:  # Write BOT
@@ -2517,28 +2621,6 @@ class WsiDicomFileWriter:
 
         """
         self._fp.write(pack('<Q', value))
-
-    def _check_tag_and_length(
-        self,
-        tag: BaseTag,
-        length: int
-    ) -> None:
-        """Check if tag at position is expected tag with expected length.
-
-        Parameters
-        ----------
-        tag: BaseTag
-            Expected tag.
-        length: int
-            Expected length.
-
-        """
-        read_tag = self._fp.read_tag()
-        if tag != read_tag:
-            raise ValueError(f"Found tag {read_tag} expected {tag}")
-        read_length = self._fp.read_UL()
-        if length != read_length:
-            raise ValueError(f"Found length {read_length} expected {length}")
 
     def _write_eot(
         self,
@@ -2724,9 +2806,6 @@ class WsiDicomFileWriter:
         """Writes tags ending pixel data."""
         self._fp.write_tag(SequenceDelimiterTag)
         self._fp.write_UL(0)
-
-    def close(self) -> None:
-        self._fp.close()
 
 
 class WsiInstance:
