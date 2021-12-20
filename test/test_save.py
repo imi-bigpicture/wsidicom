@@ -12,28 +12,30 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import math
 import os
+import unittest
+from os import urandom
+from pathlib import Path
 from random import randint
 from struct import unpack
-import unittest
-from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional, Tuple
-from pydicom.encaps import itemize_frame
+from typing import Dict, List, Optional, Sequence, Tuple, cast
+
+import pytest
+from PIL import Image, ImageChops, ImageFilter, ImageStat
+from pydicom import Sequence as DicomSequence
+from pydicom.dataset import Dataset
+from pydicom.filebase import DicomFile
 from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
-
-import pytest
-from PIL import Image
-from pydicom.filebase import DicomFile
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 from wsidicom import WsiDicom
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.instance import (ImageData, WsiDicomFile,
-                               WsiDicomFileWriter)
+from wsidicom.instance import ImageData, WsiDicomFile, WsiDicomFileWriter
 from wsidicom.uid import WSI_SOP_CLASS_UID
-from os import urandom
+from wsidicom.wsidicom import WsiDicomLevel
 
 wsidicom_test_data_dir = os.environ.get("WSIDICOM_TESTDIR", "C:/temp/wsidicom")
 sub_data_dir = "interface"
@@ -52,8 +54,13 @@ class WsiDicomTestFile(WsiDicomFile):
 
 
 class WsiDicomTestImageData(ImageData):
-    def __init__(self, data: List[bytes]) -> None:
+    def __init__(self, data: Sequence[bytes], tiled_size: Size) -> None:
+        if len(data) != tiled_size.area:
+            raise ValueError('Number of frames and tiled size area differ')
+        TILE_SIZE = Size(10, 10)
         self._data = data
+        self._tile_size = TILE_SIZE
+        self._image_size = tiled_size * TILE_SIZE
 
     @property
     def files(self) -> List[Path]:
@@ -65,11 +72,11 @@ class WsiDicomTestImageData(ImageData):
 
     @property
     def image_size(self) -> Size:
-        return Size(100, 100)
+        return self._image_size
 
     @property
     def tile_size(self) -> Size:
-        return Size(10, 10)
+        return self._tile_size
 
     @property
     def pixel_spacing(self) -> SizeMm:
@@ -107,18 +114,89 @@ class WsiDicomFileSaveTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.frame_count = 100
+        cls.tiled_size = Size(10, 10)
+        cls.frame_count = cls.tiled_size.area
         MIN_FRAME_LENGTH = 2
         MAX_FRAME_LENGTH = 100
         # Generate test data by itemizing random bytes of random length
         # from MIN_FRAME_LENGTH to MAX_FRAME_LENGTH.
         cls.test_data = [
-            next(itemize_frame(urandom(randint(
+            urandom(randint(
                 MIN_FRAME_LENGTH,
                 MAX_FRAME_LENGTH
-            ))))
+            ))
             for i in range(cls.frame_count)
         ]
+        cls.image_data = WsiDicomTestImageData(cls.test_data, cls.tiled_size)
+        cls.test_dataset = cls.create_test_dataset(
+            cls.frame_count,
+            cls.image_data
+        )
+        folders = cls.get_folders()
+        cls.test_folders = {}
+        for folder in folders:
+            cls.test_folders[folder] = cls.open(folder)
+
+    @staticmethod
+    def open(path: Path) -> WsiDicom:
+        folder = Path(path).joinpath("dcm")
+        return WsiDicom.open(str(folder))
+
+    @classmethod
+    def get_folders(cls):
+        return [
+            Path(data_dir).joinpath(item)
+            for item in os.listdir(data_dir)
+        ]
+
+    @staticmethod
+    def create_test_dataset(
+        frame_count: int,
+        image_data: WsiDicomTestImageData
+    ):
+        dataset = Dataset()
+        dataset.SOPClassUID = UID(WSI_SOP_CLASS_UID)
+        dataset.ImageType = [
+            'ORGINAL', 'PRIMARY', 'VOLUME', 'NONE'
+        ]
+        dataset.NumberOfFrames = frame_count
+        dataset.SOPInstanceUID = generate_uid()
+        dataset.StudyInstanceUID = generate_uid()
+        dataset.SeriesInstanceUID = generate_uid()
+        dataset.FrameOfReferenceUID = generate_uid()
+        dataset.DimensionOrganizationType = 'TILED_FULL'
+        dataset.Rows = image_data.tile_size.width
+        dataset.Columns = image_data.tile_size.height
+        dataset.SamplesPerPixel = image_data.samples_per_pixel
+        dataset.PhotometricInterpretation = (
+            image_data.photometric_interpretation
+        )
+        dataset.TotalPixelMatrixColumns = image_data.image_size.width
+        dataset.TotalPixelMatrixRows = image_data.image_size.height
+        dataset.OpticalPathSequence = DicomSequence([])
+        dataset.ImagedVolumeWidth = 1.0
+        dataset.ImagedVolumeHeight = 1.0
+        dataset.ImagedVolumeDepth = 1.0
+        dataset.InstanceNumber = 0
+        pixel_measure = Dataset()
+        pixel_measure.PixelSpacing = [
+            image_data.pixel_spacing.width,
+            image_data.pixel_spacing.height
+        ]
+        pixel_measure.SpacingBetweenSlices = 1.0
+        pixel_measure.SliceThickness = 1.0
+        shared_functional_group = Dataset()
+        shared_functional_group.PixelMeasuresSequence = (
+            DicomSequence([pixel_measure])
+        )
+        dataset.SharedFunctionalGroupsSequence = DicomSequence(
+            [shared_functional_group]
+        )
+        dataset.TotalPixelMatrixFocalPlanes = 1
+        dataset.NumberOfOpticalPaths = 1
+        dataset.ExtendedDepthOfField = 'NO'
+        dataset.FocusMethod = 'AUTO'
+        return dataset
 
     def test_write_preamble(self):
         with TemporaryDirectory() as tempdir:
@@ -151,10 +229,14 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                 number_of_frames=self.frame_count,
                 offset_table=offset_table
             )
-            positions = []
-            for frame in self.test_data:
-                positions.append(write_file._fp.tell())
-                write_file._fp.write(frame)
+            # positions = []
+            positions = write_file._write_pixel_data(
+                self.image_data,
+                self.image_data.default_z,
+                self.image_data.default_path,
+                1,
+                100
+            )
             pixel_data_end = write_file._fp.tell()
             write_file._write_pixel_data_end()
             if offset_table is not None:
@@ -179,8 +261,8 @@ class WsiDicomFileSaveTests(unittest.TestCase):
         frame_offsets = []
         for position in positions:  # Positions are from frame data start
             frame_offsets.append(position + TAG_BYTES + LENGHT_BYTES)
-        frame_lengths = [  # Lengths are without tag and length parts
-            len(frame) - TAG_BYTES - LENGHT_BYTES for frame in self.test_data
+        frame_lengths = [  # Lengths are disiable with 2
+            2*math.ceil(len(frame) / 2) for frame in self.test_data
         ]
         expected_frame_index = [
             (offset, length)
@@ -204,26 +286,13 @@ class WsiDicomFileSaveTests(unittest.TestCase):
         with self.assertRaises(EOFError):
             file._fp.read(1, need_exact_length=True)
 
-    def test_write_and_read_bot(self):
+    def test_write_and_read_table(self):
         with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + '/1.dcm')
-            expected_frame_index = self.write_table(filepath, 'bot')
-            frame_index = self.read_table(filepath)
-            self.assertEqual(expected_frame_index, frame_index)
-
-    def test_write_and_read_eot(self):
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + '/1.dcm')
-            expected_frame_index = self.write_table(filepath, 'eot')
-            frame_index = self.read_table(filepath)
-            self.assertEqual(expected_frame_index, frame_index)
-
-    def test_write_and_read_no_table(self):
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + '/1.dcm')
-            expected_frame_index = self.write_table(filepath, None)
-            frame_index = self.read_table(filepath)
-            self.assertEqual(expected_frame_index, frame_index)
+            for table in [None, 'bot', 'eot']:
+                filepath = Path(tempdir + '/' + str(table))
+                expected_frame_index = self.write_table(filepath, table)
+                frame_index = self.read_table(filepath)
+                self.assertEqual(expected_frame_index, frame_index)
 
     def test_reserve_bot(self):
         with TemporaryDirectory() as tempdir:
@@ -293,18 +362,110 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                 self.assertEqual(length, 0)
 
     def test_write_pixel_data(self):
-        image_data = WsiDicomTestImageData(self.test_data)
-        print(image_data.tiled_size)
         with TemporaryDirectory() as tempdir:
             filepath = Path(tempdir + '/1.dcm')
             with WsiDicomFileWriter(filepath) as write_file:
-                write_file._write_pixel_data(
-                    image_data=image_data,
-                    z=image_data.default_z,
-                    path=image_data.default_path,
+                positions = write_file._write_pixel_data(
+                    image_data=self.image_data,
+                    z=self.image_data.default_z,
+                    path=self.image_data.default_path,
                     workers=1,
                     chunk_size=10
                 )
+            with WsiDicomTestFile(
+                filepath,
+                JPEGBaseline8Bit,
+                self.frame_count
+            ) as read_file:
+                for position in positions:
+                    read_file._fp.seek(position)
+                    tag = read_file._fp.read_tag()
+                    self.assertEqual(tag, ItemTag)
 
+    def test_write_unsigned_long_long(self):
+        values = [0, 4294967295]
+        MODE = '<Q'
+        BYTES_PER_ITEM = 8
+        with TemporaryDirectory() as tempdir:
+            filepath = Path(tempdir + '/1.dcm')
+            with WsiDicomFileWriter(filepath) as write_file:
+                for value in values:
+                    write_file._write_unsigned_long_long(value)
 
+            with WsiDicomTestFile(
+                filepath,
+                JPEGBaseline8Bit,
+                self.frame_count
+            ) as read_file:
+                for value in values:
+                    read_value = unpack(
+                        MODE,
+                        read_file._fp.read(BYTES_PER_ITEM)
+                    )[0]
+                    self.assertEqual(read_value, value)
 
+    def test_write(self):
+        with TemporaryDirectory() as tempdir:
+            for table in [None, 'bot', 'eot']:
+                filepath = Path(tempdir + '/' + str(table) + '.dcm')
+                with WsiDicomFileWriter(filepath) as write_file:
+                    write_file.write(
+                        generate_uid(),
+                        JPEGBaseline8Bit,
+                        self.test_dataset,
+                        [((
+                            self.image_data.default_path,
+                            self.image_data.default_z
+                        ), self.image_data)],
+                        1,
+                        100,
+                        table
+                    )
+
+                with WsiDicomFile(filepath) as read_file:
+                    for index, frame in enumerate(self.test_data):
+                        read_frame = read_file.read_frame(index)
+                        # Stored frame can be up to one byte longer
+                        self.assertTrue(
+                            0 <=
+                            len(read_frame) - len(frame)
+                            <= 1
+                        )
+                        self.assertEqual(read_frame[:len(frame)], frame)
+
+    def test_create_child(self):
+        for _, wsi in self.test_folders.items():
+            with TemporaryDirectory() as tempdir:
+                target = cast(WsiDicomLevel, wsi.levels[-1])
+                source = cast(WsiDicomLevel, wsi.levels[-2])
+                new_level = source.create_child(
+                    2,
+                    Path(tempdir),
+                    generate_uid,
+                    1,
+                    100,
+                    'bot'
+                )
+                new_level.close()
+                with WsiDicom.open(tempdir) as created_wsi:
+                    created_size = created_wsi.levels[0].size.to_tuple()
+                    target_size = target.size.to_tuple()
+                    self.assertEqual(created_size, target_size)
+
+                    created = created_wsi.read_region(
+                        (0, 0),
+                        0,
+                        created_size
+                    )
+                    original = wsi.read_region(
+                        (0, 0),
+                        target.level,
+                        target_size
+                    )
+                    blur = ImageFilter.GaussianBlur(2)
+                    diff = ImageChops.difference(
+                        created.filter(blur),
+                        original.filter(blur)
+                    )
+                    for band_rms in ImageStat.Stat(diff).rms:
+                        self.assertLess(band_rms, 2)  # type: ignore

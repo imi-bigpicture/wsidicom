@@ -606,12 +606,14 @@ class WsiDicomGroup:
             dataset = deepcopy(instances[0].dataset)
             frames = self._get_number_of_frames(instances)
             dataset.NumberOfFrames = frames
+            image_data_list = self._list_image_data(instances)
+            dataset.set_dataset_as_tiled_full(image_data_list)
             with WsiDicomFileWriter(filepath) as wsi_file:
                 wsi_file.write(
                     uid,
                     transfer_syntax,
                     dataset,
-                    self._list_image_data(instances),
+                    image_data_list,
                     workers,
                     chunk_size,
                     offset_table
@@ -853,18 +855,21 @@ class WsiDicomLevel(WsiDicomGroup):
     def create_child(
         self,
         scale: int,
+        output_path: Path,
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
         offset_table: Optional[str]
     ) -> 'WsiDicomLevel':
         """Creates a new WsiDicomLevel from this level by scaling the image
-        data. File is saved in same folder as parent.
+        data.
 
         Parameters
         ----------
         scale: int
             Scale factor.
+        output_path: Path
+            The path to write child to.
         uid_generator: Callable[..., UID]
             Uid generator to use.
         workers: int
@@ -893,9 +898,7 @@ class WsiDicomLevel(WsiDicomGroup):
             raise NotImplementedError(
                 "Can only construct pyramid from DICOM WSI files"
             )
-        output_path = (
-            self.default_instance.image_data._files[0].filepath.parent
-        )
+
         new_image_size = self.default_instance.size / scale
         for instances in self._group_instances_to_file():
             uid = uid_generator()
@@ -903,8 +906,10 @@ class WsiDicomLevel(WsiDicomGroup):
             transfer_syntax = instances[0].image_data.transfer_syntax
             dataset = deepcopy(instances[0].dataset)
             frames = self._get_number_of_frames(instances)
+            image_data_list = self._list_image_data(instances)
+            dataset.set_dataset_as_tiled_full(image_data_list)
             # Modify dataset to reflect scaled data
-            frames = frames // (scale*scale)
+            frames = max(frames // (scale*scale), 1)
             dataset.NumberOfFrames = frames
             dataset.TotalPixelMatrixColumns = new_image_size.width
             dataset.TotalPixelMatrixRows = new_image_size.height
@@ -914,15 +919,17 @@ class WsiDicomLevel(WsiDicomGroup):
                 dataset.SharedFunctionalGroupsSequence[0].
                 PixelMeasuresSequence[0].PixelSpacing
             ) = list(new_pixel_spacing.to_tuple())
+
             with WsiDicomFileWriter(filepath) as wsi_file:
                 wsi_file.write(
                     uid,
                     transfer_syntax,
                     dataset,
-                    self._list_image_data(instances),
+                    image_data_list,
                     workers,
                     chunk_size,
-                    offset_table
+                    offset_table,
+                    scale
                 )
             filepaths.append(filepath)
 
@@ -1365,7 +1372,8 @@ class WsiDicomLevels(WsiDicomSeries):
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: int = 100,
-        offset_table: Optional[str] = 'bot'
+        offset_table: Optional[str] = 'bot',
+        add_to_excisting: bool = True
     ) -> List[Path]:
         """Construct missing pyramid levels from excisting levels.
 
@@ -1382,6 +1390,8 @@ class WsiDicomLevels(WsiDicomSeries):
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        add_to_excisting: bool = True
+            If to add the created levels to excisting levels.
 
         Returns
         ----------
@@ -1402,15 +1412,20 @@ class WsiDicomLevels(WsiDicomSeries):
                 # Find the closest larger level for missing level
                 closest_level = self.get_closest_by_level(pyramid_level)
                 # Create scaled level
+                output_path = closest_level.files[0].parent
                 new_level = closest_level.create_child(
                     scale=2,
+                    output_path=output_path,
                     uid_generator=uid_generator,
                     workers=workers,
                     chunk_size=chunk_size,
                     offset_table=offset_table
                 )
                 # Add level to available levels
-                self._levels[new_level.level] = new_level
+                if add_to_excisting:
+                    self._levels[new_level.level] = new_level
+                else:
+                    new_level.close()
                 filepaths += new_level.files
         return filepaths
 
