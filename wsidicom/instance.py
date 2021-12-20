@@ -841,7 +841,7 @@ class WsiDicomFile(MetaWsiDicomFile):
         this_offset: int = unpack(mode, table[0:bytes_per_item])[0]
         for index in range(bytes_per_item, table_length, bytes_per_item):
             next_offset = unpack(mode, table[index:index+bytes_per_item])[0]
-            offset = this_offset+TAG_BYTES+LENGHT_BYTES
+            offset = this_offset + TAG_BYTES + LENGHT_BYTES
             length = next_offset - offset
             if length == 0 or length % 2:
                 raise WsiDicomFileError(self.filepath, 'Invalid frame length')
@@ -1058,45 +1058,45 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def files(self) -> List[Path]:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def transfer_syntax(self) -> UID:
         """Should return the uid of the transfer syntax of the image."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def image_size(self) -> Size:
         """Should return the pixel size of the image."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def tile_size(self) -> Size:
         """Should return the pixel tile size of the image, or pixel size of
         the image if not tiled."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def pixel_spacing(self) -> SizeMm:
         """Should return the size of the pixels in mm/pixel."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def samples_per_pixel(self) -> int:
         """Should return number of samples per pixel (e.g. 3 for RGB."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def photometric_interpretation(self) -> str:
         """Should return the photophotometric interpretation of the image
         data."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def _get_decoded_tile(
@@ -1107,7 +1107,7 @@ class ImageData(metaclass=ABCMeta):
     ) -> Image.Image:
         """Should return Image for tile defined by tile (x, y), z,
         and optical path."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def _get_encoded_tile(
@@ -1118,12 +1118,12 @@ class ImageData(metaclass=ABCMeta):
     ) -> bytes:
         """Should return image bytes for tile defined by tile (x, y), z,
         and optical path."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def close(self) -> None:
         """Should close any open files."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     def tiled_size(self) -> Size:
@@ -2311,7 +2311,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         data: List[Tuple[Tuple[str, float], ImageData]],
         workers: int,
         chunk_size: int,
-        use_eot: bool
+        offset_table: Optional[str]
     ) -> None:
         """Writes data to file.
 
@@ -2329,8 +2329,9 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             Number of workers to use for writing pixel data.
         chunk_size: int
             Number of frames to give each worker.
-        use_eot: bool
-            If to use extended offset table instead of basic offset table.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         """
         self._write_preamble()
@@ -2342,7 +2343,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         self._write_base(dataset)
         table_start, pixels_start = self._write_pixel_data_start(
             frames,
-            use_eot
+            offset_table
         )
         frame_positions: List[int] = []
         for (path, z), image_data in data:
@@ -2356,15 +2357,17 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         pixels_end = self._fp.tell()
         self._write_pixel_data_end()
 
-        if self != Path(os.devnull):
-            if use_eot:
+        if self != Path(os.devnull) and offset_table is not None:
+            if table_start is None:
+                raise ValueError('Table start should not be None')
+            elif offset_table == 'eot':
                 self._write_eot(
                     table_start,
                     pixels_start,
                     frame_positions,
                     pixels_end
                 )
-            else:
+            elif offset_table == 'bot':
                 self._write_bot(table_start, pixels_start, frame_positions)
         self.close()
 
@@ -2404,7 +2407,8 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             dataset.SharedFunctionalGroupsSequence = DicomSequence(
                 [shared_functional_group]
             )
-        del dataset['PerFrameFunctionalGroupsSequence']
+        if 'PerFrameFunctionalGroupsSequence' in dataset:
+            del dataset['PerFrameFunctionalGroupsSequence']
         focal_planes, optical_paths, tile_count = (
             self._get_frame_information(image_data)
         )
@@ -2497,7 +2501,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
     def _reserve_eot(
         self,
         number_of_frames: int
-    ):
+    ) -> int:
         """Reserve space in file for extended offset table.
 
         Parameters
@@ -2506,6 +2510,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             Number of frames to reserve space for.
 
         """
+        table_start = self._fp.tell()
         BYTES_PER_ITEM = 8
         eot_length = BYTES_PER_ITEM * number_of_frames
         self._write_tag('ExtendedOffsetTable', 'OV', eot_length)
@@ -2514,11 +2519,12 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         self._write_tag('ExtendedOffsetTableLengths', 'OV', eot_length)
         for index in range(number_of_frames):
             self._write_unsigned_long_long(0)
+        return table_start
 
     def _reserve_bot(
         self,
         number_of_frames: int
-    ):
+    ) -> int:
         """Reserve space in file for basic offset table.
 
         Parameters
@@ -2527,46 +2533,47 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             Number of frames to reserve space for.
 
         """
+        table_start = self._fp.tell()
         BYTES_PER_ITEM = 4
         tag_lengths = BYTES_PER_ITEM * number_of_frames
+        self._fp.write_tag(ItemTag)
         self._fp.write_UL(tag_lengths)
         for index in range(number_of_frames):
             self._fp.write_UL(0)
+        return table_start
 
     def _write_pixel_data_start(
         self,
         number_of_frames: int,
-        use_eot: bool
-    ) -> Tuple[int, int]:
+        offset_table: Optional[str]
+    ) -> Tuple[Optional[int], int]:
         """Writes tags starting pixel data and reserves space for BOT or EOT.
 
         Parameters
         ----------
         number_of_frames: int
             Number of frames to reserve space for in BOT or EOT.
-        use_eot: bool
-            If to use EOT instead of BOT.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
-        Tuple[int, int]
+        Tuple[Optional[int], int]
             Start of table (BOT or EOT) and start of pixel data (after BOT).
         """
-        table_start = self._fp.tell()
-        if use_eot:
-            self._reserve_eot(number_of_frames)
+        table_start: Optional[int] = None
+        if offset_table == 'eot':
+            table_start = self._reserve_eot(number_of_frames)
 
         # Write pixel data tag
         self._write_tag('PixelData', 'OB')
 
-        # Write item tag for BOT (must be present even if EOT used)
-        bot_start = self._fp.tell()
-        self._fp.write_tag(ItemTag)
-        if not use_eot:
-            table_start = bot_start
-            self._reserve_bot(number_of_frames)
+        if offset_table == 'bot':
+            table_start = self._reserve_bot(number_of_frames)
         else:
-            self._fp.write_UL(0)  # Empty BOT
+            self._fp.write_tag(ItemTag)  # Empty BOT
+            self._fp.write_UL(0)
 
         pixel_data_start = self._fp.tell()
 
