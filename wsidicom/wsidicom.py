@@ -563,7 +563,7 @@ class WsiDicomGroup:
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        use_eot: bool
+        offset_table: Optional[str]
     ) -> List[Path]:
         """Save a WsiDicomGroup to files in output_path. Instances are grouped
         by properties that cant differ in the same file:
@@ -585,8 +585,9 @@ class WsiDicomGroup:
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-        use_eot: bool
-            If to use extended offset table instead of basic offsest table.
+        offset_table: Optional[str]
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -613,7 +614,7 @@ class WsiDicomGroup:
                     self._list_image_data(instances),
                     workers,
                     chunk_size,
-                    use_eot
+                    offset_table
                 )
             filepaths.append(filepath)
         return filepaths
@@ -855,7 +856,7 @@ class WsiDicomLevel(WsiDicomGroup):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        use_eot: bool
+        offset_table: Optional[str]
     ) -> 'WsiDicomLevel':
         """Creates a new WsiDicomLevel from this level by scaling the image
         data. File is saved in same folder as parent.
@@ -871,8 +872,9 @@ class WsiDicomLevel(WsiDicomGroup):
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-         use_eot: bool
-            If to use extended offset table instead of basic offsest table.
+        offset_table: Optional[str]
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -920,7 +922,7 @@ class WsiDicomLevel(WsiDicomGroup):
                     self._list_image_data(instances),
                     workers,
                     chunk_size,
-                    use_eot
+                    offset_table
                 )
             filepaths.append(filepath)
 
@@ -1078,7 +1080,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        use_eot: bool
+        offset_table: Optional[str]
     ) -> List[Path]:
         """Save WsiDicomSeries as DICOM-files in path.
 
@@ -1092,8 +1094,9 @@ class WsiDicomSeries(metaclass=ABCMeta):
         chunk_size:
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-        use_eot: bool
-            If to use extended offset table instead of basic offsest table.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -1107,7 +1110,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
                 uid_generator,
                 workers,
                 chunk_size,
-                use_eot
+                offset_table
             )
             filepaths.extend(group_file_paths)
         return filepaths
@@ -1362,7 +1365,7 @@ class WsiDicomLevels(WsiDicomSeries):
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: int = 100,
-        use_eot: bool = False
+        offset_table: Optional[str] = 'bot'
     ) -> List[Path]:
         """Construct missing pyramid levels from excisting levels.
 
@@ -1376,8 +1379,9 @@ class WsiDicomLevels(WsiDicomSeries):
         chunk_size: int = 100
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-         use_eot: bool = False
-            If to use extended offset table instead of basic offsest table.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -1403,7 +1407,7 @@ class WsiDicomLevels(WsiDicomSeries):
                     uid_generator=uid_generator,
                     workers=workers,
                     chunk_size=chunk_size,
-                    use_eot=use_eot
+                    offset_table=offset_table
                 )
                 # Add level to available levels
                 self._levels[new_level.level] = new_level
@@ -1914,7 +1918,7 @@ class WsiDicom:
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None,
-        use_eot: bool = False
+        offset_table: Optional[str] = 'bot'
     ) -> List[Path]:
         """Save wsi as DICOM-files in path. Instances for the same pyramid
         level will be combined when possible to one file (e.g. not split
@@ -1932,8 +1936,9 @@ class WsiDicom:
         chunk_size: Optional[int] = None
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-        use_eot: bool = False
-            If to use extended offset table instead of basic offsest table.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -1960,7 +1965,7 @@ class WsiDicom:
                 uid_generator,
                 workers,
                 chunk_size,
-                use_eot
+                offset_table
             )
             filepaths.extend(collection_filepaths)
         return filepaths
