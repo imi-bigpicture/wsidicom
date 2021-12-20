@@ -256,9 +256,9 @@ class WsiDataset(Dataset):
             for module in module_attributes:
                 for attribute in module:
                     if attribute not in datset:
-                        warnings.warn(
-                            f' is missing {key} attribute {attribute}'
-                        )
+                        # warnings.warn(
+                        #     f' is missing {key} attribute {attribute}'
+                        # )
                         passed[key] = False
 
         sop_class_uid = getattr(datset, "SOPClassUID", "")
@@ -541,6 +541,50 @@ class WsiDataset(Dataset):
     def slice_thickness(self) -> float:
         """Return slice thickness."""
         return self._slice_thickness
+
+    def set_dataset_as_tiled_full(
+        self,
+        image_data: List[Tuple[Tuple[str, float], 'ImageData']]
+    ):
+        """Set dataset as a tiled full dataset. Make a new Shared functional
+        group sequence and Pixel measure sequence if not in dataset, otherwise
+        update the Pixel measure sequence. Remove Per Frame functional groups
+        sequence. Set number of frames as per tiled size and number of
+        optical paths and focal planes.
+        """
+        self.DimensionOrganizationType = 'TILED_FULL'
+        shared_functional_group = getattr(
+            self,
+            'SharedFunctionalGroupsSequence',
+            Dataset()
+        )
+        pixel_measure = getattr(
+            shared_functional_group,
+            'PixelMeasuresSequence',
+            Dataset()
+        )
+        pixel_measure.PixelSpacing = [
+            DSfloat(self.pixel_spacing.width, True),
+            DSfloat(self.pixel_spacing.height, True)
+        ]
+        pixel_measure.SpacingBetweenSlices = self.spacing_between_slices
+        pixel_measure.SliceThickness = self.slice_thickness
+        if 'PixelMeasuresSequence' not in shared_functional_group:
+            shared_functional_group.PixelMeasuresSequence = (
+                DicomSequence([pixel_measure])
+            )
+        if 'SharedFunctionalGroupsSequence' not in self:
+            self.SharedFunctionalGroupsSequence = DicomSequence(
+                [shared_functional_group]
+            )
+        if 'PerFrameFunctionalGroupsSequence' in self:
+            del self['PerFrameFunctionalGroupsSequence']
+        focal_planes, optical_paths, tile_count = (
+            ImageData.get_frame_information(image_data)
+        )
+        self.TotalPixelMatrixFocalPlanes = focal_planes
+        self.NumberOfOpticalPaths = optical_paths
+        self.NumberOfFrames = tile_count*focal_planes*optical_paths
 
 
 class MetaWsiDicomFile(metaclass=ABCMeta):
@@ -1214,8 +1258,23 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str
     ) -> List[Image.Image]:
-        """Return Images for tile defined by tile (x, y), z, and optical
-        path."""
+        """Return tiles for tile defined by tile (x, y), z, and optical
+        path.
+
+        Parameters
+        ----------
+        tiles: List[Point]
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        List[Image.Image]
+            Tiles as Images.
+        """
         return [
             self._get_decoded_tile(tile, z, path) for tile in tiles
         ]
@@ -1226,13 +1285,114 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str
     ) -> List[bytes]:
-        """Return image bytes for tile defined by tile (x, y), z, and optical
-        path."""
+        """Return tiles for tile defined by tile (x, y), z, and optical
+        path.
+
+        Parameters
+        ----------
+        tiles: List[Point]
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        List[bytes]
+            Tiles in bytes.
+        """
         return [
             self._get_encoded_tile(tile, z, path) for tile in tiles
         ]
 
-    def get_encoded_scaled_tiles(
+    def get_scaled_tile(
+        self,
+        scaled_tile_point: Point,
+        z: float,
+        path: str,
+        scale: int
+    ) -> Image.Image:
+        """Return scaled tile defined by tile (x, y), z, optical
+        path and scale.
+
+        Parameters
+        ----------
+        scaled_tile_point: Point,
+            Scaled position of tile to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        Scale: int
+            Scale to use for downscaling.
+
+        Returns
+        ----------
+        Image.Image
+            Scaled tiled as Image.
+        """
+        image = Image.new(
+            mode=self.image_mode,  # type: ignore
+            size=(self.tile_size * scale).to_tuple()
+        )
+        # Get decoded tiles for the region covering the scaled tile
+        # in the image data
+        tile_points = Region(scaled_tile_point*scale, Size(1, 1)*scale)
+        origin = tile_points.start
+        for tile_point in tile_points.iterate_all():
+            if (
+                (tile_point.x < self.tiled_size.width) and
+                (tile_point.y < self.tiled_size.height)
+            ):
+                tile = self._get_decoded_tile(tile_point, z, path)
+                image_coordinate = (tile_point - origin) * self.tile_size
+                image.paste(tile, image_coordinate.to_tuple())
+
+        return image.resize(self.tile_size.to_tuple(), resample=Image.BILINEAR)
+
+    def get_scaled_encoded_tile(
+        self,
+        scaled_tile_point: Point,
+        z: float,
+        path: str,
+        scale: int,
+        image_format: str,
+        image_options: Dict[str, Any]
+    ) -> bytes:
+        """Return scaled encoded tile defined by tile (x, y), z, optical
+        path and scale.
+
+        Parameters
+        ----------
+        scaled_tile_point: Point,
+            Scaled position of tile to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        Scale: int
+            Scale to use for downscaling.
+        image_format: str
+            Image format, e.g. 'JPEG', for encoding.
+        image_options: Dict[str, Any].
+            Dictionary of options for encoding.
+
+        Returns
+        ----------
+        bytes
+            Scaled tile as bytes.
+        """
+        image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
+        with io.BytesIO() as buffer:
+            image.save(
+                buffer,
+                format=image_format,
+                **image_options
+            )
+            return buffer.getvalue()
+
+    def get_scaled_encoded_tiles(
         self,
         scaled_tile_points: List[Point],
         z: float,
@@ -1241,62 +1401,40 @@ class ImageData(metaclass=ABCMeta):
         image_format: str,
         image_options: Dict[str, Any]
     ) -> List[bytes]:
-        scaled_tiles: List[bytes] = []
-        for scaled_tile_point in scaled_tile_points:
-            # For each tile point in the target scale
-            image = Image.new(
-                mode=self.image_mode,  # type: ignore
-                size=(self.tile_size * scale).to_tuple()
-            )
-            # Get decoded tiles for the region covering the scaled tile
-            # in the image data
-            tile_points = Region(
-                scaled_tile_point*scale,
-                Size(1, 1) * scale
-            ).iterate_all()
-            tiles: List[Image.Image] = []
-            for tile_point in tile_points:
-                if (
-                    (tile_point.x < self.tiled_size.width) and
-                    (tile_point.y < self.tiled_size.height)
-                ):
-                    tile = self._get_decoded_tile(
-                        tile_point,
-                        z,
-                        path
-                    )
-                else:
-                    tile = self.blank_tile
-                tiles.append(tile)
+        """Return scaled encoded tiles defined by tile (x, y) positions, z,
+        optical path and scale.
 
-            # Paste the unscalled images into a large tile
-            for y in range(scale):
-                for x in range(scale):
-                    tile_index = y*scale + x
-                    tile_point = Point(x, y)
-                    image_coordinate = (
-                        (tile_point * self.tile_size)
-                    )
-                    image.paste(
-                        tiles[tile_index],
-                        image_coordinate.to_tuple()
-                    )
-            # Resize the tile
-            image = image.resize(
-                self.tile_size.to_tuple(),
-                resample=Image.BILINEAR
-            )
-            # Compress the tile and add to created tiles
-            with io.BytesIO() as buffer:
-                image.save(
-                    buffer,
-                    format=image_format,
-                    **image_options
-                )
-                scaled_tiles.append(buffer.getvalue())
+        Parameters
+        ----------
+        scaled_tile_points: List[Point],
+            Scaled position of tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        Scale: int
+            Scale to use for downscaling.
+        image_format: str
+            Image format, e.g. 'JPEG', for encoding.
+        image_options: Dict[str, Any].
+            Dictionary of options for encoding.
 
-        # Return created tiles
-        return scaled_tiles
+        Returns
+        ----------
+        List[bytes]
+            Scaled tiles as bytes.
+        """
+        return [
+            self.get_scaled_encoded_tile(
+                scaled_tile_point,
+                z,
+                path,
+                scale,
+                image_format,
+                image_options
+            )
+            for scaled_tile_point in scaled_tile_points
+        ]
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
         """Check if tile region is inside tile geometry and z coordinate and
@@ -1590,6 +1728,25 @@ class ImageData(metaclass=ABCMeta):
             image.crop(box=cropped_tile_region.box_from_origin)
             tile_frame = self.encode(image)
         return tile_frame
+
+    @staticmethod
+    def get_frame_information(
+        data: List[Tuple[Tuple[str, float], 'ImageData']]
+    ) -> Tuple[int, int, int]:
+        """Return number of focal planes, number of optical paths, and
+        number of tiles per plane.
+        """
+        focal_planes: Set[float] = set()
+        optical_paths: Set[str] = set()
+        tiled_sizes: Set[Size] = set()
+        for (optical_path, focal_plane), image_data in data:
+            optical_paths.add(optical_path)
+            focal_planes.add(focal_plane)
+            tiled_sizes.add(image_data.tiled_size)
+        if len(tiled_sizes) != 1:
+            raise ValueError('Expected only one tiled size')
+        tiled_size = list(tiled_sizes)[0]
+        return len(focal_planes), len(optical_paths), tiled_size.area
 
 
 class WsiDicomImageData(ImageData):
@@ -2307,11 +2464,12 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         self,
         uid: UID,
         transfer_syntax: UID,
-        dataset: WsiDataset,
+        dataset: Dataset,
         data: List[Tuple[Tuple[str, float], ImageData]],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[str]
+        offset_table: Optional[str],
+        scale: int = 1
     ) -> None:
         """Writes data to file.
 
@@ -2321,7 +2479,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             Instance UID for file.
         transfer_syntax: UID.
             Transfer syntax for file
-        dataset: WsiDataset
+        dataset: Dataset
             Dataset to write (exluding pixel data).
         data: List[Tuple[Tuple[str, float], ImageData]]
             Pixel data to write.
@@ -2332,17 +2490,16 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        scale: int = 1
+            Scale factor.
 
         """
         self._write_preamble()
         self._write_file_meta(uid, transfer_syntax)
         dataset.SOPInstanceUID = uid
-        dataset = self._set_dataset_as_tiled_full(dataset, data)
-
-        frames = dataset.NumberOfFrames
         self._write_base(dataset)
         table_start, pixels_start = self._write_pixel_data_start(
-            frames,
+            dataset.NumberOfFrames,
             offset_table
         )
         frame_positions: List[int] = []
@@ -2352,7 +2509,8 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
                 z,
                 path,
                 workers,
-                chunk_size
+                chunk_size,
+                scale
             )
         pixels_end = self._fp.tell()
         self._write_pixel_data_end()
@@ -2370,71 +2528,6 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             elif offset_table == 'bot':
                 self._write_bot(table_start, pixels_start, frame_positions)
         self.close()
-
-    def _set_dataset_as_tiled_full(
-        self,
-        dataset: WsiDataset,
-        image_data: List[Tuple[Tuple[str, float], ImageData]]
-    ) -> WsiDataset:
-        """Set dataset as a tiled full dataset. Make a new Shared functional
-        group sequence and Pixel measure sequence if not in dataset, otherwise
-        update the Pixel measure sequence. Remove Per Frame functional groups
-        sequence. Set number of frames as per tiled size and number of
-        optical paths and focal planes.
-        """
-        dataset.DimensionOrganizationType = 'TILED_FULL'
-        shared_functional_group = getattr(
-            dataset,
-            'SharedFunctionalGroupsSequence',
-            Dataset()
-        )
-        pixel_measure = getattr(
-            shared_functional_group,
-            'PixelMeasuresSequence',
-            Dataset()
-        )
-        pixel_measure.PixelSpacing = [
-            DSfloat(dataset.pixel_spacing.width, True),
-            DSfloat(dataset.pixel_spacing.height, True)
-        ]
-        pixel_measure.SpacingBetweenSlices = dataset.spacing_between_slices
-        pixel_measure.SliceThickness = dataset.slice_thickness
-        if 'PixelMeasuresSequence' not in shared_functional_group:
-            shared_functional_group.PixelMeasuresSequence = (
-                DicomSequence([pixel_measure])
-            )
-        if 'SharedFunctionalGroupsSequence' not in dataset:
-            dataset.SharedFunctionalGroupsSequence = DicomSequence(
-                [shared_functional_group]
-            )
-        if 'PerFrameFunctionalGroupsSequence' in dataset:
-            del dataset['PerFrameFunctionalGroupsSequence']
-        focal_planes, optical_paths, tile_count = (
-            self._get_frame_information(image_data)
-        )
-        dataset.TotalPixelMatrixFocalPlanes = focal_planes
-        dataset.NumberOfOpticalPaths = optical_paths
-        dataset.NumberOfFrames = tile_count*focal_planes*optical_paths
-        return dataset
-
-    @staticmethod
-    def _get_frame_information(
-        data: List[Tuple[Tuple[str, float], ImageData]]
-    ) -> Tuple[int, int, int]:
-        """Return number of focal planes, number of optical paths, and
-        number of tiles per plane.
-        """
-        focal_planes: Set[float] = set()
-        optical_paths: Set[str] = set()
-        tiled_sizes: Set[Size] = set()
-        for (optical_path, focal_plane), image_data in data:
-            optical_paths.add(optical_path)
-            focal_planes.add(focal_plane)
-            tiled_sizes.add(image_data.tiled_size)
-        if len(tiled_sizes) != 1:
-            raise ValueError('Expected only one tiled size')
-        tiled_size = list(tiled_sizes)[0]
-        return len(focal_planes), len(optical_paths), tiled_size.area
 
     def _write_preamble(self) -> None:
         """Writes file preamble to file."""
@@ -2720,7 +2813,8 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         Returns
         ----------
         List[int]
-            List of frame positions, relative to start of file.
+            List of frame position (position of ItemTag), relative to start of
+            file.
         """
         chunked_tile_points = self._chunk_tile_points(
             image_data,
@@ -2728,11 +2822,17 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             scale
         )
 
-        if scale is None:
+        if scale == 1:
+            def get_tiles_thread(tile_points: List[Point]) -> List[bytes]:
+                """Thread function to get tiles as bytes."""
+                return image_data.get_encoded_tiles(tile_points, z, path)
+            get_tiles = get_tiles_thread
+        else:
             def get_scaled_tiles_thread(
                 scaled_tile_points: List[Point]
             ) -> List[bytes]:
-                return image_data.get_encoded_scaled_tiles(
+                """Thread function to get scaled tiles as bytes."""
+                return image_data.get_scaled_encoded_tiles(
                     scaled_tile_points,
                     z,
                     path,
@@ -2741,13 +2841,6 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
                     image_options
                 )
             get_tiles = get_scaled_tiles_thread
-        else:
-            def get_tiles_thread(tile_points: List[Point]) -> List[bytes]:
-                # Thread that takes a chunk of tile points and returns list of
-                # tile bytes
-                return image_data.get_encoded_tiles(tile_points, z, path)
-            get_tiles = get_tiles_thread
-
         with ThreadPoolExecutor(max_workers=workers) as pool:
             # Each thread result is a list of tiles that is itemized and writen
             frame_positions: List[int] = []
@@ -2796,7 +2889,6 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             minimum_chunk_size,
             chunk_size//minimum_chunk_size * minimum_chunk_size
         )
-
         new_tiled_size = image_data.tiled_size / scale
         # Divide the image tiles up into chunk_size chunks (up to tiled size)
         chunked_tile_points = (
