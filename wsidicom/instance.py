@@ -1335,7 +1335,7 @@ class ImageData(metaclass=ABCMeta):
         image = Image.new(
             mode=self.image_mode,  # type: ignore
             size=(self.tile_size * scale).to_tuple(),
-            color=self.blank_color[:self.photometric_interpretation]
+            color=self.blank_color[:self.samples_per_pixel]
         )
         # Get decoded tiles for the region covering the scaled tile
         # in the image data
