@@ -57,7 +57,7 @@ class WsiDicomGroup:
         instances: List[WsiInstance]
             Instances to build the group.
         strict: bool = True
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
         """
         self._instances = {  # key is identifier (Uid)
             instance.identifier: instance for instance in instances
@@ -203,7 +203,7 @@ class WsiDicomGroup:
         other_group: WsiDicomGroup
             Other group to match against.
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -211,7 +211,7 @@ class WsiDicomGroup:
             True if other group matches.
         """
         return (
-            (other_group.uids == self.uids or not strict) and
+            self.uids.matches(other_group.uids, strict) and
             other_group.wsi_type == self.wsi_type
         )
 
@@ -459,7 +459,7 @@ class WsiDicomGroup:
         Parameters
         ----------
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
         """
         instances = list(self.instances.values())
         if strict:
@@ -746,7 +746,7 @@ class WsiDicomLevel(WsiDicomGroup):
         other_level: WsiDicomGroup
             Other level to match against.
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -755,7 +755,7 @@ class WsiDicomLevel(WsiDicomGroup):
         """
         other_level = cast(WsiDicomLevel, other_level)
         return (
-            (other_level.uids == self.uids or not strict) and
+            self.uids.matches(other_level.uids, strict) and
             other_level.wsi_type == self.wsi_type and
             other_level.tile_size == self.tile_size
         )
@@ -983,7 +983,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         groups: List[WsiDicomGroup]
             List of groups to include in the series.
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
         """
         self._groups: List[WsiDicomGroup] = groups
 
@@ -1085,7 +1085,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
             List of groups or levels to check
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1178,7 +1178,7 @@ class WsiDicomLabels(WsiDicomSeries):
         instances: List[WsiInstance]
             Instances to create labels from.
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1210,7 +1210,7 @@ class WsiDicomOverviews(WsiDicomSeries):
         instances: List[WsiInstance]
             Instances to create overviews from.
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1243,7 +1243,7 @@ class WsiDicomLevels(WsiDicomSeries):
         instances: List[WsiInstance]
             Instances to create levels from.
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1261,7 +1261,7 @@ class WsiDicomLevels(WsiDicomSeries):
         levels: List[WsiDicomLevel]
             List of levels to include in series
         strict: bool = True
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
         """
         self._levels = OrderedDict(
             (level.level, level)
@@ -1515,7 +1515,7 @@ class WsiDicom:
         annotations: List[AnnotationInstance] = []
             Sup-222 annotation instances.
         strict: bool = True
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
         """
         self._levels = levels
         self._labels = labels
@@ -1644,7 +1644,7 @@ class WsiDicom:
         path: Union[str, List[str], Path, List[Path]]
             Path to files to open
         strict: bool = True
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1673,18 +1673,24 @@ class WsiDicom:
                 annotation_files.append(filepath)
 
         base_dataset = cls._get_base_dataset(level_files)
-        if strict:
-            base_uids = base_dataset.base_uids
-        else:
-            base_uids = None
+        base_uids = base_dataset.base_uids
         base_tile_size = base_dataset.tile_size
         level_instances = WsiInstance.open(
             level_files,
             base_uids,
-            base_tile_size
+            base_tile_size,
+            strict
         )
-        label_instances = WsiInstance.open(label_files, base_uids)
-        overview_instances = WsiInstance.open(overview_files, base_uids)
+        label_instances = WsiInstance.open(
+            label_files,
+            base_uids,
+            strict=strict
+        )
+        overview_instances = WsiInstance.open(
+            overview_files,
+            base_uids,
+            strict=strict
+        )
 
         levels = WsiDicomLevels.open(level_instances, strict)
         labels = WsiDicomLabels.open(label_instances, strict)
@@ -2149,7 +2155,7 @@ class WsiDicom:
         series: List[WsiDicomSeries]
             List of series to check.
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------

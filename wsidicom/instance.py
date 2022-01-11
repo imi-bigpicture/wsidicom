@@ -55,14 +55,16 @@ class Requirement(IntEnum):
 
 @dataclass
 class WsiAttribute:
-    required: Requirement
+    requirement: Requirement
     default: Any = None
 
     def get_default(self, strict: bool) -> Any:
-        if self.required == Requirement.STRICT:
+        if self.requirement == Requirement.STRICT:
             raise ValueError('Attribute is set as strictly required')
-        elif strict and self.required == Requirement.REQUIRED:
-            raise AttributeError()
+        elif strict and self.requirement == Requirement.REQUIRED:
+            raise ValueError(
+                'Attribute is set as required and mode is strict'
+            )
         return self.default
 
 
@@ -321,9 +323,9 @@ class WsiDataset(Dataset):
         passed = True
         for name, attribute in WSI_ATTRIBUTES.items():
             if name not in dataset:
-                if attribute.required == Requirement.STRICT:
+                if attribute.requirement == Requirement.STRICT:
                     passed = False
-                elif strict and attribute.required == Requirement.STRICT:
+                elif strict and attribute.requirement == Requirement.STRICT:
                     passed = False
                 if not passed and strict:
                     warnings.warn(f"Missing {name}")
@@ -393,8 +395,9 @@ class WsiDataset(Dataset):
 
     def matches_series(
         self,
-        uids: Optional[BaseUids] = None,
-        tile_size: Optional[Size] = None
+        uids: BaseUids,
+        tile_size: Optional[Size] = None,
+        strict: bool = True
     ) -> bool:
         """Check if instance is valid (Uids and tile size match).
         Base uids should match for instances in all types of series,
@@ -402,9 +405,8 @@ class WsiDataset(Dataset):
         """
         if tile_size is not None and tile_size != self.tile_size:
             return False
-        if uids is None:
-            return True
-        return uids == self.base_uids
+
+        return self.base_uids.matches(uids, strict)
 
     def read_optical_path_identifier(self, frame: Dataset) -> str:
         """Return optical path identifier from frame, or from self if not
@@ -755,12 +757,12 @@ class WsiDicomFile(MetaWsiDicomFile):
 
         self._pixel_data_position = self._fp.tell()
 
-        wsi_type = WsiDataset.is_supported_wsi_dicom(
+        self._wsi_type = WsiDataset.is_supported_wsi_dicom(
             dataset,
             self.transfer_syntax,
             strict
         )
-        if wsi_type is not None:
+        if self._wsi_type is not None:
             self._dataset = WsiDataset(
                 dataset,
                 strict
@@ -787,8 +789,8 @@ class WsiDicomFile(MetaWsiDicomFile):
         return self._dataset
 
     @property
-    def wsi_type(self) -> str:
-        return self.dataset.wsi_type
+    def wsi_type(self) -> Optional[str]:
+        return self._wsi_type
 
     @property
     def uids(self) -> FileUids:
@@ -1081,8 +1083,9 @@ class WsiDicomFile(MetaWsiDicomFile):
     @staticmethod
     def filter_files(
         files: List['WsiDicomFile'],
-        series_uids: Optional[BaseUids] = None,
-        series_tile_size: Optional[Size] = None
+        series_uids: BaseUids,
+        series_tile_size: Optional[Size] = None,
+        strict: bool = True
     ) -> List['WsiDicomFile']:
         """Filter list of wsi dicom files to only include matching uids and
         tile size if defined.
@@ -1095,6 +1098,8 @@ class WsiDicomFile(MetaWsiDicomFile):
             Uids to check against.
         series_tile_size: Optional[Size] = None
             Tile size to check against.
+        strict: bool = True
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1106,7 +1111,8 @@ class WsiDicomFile(MetaWsiDicomFile):
         for file in files:
             if file.dataset.matches_series(
                 series_uids,
-                series_tile_size
+                series_tile_size,
+                strict
             ):
                 valid_files.append(file)
             else:
@@ -3138,8 +3144,9 @@ class WsiInstance:
     def open(
         cls,
         files: List[WsiDicomFile],
-        series_uids: Optional[BaseUids] = None,
-        series_tile_size: Optional[Size] = None
+        series_uids: BaseUids,
+        series_tile_size: Optional[Size] = None,
+        strict: bool = True
     ) -> List['WsiInstance']:
         """Create instances from Dicom files. Only files with matching series
         uid and tile size, if defined, are used. Other files are closed.
@@ -3152,6 +3159,8 @@ class WsiInstance:
             Uid to match against.
         series_tile_size: Optional[Size]
             Tile size to match against (for level instances).
+        strict: bool = True
+            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -3161,7 +3170,8 @@ class WsiInstance:
         filtered_files = WsiDicomFile.filter_files(
             files,
             series_uids,
-            series_tile_size
+            series_tile_size,
+            strict
         )
         files_grouped_by_instance = WsiDicomFile.group_files(filtered_files)
         return [
@@ -3229,7 +3239,7 @@ class WsiInstance:
         other_instance: WsiInstance
             Instance to check.
         strict: bool
-            If to require study, series, and frame of reference uids to match.
+            If to require frame of reference uid to match.
 
         Returns
         ----------
