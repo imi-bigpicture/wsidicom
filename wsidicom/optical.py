@@ -487,14 +487,6 @@ class OpticalPath:
             Optional lens description for the optical path.
         """
 
-        if photometric_interpretation != 'MONOCHROME2' and icc_profile is None:
-            warnings.warn(
-                "Icc profile required if photometric is "
-                f"{photometric_interpretation}"
-            )
-        if lut is not None and icc_profile is None:
-            warnings.warn("Icc profile required if lut is present")
-
         self.identifier = identifier
         self.illumination = illumination
         self.description = description
@@ -603,7 +595,9 @@ class OpticalManager:
         optical_paths: Dict[str, OpticalPath] = {}
         for instance in instances:
             for dataset in instance.datasets:
-                optical_path_sequence = dataset.OpticalPathSequence
+                optical_path_sequence = dataset.optical_path_sequence
+                if optical_path_sequence is None:
+                    continue
                 for optical_path in optical_path_sequence:
                     identifier = str(optical_path.OpticalPathIdentifier)
                     if identifier not in optical_paths:
