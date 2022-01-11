@@ -47,6 +47,15 @@ class BaseUids:
             )
         return NotImplemented
 
+    def matches(self, other: 'BaseUids', strict: bool) -> bool:
+        if strict:
+            return self == other
+
+        return (
+            self.study_instance == other.study_instance and
+            self.series_instance == other.series_instance
+        )
+
 
 @dataclass
 class FileUids:
