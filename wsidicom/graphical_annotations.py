@@ -18,20 +18,21 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import (Any, Callable, DefaultDict, Dict, Generator, List,
-                    Optional, Set, Tuple, Union, Type)
+                    Optional, Sequence, Set, Tuple, Type, Union)
 
 import numpy as np
 from pydicom import config
 from pydicom.dataset import (Dataset, FileDataset, FileMetaDataset,
                              validate_file_meta)
+from pydicom.filereader import dcmread
+from pydicom.filewriter import dcmwrite
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
 from pydicom.uid import (ExplicitVRBigEndian, ExplicitVRLittleEndian,
                          ImplicitVRLittleEndian, generate_uid)
 from pydicom.values import convert_numbers
-from pydicom.filewriter import dcmwrite
-from pydicom.filereader import dcmread
+
 from .geometry import PointMm, RegionMm, SizeMm
 from .uid import ANN_SOP_CLASS_UID, BaseUids, Uid
 
@@ -525,24 +526,27 @@ class Geometry(metaclass=ABCMeta):
     @abstractmethod
     def from_coords(
         cls,
-        coords: Union[Tuple[float, float], List[Tuple[float, float]]]
+        coords: Union[Tuple[float, float], Sequence[Tuple[float, float]]]
     ) -> 'Geometry':
         """Return geometry object created from list of coordinates"""
         raise NotImplementedError
 
     @classmethod
     @abstractmethod
-    def from_list(cls, list: List[float]) -> 'Geometry':
+    def from_list(cls, list: Sequence[float]) -> 'Geometry':
         """Return geometry object created from list of floats"""
         raise NotImplementedError
 
     @classmethod
-    def list_to_coords(cls, data: List[float]) -> List[Tuple[float, float]]:
+    def list_to_coords(
+        cls,
+        data: Sequence[float]
+    ) -> List[Tuple[float, float]]:
         """Return cordinates in list of floats as list of tuple of floats
 
         Parameters
         ----------
-        data: List[float]
+        data: Sequence[float]
             List of float to convert.
 
         Returns
@@ -562,7 +566,7 @@ class Geometry(metaclass=ABCMeta):
     def _coordinates_from_dict(
         dictionary: Union[
             Dict[str, Union[str, float]],
-            List[Dict[str, Union[str, float]]]
+            Sequence[Dict[str, Union[str, float]]]
         ],
         x: str,
         y: str
@@ -573,7 +577,7 @@ class Geometry(metaclass=ABCMeta):
         ----------
         dictionary: Union[
             Dict[str, Union[str, float]],
-            List[Dict[str, Union[str, float]]]
+            Sequence[Dict[str, Union[str, float]]]
             ]:
             Dictionary to convert.
         x: str
@@ -586,7 +590,7 @@ class Geometry(metaclass=ABCMeta):
         List[Tuple[float, float]]
             List of coordinates (Tuple of floats).
         """
-        if not isinstance(dictionary, list):
+        if not isinstance(dictionary, Sequence):
             coords = [dictionary]
         else:
             coords = dictionary
@@ -601,7 +605,7 @@ class Geometry(metaclass=ABCMeta):
         cls,
         dictionary: Union[
             Dict[str, Union[str, float]],
-            List[Dict[str, Union[str, float]]]
+            Sequence[Dict[str, Union[str, float]]]
         ],
         x: str,
         y: str,
@@ -733,7 +737,7 @@ class Point(Geometry):
         cls,
         dictionary: Union[
             Dict[str, Union[str, float]],
-            List[Dict[str, Union[str, float]]]
+            Sequence[Dict[str, Union[str, float]]]
         ],
         x: str,
         y: str,
@@ -746,7 +750,7 @@ class Point(Geometry):
         cls,
         dictionary: Union[
             Dict[str, Union[str, float]],
-            List[Dict[str, Union[str, float]]]
+            Sequence[Dict[str, Union[str, float]]]
         ],
         x: str,
         y: str,
@@ -758,7 +762,7 @@ class Point(Geometry):
 @dataclass
 class Polyline(Geometry):
     """Geometry consisting of connected lines."""
-    def __init__(self, points: List[Tuple[float, float]]):
+    def __init__(self, points: Sequence[Tuple[float, float]]):
         self.points: List[Point] = [
             Point(point[0], point[1]) for point in points
         ]
@@ -802,7 +806,7 @@ class Polyline(Geometry):
     @classmethod
     def from_coords(
         cls,
-        coords: Union[Tuple[float, float], List[Tuple[float, float]]]
+        coords: Union[Tuple[float, float], Sequence[Tuple[float, float]]]
     ) -> 'Polyline':
         if isinstance(coords, tuple):
             coords = [coords]
@@ -813,7 +817,7 @@ class Polyline(Geometry):
         cls,
         dictionary: Union[
             Dict[str, Union[str, float]],
-            List[Dict[str, Union[str, float]]]
+            Sequence[Dict[str, Union[str, float]]]
         ],
         x: str,
         y: str,
@@ -822,7 +826,7 @@ class Polyline(Geometry):
         return cls.from_coords(coords)
 
     @classmethod
-    def from_list(cls, list: List[float]) -> 'Polyline':
+    def from_list(cls, list: Sequence[float]) -> 'Polyline':
         coordinates = cls.list_to_coords(list)
         return cls.from_coords(coordinates)
 
@@ -830,20 +834,20 @@ class Polyline(Geometry):
 @dataclass
 class Polygon(Polyline):
     """Geometry consisting of connected lines implicity closed."""
-    def __init__(self, points: List[Tuple[float, float]]):
+    def __init__(self, points: Sequence[Tuple[float, float]]):
         super().__init__(points)
 
     @classmethod
     def from_coords(
         cls,
-        coords: Union[Tuple[float, float], List[Tuple[float, float]]]
+        coords: Union[Tuple[float, float], Sequence[Tuple[float, float]]]
     ) -> 'Polygon':
         if isinstance(coords, tuple):
             coords = [coords]
         return cls(coords)
 
     @classmethod
-    def from_list(cls, list: List[float]) -> 'Polygon':
+    def from_list(cls, list: Sequence[float]) -> 'Polygon':
         coordinates = cls.list_to_coords(list)
         return cls.from_coords(coordinates)
 
@@ -852,7 +856,7 @@ class Polygon(Polyline):
         cls,
         dictionary: Union[
             Dict[str, Union[str, float]],
-            List[Dict[str, Union[str, float]]]
+            Sequence[Dict[str, Union[str, float]]]
         ],
         x: str,
         y: str,
@@ -868,7 +872,7 @@ class Annotation:
     def __init__(
         self,
         geometry: Geometry,
-        measurements: Optional[List[Measurement]] = None
+        measurements: Optional[Sequence[Measurement]] = None
     ):
         """Represents an annotation, with geometry and an optional list of
         measurements.
@@ -877,12 +881,12 @@ class Annotation:
         ----------
         geometry: Geometry
             Geometry of the annotation.
-        measurements: Optional[List[Measurement]]
+        measurements: Optional[Sequence[Measurement]]
             Optional measurements of the annotation.
         """
 
         self._geometry = geometry
-        self._measurements: List[Measurement] = []
+        self._measurements: Sequence[Measurement] = []
         if measurements is not None:
             self._measurements = measurements
 
@@ -902,7 +906,7 @@ class Annotation:
         return self._geometry
 
     @property
-    def measurements(self) -> List[Measurement]:
+    def measurements(self) -> Sequence[Measurement]:
         return self._measurements
 
     def get_measurements(
@@ -956,7 +960,7 @@ class AnnotationGroup:
 
     def __init__(
         self,
-        annotations: List[Annotation],
+        annotations: Sequence[Annotation],
         label: str,
         categorycode: ConceptCode,
         typecode: ConceptCode,
@@ -969,7 +973,7 @@ class AnnotationGroup:
 
         Parameters
         ----------
-        annotations: List[Annotation]
+        annotations: Sequence[Annotation]
             Annotations in the group.
         label: str
             Group label
@@ -1037,7 +1041,7 @@ class AnnotationGroup:
         return self._typecode
 
     @property
-    def annotations(self) -> List[Annotation]:
+    def annotations(self) -> Sequence[Annotation]:
         return self._annotations
 
     @property
@@ -1088,9 +1092,9 @@ class AnnotationGroup:
 
     def __getitem__(
         self,
-        index: Union[int, List[int]]
+        index: Union[int, Sequence[int]]
     ) -> Union[Annotation, List[Annotation]]:
-        if isinstance(index, list):
+        if isinstance(index, Sequence):
             return [self.annotations[i] for i in index]
         return self.annotations[index]
 
@@ -1637,14 +1641,14 @@ class AnnotationGroup:
 
     @staticmethod
     def validate_type(
-        annotations: List[Annotation],
+        annotations: Sequence[Annotation],
         geometry_type: type
     ):
         """Check that list of annotations are of the requested type.
 
         Parameters
         ----------
-        annotations: List[Annotation]
+        annotations: Sequence[Annotation]
             List of annotations to check
         geometry_type: type
             Requested type
@@ -1680,7 +1684,7 @@ class AnnotationGroup:
     @classmethod
     def from_geometries(
         cls,
-        geometries: List[Geometry],
+        geometries: Sequence[Geometry],
         label: str,
         categorycode: ConceptCode,
         typecode: ConceptCode,
@@ -1692,7 +1696,7 @@ class AnnotationGroup:
 
         Parameters
         ----------
-        geometries: List[Geometries]
+        geometries: Sequence[Geometries]
             Geometries in the group.
         label: str
             Group label
@@ -1838,7 +1842,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
     @staticmethod
     @abstractmethod
     def _get_line_geometry_from_coords(
-        coords: List[Tuple[float, float]]
+        coords: Sequence[Tuple[float, float]]
     ) -> Geometry:
         raise NotImplementedError
 
@@ -1868,7 +1872,7 @@ class PolylineAnnotationGroup(PolylineAnnotationGroupMeta):
         return "POLYLINE"
 
     @staticmethod
-    def _get_line_geometry_from_coords(coords: List[Tuple[float, float]]):
+    def _get_line_geometry_from_coords(coords: Sequence[Tuple[float, float]]):
         return Polyline.from_coords(coords)
 
 
@@ -1880,7 +1884,7 @@ class PolygonAnnotationGroup(PolylineAnnotationGroupMeta):
         return "POLYGON"
 
     @staticmethod
-    def _get_line_geometry_from_coords(coords: List[Tuple[float, float]]):
+    def _get_line_geometry_from_coords(coords: Sequence[Tuple[float, float]]):
         return Polygon.from_coords(coords)
 
 
@@ -1893,7 +1897,7 @@ class AnnotationInstance:
     """
     def __init__(
         self,
-        groups: List[AnnotationGroup],
+        groups: Sequence[AnnotationGroup],
         coordinate_type: str,
         base_uids: BaseUids
     ):
@@ -1901,7 +1905,7 @@ class AnnotationInstance:
 
         Parameters
         ----------
-        annotations: List[AnnotationGroup]
+        annotations: Sequence[AnnotationGroup]
             List of annotations group
         coordinate_type: str
             If coordinates are volume-related ('volume') or image-related
@@ -1995,13 +1999,13 @@ class AnnotationInstance:
     @classmethod
     def open(
         cls,
-        paths: Union[List[str], List[Path]]
+        paths: Union[Sequence[str], Sequence[Path]]
     ) -> List['AnnotationInstance']:
         """Read annotations from DICOM file according to sup 222.
 
         Parameters
         ----------
-        paths: List[str]
+        paths: Sequence[str]
             Paths to DICOM annotation files to read.
         """
         instances: List['AnnotationInstance'] = []

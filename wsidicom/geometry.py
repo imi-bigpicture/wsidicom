@@ -14,7 +14,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Generator, List, Tuple, Union
+from typing import Generator, Tuple, Union, Sequence
 
 
 @dataclass
@@ -60,7 +60,7 @@ class SizeMm:
     @classmethod
     def from_tuple(
         cls,
-        input: Union[Tuple[float, float], List[float]]
+        input: Union[Tuple[float, float], Sequence[float]]
     ) -> 'SizeMm':
         try:
             return cls(input[0], input[1])
@@ -127,7 +127,7 @@ class PointMm:
     @classmethod
     def from_tuple(
         cls,
-        input: Union[Tuple[float, float], List[float]]
+        input: Union[Tuple[float, float], Sequence[float]]
     ) -> 'PointMm':
         try:
             return cls(input[0], input[1])
@@ -211,7 +211,10 @@ class Size:
         return (self.width, self.height)
 
     @classmethod
-    def from_tuple(cls, input: Union[Tuple[int, int], List[int]]) -> 'Size':
+    def from_tuple(
+        cls,
+        input: Union[Tuple[int, int], Sequence[int]]
+    ) -> 'Size':
         try:
             return cls(input[0], input[1])
         except IndexError:
@@ -320,7 +323,10 @@ class Point:
         return (self.x, self.y)
 
     @classmethod
-    def from_tuple(cls, input: Union[Tuple[int, int], List[int]]) -> 'Point':
+    def from_tuple(
+        cls,
+        input: Union[Tuple[int, int], Sequence[int]]
+    ) -> 'Point':
         try:
             return cls(input[0], input[1])
         except IndexError:
