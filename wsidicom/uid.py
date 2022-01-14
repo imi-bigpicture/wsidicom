@@ -12,9 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from pydicom.uid import UID as Uid
 from dataclasses import dataclass
 from typing import Optional
+
+from pydicom.uid import UID as Uid
+
+from wsidicom.config import settings
 
 WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
 ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.91.1'
@@ -47,8 +50,8 @@ class BaseUids:
             )
         return NotImplemented
 
-    def matches(self, other: 'BaseUids', strict: bool) -> bool:
-        if strict:
+    def matches(self, other: 'BaseUids') -> bool:
+        if settings.strict_uid_check:
             return self == other
 
         return (
