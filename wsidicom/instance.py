@@ -40,6 +40,7 @@ from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
 from pydicom.valuerep import DSfloat
 
+from wsidicom.config import settings
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
                              WsiDicomUidDuplicateError)
@@ -48,8 +49,8 @@ from wsidicom.uid import WSI_SOP_CLASS_UID, BaseUids, FileUids
 
 
 class Requirement(IntEnum):
-    STRICT = auto()  # Always required, even if not in strict mode
-    REQUIRED = auto()  # Required if in strict mode
+    ALWAYS = auto()  # Always required, even if not in strict mode
+    STRICT = auto()  # Required if in strict mode
     STANDARD = auto()  # Required or optional in standard, not (yet) needed
 
 
@@ -58,10 +59,13 @@ class WsiAttribute:
     requirement: Requirement
     default: Any = None
 
-    def get_default(self, strict: bool) -> Any:
-        if self.requirement == Requirement.STRICT:
-            raise ValueError('Attribute is set as strictly required')
-        elif strict and self.requirement == Requirement.REQUIRED:
+    def get_default(self) -> Any:
+        if self.requirement == Requirement.ALWAYS:
+            raise ValueError('Attribute is set as always required')
+        elif (
+            settings.strict_attribute_check
+            and self.requirement == Requirement.STRICT
+        ):
             raise ValueError(
                 'Attribute is set as required and mode is strict'
             )
@@ -69,26 +73,26 @@ class WsiAttribute:
 
 
 WSI_ATTRIBUTES = {
-    'SOPClassUID': WsiAttribute(Requirement.STRICT),
-    'SOPInstanceUID': WsiAttribute(Requirement.STRICT),
-    'StudyInstanceUID': WsiAttribute(Requirement.STRICT),
-    'SeriesInstanceUID': WsiAttribute(Requirement.STRICT),
-    'Rows': WsiAttribute(Requirement.STRICT),
-    'Columns': WsiAttribute(Requirement.STRICT),
-    'SamplesPerPixel': WsiAttribute(Requirement.STRICT),
-    'PhotometricInterpretation': WsiAttribute(Requirement.STRICT),
-    'TotalPixelMatrixColumns': WsiAttribute(Requirement.STRICT),
-    'TotalPixelMatrixRows': WsiAttribute(Requirement.STRICT),
-    'ImageType': WsiAttribute(Requirement.STRICT),
-    'SharedFunctionalGroupsSequence': WsiAttribute(Requirement.STRICT),
+    'SOPClassUID': WsiAttribute(Requirement.ALWAYS),
+    'SOPInstanceUID': WsiAttribute(Requirement.ALWAYS),
+    'StudyInstanceUID': WsiAttribute(Requirement.ALWAYS),
+    'SeriesInstanceUID': WsiAttribute(Requirement.ALWAYS),
+    'Rows': WsiAttribute(Requirement.ALWAYS),
+    'Columns': WsiAttribute(Requirement.ALWAYS),
+    'SamplesPerPixel': WsiAttribute(Requirement.ALWAYS),
+    'PhotometricInterpretation': WsiAttribute(Requirement.ALWAYS),
+    'TotalPixelMatrixColumns': WsiAttribute(Requirement.ALWAYS),
+    'TotalPixelMatrixRows': WsiAttribute(Requirement.ALWAYS),
+    'ImageType': WsiAttribute(Requirement.ALWAYS),
+    'SharedFunctionalGroupsSequence': WsiAttribute(Requirement.ALWAYS),
 
-    'FrameOfReferenceUID': WsiAttribute(Requirement.REQUIRED),
-    'FocusMethod': WsiAttribute(Requirement.REQUIRED, 'AUTO'),
-    'ExtendedDepthOfField': WsiAttribute(Requirement.REQUIRED, 'NO'),
-    'OpticalPathSequence': WsiAttribute(Requirement.REQUIRED),
-    'ImagedVolumeWidth': WsiAttribute(Requirement.REQUIRED),
-    'ImagedVolumeHeight': WsiAttribute(Requirement.REQUIRED),
-    'ImagedVolumeDepth': WsiAttribute(Requirement.REQUIRED),
+    'FrameOfReferenceUID': WsiAttribute(Requirement.STRICT),
+    'FocusMethod': WsiAttribute(Requirement.STRICT, 'AUTO'),
+    'ExtendedDepthOfField': WsiAttribute(Requirement.STRICT, 'NO'),
+    'OpticalPathSequence': WsiAttribute(Requirement.STRICT),
+    'ImagedVolumeWidth': WsiAttribute(Requirement.STRICT),
+    'ImagedVolumeHeight': WsiAttribute(Requirement.STRICT),
+    'ImagedVolumeDepth': WsiAttribute(Requirement.STRICT),
 
     'TotalPixelMatrixFocalPlanes': WsiAttribute(Requirement.STANDARD, 1),
     'NumberOfOpticalPaths': WsiAttribute(Requirement.STANDARD, 1),
@@ -137,8 +141,7 @@ class WsiDataset(Dataset):
     """
     def __init__(
         self,
-        dataset: Dataset,
-        strict: bool = True
+        dataset: Dataset
     ):
         """A WsiDataset wrapping a pydicom Dataset.
 
@@ -146,8 +149,6 @@ class WsiDataset(Dataset):
         ----------
         dataset: Dataset
             Pydicom dataset containing WSI data.
-        strict: bool = True
-            If to require all WsiAttributes set as REQUIRED.
 
         Returns
         ----------
@@ -155,7 +156,6 @@ class WsiDataset(Dataset):
             True if same instance.
         """
         super().__init__(dataset)
-        self._strict = strict
         self._instance_uid = UID(self.SOPInstanceUID)
         self._concatenation_uid = self._get(
             'SOPInstanceUIDOfConcatenationSource'
@@ -278,7 +278,7 @@ class WsiDataset(Dataset):
             dataset = self
         value = getattr(dataset, name, None)
         if value is None:
-            return WSI_ATTRIBUTES[name].get_default(self._strict)
+            return WSI_ATTRIBUTES[name].get_default()
         return value
 
     @property
@@ -294,8 +294,7 @@ class WsiDataset(Dataset):
     def is_supported_wsi_dicom(
         cls,
         dataset: Dataset,
-        transfer_syntax: UID,
-        strict: bool = True
+        transfer_syntax: UID
     ) -> Optional[str]:
         """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
@@ -308,8 +307,6 @@ class WsiDataset(Dataset):
             Pydicom dataset to check if is a WSI dataset.
         transfer_syntax: UID
             Transfer syntax of dataset.
-        strict: bool = True
-            If to require all WsiAttributes set as REQUIRED.
 
         Returns
         ----------
@@ -323,11 +320,14 @@ class WsiDataset(Dataset):
         passed = True
         for name, attribute in WSI_ATTRIBUTES.items():
             if name not in dataset:
-                if attribute.requirement == Requirement.STRICT:
+                if attribute.requirement == Requirement.ALWAYS:
                     passed = False
-                elif strict and attribute.requirement == Requirement.STRICT:
+                elif (
+                    settings.strict_attribute_check
+                    and attribute.requirement == Requirement.ALWAYS
+                ):
                     passed = False
-                if not passed and strict:
+                if not passed and settings.strict_attribute_check:
                     warnings.warn(f"Missing {name}")
 
         SUPPORTED_IMAGE_TYPES = ['VOLUME', 'LABEL', 'OVERVIEW']
@@ -396,8 +396,7 @@ class WsiDataset(Dataset):
     def matches_series(
         self,
         uids: BaseUids,
-        tile_size: Optional[Size] = None,
-        strict: bool = True
+        tile_size: Optional[Size] = None
     ) -> bool:
         """Check if instance is valid (Uids and tile size match).
         Base uids should match for instances in all types of series,
@@ -406,7 +405,7 @@ class WsiDataset(Dataset):
         if tile_size is not None and tile_size != self.tile_size:
             return False
 
-        return self.base_uids.matches(uids, strict)
+        return self.base_uids.matches(uids)
 
     def read_optical_path_identifier(self, frame: Dataset) -> str:
         """Return optical path identifier from frame, or from self if not
@@ -713,7 +712,7 @@ class MetaWsiDicomFile(metaclass=ABCMeta):
 class WsiDicomFile(MetaWsiDicomFile):
     """Represents a DICOM file (potentially) containing WSI image and metadata.
     """
-    def __init__(self, filepath: Path, strict: bool = True):
+    def __init__(self, filepath: Path):
         """Open dicom file in filepath. If valid wsi type read required
         parameters. Parses frames in pixel data but does not read the frames.
 
@@ -721,8 +720,6 @@ class WsiDicomFile(MetaWsiDicomFile):
         ----------
         filepath: Path
             Path to file to open
-        strict: bool = True
-            If to require all WsiAttributes set as REQUIRED.
 
         """
         self._lock = threading.Lock()
@@ -759,14 +756,10 @@ class WsiDicomFile(MetaWsiDicomFile):
 
         self._wsi_type = WsiDataset.is_supported_wsi_dicom(
             dataset,
-            self.transfer_syntax,
-            strict
+            self.transfer_syntax
         )
         if self._wsi_type is not None:
-            self._dataset = WsiDataset(
-                dataset,
-                strict
-            )
+            self._dataset = WsiDataset(dataset)
             instance_uid = self.dataset.instance_uid
             concatenation_uid = self.dataset.concatenation_uid
             base_uids = self.dataset.base_uids
@@ -1084,8 +1077,7 @@ class WsiDicomFile(MetaWsiDicomFile):
     def filter_files(
         files: List['WsiDicomFile'],
         series_uids: BaseUids,
-        series_tile_size: Optional[Size] = None,
-        strict: bool = True
+        series_tile_size: Optional[Size] = None
     ) -> List['WsiDicomFile']:
         """Filter list of wsi dicom files to only include matching uids and
         tile size if defined.
@@ -1098,8 +1090,6 @@ class WsiDicomFile(MetaWsiDicomFile):
             Uids to check against.
         series_tile_size: Optional[Size] = None
             Tile size to check against.
-        strict: bool = True
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1111,8 +1101,7 @@ class WsiDicomFile(MetaWsiDicomFile):
         for file in files:
             if file.dataset.matches_series(
                 series_uids,
-                series_tile_size,
-                strict
+                series_tile_size
             ):
                 valid_files.append(file)
             else:
@@ -3145,8 +3134,7 @@ class WsiInstance:
         cls,
         files: List[WsiDicomFile],
         series_uids: BaseUids,
-        series_tile_size: Optional[Size] = None,
-        strict: bool = True
+        series_tile_size: Optional[Size] = None
     ) -> List['WsiInstance']:
         """Create instances from Dicom files. Only files with matching series
         uid and tile size, if defined, are used. Other files are closed.
@@ -3159,8 +3147,6 @@ class WsiInstance:
             Uid to match against.
         series_tile_size: Optional[Size]
             Tile size to match against (for level instances).
-        strict: bool = True
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -3170,8 +3156,7 @@ class WsiInstance:
         filtered_files = WsiDicomFile.filter_files(
             files,
             series_uids,
-            series_tile_size,
-            strict
+            series_tile_size
         )
         files_grouped_by_instance = WsiDicomFile.group_files(filtered_files)
         return [
@@ -3231,15 +3216,13 @@ class WsiInstance:
             base_dataset.uids.base,
         )
 
-    def matches(self, other_instance: 'WsiInstance', strict: bool) -> bool:
+    def matches(self, other_instance: 'WsiInstance') -> bool:
         """Return true if other instance is of the same group as self.
 
         Parameters
         ----------
         other_instance: WsiInstance
             Instance to check.
-        strict: bool
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -3248,7 +3231,7 @@ class WsiInstance:
 
         """
         return (
-            (self.uids == other_instance.uids or not strict) and
+            self.uids.matches(other_instance.uids) and
             self.size == other_instance.size and
             self.tile_size == other_instance.tile_size and
             self.wsi_type == other_instance.wsi_type

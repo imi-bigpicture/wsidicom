@@ -28,6 +28,7 @@ from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.uid import UID, generate_uid
 
+from wsidicom.config import settings
 from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
@@ -46,8 +47,7 @@ class WsiDicomGroup:
     different z coordinate and/or optical path."""
     def __init__(
         self,
-        instances: List[WsiInstance],
-        strict: bool = True
+        instances: List[WsiInstance]
     ):
         """Create a group of WsiInstances. Instances should match in the common
         uids, wsi type, and tile size.
@@ -56,13 +56,11 @@ class WsiDicomGroup:
         ----------
         instances: List[WsiInstance]
             Instances to build the group.
-        strict: bool = True
-            If to require frame of reference uid to match.
         """
         self._instances = {  # key is identifier (Uid)
             instance.identifier: instance for instance in instances
         }
-        self._validate_group(strict)
+        self._validate_group()
 
         base_instance = instances[0]
         self._wsi_type = base_instance.wsi_type
@@ -194,7 +192,7 @@ class WsiDicomGroup:
 
         return groups
 
-    def matches(self, other_group: 'WsiDicomGroup', strict: bool) -> bool:
+    def matches(self, other_group: 'WsiDicomGroup') -> bool:
         """Check if group matches other group. If strict common Uids should
         match. Wsi type should always match.
 
@@ -202,8 +200,6 @@ class WsiDicomGroup:
         ----------
         other_group: WsiDicomGroup
             Other group to match against.
-        strict: bool
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -211,7 +207,7 @@ class WsiDicomGroup:
             True if other group matches.
         """
         return (
-            self.uids.matches(other_group.uids, strict) and
+            self.uids.matches(other_group.uids) and
             other_group.wsi_type == self.wsi_type
         )
 
@@ -452,20 +448,15 @@ class WsiDicomGroup:
         for instance in self._instances.values():
             instance.close()
 
-    def _validate_group(self, strict: bool):
+    def _validate_group(self):
         """Check that no file or instance in group is duplicate, and if strict
         instances in group matches. Raises WsiDicomMatchError otherwise.
-
-        Parameters
-        ----------
-        strict: bool
-            If to require frame of reference uid to match.
         """
         instances = list(self.instances.values())
-        if strict:
+        if settings.strict_uid_check:
             base_instance = instances[0]
             for instance in instances[1:]:
-                if not base_instance.matches(instance, strict):
+                if not base_instance.matches(instance):
                     raise WsiDicomMatchError(str(instance), str(self))
 
         WsiDataset.check_duplicate_dataset(self.datasets, self)
@@ -737,7 +728,7 @@ class WsiDicomLevel(WsiDicomGroup):
             levels.append(cls(level, base_pixel_spacing))
         return levels
 
-    def matches(self, other_level: 'WsiDicomGroup', strict: bool) -> bool:
+    def matches(self, other_level: 'WsiDicomGroup') -> bool:
         """Check if level matches other level. If strict common Uids should
         match. Wsi type and tile size should always match.
 
@@ -745,8 +736,6 @@ class WsiDicomLevel(WsiDicomGroup):
         ----------
         other_level: WsiDicomGroup
             Other level to match against.
-        strict: bool
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -755,7 +744,7 @@ class WsiDicomLevel(WsiDicomGroup):
         """
         other_level = cast(WsiDicomLevel, other_level)
         return (
-            self.uids.matches(other_level.uids, strict) and
+            self.uids.matches(other_level.uids) and
             other_level.wsi_type == self.wsi_type and
             other_level.tile_size == self.tile_size
         )
@@ -975,20 +964,18 @@ class WsiDicomSeries(metaclass=ABCMeta):
     pyramidal levels, lables, or overviews.
     """
 
-    def __init__(self, groups: List[WsiDicomGroup], strict: bool = True):
+    def __init__(self, groups: List[WsiDicomGroup]):
         """Create a WsiDicomSeries from list of WsiDicomGroups.
 
         Parameters
         ----------
         groups: List[WsiDicomGroup]
             List of groups to include in the series.
-        strict: bool
-            If to require frame of reference uid to match.
         """
         self._groups: List[WsiDicomGroup] = groups
 
         if len(self.groups) != 0 and self.groups[0].uids is not None:
-            self._uids = self._validate_series(self.groups, strict)
+            self._uids = self._validate_series(self.groups)
         else:
             self._uids = None
 
@@ -1072,8 +1059,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     def _validate_series(
             self,
-            groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]],
-            strict: bool
+            groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
     ) -> Optional[BaseUids]:
         """Check that no files or instances in series is duplicate and that
         all groups in series matches.
@@ -1084,8 +1070,6 @@ class WsiDicomSeries(metaclass=ABCMeta):
         ----------
         groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
             List of groups or levels to check
-        strict: bool
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1102,7 +1086,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
                     str(base_group), str(self)
                 )
             for group in groups[1:]:
-                if not group.matches(base_group, strict):
+                if not group.matches(base_group):
                     raise WsiDicomMatchError(
                         str(group), str(self)
                     )
@@ -1168,8 +1152,7 @@ class WsiDicomLabels(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        instances: List[WsiInstance],
-        strict: bool
+        instances: List[WsiInstance]
     ) -> 'WsiDicomLabels':
         """Return labels created from wsi files.
 
@@ -1177,8 +1160,6 @@ class WsiDicomLabels(WsiDicomSeries):
         ----------
         instances: List[WsiInstance]
             Instances to create labels from.
-        strict: bool
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1186,7 +1167,7 @@ class WsiDicomLabels(WsiDicomSeries):
             Created labels.
         """
         labels = WsiDicomGroup.open(instances)
-        return cls(labels, strict)
+        return cls(labels)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
@@ -1200,8 +1181,7 @@ class WsiDicomOverviews(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        instances: List[WsiInstance],
-        strict: bool
+        instances: List[WsiInstance]
     ) -> 'WsiDicomOverviews':
         """Return overviews created from wsi files.
 
@@ -1209,8 +1189,6 @@ class WsiDicomOverviews(WsiDicomSeries):
         ----------
         instances: List[WsiInstance]
             Instances to create overviews from.
-        strict: bool
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1218,7 +1196,7 @@ class WsiDicomOverviews(WsiDicomSeries):
             Created overviews.
         """
         overviews = WsiDicomGroup.open(instances)
-        return cls(overviews, strict)
+        return cls(overviews)
 
 
 class WsiDicomLevels(WsiDicomSeries):
@@ -1233,8 +1211,7 @@ class WsiDicomLevels(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        instances: List[WsiInstance],
-        strict: bool
+        instances: List[WsiInstance]
     ) -> 'WsiDicomLevels':
         """Return overviews created from wsi files.
 
@@ -1242,8 +1219,6 @@ class WsiDicomLevels(WsiDicomSeries):
         ----------
         instances: List[WsiInstance]
             Instances to create levels from.
-        strict: bool
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1251,24 +1226,22 @@ class WsiDicomLevels(WsiDicomSeries):
             Created levels.
         """
         levels = WsiDicomLevel.open(instances)
-        return cls(levels, strict)
+        return cls(levels)
 
-    def __init__(self, levels: List[WsiDicomLevel], strict: bool = True):
+    def __init__(self, levels: List[WsiDicomLevel]):
         """Holds a stack of levels.
 
         Parameters
         ----------
         levels: List[WsiDicomLevel]
             List of levels to include in series
-        strict: bool = True
-            If to require frame of reference uid to match.
         """
         self._levels = OrderedDict(
             (level.level, level)
             for level in sorted(levels, key=lambda level: level.level)
         )
         if len(self.groups) != 0 and self.groups[0].uids is not None:
-            self._uids = self._validate_series(self.groups, strict)
+            self._uids = self._validate_series(self.groups)
         else:
             self._uids = None
 
@@ -1498,9 +1471,7 @@ class WsiDicom:
         levels: WsiDicomLevels,
         labels: WsiDicomLabels,
         overviews: WsiDicomOverviews,
-        annotations: List[AnnotationInstance] = [],
-        strict: bool = True
-
+        annotations: List[AnnotationInstance] = []
     ):
         """Holds wsi dicom levels, labels and overviews.
 
@@ -1514,8 +1485,6 @@ class WsiDicom:
             Series of overview images
         annotations: List[AnnotationInstance] = []
             Sup-222 annotation instances.
-        strict: bool = True
-            If to require frame of reference uid to match.
         """
         self._levels = levels
         self._labels = labels
@@ -1523,8 +1492,7 @@ class WsiDicom:
         self.annotations = annotations
 
         self.uids = self._validate_collection(
-            [self.levels, self.labels, self.overviews],
-            strict
+            [self.levels, self.labels, self.overviews]
         )
 
         self.optical = OpticalManager.open(
@@ -1633,8 +1601,7 @@ class WsiDicom:
     @classmethod
     def open(
         cls,
-        path: Union[str, List[str], Path, List[Path]],
-        strict: bool = True
+        path: Union[str, List[str], Path, List[Path]]
     ) -> 'WsiDicom':
         """Open valid wsi dicom files in path and return a WsiDicom object.
         Non-valid files are ignored.
@@ -1643,8 +1610,6 @@ class WsiDicom:
         ----------
         path: Union[str, List[str], Path, List[Path]]
             Path to files to open
-        strict: bool = True
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -1660,7 +1625,7 @@ class WsiDicom:
         for filepath in cls._filter_paths(filepaths):
             sop_class_uid = cls._get_sop_class_uid(filepath)
             if sop_class_uid == WSI_SOP_CLASS_UID:
-                wsi_file = WsiDicomFile(filepath, strict)
+                wsi_file = WsiDicomFile(filepath)
                 if(wsi_file.wsi_type == WsiDicomLevels.WSI_TYPE):
                     level_files.append(wsi_file)
                 elif(wsi_file.wsi_type == WsiDicomLabels.WSI_TYPE):
@@ -1678,26 +1643,17 @@ class WsiDicom:
         level_instances = WsiInstance.open(
             level_files,
             base_uids,
-            base_tile_size,
-            strict
+            base_tile_size
         )
-        label_instances = WsiInstance.open(
-            label_files,
-            base_uids,
-            strict=strict
-        )
-        overview_instances = WsiInstance.open(
-            overview_files,
-            base_uids,
-            strict=strict
-        )
+        label_instances = WsiInstance.open(label_files, base_uids)
+        overview_instances = WsiInstance.open(overview_files, base_uids)
 
-        levels = WsiDicomLevels.open(level_instances, strict)
-        labels = WsiDicomLabels.open(label_instances, strict)
-        overviews = WsiDicomOverviews.open(overview_instances, strict)
+        levels = WsiDicomLevels.open(level_instances)
+        labels = WsiDicomLabels.open(label_instances)
+        overviews = WsiDicomOverviews.open(overview_instances)
         annotations = AnnotationInstance.open(annotation_files)
 
-        return cls(levels, labels, overviews, annotations, strict)
+        return cls(levels, labels, overviews, annotations)
 
     def read_label(self, index: int = 0) -> Image.Image:
         """Read label image of the whole slide. If several label
@@ -2143,8 +2099,7 @@ class WsiDicom:
 
     def _validate_collection(
         self,
-        series: List[WsiDicomSeries],
-        strict: bool
+        series: List[WsiDicomSeries]
     ) -> BaseUids:
         """Check that no files or instance in collection is duplicate, and, if
         strict, that all series have the same base uids.
@@ -2154,8 +2109,6 @@ class WsiDicom:
         ----------
         series: List[WsiDicomSeries]
             List of series to check.
-        strict: bool
-            If to require frame of reference uid to match.
 
         Returns
         ----------
@@ -2171,7 +2124,7 @@ class WsiDicom:
             )
         except StopIteration:
             raise WsiDicomNotFoundError("Valid series", "in collection")
-        if strict:
+        if settings.strict_uid_check:
             for item in series:
                 if item.uids is not None and item.uids != base_uids:
                     raise WsiDicomMatchError(str(item), str(self))
