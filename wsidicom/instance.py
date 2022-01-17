@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from ast import Or
+from copy import deepcopy
 import io
 import os
 import threading
@@ -539,19 +541,35 @@ class WsiDataset(Dataset):
         """Return slice thickness."""
         return self._slice_thickness
 
-    def set_dataset_as_tiled_full(
+    def as_tiled_full(
         self,
-        image_data: List[Tuple[Tuple[str, float], 'ImageData']]
-    ):
-        """Set dataset as a tiled full dataset. Make a new Shared functional
-        group sequence and Pixel measure sequence if not in dataset, otherwise
-        update the Pixel measure sequence. Remove Per Frame functional groups
-        sequence. Set number of frames as per tiled size and number of
-        optical paths and focal planes.
+        image_data: OrderedDict[Tuple[str, float], 'ImageData'],
+        scale: int = 1
+    ) -> 'WsiDataset':
+        """Return copy of dataset with properties set to reflect a tiled full
+        arrangement of the listed image data. Optionally set properties to
+        reflect scaled data.
+
+        Parameters
+        ----------
+        image_data: OrderedDict[Tuple[str, float], ImageData]
+            List of image data that should be encoded into dataset. Each
+            element is a tuple of (optical path, focal plane) and ImageData.
+
+        Returns
+        ----------
+        WsiDataset
+            Copy of dataset set as tiled full.
+
         """
-        self.DimensionOrganizationType = 'TILED_FULL'
+        dataset = deepcopy(self)
+        dataset.DimensionOrganizationType = 'TILED_FULL'
+
+        # Make a new Shared functional group sequence and Pixel measure
+        # sequence if not in dataset, otherwise update the Pixel measure
+        # sequence
         shared_functional_group = getattr(
-            self,
+            dataset,
             'SharedFunctionalGroupsSequence',
             Dataset()
         )
@@ -561,27 +579,45 @@ class WsiDataset(Dataset):
             Dataset()
         )
         pixel_measure.PixelSpacing = [
-            DSfloat(self.pixel_spacing.width, True),
-            DSfloat(self.pixel_spacing.height, True)
+            DSfloat(dataset.pixel_spacing.width * scale, True),
+            DSfloat(dataset.pixel_spacing.height * scale, True)
         ]
-        pixel_measure.SpacingBetweenSlices = self.spacing_between_slices
-        pixel_measure.SliceThickness = self.slice_thickness
+        pixel_measure.SpacingBetweenSlices = dataset.spacing_between_slices
+        pixel_measure.SliceThickness = dataset.slice_thickness
+
+        # Insert created pixel measure sequence if non excisted.
         if 'PixelMeasuresSequence' not in shared_functional_group:
             shared_functional_group.PixelMeasuresSequence = (
                 DicomSequence([pixel_measure])
             )
-        if 'SharedFunctionalGroupsSequence' not in self:
-            self.SharedFunctionalGroupsSequence = DicomSequence(
+        # Insert created shared functional group sequence if non excisted.
+        if 'SharedFunctionalGroupsSequence' not in dataset:
+            dataset.SharedFunctionalGroupsSequence = DicomSequence(
                 [shared_functional_group]
             )
-        if 'PerFrameFunctionalGroupsSequence' in self:
-            del self['PerFrameFunctionalGroupsSequence']
+
+        # Remove Per Frame functional groups sequence
+        if 'PerFrameFunctionalGroupsSequence' in dataset:
+            del dataset['PerFrameFunctionalGroupsSequence']
+
         focal_planes, optical_paths, tile_count = (
             ImageData.get_frame_information(image_data)
         )
-        self.TotalPixelMatrixFocalPlanes = focal_planes
-        self.NumberOfOpticalPaths = optical_paths
-        self.NumberOfFrames = tile_count*focal_planes*optical_paths
+        dataset.TotalPixelMatrixFocalPlanes = focal_planes
+        dataset.NumberOfOpticalPaths = optical_paths
+        dataset.NumberOfFrames = max(
+            tile_count*focal_planes*optical_paths // (scale * scale),
+            1
+        )
+        dataset.TotalPixelMatrixColumns = max(
+            dataset.image_size.width // scale,
+            1
+        )
+        dataset.TotalPixelMatrixRows = max(
+            dataset.image_size.height // scale,
+            1
+        )
+        return dataset
 
 
 class MetaWsiDicomFile(metaclass=ABCMeta):
@@ -833,7 +869,7 @@ class WsiDicomFile(MetaWsiDicomFile):
         if tag != Tag('ExtendedOffsetTableLengths'):
             raise WsiDicomFileError(
                 self.filepath,
-                "Expected Extended offset table lengths after reading "
+                "Expected Extended offset table lengths tag after reading "
                 f"Extended offset table, found {tag}"
             )
         length = self._read_tag_length()
@@ -1731,7 +1767,7 @@ class ImageData(metaclass=ABCMeta):
 
     @staticmethod
     def get_frame_information(
-        data: List[Tuple[Tuple[str, float], 'ImageData']]
+        data: OrderedDict[Tuple[str, float], 'ImageData']
     ) -> Tuple[int, int, int]:
         """Return number of focal planes, number of optical paths, and
         number of tiles per plane.
@@ -1739,7 +1775,7 @@ class ImageData(metaclass=ABCMeta):
         focal_planes: Set[float] = set()
         optical_paths: Set[str] = set()
         tiled_sizes: Set[Size] = set()
-        for (optical_path, focal_plane), image_data in data:
+        for (optical_path, focal_plane), image_data in data.items():
             optical_paths.add(optical_path)
             focal_planes.add(focal_plane)
             tiled_sizes.add(image_data.tiled_size)
@@ -2465,7 +2501,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         uid: UID,
         transfer_syntax: UID,
         dataset: Dataset,
-        data: List[Tuple[Tuple[str, float], ImageData]],
+        data: OrderedDict[Tuple[str, float], ImageData],
         workers: int,
         chunk_size: int,
         offset_table: Optional[str],
@@ -2481,7 +2517,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             Transfer syntax for file
         dataset: Dataset
             Dataset to write (exluding pixel data).
-        data: List[Tuple[Tuple[str, float], ImageData]]
+        data: OrderedDict[Tuple[str, float], ImageData],
             Pixel data to write.
         workers: int
             Number of workers to use for writing pixel data.
@@ -2503,7 +2539,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             offset_table
         )
         frame_positions: List[int] = []
-        for (path, z), image_data in data:
+        for (path, z), image_data in data.items():
             frame_positions += self._write_pixel_data(
                 image_data,
                 z,

@@ -511,7 +511,7 @@ class WsiDicomGroup:
     @staticmethod
     def _list_image_data(
         instances: List[WsiInstance]
-    ) -> List[Tuple[Tuple[str, float], ImageData]]:
+    ) -> OrderedDict[Tuple[str, float], ImageData]:
         """Sort ImageData in instances by optical path and focal
         plane.
 
@@ -523,7 +523,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Tuple[Tuple[str, float], ImageData]
+        OrderedDict[Tuple[str, float], ImageData]:
             ImageData sorted by optical path and focal plane.
         """
         output: Dict[Tuple[str, float], ImageData] = {}
@@ -532,30 +532,7 @@ class WsiDicomGroup:
                 for z in instance.focal_planes:
                     if (optical_path, z) not in output:
                         output[optical_path, z] = instance.image_data
-        return list(OrderedDict(output).items())
-
-    @staticmethod
-    def _get_number_of_frames(
-        instances: List[WsiInstance]
-    ) -> int:
-        """
-
-        Parameters
-        ----------
-        instances: List[WsiInstance]
-
-
-        Returns
-        ----------
-        int
-        """
-        frames = 0
-        for instance in instances:
-            tiles = instance.image_data.tiled_size.area
-            optical_paths = len(instance.optical_paths)
-            focal_planes = len(instance.focal_planes)
-            frames += tiles*optical_paths*focal_planes
-        return frames
+        return OrderedDict(output)
 
     def save(
         self,
@@ -599,11 +576,8 @@ class WsiDicomGroup:
             uid = uid_generator()
             filepath = Path(os.path.join(output_path, uid + '.dcm'))
             transfer_syntax = instances[0].image_data.transfer_syntax
-            dataset = deepcopy(instances[0].dataset)
-            frames = self._get_number_of_frames(instances)
-            dataset.NumberOfFrames = frames
             image_data_list = self._list_image_data(instances)
-            dataset.set_dataset_as_tiled_full(image_data_list)
+            dataset = instances[0].dataset.as_tiled_full(image_data_list)
             with WsiDicomFileWriter(filepath) as wsi_file:
                 wsi_file.write(
                     uid,
@@ -895,26 +869,15 @@ class WsiDicomLevel(WsiDicomGroup):
                 "Can only construct pyramid from DICOM WSI files"
             )
 
-        new_image_size = self.default_instance.size / scale
         for instances in self._group_instances_to_file():
             uid = uid_generator()
             filepath = Path(os.path.join(output_path, uid + '.dcm'))
             transfer_syntax = instances[0].image_data.transfer_syntax
-            dataset = deepcopy(instances[0].dataset)
-            frames = self._get_number_of_frames(instances)
             image_data_list = self._list_image_data(instances)
-            dataset.set_dataset_as_tiled_full(image_data_list)
-            # Modify dataset to reflect scaled data
-            frames = max(frames // (scale*scale), 1)
-            dataset.NumberOfFrames = frames
-            dataset.TotalPixelMatrixColumns = new_image_size.width
-            dataset.TotalPixelMatrixRows = new_image_size.height
-
-            new_pixel_spacing = self.pixel_spacing * scale
-            (
-                dataset.SharedFunctionalGroupsSequence[0].
-                PixelMeasuresSequence[0].PixelSpacing
-            ) = list(new_pixel_spacing.to_tuple())
+            dataset = instances[0].dataset.as_tiled_full(
+                image_data_list,
+                scale
+            )
 
             with WsiDicomFileWriter(filepath) as wsi_file:
                 wsi_file.write(

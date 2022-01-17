@@ -20,7 +20,7 @@ from pathlib import Path
 from random import randint
 from struct import unpack
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional, Sequence, Tuple, cast
+from typing import Dict, List, Optional, OrderedDict, Sequence, Tuple, cast
 
 import pytest
 from PIL import Image, ImageChops, ImageFilter, ImageStat
@@ -413,10 +413,13 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                         generate_uid(),
                         JPEGBaseline8Bit,
                         self.test_dataset,
-                        [((
-                            self.image_data.default_path,
-                            self.image_data.default_z
-                        ), self.image_data)],
+                        OrderedDict({
+                            (
+                                self.image_data.default_path,
+                                self.image_data.default_z
+                            ):
+                            self.image_data
+                        }),
                         1,
                         100,
                         table
