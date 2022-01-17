@@ -697,7 +697,6 @@ class WsiDicomFile(MetaWsiDicomFile):
             force=False,
             specific_tags=None,
         )
-        # dataset = pydicom.dcmread(self._fp, stop_before_pixels=True)
         self._pixel_data_position = self._fp.tell()
 
         if WsiDataset.is_wsi_dicom(dataset):
@@ -791,7 +790,7 @@ class WsiDicomFile(MetaWsiDicomFile):
         if self._fp.read_tag() != ItemTag:
             raise WsiDicomFileError(
                 self.filepath,
-                "BOT did not start with an ItemTag"
+                "Basic offset table did not start with an ItemTag"
             )
         bot_length = self._fp.read_UL()
         if bot_length == 0:
@@ -799,7 +798,7 @@ class WsiDicomFile(MetaWsiDicomFile):
         elif bot_length % BOT_BYTES:
             raise WsiDicomFileError(
                 self.filepath,
-                f"BOT length should be a multiple of {BOT_BYTES}"
+                f"Basic offset table should be a multiple of {BOT_BYTES} bytes"
             )
         # Read the BOT into bytes
         bot = self._fp.read(bot_length)
@@ -819,21 +818,23 @@ class WsiDicomFile(MetaWsiDicomFile):
         if eot_length == 0:
             raise WsiDicomFileError(
                 self.filepath,
-                "EOT present but empty"
+                "Expected Extended offset table present but empty"
             )
         elif eot_length % EOT_BYTES:
             raise WsiDicomFileError(
                 self.filepath,
-                f"BOT length should be a multiple of {EOT_BYTES}"
+                "Extended offset table should be a multiple of "
+                f"{EOT_BYTES} bytes"
             )
         # Read the EOT into bytes
         eot = self._fp.read(eot_length)
-        # Read EOT lengths
+        # Read EOT lengths tag
         tag = self._fp.read_tag()
         if tag != Tag('ExtendedOffsetTableLengths'):
             raise WsiDicomFileError(
                 self.filepath,
-                f"Expected EOT lengths after EOT, found {tag}"
+                "Expected Extended offset table lengths after reading "
+                f"Extended offset table, found {tag}"
             )
         length = self._read_tag_length()
         # Jump over EOT lengths for now
@@ -2694,7 +2695,8 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         if last_entry > 2**32 - 1:
             raise NotImplementedError(
                 "Image data exceeds 2^32 - 1 bytes "
-                "An extended offset table should be used")
+                "An extended offset table should be used"
+            )
 
         self._fp.seek(bot_start)  # Go to first BOT entry
         self._check_tag_and_length(
