@@ -597,11 +597,7 @@ class WsiDicomGroup:
         filepaths: List[Path] = []
         for instances in self._group_instances_to_file():
             uid = uid_generator()
-            if output_path == os.devnull:
-                filepath = Path(output_path)
-            else:
-                filepath = Path(os.path.join(output_path, uid + '.dcm'))
-
+            filepath = Path(os.path.join(output_path, uid + '.dcm'))
             transfer_syntax = instances[0].image_data.transfer_syntax
             dataset = deepcopy(instances[0].dataset)
             frames = self._get_number_of_frames(instances)

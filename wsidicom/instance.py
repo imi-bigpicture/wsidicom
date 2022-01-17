@@ -2516,7 +2516,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         pixels_end = self._fp.tell()
         self._write_pixel_data_end()
 
-        if self != Path(os.devnull) and offset_table is not None:
+        if offset_table is not None:
             if table_start is None:
                 raise ValueError('Table start should not be None')
             elif offset_table == 'eot':
