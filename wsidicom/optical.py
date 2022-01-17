@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 import struct
-import warnings
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional

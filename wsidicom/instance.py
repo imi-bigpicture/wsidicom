@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 import io
-import os
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod

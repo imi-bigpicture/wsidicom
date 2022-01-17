@@ -17,7 +17,6 @@ import os
 import warnings
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from copy import deepcopy
 from pathlib import Path
 from typing import (Any, Callable, DefaultDict, Dict, List, Optional,
                     OrderedDict, Tuple, Union, cast)
