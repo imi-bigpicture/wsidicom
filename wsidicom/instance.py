@@ -12,14 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from ast import Or
-from copy import deepcopy
 import io
-import os
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from struct import pack, unpack
@@ -975,6 +973,15 @@ class WsiDicomFile(MetaWsiDicomFile):
 
         self._read_sequence_delimiter()
         return positions
+
+    def _read_sequence_delimiter(self):
+        """Check if last read tag was a sequence delimter.
+        Raises WsiDicomFileError otherwise.
+        """
+        TAG_BYTES = 4
+        self._fp.seek(-TAG_BYTES, 1)
+        if(self._fp.read_tag() != SequenceDelimiterTag):
+            raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
 
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
