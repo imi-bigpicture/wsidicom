@@ -973,7 +973,7 @@ class WsiDicomFile(MetaWsiDicomFile):
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
 
-        self._read_sequence_delimeter()
+        self._read_sequence_delimiter()
         return positions
 
     def read_frame(self, frame_index: int) -> bytes:
