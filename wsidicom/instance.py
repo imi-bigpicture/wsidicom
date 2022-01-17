@@ -12,32 +12,33 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from ast import Or
+from copy import deepcopy
 import io
+import os
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import (Any, Dict, Generator, List, Optional, OrderedDict, Set,
-                    Tuple, Union)
-from struct import unpack
+from struct import pack, unpack
+from typing import (Any, BinaryIO, Dict, Generator, List, Optional,
+                    OrderedDict, Set, Tuple, Union, cast)
 
 import numpy as np
-import pydicom
 from PIL import Image
-from pydicom.dataelem import DataElement
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
 from pydicom.filebase import DicomFile, DicomFileLike
-from pydicom.filereader import (data_element_offset_to_value,
-                                read_file_meta_info)
+from pydicom.filereader import read_file_meta_info, read_partial
 from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.pixel_data_handlers import pillow_handler
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.tag import ItemTag, SequenceDelimiterTag
+from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
+from pydicom.valuerep import DSfloat
 
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
@@ -257,9 +258,6 @@ class WsiDataset(Dataset):
             for module in module_attributes:
                 for attribute in module:
                     if attribute not in datset:
-                        warnings.warn(
-                            f' is missing {key} attribute {attribute}'
-                        )
                         passed[key] = False
 
         sop_class_uid = getattr(datset, "SOPClassUID", "")
@@ -543,8 +541,160 @@ class WsiDataset(Dataset):
         """Return slice thickness."""
         return self._slice_thickness
 
+    def as_tiled_full(
+        self,
+        image_data: OrderedDict[Tuple[str, float], 'ImageData'],
+        scale: int = 1
+    ) -> 'WsiDataset':
+        """Return copy of dataset with properties set to reflect a tiled full
+        arrangement of the listed image data. Optionally set properties to
+        reflect scaled data.
 
-class WsiDicomFile:
+        Parameters
+        ----------
+        image_data: OrderedDict[Tuple[str, float], ImageData]
+            List of image data that should be encoded into dataset. Each
+            element is a tuple of (optical path, focal plane) and ImageData.
+        scale: int = 1
+            Optionally scale data.
+
+        Returns
+        ----------
+        WsiDataset
+            Copy of dataset set as tiled full.
+
+        """
+        dataset = deepcopy(self)
+        dataset.DimensionOrganizationType = 'TILED_FULL'
+
+        # Make a new Shared functional group sequence and Pixel measure
+        # sequence if not in dataset, otherwise update the Pixel measure
+        # sequence
+        shared_functional_group = getattr(
+            dataset,
+            'SharedFunctionalGroupsSequence',
+            Dataset()
+        )
+        pixel_measure = getattr(
+            shared_functional_group,
+            'PixelMeasuresSequence',
+            Dataset()
+        )
+        pixel_measure.PixelSpacing = [
+            DSfloat(dataset.pixel_spacing.width * scale, True),
+            DSfloat(dataset.pixel_spacing.height * scale, True)
+        ]
+        pixel_measure.SpacingBetweenSlices = dataset.spacing_between_slices
+        pixel_measure.SliceThickness = dataset.slice_thickness
+
+        # Insert created pixel measure sequence if non excisted.
+        if 'PixelMeasuresSequence' not in shared_functional_group:
+            shared_functional_group.PixelMeasuresSequence = (
+                DicomSequence([pixel_measure])
+            )
+        # Insert created shared functional group sequence if non excisted.
+        if 'SharedFunctionalGroupsSequence' not in dataset:
+            dataset.SharedFunctionalGroupsSequence = DicomSequence(
+                [shared_functional_group]
+            )
+
+        # Remove Per Frame functional groups sequence
+        if 'PerFrameFunctionalGroupsSequence' in dataset:
+            del dataset['PerFrameFunctionalGroupsSequence']
+
+        focal_planes, optical_paths, tile_count = (
+            ImageData.get_frame_information(image_data)
+        )
+        dataset.TotalPixelMatrixFocalPlanes = focal_planes
+        dataset.NumberOfOpticalPaths = optical_paths
+        dataset.NumberOfFrames = max(
+            tile_count*focal_planes*optical_paths // (scale * scale),
+            1
+        )
+        dataset.TotalPixelMatrixColumns = max(
+            dataset.image_size.width // scale,
+            1
+        )
+        dataset.TotalPixelMatrixRows = max(
+            dataset.image_size.height // scale,
+            1
+        )
+        return dataset
+
+
+class MetaWsiDicomFile(metaclass=ABCMeta):
+    def __init__(self, filepath: Path, mode: str):
+        self._filepath = filepath
+        self._fp = DicomFile(filepath, mode=mode)
+        self.__enter__()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.filepath})"
+
+    def __str__(self) -> str:
+        return self.pretty_str()
+
+    def pretty_str(
+        self,
+        indent: int = 0,
+        depth: Optional[int] = None
+    ) -> str:
+        return f"File with path: {self.filepath}"
+
+    @property
+    def filepath(self) -> Path:
+        """Return filepath"""
+        return self._filepath
+
+    def _read_tag_length(self, with_vr: bool = True) -> int:
+        if (not self._fp.is_implicit_VR) and with_vr:
+            VR = self._fp.read_UL()
+        return self._fp.read_UL()
+
+    def _check_tag_and_length(
+        self,
+        tag: BaseTag,
+        length: int,
+        with_vr: bool = True
+    ) -> None:
+        """Check if tag at position is expected tag with expected length.
+
+        Parameters
+        ----------
+        tag: BaseTag
+            Expected tag.
+        length: int
+            Expected length.
+
+        """
+        read_tag = self._fp.read_tag()
+        if tag != read_tag:
+            raise ValueError(f"Found tag {read_tag} expected {tag}")
+        read_length = self._read_tag_length(with_vr)
+        if length != read_length:
+            raise ValueError(f"Found length {read_length} expected {length}")
+
+    def _read_sequence_delimeter(self):
+        """Check if last read tag was a sequence delimter.
+        Raises WsiDicomFileError otherwise.
+        """
+        TAG_BYTES = 4
+        self._fp.seek(-TAG_BYTES, 1)
+        if(self._fp.read_tag() != SequenceDelimiterTag):
+            raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
+
+    def close(self) -> None:
+        """Close the file."""
+        self._fp.close()
+
+
+class WsiDicomFile(MetaWsiDicomFile):
     """Represents a DICOM file (potentially) containing WSI image and metadata.
     """
     def __init__(self, filepath: Path):
@@ -556,20 +706,35 @@ class WsiDicomFile:
         filepath: Path
             Path to file to open
         """
-        self._filepath = filepath
         self._lock = threading.Lock()
 
-        if not is_dicom(self.filepath):
-            raise WsiDicomFileError(self.filepath, "is not a DICOM file")
+        if not is_dicom(filepath):
+            raise WsiDicomFileError(filepath, "is not a DICOM file")
 
-        file_meta = read_file_meta_info(self.filepath)
+        file_meta = read_file_meta_info(filepath)
         self._transfer_syntax_uid = UID(file_meta.TransferSyntaxUID)
 
-        self._fp = DicomFile(self.filepath, mode='rb')
+        super().__init__(filepath, mode='rb')
         self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
+        pixel_data_tags = {
+            Tag('PixelData'),
+            Tag('ExtendedOffsetTable')
+        }
 
-        dataset = pydicom.dcmread(self._fp, stop_before_pixels=True)
+        def _stop_at(
+            tag: BaseTag,
+            VR: Optional[str],
+            length: int
+        ) -> bool:
+            return tag in pixel_data_tags
+        dataset = read_partial(
+            cast(BinaryIO, self._fp),
+            _stop_at,
+            defer_size=None,
+            force=False,
+            specific_tags=None,
+        )
         self._pixel_data_position = self._fp.tell()
 
         if WsiDataset.is_wsi_dicom(dataset):
@@ -602,11 +767,6 @@ class WsiDicomFile:
         return self._dataset
 
     @property
-    def filepath(self) -> Path:
-        """Return filepath"""
-        return self._filepath
-
-    @property
     def wsi_type(self) -> str:
         return self._wsi_type
 
@@ -635,13 +795,6 @@ class WsiDicomFile:
         """Return number of frames"""
         return self._frame_count
 
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
-        return f"File with path: {self.filepath}"
-
     def get_filepointer(
         self,
         frame_index: int
@@ -663,65 +816,120 @@ class WsiDicomFile:
         frame_position, frame_length = self.frame_positions[frame_index]
         return self._fp, frame_position, frame_length
 
-    def close(self) -> None:
-        """Close the file."""
-        self._fp.close()
-
-    def _read_positions_from_bot(self) -> List[Tuple[int, int]]:
-        """Read basic table offset (BOT). The BOT always starts with an ItemTag
-        followed by a length. If t he BOT length is zero the BOT is empty.
-        Otherwise the BOT contains file positions, in relation to the BOT end,
-        of frames in the file. fp needs to be positioned before the BOT.
+    def _read_bot(self) -> Optional[bytes]:
+        """Read basic table offset (BOT). Returns None if BOT is empty
 
         Returns
         ----------
-        list[tuple[int, int]]
-            A list with frame positions and frame lengths. Is empty if BOT is
-            empty.
+        Optional[bytes]
+            BOT in bytes.
         """
-        TAG_BYTES = 4
-        LENGHT_BYTES = 4
         BOT_BYTES = 4
-        if not self._fp.is_little_endian:
-            raise ValueError("fp must be little endian")
-        # Jump to BOT
-        offset_to_value = data_element_offset_to_value(
-            self._fp.is_implicit_VR,
-            'OB'
-        )
-        self._fp.seek(offset_to_value, 1)
-
-        positions: List[Tuple[int, int]] = []
         if self._fp.read_tag() != ItemTag:
             raise WsiDicomFileError(
                 self.filepath,
-                "BOT did not start with an ItemTag"
+                "Basic offset table did not start with an ItemTag"
             )
         bot_length = self._fp.read_UL()
         if bot_length == 0:
-            self._fp.seek(bot_length, 1)
-            return positions
+            return None
         elif bot_length % BOT_BYTES:
             raise WsiDicomFileError(
                 self.filepath,
-                f"BOT length should be a multiple of {BOT_BYTES}"
+                f"Basic offset table should be a multiple of {BOT_BYTES} bytes"
             )
-
         # Read the BOT into bytes
         bot = self._fp.read(bot_length)
-        bot_end = self._fp.tell()
+        return bot
 
-        # Read through BOT to get offset and length for all but last item
-        this_bot_offset: int = unpack(b"<L", bot[0:BOT_BYTES])[0]
-        for index in range(BOT_BYTES, bot_length, BOT_BYTES):
-            next_bot_offset = unpack(b"<L", bot[index:index+BOT_BYTES])[0]
-            offset = this_bot_offset+TAG_BYTES+LENGHT_BYTES
-            length = next_bot_offset - offset
-            positions.append((bot_end+offset, length))
-            this_bot_offset = next_bot_offset
+    def _read_eot(self) -> bytes:
+        """Read extended table offset (EOT) and EOT lengths.
+
+        Returns
+        ----------
+        bytes
+            EOT in bytes.
+        """
+        EOT_BYTES = 8
+
+        eot_length = self._read_tag_length()
+        if eot_length == 0:
+            raise WsiDicomFileError(
+                self.filepath,
+                "Expected Extended offset table present but empty"
+            )
+        elif eot_length % EOT_BYTES:
+            raise WsiDicomFileError(
+                self.filepath,
+                "Extended offset table should be a multiple of "
+                f"{EOT_BYTES} bytes"
+            )
+        # Read the EOT into bytes
+        eot = self._fp.read(eot_length)
+        # Read EOT lengths tag
+        tag = self._fp.read_tag()
+        if tag != Tag('ExtendedOffsetTableLengths'):
+            raise WsiDicomFileError(
+                self.filepath,
+                "Expected Extended offset table lengths tag after reading "
+                f"Extended offset table, found {tag}"
+            )
+        length = self._read_tag_length()
+        # Jump over EOT lengths for now
+        self._fp.seek(length, 1)
+        return eot
+
+    def _parse_table(
+        self,
+        table: bytes,
+        table_type: str,
+        pixels_start: int
+    ) -> List[Tuple[int, int]]:
+        """Parse table with offsets (BOT or EOT).
+
+        Parameters
+        ----------
+        table: bytes
+            BOT or EOT as bytes
+        table_type: str
+            Type of table, 'bot' or 'eot'.
+        pixels_start: int
+            Position of pixel start.
+
+        Returns
+        ----------
+        List[Tuple[int, int]]
+            A list with frame positions and frame lengths.
+        """
+        if self._fp.is_little_endian:
+            mode = '<'
+        else:
+            mode = '>'
+        if table_type == 'bot':
+            bytes_per_item = 4
+            mode += 'L'
+        elif table_type == 'eot':
+            bytes_per_item = 8
+            mode = 'Q'
+        else:
+            raise ValueError("table type should be 'bot' or 'eot'")
+        table_length = len(table)
+        TAG_BYTES = 4
+        LENGHT_BYTES = 4
+        positions: List[Tuple[int, int]] = []
+        # Read through table to get offset and length for all but last item
+        this_offset: int = unpack(mode, table[0:bytes_per_item])[0]
+        for index in range(bytes_per_item, table_length, bytes_per_item):
+            next_offset = unpack(mode, table[index:index+bytes_per_item])[0]
+            offset = this_offset + TAG_BYTES + LENGHT_BYTES
+            length = next_offset - offset
+            if length == 0 or length % 2:
+                raise WsiDicomFileError(self.filepath, 'Invalid frame length')
+            positions.append((pixels_start+offset, length))
+            this_offset = next_offset
 
         # Go to last frame in pixel data and read the length of the frame
-        self._fp.seek(bot_end+this_bot_offset)
+        self._fp.seek(pixels_start+this_offset)
         if self._fp.read_tag() != ItemTag:
             raise WsiDicomFileError(
                 self.filepath,
@@ -730,8 +938,8 @@ class WsiDicomFile:
         length: int = self._fp.read_UL()
         if length == 0 or length % 2:
             raise WsiDicomFileError(self.filepath, 'Invalid frame length')
-        offset = this_bot_offset+TAG_BYTES+LENGHT_BYTES
-        positions.append((bot_end+offset, length))
+        offset = this_offset+TAG_BYTES+LENGHT_BYTES
+        positions.append((pixels_start+offset, length))
 
         return positions
 
@@ -760,40 +968,12 @@ class WsiDicomFile:
             length: int = self._fp.read_UL()
             if length == 0 or length % 2:
                 raise WsiDicomFileError(self.filepath, 'Invalid frame length')
-            # Frame position
-            position = frame_position
-            positions.append((position+TAG_BYTES+LENGHT_BYTES, length))
-            # Jump to end of item
+            positions.append((frame_position+TAG_BYTES+LENGHT_BYTES, length))
+            # Jump to end of frame
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
 
         self._read_sequence_delimiter()
-        return positions
-
-    def _read_sequence_delimiter(self):
-        """Check if last read tag was a sequence delimter.
-        Raises WsiDicomFileError otherwise.
-        """
-        TAG_BYTES = 4
-        self._fp.seek(-TAG_BYTES, 1)
-        if(self._fp.read_tag() != SequenceDelimiterTag):
-            raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
-
-    def _read_frame_positions(self) -> List[Tuple[int, int]]:
-        """Parse pixel data to get frame positions (relative to end of BOT)
-        and frame lenght.
-
-        Returns
-        ----------
-        list[tuple[int, int]]
-            A list with frame positions and frame lengths
-        """
-        # First read BOT
-        positions = self._read_positions_from_bot()
-        # If BOT is empty read positions from PixelData (slow)
-        if positions == []:
-            positions = self._read_positions_from_pixeldata()
-
         return positions
 
     def read_frame(self, frame_index: int) -> bytes:
@@ -817,23 +997,68 @@ class WsiDicomFile:
 
     def _parse_pixel_data(self) -> List[Tuple[int, int]]:
         """Parse file pixel data, reads frame positions.
-        Note that fp needs to be positionend at pixel data.
+        Note that fp needs to be positionend at Extended offset table (EOT)
+        or Pixel data. An EOT can be present before the pixel data, and must
+        then not be empty. A BOT most always be the first item in the Pixel
+        data, but can be empty (zero length). If EOT is used BOT must be empty.
 
         Returns
         ----------
         List[Tuple[int, int]]
             List of frame positions and lenghts
         """
-        frame_positions = self._read_frame_positions()
-        fragment_count = len(frame_positions)
+
+        table = None
+        table_type = 'bot'
+        pixel_data_or_eot_tag = self._fp.read_tag()
+        if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
+            table_type = 'eot'
+            table = self._read_eot()
+            pixel_data_tag = self._fp.read_tag()
+        else:
+            pixel_data_tag = pixel_data_or_eot_tag
+
+        if pixel_data_tag != Tag('PixelData'):
+            WsiDicomFileError(
+                self.filepath,
+                "Expected PixelData tag"
+            )
+        length = self._read_tag_length()
+        if length != 0xFFFFFFFF:
+            raise WsiDicomFileError(
+                self.filepath,
+                "Expected undefined length when reading Pixel data"
+            )
+        bot = self._read_bot()
+
+        if bot is not None:
+            if table is not None:
+                raise WsiDicomFileError(
+                    self.filepath,
+                    "Both BOT and EOT present"
+                )
+            table = bot
+
+        frame_positions = []
+        if table is None:
+            frame_positions = self._read_positions_from_pixeldata()
+        else:
+            frame_positions = self._parse_table(
+                table,
+                table_type,
+                self._fp.tell()
+            )
+
         if(self.frame_count != len(frame_positions)):
             raise WsiDicomFileError(
                 self.filepath,
                 (
-                    f"Frames {self.frame_count} != Fragments {fragment_count}."
+                    f"Frame count {self.frame_count} "
+                    f"!= Fragments {len(frame_positions)}."
                     " Fragmented frames are not supported"
                 )
             )
+
         return frame_positions
 
     @staticmethod
@@ -914,45 +1139,45 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def files(self) -> List[Path]:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def transfer_syntax(self) -> UID:
         """Should return the uid of the transfer syntax of the image."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def image_size(self) -> Size:
         """Should return the pixel size of the image."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def tile_size(self) -> Size:
         """Should return the pixel tile size of the image, or pixel size of
         the image if not tiled."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def pixel_spacing(self) -> SizeMm:
         """Should return the size of the pixels in mm/pixel."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def samples_per_pixel(self) -> int:
         """Should return number of samples per pixel (e.g. 3 for RGB."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def photometric_interpretation(self) -> str:
         """Should return the photophotometric interpretation of the image
         data."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def _get_decoded_tile(
@@ -963,7 +1188,7 @@ class ImageData(metaclass=ABCMeta):
     ) -> Image.Image:
         """Should return Image for tile defined by tile (x, y), z,
         and optical path."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def _get_encoded_tile(
@@ -974,12 +1199,12 @@ class ImageData(metaclass=ABCMeta):
     ) -> bytes:
         """Should return image bytes for tile defined by tile (x, y), z,
         and optical path."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def close(self) -> None:
         """Should close any open files."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     def tiled_size(self) -> Size:
@@ -1070,8 +1295,23 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str
     ) -> List[Image.Image]:
-        """Return Images for tile defined by tile (x, y), z, and optical
-        path."""
+        """Return tiles for tile defined by tile (x, y), z, and optical
+        path.
+
+        Parameters
+        ----------
+        tiles: List[Point]
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        List[Image.Image]
+            Tiles as Images.
+        """
         return [
             self._get_decoded_tile(tile, z, path) for tile in tiles
         ]
@@ -1082,13 +1322,115 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str
     ) -> List[bytes]:
-        """Return image bytes for tile defined by tile (x, y), z, and optical
-        path."""
+        """Return tiles for tile defined by tile (x, y), z, and optical
+        path.
+
+        Parameters
+        ----------
+        tiles: List[Point]
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        List[bytes]
+            Tiles in bytes.
+        """
         return [
             self._get_encoded_tile(tile, z, path) for tile in tiles
         ]
 
-    def get_encoded_scaled_tiles(
+    def get_scaled_tile(
+        self,
+        scaled_tile_point: Point,
+        z: float,
+        path: str,
+        scale: int
+    ) -> Image.Image:
+        """Return scaled tile defined by tile (x, y), z, optical
+        path and scale.
+
+        Parameters
+        ----------
+        scaled_tile_point: Point,
+            Scaled position of tile to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        Scale: int
+            Scale to use for downscaling.
+
+        Returns
+        ----------
+        Image.Image
+            Scaled tiled as Image.
+        """
+        image = Image.new(
+            mode=self.image_mode,  # type: ignore
+            size=(self.tile_size * scale).to_tuple(),
+            color=self.blank_color[:self.samples_per_pixel]
+        )
+        # Get decoded tiles for the region covering the scaled tile
+        # in the image data
+        tile_points = Region(scaled_tile_point*scale, Size(1, 1)*scale)
+        origin = tile_points.start
+        for tile_point in tile_points.iterate_all():
+            if (
+                (tile_point.x < self.tiled_size.width) and
+                (tile_point.y < self.tiled_size.height)
+            ):
+                tile = self._get_decoded_tile(tile_point, z, path)
+                image_coordinate = (tile_point - origin) * self.tile_size
+                image.paste(tile, image_coordinate.to_tuple())
+
+        return image.resize(self.tile_size.to_tuple(), resample=Image.BILINEAR)
+
+    def get_scaled_encoded_tile(
+        self,
+        scaled_tile_point: Point,
+        z: float,
+        path: str,
+        scale: int,
+        image_format: str,
+        image_options: Dict[str, Any]
+    ) -> bytes:
+        """Return scaled encoded tile defined by tile (x, y), z, optical
+        path and scale.
+
+        Parameters
+        ----------
+        scaled_tile_point: Point,
+            Scaled position of tile to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        Scale: int
+            Scale to use for downscaling.
+        image_format: str
+            Image format, e.g. 'JPEG', for encoding.
+        image_options: Dict[str, Any].
+            Dictionary of options for encoding.
+
+        Returns
+        ----------
+        bytes
+            Scaled tile as bytes.
+        """
+        image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
+        with io.BytesIO() as buffer:
+            image.save(
+                buffer,
+                format=image_format,
+                **image_options
+            )
+            return buffer.getvalue()
+
+    def get_scaled_encoded_tiles(
         self,
         scaled_tile_points: List[Point],
         z: float,
@@ -1097,62 +1439,40 @@ class ImageData(metaclass=ABCMeta):
         image_format: str,
         image_options: Dict[str, Any]
     ) -> List[bytes]:
-        scaled_tiles: List[bytes] = []
-        for scaled_tile_point in scaled_tile_points:
-            # For each tile point in the target scale
-            image = Image.new(
-                mode=self.image_mode,  # type: ignore
-                size=(self.tile_size * scale).to_tuple()
-            )
-            # Get decoded tiles for the region covering the scaled tile
-            # in the image data
-            tile_points = Region(
-                scaled_tile_point*scale,
-                Size(1, 1) * scale
-            ).iterate_all()
-            tiles: List[Image.Image] = []
-            for tile_point in tile_points:
-                if (
-                    (tile_point.x < self.tiled_size.width) and
-                    (tile_point.y < self.tiled_size.height)
-                ):
-                    tile = self._get_decoded_tile(
-                        tile_point,
-                        z,
-                        path
-                    )
-                else:
-                    tile = self.blank_tile
-                tiles.append(tile)
+        """Return scaled encoded tiles defined by tile (x, y) positions, z,
+        optical path and scale.
 
-            # Paste the unscalled images into a large tile
-            for y in range(scale):
-                for x in range(scale):
-                    tile_index = y*scale + x
-                    tile_point = Point(x, y)
-                    image_coordinate = (
-                        (tile_point * self.tile_size)
-                    )
-                    image.paste(
-                        tiles[tile_index],
-                        image_coordinate.to_tuple()
-                    )
-            # Resize the tile
-            image = image.resize(
-                self.tile_size.to_tuple(),
-                resample=Image.BILINEAR
-            )
-            # Compress the tile and add to created tiles
-            with io.BytesIO() as buffer:
-                image.save(
-                    buffer,
-                    format=image_format,
-                    **image_options
-                )
-                scaled_tiles.append(buffer.getvalue())
+        Parameters
+        ----------
+        scaled_tile_points: List[Point],
+            Scaled position of tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        Scale: int
+            Scale to use for downscaling.
+        image_format: str
+            Image format, e.g. 'JPEG', for encoding.
+        image_options: Dict[str, Any].
+            Dictionary of options for encoding.
 
-        # Return created tiles
-        return scaled_tiles
+        Returns
+        ----------
+        List[bytes]
+            Scaled tiles as bytes.
+        """
+        return [
+            self.get_scaled_encoded_tile(
+                scaled_tile_point,
+                z,
+                path,
+                scale,
+                image_format,
+                image_options
+            )
+            for scaled_tile_point in scaled_tile_points
+        ]
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
         """Check if tile region is inside tile geometry and z coordinate and
@@ -1240,8 +1560,8 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        int, int, int
-            RGB color
+        Tuple[int, int, int]
+            RGB color,
 
         """
         BLACK = 0
@@ -1446,6 +1766,25 @@ class ImageData(metaclass=ABCMeta):
             image.crop(box=cropped_tile_region.box_from_origin)
             tile_frame = self.encode(image)
         return tile_frame
+
+    @staticmethod
+    def get_frame_information(
+        data: OrderedDict[Tuple[str, float], 'ImageData']
+    ) -> Tuple[int, int, int]:
+        """Return number of focal planes, number of optical paths, and
+        number of tiles per plane.
+        """
+        focal_planes: Set[float] = set()
+        optical_paths: Set[str] = set()
+        tiled_sizes: Set[Size] = set()
+        for (optical_path, focal_plane), image_data in data.items():
+            optical_paths.add(optical_path)
+            focal_planes.add(focal_plane)
+            tiled_sizes.add(image_data.tiled_size)
+        if len(tiled_sizes) != 1:
+            raise ValueError('Expected only one tiled size')
+        tiled_size = list(tiled_sizes)[0]
+        return len(focal_planes), len(optical_paths), tiled_size.area
 
 
 class WsiDicomImageData(ImageData):
@@ -2145,35 +2484,96 @@ class SparseTileIndex(TileIndex):
         return tile, z
 
 
-class WsiDicomFileWriter:
-    def __init__(self, path: Path) -> None:
+class WsiDicomFileWriter(MetaWsiDicomFile):
+    def __init__(self, filepath: Path) -> None:
         """Return a dicom filepointer.
 
         Parameters
         ----------
-        path: Path
+        filepath: Path
             Path to filepointer.
 
         """
-        self._fp = DicomFile(path, mode='wb')
+        super().__init__(filepath, mode='w+b')
         self._fp.is_little_endian = True
         self._fp.is_implicit_VR = False
 
-        self.__enter__()
+    def write(
+        self,
+        uid: UID,
+        transfer_syntax: UID,
+        dataset: Dataset,
+        data: OrderedDict[Tuple[str, float], ImageData],
+        workers: int,
+        chunk_size: int,
+        offset_table: Optional[str],
+        scale: int = 1
+    ) -> None:
+        """Writes data to file.
 
-    def __enter__(self):
-        return self
+        Parameters
+        ----------
+        uid: UID
+            Instance UID for file.
+        transfer_syntax: UID.
+            Transfer syntax for file
+        dataset: Dataset
+            Dataset to write (exluding pixel data).
+        data: OrderedDict[Tuple[str, float], ImageData],
+            Pixel data to write.
+        workers: int
+            Number of workers to use for writing pixel data.
+        chunk_size: int
+            Number of frames to give each worker.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
+        scale: int = 1
+            Scale factor.
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        self._write_preamble()
+        self._write_file_meta(uid, transfer_syntax)
+        dataset.SOPInstanceUID = uid
+        self._write_base(dataset)
+        table_start, pixels_start = self._write_pixel_data_start(
+            dataset.NumberOfFrames,
+            offset_table
+        )
+        frame_positions: List[int] = []
+        for (path, z), image_data in data.items():
+            frame_positions += self._write_pixel_data(
+                image_data,
+                z,
+                path,
+                workers,
+                chunk_size,
+                scale
+            )
+        pixels_end = self._fp.tell()
+        self._write_pixel_data_end()
+
+        if offset_table is not None:
+            if table_start is None:
+                raise ValueError('Table start should not be None')
+            elif offset_table == 'eot':
+                self._write_eot(
+                    table_start,
+                    pixels_start,
+                    frame_positions,
+                    pixels_end
+                )
+            elif offset_table == 'bot':
+                self._write_bot(table_start, pixels_start, frame_positions)
         self.close()
 
-    def write_preamble(self) -> None:
+    def _write_preamble(self) -> None:
         """Writes file preamble to file."""
         preamble = b'\x00' * 128
         self._fp.write(preamble)
         self._fp.write(b'DICM')
 
-    def write_file_meta(self, uid: UID, transfer_syntax: UID) -> None:
+    def _write_file_meta(self, uid: UID, transfer_syntax: UID) -> None:
         """Writes file meta dataset to file.
 
         Parameters
@@ -2190,7 +2590,7 @@ class WsiDicomFileWriter:
         validate_file_meta(meta_ds)
         write_file_meta_info(self._fp, meta_ds)
 
-    def write_base(self, dataset: Dataset) -> None:
+    def _write_base(self, dataset: Dataset) -> None:
         """Writes base dataset to file.
 
         Parameters
@@ -2203,49 +2603,117 @@ class WsiDicomFileWriter:
         dataset.ContentTime = datetime.time(now).strftime('%H%M%S.%f')
         write_dataset(self._fp, dataset)
 
-    def write_pixel_data_start(self, frames: int) -> Tuple[int, int]:
-        """Writes tags starting pixel data and reserves space for BOT.
+    def _write_tag(
+        self,
+        tag: str,
+        value_representation: str,
+        length: Optional[int] = None
+    ):
+        """Write tag, tag VR and length.
 
         Parameters
         ----------
-        frames: int
-            Number of frames to reserve space for in BOT
+        tag: str
+            Name of tag to write.
+        value_representation: str.
+            Value representation (VR) of tag to write.
+        length: Optional[int] = None
+            Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
+
+        """
+        self._fp.write_tag(Tag(tag))
+        self._fp.write(bytes(value_representation, "iso8859"))
+        self._fp.write_US(0)
+        if length is not None:
+            self._fp.write_UL(length)
+        else:
+            self._fp.write_UL(0xFFFFFFFF)
+
+    def _reserve_eot(
+        self,
+        number_of_frames: int
+    ) -> int:
+        """Reserve space in file for extended offset table.
+
+        Parameters
+        ----------
+        number_of_frames: int
+            Number of frames to reserve space for.
+
+        """
+        table_start = self._fp.tell()
+        BYTES_PER_ITEM = 8
+        eot_length = BYTES_PER_ITEM * number_of_frames
+        self._write_tag('ExtendedOffsetTable', 'OV', eot_length)
+        for index in range(number_of_frames):
+            self._write_unsigned_long_long(0)
+        self._write_tag('ExtendedOffsetTableLengths', 'OV', eot_length)
+        for index in range(number_of_frames):
+            self._write_unsigned_long_long(0)
+        return table_start
+
+    def _reserve_bot(
+        self,
+        number_of_frames: int
+    ) -> int:
+        """Reserve space in file for basic offset table.
+
+        Parameters
+        ----------
+        number_of_frames: int
+            Number of frames to reserve space for.
+
+        """
+        table_start = self._fp.tell()
+        BYTES_PER_ITEM = 4
+        tag_lengths = BYTES_PER_ITEM * number_of_frames
+        self._fp.write_tag(ItemTag)
+        self._fp.write_UL(tag_lengths)
+        for index in range(number_of_frames):
+            self._fp.write_UL(0)
+        return table_start
+
+    def _write_pixel_data_start(
+        self,
+        number_of_frames: int,
+        offset_table: Optional[str]
+    ) -> Tuple[Optional[int], int]:
+        """Writes tags starting pixel data and reserves space for BOT or EOT.
+
+        Parameters
+        ----------
+        number_of_frames: int
+            Number of frames to reserve space for in BOT or EOT.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
-        Tuple[int, int]
-            Start and end of BOT.
+        Tuple[Optional[int], int]
+            Start of table (BOT or EOT) and start of pixel data (after BOT).
         """
-        pixel_data_element = DataElement(
-            0x7FE00010,
-            'OB',
-            0,
-            is_undefined_length=True
-            )
+        table_start: Optional[int] = None
+        if offset_table == 'eot':
+            table_start = self._reserve_eot(number_of_frames)
 
         # Write pixel data tag
-        self._fp.write_tag(pixel_data_element.tag)
+        self._write_tag('PixelData', 'OB')
 
-        if not self._fp.is_implicit_VR:
-            # Write pixel data VR (OB), two empty bytes (PS3.5 7.1.2)
-            self._fp.write(bytes(pixel_data_element.VR, "iso8859"))
-            self._fp.write_US(0)
-        # Write unspecific length
-        self._fp.write_UL(0xFFFFFFFF)
-
-        # Write item tag and length of BOT, and fill with dummy values
-        bot_start = self._fp.tell()
-        self._fp.write_tag(ItemTag)
-        self._fp.write_UL(4*frames)
-        for index in range(frames):
+        if offset_table == 'bot':
+            table_start = self._reserve_bot(number_of_frames)
+        else:
+            self._fp.write_tag(ItemTag)  # Empty BOT
             self._fp.write_UL(0)
-        bot_end = self._fp.tell()
-        return bot_start, bot_end
 
-    def write_bot(
+        pixel_data_start = self._fp.tell()
+
+        return table_start, pixel_data_start
+
+    def _write_bot(
         self,
         bot_start: int,
-        bot_end: int,
+        pixel_data_start: int,
         frame_positions: List[int]
     ) -> None:
         """Writes BOT to file.
@@ -2260,23 +2728,95 @@ class WsiDicomFileWriter:
             List of file positions for frames, relative to file start
 
         """
+        BYTES_PER_ITEM = 4
         # Check that last BOT entry is not over 2^32 - 1
-        last_entry = frame_positions[-1] - bot_end
-        # Files larger than 4 GB will fail on this.
-        # TODO either split larger files or use extended offset table
+        last_entry = frame_positions[-1] - pixel_data_start
         if last_entry > 2**32 - 1:
             raise NotImplementedError(
                 "Image data exceeds 2^32 - 1 bytes "
                 "An extended offset table should be used"
             )
+
+        self._fp.seek(bot_start)  # Go to first BOT entry
+        self._check_tag_and_length(
+            ItemTag,
+            BYTES_PER_ITEM*len(frame_positions),
+            False
+        )
+
+        for frame_position in frame_positions:  # Write BOT
+            self._fp.write_UL(frame_position-pixel_data_start)
+
+    def _write_unsigned_long_long(
+        self,
+        value: int
+    ):
+        """Write unsigned long long integer (64 bits) as little endian.
+
+        Parameters
+        ----------
+        value: int
+            Value to write.
+
+        """
+        self._fp.write(pack('<Q', value))
+
+    def _write_eot(
+        self,
+        eot_start: int,
+        pixel_data_start: int,
+        frame_positions: List[int],
+        last_frame_end: int
+    ) -> None:
+        """Writes EOT to file.
+
+        Parameters
+        ----------
+        bot_start: int
+            File position of EOT start
+        pixel_data_start: int
+            File position of EOT end
+        frame_positions: List[int]
+            List of file positions for frames, relative to file start
+        last_frame_end: int
+            Position of last frame end.
+
+        """
+        BYTES_PER_ITEM = 8
+        # Check that last BOT entry is not over 2^64 - 1
+        last_entry = frame_positions[-1] - pixel_data_start
+        if last_entry > 2**64 - 1:
+            raise ValueError(
+                "Image data exceeds 2^64 - 1 bytes, likely something is wrong"
+            )
+        self._fp.seek(eot_start)  # Go to EOT table
+        self._check_tag_and_length(
+            Tag('ExtendedOffsetTable'),
+            BYTES_PER_ITEM*len(frame_positions)
+        )
+        for frame_position in frame_positions:  # Write EOT
+            relative_position = frame_position-pixel_data_start
+            self._write_unsigned_long_long(relative_position)
+
+        # EOT LENGTHS
+        self._check_tag_and_length(
+            Tag('ExtendedOffsetTableLengths'),
+            BYTES_PER_ITEM*len(frame_positions)
+        )
+        frame_start = frame_positions[0]
+        for frame_end in frame_positions[1:]:  # Write EOT lengths
+            frame_length = frame_end - frame_start
+            self._write_unsigned_long_long(frame_length)
+            frame_start = frame_end
+
+        # Last frame length, end does not include tag and length
         TAG_BYTES = 4
         LENGHT_BYTES = 4
-        # Go to first BOT entry
-        self._fp.seek(bot_start + TAG_BYTES + LENGHT_BYTES)
-        for frame_position in frame_positions:
-            self._fp.write_UL(frame_position-bot_end)
+        last_frame_start = frame_start + TAG_BYTES + LENGHT_BYTES
+        last_frame_length = last_frame_end - last_frame_start
+        self._write_unsigned_long_long(last_frame_length)
 
-    def write_pixel_data(
+    def _write_pixel_data(
         self,
         image_data: ImageData,
         z: float,
@@ -2312,7 +2852,8 @@ class WsiDicomFileWriter:
         Returns
         ----------
         List[int]
-            List of frame positions, relative to start of file.
+            List of frame position (position of ItemTag), relative to start of
+            file.
         """
         chunked_tile_points = self._chunk_tile_points(
             image_data,
@@ -2320,11 +2861,17 @@ class WsiDicomFileWriter:
             scale
         )
 
-        if scale is None:
+        if scale == 1:
+            def get_tiles_thread(tile_points: List[Point]) -> List[bytes]:
+                """Thread function to get tiles as bytes."""
+                return image_data.get_encoded_tiles(tile_points, z, path)
+            get_tiles = get_tiles_thread
+        else:
             def get_scaled_tiles_thread(
                 scaled_tile_points: List[Point]
             ) -> List[bytes]:
-                return image_data.get_encoded_scaled_tiles(
+                """Thread function to get scaled tiles as bytes."""
+                return image_data.get_scaled_encoded_tiles(
                     scaled_tile_points,
                     z,
                     path,
@@ -2333,13 +2880,6 @@ class WsiDicomFileWriter:
                     image_options
                 )
             get_tiles = get_scaled_tiles_thread
-        else:
-            def get_tiles_thread(tile_points: List[Point]) -> List[bytes]:
-                # Thread that takes a chunk of tile points and returns list of
-                # tile bytes
-                return image_data.get_encoded_tiles(tile_points, z, path)
-            get_tiles = get_tiles_thread
-
         with ThreadPoolExecutor(max_workers=workers) as pool:
             # Each thread result is a list of tiles that is itemized and writen
             frame_positions: List[int] = []
@@ -2388,7 +2928,6 @@ class WsiDicomFileWriter:
             minimum_chunk_size,
             chunk_size//minimum_chunk_size * minimum_chunk_size
         )
-
         new_tiled_size = image_data.tiled_size / scale
         # Divide the image tiles up into chunk_size chunks (up to tiled size)
         chunked_tile_points = (
@@ -2401,13 +2940,10 @@ class WsiDicomFileWriter:
         )
         return chunked_tile_points
 
-    def write_pixel_data_end(self) -> None:
+    def _write_pixel_data_end(self) -> None:
         """Writes tags ending pixel data."""
         self._fp.write_tag(SequenceDelimiterTag)
         self._fp.write_UL(0)
-
-    def close(self) -> None:
-        self._fp.close()
 
 
 class WsiInstance:
