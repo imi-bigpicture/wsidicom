@@ -511,7 +511,7 @@ class WsiDicomGroup:
     @staticmethod
     def _list_image_data(
         instances: List[WsiInstance]
-    ) -> List[Tuple[Tuple[str, float], ImageData]]:
+    ) -> OrderedDict[Tuple[str, float], ImageData]:
         """Sort ImageData in instances by optical path and focal
         plane.
 
@@ -523,7 +523,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Tuple[Tuple[str, float], ImageData]
+        OrderedDict[Tuple[str, float], ImageData]:
             ImageData sorted by optical path and focal plane.
         """
         output: Dict[Tuple[str, float], ImageData] = {}
@@ -532,37 +532,15 @@ class WsiDicomGroup:
                 for z in instance.focal_planes:
                     if (optical_path, z) not in output:
                         output[optical_path, z] = instance.image_data
-        return list(OrderedDict(output).items())
-
-    @staticmethod
-    def _get_number_of_frames(
-        instances: List[WsiInstance]
-    ) -> int:
-        """
-
-        Parameters
-        ----------
-        instances: List[WsiInstance]
-
-
-        Returns
-        ----------
-        int
-        """
-        frames = 0
-        for instance in instances:
-            tiles = instance.image_data.tiled_size.area
-            optical_paths = len(instance.optical_paths)
-            focal_planes = len(instance.focal_planes)
-            frames += tiles*optical_paths*focal_planes
-        return frames
+        return OrderedDict(output)
 
     def save(
         self,
         output_path: str,
         uid_generator: Callable[..., UID],
         workers: int,
-        chunk_size: int
+        chunk_size: int,
+        offset_table: Optional[str]
     ) -> List[Path]:
         """Save a WsiDicomGroup to files in output_path. Instances are grouped
         by properties that cant differ in the same file:
@@ -584,6 +562,9 @@ class WsiDicomGroup:
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
+        offset_table: Optional[str]
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -593,57 +574,22 @@ class WsiDicomGroup:
         filepaths: List[Path] = []
         for instances in self._group_instances_to_file():
             uid = uid_generator()
-            if output_path == os.devnull:
-                filepath = Path(output_path)
-            else:
-                filepath = Path(os.path.join(output_path, uid + '.dcm'))
-
+            filepath = Path(os.path.join(output_path, uid + '.dcm'))
             transfer_syntax = instances[0].image_data.transfer_syntax
-            dataset = deepcopy(instances[0].dataset)
-            frames = self._get_number_of_frames(instances)
-            dataset.NumberOfFrames = frames
-            self._write_file(
-                filepath,
-                uid,
-                transfer_syntax,
-                dataset,
-                instances,
-                workers,
-                chunk_size
-            )
+            image_data_list = self._list_image_data(instances)
+            dataset = instances[0].dataset.as_tiled_full(image_data_list)
+            with WsiDicomFileWriter(filepath) as wsi_file:
+                wsi_file.write(
+                    uid,
+                    transfer_syntax,
+                    dataset,
+                    image_data_list,
+                    workers,
+                    chunk_size,
+                    offset_table
+                )
             filepaths.append(filepath)
         return filepaths
-
-    @classmethod
-    def _write_file(
-        cls,
-        filepath: Path,
-        uid: UID,
-        transfer_syntax: UID,
-        dataset: WsiDataset,
-        instances: List[WsiInstance],
-        workers: int,
-        chunk_size: int
-    ) -> None:
-        with WsiDicomFileWriter(filepath) as wsi_file:
-            wsi_file.write_preamble()
-            wsi_file.write_file_meta(uid, transfer_syntax)
-            dataset.SOPInstanceUID = uid
-            wsi_file.write_base(dataset)
-            frames = dataset.NumberOfFrames
-            bot_start, bot_end = wsi_file.write_pixel_data_start(frames)
-            frame_positions: List[int] = []
-            for (path, z), image_data in cls._list_image_data(instances):
-                frame_positions += wsi_file.write_pixel_data(
-                    image_data,
-                    z,
-                    path,
-                    workers,
-                    chunk_size
-                )
-            wsi_file.write_pixel_data_end()
-            wsi_file.write_bot(bot_start, bot_end, frame_positions)
-            wsi_file.close()
 
 
 class WsiDicomLevel(WsiDicomGroup):
@@ -879,17 +825,21 @@ class WsiDicomLevel(WsiDicomGroup):
     def create_child(
         self,
         scale: int,
+        output_path: Path,
         uid_generator: Callable[..., UID],
         workers: int,
-        chunk_size: int
+        chunk_size: int,
+        offset_table: Optional[str]
     ) -> 'WsiDicomLevel':
         """Creates a new WsiDicomLevel from this level by scaling the image
-        data. File is saved in same folder as parent.
+        data.
 
         Parameters
         ----------
         scale: int
             Scale factor.
+        output_path: Path
+            The path to write child to.
         uid_generator: Callable[..., UID]
             Uid generator to use.
         workers: int
@@ -897,6 +847,9 @@ class WsiDicomLevel(WsiDicomGroup):
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
+        offset_table: Optional[str]
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -915,36 +868,28 @@ class WsiDicomLevel(WsiDicomGroup):
             raise NotImplementedError(
                 "Can only construct pyramid from DICOM WSI files"
             )
-        output_path = (
-            self.default_instance.image_data._files[0].filepath.parent
-        )
-        new_image_size = self.default_instance.size / scale
+
         for instances in self._group_instances_to_file():
             uid = uid_generator()
             filepath = Path(os.path.join(output_path, uid + '.dcm'))
             transfer_syntax = instances[0].image_data.transfer_syntax
-            dataset = deepcopy(instances[0].dataset)
-            frames = self._get_number_of_frames(instances)
-            # Modify dataset to reflect scaled data
-            frames = frames // (scale*scale)
-            dataset.NumberOfFrames = frames
-            dataset.TotalPixelMatrixColumns = new_image_size.width
-            dataset.TotalPixelMatrixRows = new_image_size.height
-
-            new_pixel_spacing = self.pixel_spacing * scale
-            (
-                dataset.SharedFunctionalGroupsSequence[0].
-                PixelMeasuresSequence[0].PixelSpacing
-            ) = list(new_pixel_spacing.to_tuple())
-            self._write_file(
-                filepath,
-                uid,
-                transfer_syntax,
-                dataset,
-                instances,
-                workers,
-                chunk_size
+            image_data_list = self._list_image_data(instances)
+            dataset = instances[0].dataset.as_tiled_full(
+                image_data_list,
+                scale
             )
+
+            with WsiDicomFileWriter(filepath) as wsi_file:
+                wsi_file.write(
+                    uid,
+                    transfer_syntax,
+                    dataset,
+                    image_data_list,
+                    workers,
+                    chunk_size,
+                    offset_table,
+                    scale
+                )
             filepaths.append(filepath)
 
         created_instances = WsiInstance.open(
@@ -1100,7 +1045,8 @@ class WsiDicomSeries(metaclass=ABCMeta):
         output_path: str,
         uid_generator: Callable[..., UID],
         workers: int,
-        chunk_size: int
+        chunk_size: int,
+        offset_table: Optional[str]
     ) -> List[Path]:
         """Save WsiDicomSeries as DICOM-files in path.
 
@@ -1114,6 +1060,9 @@ class WsiDicomSeries(metaclass=ABCMeta):
         chunk_size:
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -1126,7 +1075,8 @@ class WsiDicomSeries(metaclass=ABCMeta):
                 output_path,
                 uid_generator,
                 workers,
-                chunk_size
+                chunk_size,
+                offset_table
             )
             filepaths.extend(group_file_paths)
         return filepaths
@@ -1380,7 +1330,9 @@ class WsiDicomLevels(WsiDicomSeries):
         highest_level: int,
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
-        chunk_size: int = 100
+        chunk_size: int = 100,
+        offset_table: Optional[str] = 'bot',
+        add_to_excisting: bool = True
     ) -> List[Path]:
         """Construct missing pyramid levels from excisting levels.
 
@@ -1394,6 +1346,11 @@ class WsiDicomLevels(WsiDicomSeries):
         chunk_size: int = 100
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
+        add_to_excisting: bool = True
+            If to add the created levels to excisting levels.
 
         Returns
         ----------
@@ -1414,14 +1371,20 @@ class WsiDicomLevels(WsiDicomSeries):
                 # Find the closest larger level for missing level
                 closest_level = self.get_closest_by_level(pyramid_level)
                 # Create scaled level
+                output_path = closest_level.files[0].parent
                 new_level = closest_level.create_child(
                     scale=2,
+                    output_path=output_path,
                     uid_generator=uid_generator,
                     workers=workers,
-                    chunk_size=chunk_size
+                    chunk_size=chunk_size,
+                    offset_table=offset_table
                 )
                 # Add level to available levels
-                self._levels[new_level.level] = new_level
+                if add_to_excisting:
+                    self._levels[new_level.level] = new_level
+                else:
+                    new_level.close()
                 filepaths += new_level.files
         return filepaths
 
@@ -1928,7 +1891,8 @@ class WsiDicom:
         output_path: str,
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
-        chunk_size: Optional[int] = None
+        chunk_size: Optional[int] = None,
+        offset_table: Optional[str] = 'bot'
     ) -> List[Path]:
         """Save wsi as DICOM-files in path. Instances for the same pyramid
         level will be combined when possible to one file (e.g. not split
@@ -1946,6 +1910,9 @@ class WsiDicom:
         chunk_size: Optional[int] = None
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
+        offset_table: Optional[str] = 'bot'
+            Offset table to use, 'bot' basic offset table, 'eot' extended
+            offset table, None - no offset table.
 
         Returns
         ----------
@@ -1971,7 +1938,8 @@ class WsiDicom:
                 output_path,
                 uid_generator,
                 workers,
-                chunk_size
+                chunk_size,
+                offset_table
             )
             filepaths.extend(collection_filepaths)
         return filepaths
