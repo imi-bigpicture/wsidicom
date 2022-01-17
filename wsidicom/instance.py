@@ -555,6 +555,8 @@ class WsiDataset(Dataset):
         image_data: OrderedDict[Tuple[str, float], ImageData]
             List of image data that should be encoded into dataset. Each
             element is a tuple of (optical path, focal plane) and ImageData.
+        scale: int = 1
+            Optionally scale data.
 
         Returns
         ----------
