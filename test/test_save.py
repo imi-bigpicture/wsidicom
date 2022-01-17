@@ -16,8 +16,10 @@ import math
 import os
 import unittest
 from os import urandom
+import sys
 from pathlib import Path
 from random import randint
+import random
 from struct import unpack
 from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, OrderedDict, Sequence, Tuple, cast
@@ -116,16 +118,22 @@ class WsiDicomFileSaveTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tiled_size = Size(10, 10)
         cls.frame_count = cls.tiled_size.area
+        SEED = 0
         MIN_FRAME_LENGTH = 2
         MAX_FRAME_LENGTH = 100
         # Generate test data by itemizing random bytes of random length
         # from MIN_FRAME_LENGTH to MAX_FRAME_LENGTH.
-        cls.test_data = [
-            urandom(randint(
+        rng = random.Random(SEED)
+        lengths = [
+            rng.randint(
                 MIN_FRAME_LENGTH,
                 MAX_FRAME_LENGTH
-            ))
+            )
             for i in range(cls.frame_count)
+        ]
+        cls.test_data = [
+            rng.getrandbits(length*8).to_bytes(length, sys.byteorder)
+            for length in lengths
         ]
         cls.image_data = WsiDicomTestImageData(cls.test_data, cls.tiled_size)
         cls.test_dataset = cls.create_test_dataset(
