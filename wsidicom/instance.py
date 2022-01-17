@@ -256,9 +256,6 @@ class WsiDataset(Dataset):
             for module in module_attributes:
                 for attribute in module:
                     if attribute not in datset:
-                        # warnings.warn(
-                        #     f' is missing {key} attribute {attribute}'
-                        # )
                         passed[key] = False
 
         sop_class_uid = getattr(datset, "SOPClassUID", "")
