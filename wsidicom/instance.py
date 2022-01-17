@@ -19,6 +19,7 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from copy import deepcopy
 from datetime import datetime
 from enum import IntEnum, auto
 from pathlib import Path
@@ -592,19 +593,37 @@ class WsiDataset(Dataset):
         """Return slice thickness."""
         return self._slice_thickness
 
-    def set_dataset_as_tiled_full(
+    def as_tiled_full(
         self,
-        image_data: List[Tuple[Tuple[str, float], 'ImageData']]
-    ):
-        """Set dataset as a tiled full dataset. Make a new Shared functional
-        group sequence and Pixel measure sequence if not in dataset, otherwise
-        update the Pixel measure sequence. Remove Per Frame functional groups
-        sequence. Set number of frames as per tiled size and number of
-        optical paths and focal planes.
+        image_data: OrderedDict[Tuple[str, float], 'ImageData'],
+        scale: int = 1
+    ) -> 'WsiDataset':
+        """Return copy of dataset with properties set to reflect a tiled full
+        arrangement of the listed image data. Optionally set properties to
+        reflect scaled data.
+
+        Parameters
+        ----------
+        image_data: OrderedDict[Tuple[str, float], ImageData]
+            List of image data that should be encoded into dataset. Each
+            element is a tuple of (optical path, focal plane) and ImageData.
+        scale: int = 1
+            Optionally scale data.
+
+        Returns
+        ----------
+        WsiDataset
+            Copy of dataset set as tiled full.
+
         """
-        self.DimensionOrganizationType = 'TILED_FULL'
+        dataset = deepcopy(self)
+        dataset.DimensionOrganizationType = 'TILED_FULL'
+
+        # Make a new Shared functional group sequence and Pixel measure
+        # sequence if not in dataset, otherwise update the Pixel measure
+        # sequence
         shared_functional_group = getattr(
-            self,
+            dataset,
             'SharedFunctionalGroupsSequence',
             Dataset()
         )
@@ -614,27 +633,46 @@ class WsiDataset(Dataset):
             Dataset()
         )
         pixel_measure.PixelSpacing = [
-            DSfloat(self.pixel_spacing.width, True),
-            DSfloat(self.pixel_spacing.height, True)
+            DSfloat(dataset.pixel_spacing.width * scale, True),
+            DSfloat(dataset.pixel_spacing.height * scale, True)
         ]
-        pixel_measure.SpacingBetweenSlices = self.spacing_between_slices
-        pixel_measure.SliceThickness = self.slice_thickness
+        pixel_measure.SpacingBetweenSlices = dataset.spacing_between_slices
+        pixel_measure.SliceThickness = dataset.slice_thickness
+
+        # Insert created pixel measure sequence if non excisted.
         if 'PixelMeasuresSequence' not in shared_functional_group:
             shared_functional_group.PixelMeasuresSequence = (
                 DicomSequence([pixel_measure])
             )
-        if 'SharedFunctionalGroupsSequence' not in self:
-            self.SharedFunctionalGroupsSequence = DicomSequence(
+
+        # Insert created shared functional group sequence if non excisted.
+        if 'SharedFunctionalGroupsSequence' not in dataset:
+            dataset.SharedFunctionalGroupsSequence = DicomSequence(
                 [shared_functional_group]
             )
-        if 'PerFrameFunctionalGroupsSequence' in self:
-            del self['PerFrameFunctionalGroupsSequence']
+
+        # Remove Per Frame functional groups sequence
+        if 'PerFrameFunctionalGroupsSequence' in dataset:
+            del dataset['PerFrameFunctionalGroupsSequence']
+
         focal_planes, optical_paths, tile_count = (
             ImageData.get_frame_information(image_data)
         )
-        self.TotalPixelMatrixFocalPlanes = focal_planes
-        self.NumberOfOpticalPaths = optical_paths
-        self.NumberOfFrames = tile_count*focal_planes*optical_paths
+        dataset.TotalPixelMatrixFocalPlanes = focal_planes
+        dataset.NumberOfOpticalPaths = optical_paths
+        dataset.NumberOfFrames = max(
+            tile_count*focal_planes*optical_paths // (scale * scale),
+            1
+        )
+        dataset.TotalPixelMatrixColumns = max(
+            dataset.image_size.width // scale,
+            1
+        )
+        dataset.TotalPixelMatrixRows = max(
+            dataset.image_size.height // scale,
+            1
+        )
+        return dataset
 
 
 class MetaWsiDicomFile(metaclass=ABCMeta):
@@ -751,7 +789,6 @@ class WsiDicomFile(MetaWsiDicomFile):
             force=False,
             specific_tags=None,
         )
-
         self._pixel_data_position = self._fp.tell()
 
         self._wsi_type = WsiDataset.is_supported_wsi_dicom(
@@ -843,7 +880,7 @@ class WsiDicomFile(MetaWsiDicomFile):
         if self._fp.read_tag() != ItemTag:
             raise WsiDicomFileError(
                 self.filepath,
-                "BOT did not start with an ItemTag"
+                "Basic offset table did not start with an ItemTag"
             )
         bot_length = self._fp.read_UL()
         if bot_length == 0:
@@ -851,7 +888,7 @@ class WsiDicomFile(MetaWsiDicomFile):
         elif bot_length % BOT_BYTES:
             raise WsiDicomFileError(
                 self.filepath,
-                f"BOT length should be a multiple of {BOT_BYTES}"
+                f"Basic offset table should be a multiple of {BOT_BYTES} bytes"
             )
         # Read the BOT into bytes
         bot = self._fp.read(bot_length)
@@ -871,21 +908,23 @@ class WsiDicomFile(MetaWsiDicomFile):
         if eot_length == 0:
             raise WsiDicomFileError(
                 self.filepath,
-                "EOT present but empty"
+                "Expected Extended offset table present but empty"
             )
         elif eot_length % EOT_BYTES:
             raise WsiDicomFileError(
                 self.filepath,
-                f"BOT length should be a multiple of {EOT_BYTES}"
+                "Extended offset table should be a multiple of "
+                f"{EOT_BYTES} bytes"
             )
         # Read the EOT into bytes
         eot = self._fp.read(eot_length)
-        # Read EOT lengths
+        # Read EOT lengths tag
         tag = self._fp.read_tag()
         if tag != Tag('ExtendedOffsetTableLengths'):
             raise WsiDicomFileError(
                 self.filepath,
-                f"Expected EOT lengths after EOT, found {tag}"
+                "Expected Extended offset table lengths tag after reading "
+                f"Extended offset table, found {tag}"
             )
         length = self._read_tag_length()
         # Jump over EOT lengths for now
@@ -986,8 +1025,17 @@ class WsiDicomFile(MetaWsiDicomFile):
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
 
-        self._read_sequence_delimeter()
+        self._read_sequence_delimiter()
         return positions
+
+    def _read_sequence_delimiter(self):
+        """Check if last read tag was a sequence delimter.
+        Raises WsiDicomFileError otherwise.
+        """
+        TAG_BYTES = 4
+        self._fp.seek(-TAG_BYTES, 1)
+        if(self._fp.read_tag() != SequenceDelimiterTag):
+            raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
 
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
@@ -1020,45 +1068,46 @@ class WsiDicomFile(MetaWsiDicomFile):
         List[Tuple[int, int]]
             List of frame positions and lenghts
         """
-        tag = self._fp.read_tag()  # Either EOT or Pixel data tag
-        frame_positions = []
+
         table = None
         table_type = 'bot'
-        if tag == Tag('ExtendedOffsetTable'):
+        pixel_data_or_eot_tag = self._fp.read_tag()
+        if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
             table_type = 'eot'
             table = self._read_eot()
-            tag = self._fp.read_tag()
-
-        if tag == Tag('PixelData'):
-            length = self._read_tag_length()
-            if length != 0xFFFFFFFF:
-                raise WsiDicomFileError(
-                    self.filepath,
-                    "Expected undefined length when reading Pixel data"
-                )
-            bot = self._read_bot()
-            pixels_start = self._fp.tell()
-
-            if bot is not None:
-                if table is not None:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        "Both BOT and EOT present"
-                    )
-                table = bot
-
-            if table is None:
-                frame_positions = self._read_positions_from_pixeldata()
-            else:
-                frame_positions = self._parse_table(
-                    table,
-                    table_type,
-                    pixels_start
-                )
+            pixel_data_tag = self._fp.read_tag()
         else:
+            pixel_data_tag = pixel_data_or_eot_tag
+
+        if pixel_data_tag != Tag('PixelData'):
             WsiDicomFileError(
                 self.filepath,
                 "Expected PixelData tag"
+            )
+        length = self._read_tag_length()
+        if length != 0xFFFFFFFF:
+            raise WsiDicomFileError(
+                self.filepath,
+                "Expected undefined length when reading Pixel data"
+            )
+        bot = self._read_bot()
+
+        if bot is not None:
+            if table is not None:
+                raise WsiDicomFileError(
+                    self.filepath,
+                    "Both BOT and EOT present"
+                )
+            table = bot
+
+        frame_positions = []
+        if table is None:
+            frame_positions = self._read_positions_from_pixeldata()
+        else:
+            frame_positions = self._parse_table(
+                table,
+                table_type,
+                self._fp.tell()
             )
 
         if(self.frame_count != len(frame_positions)):
@@ -1784,7 +1833,7 @@ class ImageData(metaclass=ABCMeta):
 
     @staticmethod
     def get_frame_information(
-        data: List[Tuple[Tuple[str, float], 'ImageData']]
+        data: OrderedDict[Tuple[str, float], 'ImageData']
     ) -> Tuple[int, int, int]:
         """Return number of focal planes, number of optical paths, and
         number of tiles per plane.
@@ -1792,7 +1841,7 @@ class ImageData(metaclass=ABCMeta):
         focal_planes: Set[float] = set()
         optical_paths: Set[str] = set()
         tiled_sizes: Set[Size] = set()
-        for (optical_path, focal_plane), image_data in data:
+        for (optical_path, focal_plane), image_data in data.items():
             optical_paths.add(optical_path)
             focal_planes.add(focal_plane)
             tiled_sizes.add(image_data.tiled_size)
@@ -2522,7 +2571,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         uid: UID,
         transfer_syntax: UID,
         dataset: Dataset,
-        data: List[Tuple[Tuple[str, float], ImageData]],
+        data: OrderedDict[Tuple[str, float], ImageData],
         workers: int,
         chunk_size: int,
         offset_table: Optional[str],
@@ -2538,7 +2587,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             Transfer syntax for file
         dataset: Dataset
             Dataset to write (exluding pixel data).
-        data: List[Tuple[Tuple[str, float], ImageData]]
+        data: OrderedDict[Tuple[str, float], ImageData],
             Pixel data to write.
         workers: int
             Number of workers to use for writing pixel data.
@@ -2560,7 +2609,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             offset_table
         )
         frame_positions: List[int] = []
-        for (path, z), image_data in data:
+        for (path, z), image_data in data.items():
             frame_positions += self._write_pixel_data(
                 image_data,
                 z,
@@ -2572,7 +2621,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         pixels_end = self._fp.tell()
         self._write_pixel_data_end()
 
-        if self != Path(os.devnull) and offset_table is not None:
+        if offset_table is not None:
             if table_start is None:
                 raise ValueError('Table start should not be None')
             elif offset_table == 'eot':
@@ -2689,6 +2738,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         self._fp.write_tag(ItemTag)
         self._fp.write_UL(tag_lengths)
         for index in range(number_of_frames):
+
             self._fp.write_UL(0)
         return table_start
 
@@ -2753,7 +2803,8 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         if last_entry > 2**32 - 1:
             raise NotImplementedError(
                 "Image data exceeds 2^32 - 1 bytes "
-                "An extended offset table should be used")
+                "An extended offset table should be used"
+            )
 
         self._fp.seek(bot_start)  # Go to first BOT entry
         self._check_tag_and_length(

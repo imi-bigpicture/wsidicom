@@ -14,13 +14,13 @@
 
 import math
 import os
+import random
+import sys
 import unittest
-from os import urandom
 from pathlib import Path
-from random import randint
 from struct import unpack
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional, Sequence, Tuple, cast
+from typing import Dict, List, Optional, OrderedDict, Sequence, Tuple, cast
 
 import pytest
 from PIL import Image, ImageChops, ImageFilter, ImageStat
@@ -116,16 +116,22 @@ class WsiDicomFileSaveTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tiled_size = Size(10, 10)
         cls.frame_count = cls.tiled_size.area
+        SEED = 0
         MIN_FRAME_LENGTH = 2
         MAX_FRAME_LENGTH = 100
         # Generate test data by itemizing random bytes of random length
         # from MIN_FRAME_LENGTH to MAX_FRAME_LENGTH.
-        cls.test_data = [
-            urandom(randint(
+        rng = random.Random(SEED)
+        lengths = [
+            rng.randint(
                 MIN_FRAME_LENGTH,
                 MAX_FRAME_LENGTH
-            ))
+            )
             for i in range(cls.frame_count)
+        ]
+        cls.test_data = [
+            rng.getrandbits(length*8).to_bytes(length, sys.byteorder)
+            for length in lengths
         ]
         cls.image_data = WsiDicomTestImageData(cls.test_data, cls.tiled_size)
         cls.test_dataset = cls.create_test_dataset(
@@ -282,7 +288,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
             frame_index = read_file._parse_pixel_data()
             return frame_index
 
-    def assert_end_of_file(self, file: WsiDicomTestFile):
+    def assertEndOfFile(self, file: WsiDicomTestFile):
         with self.assertRaises(EOFError):
             file._fp.read(1, need_exact_length=True)
 
@@ -311,7 +317,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                 self.assertEqual(length, BOT_ITEM_LENGTH*self.frame_count)
                 for frame in range(self.frame_count):
                     self.assertEqual(read_file._fp.read_UL(), 0)
-                self.assert_end_of_file(read_file)
+                self.assertEndOfFile(read_file)
 
     def test_reserve_eot(self):
         with TemporaryDirectory() as tempdir:
@@ -344,7 +350,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                         unpack('<Q', read_file._fp.read(EOT_ITEM_LENGTH))[0],
                         0
                     )
-                self.assert_end_of_file(read_file)
+                self.assertEndOfFile(read_file)
 
     def test_write_pixel_end(self):
         with TemporaryDirectory() as tempdir:
@@ -413,10 +419,13 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                         generate_uid(),
                         JPEGBaseline8Bit,
                         self.test_dataset,
-                        [((
-                            self.image_data.default_path,
-                            self.image_data.default_z
-                        ), self.image_data)],
+                        OrderedDict({
+                            (
+                                self.image_data.default_path,
+                                self.image_data.default_z
+                            ):
+                            self.image_data
+                        }),
                         1,
                         100,
                         table
