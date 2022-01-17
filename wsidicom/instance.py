@@ -969,45 +969,46 @@ class WsiDicomFile(MetaWsiDicomFile):
         List[Tuple[int, int]]
             List of frame positions and lenghts
         """
-        tag = self._fp.read_tag()  # Either EOT or Pixel data tag
-        frame_positions = []
+
         table = None
         table_type = 'bot'
-        if tag == Tag('ExtendedOffsetTable'):
+        pixel_data_or_eot_tag = self._fp.read_tag()
+        if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
             table_type = 'eot'
             table = self._read_eot()
-            tag = self._fp.read_tag()
-
-        if tag == Tag('PixelData'):
-            length = self._read_tag_length()
-            if length != 0xFFFFFFFF:
-                raise WsiDicomFileError(
-                    self.filepath,
-                    "Expected undefined length when reading Pixel data"
-                )
-            bot = self._read_bot()
-            pixels_start = self._fp.tell()
-
-            if bot is not None:
-                if table is not None:
-                    raise WsiDicomFileError(
-                        self.filepath,
-                        "Both BOT and EOT present"
-                    )
-                table = bot
-
-            if table is None:
-                frame_positions = self._read_positions_from_pixeldata()
-            else:
-                frame_positions = self._parse_table(
-                    table,
-                    table_type,
-                    pixels_start
-                )
+            pixel_data_tag = self._fp.read_tag()
         else:
+            pixel_data_tag = pixel_data_or_eot_tag
+
+        if pixel_data_tag != Tag('PixelData'):
             WsiDicomFileError(
                 self.filepath,
                 "Expected PixelData tag"
+            )
+        length = self._read_tag_length()
+        if length != 0xFFFFFFFF:
+            raise WsiDicomFileError(
+                self.filepath,
+                "Expected undefined length when reading Pixel data"
+            )
+        bot = self._read_bot()
+
+        if bot is not None:
+            if table is not None:
+                raise WsiDicomFileError(
+                    self.filepath,
+                    "Both BOT and EOT present"
+                )
+            table = bot
+
+        frame_positions = []
+        if table is None:
+            frame_positions = self._read_positions_from_pixeldata()
+        else:
+            frame_positions = self._parse_table(
+                table,
+                table_type,
+                self._fp.tell()
             )
 
         if(self.frame_count != len(frame_positions)):
