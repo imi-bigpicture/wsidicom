@@ -183,7 +183,7 @@ class Size:
             )
         return NotImplemented
 
-    def __truediv__(self, divider: Union[int, 'Size', SizeMm]) -> 'Size':
+    def ceil_div(self, divider: Union[int, 'Size', SizeMm]) -> 'Size':
         if isinstance(divider, (int, float)):
             return Size(
                 math.ceil(self.width/divider),
@@ -270,7 +270,7 @@ class Point:
             return Point(int(self.x/divider.width), int(self.y/divider.height))
         return NotImplemented
 
-    def __truediv__(self, divider: Union[int, float, Size, SizeMm]) -> 'Point':
+    def ceil_div(self, divider: Union[int, float, Size, SizeMm]) -> 'Point':
         if isinstance(divider, (int, float)):
             return Point(
                 math.ceil(self.x/divider),
