@@ -654,23 +654,18 @@ class WsiDataset(Dataset):
         if 'PerFrameFunctionalGroupsSequence' in dataset:
             del dataset['PerFrameFunctionalGroupsSequence']
 
-        focal_planes, optical_paths, tile_count = (
+        focal_planes, optical_paths, tiled_size = (
             ImageData.get_frame_information(image_data)
         )
         dataset.TotalPixelMatrixFocalPlanes = focal_planes
         dataset.NumberOfOpticalPaths = optical_paths
         dataset.NumberOfFrames = max(
-            tile_count*focal_planes*optical_paths // (scale * scale),
+            tiled_size.ceil_div(scale).area,
             1
-        )
-        dataset.TotalPixelMatrixColumns = max(
-            dataset.image_size.width // scale,
-            1
-        )
-        dataset.TotalPixelMatrixRows = max(
-            dataset.image_size.height // scale,
-            1
-        )
+        ) * focal_planes * optical_paths
+        scaled_size = dataset.image_size.ceil_div(scale)
+        dataset.TotalPixelMatrixColumns = max(scaled_size.width, 1)
+        dataset.TotalPixelMatrixRows = max(scaled_size.height, 1)
         return dataset
 
 
@@ -1833,9 +1828,9 @@ class ImageData(metaclass=ABCMeta):
     @staticmethod
     def get_frame_information(
         data: OrderedDict[Tuple[str, float], 'ImageData']
-    ) -> Tuple[int, int, int]:
+    ) -> Tuple[int, int, Size]:
         """Return number of focal planes, number of optical paths, and
-        number of tiles per plane.
+        tiled size.
         """
         focal_planes: Set[float] = set()
         optical_paths: Set[str] = set()
@@ -1847,7 +1842,7 @@ class ImageData(metaclass=ABCMeta):
         if len(tiled_sizes) != 1:
             raise ValueError('Expected only one tiled size')
         tiled_size = list(tiled_sizes)[0]
-        return len(focal_planes), len(optical_paths), tiled_size.area
+        return len(focal_planes), len(optical_paths), tiled_size
 
 
 class WsiDicomImageData(ImageData):
