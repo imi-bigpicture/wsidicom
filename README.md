@@ -67,11 +67,11 @@ slide.close()
 ```
 
 ## Settings
-*wsidicom* can be configured with the settings variable. For example, to relax the file parsing so that DICOM files generated with [wsi2dcm](https://github.com/GoogleCloudPlatform/wsi-to-dicom-converter) can be opened:
+*wsidicom* can be configured with the settings variable. For example, set the parsing of files to strict:
 ```python
 from wsidicom import settings
-settings.strict_attribute_check = False
-settings.strict_uid_check = False
+settings.strict_uid_check = True
+settings._strict_attribute_check = True
 ```
 
 ## Data structure
