@@ -66,6 +66,14 @@ tile_bytes = slide.read_encoded_tile(6, (1, 1))
 slide.close()
 ```
 
+## Settings
+*wsidicom* can be configured with the settings variable. For example, set the parsing of files to strict:
+```python
+from wsidicom import settings
+settings.strict_uid_check = True
+settings._strict_attribute_check = True
+```
+
 ## Data structure
 A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of different classes, starting from bottom:
 - *WsiDicomFile*, represents a WSI DICOM file, used for accessing DicomImageData and WsiDataset.

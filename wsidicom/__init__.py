@@ -20,3 +20,4 @@ from .graphical_annotations import (Annotation, AnnotationGroup,
 from .instance import WsiDataset, WsiInstance
 from .wsidicom import (WsiDicom, WsiDicomLabels, WsiDicomLevels,
                        WsiDicomOverviews, ImageData)
+from .config import settings
