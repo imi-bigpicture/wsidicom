@@ -12,30 +12,48 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from pydicom.uid import UID as Uid
 from dataclasses import dataclass
 from typing import Optional
+
+from pydicom.uid import UID as Uid
+
+from wsidicom.config import settings
 
 WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
 ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.91.1'
 
 
 @dataclass
-class BaseUids:
-    """Represents the UIDs that should be common for all files in the wsi."""
+class SlideUids:
+    """Represents the UIDs that should be common for all files of a slide."""
     study_instance: Uid
     series_instance: Uid
     frame_of_reference: Optional[Uid] = None
 
+    def __init__(
+        self,
+        study_instance: Uid,
+        series_instance: Uid,
+        frame_of_reference: Optional[Uid] = None
+    ) -> None:
+        if settings.strict_uid_check and frame_of_reference is None:
+            raise ValueError(
+                'Frame of reference uid is missing and strict uid check is '
+                'enabled'
+            )
+        self.study_instance = study_instance
+        self.series_instance = series_instance
+        self.frame_of_reference = frame_of_reference
+
     def __str__(self) -> str:
         return (
-            f"BaseUids study: {self.study_instance}, "
+            f"SlideUids study: {self.study_instance}, "
             f"series: {self.series_instance}, "
             f"frame of reference {self.frame_of_reference}"
         )
 
-    def __eq__(self, other: 'BaseUids') -> bool:
-        if isinstance(other, BaseUids):
+    def __eq__(self, other: 'SlideUids') -> bool:
+        if isinstance(other, SlideUids):
             return (
                 self.study_instance == other.study_instance and
                 self.series_instance == other.series_instance and
@@ -47,13 +65,22 @@ class BaseUids:
             )
         return NotImplemented
 
+    def matches(self, other: 'SlideUids') -> bool:
+        if settings.strict_uid_check:
+            return self == other
+
+        return (
+            self.study_instance == other.study_instance and
+            self.series_instance == other.series_instance
+        )
+
 
 @dataclass
 class FileUids:
     """Represents the UIDs in a DICOM-file."""
     instance: Uid
     concatenation: Optional[Uid]
-    base: BaseUids
+    base: SlideUids
 
     @property
     def identifier(self) -> Uid:
