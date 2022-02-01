@@ -1594,9 +1594,8 @@ class WsiDicom:
                     wsi_file.close()
             elif sop_class_uid == ANN_SOP_CLASS_UID:
                 annotation_files.append(filepath)
-
         base_dataset = cls._get_base_dataset(level_files)
-        base_uids = base_dataset.base_uids
+        base_uids = base_dataset.uids.base
         base_tile_size = base_dataset.tile_size
         level_instances = WsiInstance.open(
             level_files,
