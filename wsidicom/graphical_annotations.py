@@ -34,7 +34,7 @@ from pydicom.uid import (ExplicitVRBigEndian, ExplicitVRLittleEndian,
 from pydicom.values import convert_numbers
 
 from .geometry import PointMm, RegionMm, SizeMm
-from .uid import ANN_SOP_CLASS_UID, BaseUids, Uid
+from .uid import ANN_SOP_CLASS_UID, SlideUids, Uid
 
 config.enforce_valid_values = True
 config.future_behavior()
@@ -1899,7 +1899,7 @@ class AnnotationInstance:
         self,
         groups: Sequence[AnnotationGroup],
         coordinate_type: str,
-        base_uids: BaseUids
+        slide_uids: SlideUids
     ):
         """Represents a collection of annotation groups.
 
@@ -1917,7 +1917,7 @@ class AnnotationInstance:
         if coordinate_type not in ['image', 'volume']:
             raise ValueError("Coordiante type should be 'image' or 'volume'")
         self.coordinate_type = coordinate_type
-        self.base_uids = base_uids
+        self.slide_uids = slide_uids
         self.datetime = datetime.now()
         self.modality = 'ANN'
         self.series_number: int
@@ -1925,7 +1925,7 @@ class AnnotationInstance:
     def __repr__(self) -> str:
         return (
             f"AnnotationInstance({self.groups}, "
-            f"{self.base_uids})"
+            f"{self.slide_uids})"
         )
 
     def save(
@@ -1964,10 +1964,10 @@ class AnnotationInstance:
             ds.AnnotationCoordinateType = '2D'
         elif self.coordinate_type == 'volume':
             ds.AnnotationCoordinateType = '3D'
-        if self.base_uids.frame_of_reference is not None:
-            ds.FrameOfReferenceUID = self.base_uids.frame_of_reference
-        ds.StudyInstanceUID = self.base_uids.study_instance
-        ds.SeriesInstanceUID = self.base_uids.series_instance
+        if self.slide_uids.frame_of_reference is not None:
+            ds.FrameOfReferenceUID = self.slide_uids.frame_of_reference
+        ds.StudyInstanceUID = self.slide_uids.study_instance
+        ds.SeriesInstanceUID = self.slide_uids.series_instance
         ds.SOPInstanceUID = uid_generator()
         ds.SOPClassUID = ANN_SOP_CLASS_UID
 
@@ -2030,7 +2030,7 @@ class AnnotationInstance:
             Annotation groups read from dataset.
         """
         groups: List[AnnotationGroup] = []
-        base_uids: Optional[BaseUids] = None
+        slide_uids: Optional[SlideUids] = None
 
         if dataset.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
             raise ValueError("SOP Class UID of file is wrong")
@@ -2047,14 +2047,14 @@ class AnnotationInstance:
             )
 
         instance = dataset.SOPInstanceUID
-        if base_uids is None:
-            base_uids = BaseUids(
+        if slide_uids is None:
+            slide_uids = SlideUids(
                 dataset.StudyInstanceUID,
                 dataset.SeriesInstanceUID,
                 frame_of_reference_uid
             )
         else:
-            if base_uids != BaseUids(
+            if slide_uids != SlideUids(
                 dataset.StudyInstanceUID,
                 dataset.SeriesInstanceUID,
                 frame_of_reference_uid
@@ -2072,7 +2072,7 @@ class AnnotationInstance:
                 raise NotImplementedError("Unsupported Graphic type")
             annotation = annotation_class.from_ds(annotation_ds, instance)
             groups.append(annotation)
-        return cls(groups, coordinate_type, base_uids)
+        return cls(groups, coordinate_type, slide_uids)
 
     def __getitem__(
         self,
