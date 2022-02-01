@@ -27,7 +27,6 @@ from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.config import settings
 from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
@@ -38,7 +37,7 @@ from wsidicom.instance import (ImageData, WsiDataset, WsiDicomFile,
 from wsidicom.optical import OpticalManager
 from wsidicom.stringprinting import (dict_pretty_str, list_pretty_str,
                                      str_indent)
-from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, BaseUids
+from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 
 
 class WsiDicomGroup:
@@ -96,7 +95,7 @@ class WsiDicomGroup:
         return self.instances[index]
 
     @property
-    def uids(self) -> BaseUids:
+    def uids(self) -> SlideUids:
         """Return uids"""
         return self._uids
 
@@ -973,7 +972,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         return self._groups
 
     @property
-    def uids(self) -> Optional[BaseUids]:
+    def uids(self) -> Optional[SlideUids]:
         """Return uids."""
         return self._uids
 
@@ -1017,7 +1016,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
     def _validate_series(
             self,
             groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
-    ) -> Optional[BaseUids]:
+    ) -> Optional[SlideUids]:
         """Check that no files or instances in series is duplicate and that
         all groups in series matches.
         Raises WsiDicomMatchError otherwise.
@@ -1030,7 +1029,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         Returns
         ----------
-        Optional[BaseUids]:
+        Optional[SlideUids]:
             Matching uids
         """
         WsiDataset.check_duplicate_dataset(self.datasets, self)
@@ -1458,7 +1457,7 @@ class WsiDicom:
 
         if self.annotations != []:
             for annotation in self.annotations:
-                if annotation.base_uids != self.uids:
+                if annotation.slide_uids != self.uids:
                     warnings.warn("Annotations uids does not match")
 
         self.__enter__()
@@ -1595,15 +1594,15 @@ class WsiDicom:
                 annotation_files.append(filepath)
 
         base_dataset = cls._get_base_dataset(level_files)
-        base_uids = base_dataset.base_uids
+        slide_uids = base_dataset.slide_uids
         base_tile_size = base_dataset.tile_size
         level_instances = WsiInstance.open(
             level_files,
-            base_uids,
+            slide_uids,
             base_tile_size
         )
-        label_instances = WsiInstance.open(label_files, base_uids)
-        overview_instances = WsiInstance.open(overview_files, base_uids)
+        label_instances = WsiInstance.open(label_files, slide_uids)
+        overview_instances = WsiInstance.open(overview_files, slide_uids)
 
         levels = WsiDicomLevels.open(level_instances)
         labels = WsiDicomLabels.open(label_instances)
@@ -2057,7 +2056,7 @@ class WsiDicom:
     def _validate_collection(
         self,
         series: List[WsiDicomSeries]
-    ) -> BaseUids:
+    ) -> SlideUids:
         """Check that no files or instance in collection is duplicate, and, if
         strict, that all series have the same base uids.
         Raises WsiDicomMatchError otherwise. Returns base uid for collection.
@@ -2069,19 +2068,19 @@ class WsiDicom:
 
         Returns
         ----------
-        BaseUids
+        SlideUids
             Matching uids
         """
         WsiDataset.check_duplicate_dataset(self.datasets, self)
         WsiInstance.check_duplicate_instance(self.instances, self)
 
         try:
-            base_uids = next(
+            slide_uids = next(
                 item.uids for item in series if item.uids is not None
             )
         except StopIteration:
             raise WsiDicomNotFoundError("Valid series", "in collection")
         for item in series:
-            if item.uids is not None and item.uids != base_uids:
+            if item.uids is not None and item.uids != slide_uids:
                 raise WsiDicomMatchError(str(item), str(self))
-        return base_uids
+        return slide_uids
