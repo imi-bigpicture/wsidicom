@@ -17,7 +17,6 @@ import os
 import warnings
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from copy import deepcopy
 from pathlib import Path
 from typing import (Any, Callable, DefaultDict, Dict, List, Optional,
                     OrderedDict, Sequence, Tuple, Union, cast)
@@ -28,7 +27,6 @@ from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.config import settings
 from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
@@ -39,7 +37,7 @@ from wsidicom.instance import (ImageData, WsiDataset, WsiDicomFile,
 from wsidicom.optical import OpticalManager
 from wsidicom.stringprinting import (dict_pretty_str, list_pretty_str,
                                      str_indent)
-from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, BaseUids
+from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 
 
 class WsiDicomGroup:
@@ -97,7 +95,7 @@ class WsiDicomGroup:
         return self.instances[index]
 
     @property
-    def uids(self) -> BaseUids:
+    def uids(self) -> SlideUids:
         """Return uids"""
         return self._uids
 
@@ -453,11 +451,10 @@ class WsiDicomGroup:
         instances in group matches. Raises WsiDicomMatchError otherwise.
         """
         instances = list(self.instances.values())
-        if settings.strict_uid_check:
-            base_instance = instances[0]
-            for instance in instances[1:]:
-                if not base_instance.matches(instance):
-                    raise WsiDicomMatchError(str(instance), str(self))
+        base_instance = instances[0]
+        for instance in instances[1:]:
+            if not base_instance.matches(instance):
+                raise WsiDicomMatchError(str(instance), str(self))
 
         WsiDataset.check_duplicate_dataset(self.datasets, self)
         WsiInstance.check_duplicate_instance(instances, self)
@@ -523,7 +520,7 @@ class WsiDicomGroup:
     @staticmethod
     def _list_image_data(
         instances: Sequence[WsiInstance]
-    ) -> List[Tuple[Tuple[str, float], ImageData]]:
+    ) -> OrderedDict[Tuple[str, float], ImageData]:
         """Sort ImageData in instances by optical path and focal
         plane.
 
@@ -535,7 +532,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Tuple[Tuple[str, float], ImageData]
+        OrderedDict[Tuple[str, float], ImageData]:
             ImageData sorted by optical path and focal plane.
         """
         output: Dict[Tuple[str, float], ImageData] = {}
@@ -544,30 +541,7 @@ class WsiDicomGroup:
                 for z in instance.focal_planes:
                     if (optical_path, z) not in output:
                         output[optical_path, z] = instance.image_data
-        return list(OrderedDict(output).items())
-
-    @staticmethod
-    def _get_number_of_frames(
-        instances: Sequence[WsiInstance]
-    ) -> int:
-        """
-
-        Parameters
-        ----------
-        instances: Sequence[WsiInstance]
-
-
-        Returns
-        ----------
-        int
-        """
-        frames = 0
-        for instance in instances:
-            tiles = instance.image_data.tiled_size.area
-            optical_paths = len(instance.optical_paths)
-            focal_planes = len(instance.focal_planes)
-            frames += tiles*optical_paths*focal_planes
-        return frames
+        return OrderedDict(output)
 
     def save(
         self,
@@ -609,17 +583,10 @@ class WsiDicomGroup:
         filepaths: List[Path] = []
         for instances in self._group_instances_to_file():
             uid = uid_generator()
-            if output_path == os.devnull:
-                filepath = Path(output_path)
-            else:
-                filepath = Path(os.path.join(output_path, uid + '.dcm'))
-
+            filepath = Path(os.path.join(output_path, uid + '.dcm'))
             transfer_syntax = instances[0].image_data.transfer_syntax
-            dataset = deepcopy(instances[0].dataset)
-            frames = self._get_number_of_frames(instances)
-            dataset.NumberOfFrames = frames
             image_data_list = self._list_image_data(instances)
-            dataset.set_dataset_as_tiled_full(image_data_list)
+            dataset = instances[0].dataset.as_tiled_full(image_data_list)
             with WsiDicomFileWriter(filepath) as wsi_file:
                 wsi_file.write(
                     uid,
@@ -917,26 +884,15 @@ class WsiDicomLevel(WsiDicomGroup):
                 "Can only construct pyramid from DICOM WSI files"
             )
 
-        new_image_size = self.default_instance.size / scale
         for instances in self._group_instances_to_file():
             uid = uid_generator()
             filepath = Path(os.path.join(output_path, uid + '.dcm'))
             transfer_syntax = instances[0].image_data.transfer_syntax
-            dataset = deepcopy(instances[0].dataset)
-            frames = self._get_number_of_frames(instances)
             image_data_list = self._list_image_data(instances)
-            dataset.set_dataset_as_tiled_full(image_data_list)
-            # Modify dataset to reflect scaled data
-            frames = max(frames // (scale*scale), 1)
-            dataset.NumberOfFrames = frames
-            dataset.TotalPixelMatrixColumns = new_image_size.width
-            dataset.TotalPixelMatrixRows = new_image_size.height
-
-            new_pixel_spacing = self.pixel_spacing * scale
-            (
-                dataset.SharedFunctionalGroupsSequence[0].
-                PixelMeasuresSequence[0].PixelSpacing
-            ) = list(new_pixel_spacing.to_tuple())
+            dataset = instances[0].dataset.as_tiled_full(
+                image_data_list,
+                scale
+            )
 
             with WsiDicomFileWriter(filepath) as wsi_file:
                 wsi_file.write(
@@ -1016,7 +972,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         return self._groups
 
     @property
-    def uids(self) -> Optional[BaseUids]:
+    def uids(self) -> Optional[SlideUids]:
         """Return uids."""
         return self._uids
 
@@ -1059,8 +1015,8 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     def _validate_series(
             self,
-            groups: Union[Sequence[WsiDicomGroup], Sequence[WsiDicomLevel]]
-    ) -> Optional[BaseUids]:
+            groups: Union[List[WsiDicomGroup], Sequence[WsiDicomLevel]]
+    ) -> Optional[SlideUids]:
         """Check that no files or instances in series is duplicate and that
         all groups in series matches.
         Raises WsiDicomMatchError otherwise.
@@ -1073,7 +1029,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         Returns
         ----------
-        Optional[BaseUids]:
+        Optional[SlideUids]:
             Matching uids
         """
         WsiDataset.check_duplicate_dataset(self.datasets, self)
@@ -1501,7 +1457,7 @@ class WsiDicom:
 
         if self.annotations != []:
             for annotation in self.annotations:
-                if annotation.base_uids != self.uids:
+                if annotation.slide_uids != self.uids:
                     warnings.warn("Annotations uids does not match")
 
         self.__enter__()
@@ -1638,15 +1594,15 @@ class WsiDicom:
                 annotation_files.append(filepath)
 
         base_dataset = cls._get_base_dataset(level_files)
-        base_uids = base_dataset.base_uids
+        slide_uids = base_dataset.slide_uids
         base_tile_size = base_dataset.tile_size
         level_instances = WsiInstance.open(
             level_files,
-            base_uids,
+            slide_uids,
             base_tile_size
         )
-        label_instances = WsiInstance.open(label_files, base_uids)
-        overview_instances = WsiInstance.open(overview_files, base_uids)
+        label_instances = WsiInstance.open(label_files, slide_uids)
+        overview_instances = WsiInstance.open(overview_files, slide_uids)
 
         levels = WsiDicomLevels.open(level_instances)
         labels = WsiDicomLabels.open(label_instances)
@@ -2100,7 +2056,7 @@ class WsiDicom:
     def _validate_collection(
         self,
         series: Sequence[WsiDicomSeries]
-    ) -> BaseUids:
+    ) -> SlideUids:
         """Check that no files or instance in collection is duplicate, and, if
         strict, that all series have the same base uids.
         Raises WsiDicomMatchError otherwise. Returns base uid for collection.
@@ -2112,20 +2068,19 @@ class WsiDicom:
 
         Returns
         ----------
-        BaseUids
+        SlideUids
             Matching uids
         """
         WsiDataset.check_duplicate_dataset(self.datasets, self)
         WsiInstance.check_duplicate_instance(self.instances, self)
 
         try:
-            base_uids = next(
+            slide_uids = next(
                 item.uids for item in series if item.uids is not None
             )
         except StopIteration:
             raise WsiDicomNotFoundError("Valid series", "in collection")
-        if settings.strict_uid_check:
-            for item in series:
-                if item.uids is not None and item.uids != base_uids:
-                    raise WsiDicomMatchError(str(item), str(self))
-        return base_uids
+        for item in series:
+            if item.uids is not None and item.uids != slide_uids:
+                raise WsiDicomMatchError(str(item), str(self))
+        return slide_uids
