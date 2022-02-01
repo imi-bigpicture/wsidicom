@@ -45,7 +45,7 @@ from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
                              WsiDicomUidDuplicateError)
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.uid import WSI_SOP_CLASS_UID, BaseUids, FileUids
+from wsidicom.uid import WSI_SOP_CLASS_UID, SlideUids, FileUids
 
 
 class Requirement(IntEnum):
@@ -162,7 +162,7 @@ class WsiDataset(Dataset):
         )
         frame_of_reference_uid = self._get('FrameOfReferenceUID')
 
-        self._base_uids = BaseUids(
+        self._slide_uids = SlideUids(
             self.StudyInstanceUID,
             self.SeriesInstanceUID,
             frame_of_reference_uid,
@@ -170,7 +170,7 @@ class WsiDataset(Dataset):
         self._uids = FileUids(
             self.instance_uid,
             self.concatenation_uid,
-            self.base_uids
+            self.slide_uids
         )
         if self.concatenation_uid is None:
             self._frame_offset = 0
@@ -395,7 +395,7 @@ class WsiDataset(Dataset):
 
     def matches_series(
         self,
-        uids: BaseUids,
+        uids: SlideUids,
         tile_size: Optional[Size] = None
     ) -> bool:
         """Check if instance is valid (Uids and tile size match).
@@ -405,7 +405,7 @@ class WsiDataset(Dataset):
         if tile_size is not None and tile_size != self.tile_size:
             return False
 
-        return self.base_uids.matches(uids)
+        return self.slide_uids.matches(uids)
 
     def read_optical_path_identifier(self, frame: Dataset) -> str:
         """Return optical path identifier from frame, or from self if not
@@ -432,9 +432,9 @@ class WsiDataset(Dataset):
         return self._concatenation_uid
 
     @property
-    def base_uids(self) -> BaseUids:
+    def slide_uids(self) -> SlideUids:
         """Return base uids (study, series, and frame of reference Uids)."""
-        return self._base_uids
+        return self._slide_uids
 
     @property
     def uids(self) -> FileUids:
@@ -798,8 +798,8 @@ class WsiDicomFile(MetaWsiDicomFile):
             self._dataset = WsiDataset(dataset)
             instance_uid = self.dataset.instance_uid
             concatenation_uid = self.dataset.concatenation_uid
-            base_uids = self.dataset.base_uids
-            self._uids = FileUids(instance_uid, concatenation_uid, base_uids)
+            slide_uids = self.dataset.slide_uids
+            self._uids = FileUids(instance_uid, concatenation_uid, slide_uids)
             self._frame_offset = self.dataset.frame_offset
             self._frame_count = self.dataset.frame_count
             self._frame_positions = self._parse_pixel_data()
@@ -1124,7 +1124,7 @@ class WsiDicomFile(MetaWsiDicomFile):
     @staticmethod
     def filter_files(
         files: List['WsiDicomFile'],
-        series_uids: BaseUids,
+        series_uids: SlideUids,
         series_tile_size: Optional[Size] = None
     ) -> List['WsiDicomFile']:
         """Filter list of wsi dicom files to only include matching uids and
@@ -3175,7 +3175,7 @@ class WsiInstance:
         return self._image_data.tiled_size
 
     @property
-    def uids(self) -> BaseUids:
+    def uids(self) -> SlideUids:
         """Return base uids"""
         return self._uids
 
@@ -3183,7 +3183,7 @@ class WsiInstance:
     def open(
         cls,
         files: List[WsiDicomFile],
-        series_uids: BaseUids,
+        series_uids: SlideUids,
         series_tile_size: Optional[Size] = None
     ) -> List['WsiInstance']:
         """Create instances from Dicom files. Only files with matching series
@@ -3193,7 +3193,7 @@ class WsiInstance:
         ----------
         files: List[WsiDicomFile]
             Files to create instances from.
-        series_uids: BaseUids
+        series_uids: SlideUids
             Uid to match against.
         series_tile_size: Optional[Size]
             Tile size to match against (for level instances).
@@ -3244,7 +3244,7 @@ class WsiInstance:
     def _validate_instance(
         self,
         datasets: List[WsiDataset]
-    ) -> Tuple[UID, BaseUids]:
+    ) -> Tuple[UID, SlideUids]:
         """Check that no files in instance are duplicate, that all files in
         instance matches (uid, type and size).
         Raises WsiDicomMatchError otherwise.
@@ -3252,7 +3252,7 @@ class WsiInstance:
 
         Returns
         ----------
-        Tuple[UID, BaseUids]
+        Tuple[UID, SlideUids]
             Instance identifier uid and base uids
         """
         WsiDataset.check_duplicate_dataset(datasets, self)
