@@ -452,11 +452,10 @@ class WsiDicomGroup:
         instances in group matches. Raises WsiDicomMatchError otherwise.
         """
         instances = list(self.instances.values())
-        if settings.strict_uid_check:
-            base_instance = instances[0]
-            for instance in instances[1:]:
-                if not base_instance.matches(instance):
-                    raise WsiDicomMatchError(str(instance), str(self))
+        base_instance = instances[0]
+        for instance in instances[1:]:
+            if not base_instance.matches(instance):
+                raise WsiDicomMatchError(str(instance), str(self))
 
         WsiDataset.check_duplicate_dataset(self.datasets, self)
         WsiInstance.check_duplicate_instance(instances, self)
@@ -2082,8 +2081,7 @@ class WsiDicom:
             )
         except StopIteration:
             raise WsiDicomNotFoundError("Valid series", "in collection")
-        if settings.strict_uid_check:
-            for item in series:
-                if item.uids is not None and item.uids != base_uids:
-                    raise WsiDicomMatchError(str(item), str(self))
+        for item in series:
+            if item.uids is not None and item.uids != base_uids:
+                raise WsiDicomMatchError(str(item), str(self))
         return base_uids

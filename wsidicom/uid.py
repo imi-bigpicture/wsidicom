@@ -30,6 +30,21 @@ class BaseUids:
     series_instance: Uid
     frame_of_reference: Optional[Uid] = None
 
+    def __init__(
+        self,
+        study_instance: Uid,
+        series_instance: Uid,
+        frame_of_reference: Optional[Uid] = None
+    ) -> None:
+        if settings.strict_uid_check and frame_of_reference is None:
+            raise ValueError(
+                'Frame of reference uid is missing and strict uid check is '
+                'enabled'
+            )
+        self.study_instance = study_instance
+        self.series_instance = series_instance
+        self.frame_of_reference = frame_of_reference
+
     def __str__(self) -> str:
         return (
             f"BaseUids study: {self.study_instance}, "
