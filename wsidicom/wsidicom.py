@@ -502,9 +502,11 @@ class WsiDicomGroup:
         List[List[WsiInstance]]
             Instances grouped by common properties.
         """
-        groups: DefaultDict[Any, List[WsiInstance]] = (
-            defaultdict(list)
-        )
+        groups: DefaultDict[
+            Tuple[str, UID, bool, Optional[int], Optional[float], str],
+            List[WsiInstance]
+        ] = defaultdict(list)
+
         for instance in self.instances.values():
             groups[
                 instance.image_data.photometric_interpretation,
@@ -512,8 +514,7 @@ class WsiDicomGroup:
                 instance.ext_depth_of_field,
                 instance.ext_depth_of_field_planes,
                 instance.ext_depth_of_field_plane_distance,
-                instance.focus_method,
-                instance.slice_spacing
+                instance.focus_method
             ].append(
                 instance
             )
@@ -559,7 +560,6 @@ class WsiDicomGroup:
             - transfer syntax
             - extended depth of field (and planes and distance)
             - focus method
-            - spacing between slices
         Other properties are assumed to be equal or to be updated.
 
         Parameters
