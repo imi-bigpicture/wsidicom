@@ -654,23 +654,18 @@ class WsiDataset(Dataset):
         if 'PerFrameFunctionalGroupsSequence' in dataset:
             del dataset['PerFrameFunctionalGroupsSequence']
 
-        focal_planes, optical_paths, tile_count = (
+        focal_planes, optical_paths, tiled_size = (
             ImageData.get_frame_information(image_data)
         )
         dataset.TotalPixelMatrixFocalPlanes = focal_planes
         dataset.NumberOfOpticalPaths = optical_paths
         dataset.NumberOfFrames = max(
-            tile_count*focal_planes*optical_paths // (scale * scale),
+            tiled_size.ceil_div(scale).area,
             1
-        )
-        dataset.TotalPixelMatrixColumns = max(
-            dataset.image_size.width // scale,
-            1
-        )
-        dataset.TotalPixelMatrixRows = max(
-            dataset.image_size.height // scale,
-            1
-        )
+        ) * focal_planes * optical_paths
+        scaled_size = dataset.image_size.ceil_div(scale)
+        dataset.TotalPixelMatrixColumns = max(scaled_size.width, 1)
+        dataset.TotalPixelMatrixRows = max(scaled_size.height, 1)
         return dataset
 
 
@@ -1273,7 +1268,7 @@ class ImageData(metaclass=ABCMeta):
     def tiled_size(self) -> Size:
         """The size of the image when divided into tiles, e.g. number of
         columns and rows of tiles. Equals (1, 1) if image is not tiled."""
-        return self.image_size / self.tile_size
+        return self.image_size.ceil_div(self.tile_size)
 
     @property
     def image_region(self) -> Region:
@@ -1711,7 +1706,7 @@ class ImageData(metaclass=ABCMeta):
             Region of tiles for stitching image
         """
         start = pixel_region.start // self.tile_size
-        end = pixel_region.end / self.tile_size - 1
+        end = pixel_region.end.ceil_div(self.tile_size) - 1
         tile_region = Region.from_points(start, end)
         if not self.valid_tiles(tile_region, z, path):
             raise WsiDicomOutOfBoundsError(
@@ -1833,9 +1828,9 @@ class ImageData(metaclass=ABCMeta):
     @staticmethod
     def get_frame_information(
         data: OrderedDict[Tuple[str, float], 'ImageData']
-    ) -> Tuple[int, int, int]:
+    ) -> Tuple[int, int, Size]:
         """Return number of focal planes, number of optical paths, and
-        number of tiles per plane.
+        tiled size.
         """
         focal_planes: Set[float] = set()
         optical_paths: Set[str] = set()
@@ -1847,7 +1842,7 @@ class ImageData(metaclass=ABCMeta):
         if len(tiled_sizes) != 1:
             raise ValueError('Expected only one tiled size')
         tiled_size = list(tiled_sizes)[0]
-        return len(focal_planes), len(optical_paths), tiled_size.area
+        return len(focal_planes), len(optical_paths), tiled_size
 
 
 class WsiDicomImageData(ImageData):
@@ -2133,7 +2128,7 @@ class TileIndex(metaclass=ABCMeta):
         self._tile_size = base_dataset.tile_size
         self._frame_count = self._read_frame_count_from_datasets(datasets)
         self._optical_paths = self._read_optical_paths_from_datasets(datasets)
-        self._tiled_size = self.image_size / self.tile_size
+        self._tiled_size = self.image_size.ceil_div(self.tile_size)
 
     def __str__(self) -> str:
         return (
@@ -2996,7 +2991,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             minimum_chunk_size,
             chunk_size//minimum_chunk_size * minimum_chunk_size
         )
-        new_tiled_size = image_data.tiled_size / scale
+        new_tiled_size = image_data.tiled_size.ceil_div(scale)
         # Divide the image tiles up into chunk_size chunks (up to tiled size)
         chunked_tile_points = (
             Region(
