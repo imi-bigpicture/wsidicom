@@ -763,7 +763,7 @@ class WsiDicomLevel(WsiDicomGroup):
                 f"Region {cropped_region}", f"level size {self.size}"
             )
         image = self.get_region(cropped_region, z, path)
-        tile_size = cropped_region.size/scale
+        tile_size = cropped_region.size.ceil_div(scale)
         image = image.resize(
             tile_size.to_tuple(),
             resample=Image.BILINEAR
