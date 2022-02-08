@@ -19,7 +19,7 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from pathlib import Path
 from typing import (Any, Callable, DefaultDict, Dict, List, Optional,
-                    OrderedDict, Tuple, Union, cast)
+                    OrderedDict, Sequence, Tuple, Union, cast)
 
 from PIL import Image
 from pydicom.dataset import FileMetaDataset
@@ -45,14 +45,14 @@ class WsiDicomGroup:
     different z coordinate and/or optical path."""
     def __init__(
         self,
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
     ):
         """Create a group of WsiInstances. Instances should match in the common
         uids, wsi type, and tile size.
 
         Parameters
         ----------
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
             Instances to build the group.
         """
         self._instances = {  # key is identifier (Uid)
@@ -166,13 +166,13 @@ class WsiDicomGroup:
     @classmethod
     def open(
         cls,
-        instances: List[WsiInstance],
+        instances: Sequence[WsiInstance],
     ) -> List['WsiDicomGroup']:
         """Return list of groups created from wsi instances.
 
         Parameters
         ----------
-        files: List[WsiInstance]
+        files: Sequence[WsiInstance]
             Instances to create groups from.
 
         Returns
@@ -462,13 +462,13 @@ class WsiDicomGroup:
     @classmethod
     def _group_instances(
         cls,
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
     ) -> OrderedDict[Size, List[WsiInstance]]:
         """Return instances grouped and sorted by image size.
 
         Parameters
         ----------
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
             Instances to group by image size.
 
         Returns
@@ -519,14 +519,14 @@ class WsiDicomGroup:
 
     @staticmethod
     def _list_image_data(
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
     ) -> OrderedDict[Tuple[str, float], ImageData]:
         """Sort ImageData in instances by optical path and focal
         plane.
 
         Parameters
         ----------
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
             List of instances with optical paths and focal planes to list and
             sort.
 
@@ -608,7 +608,7 @@ class WsiDicomLevel(WsiDicomGroup):
     """
     def __init__(
         self,
-        instances: List[WsiInstance],
+        instances: Sequence[WsiInstance],
         base_pixel_spacing: SizeMm
     ):
         """Create a level from list of WsiInstances. Asign the pyramid level
@@ -616,7 +616,7 @@ class WsiDicomLevel(WsiDicomGroup):
 
         Parameters
         ----------
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
             Instances to build the level.
         base_pixel_spacing: SizeMm
             Pixel spacing of base level.
@@ -672,13 +672,13 @@ class WsiDicomLevel(WsiDicomGroup):
     @classmethod
     def open(
         cls,
-        instances: List[WsiInstance],
+        instances: Sequence[WsiInstance],
     ) -> List['WsiDicomLevel']:
         """Return list of levels created wsi files.
 
         Parameters
         ----------
-        files: List[WsiInstance]
+        files: Sequence[WsiInstance]
             Instances to create levels from.
 
         Returns
@@ -920,15 +920,15 @@ class WsiDicomSeries(metaclass=ABCMeta):
     pyramidal levels, lables, or overviews.
     """
 
-    def __init__(self, groups: List[WsiDicomGroup]):
+    def __init__(self, groups: Sequence[WsiDicomGroup]):
         """Create a WsiDicomSeries from list of WsiDicomGroups.
 
         Parameters
         ----------
-        groups: List[WsiDicomGroup]
+        groups: Sequence[WsiDicomGroup]
             List of groups to include in the series.
         """
-        self._groups: List[WsiDicomGroup] = groups
+        self._groups = groups
 
         if len(self.groups) != 0 and self.groups[0].uids is not None:
             self._uids = self._validate_series(self.groups)
@@ -967,7 +967,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @property
-    def groups(self) -> List[WsiDicomGroup]:
+    def groups(self) -> Sequence[WsiDicomGroup]:
         """Return contained groups."""
         return self._groups
 
@@ -1010,12 +1010,12 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def open(cls, instances: List[WsiInstance]) -> 'WsiDicomSeries':
+    def open(cls, instances: Sequence[WsiInstance]) -> 'WsiDicomSeries':
         raise NotImplementedError
 
     def _validate_series(
             self,
-            groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
+            groups: Union[List[WsiDicomGroup], Sequence[WsiDicomLevel]]
     ) -> Optional[SlideUids]:
         """Check that no files or instances in series is duplicate and that
         all groups in series matches.
@@ -1024,7 +1024,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         Parameters
         ----------
-        groups: Union[List[WsiDicomGroup], List[WsiDicomLevel]]
+        groups: Union[Sequence[WsiDicomGroup], Sequence[WsiDicomLevel]]
             List of groups or levels to check
 
         Returns
@@ -1108,13 +1108,13 @@ class WsiDicomLabels(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
     ) -> 'WsiDicomLabels':
         """Return labels created from wsi files.
 
         Parameters
         ----------
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
             Instances to create labels from.
 
         Returns
@@ -1137,13 +1137,13 @@ class WsiDicomOverviews(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
     ) -> 'WsiDicomOverviews':
         """Return overviews created from wsi files.
 
         Parameters
         ----------
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
             Instances to create overviews from.
 
         Returns
@@ -1167,13 +1167,13 @@ class WsiDicomLevels(WsiDicomSeries):
     @classmethod
     def open(
         cls,
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
     ) -> 'WsiDicomLevels':
         """Return overviews created from wsi files.
 
         Parameters
         ----------
-        instances: List[WsiInstance]
+        instances: Sequence[WsiInstance]
             Instances to create levels from.
 
         Returns
@@ -1184,12 +1184,12 @@ class WsiDicomLevels(WsiDicomSeries):
         levels = WsiDicomLevel.open(instances)
         return cls(levels)
 
-    def __init__(self, levels: List[WsiDicomLevel]):
+    def __init__(self, levels: Sequence[WsiDicomLevel]):
         """Holds a stack of levels.
 
         Parameters
         ----------
-        levels: List[WsiDicomLevel]
+        levels: Sequence[WsiDicomLevel]
             List of levels to include in series
         """
         self._levels = OrderedDict(
@@ -1427,7 +1427,7 @@ class WsiDicom:
         levels: WsiDicomLevels,
         labels: WsiDicomLabels,
         overviews: WsiDicomOverviews,
-        annotations: List[AnnotationInstance] = []
+        annotations: Sequence[AnnotationInstance] = []
     ):
         """Holds wsi dicom levels, labels and overviews.
 
@@ -1439,7 +1439,7 @@ class WsiDicom:
             Series of label images.
         overviews: WsiDicomOverviews
             Series of overview images
-        annotations: List[AnnotationInstance] = []
+        annotations: Sequence[AnnotationInstance] = []
             Sup-222 annotation instances.
         """
         self._levels = levels
@@ -1557,14 +1557,14 @@ class WsiDicom:
     @classmethod
     def open(
         cls,
-        path: Union[str, List[str], Path, List[Path]]
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
     ) -> 'WsiDicom':
         """Open valid wsi dicom files in path and return a WsiDicom object.
         Non-valid files are ignored.
 
         Parameters
         ----------
-        path: Union[str, List[str], Path, List[Path]]
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
             Path to files to open
 
         Returns
@@ -1978,7 +1978,7 @@ class WsiDicom:
         return metadata.MediaStorageSOPClassUID
 
     @staticmethod
-    def _get_filepaths(path: Union[str, List[str], Path, List[Path]]):
+    def _get_filepaths(path: Union[str, Sequence[str], Path, Sequence[Path]]):
         """Return file paths to files in path.
         If path is folder, return list of folder files in path.
         If path is single file, return list of that path.
@@ -1987,7 +1987,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        path: path: Union[str, List[str], Path, List[Path]]
+        path: path: Union[str, Sequence[str], Path, Sequence[Path]]
             Path to folder, file or list of files
 
         Returns
@@ -2013,13 +2013,13 @@ class WsiDicom:
 
     @staticmethod
     def _get_base_dataset(
-        files: List[WsiDicomFile]
+        files: Sequence[WsiDicomFile]
     ) -> WsiDataset:
         """Return file with largest image (width) from list of files.
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
+        files: Sequence[WsiDicomFile]
            List of files.
 
         Returns
@@ -2036,12 +2036,12 @@ class WsiDicom:
         return base_dataset
 
     @staticmethod
-    def _filter_paths(filepaths: List[Path]) -> List[Path]:
+    def _filter_paths(filepaths: Sequence[Path]) -> List[Path]:
         """Filter list of paths to only include valid dicom files.
 
         Parameters
         ----------
-        filepaths: List[Path]
+        filepaths: Sequence[Path]
             Paths to filter
 
         Returns
@@ -2055,7 +2055,7 @@ class WsiDicom:
 
     def _validate_collection(
         self,
-        series: List[WsiDicomSeries]
+        series: Sequence[WsiDicomSeries]
     ) -> SlideUids:
         """Check that no files or instance in collection is duplicate, and, if
         strict, that all series have the same base uids.
@@ -2063,7 +2063,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        series: List[WsiDicomSeries]
+        series: Sequence[WsiDicomSeries]
             List of series to check.
 
         Returns
