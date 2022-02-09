@@ -16,9 +16,10 @@ import io
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum, auto
 from pathlib import Path
@@ -220,278 +221,6 @@ class WsiDataset(Dataset):
     def __str__(self) -> str:
         return f"{type(self).__name__} of dataset {self.uids.instance}"
 
-    def _get(
-        self,
-        name: str,
-        dataset: Optional[Dataset] = None
-    ) -> Optional[Any]:
-        if dataset is None:
-            dataset = self
-        value = getattr(dataset, name, None)
-        if value is None:
-            return WSI_ATTRIBUTES[name].get_default(self.wsi_type)
-        return value
-
-    @property
-    def wsi_type(self) -> str:
-        return self._get_wsi_flavor(self.ImageType)
-
-    def _get_uids(self) -> FileUids:
-        instance_uid = UID(self.SOPInstanceUID)
-        concatenation_uid = self._get(
-            'SOPInstanceUIDOfConcatenationSource'
-        )
-        frame_of_reference_uid = self._get('FrameOfReferenceUID')
-
-        slide_uids = SlideUids(
-            self.StudyInstanceUID,
-            self.SeriesInstanceUID,
-            frame_of_reference_uid,
-        )
-        file_uids = FileUids(
-            instance_uid,
-            concatenation_uid,
-            slide_uids
-        )
-        return file_uids
-
-    def _get_concatenation_offset(self) -> int:
-        if self.uids.concatenation is None:
-            return 0
-        try:
-            return int(self.ConcatenationFrameOffsetNumber)
-        except AttributeError:
-            raise WsiDicomError(
-                'Concatenated file missing concatenation frame offset'
-                'number'
-            )
-
-    def _get_tile_organization_type(self) -> str:
-        tile_type = self._get('DimensionOrganizationType')
-        if(tile_type == 'TILED_FULL'):
-            return 'TILED_FULL'
-        elif 'PerFrameFunctionalGroupsSequence' in self:
-            return 'TILED_SPARSE'
-        raise WsiDicomError("undetermined tile type")
-
-    def _get_pixel_measure(self) -> Optional[Dataset]:
-        shared_functional_group = self._get('SharedFunctionalGroupsSequence')
-        if shared_functional_group is None:
-            return None
-        pixel_measure_sequence = self._get(
-            'PixelMeasuresSequence',
-            shared_functional_group[0]
-        )
-        if pixel_measure_sequence is None:
-            return None
-        return pixel_measure_sequence[0]
-
-    def _get_spacings(self) -> Tuple[Optional[SizeMm], Optional[float]]:
-        if self._pixel_measure is None:
-            return None, None
-        pixel_spacing_values = getattr(
-            self._pixel_measure,
-            'PixelSpacing',
-            None
-        )
-        if pixel_spacing_values is not None:
-            if any([spacing == 0 for spacing in pixel_spacing_values]):
-                raise WsiDicomError("Pixel spacing is zero")
-            pixel_spacing = SizeMm.from_tuple(pixel_spacing_values)
-        else:
-            pixel_spacing = None
-        spacing_between_slices = getattr(
-            self._pixel_measure,
-            'SpacingBetweenSlices',
-            None
-        )
-        return pixel_spacing, spacing_between_slices
-
-    def _get_ext_depth_of_field(
-        self
-    ) -> Tuple[bool, Optional[int], Optional[float]]:
-        if self._get('ExtendedDepthOfField') != 'YES':
-            return False, None, None
-
-        planes = self._get('NumberOfFocalPlanes')
-        distance = self._get('DistanceBetweenFocalPlanes')
-        if planes is None or distance is None:
-            raise WsiDicomFileError(
-                self.filepath,
-                'Missing NumberOfFocalPlanes or DistanceBetweenFocalPlanes'
-            )
-        return True, planes, distance
-
-    def _get_image_size(
-        self
-    ) -> Tuple[Size, Optional[SizeMm], Optional[float]]:
-        image_size = Size(
-            self.TotalPixelMatrixColumns,
-            self.TotalPixelMatrixRows
-        )
-        if image_size.width == 0 or image_size.height == 0:
-            raise WsiDicomFileError(self.filepath, "Image size is zero")
-
-        mm_width = self._get('ImagedVolumeWidth')
-        mm_height = self._get('ImagedVolumeHeight')
-        if mm_width is None or mm_height is None:
-            mm_size = None
-        else:
-            mm_size = SizeMm(mm_width, mm_height)
-        mm_depth = self._get('ImagedVolumeDepth')
-        return image_size, mm_size, mm_depth
-
-    def _get_slice_thickness(self) -> Optional[float]:
-        try:
-            return self._get(
-                'SliceThickness',
-                self.pixel_measure
-            )
-        except AttributeError:
-            if self.mm_depth is not None:
-                return self.mm_depth / self.number_of_focal_planes
-        return None
-
-    def _get_frame_sequence(self) -> DicomSequence:
-        if (
-            'PerFrameFunctionalGroupsSequence' in self and
-            (
-                'PlanePositionSlideSequence' in
-                self.PerFrameFunctionalGroupsSequence[0]
-            )
-        ):
-            return self.PerFrameFunctionalGroupsSequence
-        elif 'SharedFunctionalGroupsSequence' in self:
-            return self.SharedFunctionalGroupsSequence
-        return DicomSequence([])
-
-    @staticmethod
-    def _get_wsi_flavor(wsi_type: Tuple[str, str, str, str]) -> str:
-        IMAGE_FLAVOR_INDEX_IN_IMAGE_TYPE = 2
-        return wsi_type[IMAGE_FLAVOR_INDEX_IN_IMAGE_TYPE]
-
-    @classmethod
-    def is_supported_wsi_dicom(
-        cls,
-        dataset: Dataset,
-        transfer_syntax: UID
-    ) -> Optional[str]:
-        """Check if dataset is dicom wsi type and that required attributes
-        (for the function of the library) is available.
-        Warn if attribute listed as requierd in the library or required in the
-        standard is missing.
-
-        Parameters
-        ----------
-        dataset: Dataset
-            Pydicom dataset to check if is a WSI dataset.
-        transfer_syntax: UID
-            Transfer syntax of dataset.
-
-        Returns
-        ----------
-        Optional[str]
-            WSI image flavor
-        """
-
-        sop_class_uid = getattr(dataset, "SOPClassUID", "")
-        if sop_class_uid != WSI_SOP_CLASS_UID:
-            return None
-
-        SUPPORTED_IMAGE_TYPES = ['VOLUME', 'LABEL', 'OVERVIEW']
-        image_flavor = cls._get_wsi_flavor(dataset.ImageType)
-        image_flavor_supported = image_flavor in SUPPORTED_IMAGE_TYPES
-        if not image_flavor_supported:
-            warnings.warn(f"Non-supported image type {image_flavor}")
-            return None
-
-        for name, attribute in WSI_ATTRIBUTES.items():
-            if (
-                name not in dataset
-                and not attribute.evaluate(image_flavor)
-            ):
-                return None
-
-        syntax_supported = (
-            pillow_handler.supports_transfer_syntax(transfer_syntax)
-        )
-        if not syntax_supported:
-            warnings.warn(f"Non-supported transfer syntax {transfer_syntax}")
-            return None
-
-        return image_flavor
-
-    @staticmethod
-    def check_duplicate_dataset(
-        datasets: Sequence['WsiDataset'],
-        caller: object
-    ) -> None:
-        """Check for duplicates in a list of datasets. Datasets are duplicate
-        if instance uids match. Stops at first found duplicate and raises
-        WsiDicomUidDuplicateError.
-
-        Parameters
-        ----------
-        datasets: Sequence[Dataset]
-            List of datasets to check.
-        caller: Object
-            Object that the files belongs to.
-        """
-        instance_uids: List[UID] = []
-
-        for dataset in datasets:
-            instance_uid = UID(dataset.SOPInstanceUID)
-            if instance_uid not in instance_uids:
-                instance_uids.append(instance_uid)
-            else:
-                raise WsiDicomUidDuplicateError(str(dataset), str(caller))
-
-    def matches_instance(self, other_dataset: 'WsiDataset') -> bool:
-        """Return true if other file is of the same instance as self.
-
-        Parameters
-        ----------
-        other_dataset: 'WsiDataset'
-            Dataset to check.
-
-        Returns
-        ----------
-        bool
-            True if same instance.
-        """
-        return (
-            self.uids == other_dataset.uids and
-            self.image_size == other_dataset.image_size and
-            self.tile_size == other_dataset.tile_size and
-            self.tile_type == other_dataset.tile_type
-        )
-
-    def matches_series(
-        self,
-        uids: SlideUids,
-        tile_size: Optional[Size] = None
-    ) -> bool:
-        """Check if instance is valid (Uids and tile size match).
-        Base uids should match for instances in all types of series,
-        tile size should only match for level series.
-        """
-        if tile_size is not None and tile_size != self.tile_size:
-            return False
-
-        return self.slide_uids.matches(uids)
-
-    def read_optical_path_identifier(self, frame: Dataset) -> str:
-        """Return optical path identifier from frame, or from self if not
-        found."""
-        optical_sequence = getattr(
-            frame,
-            'OpticalPathIdentificationSequence',
-            self.optical_path_sequence
-        )
-        if optical_sequence is None:
-            return '0'
-        return getattr(optical_sequence[0], 'OpticalPathIdentifier', '0')
-
     @property
     def instance_uid(self) -> UID:
         """Return instance uid from dataset."""
@@ -667,6 +396,132 @@ class WsiDataset(Dataset):
         """Return slice thickness."""
         return self._slice_thickness
 
+    @property
+    def wsi_type(self) -> str:
+        return self._get_wsi_flavor(self.ImageType)
+
+    @classmethod
+    def is_supported_wsi_dicom(
+        cls,
+        dataset: Dataset,
+        transfer_syntax: UID
+    ) -> Optional[str]:
+        """Check if dataset is dicom wsi type and that required attributes
+        (for the function of the library) is available.
+        Warn if attribute listed as requierd in the library or required in the
+        standard is missing.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Pydicom dataset to check if is a WSI dataset.
+        transfer_syntax: UID
+            Transfer syntax of dataset.
+
+        Returns
+        ----------
+        Optional[str]
+            WSI image flavor
+        """
+
+        sop_class_uid = getattr(dataset, "SOPClassUID", "")
+        if sop_class_uid != WSI_SOP_CLASS_UID:
+            return None
+
+        SUPPORTED_IMAGE_TYPES = ['VOLUME', 'LABEL', 'OVERVIEW']
+        image_flavor = cls._get_wsi_flavor(dataset.ImageType)
+        image_flavor_supported = image_flavor in SUPPORTED_IMAGE_TYPES
+        if not image_flavor_supported:
+            warnings.warn(f"Non-supported image type {image_flavor}")
+            return None
+
+        for name, attribute in WSI_ATTRIBUTES.items():
+            if (
+                name not in dataset
+                and not attribute.evaluate(image_flavor)
+            ):
+                return None
+
+        syntax_supported = (
+            pillow_handler.supports_transfer_syntax(transfer_syntax)
+        )
+        if not syntax_supported:
+            warnings.warn(f"Non-supported transfer syntax {transfer_syntax}")
+            return None
+
+        return image_flavor
+
+    @staticmethod
+    def check_duplicate_dataset(
+        datasets: Sequence['WsiDataset'],
+        caller: object
+    ) -> None:
+        """Check for duplicates in a list of datasets. Datasets are duplicate
+        if instance uids match. Stops at first found duplicate and raises
+        WsiDicomUidDuplicateError.
+
+        Parameters
+        ----------
+        datasets: Sequence[Dataset]
+            List of datasets to check.
+        caller: Object
+            Object that the files belongs to.
+        """
+        instance_uids: List[UID] = []
+
+        for dataset in datasets:
+            instance_uid = UID(dataset.SOPInstanceUID)
+            if instance_uid not in instance_uids:
+                instance_uids.append(instance_uid)
+            else:
+                raise WsiDicomUidDuplicateError(str(dataset), str(caller))
+
+    def matches_instance(self, other_dataset: 'WsiDataset') -> bool:
+        """Return true if other file is of the same instance as self.
+
+        Parameters
+        ----------
+        other_dataset: 'WsiDataset'
+            Dataset to check.
+
+        Returns
+        ----------
+        bool
+            True if same instance.
+        """
+        return (
+            self.uids == other_dataset.uids and
+            self.image_size == other_dataset.image_size and
+            self.tile_size == other_dataset.tile_size and
+            self.tile_type == other_dataset.tile_type
+        )
+
+    def matches_series(
+        self,
+        uids: SlideUids,
+        tile_size: Optional[Size] = None
+    ) -> bool:
+        """Check if instance is valid (Uids and tile size match).
+        Base uids should match for instances in all types of series,
+        tile size should only match for level series.
+        """
+        if tile_size is not None and tile_size != self.tile_size:
+            return False
+
+        return self.slide_uids.matches(uids)
+
+    def read_optical_path_identifier(self, frame: Dataset) -> str:
+        """Return optical path identifier from frame, or from self if not
+        found."""
+        optical_sequence = getattr(
+            frame,
+            'OpticalPathIdentificationSequence',
+            self.optical_path_sequence
+        )
+        if optical_sequence is None:
+            return '0'
+        return getattr(optical_sequence[0], 'OpticalPathIdentifier', '0')
+
     def as_tiled_full(
         self,
         image_data: OrderedDict[Tuple[str, float], 'ImageData'],
@@ -690,6 +545,10 @@ class WsiDataset(Dataset):
             Copy of dataset set as tiled full.
 
         """
+        focal_planes, optical_paths, tiled_size = (
+            self._get_frame_information(image_data)
+        )
+
         dataset = deepcopy(self)
         dataset.DimensionOrganizationType = 'TILED_FULL'
 
@@ -711,10 +570,13 @@ class WsiDataset(Dataset):
                 DSfloat(dataset.pixel_spacing.width * scale, True),
                 DSfloat(dataset.pixel_spacing.height * scale, True)
             ]
-        if dataset.spacing_between_slices is not None:
-            pixel_measure[0].SpacingBetweenSlices = (
-                dataset.spacing_between_slices
-            )
+        pixel_measure[0].SpacingBetweenSlices = (
+            self._get_spacing_between_slices_for_focal_planes(focal_planes)
+        )
+        # if dataset.spacing_between_slices is not None:
+        #     pixel_measure[0].SpacingBetweenSlices = (
+        #         dataset.spacing_between_slices
+        #     )
         if dataset.slice_thickness is not None:
             pixel_measure[0].SliceThickness = dataset.slice_thickness
 
@@ -725,19 +587,234 @@ class WsiDataset(Dataset):
         if 'PerFrameFunctionalGroupsSequence' in dataset:
             del dataset['PerFrameFunctionalGroupsSequence']
 
-        focal_planes, optical_paths, tiled_size = (
-            ImageData.get_frame_information(image_data)
-        )
-        dataset.TotalPixelMatrixFocalPlanes = focal_planes
-        dataset.NumberOfOpticalPaths = optical_paths
+        dataset.TotalPixelMatrixFocalPlanes = len(focal_planes)
+        dataset.NumberOfOpticalPaths = len(optical_paths)
         dataset.NumberOfFrames = max(
             tiled_size.ceil_div(scale).area,
             1
-        ) * focal_planes * optical_paths
+        ) * len(focal_planes) * len(optical_paths)
         scaled_size = dataset.image_size.ceil_div(scale)
         dataset.TotalPixelMatrixColumns = max(scaled_size.width, 1)
         dataset.TotalPixelMatrixRows = max(scaled_size.height, 1)
         return dataset
+
+    def _get(
+        self,
+        name: str,
+        dataset: Optional[Dataset] = None
+    ) -> Optional[Any]:
+        if dataset is None:
+            dataset = self
+        value = getattr(dataset, name, None)
+        if value is None:
+            return WSI_ATTRIBUTES[name].get_default(self.wsi_type)
+        return value
+
+    def _get_uids(self) -> FileUids:
+        instance_uid = UID(self.SOPInstanceUID)
+        concatenation_uid = self._get(
+            'SOPInstanceUIDOfConcatenationSource'
+        )
+        frame_of_reference_uid = self._get('FrameOfReferenceUID')
+
+        slide_uids = SlideUids(
+            self.StudyInstanceUID,
+            self.SeriesInstanceUID,
+            frame_of_reference_uid,
+        )
+        file_uids = FileUids(
+            instance_uid,
+            concatenation_uid,
+            slide_uids
+        )
+        return file_uids
+
+    def _get_concatenation_offset(self) -> int:
+        if self.uids.concatenation is None:
+            return 0
+        try:
+            return int(self.ConcatenationFrameOffsetNumber)
+        except AttributeError:
+            raise WsiDicomError(
+                'Concatenated file missing concatenation frame offset'
+                'number'
+            )
+
+    def _get_tile_organization_type(self) -> str:
+        tile_type = self._get('DimensionOrganizationType')
+        if(tile_type == 'TILED_FULL'):
+            return 'TILED_FULL'
+        elif 'PerFrameFunctionalGroupsSequence' in self:
+            return 'TILED_SPARSE'
+        raise WsiDicomError("undetermined tile type")
+
+    def _get_pixel_measure(self) -> Optional[Dataset]:
+        shared_functional_group = self._get('SharedFunctionalGroupsSequence')
+        if shared_functional_group is None:
+            return None
+        pixel_measure_sequence = self._get(
+            'PixelMeasuresSequence',
+            shared_functional_group[0]
+        )
+        if pixel_measure_sequence is None:
+            return None
+        return pixel_measure_sequence[0]
+
+    def _get_spacings(self) -> Tuple[Optional[SizeMm], Optional[float]]:
+        if self._pixel_measure is None:
+            return None, None
+        pixel_spacing_values = getattr(
+            self._pixel_measure,
+            'PixelSpacing',
+            None
+        )
+        if pixel_spacing_values is not None:
+            if any([spacing == 0 for spacing in pixel_spacing_values]):
+                raise WsiDicomError("Pixel spacing is zero")
+            pixel_spacing = SizeMm.from_tuple(pixel_spacing_values)
+        else:
+            pixel_spacing = None
+        spacing_between_slices = getattr(
+            self._pixel_measure,
+            'SpacingBetweenSlices',
+            None
+        )
+        return pixel_spacing, spacing_between_slices
+
+    def _get_ext_depth_of_field(
+        self
+    ) -> Tuple[bool, Optional[int], Optional[float]]:
+        if self._get('ExtendedDepthOfField') != 'YES':
+            return False, None, None
+
+        planes = self._get('NumberOfFocalPlanes')
+        distance = self._get('DistanceBetweenFocalPlanes')
+        if planes is None or distance is None:
+            raise WsiDicomFileError(
+                self.filepath,
+                'Missing NumberOfFocalPlanes or DistanceBetweenFocalPlanes'
+            )
+        return True, planes, distance
+
+    def _get_image_size(
+        self
+    ) -> Tuple[Size, Optional[SizeMm], Optional[float]]:
+        image_size = Size(
+            self.TotalPixelMatrixColumns,
+            self.TotalPixelMatrixRows
+        )
+        if image_size.width == 0 or image_size.height == 0:
+            raise WsiDicomFileError(self.filepath, "Image size is zero")
+
+        mm_width = self._get('ImagedVolumeWidth')
+        mm_height = self._get('ImagedVolumeHeight')
+        if mm_width is None or mm_height is None:
+            mm_size = None
+        else:
+            mm_size = SizeMm(mm_width, mm_height)
+        mm_depth = self._get('ImagedVolumeDepth')
+        return image_size, mm_size, mm_depth
+
+    def _get_slice_thickness(self) -> Optional[float]:
+        try:
+            return self._get(
+                'SliceThickness',
+                self.pixel_measure
+            )
+        except AttributeError:
+            if self.mm_depth is not None:
+                return self.mm_depth / self.number_of_focal_planes
+        return None
+
+    def _get_frame_sequence(self) -> DicomSequence:
+        if (
+            'PerFrameFunctionalGroupsSequence' in self and
+            (
+                'PlanePositionSlideSequence' in
+                self.PerFrameFunctionalGroupsSequence[0]
+            )
+        ):
+            return self.PerFrameFunctionalGroupsSequence
+        elif 'SharedFunctionalGroupsSequence' in self:
+            return self.SharedFunctionalGroupsSequence
+        return DicomSequence([])
+
+    @staticmethod
+    def _get_wsi_flavor(wsi_type: Tuple[str, str, str, str]) -> str:
+        IMAGE_FLAVOR_INDEX_IN_IMAGE_TYPE = 2
+        return wsi_type[IMAGE_FLAVOR_INDEX_IN_IMAGE_TYPE]
+
+    @staticmethod
+    def _get_spacing_between_slices_for_focal_planes(
+        focal_planes: Sequence[float]
+    ) -> float:
+        """Return spacing between slices in mm for focal planes (defined in
+        um). Spacing must be the same between all focal planes for TILED_FULL
+        arrangement.
+
+        Parameters
+        ----------
+        focal_planes: Sequence[float]
+            Focal planes to calculate spacing for.
+
+        Returns
+        ----------
+        float
+            Spacing between focal planes.
+
+        """
+        if len(focal_planes) == 1:
+            return 0.0
+        distances: Set[float] = set()
+        sorted_focal_planes = sorted(focal_planes)
+        for index in range(len(sorted_focal_planes)-1):
+            distance = (
+                sorted_focal_planes[index + 1]
+                - sorted_focal_planes[index]
+            )
+            distances.add(distance)
+        if len(distances) != 1:
+            raise NotImplementedError(
+                "Image data has non-equal spacing between slices "
+                f"{distances}, not possible to encode as TILED_FULL"
+            )
+        return distances.pop() / 1000.0
+
+    @staticmethod
+    def _get_frame_information(
+        data: OrderedDict[Tuple[str, float], 'ImageData']
+    ) -> Tuple[List[float], List[str], Size]:
+        """Return optical_paths, focal planes, and tiled size.
+        """
+        focal_planes_by_optical_path: Dict[str, List[float]] = (
+            defaultdict(list)
+        )
+        all_focal_planes: Set[float] = set()
+        tiled_sizes: Set[Size] = set()
+        for (optical_path, focal_plane), image_data in data.items():
+            focal_planes_by_optical_path[optical_path].append(focal_plane)
+            all_focal_planes.add(focal_plane)
+            tiled_sizes.add(image_data.tiled_size)
+
+        focal_planes_sparse_by_optical_path = any(
+            optical_path_focal_planes != list(all_focal_planes)
+            for optical_path_focal_planes
+            in focal_planes_by_optical_path.values()
+        )
+
+        if focal_planes_sparse_by_optical_path:
+            raise ValueError(
+                'Each optical path must have the same focal planes.'
+            )
+
+        if len(tiled_sizes) != 1:
+            raise ValueError('Expected only one tiled size')
+        tiled_size = list(tiled_sizes)[0]
+        return (
+            sorted(list(all_focal_planes)),
+            sorted(list(focal_planes_by_optical_path.keys())),
+            tiled_size
+        )
 
 
 class MetaWsiDicomFile(metaclass=ABCMeta):
@@ -1897,25 +1974,6 @@ class ImageData(metaclass=ABCMeta):
             tile_frame = self.encode(image)
         return tile_frame
 
-    @staticmethod
-    def get_frame_information(
-        data: OrderedDict[Tuple[str, float], 'ImageData']
-    ) -> Tuple[int, int, Size]:
-        """Return number of focal planes, number of optical paths, and
-        tiled size.
-        """
-        focal_planes: Set[float] = set()
-        optical_paths: Set[str] = set()
-        tiled_sizes: Set[Size] = set()
-        for (optical_path, focal_plane), image_data in data.items():
-            optical_paths.add(optical_path)
-            focal_planes.add(focal_plane)
-            tiled_sizes.add(image_data.tiled_size)
-        if len(tiled_sizes) != 1:
-            raise ValueError('Expected only one tiled size')
-        tiled_size = list(tiled_sizes)[0]
-        return len(focal_planes), len(optical_paths), tiled_size
-
 
 class WsiDicomImageData(ImageData):
     """Represents image data read from dicom file(s). Image data can
@@ -2438,7 +2496,7 @@ class FullTileIndex(TileIndex):
             for plane in range(number_of_focal_planes):
                 z = round(plane * slice_spacing * MM_TO_MICRON, DECIMALS)
                 focal_planes.add(z)
-        return list(focal_planes)
+        return sorted(list(focal_planes))
 
     def _get_optical_path_index(self, path: str) -> int:
         """Return index of the optical path in instance.
@@ -2564,7 +2622,7 @@ class SparseTileIndex(TileIndex):
         focal_planes: Set[float] = set()
         for z, _ in self._planes.keys():
             focal_planes.add(z)
-        return list(focal_planes)
+        return sorted(list(focal_planes))
 
     def _read_planes_from_datasets(
         self,
