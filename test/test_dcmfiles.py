@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 from pathlib import Path
-from typing import TypedDict, Dict
+from typing import Dict
 
 import pytest
 from PIL import Image, ImageChops
@@ -27,11 +27,6 @@ from wsidicom import WsiDicom
 wsidicom_test_data_dir = os.environ.get("WSIDICOM_TESTDIR", "C:/temp/wsidicom")
 sub_data_dir = "interface"
 data_dir = wsidicom_test_data_dir + '/' + sub_data_dir
-
-
-class WsiFolder(TypedDict):
-    path: Path
-    wsi_dicom: WsiDicom
 
 
 @pytest.mark.integration
