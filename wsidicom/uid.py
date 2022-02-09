@@ -80,7 +80,7 @@ class FileUids:
     """Represents the UIDs in a DICOM-file."""
     instance: Uid
     concatenation: Optional[Uid]
-    base: SlideUids
+    slide: SlideUids
 
     @property
     def identifier(self) -> Uid:
@@ -114,6 +114,6 @@ class FileUids:
             return (
                 self.concatenation is not None and
                 self.concatenation == other.concatenation and
-                self.base == other.base
+                self.slide == other.slide
             )
         return NotImplemented

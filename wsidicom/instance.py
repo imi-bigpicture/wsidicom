@@ -244,15 +244,14 @@ class WsiDataset(Dataset):
         frame_of_reference_uid = self._get('FrameOfReferenceUID')
 
         slide_uids = SlideUids(
-
             self.StudyInstanceUID,
             self.SeriesInstanceUID,
             frame_of_reference_uid,
         )
         file_uids = FileUids(
-            self.instance_uid,
-            self.concatenation_uid,
-            self.slide_uids
+            instance_uid,
+            concatenation_uid,
+            slide_uids
         )
         return file_uids
 
@@ -496,19 +495,19 @@ class WsiDataset(Dataset):
     @property
     def instance_uid(self) -> UID:
         """Return instance uid from dataset."""
-        return self._instance_uid
+        return self.uids.instance
 
     @property
     def concatenation_uid(self) -> Optional[UID]:
         """Return concatenation uid, if defined, from dataset. An instance that
         is concatenated (split into several files) should have the same
         concatenation uid."""
-        return self._concatenation_uid
+        return self.uids.concatenation
 
     @property
     def slide_uids(self) -> SlideUids:
         """Return base uids (study, series, and frame of reference Uids)."""
-        return self._slide_uids
+        return self.uids.slide
 
     @property
     def uids(self) -> FileUids:
@@ -1222,7 +1221,7 @@ class WsiDicomFile(MetaWsiDicomFile):
                 valid_files.append(file)
             else:
                 warnings.warn(
-                    f'{file.filepath} with uids {file.uids.base} '
+                    f'{file.filepath} with uids {file.uids.slide} '
                     f'did not match series with {series_uids} '
                     f'and tile size {series_tile_size}'
                 )
@@ -3340,7 +3339,7 @@ class WsiInstance:
                 raise WsiDicomError("Datasets in instances does not match")
         return (
             base_dataset.uids.identifier,
-            base_dataset.uids.base,
+            base_dataset.uids.slide,
         )
 
     def matches(self, other_instance: 'WsiInstance') -> bool:
