@@ -36,7 +36,7 @@ from wsidicom.graphical_annotations import (Annotation, AnnotationGroup,
                                             Polygon, PolygonAnnotationGroup,
                                             Polyline, PolylineAnnotationGroup)
 from wsidicom import WsiDicom
-from wsidicom.uid import BaseUids
+from wsidicom.uid import SlideUids
 
 from .data_gen import create_layer_file
 
@@ -45,14 +45,14 @@ sub_data_dir = "annotation"
 data_dir = wsidicom_test_data_dir + '/' + sub_data_dir
 typecode = ConceptCode.type('Nucleus')
 categorycode = ConceptCode.category('Tissue')
-base_uids = BaseUids(
+slide_uids = SlideUids(
     study_instance=generate_uid(),
     series_instance=generate_uid(),
     frame_of_reference=generate_uid()
 )
 
 
-@pytest.mark.unittest
+@pytest.mark.annotation
 class WsiDicomAnnotationTests(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
@@ -165,7 +165,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     categorycode=categorycode,
                     typecode=typecode
                 )
-                dicom = AnnotationInstance([group], 'volume', base_uids)
+                dicom = AnnotationInstance([group], 'volume', slide_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
                 geometry_type, coordinates = (
@@ -256,7 +256,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 dicom = AnnotationInstance(
                     annotation_groups,
                     'volume',
-                    base_uids
+                    slide_uids
                 )
                 dicom = self.dicom_round_trip(dicom)
 
@@ -337,7 +337,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     categorycode=categorycode,
                     typecode=typecode
                 )
-                dicom = AnnotationInstance([group], 'volume', base_uids)
+                dicom = AnnotationInstance([group], 'volume', slide_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
                 output_dict = deepcopy(input_dict)
@@ -396,7 +396,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     categorycode=categorycode,
                     typecode=typecode
                 )
-                dicom = AnnotationInstance([group], 'volume', base_uids)
+                dicom = AnnotationInstance([group], 'volume', slide_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
                 output_annotation = output_group.annotations[0]
@@ -429,7 +429,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     categorycode=categorycode,
                     typecode=typecode
                 )
-                dicom = AnnotationInstance([group], 'volume', base_uids)
+                dicom = AnnotationInstance([group], 'volume', slide_uids)
                 dicom = self.dicom_round_trip(dicom)
                 output_group = dicom[0]
                 output_annotation = output_group.annotations[0]
@@ -475,7 +475,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 categorycode=categorycode,
                 typecode=typecode
             )
-            dicom = AnnotationInstance([group], 'volume', base_uids)
+            dicom = AnnotationInstance([group], 'volume', slide_uids)
             dicom = self.dicom_round_trip(dicom)
             output_group = dicom[0]
             output_annotation = output_group.annotations[0]
@@ -562,7 +562,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             is_double=False
         )
 
-        dicom = AnnotationInstance([group], 'volume', base_uids)
+        dicom = AnnotationInstance([group], 'volume', slide_uids)
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]
 
@@ -582,7 +582,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             typecode,
             is_double=True
         )
-        dicom = AnnotationInstance([group], 'volume', base_uids)
+        dicom = AnnotationInstance([group], 'volume', slide_uids)
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]
 
@@ -603,7 +603,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             typecode,
             is_double=True
         )
-        dicom = AnnotationInstance([group], 'volume', base_uids)
+        dicom = AnnotationInstance([group], 'volume', slide_uids)
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]
 
@@ -625,7 +625,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             is_double=False
         )
 
-        dicom = AnnotationInstance([group], 'volume', base_uids)
+        dicom = AnnotationInstance([group], 'volume', slide_uids)
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]
 
@@ -708,7 +708,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             typecode
         )
 
-        dicom = AnnotationInstance([annotation_group], 'volume', base_uids)
+        dicom = AnnotationInstance([annotation_group], 'volume', slide_uids)
         dicom = self.dicom_round_trip(dicom)
 
         output_group = dicom[0]
@@ -739,7 +739,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         dicom = AnnotationInstance(
                 [group],
                 'volume',
-                base_uids
+                slide_uids
         )
         dicom = self.dicom_round_trip(dicom)
         output_group = dicom[0]

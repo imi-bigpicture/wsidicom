@@ -16,8 +16,8 @@ class Settings:
     """Class containing settings. Settings are to be accessed through the
     global variable settings."""
     def __init__(self) -> None:
-        self._strict_uid_check = True
-        self._strict_attribute_check = True
+        self._strict_uid_check = False
+        self._strict_attribute_check = False
 
     @property
     def strict_uid_check(self) -> bool:

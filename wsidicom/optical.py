@@ -15,7 +15,7 @@
 import struct
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 from PIL import Image
@@ -324,7 +324,7 @@ class Illumination:
     """Set of illumination conditions for optical path"""
     def __init__(
         self,
-        illumination_method: List[ConceptCode] = [],
+        illumination_method: Sequence[ConceptCode] = [],
         illumination_wavelength: Optional[float] = None,
         illumination_color: Optional[ConceptCode] = None,
         illuminator: Optional[ConceptCode] = None
@@ -456,7 +456,7 @@ class OpticalPath:
         lut: Optional[Lut] = None,
         light_path_filter: Optional[LightPathFilter] = None,
         image_path_filter: Optional[ImagePathFilter] = None,
-        channel_description: Optional[List[ConceptCode]] = None,
+        channel_description: Optional[Sequence[ConceptCode]] = None,
         lenses: Optional[Lenses] = None
     ):
         """Create a OpticalPath from identifier, illumination, photometric
@@ -480,7 +480,7 @@ class OpticalPath:
             Optional light path filter description for the optical path.
         image_path_filter: Optional[ImagePathFilter] = None
             Optional image path filter description for the optical path.
-        channel_description: Optional[List[ConceptCode]] = None
+        channel_description: Optional[Sequence[ConceptCode]] = None
             Optional channel description for the optical path.
         lenses: Optional[Lenses] = None
             Optional lens description for the optical path.
@@ -562,13 +562,13 @@ class OpticalManager:
     """Store optical paths loaded from dicom files."""
     def __init__(
         self,
-        optical_paths: List[OpticalPath] = [],
+        optical_paths: Sequence[OpticalPath] = [],
     ):
         """Create a OpticalManager from list of OpticalPaths.
 
         Parameters
         ----------
-        optical_paths: List[OpticalPath] = []
+        optical_paths: Sequence[OpticalPath] = []
             List of OpticalPaths.
         """
         self._optical_paths: Dict[str, OpticalPath] = {
@@ -577,13 +577,13 @@ class OpticalManager:
         }
 
     @classmethod
-    def open(cls, instances: List[WsiInstance]) -> 'OpticalManager':
+    def open(cls, instances: Sequence[WsiInstance]) -> 'OpticalManager':
         """Parse optical path sequence in listed instances and create an
         OpticalManager out of the found (unique) OpticalPaths.
 
         Parameters
         ----------
-        files: List[WsiInstance]
+        files: Sequence[WsiInstance]
             List of WsiDicom instances to parse
 
         Returns
