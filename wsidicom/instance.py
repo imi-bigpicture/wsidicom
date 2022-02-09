@@ -24,7 +24,7 @@ from enum import IntEnum, auto
 from pathlib import Path
 from struct import pack, unpack
 from typing import (Any, BinaryIO, Dict, Generator, List, Optional,
-                    OrderedDict, Set, Tuple, Union, cast)
+                    OrderedDict, Sequence, Set, Tuple, Union, cast)
 
 import numpy as np
 from PIL import Image
@@ -350,7 +350,7 @@ class WsiDataset(Dataset):
 
     @staticmethod
     def check_duplicate_dataset(
-        datasets: List['WsiDataset'],
+        datasets: Sequence['WsiDataset'],
         caller: object
     ) -> None:
         """Check for duplicates in a list of datasets. Datasets are duplicate
@@ -359,7 +359,7 @@ class WsiDataset(Dataset):
 
         Parameters
         ----------
-        datasets: List[Dataset]
+        datasets: Sequence[Dataset]
             List of datasets to check.
         caller: Object
             Object that the files belongs to.
@@ -654,23 +654,18 @@ class WsiDataset(Dataset):
         if 'PerFrameFunctionalGroupsSequence' in dataset:
             del dataset['PerFrameFunctionalGroupsSequence']
 
-        focal_planes, optical_paths, tile_count = (
+        focal_planes, optical_paths, tiled_size = (
             ImageData.get_frame_information(image_data)
         )
         dataset.TotalPixelMatrixFocalPlanes = focal_planes
         dataset.NumberOfOpticalPaths = optical_paths
         dataset.NumberOfFrames = max(
-            tile_count*focal_planes*optical_paths // (scale * scale),
+            tiled_size.ceil_div(scale).area,
             1
-        )
-        dataset.TotalPixelMatrixColumns = max(
-            dataset.image_size.width // scale,
-            1
-        )
-        dataset.TotalPixelMatrixRows = max(
-            dataset.image_size.height // scale,
-            1
-        )
+        ) * focal_planes * optical_paths
+        scaled_size = dataset.image_size.ceil_div(scale)
+        dataset.TotalPixelMatrixColumns = max(scaled_size.width, 1)
+        dataset.TotalPixelMatrixRows = max(scaled_size.height, 1)
         return dataset
 
 
@@ -1123,7 +1118,7 @@ class WsiDicomFile(MetaWsiDicomFile):
 
     @staticmethod
     def filter_files(
-        files: List['WsiDicomFile'],
+        files: Sequence['WsiDicomFile'],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None
     ) -> List['WsiDicomFile']:
@@ -1132,7 +1127,7 @@ class WsiDicomFile(MetaWsiDicomFile):
 
         Parameters
         ----------
-        files: List['WsiDicomFile']
+        files: Sequence['WsiDicomFile']
             Wsi files to filter.
         series_uids: Uids
             Uids to check against.
@@ -1165,13 +1160,13 @@ class WsiDicomFile(MetaWsiDicomFile):
     @classmethod
     def group_files(
         cls,
-        files: List['WsiDicomFile']
+        files: Sequence['WsiDicomFile']
     ) -> Dict[str, List['WsiDicomFile']]:
         """Return files grouped by instance identifier (instances).
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
+        files: Sequence[WsiDicomFile]
             Files to group into instances
 
         Returns
@@ -1273,7 +1268,7 @@ class ImageData(metaclass=ABCMeta):
     def tiled_size(self) -> Size:
         """The size of the image when divided into tiles, e.g. number of
         columns and rows of tiles. Equals (1, 1) if image is not tiled."""
-        return self.image_size / self.tile_size
+        return self.image_size.ceil_div(self.tile_size)
 
     @property
     def image_region(self) -> Region:
@@ -1354,7 +1349,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_decoded_tiles(
         self,
-        tiles: List[Point],
+        tiles: Sequence[Point],
         z: float,
         path: str
     ) -> List[Image.Image]:
@@ -1363,7 +1358,7 @@ class ImageData(metaclass=ABCMeta):
 
         Parameters
         ----------
-        tiles: List[Point]
+        tiles: Sequence[Point]
             Tiles to get.
         z: float
             Z coordinate.
@@ -1381,7 +1376,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_encoded_tiles(
         self,
-        tiles: List[Point],
+        tiles: Sequence[Point],
         z: float,
         path: str
     ) -> List[bytes]:
@@ -1390,7 +1385,7 @@ class ImageData(metaclass=ABCMeta):
 
         Parameters
         ----------
-        tiles: List[Point]
+        tiles: Sequence[Point]
             Tiles to get.
         z: float
             Z coordinate.
@@ -1495,7 +1490,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_scaled_encoded_tiles(
         self,
-        scaled_tile_points: List[Point],
+        scaled_tile_points: Sequence[Point],
         z: float,
         path: str,
         scale: int,
@@ -1507,7 +1502,7 @@ class ImageData(metaclass=ABCMeta):
 
         Parameters
         ----------
-        scaled_tile_points: List[Point],
+        scaled_tile_points: Sequence[Point],
             Scaled position of tiles to get.
         z: float
             Z coordinate.
@@ -1711,7 +1706,7 @@ class ImageData(metaclass=ABCMeta):
             Region of tiles for stitching image
         """
         start = pixel_region.start // self.tile_size
-        end = pixel_region.end / self.tile_size - 1
+        end = pixel_region.end.ceil_div(self.tile_size) - 1
         tile_region = Region.from_points(start, end)
         if not self.valid_tiles(tile_region, z, path):
             raise WsiDicomOutOfBoundsError(
@@ -1833,9 +1828,9 @@ class ImageData(metaclass=ABCMeta):
     @staticmethod
     def get_frame_information(
         data: OrderedDict[Tuple[str, float], 'ImageData']
-    ) -> Tuple[int, int, int]:
+    ) -> Tuple[int, int, Size]:
         """Return number of focal planes, number of optical paths, and
-        number of tiles per plane.
+        tiled size.
         """
         focal_planes: Set[float] = set()
         optical_paths: Set[str] = set()
@@ -1847,21 +1842,24 @@ class ImageData(metaclass=ABCMeta):
         if len(tiled_sizes) != 1:
             raise ValueError('Expected only one tiled size')
         tiled_size = list(tiled_sizes)[0]
-        return len(focal_planes), len(optical_paths), tiled_size.area
+        return len(focal_planes), len(optical_paths), tiled_size
 
 
 class WsiDicomImageData(ImageData):
     """Represents image data read from dicom file(s). Image data can
     be sparsly or fully tiled and/or concatenated."""
-    def __init__(self, files: Union[WsiDicomFile, List[WsiDicomFile]]) -> None:
+    def __init__(
+        self,
+        files: Union[WsiDicomFile, Sequence[WsiDicomFile]]
+    ) -> None:
         """Create WsiDicomImageData from frame data in files.
 
         Parameters
         ----------
-        files: Union[WsiDicomFile, List[WsiDicomFile]]
+        files: Union[WsiDicomFile, Sequence[WsiDicomFile]]
             Single or list of WsiDicomFiles containing frame data.
         """
-        if not isinstance(files, list):
+        if not isinstance(files, Sequence):
             files = [files]
 
         # Key is frame offset
@@ -2117,14 +2115,14 @@ class TileIndex(metaclass=ABCMeta):
     FullTileIndex and SparseTileIndex."""
     def __init__(
         self,
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
     ):
         """Create tile index for frames in datasets. Requires equal tile
         size for all tile planes.
 
         Parameters
         ----------
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
             List of datasets containing tiled image data.
 
         """
@@ -2133,7 +2131,7 @@ class TileIndex(metaclass=ABCMeta):
         self._tile_size = base_dataset.tile_size
         self._frame_count = self._read_frame_count_from_datasets(datasets)
         self._optical_paths = self._read_optical_paths_from_datasets(datasets)
-        self._tiled_size = self.image_size / self.tile_size
+        self._tiled_size = self.image_size.ceil_div(self.tile_size)
 
     def __str__(self) -> str:
         return (
@@ -2190,13 +2188,13 @@ class TileIndex(metaclass=ABCMeta):
 
     @staticmethod
     def _read_frame_count_from_datasets(
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
     ) -> int:
         """Return total frame count from files.
 
         Parameters
         ----------
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
            List of datasets.
 
         Returns
@@ -2213,13 +2211,13 @@ class TileIndex(metaclass=ABCMeta):
     @classmethod
     def _read_optical_paths_from_datasets(
         cls,
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
     ) -> List[str]:
         """Return list of optical path identifiers from files.
 
         Parameters
         ----------
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
            List of datasets.
 
         Returns
@@ -2268,14 +2266,14 @@ class FullTileIndex(TileIndex):
     the frame index for a tile can directly be calculated."""
     def __init__(
         self,
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
     ):
         """Create full tile index for frames in datasets. Requires equal tile
         size for all tile planes.
 
         Parameters
         ----------
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
             List of datasets containing full tiled image data.
         """
         super().__init__(datasets)
@@ -2335,14 +2333,14 @@ class FullTileIndex(TileIndex):
 
     def _read_focal_planes_from_datasets(
         self,
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
     ) -> List[float]:
         """Return list of focal planes in datasets. Values in Pixel Measures
         Sequene are in mm.
 
         Parameters
         ----------
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
            List of datasets to read focal planes from.
 
         Returns
@@ -2416,7 +2414,7 @@ class SparseTileIndex(TileIndex):
     the sparseness), -1 is returned."""
     def __init__(
         self,
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
     ):
         """Create sparse tile index for frames in datasets. Requires equal tile
         size for all tile planes. Pixel data tiles are identified by the Per
@@ -2426,7 +2424,7 @@ class SparseTileIndex(TileIndex):
 
         Parameters
         ----------
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
             List of datasets containing sparse tiled image data.
         """
         super().__init__(datasets)
@@ -2492,13 +2490,13 @@ class SparseTileIndex(TileIndex):
 
     def _read_planes_from_datasets(
         self,
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
     ) -> Dict[Tuple[float, str], SparseTilePlane]:
         """Return SparseTilePlane from planes in datasets.
 
         Parameters
         ----------
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
            List of datasets to read planes from.
 
         Returns
@@ -2782,7 +2780,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         self,
         bot_start: int,
         pixel_data_start: int,
-        frame_positions: List[int]
+        frame_positions: Sequence[int]
     ) -> None:
         """Writes BOT to file.
 
@@ -2792,7 +2790,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             File position of BOT start
         bot_end: int
             File position of BOT end
-        frame_positions: List[int]
+        frame_positions: Sequence[int]
             List of file positions for frames, relative to file start
 
         """
@@ -2833,7 +2831,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         self,
         eot_start: int,
         pixel_data_start: int,
-        frame_positions: List[int],
+        frame_positions: Sequence[int],
         last_frame_end: int
     ) -> None:
         """Writes EOT to file.
@@ -2844,7 +2842,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             File position of EOT start
         pixel_data_start: int
             File position of EOT end
-        frame_positions: List[int]
+        frame_positions: Sequence[int]
             List of file positions for frames, relative to file start
         last_frame_end: int
             Position of last frame end.
@@ -2930,13 +2928,13 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         )
 
         if scale == 1:
-            def get_tiles_thread(tile_points: List[Point]) -> List[bytes]:
+            def get_tiles_thread(tile_points: Sequence[Point]) -> List[bytes]:
                 """Thread function to get tiles as bytes."""
                 return image_data.get_encoded_tiles(tile_points, z, path)
             get_tiles = get_tiles_thread
         else:
             def get_scaled_tiles_thread(
-                scaled_tile_points: List[Point]
+                scaled_tile_points: Sequence[Point]
             ) -> List[bytes]:
                 """Thread function to get scaled tiles as bytes."""
                 return image_data.get_scaled_encoded_tiles(
@@ -2996,7 +2994,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
             minimum_chunk_size,
             chunk_size//minimum_chunk_size * minimum_chunk_size
         )
-        new_tiled_size = image_data.tiled_size / scale
+        new_tiled_size = image_data.tiled_size.ceil_div(scale)
         # Divide the image tiles up into chunk_size chunks (up to tiled size)
         chunked_tile_points = (
             Region(
@@ -3019,19 +3017,19 @@ class WsiInstance:
     and datasets with metadata."""
     def __init__(
         self,
-        datasets: Union[WsiDataset, List[WsiDataset]],
+        datasets: Union[WsiDataset, Sequence[WsiDataset]],
         image_data: ImageData
     ):
         """Create a WsiInstance from datasets with metadata and image data.
 
         Parameters
         ----------
-        datasets: Union[WsiDataset, List[WsiDataset]]
+        datasets: Union[WsiDataset, Sequence[WsiDataset]]
             Single dataset or list of datasets.
         image_data: ImageData
             Image data.
         """
-        if not isinstance(datasets, list):
+        if not isinstance(datasets, Sequence):
             datasets = [datasets]
         self._datasets = datasets
         self._image_data = image_data
@@ -3077,7 +3075,7 @@ class WsiInstance:
         return self._wsi_type
 
     @property
-    def datasets(self) -> List[WsiDataset]:
+    def datasets(self) -> Sequence[WsiDataset]:
         return self._datasets
 
     @property
@@ -3182,7 +3180,7 @@ class WsiInstance:
     @classmethod
     def open(
         cls,
-        files: List[WsiDicomFile],
+        files: Sequence[WsiDicomFile],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None
     ) -> List['WsiInstance']:
@@ -3191,7 +3189,7 @@ class WsiInstance:
 
         Parameters
         ----------
-        files: List[WsiDicomFile]
+        files: Sequence[WsiDicomFile]
             Files to create instances from.
         series_uids: SlideUids
             Uid to match against.
@@ -3219,7 +3217,7 @@ class WsiInstance:
 
     @staticmethod
     def check_duplicate_instance(
-        instances: List['WsiInstance'],
+        instances: Sequence['WsiInstance'],
         self: object
     ) -> None:
         """Check for duplicates in list of instances. Instances are duplicate
@@ -3228,7 +3226,7 @@ class WsiInstance:
 
         Parameters
         ----------
-        instances: List['WsiInstance']
+        instances: Sequence['WsiInstance']
             List of instances to check.
         caller: Object
             Object that the instances belongs to.
@@ -3243,7 +3241,7 @@ class WsiInstance:
 
     def _validate_instance(
         self,
-        datasets: List[WsiDataset]
+        datasets: Sequence[WsiDataset]
     ) -> Tuple[UID, SlideUids]:
         """Check that no files in instance are duplicate, that all files in
         instance matches (uid, type and size).
