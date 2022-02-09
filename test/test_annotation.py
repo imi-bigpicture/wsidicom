@@ -52,7 +52,7 @@ slide_uids = SlideUids(
 )
 
 
-@pytest.mark.unittest
+@pytest.mark.annotation
 class WsiDicomAnnotationTests(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
