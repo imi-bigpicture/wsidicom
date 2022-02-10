@@ -824,7 +824,7 @@ class WsiDicomFile(MetaWsiDicomFile):
         return self.pretty_str()
 
     @property
-    def offset_table(self) -> Optional[str]:
+    def offset_table_type(self) -> Optional[str]:
         """Return type of the offset table, or None if not present."""
         if self._offset_table_type is None:
             self._offset_table_type = self._get_offset_table_type()
