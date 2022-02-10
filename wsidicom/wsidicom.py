@@ -2109,7 +2109,7 @@ class WsiDicom:
                 continue
             if (
                 file.dataset.tile_type != 'TILED_FULL'
-                or file.offset_table is None
+                or file.offset_table_type is None
             ):
                 return False
 
