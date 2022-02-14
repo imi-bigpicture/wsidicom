@@ -997,8 +997,17 @@ class WsiDataset(Dataset):
         )
 
 
-class MetaWsiDicomFile(metaclass=ABCMeta):
+class WsiDicomFileBase():
     def __init__(self, filepath: Path, mode: str):
+        """Base class for reading or writing DICOM WSI file.
+
+        Parameters
+        ----------
+        filepath: Path
+            Filepath to file to read or write.
+        mode: str
+            Mode for opening file.
+        """
         self._filepath = filepath
         self._fp = DicomFile(filepath, mode=mode)
         self.__enter__()
@@ -1069,7 +1078,7 @@ class MetaWsiDicomFile(metaclass=ABCMeta):
         self._fp.close()
 
 
-class WsiDicomFile(MetaWsiDicomFile):
+class WsiDicomFile(WsiDicomFileBase):
     """Represents a DICOM file (potentially) containing WSI image and metadata.
     """
     def __init__(self, filepath: Path):
@@ -2869,7 +2878,7 @@ class SparseTileIndex(TileIndex):
         return tile, z
 
 
-class WsiDicomFileWriter(MetaWsiDicomFile):
+class WsiDicomFileWriter(WsiDicomFileBase):
     def __init__(self, filepath: Path) -> None:
         """Return a dicom filepointer.
 
