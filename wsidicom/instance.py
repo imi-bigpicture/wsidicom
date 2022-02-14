@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import io
+from optparse import Option
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
@@ -59,10 +60,27 @@ class Requirement(IntEnum):
 
 
 @dataclass
-class WsiAttribute:
+class WsiAttributeRequirement:
+    """Class for defining requirement and optionally default value for DICOM
+    WSI attribute. If image types is given, requirement is only checked for
+    images of matching image type.
+    """
     requirement: Requirement
-    image_types: Tuple[str, ...] = ()
+    image_types: Tuple[str, ...]
     default: Any = None
+
+    def __init__(
+        self,
+        requirement: Requirement,
+        image_types: Sequence[str] = None,
+        default: Any = None
+    ) -> None:
+        self.requirement = requirement
+        if image_types is not None:
+            self.image_types = tuple(image_types)
+        else:
+            self.image_types = ()
+        self.default = default
 
     def get_default(self, image_type: str) -> Any:
         """Get default value for attribute. Raises WsiDicomRequirementError if
@@ -101,73 +119,114 @@ class WsiAttribute:
 
 
 WSI_ATTRIBUTES = {
-    'SOPClassUID': WsiAttribute(Requirement.ALWAYS),
-    'SOPInstanceUID': WsiAttribute(Requirement.ALWAYS),
-    'StudyInstanceUID': WsiAttribute(Requirement.ALWAYS),
-    'SeriesInstanceUID': WsiAttribute(Requirement.ALWAYS),
-    'Rows': WsiAttribute(Requirement.ALWAYS),
-    'Columns': WsiAttribute(Requirement.ALWAYS),
-    'SamplesPerPixel': WsiAttribute(Requirement.ALWAYS),
-    'PhotometricInterpretation': WsiAttribute(Requirement.ALWAYS),
-    'TotalPixelMatrixColumns': WsiAttribute(Requirement.ALWAYS),
-    'TotalPixelMatrixRows': WsiAttribute(Requirement.ALWAYS),
-    'ImageType': WsiAttribute(Requirement.ALWAYS),
+    'SOPClassUID': WsiAttributeRequirement(Requirement.ALWAYS),
+    'SOPInstanceUID': WsiAttributeRequirement(Requirement.ALWAYS),
+    'StudyInstanceUID': WsiAttributeRequirement(Requirement.ALWAYS),
+    'SeriesInstanceUID': WsiAttributeRequirement(Requirement.ALWAYS),
+    'Rows': WsiAttributeRequirement(Requirement.ALWAYS),
+    'Columns': WsiAttributeRequirement(Requirement.ALWAYS),
+    'SamplesPerPixel': WsiAttributeRequirement(Requirement.ALWAYS),
+    'PhotometricInterpretation': WsiAttributeRequirement(Requirement.ALWAYS),
+    'TotalPixelMatrixColumns': WsiAttributeRequirement(Requirement.ALWAYS),
+    'TotalPixelMatrixRows': WsiAttributeRequirement(Requirement.ALWAYS),
+    'ImageType': WsiAttributeRequirement(Requirement.ALWAYS),
 
-    'SharedFunctionalGroupsSequence': WsiAttribute(
+    'SharedFunctionalGroupsSequence': WsiAttributeRequirement(
         Requirement.STRICT,
-        ('VOLUME',)
+        ['VOLUME']
     ),
-    'FrameOfReferenceUID': WsiAttribute(Requirement.STRICT),
-    'FocusMethod': WsiAttribute(Requirement.STRICT, ('VOLUME',), 'AUTO'),
-    'ExtendedDepthOfField': WsiAttribute(
+    'FrameOfReferenceUID': WsiAttributeRequirement(Requirement.STRICT),
+    'FocusMethod': WsiAttributeRequirement(
         Requirement.STRICT,
-        ('VOLUME',),
+        ['VOLUME'],
+        'AUTO'
+    ),
+    'ExtendedDepthOfField': WsiAttributeRequirement(
+        Requirement.STRICT,
+        ['VOLUME'],
         'NO'
     ),
-    'OpticalPathSequence': WsiAttribute(Requirement.STRICT),
-    'ImagedVolumeWidth': WsiAttribute(Requirement.STRICT, ('VOLUME',)),
-    'ImagedVolumeHeight': WsiAttribute(Requirement.STRICT, ('VOLUME',)),
-    'ImagedVolumeDepth': WsiAttribute(Requirement.STRICT, ('VOLUME',)),
-
-    'TotalPixelMatrixFocalPlanes': WsiAttribute(Requirement.STANDARD, (), 1),
-    'NumberOfOpticalPaths': WsiAttribute(Requirement.STANDARD, (), 1),
-    'NumberOfFrames': WsiAttribute(Requirement.STANDARD, (), 1),
-    'Modality': WsiAttribute(Requirement.STANDARD, (), 'SM'),
-    'Manufacturer': WsiAttribute(Requirement.STANDARD),
-    'ManufacturerModelName': WsiAttribute(Requirement.STANDARD),
-    'DeviceSerialNumber': WsiAttribute(Requirement.STANDARD),
-    'SoftwareVersions': WsiAttribute(Requirement.STANDARD),
-    'BitsAllocated': WsiAttribute(Requirement.STANDARD),
-    'BitsStored': WsiAttribute(Requirement.STANDARD),
-    'HighBit': WsiAttribute(Requirement.STANDARD),
-    'PixelRepresentation': WsiAttribute(Requirement.STANDARD),
-    'TotalPixelMatrixOriginSequence': WsiAttribute(Requirement.STANDARD),
-    'ImageOrientationSlide': WsiAttribute(
-        Requirement.STANDARD,
-        (),
-        [0, 1, 0, 1, 0, 0]
+    'OpticalPathSequence': WsiAttributeRequirement(Requirement.STRICT),
+    'ImagedVolumeWidth': WsiAttributeRequirement(
+        Requirement.STRICT,
+        ['VOLUME']
     ),
-    'AcquisitionDateTime': WsiAttribute(Requirement.STANDARD),
-    'LossyImageCompression': WsiAttribute(Requirement.STANDARD),
-    'VolumetricProperties': WsiAttribute(Requirement.STANDARD, (), 'VOLUME'),
-    'SpecimenLabelInImage': WsiAttribute(Requirement.STANDARD, (), 'NO'),
-    'BurnedInAnnotation': WsiAttribute(Requirement.STANDARD, (), 'NO'),
-    'ContentDate': WsiAttribute(Requirement.STANDARD),
-    'ContentTime': WsiAttribute(Requirement.STANDARD),
-    'InstanceNumber': WsiAttribute(Requirement.STANDARD),
-    'DimensionOrganizationSequence': WsiAttribute(Requirement.STANDARD),
-    'ContainerIdentifier': WsiAttribute(Requirement.STANDARD),
-    'SpecimenDescriptionSequence': WsiAttribute(Requirement.STANDARD),
-    'SpacingBetweenSlices': WsiAttribute(Requirement.STANDARD, (), 0.0),
-    'SOPInstanceUIDOfConcatenationSource': WsiAttribute(Requirement.STANDARD),
-    'DimensionOrganizationType': WsiAttribute(
-        Requirement.STANDARD,
-        (),
-        'TILED_SPARSE'
+    'ImagedVolumeHeight': WsiAttributeRequirement(
+        Requirement.STRICT,
+        ['VOLUME']
     ),
-    'NumberOfFocalPlanes': WsiAttribute(Requirement.STANDARD, (), 1),
-    'DistanceBetweenFocalPlanes': WsiAttribute(Requirement.STANDARD, (), 0.0),
-    'SliceThickness': WsiAttribute(Requirement.STANDARD),
+    'ImagedVolumeDepth': WsiAttributeRequirement(
+        Requirement.STRICT,
+        ['VOLUME']
+    ),
+    'TotalPixelMatrixFocalPlanes': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default=1
+    ),
+    'NumberOfOpticalPaths': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default=1
+    ),
+    'NumberOfFrames': WsiAttributeRequirement(Requirement.STANDARD, default=1),
+    'Modality': WsiAttributeRequirement(Requirement.STANDARD, default='SM'),
+    'Manufacturer': WsiAttributeRequirement(Requirement.STANDARD),
+    'ManufacturerModelName': WsiAttributeRequirement(Requirement.STANDARD),
+    'DeviceSerialNumber': WsiAttributeRequirement(Requirement.STANDARD),
+    'SoftwareVersions': WsiAttributeRequirement(Requirement.STANDARD),
+    'BitsAllocated': WsiAttributeRequirement(Requirement.STANDARD),
+    'BitsStored': WsiAttributeRequirement(Requirement.STANDARD),
+    'HighBit': WsiAttributeRequirement(Requirement.STANDARD),
+    'PixelRepresentation': WsiAttributeRequirement(Requirement.STANDARD),
+    'TotalPixelMatrixOriginSequence': WsiAttributeRequirement(
+        Requirement.STANDARD
+    ),
+    'ImageOrientationSlide': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default=[0, 1, 0, 1, 0, 0]
+    ),
+    'AcquisitionDateTime': WsiAttributeRequirement(Requirement.STANDARD),
+    'LossyImageCompression': WsiAttributeRequirement(Requirement.STANDARD),
+    'VolumetricProperties': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default='VOLUME'
+    ),
+    'SpecimenLabelInImage': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default='NO'
+    ),
+    'BurnedInAnnotation': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default='NO'
+    ),
+    'ContentDate': WsiAttributeRequirement(Requirement.STANDARD),
+    'ContentTime': WsiAttributeRequirement(Requirement.STANDARD),
+    'InstanceNumber': WsiAttributeRequirement(Requirement.STANDARD),
+    'DimensionOrganizationSequence': WsiAttributeRequirement(
+        Requirement.STANDARD
+    ),
+    'ContainerIdentifier': WsiAttributeRequirement(Requirement.STANDARD),
+    'SpecimenDescriptionSequence': WsiAttributeRequirement(
+        Requirement.STANDARD
+    ),
+    'SpacingBetweenSlices': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default=.0
+    ),
+    'SOPInstanceUIDOfConcatenationSource': WsiAttributeRequirement(
+        Requirement.STANDARD),
+    'DimensionOrganizationType': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default='TILED_SPARSE'
+    ),
+    'NumberOfFocalPlanes': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default=1
+    ),
+    'DistanceBetweenFocalPlanes': WsiAttributeRequirement(
+        Requirement.STANDARD,
+        default=0.0
+    ),
+    'SliceThickness': WsiAttributeRequirement(Requirement.STANDARD)
 }
 
 
