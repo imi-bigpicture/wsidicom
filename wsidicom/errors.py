@@ -78,3 +78,11 @@ class WsiDicomOutOfBoundsError(Exception):
 
     def __str__(self):
         return f"{self.error} is out of bonds of {self.bonds}"
+
+
+class WsiDicomStrictRequirementError(Exception):
+    """Raised if attribute required in strict mode is missing."""
+
+
+class WsiDicomRequirementError(Exception):
+    """Raised if required attribute is missing."""

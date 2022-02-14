@@ -161,7 +161,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
         image_data: WsiDicomTestImageData
     ):
         dataset = Dataset()
-        dataset.SOPClassUID = UID(WSI_SOP_CLASS_UID)
+        dataset.SOPClassUID = WSI_SOP_CLASS_UID
         dataset.ImageType = [
             'ORGINAL', 'PRIMARY', 'VOLUME', 'NONE'
         ]
@@ -214,7 +214,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
     def test_write_meta(self):
         transfer_syntax = JPEGBaseline8Bit
         instance_uid = generate_uid()
-        class_uid = UID(WSI_SOP_CLASS_UID)
+        class_uid = WSI_SOP_CLASS_UID
         with TemporaryDirectory() as tempdir:
             filepath = Path(tempdir + '/1.dcm')
             with WsiDicomFileWriter(filepath) as write_file:
