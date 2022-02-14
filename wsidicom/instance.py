@@ -583,10 +583,7 @@ class WsiDataset(Dataset):
         pixel_measure[0].SpacingBetweenSlices = (
             self._get_spacing_between_slices_for_focal_planes(focal_planes)
         )
-        # if dataset.spacing_between_slices is not None:
-        #     pixel_measure[0].SpacingBetweenSlices = (
-        #         dataset.spacing_between_slices
-        #     )
+
         if dataset.slice_thickness is not None:
             pixel_measure[0].SliceThickness = dataset.slice_thickness
 
