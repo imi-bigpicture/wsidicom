@@ -29,6 +29,7 @@ from typing import (Any, BinaryIO, Dict, Generator, List, Optional,
 
 import numpy as np
 from PIL import Image
+from pydicom import FileDataset
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
 from pydicom.filebase import DicomFile, DicomFileLike
@@ -442,6 +443,7 @@ class WsiDataset(Dataset):
                 name not in dataset
                 and not attribute.evaluate(image_flavor)
             ):
+                warnings.warn(f"Missing required attribute {name}")
                 return None
 
         syntax_supported = (
