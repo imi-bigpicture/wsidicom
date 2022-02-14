@@ -18,6 +18,7 @@ from typing import Optional
 from pydicom.uid import UID as Uid
 
 from wsidicom.config import settings
+from wsidicom.errors import WsiDicomStrictRequirementError
 
 WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
 ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.91.1'
@@ -37,7 +38,7 @@ class SlideUids:
         frame_of_reference: Optional[Uid] = None
     ) -> None:
         if settings.strict_uid_check and frame_of_reference is None:
-            raise ValueError(
+            raise WsiDicomStrictRequirementError(
                 'Frame of reference uid is missing and strict uid check is '
                 'enabled'
             )

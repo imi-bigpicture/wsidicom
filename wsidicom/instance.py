@@ -17,8 +17,8 @@ import threading
 import warnings
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum, auto
 from pathlib import Path
@@ -43,9 +43,11 @@ from pydicom.valuerep import DSfloat
 from wsidicom.config import settings
 from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
+                             WsiDicomRequirementError,
+                             WsiDicomStrictRequirementError,
                              WsiDicomUidDuplicateError)
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.uid import WSI_SOP_CLASS_UID, SlideUids, FileUids
+from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
 
 
 class Requirement(IntEnum):
@@ -65,14 +67,14 @@ class WsiAttribute:
             self.requirement == Requirement.ALWAYS
             and image_type in self.image_types
         ):
-            raise ValueError(
+            raise WsiDicomRequirementError(
                 f'Attribute is set as always required for {image_type}')
         elif (
             settings.strict_attribute_check
             and self.requirement == Requirement.STRICT
             and image_type in self.image_types
         ):
-            raise ValueError(
+            raise WsiDicomStrictRequirementError(
                 f'Attribute is set as required for {image_type} '
                 'and mode is strict'
             )
@@ -2431,9 +2433,13 @@ class FullTileIndex(TileIndex):
                 if number_of_focal_planes == 1:
                     slice_spacing = 0.0
                 else:
-                    raise ValueError()
+                    raise ValueError(
+                        "Slice spacing must be known if multple focal planes."
+                    )
             elif slice_spacing == 0 and number_of_focal_planes != 1:
-                raise ValueError()
+                raise ValueError(
+                    "Slice spacing must be non-zero if multiple focal planes."
+                )
 
             for plane in range(number_of_focal_planes):
                 z = round(plane * slice_spacing * MM_TO_MICRON, DECIMALS)
