@@ -34,7 +34,7 @@ from pydicom.uid import (ExplicitVRBigEndian, ExplicitVRLittleEndian,
 from pydicom.values import convert_numbers
 
 from .geometry import PointMm, RegionMm, SizeMm
-from .uid import ANN_SOP_CLASS_UID, SlideUids, Uid
+from .uid import ANN_SOP_CLASS_UID, SlideUids, UID
 
 config.enforce_valid_values = True
 config.future_behavior()
@@ -967,7 +967,7 @@ class AnnotationGroup:
         description: Optional[str] = None,
         color: Optional[LabColor] = None,
         is_double: bool = True,
-        instance: Optional[Uid] = None
+        instance: Optional[UID] = None
     ):
         """Represents a group of annotations of the same type.
 
@@ -1102,7 +1102,7 @@ class AnnotationGroup:
     def from_ds(
         cls,
         ds: Dataset,
-        instance: Uid
+        instance: UID
     ) -> 'AnnotationGroup':
         """Return annotation group from Annotation Group Sequence dataset.
 
@@ -1933,7 +1933,7 @@ class AnnotationInstance:
         path: Union[str, Path],
         little_endian: bool = True,
         implicit_vr: bool = False,
-        uid_generator: Callable[..., Uid] = generate_uid
+        uid_generator: Callable[..., UID] = generate_uid
     ):
         """Write annotations to DICOM file according to sup 222.
         Note that the file will miss DICOM attributes that has not yet been
@@ -1983,7 +1983,7 @@ class AnnotationInstance:
 
         meta_ds.TransferSyntaxUID = transfer_syntax
         meta_ds.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
-        meta_ds.MediaStorageSOPClassUID = Uid(ANN_SOP_CLASS_UID)
+        meta_ds.MediaStorageSOPClassUID = ANN_SOP_CLASS_UID
         meta_ds.FileMetaInformationGroupLength = 0  # Updated on write
         validate_file_meta(meta_ds)
         file_ds = FileDataset(

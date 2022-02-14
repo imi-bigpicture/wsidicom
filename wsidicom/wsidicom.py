@@ -500,9 +500,11 @@ class WsiDicomGroup:
         List[List[WsiInstance]]
             Instances grouped by common properties.
         """
-        groups: DefaultDict[Any, List[WsiInstance]] = (
-            defaultdict(list)
-        )
+        groups: DefaultDict[
+            Tuple[str, UID, bool, Optional[int], Optional[float], str],
+            List[WsiInstance]
+        ] = defaultdict(list)
+
         for instance in self.instances.values():
             groups[
                 instance.image_data.photometric_interpretation,
@@ -510,8 +512,7 @@ class WsiDicomGroup:
                 instance.ext_depth_of_field,
                 instance.ext_depth_of_field_planes,
                 instance.ext_depth_of_field_plane_distance,
-                instance.focus_method,
-                instance.slice_spacing
+                instance.focus_method
             ].append(
                 instance
             )
@@ -557,7 +558,6 @@ class WsiDicomGroup:
             - transfer syntax
             - extended depth of field (and planes and distance)
             - focus method
-            - spacing between slices
         Other properties are assumed to be equal or to be updated.
 
         Parameters
@@ -1592,9 +1592,8 @@ class WsiDicom:
                     wsi_file.close()
             elif sop_class_uid == ANN_SOP_CLASS_UID:
                 annotation_files.append(filepath)
-
         base_dataset = cls._get_base_dataset(level_files)
-        slide_uids = base_dataset.slide_uids
+        slide_uids = base_dataset.uids.slide
         base_tile_size = base_dataset.tile_size
         level_instances = WsiInstance.open(
             level_files,
