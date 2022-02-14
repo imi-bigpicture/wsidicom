@@ -65,6 +65,10 @@ class WsiAttribute:
     default: Any = None
 
     def get_default(self, image_type: str) -> Any:
+        """Get default value for attribute. Raises WsiDicomRequirementError if
+        attribute is set as always required for image type. Raises
+        WsiDicomStrictRequirementError if attribute is set as always required
+        in strict mode."""
         if (
             self.requirement == Requirement.ALWAYS
             and image_type in self.image_types
@@ -83,6 +87,7 @@ class WsiAttribute:
         return self.default
 
     def evaluate(self, image_type: str) -> bool:
+        """Evaluate if attribute is required for image type."""
         if (
             self.requirement == Requirement.ALWAYS
             or (
@@ -91,8 +96,8 @@ class WsiAttribute:
             )
         ):
             if image_type in self.image_types:
-                return False
-        return True
+                return True
+        return False
 
 
 WSI_ATTRIBUTES = {
@@ -427,8 +432,9 @@ class WsiDataset(Dataset):
             WSI image flavor
         """
 
-        sop_class_uid = getattr(dataset, "SOPClassUID", "")
+        sop_class_uid: UID = getattr(dataset, "SOPClassUID")
         if sop_class_uid != WSI_SOP_CLASS_UID:
+            warnings.warn(f"Non-wsi image, SOP class {sop_class_uid.name}")
             return None
 
         SUPPORTED_IMAGE_TYPES = ['VOLUME', 'LABEL', 'OVERVIEW']
@@ -441,7 +447,7 @@ class WsiDataset(Dataset):
         for name, attribute in WSI_ATTRIBUTES.items():
             if (
                 name not in dataset
-                and not attribute.evaluate(image_flavor)
+                and attribute.evaluate(image_flavor)
             ):
                 warnings.warn(f"Missing required attribute {name}")
                 return None
@@ -2795,7 +2801,7 @@ class WsiDicomFileWriter(MetaWsiDicomFile):
         meta_ds = FileMetaDataset()
         meta_ds.TransferSyntaxUID = transfer_syntax
         meta_ds.MediaStorageSOPInstanceUID = uid
-        meta_ds.MediaStorageSOPClassUID = UID(WSI_SOP_CLASS_UID)
+        meta_ds.MediaStorageSOPClassUID = WSI_SOP_CLASS_UID
         validate_file_meta(meta_ds)
         write_file_meta_info(self._fp, meta_ds)
 

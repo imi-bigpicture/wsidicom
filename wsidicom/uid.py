@@ -15,27 +15,27 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from pydicom.uid import UID as Uid
+from pydicom.uid import UID
 
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomStrictRequirementError
 
-WSI_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.77.1.6'
-ANN_SOP_CLASS_UID = '1.2.840.10008.5.1.4.1.1.91.1'
+WSI_SOP_CLASS_UID = UID('1.2.840.10008.5.1.4.1.1.77.1.6')
+ANN_SOP_CLASS_UID = UID('1.2.840.10008.5.1.4.1.1.91.1')
 
 
 @dataclass
 class SlideUids:
     """Represents the UIDs that should be common for all files of a slide."""
-    study_instance: Uid
-    series_instance: Uid
-    frame_of_reference: Optional[Uid] = None
+    study_instance: UID
+    series_instance: UID
+    frame_of_reference: Optional[UID] = None
 
     def __init__(
         self,
-        study_instance: Uid,
-        series_instance: Uid,
-        frame_of_reference: Optional[Uid] = None
+        study_instance: UID,
+        series_instance: UID,
+        frame_of_reference: Optional[UID] = None
     ) -> None:
         if settings.strict_uid_check and frame_of_reference is None:
             raise WsiDicomStrictRequirementError(
@@ -79,12 +79,12 @@ class SlideUids:
 @dataclass
 class FileUids:
     """Represents the UIDs in a DICOM-file."""
-    instance: Uid
-    concatenation: Optional[Uid]
+    instance: UID
+    concatenation: Optional[UID]
     slide: SlideUids
 
     @property
-    def identifier(self) -> Uid:
+    def identifier(self) -> UID:
         """Return identifier for the instance the file belongs to. Either its
         own intance uid or, if not none, the concnatenation uid.
 
