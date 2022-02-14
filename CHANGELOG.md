@@ -7,9 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ...
 
+## [0.2.0] - 2022-02-14
+### Added
+- Configuration through global variable settings.
+- Relaxed requirements for some DICOM attributes.
+- Writing BOT and EOT, and reading EOT.
+- Pyramid creation.
+
+### Changed
+- save() converts the dataset to TILED_FULL.
+
+### Removed
+- Using null path as output path for save().
+
+### Fixed
+- Fix NumberOfFrames when saving.
+
+
 ## [0.1.0] - 2021-11-26
 ### Added
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.1.0..HEAD
-[0.1.0]: https://github.com/imi-bigpicture/wsidicom/tree/v0.1.0
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.2.0..HEAD
+[0.2.0]: https://github.com/imi-bigpicture/wsidicom/tree/refs/tags/v0.2.0
+[0.1.0]: https://github.com/imi-bigpicture/wsidicom/tree/refs/tags/v0.1.0
