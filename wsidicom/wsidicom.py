@@ -1015,7 +1015,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     def _validate_series(
             self,
-            groups: Union[List[WsiDicomGroup], Sequence[WsiDicomLevel]]
+            groups: Union[Sequence[WsiDicomGroup], Sequence[WsiDicomLevel]]
     ) -> Optional[SlideUids]:
         """Check that no files or instances in series is duplicate and that
         all groups in series matches.

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wsidicom"
-version = "0.1.0"
+version = "0.2.0"
 description = "Tools for handling DICOM based whole scan images"
 authors = ["Erik O Gabrielsson <erik.o.gabrielsson@sectra.com>"]
 license = "Apache-2.0"
@@ -20,7 +20,7 @@ classifiers = [
 python = "^3.7"
 numpy = "^1.15.0"
 pydicom = "^2.1.0"
-Pillow = "^8.0.0"
+Pillow = "^9.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.0.0"
