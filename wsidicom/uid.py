@@ -79,12 +79,12 @@ class SlideUids:
 @dataclass
 class FileUids:
     """Represents the UIDs in a DICOM-file."""
-    instance: UID
-    concatenation: Optional[UID]
+    instance: Uid
+    concatenation: Optional[Uid]
     slide: SlideUids
 
     @property
-    def identifier(self) -> UID:
+    def identifier(self) -> Uid:
         """Return identifier for the instance the file belongs to. Either its
         own intance uid or, if not none, the concnatenation uid.
 
