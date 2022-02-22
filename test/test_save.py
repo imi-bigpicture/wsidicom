@@ -285,7 +285,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
             JPEGBaseline8Bit,
             self.frame_count
         ) as read_file:
-            frame_index = read_file._parse_pixel_data()
+            frame_index, table_type = read_file._parse_pixel_data()
             return frame_index
 
     def assertEndOfFile(self, file: WsiDicomTestFile):
