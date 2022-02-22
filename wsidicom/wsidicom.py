@@ -1565,12 +1565,12 @@ class WsiDicom:
         Parameters
         ----------
         path: Union[str, Sequence[str], Path, Sequence[Path]]
-            Path to files to open
+            Path to files to open.
 
         Returns
         ----------
         WsiDicom
-            Object created from wsi dicom files in path
+            Object created from wsi dicom files in path.
         """
         filepaths = cls._get_filepaths(path)
         level_files: List[WsiDicomFile] = []
@@ -2083,3 +2083,34 @@ class WsiDicom:
             if item.uids is not None and item.uids != slide_uids:
                 raise WsiDicomMatchError(str(item), str(self))
         return slide_uids
+
+    @classmethod
+    def ready_for_viewing(
+        cls,
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
+    ) -> bool:
+        """Return true if files in path are formated for fast viewing, i.e.
+        have TILED_FULL tile arrangement and have an offset table.
+
+        Parameters
+        ----------
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
+            Path to files to test.
+
+        Returns
+            True if files in path are formated for fast viewing.
+        """
+        filepaths = cls._get_filepaths(path)
+        # Sort files by file size to test smallest file first.
+        filepaths.sort(key=os.path.getsize)
+        for filepath in cls._filter_paths(filepaths):
+            file = WsiDicomFile(filepath, parse_pixel_data=False)
+            if file.wsi_type is None:
+                continue
+            if (
+                file.dataset.tile_type != 'TILED_FULL'
+                or file.offset_table_type is None
+            ):
+                return False
+
+        return True

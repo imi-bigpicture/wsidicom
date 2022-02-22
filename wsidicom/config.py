@@ -18,6 +18,7 @@ class Settings:
     def __init__(self) -> None:
         self._strict_uid_check = False
         self._strict_attribute_check = False
+        self._parse_pixel_data_on_load = True
 
     @property
     def strict_uid_check(self) -> bool:
@@ -36,6 +37,15 @@ class Settings:
     @strict_attribute_check.setter
     def strict_attribute_check(self, value: bool) -> None:
         self._strict_attribute_check = value
+
+    @property
+    def parse_pixel_data_on_load(self) -> bool:
+        """If to parse pixel data for frame positions on file load."""
+        return self._parse_pixel_data_on_load
+
+    @parse_pixel_data_on_load.setter
+    def parse_pixel_data_on_load(self, value: bool) -> None:
+        self._parse_pixel_data_on_load = value
 
 
 settings = Settings()
