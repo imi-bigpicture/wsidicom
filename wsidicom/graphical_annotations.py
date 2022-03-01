@@ -1778,7 +1778,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
         for annotation in self.annotations:
             indices.append(index)
             index += len(annotation.geometry.data)
-        return np.array(indices, dtype=int)
+        return np.array(indices, dtype=np.int32)
 
     @staticmethod
     def _get_indices_from_ds(
