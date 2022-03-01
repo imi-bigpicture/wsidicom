@@ -1619,7 +1619,7 @@ class AnnotationGroup:
             Dataset containing the group.
         """
         ds = Dataset()
-        ds.AnnotationGroupNumber = group_number + 1
+        ds.AnnotationGroupNumber = group_number
         ds.AnnotationGroupUID = self._uid
         ds.NumberOfAnnotations = len(self.annotations)
         ds.GraphicType = self.annotation_type
@@ -1952,7 +1952,9 @@ class AnnotationInstance:
         ds.is_little_endian = little_endian
         ds.is_implicit_VR = implicit_vr
         bulk_sequence = DicomSequence()
+        print(self.groups)
         for index, annotation_group in enumerate(self.groups):
+            print(index)
             if(isinstance(annotation_group, AnnotationGroup)):
                 bulk_sequence.append(annotation_group.to_ds(index+1))
             else:
