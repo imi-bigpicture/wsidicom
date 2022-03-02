@@ -15,7 +15,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8"]
+        # python-version: ["3.7", "3.8", "3.9", "3.10"]
 
     steps:
     - uses: actions/checkout@v2
@@ -36,17 +37,12 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics
-        
-  tests:
-    needs: [ build ]
-    runs-on: ubuntu-latest
-    steps:
     - name: Load test images from cache
       id: cache-test-images
       uses: actions/cache@v2
       with:
-        key: test-image-cache-v1.0.1
-        path: wsidicom/tests/testdata/slides
+        key: test-image-cache
+        path: tests/testdata/slides
     - name: Check test images are loaded
       if: steps.cache-test-images.outputs.cache-hit != 'true'
       run: |
