@@ -50,7 +50,7 @@ jobs:
     - name: Check test images are loaded
       if: steps.cache-test-images.outputs.cache-hit != 'true'
       run: |
-          mkdir -p wsidicom/tests/testdata/slides
-          python wsidicom/tests/download_test_images.py
+          mkdir -p tests/testdata/slides
+          python tests/download_test_images.py
     - name: Test with pytest, only unittests as there is no test data yet.
       run: python -m poetry run pytest -m unittest
