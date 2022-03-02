@@ -10,25 +10,7 @@ on:
     branches: [ main ]
 
 jobs:
-  cache_test_images:
-    name: cache test images
-    runs-on: ubuntu-latest
-    steps:
-      - name: Load test images from cache
-        id: cache-test-images
-        uses: actions/cache@v2
-        with:
-          key: test-image-cache-v1.0.1
-          path: SLIDE_FOLDER
-      - name: Load test images
-        if: steps.cache-test-images.outputs.cache-hit != 'true'
-        # we should call a script provided in the repo
-        run: |
-          mkdir -p tests/testdata/slides
-          python tests/download_test_images.py
-
   build:
-
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -55,6 +37,27 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics
         
+  cache_test_images:
+    name: cache test images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Load test images from cache
+        id: cache-test-images
+        uses: actions/cache@v2
+        with:
+          key: test-image-cache-v1.0.1
+          path: SLIDE_FOLDER
+      - name: Load test images
+        if: steps.cache-test-images.outputs.cache-hit != 'true'
+        # we should call a script provided in the repo
+        run: |
+          mkdir -p tests/testdata/slides
+          python tests/download_test_images.py
+        
+  tests:
+    needs: [ cache_test_images ]
+    runs-on: ubuntu-latest
+    steps:
     # cross os caching support, see: https://github.com/actions/cache/issues/591
     - name: "Use GNU tar instead BSD tar"
       if: matrix.os == 'windows-latest'
