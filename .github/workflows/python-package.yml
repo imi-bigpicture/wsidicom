@@ -45,15 +45,11 @@ jobs:
     - name: Download test images
       if: steps.cache-test-images.outputs.cache-hit != 'true'
       run: |
-          mkdir -p tests/testdata/slides
-          python tests/download_test_images.py
+        mkdir -p tests/testdata/slides
+        python tests/download_test_images.py
+    - name: List files.
+      run: |
+        pwd
+        ls
     - name: Test with pytest.
       run: python -m poetry run pytest
-    - name: Content list
-      uses: enricomarino/actions@v2
-      with:
-        source: tests
-    - name: Content list
-      uses: enricomarino/actions@v2
-      with:
-        source: tests/testdata
