@@ -15,7 +15,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.7"]
+        #python-version: ["3.7", "3.8", "3.9", "3.10"]
 
     steps:
     - uses: actions/checkout@v2
@@ -44,8 +45,8 @@ jobs:
         path: tests/testdata/slides
     - name: Download test images
 #       if: steps.cache-test-images.outputs.cache-hit != 'true'
-      run: |
-        mkdir -p tests/testdata/slides
+      run:
+#        mkdir -p tests/testdata/slides
         python tests/download_test_images.py
     - name: List files.
       run: |
