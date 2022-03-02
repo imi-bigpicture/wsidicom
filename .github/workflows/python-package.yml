@@ -51,8 +51,8 @@ jobs:
         if: steps.cache-test-images.outputs.cache-hit != 'true'
         # we should call a script provided in the repo
         run: |
-          mkdir -p tests/testdata/slides
-          python tests/download_test_images.py
+          mkdir -p wsidicom/tests/testdata/slides
+          python wsidicom/tests/download_test_images.py
         
   tests:
     needs: [ cache_test_images ]
