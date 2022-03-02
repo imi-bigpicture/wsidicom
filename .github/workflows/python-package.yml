@@ -43,15 +43,13 @@ jobs:
         key: test-image-cache
         path: tests/testdata/slides
     - name: Download test images
-      if: steps.cache-test-images.outputs.cache-hit != 'true'
+#       if: steps.cache-test-images.outputs.cache-hit != 'true'
       run: |
         mkdir -p tests/testdata/slides
         python tests/download_test_images.py
     - name: List files.
       run: |
         pwd
-        ls
-        ls tests/testdata
         ls tests/testdata/slides
     - name: Test with pytest.
       run: python -m poetry run pytest
