@@ -51,5 +51,7 @@ jobs:
       run: |
         pwd
         ls
+        ls tests/testdata
+        ls tests/testdata/slides
     - name: Test with pytest.
       run: python -m poetry run pytest
