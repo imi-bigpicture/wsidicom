@@ -42,10 +42,18 @@ jobs:
       with:
         key: test-image-cache
         path: tests/testdata/slides
-    - name: Check test images are loaded
+    - name: Download test images
       if: steps.cache-test-images.outputs.cache-hit != 'true'
       run: |
           mkdir -p tests/testdata/slides
           python tests/download_test_images.py
     - name: Test with pytest.
       run: python -m poetry run pytest
+    - name: Content list
+      uses: enricomarino/actions@v2
+      with:
+        source: tests
+    - name: Content list
+      uses: enricomarino/actions@v2
+      with:
+        source: tests/testdata
