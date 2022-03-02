@@ -1,0 +1,356 @@
+{
+    "Histech^Samantha [1229631]": {
+        "read_region": [
+            {
+                "location": {
+                    "x": 20000,
+                    "y": 15000
+                },
+                "level": 0,
+                "size": {
+                    "width": 200,
+                    "height": 200
+                },
+                "md5": "b075476112b07f2bc4593f2fb27d964b"
+            },
+            {
+                "location": {
+                    "x": 10000,
+                    "y": 7500
+                },
+                "level": 1,
+                "size": {
+                    "width": 200,
+                    "height": 200
+                },
+                "md5": "0c69d7e0484da6cc0a7710614e89dcf8"
+            },
+            {
+                "location": {
+                    "x": 5000,
+                    "y": 3750
+                },
+                "level": 2,
+                "size": {
+                    "width": 200,
+                    "height": 200
+                },
+                "md5": "cb449dcc6cb4d6db6d87ffee5067e461"
+            }
+        ],
+        "read_region_mm": [
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "level": 0,
+                "size": {
+                    "width": 0.05,
+                    "height": 0.05
+                },
+                "md5": "8f0328d1f3ae3f0733bc0d00ebab13e8"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "level": 1,
+                "size": {
+                    "width": 0.1,
+                    "height": 0.1
+                },
+                "md5": "2a3b5cba4a697574e2a923ce1ef5ca7b"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "level": 2,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.2
+                },
+                "md5": "8ddc4e8e8ba564b61b5826739497b132"
+            }
+        ],
+        "read_region_mpp": [
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "mpp": 0.5,
+                "size": {
+                    "width": 0.05,
+                    "height": 0.05
+                },
+                "md5": "a71295efe7f325ea63d48d3529eaf056"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "mpp": 5,
+                "size": {
+                    "width": 0.5,
+                    "height": 0.5
+                },
+                "md5": "28c31d120e0cf06b72da4e20fc2af6b6"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "mpp": 25,
+                "size": {
+                    "width": 2.5,
+                    "height": 2.5
+                },
+                "md5": "d0ad70710eb358a8e6fce0df81f98efe"
+            }
+        ],
+        "read_tile": [
+            {
+                "location": {
+                    "x": 24,
+                    "y": 20
+                },
+                "level": 0,
+                "md5": "69adabc58c45d7e55add875b57282cb3"
+            },
+            {
+                "location": {
+                    "x": 12,
+                    "y": 10
+                },
+                "level": 1,
+                "md5": "a7a7acbafd02a01f7537e47b10e80ca8"
+            },
+            {
+                "location": {
+                    "x": 6,
+                    "y": 5
+                },
+                "level": 2,
+                "md5": "42630d76a37ad600ee960ab0f27ee962"
+            }
+        ],
+        "read_encoded_tile": [
+            {
+                "location": {
+                    "x": 24,
+                    "y": 20
+                },
+                "level": 0,
+                "md5": "c7db48ebb4fc1b0960aa010cc1db08b2"
+            },
+            {
+                "location": {
+                    "x": 12,
+                    "y": 10
+                },
+                "level": 1,
+                "md5": "cb54e189e1a33917afa29a5bce0cbf2a"
+            },
+            {
+                "location": {
+                    "x": 6,
+                    "y": 5
+                },
+                "level": 2,
+                "md5": "15ea2069985506bd2b0bddbbae749df2"
+            }
+        ],
+        "read_thumbnail": [
+            {
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "e0727aca5ad2a3dc39d1f525f72df084"
+            }
+        ]
+    },
+    "MoticWangjie^Professer [100001]": {
+        "read_region": [
+            {
+                "location": {
+                    "x": 20000,
+                    "y": 15000
+                },
+                "level": 0,
+                "size": {
+                    "width": 200,
+                    "height": 200
+                },
+                "md5": "8caf1eadec44d80b7431af0491b97a55"
+            },
+            {
+                "location": {
+                    "x": 10000,
+                    "y": 7500
+                },
+                "level": 1,
+                "size": {
+                    "width": 200,
+                    "height": 200
+                },
+                "md5": "d3260384a16c2686800198dc6f079f3a"
+            },
+            {
+                "location": {
+                    "x": 5000,
+                    "y": 3750
+                },
+                "level": 2,
+                "size": {
+                    "width": 200,
+                    "height": 200
+                },
+                "md5": "5ca3da6bc91548df419226c7a56db2c9"
+            }
+        ],
+        "read_region_mm": [
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "level": 0,
+                "size": {
+                    "width": 0.05,
+                    "height": 0.05
+                },
+                "md5": "b3d264d3fbd79b771c47d56769cae729"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "level": 1,
+                "size": {
+                    "width": 0.1,
+                    "height": 0.1
+                },
+                "md5": "e0a2a1be5414b969a5f30fcee742a5a4"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "level": 2,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.2
+                },
+                "md5": "697edbaf32b50b696322fd8bbe040919"
+            }
+        ],
+        "read_region_mpp": [
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "mpp": 0.5,
+                "size": {
+                    "width": 0.1,
+                    "height": 0.1
+                },
+                "md5": "a1eac63bdaeda88c008ece88878b3f81"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "mpp": 5,
+                "size": {
+                    "width": 1,
+                    "height": 1
+                },
+                "md5": "29e63bc222d561f4f6e4ae248085bce1"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "mpp": 25,
+                "size": {
+                    "width": 5,
+                    "height": 5
+                },
+                "md5": "1b335c34c9dcf91955c7413b5cc2a716"
+            }
+        ],
+        "read_tile": [
+            {
+                "location": {
+                    "x": 24,
+                    "y": 20
+                },
+                "level": 0,
+                "md5": "5cc45ec8259561956f34a7a784fcaf2c"
+            },
+            {
+                "location": {
+                    "x": 12,
+                    "y": 10
+                },
+                "level": 1,
+                "md5": "3d243c8b2459cc249f7cb9252695c2e4"
+            },
+            {
+                "location": {
+                    "x": 6,
+                    "y": 5
+                },
+                "level": 2,
+                "md5": "63c9750b5dd05c224ea2b1ddc6273ee9"
+            }
+        ],
+        "read_encoded_tile": [
+            {
+                "location": {
+                    "x": 24,
+                    "y": 20
+                },
+                "level": 0,
+                "md5": "064d5c4da42f7a6c9f3229c0230ba202"
+            },
+            {
+                "location": {
+                    "x": 12,
+                    "y": 10
+                },
+                "level": 1,
+                "md5": "437ab868ddb69ba40d3c262530cb07df"
+            },
+            {
+                "location": {
+                    "x": 6,
+                    "y": 5
+                },
+                "level": 2,
+                "md5": "665e94c4f47180aacedeeaf5cc7e21bf"
+            }
+        ],
+        "read_thumbnail": [
+            {
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "8ff6df7578e4851706498ca8d58edee6"
+            }
+        ]
+    }
+}

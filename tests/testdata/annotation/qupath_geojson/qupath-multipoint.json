@@ -1,0 +1,17 @@
+{
+  "type": "Feature",
+  "id": "PathAnnotationObject",
+  "geometry": {
+    "type": "MultiPoint",
+    "coordinates": [
+      [26833.53, 15424.94],
+      [26807.1, 15451.72],
+      [26843.88, 15449.94]
+    ]
+  },
+  "properties": {
+    "name": "multipoint",
+    "isLocked": false,
+    "measurements": []
+  }
+}
