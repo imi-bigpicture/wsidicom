@@ -20,37 +20,48 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        python -m pip install poetry
-    - name: Install Application
-      run: python -m poetry install
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics
+    # - name: Set up Python ${{ matrix.python-version }}
+    #   uses: actions/setup-python@v2
+    #   with:
+    #     python-version: ${{ matrix.python-version }}
+    # - name: Install dependencies
+    #   run: |
+    #     python -m pip install --upgrade pip
+    #     python -m pip install flake8 pytest
+    #     python -m pip install poetry
+    # - name: Install Application
+    #   run: python -m poetry install
+    # - name: Lint with flake8
+    #   run: |
+    #     # stop the build if there are Python syntax errors or undefined names
+    #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+    #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics
     - name: Load test images from cache
       id: cache-test-images
       uses: actions/cache@v2
       with:
         key: test-image-cache
         path: tests/testdata/slides
-    - name: Download test images
-#       if: steps.cache-test-images.outputs.cache-hit != 'true'
-      run:
-#        mkdir -p tests/testdata/slides
-        python tests/download_test_images.py
     - name: List files.
       run: |
         pwd
         ls tests/testdata/slides
-    - name: Test with pytest.
-      run: python -m poetry run pytest
+    - name: Create test folder
+      run:
+        mkdir test/testdata/slides/test123
+    - name: List files.
+      run: |
+        pwd
+        ls tests/testdata/slides
+    - name: Create test folder
+      run:
+        mkdir test/testdata/slides/test123
+    # - name: Download test images
+#       if: steps.cache-test-images.outputs.cache-hit != 'true'
+      # run:
+#        mkdir -p tests/testdata/slides
+    #     python tests/download_test_images.py
+
+    # - name: Test with pytest.
+    #   run: python -m poetry run pytest
