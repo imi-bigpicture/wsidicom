@@ -16,12 +16,13 @@ import os
 from pathlib import Path
 from hashlib import md5
 from ftplib import FTP
+from typing import Any, Dict, Sequence, Tuple, Union
 
 
 FILESERVER = 'medical.nema.org'
 FILESERVER_SLIDE_PATH = Path('MEDICAL/Dicom/DataSets/WG26')
 
-SLIDES = {
+SLIDES: Dict[str, Dict[str, Any]] = {
     'FULL_WITH_BOT': {
         'name':  r'Histech^Samantha [1229631]',
         'parentpath': r'WG26Demo2020_PV',
@@ -59,9 +60,6 @@ SLIDES = {
     }
 }
 
-DEFAULT_DIR = 'testdata'
-SLIDE_DIR = 'slides'
-
 def cwd_to_folder(ftp, folder: Path):
     ftp.cwd('/')
     for subfolder in folder.parts:
@@ -71,8 +69,9 @@ def download_file(ftp: FTP, file: str, filename: Path):
     with open(filename, 'wb') as fp:
         ftp.retrbinary(f'RETR {file}', fp.write)
 
-def main():
-    print("Downloading and/or checking testdata from openslide.")
+def get_slide_dir() -> Path:
+    DEFAULT_DIR = 'tests/testdata'
+    SLIDE_DIR = 'slides'
     test_data_path = os.environ.get("DICOM_TESTDIR")
     if test_data_path is None:
         test_data_dir = Path(DEFAULT_DIR)
@@ -83,29 +82,39 @@ def main():
     else:
         test_data_dir = Path(test_data_path)
         print(f"Downloading to {test_data_dir}")
-    os.makedirs(test_data_dir, exist_ok=True)
+    return test_data_dir.joinpath(SLIDE_DIR)
+
+def get_or_check_slide(slide_dir: Path, slide: Dict[str, Any], ftp: FTP):
+    path = slide_dir.joinpath(slide['name'], slide['subpath'])
+    ftp_path = FILESERVER_SLIDE_PATH.joinpath(slide['parentpath'], slide['name'], slide['subpath'])
+    os.makedirs(path, exist_ok=True)
+    cwd_to_folder(ftp, ftp_path)
+    for file, checksum in slide['files'].items():
+        file_path = path.joinpath(file)
+        if not file_path.exists():
+            print(f"{file} not found, downloading from {ftp_path.joinpath(file).as_posix()}")
+            download_file(ftp, file, file_path)
+        else:
+            print(f"{file} found, skipping download")
+        check_checksum(file_path, checksum)
+
+def check_checksum(file_path: Path, checksum: str):
+    with open(file_path, 'rb') as saved_file:
+        data = saved_file.read()
+        file_checksum = md5(data).hexdigest()
+        if checksum != file_checksum:
+            raise ValueError(f"Checksum failed for {file_path}")
+        else:
+            print(f"{file_path} checksum OK")
+
+def main():
+    print("Downloading and/or checking testdata from nema.org.")
+    slide_dir = get_slide_dir()
     with FTP(FILESERVER) as ftp:
         ftp.login()
-        ftp.set_pasv(True)
         for slide in SLIDES.values():
-            path = test_data_dir.joinpath(SLIDE_DIR, slide['name'], slide['subpath'])
-            ftp_path = FILESERVER_SLIDE_PATH.joinpath(slide['parentpath'], slide['name'], slide['subpath'])
-            os.makedirs(path, exist_ok=True)
-            cwd_to_folder(ftp, ftp_path)
-            for file, checksum in slide['files'].items():
-                file_path = path.joinpath(file)
-                if not file_path.exists():
-                    print(f"{file} not found, downloading from {ftp_path.joinpath(file).as_posix()}")
-                    download_file(ftp, file, file_path)
-                else:
-                    print(f"{file} found, skipping download")
-                with open(file_path, 'rb') as saved_file:
-                    data = saved_file.read()
-                    file_checksum = md5(data).hexdigest()
-                    if checksum != file_checksum:
-                        raise ValueError(f"Checksum failed for {file}")
-                    else:
-                        print(f"{file} checksum OK")
+            get_or_check_slide(slide_dir, slide, ftp)
+
 
 
 if __name__ == "__main__":
