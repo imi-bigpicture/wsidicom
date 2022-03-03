@@ -48,8 +48,8 @@ jobs:
         pwd
         ls tests/testdata/slides
     - name: Create test folder
-      run:
-        mkdir test/testdata/slides/test123
+      run: |
+        mkdir -p test/testdata/slides/test123
     - name: List files.
       run: |
         pwd
