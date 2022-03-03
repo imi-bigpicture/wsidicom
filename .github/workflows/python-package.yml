@@ -45,14 +45,14 @@ jobs:
         path: tests/testdata/slides
     - name: Create test folder
       run: |
-        mkdir -p test/testdata/slides
+        mkdir -p tests/testdata/slides
     - name: List files.
       run: |
         pwd
         ls tests/testdata/slides
     - name: Create test folder
       run:
-        mkdir test/testdata/slides/test123
+        mkdir tests/testdata/slides/test123
     # - name: Download test images
 #       if: steps.cache-test-images.outputs.cache-hit != 'true'
       # run:
