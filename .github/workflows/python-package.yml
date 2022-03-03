@@ -41,7 +41,7 @@ jobs:
       id: cache-test-images
       uses: actions/cache@v2
       with:
-        key: test-image-cache
+        key: test-image-cache-2
         path: tests/testdata/slides
     - name: List files.
       run: |
