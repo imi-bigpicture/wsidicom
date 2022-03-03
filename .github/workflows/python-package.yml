@@ -49,7 +49,7 @@ jobs:
         ls tests/testdata/slides
     - name: Create test folder
       run: |
-        mkdir -p test/testdata/slides/test123
+        mkdir -p test/testdata/slides
     - name: List files.
       run: |
         pwd
