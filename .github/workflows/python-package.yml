@@ -45,7 +45,7 @@ jobs:
         path: tests/testdata/slides
     - name: Download test images
       if: steps.cache-test-images.outputs.cache-hit != 'true'
-      run:
+      run: |
         mkdir -p tests/testdata/slides
         python tests/download_test_images.py
     - name: Test with pytest.
