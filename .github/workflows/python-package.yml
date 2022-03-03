@@ -41,7 +41,7 @@ jobs:
       with:
         key: test-images-cache-0.1
         path: tests/testdata/slides
-    - name: Download test images
+    - name: Download test images if not cached
       if: steps.test-images-cache.outputs.cache-hit != 'true'
       run:
         python tests/download_test_images.py
