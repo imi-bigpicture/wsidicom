@@ -2,7 +2,7 @@ name: Python package
 
 on:
   push:
-    branches: [ main, public-testdat ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
