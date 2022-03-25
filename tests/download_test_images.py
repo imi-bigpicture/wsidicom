@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 from hashlib import md5
 from ftplib import FTP
-from typing import Any, Dict, Sequence, Tuple, Union
+from typing import Any, Dict
 
 
 FILESERVER = 'medical.nema.org'
