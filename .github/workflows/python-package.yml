@@ -11,6 +11,8 @@ jobs:
     name: cache test images
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout repository
+        uses: actions/checkout@v2
     - name: Load test images from cache
       id: test-images-cache
       uses: actions/cache@v2
