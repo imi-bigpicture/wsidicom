@@ -135,7 +135,7 @@ point_annotation = Annotation(Point(10.0, 20.0))
 
 ***Create a point annotation with a measurement.***
 ```python
-from wsidicom import Coder, Measurement
+from wsidicom import ConceptCode, Measurement
 # A measurement is defined by a type code ('Area'), a value (25.0) and a unit code ('Pixels).
 area = ConceptCode.measurement('Area')
 pixels = ConceptCode.unit('Pixels')
@@ -159,7 +159,7 @@ group = PointAnnotationGroup(
 ***Create a collection of annotation groups.***
 ```python
 from wsidicom import AnnotationInstance
-annotations = AnnotationInstance([group], slide.frame_of_reference)
+annotations = AnnotationInstance([group], 'volume', slide.uids)
 ```
 
 ***Save the collection to file.***

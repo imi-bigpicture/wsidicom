@@ -1447,7 +1447,7 @@ class WsiDicom:
         self._overviews = overviews
         self.annotations = annotations
 
-        self.uids = self._validate_collection(
+        self._uids = self._validate_collection(
             [self.levels, self.labels, self.overviews]
         )
 
@@ -1536,8 +1536,8 @@ class WsiDicom:
         )
 
     @property
-    def frame_of_reference(self) -> Optional[UID]:
-        return self.uids.frame_of_reference
+    def uids(self) -> Optional[SlideUids]:
+        return self._uids
 
     def pretty_str(
         self,
