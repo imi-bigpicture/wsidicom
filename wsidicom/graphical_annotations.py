@@ -21,7 +21,6 @@ from typing import (Any, Callable, DefaultDict, Dict, Generator, List,
                     Optional, Sequence, Set, Tuple, Type, Union)
 
 import numpy as np
-from pydicom import config
 from pydicom.dataset import (Dataset, FileDataset, FileMetaDataset,
                              validate_file_meta)
 from pydicom.filereader import dcmread
@@ -35,9 +34,6 @@ from pydicom.values import convert_numbers
 
 from .geometry import PointMm, RegionMm, SizeMm
 from .uid import ANN_SOP_CLASS_UID, SlideUids, UID
-
-config.enforce_valid_values = True
-config.future_behavior()
 
 
 @dataclass
