@@ -1,0 +1,13 @@
+{
+  "type": "Feature",
+  "id": "PathAnnotationObject",
+  "geometry": {
+    "type": "Point",
+    "coordinates": [26833.53, 15424.94]
+  },
+  "properties": {
+    "name": "point",
+    "isLocked": false,
+    "measurements": []
+  }
+}

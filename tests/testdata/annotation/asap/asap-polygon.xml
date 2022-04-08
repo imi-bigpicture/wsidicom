@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<ASAP_Annotations>
+	<Annotations>
+		<Annotation Name="Annotation 0" Type="Polygon" PartOfGroup="None" Color="#F4FA58">
+			<Coordinates>
+				<Coordinate Order="0" X="22851.3281" Y="16551.1797" />
+				<Coordinate Order="1" X="22693.1875" Y="16669.7832" />
+				<Coordinate Order="2" X="22911.5078" Y="16710.6367" />
+				<Coordinate Order="3" X="22934.3516" Y="16636.3984" />
+				<Coordinate Order="4" X="23067.4531" Y="16621.4629" />
+				<Coordinate Order="5" X="22954.1191" Y="16565.2363" />
+			</Coordinates>
+		</Annotation>
+	</Annotations>
+	<AnnotationGroups />
+</ASAP_Annotations>

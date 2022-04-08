@@ -1,0 +1,16 @@
+{
+  "type": "Feature",
+  "id": "PathAnnotationObject",
+  "geometry": {
+    "type": "LineString",
+    "coordinates": [
+      [26096.35, 15240.5],
+      [26230.6, 15580.39]
+    ]
+  },
+  "properties": {
+    "name": "line",
+    "isLocked": false,
+    "measurements": []
+  }
+}

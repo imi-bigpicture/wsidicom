@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<ASAP_Annotations>
+	<Annotations>
+		<Annotation Name="Annotation 0" Type="PointSet" PartOfGroup="None" Color="#F4FA58">
+			<Coordinates>
+				<Coordinate Order="0" X="22793.7832" Y="16650.8945" />
+				<Coordinate Order="1" X="22746.7793" Y="16708.4414" />
+				<Coordinate Order="2" X="22819.2598" Y="16718.9844" />
+				<Coordinate Order="3" X="22828.0449" Y="16681.2051" />
+				<Coordinate Order="4" X="22798.1738" Y="16682.5234" />
+			</Coordinates>
+		</Annotation>
+	</Annotations>
+	<AnnotationGroups />
+</ASAP_Annotations>

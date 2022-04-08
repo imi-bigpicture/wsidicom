@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ASAP_Annotations>
+	<Annotations>
+		<Annotation Name="Annotation 0" Type="Dot" PartOfGroup="None" Color="#F4FA58">
+			<Coordinates>
+				<Coordinate Order="0" X="23071.5605" Y="16831.0098" />
+			</Coordinates>
+		</Annotation>
+	</Annotations>
+	<AnnotationGroups />
+</ASAP_Annotations>
