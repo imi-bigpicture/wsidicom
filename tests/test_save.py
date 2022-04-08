@@ -37,10 +37,10 @@ from wsidicom.instance import ImageData, WsiDicomFile, WsiDicomFileWriter
 from wsidicom.uid import WSI_SOP_CLASS_UID
 from wsidicom.wsidicom import WsiDicomLevel
 
-wsidicom_test_data_dir = os.environ.get("WSIDICOM_TESTDIR", "C:/temp/wsidicom")
-sub_data_dir = "interface"
-data_dir = wsidicom_test_data_dir + '/' + sub_data_dir
-
+SLIDE_FOLDER = Path(os.environ.get(
+    "WSIDICOM_TESTDIR",
+    "tests/testdata/slides")
+)
 
 class WsiDicomTestFile(WsiDicomFile):
     """Test version of WsiDicomFile that overrides __init__."""
@@ -108,10 +108,6 @@ class WsiDicomTestImageData(ImageData):
 
 @pytest.mark.save
 class WsiDicomFileSaveTests(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.test_folders: Dict[Path, WsiDicom]
-
     @classmethod
     def setUpClass(cls):
         cls.tiled_size = Size(10, 10)
@@ -138,22 +134,39 @@ class WsiDicomFileSaveTests(unittest.TestCase):
             cls.frame_count,
             cls.image_data
         )
-        folders = cls.get_folders()
+
+        folders = cls._get_folders(SLIDE_FOLDER)
         cls.test_folders = {}
         for folder in folders:
-            cls.test_folders[folder] = cls.open(folder)
+            relative_path = cls._get_relative_path(folder)
+            cls.test_folders[relative_path] = cls.open(folder)
+
+        if len(cls.test_folders) == 0:
+            raise unittest.SkipTest(
+                f'no test slide files found for {SLIDE_FOLDER}, '
+                'skipping'
+            )
 
     @staticmethod
-    def open(path: Path) -> WsiDicom:
-        folder = Path(path).joinpath("dcm")
-        return WsiDicom.open(str(folder))
+    def open(folder: Path) -> WsiDicom:
+        while next(folder.iterdir()).is_dir():
+            folder = next(folder.iterdir())
+        return WsiDicom.open(folder)
 
-    @classmethod
-    def get_folders(cls):
+    @staticmethod
+    def _get_folders(slide_folder: Path) -> List[Path]:
+        if not slide_folder.exists():
+            print("slide folder does not exist")
+            return []
         return [
-            Path(data_dir).joinpath(item)
-            for item in os.listdir(data_dir)
+            item for item in slide_folder.iterdir()
+            if item.is_dir
         ]
+
+    @staticmethod
+    def _get_relative_path(slide_path: Path) -> Path:
+        parts = slide_path.parts
+        return Path(parts[-1])
 
     @staticmethod
     def create_test_dataset(
@@ -445,8 +458,9 @@ class WsiDicomFileSaveTests(unittest.TestCase):
     def test_create_child(self):
         for _, wsi in self.test_folders.items():
             with TemporaryDirectory() as tempdir:
-                target = cast(WsiDicomLevel, wsi.levels[-1])
-                source = cast(WsiDicomLevel, wsi.levels[-2])
+                print(f"running test create child on {wsi.files}")
+                target = cast(WsiDicomLevel, wsi.levels[-2])
+                source = cast(WsiDicomLevel, wsi.levels[-3])
                 new_level = source.create_child(
                     2,
                     Path(tempdir),

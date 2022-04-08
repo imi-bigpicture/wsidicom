@@ -1,0 +1,21 @@
+{
+  "type": "Feature",
+  "id": "PathAnnotationObject",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [26268, 15298],
+        [26268, 15474],
+        [26478, 15474],
+        [26478, 15298],
+        [26268, 15298]
+      ]
+    ]
+  },
+  "properties": {
+    "name": "rectangle",
+    "isLocked": false,
+    "measurements": []
+  }
+}

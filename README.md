@@ -174,7 +174,7 @@ annotations = slide.annotations
 ```
 
 ## Setup environment for development
-Requires poetry and pytest and pytest-watch installed in the virtual environment.
+Requires poetry installed in the virtual environment.
 
 ```console
 $ git clone https://github.com/imi-bigpicture/wsidicom.git
@@ -187,12 +187,19 @@ To watch unit tests use:
 $ poetry run pytest-watch -- -m unittest
 ```
 
-To run integration tests, set the WSIDICOM_TESTDIR environment varible to your test data directory and then use:
+The integration tests uses test images from nema.org thats needs to be downloaded. The location of the test images can be changed from the default tests\testdata\slides using the enviroment variable WSIDICOM_TESTDIR. Download the images using the supplied script:
+
+```console
+$ python .\tests\download_test_images.py
+```
+
+If the files are already downloaded the script will validate the checksums.
+
+To run integration tests:
 
 ```console
 $ poetry run pytest -m integration
 ```
-Unfortunately due to data sharing restrictions the default WSI DICOM test files can't be shared. We are working on a solution, please disregard the integration tests at the moment.
 
 ## Other DICOM python tools
 - [pydicom](https://pydicom.github.io/)

@@ -40,9 +40,8 @@ from wsidicom.uid import SlideUids
 
 from .data_gen import create_layer_file
 
-wsidicom_test_data_dir = os.environ.get("WSIDICOM_TESTDIR", "C:/temp/wsidicom")
-sub_data_dir = "annotation"
-data_dir = wsidicom_test_data_dir + '/' + sub_data_dir
+ANNOTATION_FOLDER = Path('tests/testdata/annotation')
+
 typecode = ConceptCode.type('Nucleus')
 categorycode = ConceptCode.category('Tissue')
 slide_uids = SlideUids(
@@ -55,12 +54,6 @@ slide_uids = SlideUids(
 @pytest.mark.annotation
 class WsiDicomAnnotationTests(unittest.TestCase):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.test_files: Dict[str, List[Path]]
-        self.tempdir: TemporaryDirectory
-        self.slide: WsiDicom
-
     @classmethod
     def setUpClass(cls):
         cls.tempdir = TemporaryDirectory()
@@ -70,25 +63,14 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         cls.slide = WsiDicom.open(cls.tempdir.name)
 
         cls.test_files = {}
-        folders = cls._get_folders()
-        for folder in folders:
+        for folder in ANNOTATION_FOLDER.iterdir():
             folder_name = os.path.basename(folder)
-            cls.test_files[folder_name] = [
-                Path(folder).joinpath(item)
-                for item in os.listdir(folder)
-            ]
+            cls.test_files[folder_name] = list(folder.iterdir())
 
     @classmethod
     def tearDownClass(cls):
         cls.slide.close()
         cls.tempdir.cleanup()
-
-    @classmethod
-    def _get_folders(cls) -> List[Path]:
-        return [
-            Path(data_dir).joinpath(item)
-            for item in os.listdir(data_dir)
-        ]
 
     @classmethod
     def dicom_round_trip(
@@ -381,7 +363,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         raise NotImplementedError()
 
     def test_sectra(self):
-        files = self.test_files['pathologycore']
+        files = self.test_files['sectra']
         for file_path in files:
             with open(file_path) as f:
                 print(file_path)
