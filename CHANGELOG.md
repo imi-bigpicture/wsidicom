@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ...
 
+## [0.3.0] - ...
+### Added
+- Simple check for if DICOM WSI is formatted for fast viewing (WsiDicom.ready_for_viewing()).
+
+### Changed
+- Action for downloading test data.
+- Do not set pydicom configuration parameters.
+
+### Fixed
+- Use correct data type for 32 bit integer in numpy arrays.
+- Fix check for if focal planes are sparse.
+
 ## [0.2.0] - 2022-02-14
 ### Added
 - Configuration through global variable settings.
