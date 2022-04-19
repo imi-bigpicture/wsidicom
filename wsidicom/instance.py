@@ -977,11 +977,11 @@ class WsiDataset(Dataset):
             tiled_sizes.add(image_data.tiled_size)
 
         focal_planes_sparse_by_optical_path = any(
-            optical_path_focal_planes != list(all_focal_planes)
+            focal_plane not in optical_path_focal_planes
+            for focal_plane in all_focal_planes
             for optical_path_focal_planes
             in focal_planes_by_optical_path.values()
         )
-
         if focal_planes_sparse_by_optical_path:
             raise ValueError(
                 'Each optical path must have the same focal planes.'
