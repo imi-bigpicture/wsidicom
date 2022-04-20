@@ -12,12 +12,14 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from .config import settings
 from .graphical_annotations import (Annotation, AnnotationGroup,
                                     AnnotationInstance, ConceptCode,
                                     Measurement, Point, PointAnnotationGroup,
                                     Polygon, PolygonAnnotationGroup, Polyline,
                                     PolylineAnnotationGroup)
 from .instance import WsiDataset, WsiInstance
-from .wsidicom import (WsiDicom, WsiDicomLabels, WsiDicomLevels,
-                       WsiDicomOverviews, ImageData)
-from .config import settings
+from .wsidicom import (ImageData, WsiDicom, WsiDicomLabels, WsiDicomLevels,
+                       WsiDicomOverviews)
+
+__version__ = '0.3.0'

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - ...
 ### Added
 - Simple check for if DICOM WSI is formatted for fast viewing (WsiDicom.ready_for_viewing()).
+- __version__ added.
 
 ### Changed
 - Action for downloading test data.
