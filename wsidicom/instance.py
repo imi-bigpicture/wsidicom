@@ -966,19 +966,18 @@ class WsiDataset(Dataset):
     ) -> Tuple[List[float], List[str], Size]:
         """Return optical_paths, focal planes, and tiled size.
         """
-        focal_planes_by_optical_path: Dict[str, List[float]] = (
-            defaultdict(list)
+        focal_planes_by_optical_path: Dict[str, Set[float]] = (
+            defaultdict(set)
         )
         all_focal_planes: Set[float] = set()
         tiled_sizes: Set[Size] = set()
         for (optical_path, focal_plane), image_data in data.items():
-            focal_planes_by_optical_path[optical_path].append(focal_plane)
+            focal_planes_by_optical_path[optical_path].add(focal_plane)
             all_focal_planes.add(focal_plane)
             tiled_sizes.add(image_data.tiled_size)
 
         focal_planes_sparse_by_optical_path = any(
-            focal_plane not in optical_path_focal_planes
-            for focal_plane in all_focal_planes
+            optical_path_focal_planes != all_focal_planes
             for optical_path_focal_planes
             in focal_planes_by_optical_path.values()
         )
