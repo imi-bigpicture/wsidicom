@@ -72,7 +72,7 @@ class WsiAttributeRequirement:
     def __init__(
         self,
         requirement: Requirement,
-        image_types: Sequence[str] = None,
+        image_types: Optional[Sequence[str]] = None,
         default: Any = None
     ) -> None:
         self.requirement = requirement
@@ -781,8 +781,8 @@ class WsiDataset(Dataset):
 
     @staticmethod
     def _get_spacings(
-            pixel_measure: Optional[Dataset]
-        ) -> Tuple[Optional[SizeMm], Optional[float]]:
+        pixel_measure: Optional[Dataset]
+    ) -> Tuple[Optional[SizeMm], Optional[float]]:
         """Return Pixel and slice spacing from pixel measure dataset.
 
         Parameters
@@ -1232,7 +1232,7 @@ class WsiDicomFile(WsiDicomFileBase):
         Parse file for basic or extended offset table.
         """
         self._fp.seek(self._pixel_data_position)
-        pixel_data_or_eot_tag = self._fp.read_tag()
+        pixel_data_or_eot_tag = Tag(self._fp.read_tag())
         if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
             eot_length = self._read_tag_length()
             self._fp.seek(eot_length, 1)
@@ -1495,11 +1495,11 @@ class WsiDicomFile(WsiDicomFileBase):
         """
         table = None
         table_type = 'bot'
-        pixel_data_or_eot_tag = self._fp.read_tag()
+        pixel_data_or_eot_tag = Tag(self._fp.read_tag())
         if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
             table_type = 'eot'
             table = self._read_eot()
-            pixel_data_tag = self._fp.read_tag()
+            pixel_data_tag = Tag(self._fp.read_tag())
         else:
             pixel_data_tag = pixel_data_or_eot_tag
 
