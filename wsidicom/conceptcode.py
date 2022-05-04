@@ -30,14 +30,14 @@ class ConceptCode:
 
     def __init__(
         self,
-        meaning: str,
         value: str,
         scheme_designator: str,
+        meaning: str,
         scheme_version: Optional[str] = None
     ):
-        self.meaning = meaning
         self.value = value
         self.scheme_designator = scheme_designator
+        self.meaning = meaning
         self.scheme_version = scheme_version
 
     def __hash__(self):
