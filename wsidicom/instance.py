@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 import io
-from optparse import Option
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
@@ -30,7 +29,6 @@ from typing import (Any, BinaryIO, Dict, Generator, List, Optional,
 
 import numpy as np
 from PIL import Image
-from pydicom import FileDataset
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
 from pydicom.filebase import DicomFile, DicomFileLike
@@ -49,7 +47,7 @@ from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomRequirementError,
                              WsiDicomStrictRequirementError,
                              WsiDicomUidDuplicateError)
-from wsidicom.geometry import Point, Region, Size, SizeMm
+from wsidicom.geometry import Point, PointMm, Region, Size, SizeMm
 from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
 
 
@@ -72,7 +70,7 @@ class WsiAttributeRequirement:
     def __init__(
         self,
         requirement: Requirement,
-        image_types: Sequence[str] = None,
+        image_types: Sequence[str] = [],
         default: Any = None
     ) -> None:
         self.requirement = requirement
@@ -285,6 +283,13 @@ class WsiDataset(Dataset):
             'OpticalPathSequence'
         )
         self._slice_thickness = self._get_slice_thickness(self.pixel_measure)
+        self._image_origin = PointMm(
+            self.TotalPixelMatrixOriginSequence[0].
+            XOffsetInSlideCoordinateSystem,
+            self.TotalPixelMatrixOriginSequence[0].
+            YOffsetInSlideCoordinateSystem
+        )
+        self._image_orientation = self.ImageOrientationSlide
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"
@@ -470,6 +475,14 @@ class WsiDataset(Dataset):
     @property
     def wsi_type(self) -> str:
         return self._get_wsi_flavor(self.ImageType)
+
+    @property
+    def image_origin(self) -> PointMm:
+        return self._image_origin
+
+    @property
+    def image_orientation(self) -> Tuple[int, int, int, int, int, int]:
+        return self._image_orientation
 
     @classmethod
     def is_supported_wsi_dicom(
@@ -782,7 +795,7 @@ class WsiDataset(Dataset):
     @staticmethod
     def _get_spacings(
             pixel_measure: Optional[Dataset]
-        ) -> Tuple[Optional[SizeMm], Optional[float]]:
+    ) -> Tuple[Optional[SizeMm], Optional[float]]:
         """Return Pixel and slice spacing from pixel measure dataset.
 
         Parameters
@@ -3586,6 +3599,14 @@ class WsiInstance:
     def uids(self) -> SlideUids:
         """Return base uids"""
         return self._uids
+
+    @property
+    def image_origin(self) -> PointMm:
+        return self.dataset.image_origin
+
+    @property
+    def image_orientation(self) -> Tuple[int, int, int, int, int, int]:
+        return self.dataset.image_orientation
 
     @classmethod
     def open(

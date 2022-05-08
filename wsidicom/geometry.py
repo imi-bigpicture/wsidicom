@@ -124,6 +124,9 @@ class PointMm:
             return PointMm(self.x - value.x, self.y - value.y)
         return NotImplemented
 
+    def __neg__(self) -> 'PointMm':
+        return PointMm(-self.x, -self.y)
+
     @classmethod
     def from_tuple(
         cls,
@@ -455,13 +458,23 @@ class RegionMm:
     position: PointMm
     size: SizeMm
 
+    def __init__(self, position: PointMm, size: SizeMm):
+        if size.width < 0:
+            position.x -= size.width
+            size.width = -size.width
+        if size.height < 0:
+            position.y -= size.height
+            size.height = -size.height
+        self.position = position
+        self.size = size
+
     @property
     def start(self) -> PointMm:
         return self.position
 
     @property
     def end(self) -> PointMm:
-        end: PointMm = self.position + self.size
+        end = self.position + self.size
         return end
 
     def __add__(self, value: PointMm) -> 'RegionMm':
@@ -473,3 +486,26 @@ class RegionMm:
         if isinstance(value, PointMm):
             return RegionMm(self.position - value, self.size)
         return NotImplemented
+
+    def to_other_origin(
+        self,
+        origin: PointMm,
+        orientation: Tuple[int, int, int, int, int, int]
+    ) -> 'RegionMm':
+        position = self.position - origin
+        size = self.size
+        if orientation == (0, 1, 0, 1, 0, 0):
+            position = PointMm(position.y, position.x)
+            size = SizeMm(size.height, size.width)
+        elif orientation == (0, -1, 0, -1, 0, 0):
+            position = PointMm(-position.y, -position.x)
+            size = SizeMm(-size.height, -size.width)
+        elif orientation == (1, 0, 0, 0, -1, 0):
+            position = PointMm(position.x, -position.y)
+            size = SizeMm(size.width, -size.height)
+        elif orientation == (-1, 0, 0, 0, 1, 0):
+            position = PointMm(-position.x, position.y)
+            size = SizeMm(-size.width, size.height)
+        else:
+            NotImplementedError("Non-implemented orientation")
+        return RegionMm(position, size)
