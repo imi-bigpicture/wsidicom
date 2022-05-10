@@ -18,8 +18,8 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from pathlib import Path
-from typing import (Any, Callable, DefaultDict, Dict, List, Optional,
-                    OrderedDict, Sequence, Tuple, Union, cast)
+from typing import (Callable, DefaultDict, Dict, List, Optional, OrderedDict,
+                    Sequence, Tuple, Union, cast)
 
 from PIL import Image
 from pydicom.dataset import FileMetaDataset
@@ -31,7 +31,7 @@ from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import (ImageData, WsiDataset, WsiDicomFile,
+from wsidicom.instance import (ImageData, ImageOrgin, WsiDataset, WsiDicomFile,
                                WsiDicomFileWriter, WsiDicomImageData,
                                WsiInstance)
 from wsidicom.optical import OpticalManager
@@ -1245,12 +1245,8 @@ class WsiDicomLevels(WsiDicomSeries):
         return self._mm_size
 
     @property
-    def image_origin(self) -> PointMm:
+    def image_origin(self) -> ImageOrgin:
         return self.base_level.default_instance.image_origin
-
-    @property
-    def image_orientation(self) -> Tuple[int, int, int, int, int, int]:
-        return self.base_level.default_instance.image_orientation
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -1793,8 +1789,8 @@ class WsiDicom:
         )
         if slide_orgin:
             region = region.to_other_origin(
-                self.levels.image_origin,
-                self.levels.image_orientation
+                self.levels.image_origin.origin,
+                self.levels.image_origin.orientation
             )
         image = wsi_level.get_region_mm(region, z, path)
         image_size = (
@@ -1844,8 +1840,8 @@ class WsiDicom:
         )
         if slide_orgin:
             region = region.to_other_origin(
-                self.levels.image_origin,
-                self.levels.image_orientation
+                self.levels.image_origin.origin,
+                self.levels.image_origin.orientation
             )
         image = wsi_level.get_region_mm(region, z, path)
         image_size = SizeMm(width=size[0], height=size[1]) // pixel_spacing

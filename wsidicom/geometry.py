@@ -460,11 +460,11 @@ class RegionMm:
 
     def __init__(self, position: PointMm, size: SizeMm):
         if size.width < 0:
-            position.x -= size.width
             size.width = -size.width
+            position.x -= size.width
         if size.height < 0:
-            position.y -= size.height
             size.height = -size.height
+            position.y -= size.height
         self.position = position
         self.size = size
 

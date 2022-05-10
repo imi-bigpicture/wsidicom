@@ -228,6 +228,46 @@ WSI_ATTRIBUTES = {
 }
 
 
+class ImageOrgin:
+    DEFAULT_ORIGIN = PointMm(0, 0)
+    DEFAULT_ORIENTATION = (0, 1, 0, 1, 0, 0)
+
+    def __init__(self, dataset: Dataset):
+        try:
+            self._image_origin = PointMm(
+                dataset.TotalPixelMatrixOriginSequence[0].
+                XOffsetInSlideCoordinateSystem,
+                dataset.TotalPixelMatrixOriginSequence[0].
+                YOffsetInSlideCoordinateSystem
+            )
+        except (KeyError, IndexError):
+            self._image_origin = None
+        try:
+            self._image_orientation = dataset.ImageOrientationSlide
+        except KeyError:
+            self._image_orientation = None
+
+    @property
+    def origin(self) -> PointMm:
+        if self._image_origin is None:
+            warnings.warn(
+                "Using default image origin as TotalPixelMatrixOriginSequence "
+                "not set in file"
+            )
+            return self.DEFAULT_ORIGIN
+        return self._image_origin
+
+    @property
+    def orientation(self) -> Tuple[int, int, int, int, int, int]:
+        if self._image_orientation is None:
+            warnings.warn(
+                "Using default image orientation as ImageOrientationSlide "
+                "not set in file"
+            )
+            return self.DEFAULT_ORIENTATION
+        return self._image_orientation
+
+
 class WsiDataset(Dataset):
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
     parsers for attributes specific for WSI. Use snake case to avoid name
@@ -283,13 +323,7 @@ class WsiDataset(Dataset):
             'OpticalPathSequence'
         )
         self._slice_thickness = self._get_slice_thickness(self.pixel_measure)
-        self._image_origin = PointMm(
-            self.TotalPixelMatrixOriginSequence[0].
-            XOffsetInSlideCoordinateSystem,
-            self.TotalPixelMatrixOriginSequence[0].
-            YOffsetInSlideCoordinateSystem
-        )
-        self._image_orientation = self.ImageOrientationSlide
+        self._image_origin = ImageOrgin(dataset)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"
@@ -477,12 +511,8 @@ class WsiDataset(Dataset):
         return self._get_wsi_flavor(self.ImageType)
 
     @property
-    def image_origin(self) -> PointMm:
+    def image_origin(self) -> ImageOrgin:
         return self._image_origin
-
-    @property
-    def image_orientation(self) -> Tuple[int, int, int, int, int, int]:
-        return self._image_orientation
 
     @classmethod
     def is_supported_wsi_dicom(
@@ -3601,12 +3631,8 @@ class WsiInstance:
         return self._uids
 
     @property
-    def image_origin(self) -> PointMm:
+    def image_origin(self) -> ImageOrgin:
         return self.dataset.image_origin
-
-    @property
-    def image_orientation(self) -> Tuple[int, int, int, int, int, int]:
-        return self.dataset.image_orientation
 
     @classmethod
     def open(

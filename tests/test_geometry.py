@@ -91,29 +91,43 @@ class WsiDicomGometryTests(unittest.TestCase):
         )
 
     def test_region_mm_to_other_origin_1(self):
-        region = RegionMm(PointMm(30.0, 40.0), SizeMm(10.0, 20.0))
-        origin = PointMm(10.0, 20.0)
+        region = RegionMm(PointMm(2.0, 4.0), SizeMm(1.0, 2.0))
+        origin = PointMm(1.0, 2.0)
         orientation = (0, 1, 0, 1, 0, 0)
         region = region.to_other_origin(origin, orientation)
         self.assertEqual(
             region.start,
-            PointMm(20, 20)
+            PointMm(2.0, 1.0)
         )
         self.assertEqual(
             region.end,
-            PointMm(40, 30)
+            PointMm(4.0, 2.0)
         )
 
     def test_region_mm_to_other_origin_2(self):
-        region = RegionMm(PointMm(30.0, 40.0), SizeMm(10.0, 20.0))
-        origin = PointMm(10.0, 20.0)
+        region = RegionMm(PointMm(1.0, 4.0), SizeMm(2.0, 1.0))
+        origin = PointMm(4.0, 8.0)
         orientation = (0, -1, 0, -1, 0, 0)
         region = region.to_other_origin(origin, orientation)
         self.assertEqual(
             region.start,
-            PointMm(20, 20)
+            PointMm(3.0, 1.0)
         )
         self.assertEqual(
             region.end,
-            PointMm(40, 30)
+            PointMm(4.0, 3.0)
+        )
+
+    def test_region_mm_to_other_origin_3(self):
+        region = RegionMm(PointMm(2.0, 3.0), SizeMm(2.0, 3.0))
+        origin = PointMm(5.0, 2.0)
+        orientation = (-1, 0, 0, 0, 1, 0)
+        region = region.to_other_origin(origin, orientation)
+        self.assertEqual(
+            region.start,
+            PointMm(1.0, 1.0)
+        )
+        self.assertEqual(
+            region.end,
+            PointMm(3.0, 4.0)
         )
