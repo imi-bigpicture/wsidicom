@@ -490,22 +490,21 @@ class RegionMm:
     def to_other_origin(
         self,
         origin: PointMm,
-        orientation: Tuple[int, int, int, int, int, int]
+        orientation: Sequence[float]
     ) -> 'RegionMm':
         position = self.position - origin
-        size = self.size
-        if orientation == (0, 1, 0, 1, 0, 0):
+        if orientation == [0, 1, 0, 1, 0, 0]:
             position = PointMm(position.y, position.x)
-            size = SizeMm(size.height, size.width)
-        elif orientation == (0, -1, 0, -1, 0, 0):
+            size = SizeMm(self.size.height, self.size.width)
+        elif orientation == [0, -1, 0, -1, 0, 0]:
             position = PointMm(-position.y, -position.x)
-            size = SizeMm(-size.height, -size.width)
-        elif orientation == (1, 0, 0, 0, -1, 0):
+            size = SizeMm(-self.size.height, -self.size.width)
+        elif orientation == [1, 0, 0, 0, -1, 0]:
             position = PointMm(position.x, -position.y)
-            size = SizeMm(size.width, -size.height)
-        elif orientation == (-1, 0, 0, 0, 1, 0):
+            size = SizeMm(self.size.width, -self.size.height)
+        elif orientation == [-1, 0, 0, 0, 1, 0]:
             position = PointMm(-position.x, position.y)
-            size = SizeMm(-size.width, size.height)
+            size = SizeMm(-self.size.width, self.size.height)
         else:
-            NotImplementedError("Non-implemented orientation")
+            raise NotImplementedError("Non-implemented orientation")
         return RegionMm(position, size)

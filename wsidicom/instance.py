@@ -230,7 +230,7 @@ WSI_ATTRIBUTES = {
 
 class ImageOrgin:
     DEFAULT_ORIGIN = PointMm(0, 0)
-    DEFAULT_ORIENTATION = (0, 1, 0, 1, 0, 0)
+    DEFAULT_ORIENTATION: List[float] = [0, 1, 0, 1, 0, 0]
 
     def __init__(self, dataset: Dataset):
         try:
@@ -258,13 +258,17 @@ class ImageOrgin:
         return self._image_origin
 
     @property
-    def orientation(self) -> Tuple[int, int, int, int, int, int]:
+    def orientation(self) -> List[float]:
         if self._image_orientation is None:
             warnings.warn(
                 "Using default image orientation as ImageOrientationSlide "
                 "not set in file"
             )
             return self.DEFAULT_ORIENTATION
+        if len(self._image_orientation) != 6:
+            raise ValueError(
+                "ImageOrientationSlide should be a list of 6 values."
+            )
         return self._image_orientation
 
 
