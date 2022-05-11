@@ -9,6 +9,10 @@
 ```console
 $ pip install wsidicom
 ```
+And through conda:
+```console
+conda install -c conda-forge wsidicom
+```
 
 ## Important note
 Please note that this is an early release and the API is not frozen yet. Function names and functionality is prone to change.
