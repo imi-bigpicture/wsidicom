@@ -271,6 +271,18 @@ class ImageOrgin:
             )
         return self._image_orientation
 
+    @property
+    def rotation(self) -> float:
+        if self.orientation == [0, 1, 0, 1, 0, 0]:
+            return 90
+        elif self.orientation == [0, -1, 0, -1, 0, 0]:
+            return 270
+        elif self.orientation == [1, 0, 0, 0, -1, 0]:
+            return 0
+        elif self.orientation == [-1, 0, 0, 0, 1, 0]:
+            return 180
+        raise NotImplementedError("Non-implemented orientation")
+
 
 class WsiDataset(Dataset):
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple

@@ -163,6 +163,10 @@ class WsiDicomGroup:
             for focal_plane in innstance.focal_planes
         })
 
+    @property
+    def image_origin(self) -> ImageOrgin:
+        return self.default_instance.image_origin
+
     @classmethod
     def open(
         cls,
@@ -335,28 +339,40 @@ class WsiDicomGroup:
         self,
         region: RegionMm,
         z: Optional[float] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
+        slide_origin: bool = False
     ) -> Image.Image:
         """Read region defined by mm.
 
         Parameters
         ----------
-        location: float, float
-            Upper left corner of region in mm
-        size: float
-            Size of region in mm
+        region: RegionMm
+            Region defining upper left corner and size in mm.
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            optical path, optional.
+        slide_origin: bool = False.
+            If to use the slide origin instead of image origin.
 
         Returns
         ----------
         Image.Image
             Region as image
         """
+        if slide_origin:
+            region = region.to_other_origin(
+                self.image_origin.origin,
+                self.image_origin.orientation
+            )
         pixel_region = self.mm_to_pixel(region)
         image = self.get_region(pixel_region, z, path)
+        if slide_origin:
+            image = image.rotate(
+                self.image_origin.rotation,
+                resample=Image.BILINEAR,
+                expand=True
+            )
         return image
 
     def get_tile(
@@ -1756,7 +1772,7 @@ class WsiDicom:
         size: Tuple[float, float],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        slide_orgin: bool = False
+        slide_origin: bool = False
     ) -> Image.Image:
         """Read image from region defined in mm.
 
@@ -1787,12 +1803,7 @@ class WsiDicom:
             PointMm.from_tuple(location),
             SizeMm.from_tuple(size)
         )
-        if slide_orgin:
-            region = region.to_other_origin(
-                self.levels.image_origin.origin,
-                self.levels.image_origin.orientation
-            )
-        image = wsi_level.get_region_mm(region, z, path)
+        image = wsi_level.get_region_mm(region, z, path, slide_origin)
         image_size = (
             Size(width=image.size[0], height=image.size[1]) // scale_factor
         )
@@ -1805,7 +1816,7 @@ class WsiDicom:
         size: Tuple[float, float],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        slide_orgin: bool = False
+        slide_origin: bool = False
     ) -> Image.Image:
         """Read image from region defined in mm with set pixel spacing.
 
@@ -1838,13 +1849,8 @@ class WsiDicom:
             PointMm.from_tuple(location),
             SizeMm.from_tuple(size)
         )
-        if slide_orgin:
-            region = region.to_other_origin(
-                self.levels.image_origin.origin,
-                self.levels.image_origin.orientation
-            )
-        image = wsi_level.get_region_mm(region, z, path)
-        image_size = SizeMm(width=size[0], height=size[1]) // pixel_spacing
+        image = wsi_level.get_region_mm(region, z, path, slide_origin)
+        image_size = PointMm.from_tuple(size) // pixel_spacing
         return image.resize(image_size.to_tuple(), resample=Image.BILINEAR)
 
     def read_tile(
