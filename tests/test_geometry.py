@@ -119,6 +119,20 @@ class WsiDicomGometryTests(unittest.TestCase):
         )
 
     def test_region_mm_to_other_origin_3(self):
+        region = RegionMm(PointMm(2.0, 5.0), SizeMm(2.0, 1.0))
+        origin = PointMm(1.0, 8.0)
+        orientation = [1, 0, 0, 0, -1, 0]
+        region = region.to_other_origin(origin, orientation)
+        self.assertEqual(
+            region.start,
+            PointMm(1.0, 2.0)
+        )
+        self.assertEqual(
+            region.end,
+            PointMm(3.0, 3.0)
+        )
+
+    def test_region_mm_to_other_origin_4(self):
         region = RegionMm(PointMm(2.0, 3.0), SizeMm(2.0, 3.0))
         origin = PointMm(5.0, 2.0)
         orientation = [-1, 0, 0, 0, 1, 0]
