@@ -521,7 +521,7 @@ class WsiDicomGroup:
     @staticmethod
     def _list_image_data(
         instances: Sequence[WsiInstance]
-    ) -> OrderedDict[Tuple[str, float], ImageData]:
+    ) -> Dict[Tuple[str, float], ImageData]:
         """Sort ImageData in instances by optical path and focal
         plane.
 
@@ -533,16 +533,16 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        OrderedDict[Tuple[str, float], ImageData]:
+        Dict[Tuple[str, float], ImageData]:
             ImageData sorted by optical path and focal plane.
         """
         output: Dict[Tuple[str, float], ImageData] = {}
         for instance in instances:
             for optical_path in instance.optical_paths:
-                for z in instance.focal_planes:
+                for z in sorted(instance.focal_planes):
                     if (optical_path, z) not in output:
                         output[optical_path, z] = instance.image_data
-        return OrderedDict(output)
+        return output
 
     def save(
         self,

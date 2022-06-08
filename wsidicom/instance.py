@@ -597,7 +597,7 @@ class WsiDataset(Dataset):
 
     def as_tiled_full(
         self,
-        image_data: OrderedDict[Tuple[str, float], 'ImageData'],
+        image_data: Dict[Tuple[str, float], 'ImageData'],
         scale: int = 1
     ) -> 'WsiDataset':
         """Return copy of dataset with properties set to reflect a tiled full
@@ -606,7 +606,7 @@ class WsiDataset(Dataset):
 
         Parameters
         ----------
-        image_data: OrderedDict[Tuple[str, float], ImageData]
+        image_data: Dict[Tuple[str, float], ImageData]
             List of image data that should be encoded into dataset. Each
             element is a tuple of (optical path, focal plane) and ImageData.
         scale: int = 1
@@ -633,6 +633,9 @@ class WsiDataset(Dataset):
             'SharedFunctionalGroupsSequence',
             DicomSequence([Dataset()])
         )
+        if len(focal_planes) > 1 and 'PlanePositionSlideSequence' in dataset:
+            del dataset['PlanePositionSlideSequence']
+
         pixel_measure = getattr(
             shared_functional_group[0],
             'PixelMeasuresSequence',
@@ -962,7 +965,7 @@ class WsiDataset(Dataset):
 
     @staticmethod
     def _get_frame_information(
-        data: OrderedDict[Tuple[str, float], 'ImageData']
+        data: Dict[Tuple[str, float], 'ImageData']
     ) -> Tuple[List[float], List[str], Size]:
         """Return optical_paths, focal planes, and tiled size.
         """
@@ -2659,6 +2662,33 @@ class TileIndex(metaclass=ABCMeta):
             for optical_ds in optical_path_sequence
         })
 
+    def _read_frame_coordinates(
+            self,
+            frame: Dataset
+    ) -> Tuple[Point, float]:
+        """Return frame coordinate (Point(x, y) and float z) of the frame.
+        In the Plane Position Slide Sequence x and y are defined in mm and z in
+        um.
+
+        Parameters
+        ----------
+        frame: Dataset
+            Pydicom frame sequence.
+
+        Returns
+        ----------
+        Point, float
+            The frame xy coordinate and z coordinate
+        """
+        DECIMALS = 3
+        position = frame.PlanePositionSlideSequence[0]
+        y = int(position.RowPositionInTotalImagePixelMatrix) - 1
+        x = int(position.ColumnPositionInTotalImagePixelMatrix) - 1
+        z_offset = getattr(position, 'ZOffsetInSlideCoordinateSystem', 0.0)
+        z = round(float(z_offset), DECIMALS)
+        tile = Point(x=x, y=y) // self.tile_size
+        return tile, z
+
 
 class FullTileIndex(TileIndex):
     """Index for mapping tile position to frame number for datasets containing
@@ -2767,8 +2797,17 @@ class FullTileIndex(TileIndex):
                     "Slice spacing must be non-zero if multiple focal planes."
                 )
 
+            try:
+                (_, z_offset) = self._read_frame_coordinates(
+                    dataset.SharedFunctionalGroupsSequence[0]
+                )
+            except Exception:
+                z_offset = 0
+
             for plane in range(number_of_focal_planes):
-                z = round(plane * slice_spacing * MM_TO_MICRON, DECIMALS)
+                z = z_offset + round(
+                    plane * slice_spacing * MM_TO_MICRON, DECIMALS
+                )
                 focal_planes.add(z)
         return sorted(list(focal_planes))
 
@@ -2931,33 +2970,6 @@ class SparseTileIndex(TileIndex):
 
         return planes
 
-    def _read_frame_coordinates(
-            self,
-            frame: Dataset
-    ) -> Tuple[Point, float]:
-        """Return frame coordinate (Point(x, y) and float z) of the frame.
-        In the Plane Position Slide Sequence x and y are defined in mm and z in
-        um.
-
-        Parameters
-        ----------
-        frame: Dataset
-            Pydicom frame sequence.
-
-        Returns
-        ----------
-        Point, float
-            The frame xy coordinate and z coordinate
-        """
-        DECIMALS = 3
-        position = frame.PlanePositionSlideSequence[0]
-        y = int(position.RowPositionInTotalImagePixelMatrix) - 1
-        x = int(position.ColumnPositionInTotalImagePixelMatrix) - 1
-        z_offset = getattr(position, 'ZOffsetInSlideCoordinateSystem', 0.0)
-        z = round(float(z_offset), DECIMALS)
-        tile = Point(x=x, y=y) // self.tile_size
-        return tile, z
-
 
 class WsiDicomFileWriter(WsiDicomFileBase):
     def __init__(self, filepath: Path) -> None:
@@ -2978,7 +2990,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         uid: UID,
         transfer_syntax: UID,
         dataset: Dataset,
-        data: OrderedDict[Tuple[str, float], ImageData],
+        data: Dict[Tuple[str, float], ImageData],
         workers: int,
         chunk_size: int,
         offset_table: Optional[str],
@@ -2994,7 +3006,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Transfer syntax for file
         dataset: Dataset
             Dataset to write (exluding pixel data).
-        data: OrderedDict[Tuple[str, float], ImageData],
+        data: Dict[Tuple[str, float], ImageData]
             Pixel data to write.
         workers: int
             Number of workers to use for writing pixel data.
@@ -3016,7 +3028,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             offset_table
         )
         frame_positions: List[int] = []
-        for (path, z), image_data in data.items():
+        for (path, z), image_data in sorted(data.items()):
             frame_positions += self._write_pixel_data(
                 image_data,
                 z,
