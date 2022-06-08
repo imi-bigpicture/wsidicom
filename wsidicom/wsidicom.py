@@ -370,7 +370,7 @@ class WsiDicomGroup:
         if slide_origin:
             image = image.rotate(
                 self.image_origin.rotation,
-                resample=Image.BILINEAR,
+                resample=Image.Resampling.BILINEAR,
                 expand=True
             )
         return image
@@ -782,7 +782,7 @@ class WsiDicomLevel(WsiDicomGroup):
         tile_size = cropped_region.size.ceil_div(scale)
         image = image.resize(
             tile_size.to_tuple(),
-            resample=Image.BILINEAR
+            resample=Image.Resampling.BILINEAR
         )
         return image
 
@@ -1718,7 +1718,7 @@ class WsiDicom:
         level = self.levels.get_closest_by_size(thumbnail_size)
         region = Region(position=Point(0, 0), size=level.size)
         image = level.get_region(region, z, path)
-        image.thumbnail((size), resample=Image.BILINEAR)
+        image.thumbnail((size), resample=Image.Resampling.BILINEAR)
         return image
 
     def read_region(
@@ -1762,7 +1762,7 @@ class WsiDicom:
             )
         image = wsi_level.get_region(scaled_region, z, path)
         if(scale_factor != 1):
-            image = image.resize((size), resample=Image.BILINEAR)
+            image = image.resize((size), resample=Image.Resampling.BILINEAR)
         return image
 
     def read_region_mm(
@@ -1807,7 +1807,10 @@ class WsiDicom:
         image_size = (
             Size(width=image.size[0], height=image.size[1]) // scale_factor
         )
-        return image.resize(image_size.to_tuple(), resample=Image.BILINEAR)
+        return image.resize(
+            image_size.to_tuple(),
+            resample=Image.Resampling.BILINEAR
+        )
 
     def read_region_mpp(
         self,

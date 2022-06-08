@@ -1923,7 +1923,10 @@ class ImageData(metaclass=ABCMeta):
                 image_coordinate = (tile_point - origin) * self.tile_size
                 image.paste(tile, image_coordinate.to_tuple())
 
-        return image.resize(self.tile_size.to_tuple(), resample=Image.BILINEAR)
+        return image.resize(
+            self.tile_size.to_tuple(),
+            resample=Image.Resampling.BILINEAR
+        )
 
     def get_scaled_encoded_tile(
         self,
