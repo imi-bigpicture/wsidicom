@@ -1850,8 +1850,11 @@ class WsiDicom:
             SizeMm.from_tuple(size)
         )
         image = wsi_level.get_region_mm(region, z, path, slide_origin)
-        image_size = PointMm.from_tuple(size) // pixel_spacing
-        return image.resize(image_size.to_tuple(), resample=Image.BILINEAR)
+        image_size = SizeMm.from_tuple(size) // pixel_spacing
+        return image.resize(
+            image_size.to_tuple(),
+            resample=Image.Resampling.BILINEAR
+        )
 
     def read_tile(
         self,
