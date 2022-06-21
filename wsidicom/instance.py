@@ -240,11 +240,11 @@ class ImageOrgin:
                 dataset.TotalPixelMatrixOriginSequence[0].
                 YOffsetInSlideCoordinateSystem
             )
-        except (KeyError, IndexError):
+        except (AttributeError, IndexError):
             self._image_origin = None
         try:
             self._image_orientation = dataset.ImageOrientationSlide
-        except KeyError:
+        except AttributeError:
             self._image_orientation = None
 
     @property
