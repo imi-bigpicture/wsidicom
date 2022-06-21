@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 import io
-from optparse import Option
 import threading
 import warnings
 from abc import ABCMeta, abstractmethod
@@ -633,8 +632,13 @@ class WsiDataset(Dataset):
             'SharedFunctionalGroupsSequence',
             DicomSequence([Dataset()])
         )
-        if len(focal_planes) > 1 and 'PlanePositionSlideSequence' in dataset:
-            del dataset['PlanePositionSlideSequence']
+        plane_position_slide = Dataset()
+        plane_position_slide.ZOffsetInSlideCoordinateSystem = (
+            focal_planes[0]
+        )
+        shared_functional_group[0].PlanePositionSlideSequence = (
+            DicomSequence([plane_position_slide])
+        )
 
         pixel_measure = getattr(
             shared_functional_group[0],
@@ -2663,8 +2667,8 @@ class TileIndex(metaclass=ABCMeta):
         })
 
     def _read_frame_coordinates(
-            self,
-            frame: Dataset
+        self,
+        frame: Dataset
     ) -> Tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
         In the Plane Position Slide Sequence x and y are defined in mm and z in
@@ -2798,10 +2802,12 @@ class FullTileIndex(TileIndex):
                 )
 
             try:
-                (_, z_offset) = self._read_frame_coordinates(
+                z_offset = (
                     dataset.SharedFunctionalGroupsSequence[0]
+                    .PlanePositionSlideSequence[0]
+                    .ZOffsetInSlideCoordinateSystem
                 )
-            except Exception:
+            except AttributeError:
                 z_offset = 0
 
             for plane in range(number_of_focal_planes):
