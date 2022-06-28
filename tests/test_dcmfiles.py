@@ -28,6 +28,7 @@ SLIDE_FOLDER = Path(os.environ.get(
 )
 REGION_DEFINITIONS_FILE = 'tests/testdata/region_definitions.json'
 
+
 @pytest.mark.integration
 class WsiDicomFilesTests(unittest.TestCase):
 
@@ -49,9 +50,7 @@ class WsiDicomFilesTests(unittest.TestCase):
                 json.load(json_file)
             )
         if len(cls.test_definitions) == 0:
-            raise unittest.SkipTest(
-                f'no test definition found, skipping'
-            )
+            raise unittest.SkipTest('no test definition found, skipping.')
 
     @classmethod
     def tearDownClass(cls):

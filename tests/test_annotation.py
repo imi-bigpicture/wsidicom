@@ -679,7 +679,6 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         pixels = ConceptCode.unit('Pixels')
         measurement0 = Measurement(area, 5, pixels)
         measurement1 = Measurement(area, 10, pixels)
-        measurement2 = Measurement(area, 15, pixels)
         point = Point(1, 1)
         annotation0 = Annotation(point, [measurement0])
         annotation1 = Annotation(point, [measurement1])
