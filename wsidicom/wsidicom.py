@@ -18,8 +18,8 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from pathlib import Path
-from typing import (Any, Callable, DefaultDict, Dict, List, Optional,
-                    OrderedDict, Sequence, Tuple, Union, cast)
+from typing import (Callable, DefaultDict, Dict, List, Optional, OrderedDict,
+                    Sequence, Tuple, Union, cast)
 
 from PIL import Image
 from pydicom.dataset import FileMetaDataset
@@ -834,7 +834,7 @@ class WsiDicomLevel(WsiDicomGroup):
         level = int(round(float_level))
         TOLERANCE = 1e-2
         if not math.isclose(float_level, level, rel_tol=TOLERANCE):
-            raise NotImplementedError(f"Levels needs to be integer")
+            raise NotImplementedError("Levels needs to be integer.")
         return level
 
     def create_child(

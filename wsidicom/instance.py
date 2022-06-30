@@ -29,7 +29,6 @@ from typing import (Any, BinaryIO, Dict, Generator, List, Optional,
 
 import numpy as np
 from PIL import Image
-from pydicom import FileDataset
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
 from pydicom.filebase import DicomFile, DicomFileLike
@@ -71,7 +70,7 @@ class WsiAttributeRequirement:
     def __init__(
         self,
         requirement: Requirement,
-        image_types: Sequence[str] = None,
+        image_types: Optional[Sequence[str]] = None,
         default: Any = None
     ) -> None:
         self.requirement = requirement
@@ -788,8 +787,8 @@ class WsiDataset(Dataset):
 
     @staticmethod
     def _get_spacings(
-            pixel_measure: Optional[Dataset]
-        ) -> Tuple[Optional[SizeMm], Optional[float]]:
+        pixel_measure: Optional[Dataset]
+    ) -> Tuple[Optional[SizeMm], Optional[float]]:
         """Return Pixel and slice spacing from pixel measure dataset.
 
         Parameters
@@ -1044,7 +1043,8 @@ class WsiDicomFileBase():
 
     def _read_tag_length(self, with_vr: bool = True) -> int:
         if (not self._fp.is_implicit_VR) and with_vr:
-            VR = self._fp.read_UL()
+            # Read VR
+            self._fp.read_UL()
         return self._fp.read_UL()
 
     def _check_tag_and_length(
@@ -1239,7 +1239,7 @@ class WsiDicomFile(WsiDicomFileBase):
         Parse file for basic or extended offset table.
         """
         self._fp.seek(self._pixel_data_position)
-        pixel_data_or_eot_tag = self._fp.read_tag()
+        pixel_data_or_eot_tag = Tag(self._fp.read_tag())
         if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
             eot_length = self._read_tag_length()
             self._fp.seek(eot_length, 1)
@@ -1502,11 +1502,11 @@ class WsiDicomFile(WsiDicomFileBase):
         """
         table = None
         table_type = 'bot'
-        pixel_data_or_eot_tag = self._fp.read_tag()
+        pixel_data_or_eot_tag = Tag(self._fp.read_tag())
         if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
             table_type = 'eot'
             table = self._read_eot()
-            pixel_data_tag = self._fp.read_tag()
+            pixel_data_tag = Tag(self._fp.read_tag())
         else:
             pixel_data_tag = pixel_data_or_eot_tag
 
