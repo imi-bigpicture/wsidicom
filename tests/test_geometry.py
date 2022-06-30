@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2022 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -16,11 +16,12 @@ import unittest
 
 import pytest
 
-from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
+from wsidicom.geometry import Orientation, Point, PointMm, Region, RegionMm, Size, SizeMm
+from wsidicom.instance import ImageOrgin
 
 
 @pytest.mark.unittest
-class WsiDicomGometryTests(unittest.TestCase):
+class WsiDicomGeomtryTests(unittest.TestCase):
     def test_size_class(self):
         size0 = Size(10, 10)
         size1 = Size(1, 1)
@@ -92,9 +93,12 @@ class WsiDicomGometryTests(unittest.TestCase):
 
     def test_region_mm_to_other_origin_1(self):
         region = RegionMm(PointMm(2.0, 4.0), SizeMm(1.0, 2.0))
-        origin = PointMm(1.0, 2.0)
-        orientation = [0, 1, 0, 1, 0, 0]
-        region = region.to_other_origin(origin, orientation)
+        # Image x along slide y, Image y along slide x
+        origin = ImageOrgin(
+            PointMm(1.0, 2.0),
+            Orientation([0, 1, 0, 1, 0, 0])
+        )
+        region = origin.transform_region(region)
         self.assertEqual(
             region.start,
             PointMm(2.0, 1.0)
@@ -106,9 +110,12 @@ class WsiDicomGometryTests(unittest.TestCase):
 
     def test_region_mm_to_other_origin_2(self):
         region = RegionMm(PointMm(1.0, 4.0), SizeMm(2.0, 1.0))
-        origin = PointMm(4.0, 8.0)
-        orientation = [0, -1, 0, -1, 0, 0]
-        region = region.to_other_origin(origin, orientation)
+        # Image x reversed to slide y, Image y reversed to slide x
+        origin = ImageOrgin(
+            PointMm(4.0, 8.0),
+            Orientation([0, -1, 0, -1, 0, 0])
+        )
+        region = origin.transform_region(region)
         self.assertEqual(
             region.start,
             PointMm(3.0, 1.0)
@@ -120,9 +127,12 @@ class WsiDicomGometryTests(unittest.TestCase):
 
     def test_region_mm_to_other_origin_3(self):
         region = RegionMm(PointMm(2.0, 5.0), SizeMm(2.0, 1.0))
-        origin = PointMm(1.0, 8.0)
-        orientation = [1, 0, 0, 0, -1, 0]
-        region = region.to_other_origin(origin, orientation)
+        # Image x along slide x, Image y reversed to slide y
+        origin = ImageOrgin(
+            PointMm(1.0, 8.0),
+            Orientation([1, 0, 0, 0, -1, 0])
+        )
+        region = origin.transform_region(region)
         self.assertEqual(
             region.start,
             PointMm(1.0, 2.0)
@@ -134,9 +144,12 @@ class WsiDicomGometryTests(unittest.TestCase):
 
     def test_region_mm_to_other_origin_4(self):
         region = RegionMm(PointMm(2.0, 3.0), SizeMm(2.0, 3.0))
-        origin = PointMm(5.0, 2.0)
-        orientation = [-1, 0, 0, 0, 1, 0]
-        region = region.to_other_origin(origin, orientation)
+        # Image x reversed to slide x, Image y along slide y
+        origin = ImageOrgin(
+            PointMm(5.0, 2.0),
+            Orientation([-1, 0, 0, 0, 1, 0])
+        )
+        region = origin.transform_region(region)
         self.assertEqual(
             region.start,
             PointMm(1.0, 1.0)

@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2021, 2022 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -47,7 +47,8 @@ from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomRequirementError,
                              WsiDicomStrictRequirementError,
                              WsiDicomUidDuplicateError)
-from wsidicom.geometry import Point, PointMm, Region, Size, SizeMm
+from wsidicom.geometry import (Orientation, Point, PointMm, Region, RegionMm,
+                               Size, SizeMm)
 from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
 
 
@@ -229,59 +230,52 @@ WSI_ATTRIBUTES = {
 
 
 class ImageOrgin:
-    DEFAULT_ORIGIN = PointMm(0, 0)
-    DEFAULT_ORIENTATION: List[float] = [0, 1, 0, 1, 0, 0]
+    def __init__(
+        self,
+        origin: PointMm,
+        orientation: Orientation
+    ):
+        self._origin = origin
+        self._orientation = orientation
 
-    def __init__(self, dataset: Dataset):
+    @classmethod
+    def from_dataset(
+        cls,
+        dataset: Dataset
+    ):
         try:
-            self._image_origin = PointMm(
+            origin = PointMm(
                 dataset.TotalPixelMatrixOriginSequence[0].
                 XOffsetInSlideCoordinateSystem,
                 dataset.TotalPixelMatrixOriginSequence[0].
                 YOffsetInSlideCoordinateSystem
             )
         except (AttributeError, IndexError):
-            self._image_origin = None
-        try:
-            self._image_orientation = dataset.ImageOrientationSlide
-        except AttributeError:
-            self._image_orientation = None
-
-    @property
-    def origin(self) -> PointMm:
-        if self._image_origin is None:
             warnings.warn(
                 "Using default image origin as TotalPixelMatrixOriginSequence "
                 "not set in file"
             )
-            return self.DEFAULT_ORIGIN
-        return self._image_origin
-
-    @property
-    def orientation(self) -> List[float]:
-        if self._image_orientation is None:
+            origin = PointMm(0, 0)
+        try:
+            orientation = Orientation(dataset.ImageOrientationSlide)
+        except AttributeError:
             warnings.warn(
                 "Using default image orientation as ImageOrientationSlide "
                 "not set in file"
             )
-            return self.DEFAULT_ORIENTATION
-        if len(self._image_orientation) != 6:
-            raise ValueError(
-                "ImageOrientationSlide should be a list of 6 values."
-            )
-        return self._image_orientation
+            orientation = Orientation([0, 1, 0, 1, 0, 0])
+        return cls(origin, orientation)
 
     @property
     def rotation(self) -> float:
-        if self.orientation == [0, 1, 0, 1, 0, 0]:
-            return 90
-        elif self.orientation == [0, -1, 0, -1, 0, 0]:
-            return 270
-        elif self.orientation == [1, 0, 0, 0, -1, 0]:
-            return 0
-        elif self.orientation == [-1, 0, 0, 0, 1, 0]:
-            return 180
-        raise NotImplementedError("Non-implemented orientation")
+        return self._orientation.rotation
+
+    def transform_region(
+        self,
+        region: RegionMm
+    ) -> 'RegionMm':
+        region.position = region.position - self._origin
+        return self._orientation.apply(region)
 
 
 class WsiDataset(Dataset):
@@ -339,7 +333,7 @@ class WsiDataset(Dataset):
             'OpticalPathSequence'
         )
         self._slice_thickness = self._get_slice_thickness(self.pixel_measure)
-        self._image_origin = ImageOrgin(dataset)
+        self._image_origin = ImageOrgin.from_dataset(dataset)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"

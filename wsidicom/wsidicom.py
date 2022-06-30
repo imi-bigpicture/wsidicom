@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2021, 2022 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -361,10 +361,7 @@ class WsiDicomGroup:
             Region as image
         """
         if slide_origin:
-            region = region.to_other_origin(
-                self.image_origin.origin,
-                self.image_origin.orientation
-            )
+            region = self.image_origin.transform_region(region)
         pixel_region = self.mm_to_pixel(region)
         image = self.get_region(pixel_region, z, path)
         if slide_origin:

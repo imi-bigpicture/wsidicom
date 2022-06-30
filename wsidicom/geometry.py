@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2021, 2022 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -487,24 +487,39 @@ class RegionMm:
             return RegionMm(self.position - value, self.size)
         return NotImplemented
 
-    def to_other_origin(
-        self,
-        origin: PointMm,
-        orientation: Sequence[float]
-    ) -> 'RegionMm':
-        position = self.position - origin
-        if orientation == [0, 1, 0, 1, 0, 0]:
-            position = PointMm(position.y, position.x)
-            size = SizeMm(self.size.height, self.size.width)
-        elif orientation == [0, -1, 0, -1, 0, 0]:
-            position = PointMm(-position.y, -position.x)
-            size = SizeMm(-self.size.height, -self.size.width)
-        elif orientation == [1, 0, 0, 0, -1, 0]:
-            position = PointMm(position.x, -position.y)
-            size = SizeMm(self.size.width, -self.size.height)
-        elif orientation == [-1, 0, 0, 0, 1, 0]:
-            position = PointMm(-position.x, position.y)
-            size = SizeMm(-self.size.width, self.size.height)
+
+class Orientation:
+    # Only 90 degree rotations implemented
+    IMPLEMENTED_ORIENTATIONS = {
+        (0.0, 1.0, 0.0, 1.0, 0.0, 0.0): 90.0,
+        (0.0, -1.0, 0.0, -1.0, 0.0, 0.0): 270.0,
+        (1.0, 0.0, 0.0, 0.0, -1.0, 0.0): 0.0,
+        (-1.0, 0.0, 0.0, 0.0, 1.0, 0.0): 180.0
+    }
+
+    def __init__(self, orientation: Sequence[float]):
+        orientation = tuple(orientation)
+        if orientation not in self.IMPLEMENTED_ORIENTATIONS:
+            NotImplementedError("Non-implemented orientation.")
+        self._orientation = orientation
+
+    @property
+    def rotation(self) -> float:
+        return self.IMPLEMENTED_ORIENTATIONS[self._orientation]
+
+    def apply(self, region: RegionMm):
+        if self._orientation == (0, 1, 0, 1, 0, 0):
+            position = PointMm(region.position.y, region.position.x)
+            size = SizeMm(region.size.height, region.size.width)
+        elif self._orientation == (0, -1, 0, -1, 0, 0):
+            position = PointMm(-region.position.y, -region.position.x)
+            size = SizeMm(-region.size.height, -region.size.width)
+        elif self._orientation == (1, 0, 0, 0, -1, 0):
+            position = PointMm(region.position.x, -region.position.y)
+            size = SizeMm(region.size.width, -region.size.height)
+        elif self._orientation == (-1, 0, 0, 0, 1, 0):
+            position = PointMm(-region.position.x, region.position.y)
+            size = SizeMm(-region.size.width, region.size.height)
         else:
-            raise NotImplementedError("Non-implemented orientation")
+            raise NotImplementedError("Non-implemented orientation.")
         return RegionMm(position, size)
