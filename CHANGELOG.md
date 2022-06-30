@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ...
 
 ## [0.4.0] - 2022-06-30
+### Added
 - Focal planes are considered equal if configurable withing threshold distance, see config.focal_plane_distance_threshold
 - Option to read region defined in slide coordinate system for get_region_mm().
 
