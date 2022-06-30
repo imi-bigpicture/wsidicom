@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2021, 2022 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -47,7 +47,8 @@ from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomRequirementError,
                              WsiDicomStrictRequirementError,
                              WsiDicomUidDuplicateError)
-from wsidicom.geometry import Point, Region, Size, SizeMm
+from wsidicom.geometry import (Orientation, Point, PointMm, Region, RegionMm,
+                               Size, SizeMm)
 from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
 
 
@@ -228,6 +229,55 @@ WSI_ATTRIBUTES = {
 }
 
 
+class ImageOrgin:
+    def __init__(
+        self,
+        origin: PointMm,
+        orientation: Orientation
+    ):
+        self._origin = origin
+        self._orientation = orientation
+
+    @classmethod
+    def from_dataset(
+        cls,
+        dataset: Dataset
+    ):
+        try:
+            origin = PointMm(
+                dataset.TotalPixelMatrixOriginSequence[0].
+                XOffsetInSlideCoordinateSystem,
+                dataset.TotalPixelMatrixOriginSequence[0].
+                YOffsetInSlideCoordinateSystem
+            )
+        except (AttributeError, IndexError):
+            warnings.warn(
+                "Using default image origin as TotalPixelMatrixOriginSequence "
+                "not set in file"
+            )
+            origin = PointMm(0, 0)
+        try:
+            orientation = Orientation(dataset.ImageOrientationSlide)
+        except AttributeError:
+            warnings.warn(
+                "Using default image orientation as ImageOrientationSlide "
+                "not set in file"
+            )
+            orientation = Orientation([0, 1, 0, 1, 0, 0])
+        return cls(origin, orientation)
+
+    @property
+    def rotation(self) -> float:
+        return self._orientation.rotation
+
+    def transform_region(
+        self,
+        region: RegionMm
+    ) -> 'RegionMm':
+        region.position = region.position - self._origin
+        return self._orientation.apply(region)
+
+
 class WsiDataset(Dataset):
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
     parsers for attributes specific for WSI. Use snake case to avoid name
@@ -283,6 +333,7 @@ class WsiDataset(Dataset):
             'OpticalPathSequence'
         )
         self._slice_thickness = self._get_slice_thickness(self.pixel_measure)
+        self._image_origin = ImageOrgin.from_dataset(dataset)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"
@@ -468,6 +519,10 @@ class WsiDataset(Dataset):
     @property
     def wsi_type(self) -> str:
         return self._get_wsi_flavor(self.ImageType)
+
+    @property
+    def image_origin(self) -> ImageOrgin:
+        return self._image_origin
 
     @classmethod
     def is_supported_wsi_dicom(
@@ -1873,7 +1928,10 @@ class ImageData(metaclass=ABCMeta):
                 image_coordinate = (tile_point - origin) * self.tile_size
                 image.paste(tile, image_coordinate.to_tuple())
 
-        return image.resize(self.tile_size.to_tuple(), resample=Image.BILINEAR)
+        return image.resize(
+            self.tile_size.to_tuple(),
+            resample=Image.Resampling.BILINEAR
+        )
 
     def get_scaled_encoded_tile(
         self,
@@ -3606,6 +3664,10 @@ class WsiInstance:
     def uids(self) -> SlideUids:
         """Return base uids"""
         return self._uids
+
+    @property
+    def image_origin(self) -> ImageOrgin:
+        return self.dataset.image_origin
 
     @classmethod
     def open(

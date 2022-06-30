@@ -231,40 +231,6 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         cropped_region = region.crop(image_size)
         self.assertEqual(Size(0, 0), cropped_region.size)
 
-    def test_size_class(self):
-        size0 = Size(10, 10)
-        size1 = Size(1, 1)
-        self.assertEqual(size0 - size1, Size(9, 9))
-
-        self.assertEqual(size0 * 2, Size(20, 20))
-
-        self.assertEqual(size0 // 3, Size(3, 3))
-
-        self.assertEqual(size0.to_tuple(), (10, 10))
-
-    def test_point_class(self):
-        point0 = Point(10, 10)
-        point1 = Point(2, 2)
-        point2 = Point(3, 3)
-        size0 = Size(2, 2)
-
-        self.assertEqual(point1 * point0, Point(20, 20))
-        self.assertEqual(point0 * size0, Point(20, 20))
-        self.assertEqual(point0 * 2, Point(20, 20))
-        self.assertEqual(point0 // 3, Point(3, 3))
-        self.assertEqual(point0 % point1, Point(0, 0))
-        self.assertEqual(point0 % point2, Point(1, 1))
-        self.assertEqual(point0 % size0, Point(0, 0))
-        self.assertEqual(point0 + point1, Point(12, 12))
-        self.assertEqual(point0 + 2, Point(12, 12))
-        self.assertEqual(point0 + size0, Point(12, 12))
-        self.assertEqual(point0 - point1, Point(8, 8))
-        self.assertEqual(point0 - 2, Point(8, 8))
-        self.assertEqual(point0 - size0, Point(8, 8))
-        self.assertEqual(Point.max(point0, point1), point0)
-        self.assertEqual(Point.min(point0, point1), point1)
-        self.assertEqual(point0.to_tuple(), (10, 10))
-
     def test_valid_pixel(self):
         wsi_level = self.slide.levels.get_level(0)
         # 154x290
