@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2021, 2022 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import (ImageData, WsiDataset, WsiDicomFile,
+from wsidicom.instance import (ImageData, ImageOrgin, WsiDataset, WsiDicomFile,
                                WsiDicomFileWriter, WsiDicomImageData,
                                WsiInstance)
 from wsidicom.optical import OpticalManager
@@ -162,6 +162,10 @@ class WsiDicomGroup:
             for innstance in self.instances.values()
             for focal_plane in innstance.focal_planes
         })
+
+    @property
+    def image_origin(self) -> ImageOrgin:
+        return self.default_instance.image_origin
 
     @classmethod
     def open(
@@ -335,28 +339,37 @@ class WsiDicomGroup:
         self,
         region: RegionMm,
         z: Optional[float] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
+        slide_origin: bool = False
     ) -> Image.Image:
         """Read region defined by mm.
 
         Parameters
         ----------
-        location: float, float
-            Upper left corner of region in mm
-        size: float
-            Size of region in mm
+        region: RegionMm
+            Region defining upper left corner and size in mm.
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            optical path, optional.
+        slide_origin: bool = False.
+            If to use the slide origin instead of image origin.
 
         Returns
         ----------
         Image.Image
             Region as image
         """
+        if slide_origin:
+            region = self.image_origin.transform_region(region)
         pixel_region = self.mm_to_pixel(region)
         image = self.get_region(pixel_region, z, path)
+        if slide_origin:
+            image = image.rotate(
+                self.image_origin.rotation,
+                resample=Image.Resampling.BILINEAR,
+                expand=True
+            )
         return image
 
     def get_tile(
@@ -766,7 +779,7 @@ class WsiDicomLevel(WsiDicomGroup):
         tile_size = cropped_region.size.ceil_div(scale)
         image = image.resize(
             tile_size.to_tuple(),
-            resample=Image.BILINEAR
+            resample=Image.Resampling.BILINEAR
         )
         return image
 
@@ -1201,6 +1214,14 @@ class WsiDicomLevels(WsiDicomSeries):
         else:
             self._uids = None
 
+        mm_size = self.base_level.default_instance.mm_size
+        if mm_size is None:
+            raise ValueError(
+                'ImagedVolumeWidth and ImagedVolumeHeight must be set for '
+                '"Volume" type'
+            )
+        self._mm_size = mm_size
+
     @property
     def pyramid(self) -> str:
         """Return string representation of pyramid"""
@@ -1231,6 +1252,14 @@ class WsiDicomLevels(WsiDicomSeries):
     def base_level(self) -> WsiDicomLevel:
         """Return the base level of the pyramid"""
         return self._levels[0]
+
+    @property
+    def mm_size(self) -> SizeMm:
+        return self._mm_size
+
+    @property
+    def image_origin(self) -> ImageOrgin:
+        return self.base_level.default_instance.image_origin
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -1536,6 +1565,15 @@ class WsiDicom:
         )
 
     @property
+    def image_size(self) -> Size:
+        """Size of base leve."""
+        return self.base_level.size
+
+    @property
+    def mm_size(self) -> SizeMm:
+        return self.levels.mm_size
+
+    @property
     def uids(self) -> Optional[SlideUids]:
         return self._uids
 
@@ -1616,13 +1654,13 @@ class WsiDicom:
 
         Parameters
         ----------
-        index: int
-            Index of the label image to read
+        index: int = 0
+            Index of the label image to read.
 
         Returns
         ----------
         Image.Image
-            label as image
+            label as image.
         """
         try:
             label = self.labels[index]
@@ -1636,13 +1674,13 @@ class WsiDicom:
 
         Parameters
         ----------
-        index: int
-            Index of the overview image to read
+        index: int = 0
+            Index of the overview image to read.
 
         Returns
         ----------
         Image.Image
-            Overview as image
+            Overview as image.
         """
         try:
             overview = self.overviews[index]
@@ -1652,7 +1690,7 @@ class WsiDicom:
 
     def read_thumbnail(
         self,
-        size: Tuple[int, int],
+        size: Tuple[int, int] = (512, 512),
         z: Optional[float] = None,
         path: Optional[str] = None
     ) -> Image.Image:
@@ -1661,23 +1699,23 @@ class WsiDicom:
 
         Parameters
         ----------
-        size: int, int
-            Upper size limit for thumbnail
+        size: Tuple[int, int] = (512, 512)
+            Upper size limit for thumbnail.
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            Optical path, optional.
 
         Returns
         ----------
         Image.Image
-            Thumbnail as image
+            Thumbnail as image,
         """
         thumbnail_size = Size.from_tuple(size)
         level = self.levels.get_closest_by_size(thumbnail_size)
         region = Region(position=Point(0, 0), size=level.size)
         image = level.get_region(region, z, path)
-        image.thumbnail((size), resample=Image.BILINEAR)
+        image.thumbnail((size), resample=Image.Resampling.BILINEAR)
         return image
 
     def read_region(
@@ -1692,16 +1730,16 @@ class WsiDicom:
 
         Parameters
         ----------
-        location: int, int
-            Upper left corner of region in pixels
+        location: Tuple[int, int]
+            Upper left corner of region in pixels.
         level: int
-            Level in pyramid
-        size: int
-            Size of region in pixels
+            Level in pyramid.
+        size: Tuple[int, int]
+            Size of region in pixels.
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            Optical path, optional.
 
         Returns
         ----------
@@ -1721,7 +1759,7 @@ class WsiDicom:
             )
         image = wsi_level.get_region(scaled_region, z, path)
         if(scale_factor != 1):
-            image = image.resize((size), resample=Image.BILINEAR)
+            image = image.resize((size), resample=Image.Resampling.BILINEAR)
         return image
 
     def read_region_mm(
@@ -1730,22 +1768,26 @@ class WsiDicom:
         level: int,
         size: Tuple[float, float],
         z: Optional[float] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
+        slide_origin: bool = False
     ) -> Image.Image:
         """Read image from region defined in mm.
 
         Parameters
         ----------
-        location: float, float
-            Upper left corner of region in mm
+        location: Tuple[float, float]
+            Upper left corner of region in mm, or lower left corner if using
+            slide origin.
         level: int
             Level in pyramid
-        size: float
+        size: Tuple[float, float].
             Size of region in mm
         z: Optional[float] = None
             Z coordinate, optional
         path: Optional[str] = None
             optical path, optional
+        slide_origin: bool = False
+            If to use the slide origin instead of image origin.
 
         Returns
         ----------
@@ -1755,14 +1797,17 @@ class WsiDicom:
         wsi_level = self.levels.get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         region = RegionMm(
-            position=PointMm.from_tuple(location),
-            size=SizeMm.from_tuple(size)
+            PointMm.from_tuple(location),
+            SizeMm.from_tuple(size)
         )
-        image = wsi_level.get_region_mm(region, z, path)
+        image = wsi_level.get_region_mm(region, z, path, slide_origin)
         image_size = (
             Size(width=image.size[0], height=image.size[1]) // scale_factor
         )
-        return image.resize(image_size.to_tuple(), resample=Image.BILINEAR)
+        return image.resize(
+            image_size.to_tuple(),
+            resample=Image.Resampling.BILINEAR
+        )
 
     def read_region_mpp(
         self,
@@ -1770,22 +1815,26 @@ class WsiDicom:
         mpp: float,
         size: Tuple[float, float],
         z: Optional[float] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
+        slide_origin: bool = False
     ) -> Image.Image:
         """Read image from region defined in mm with set pixel spacing.
 
         Parameters
         ----------
-        location: float, float
-            Upper left corner of region in mm
+        location: Tuple[float, float].
+            Upper left corner of region in mm, or lower left corner if using
+            slide origin.
         mpp: float
-            Requested pixel spacing (um/pixel)
-        size: float
-            Size of region in mm
+            Requested pixel spacing (um/pixel).
+        size: Tuple[float, float].
+            Size of region in mm.
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            Optical path, optional.
+        slide_origin: bool = False
+            If to use the slide origin instead of image origin.
 
         Returns
         ----------
@@ -1797,12 +1846,15 @@ class WsiDicom:
             SizeMm(pixel_spacing, pixel_spacing)
         )
         region = RegionMm(
-            position=PointMm.from_tuple(location),
-            size=SizeMm.from_tuple(size)
+            PointMm.from_tuple(location),
+            SizeMm.from_tuple(size)
         )
-        image = wsi_level.get_region_mm(region, z, path)
-        image_size = SizeMm(width=size[0], height=size[1]) // pixel_spacing
-        return image.resize(image_size.to_tuple(), resample=Image.BILINEAR)
+        image = wsi_level.get_region_mm(region, z, path, slide_origin)
+        image_size = SizeMm.from_tuple(size) // pixel_spacing
+        return image.resize(
+            image_size.to_tuple(),
+            resample=Image.Resampling.BILINEAR
+        )
 
     def read_tile(
         self,
