@@ -1953,7 +1953,7 @@ class WsiDicom:
             else:
                 workers = cpus
         if chunk_size is None:
-            chunk_size = 100
+            chunk_size = 16
 
         collections: List[WsiDicomSeries] = [
             self.levels, self.labels, self.overviews
