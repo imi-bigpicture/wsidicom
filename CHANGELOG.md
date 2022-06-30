@@ -6,11 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased] - ...
-### Added
+
+## [0.4.0] - 2022-06-30
 - Focal planes are considered equal if configurable withing threshold distance, see config.focal_plane_distance_threshold
+- Option to read region defined in slide coordinate system for get_region_mm().
 
 ### Changed
 - Default chunk size for saving is now set to 16 tiles.
+- Drop support for python 3.7.
 
 ### Fixed
 - Focal planes are now written to file in correct order.
@@ -61,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.3.2..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.4.0..HEAD
+[0.4.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.3.2..v0.4.0
 [0.3.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.3.1..v0.3.2
 [0.3.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.3.0..v0.3.1
 [0.3.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.2.0..v0.3.0
