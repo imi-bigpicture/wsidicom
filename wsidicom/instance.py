@@ -71,7 +71,6 @@ class WsiAttributeRequirement:
     def __init__(
         self,
         requirement: Requirement,
-        image_types: Sequence[str] = [],
         image_types: Optional[Sequence[str]] = None,
         default: Any = None
     ) -> None:
