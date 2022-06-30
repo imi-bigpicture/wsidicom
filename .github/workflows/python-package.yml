@@ -14,13 +14,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
     - name: Load test images from cache
-      id: test-images-cache
+      id: cache_test_images
       uses: actions/cache@v2
       with:
-        key: test-images-cache-0.2
+        key: cache_test_images-0.3
         path: tests/testdata/slides
     - name: Download test images if not cached
-      if: steps.test-images-cache.outputs.cache-hit != 'true'
+      if: steps.cache_test_images.outputs.cache-hit != 'true'
       run:
         python tests/download_test_images.py
 
