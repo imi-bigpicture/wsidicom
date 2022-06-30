@@ -1070,15 +1070,6 @@ class WsiDicomFileBase():
         if length != read_length:
             raise ValueError(f"Found length {read_length} expected {length}")
 
-    def _read_sequence_delimeter(self):
-        """Check if last read tag was a sequence delimter.
-        Raises WsiDicomFileError otherwise.
-        """
-        TAG_BYTES = 4
-        self._fp.seek(-TAG_BYTES, 1)
-        if(self._fp.read_tag() != SequenceDelimiterTag):
-            raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
-
     def close(self) -> None:
         """Close the file."""
         self._fp.close()
@@ -1357,7 +1348,7 @@ class WsiDicomFile(WsiDicomFileBase):
         table_type: str
             Type of table, 'bot' or 'eot'.
         pixels_start: int
-            Position of pixel start.
+            Position of first frame item in pixel data.
 
         Returns
         ----------
@@ -1381,7 +1372,11 @@ class WsiDicomFile(WsiDicomFileBase):
         LENGHT_BYTES = 4
         positions: List[Tuple[int, int]] = []
         # Read through table to get offset and length for all but last item
+        # All read offsets are for item tag of frame and relative to first
+        # frame in pixel data.
         this_offset: int = unpack(mode, table[0:bytes_per_item])[0]
+        if this_offset != 0:
+            raise ValueError("First item in table should be at offset 0")
         for index in range(bytes_per_item, table_length, bytes_per_item):
             next_offset = unpack(mode, table[index:index+bytes_per_item])[0]
             offset = this_offset + TAG_BYTES + LENGHT_BYTES
@@ -1435,12 +1430,11 @@ class WsiDicomFile(WsiDicomFileBase):
             # Jump to end of frame
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
-
         self._read_sequence_delimiter()
         return positions
 
     def _read_sequence_delimiter(self):
-        """Check if last read tag was a sequence delimter.
+        """Check if last read tag was a sequence delimiter.
         Raises WsiDicomFileError otherwise.
         """
         TAG_BYTES = 4
