@@ -19,6 +19,7 @@ class Settings:
         self._strict_uid_check = False
         self._strict_attribute_check = False
         self._parse_pixel_data_on_load = True
+        self._focal_plane_distance_threshold = 0.000001
 
     @property
     def strict_uid_check(self) -> bool:
@@ -46,6 +47,18 @@ class Settings:
     @parse_pixel_data_on_load.setter
     def parse_pixel_data_on_load(self, value: bool) -> None:
         self._parse_pixel_data_on_load = value
+
+    @property
+    def focal_plane_distance_threshold(self) -> float:
+        """Threshold in mm for which distances between focal planes are
+        considered to be equal. Default is 1 nm, as distance between focal
+        planes are likely larger than this.
+        """
+        return self._focal_plane_distance_threshold
+
+    @focal_plane_distance_threshold.setter
+    def focal_plane_distance_threshold(self, value: float) -> None:
+        self._focal_plane_distance_threshold = value
 
 
 settings = Settings()

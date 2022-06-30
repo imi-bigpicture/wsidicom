@@ -951,20 +951,28 @@ class WsiDataset(Dataset):
         """
         if len(focal_planes) == 1:
             return 0.0
-        distances: Set[float] = set()
+        spacing: Optional[float] = None
         sorted_focal_planes = sorted(focal_planes)
         for index in range(len(sorted_focal_planes)-1):
-            distance = (
+            this_spacing = (
                 sorted_focal_planes[index + 1]
                 - sorted_focal_planes[index]
             )
-            distances.add(distance)
-        if len(distances) != 1:
-            raise NotImplementedError(
-                "Image data has non-equal spacing between slices "
-                f"{distances}, not possible to encode as TILED_FULL"
-            )
-        return distances.pop() / 1000.0
+            if spacing is None:
+                spacing = this_spacing
+            elif (
+                abs(spacing - this_spacing)
+                > settings.focal_plane_distance_threshold
+            ):
+                raise NotImplementedError(
+                    "Image data has non-equal spacing between slices: "
+                    f"{spacing, this_spacing}, difference threshold: "
+                    f"{settings.focal_plane_distance_threshold}, "
+                    "not possible to encode as TILED_FULL"
+                )
+        if spacing is None:
+            raise ValueError("Could not calculate spacings.")
+        return spacing / 1000.0
 
     @staticmethod
     def _get_frame_information(
