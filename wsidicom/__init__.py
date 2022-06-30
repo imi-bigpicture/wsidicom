@@ -22,4 +22,4 @@ from .instance import WsiDataset, WsiInstance
 from .wsidicom import (ImageData, WsiDicom, WsiDicomLabels, WsiDicomLevels,
                        WsiDicomOverviews)
 
-__version__ = '0.3.2'
+__version__ = '0.4.0'
