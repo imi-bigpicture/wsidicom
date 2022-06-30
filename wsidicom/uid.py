@@ -90,7 +90,7 @@ class FileUids:
 
         Returns
         ----------
-        Uid
+        UID
             Identifier uid for the instance the file belongs to.
         """
         if self.concatenation is not None:

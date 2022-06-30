@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased] - ...
+### Added
+- Focal planes are considered equal if configurable withing threshold distance, see config.focal_plane_distance_threshold
+
+### Changed
+- Default chunk size for saving is now set to 16 tiles.
+
+### Fixed
+- Focal planes are now written to file in correct order.
+
+## [0.3.2] - 2022-05-08
+### Fixed
+- Fix version in __init__.py.
 
 ## [0.3.2] - 2022-05-08
 ### Fixed

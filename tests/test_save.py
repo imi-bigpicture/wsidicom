@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 from struct import unpack
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional, OrderedDict, Sequence, Tuple, cast
+from typing import List, Optional, OrderedDict, Sequence, Tuple, cast
 
 import pytest
 from PIL import Image, ImageChops, ImageFilter, ImageStat
@@ -41,6 +41,7 @@ SLIDE_FOLDER = Path(os.environ.get(
     "WSIDICOM_TESTDIR",
     "tests/testdata/slides")
 )
+
 
 class WsiDicomTestFile(WsiDicomFile):
     """Test version of WsiDicomFile that overrides __init__."""

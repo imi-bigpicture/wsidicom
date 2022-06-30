@@ -72,6 +72,7 @@ class WsiAttributeRequirement:
         self,
         requirement: Requirement,
         image_types: Sequence[str] = [],
+        image_types: Optional[Sequence[str]] = None,
         default: Any = None
     ) -> None:
         self.requirement = requirement
@@ -650,7 +651,7 @@ class WsiDataset(Dataset):
 
     def as_tiled_full(
         self,
-        image_data: OrderedDict[Tuple[str, float], 'ImageData'],
+        image_data: Dict[Tuple[str, float], 'ImageData'],
         scale: int = 1
     ) -> 'WsiDataset':
         """Return copy of dataset with properties set to reflect a tiled full
@@ -659,7 +660,7 @@ class WsiDataset(Dataset):
 
         Parameters
         ----------
-        image_data: OrderedDict[Tuple[str, float], ImageData]
+        image_data: Dict[Tuple[str, float], ImageData]
             List of image data that should be encoded into dataset. Each
             element is a tuple of (optical path, focal plane) and ImageData.
         scale: int = 1
@@ -686,6 +687,14 @@ class WsiDataset(Dataset):
             'SharedFunctionalGroupsSequence',
             DicomSequence([Dataset()])
         )
+        plane_position_slide = Dataset()
+        plane_position_slide.ZOffsetInSlideCoordinateSystem = (
+            focal_planes[0]
+        )
+        shared_functional_group[0].PlanePositionSlideSequence = (
+            DicomSequence([plane_position_slide])
+        )
+
         pixel_measure = getattr(
             shared_functional_group[0],
             'PixelMeasuresSequence',
@@ -834,7 +843,7 @@ class WsiDataset(Dataset):
 
     @staticmethod
     def _get_spacings(
-            pixel_measure: Optional[Dataset]
+        pixel_measure: Optional[Dataset]
     ) -> Tuple[Optional[SizeMm], Optional[float]]:
         """Return Pixel and slice spacing from pixel measure dataset.
 
@@ -998,24 +1007,32 @@ class WsiDataset(Dataset):
         """
         if len(focal_planes) == 1:
             return 0.0
-        distances: Set[float] = set()
+        spacing: Optional[float] = None
         sorted_focal_planes = sorted(focal_planes)
         for index in range(len(sorted_focal_planes)-1):
-            distance = (
+            this_spacing = (
                 sorted_focal_planes[index + 1]
                 - sorted_focal_planes[index]
             )
-            distances.add(distance)
-        if len(distances) != 1:
-            raise NotImplementedError(
-                "Image data has non-equal spacing between slices "
-                f"{distances}, not possible to encode as TILED_FULL"
-            )
-        return distances.pop() / 1000.0
+            if spacing is None:
+                spacing = this_spacing
+            elif (
+                abs(spacing - this_spacing)
+                > settings.focal_plane_distance_threshold
+            ):
+                raise NotImplementedError(
+                    "Image data has non-equal spacing between slices: "
+                    f"{spacing, this_spacing}, difference threshold: "
+                    f"{settings.focal_plane_distance_threshold}, "
+                    "not possible to encode as TILED_FULL"
+                )
+        if spacing is None:
+            raise ValueError("Could not calculate spacings.")
+        return spacing / 1000.0
 
     @staticmethod
     def _get_frame_information(
-        data: OrderedDict[Tuple[str, float], 'ImageData']
+        data: Dict[Tuple[str, float], 'ImageData']
     ) -> Tuple[List[float], List[str], Size]:
         """Return optical_paths, focal planes, and tiled size.
         """
@@ -1090,7 +1107,8 @@ class WsiDicomFileBase():
 
     def _read_tag_length(self, with_vr: bool = True) -> int:
         if (not self._fp.is_implicit_VR) and with_vr:
-            VR = self._fp.read_UL()
+            # Read VR
+            self._fp.read_UL()
         return self._fp.read_UL()
 
     def _check_tag_and_length(
@@ -1115,15 +1133,6 @@ class WsiDicomFileBase():
         read_length = self._read_tag_length(with_vr)
         if length != read_length:
             raise ValueError(f"Found length {read_length} expected {length}")
-
-    def _read_sequence_delimeter(self):
-        """Check if last read tag was a sequence delimter.
-        Raises WsiDicomFileError otherwise.
-        """
-        TAG_BYTES = 4
-        self._fp.seek(-TAG_BYTES, 1)
-        if(self._fp.read_tag() != SequenceDelimiterTag):
-            raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
 
     def close(self) -> None:
         """Close the file."""
@@ -1285,7 +1294,7 @@ class WsiDicomFile(WsiDicomFileBase):
         Parse file for basic or extended offset table.
         """
         self._fp.seek(self._pixel_data_position)
-        pixel_data_or_eot_tag = self._fp.read_tag()
+        pixel_data_or_eot_tag = Tag(self._fp.read_tag())
         if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
             eot_length = self._read_tag_length()
             self._fp.seek(eot_length, 1)
@@ -1403,7 +1412,7 @@ class WsiDicomFile(WsiDicomFileBase):
         table_type: str
             Type of table, 'bot' or 'eot'.
         pixels_start: int
-            Position of pixel start.
+            Position of first frame item in pixel data.
 
         Returns
         ----------
@@ -1427,7 +1436,11 @@ class WsiDicomFile(WsiDicomFileBase):
         LENGHT_BYTES = 4
         positions: List[Tuple[int, int]] = []
         # Read through table to get offset and length for all but last item
+        # All read offsets are for item tag of frame and relative to first
+        # frame in pixel data.
         this_offset: int = unpack(mode, table[0:bytes_per_item])[0]
+        if this_offset != 0:
+            raise ValueError("First item in table should be at offset 0")
         for index in range(bytes_per_item, table_length, bytes_per_item):
             next_offset = unpack(mode, table[index:index+bytes_per_item])[0]
             offset = this_offset + TAG_BYTES + LENGHT_BYTES
@@ -1481,12 +1494,11 @@ class WsiDicomFile(WsiDicomFileBase):
             # Jump to end of frame
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
-
         self._read_sequence_delimiter()
         return positions
 
     def _read_sequence_delimiter(self):
-        """Check if last read tag was a sequence delimter.
+        """Check if last read tag was a sequence delimiter.
         Raises WsiDicomFileError otherwise.
         """
         TAG_BYTES = 4
@@ -1548,11 +1560,11 @@ class WsiDicomFile(WsiDicomFileBase):
         """
         table = None
         table_type = 'bot'
-        pixel_data_or_eot_tag = self._fp.read_tag()
+        pixel_data_or_eot_tag = Tag(self._fp.read_tag())
         if pixel_data_or_eot_tag == Tag('ExtendedOffsetTable'):
             table_type = 'eot'
             table = self._read_eot()
-            pixel_data_tag = self._fp.read_tag()
+            pixel_data_tag = Tag(self._fp.read_tag())
         else:
             pixel_data_tag = pixel_data_or_eot_tag
 
@@ -2715,6 +2727,33 @@ class TileIndex(metaclass=ABCMeta):
             for optical_ds in optical_path_sequence
         })
 
+    def _read_frame_coordinates(
+        self,
+        frame: Dataset
+    ) -> Tuple[Point, float]:
+        """Return frame coordinate (Point(x, y) and float z) of the frame.
+        In the Plane Position Slide Sequence x and y are defined in mm and z in
+        um.
+
+        Parameters
+        ----------
+        frame: Dataset
+            Pydicom frame sequence.
+
+        Returns
+        ----------
+        Point, float
+            The frame xy coordinate and z coordinate
+        """
+        DECIMALS = 3
+        position = frame.PlanePositionSlideSequence[0]
+        y = int(position.RowPositionInTotalImagePixelMatrix) - 1
+        x = int(position.ColumnPositionInTotalImagePixelMatrix) - 1
+        z_offset = getattr(position, 'ZOffsetInSlideCoordinateSystem', 0.0)
+        z = round(float(z_offset), DECIMALS)
+        tile = Point(x=x, y=y) // self.tile_size
+        return tile, z
+
 
 class FullTileIndex(TileIndex):
     """Index for mapping tile position to frame number for datasets containing
@@ -2823,8 +2862,19 @@ class FullTileIndex(TileIndex):
                     "Slice spacing must be non-zero if multiple focal planes."
                 )
 
+            try:
+                z_offset = (
+                    dataset.SharedFunctionalGroupsSequence[0]
+                    .PlanePositionSlideSequence[0]
+                    .ZOffsetInSlideCoordinateSystem
+                )
+            except AttributeError:
+                z_offset = 0
+
             for plane in range(number_of_focal_planes):
-                z = round(plane * slice_spacing * MM_TO_MICRON, DECIMALS)
+                z = z_offset + round(
+                    plane * slice_spacing * MM_TO_MICRON, DECIMALS
+                )
                 focal_planes.add(z)
         return sorted(list(focal_planes))
 
@@ -2987,33 +3037,6 @@ class SparseTileIndex(TileIndex):
 
         return planes
 
-    def _read_frame_coordinates(
-            self,
-            frame: Dataset
-    ) -> Tuple[Point, float]:
-        """Return frame coordinate (Point(x, y) and float z) of the frame.
-        In the Plane Position Slide Sequence x and y are defined in mm and z in
-        um.
-
-        Parameters
-        ----------
-        frame: Dataset
-            Pydicom frame sequence.
-
-        Returns
-        ----------
-        Point, float
-            The frame xy coordinate and z coordinate
-        """
-        DECIMALS = 3
-        position = frame.PlanePositionSlideSequence[0]
-        y = int(position.RowPositionInTotalImagePixelMatrix) - 1
-        x = int(position.ColumnPositionInTotalImagePixelMatrix) - 1
-        z_offset = getattr(position, 'ZOffsetInSlideCoordinateSystem', 0.0)
-        z = round(float(z_offset), DECIMALS)
-        tile = Point(x=x, y=y) // self.tile_size
-        return tile, z
-
 
 class WsiDicomFileWriter(WsiDicomFileBase):
     def __init__(self, filepath: Path) -> None:
@@ -3034,7 +3057,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         uid: UID,
         transfer_syntax: UID,
         dataset: Dataset,
-        data: OrderedDict[Tuple[str, float], ImageData],
+        data: Dict[Tuple[str, float], ImageData],
         workers: int,
         chunk_size: int,
         offset_table: Optional[str],
@@ -3050,7 +3073,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Transfer syntax for file
         dataset: Dataset
             Dataset to write (exluding pixel data).
-        data: OrderedDict[Tuple[str, float], ImageData],
+        data: Dict[Tuple[str, float], ImageData]
             Pixel data to write.
         workers: int
             Number of workers to use for writing pixel data.
@@ -3072,7 +3095,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             offset_table
         )
         frame_positions: List[int] = []
-        for (path, z), image_data in data.items():
+        for (path, z), image_data in sorted(data.items()):
             frame_positions += self._write_pixel_data(
                 image_data,
                 z,
