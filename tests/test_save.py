@@ -249,7 +249,6 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                 number_of_frames=self.frame_count,
                 offset_table=offset_table
             )
-            # positions = []
             positions = write_file._write_pixel_data(
                 self.image_data,
                 self.image_data.default_z,
