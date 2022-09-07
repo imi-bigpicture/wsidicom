@@ -1456,7 +1456,7 @@ class WsiDicom:
         levels: WsiDicomLevels,
         labels: WsiDicomLabels,
         overviews: WsiDicomOverviews,
-        annotations: Sequence[AnnotationInstance] = []
+        annotations: Optional[Sequence[AnnotationInstance]] = None
     ):
         """Holds wsi dicom levels, labels and overviews.
 
@@ -1468,9 +1468,11 @@ class WsiDicom:
             Series of label images.
         overviews: WsiDicomOverviews
             Series of overview images
-        annotations: Sequence[AnnotationInstance] = []
+        annotations: Optional[Sequence[AnnotationInstance]] = None
             Sup-222 annotation instances.
         """
+        if annotations is None:
+            annotations = []
         self._levels = levels
         self._labels = labels
         self._overviews = overviews
