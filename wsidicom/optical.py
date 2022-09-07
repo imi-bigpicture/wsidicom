@@ -324,13 +324,15 @@ class Illumination:
     """Set of illumination conditions for optical path"""
     def __init__(
         self,
-        illumination_method: Sequence[ConceptCode] = [],
+        illumination_method: Optional[Sequence[ConceptCode]] = None,
         illumination_wavelength: Optional[float] = None,
         illumination_color: Optional[ConceptCode] = None,
         illuminator: Optional[ConceptCode] = None
     ):
         if illumination_color is None and illumination_wavelength is None:
             raise ValueError("Illumination color or wavelenght need to be set")
+        if illumination_method is None:
+            illumination_method = []
         self.illumination_method = illumination_method
         self.illumination_wavelength = illumination_wavelength
         self.illumination_color = illumination_color
@@ -562,15 +564,17 @@ class OpticalManager:
     """Store optical paths loaded from dicom files."""
     def __init__(
         self,
-        optical_paths: Sequence[OpticalPath] = [],
+        optical_paths: Optional[Sequence[OpticalPath]] = None,
     ):
         """Create a OpticalManager from list of OpticalPaths.
 
         Parameters
         ----------
-        optical_paths: Sequence[OpticalPath] = []
+         optical_paths: Optional[Sequence[OpticalPath]] = None
             List of OpticalPaths.
         """
+        if optical_paths is None:
+            optical_paths = []
         self._optical_paths: Dict[str, OpticalPath] = {
             optical_path.identifier: optical_path
             for optical_path in optical_paths
