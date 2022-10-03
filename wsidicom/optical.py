@@ -323,10 +323,10 @@ class Illumination:
     """Set of illumination conditions for optical path"""
     def __init__(
         self,
-        illumination_method: Optional[Sequence[ConceptCode]] = None,
+        illumination_method: Optional[Sequence[IlluminationCode]] = None,
         illumination_wavelength: Optional[float] = None,
-        illumination_color: Optional[ConceptCode] = None,
-        illuminator: Optional[ConceptCode] = None
+        illumination_color: Optional[IlluminationColorCode] = None,
+        illuminator: Optional[IlluminatorCode] = None
     ):
         if illumination_color is None and illumination_wavelength is None:
             raise ValueError("Illumination color or wavelenght need to be set")
@@ -457,7 +457,7 @@ class OpticalPath:
         lut: Optional[Lut] = None,
         light_path_filter: Optional[LightPathFilter] = None,
         image_path_filter: Optional[ImagePathFilter] = None,
-        channel_description: Optional[Sequence[ConceptCode]] = None,
+        channel_description: Optional[Sequence[ChannelDescriptionCode]] = None,
         lenses: Optional[Lenses] = None
     ):
         """Create a OpticalPath from identifier, illumination, photometric
@@ -481,7 +481,7 @@ class OpticalPath:
             Optional light path filter description for the optical path.
         image_path_filter: Optional[ImagePathFilter] = None
             Optional image path filter description for the optical path.
-        channel_description: Optional[Sequence[ConceptCode]] = None
+        channel_description: Optional[Sequence[ChannelDescriptionCode]] = None
             Optional channel description for the optical path.
         lenses: Optional[Lenses] = None
             Optional lens description for the optical path.

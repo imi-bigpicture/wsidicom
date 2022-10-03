@@ -1270,9 +1270,9 @@ class AnnotationGroup(Generic[GEOMETRY_TYPE]):
 
         Parameters
         ----------
-        code: ConceptCode
+        code: MeasurementCode
             Code of measurement to create sequence for.
-        unit: ConceptCode
+        unit: UnitCode
             Unit of measurement to create sequence for.
 
         Returns
