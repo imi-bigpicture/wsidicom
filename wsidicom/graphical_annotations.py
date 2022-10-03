@@ -26,14 +26,15 @@ from pydicom.dataset import (Dataset, FileDataset, FileMetaDataset,
 from pydicom.filereader import dcmread
 from pydicom.filewriter import dcmwrite
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.sr.codedict import codes
-from pydicom.sr.coding import Code
 from pydicom.uid import (ExplicitVRBigEndian, ExplicitVRLittleEndian,
                          ImplicitVRLittleEndian, generate_uid)
 from pydicom.values import convert_numbers
 
+from wsidicom.conceptcode import (AnnotationCategoryCode, AnnotationTypeCode,
+                                  MeasurementCode, UnitCode)
+
 from .geometry import PointMm, RegionMm, SizeMm
-from .uid import ANN_SOP_CLASS_UID, SlideUids, UID
+from .uid import ANN_SOP_CLASS_UID, UID, SlideUids
 
 
 @dataclass
@@ -43,14 +44,14 @@ class LabColor:
     b: int
 
 
-def dcm_to_list(item: bytes, type: str) -> List[Any]:
+def dcm_to_list(item: bytes, format: str) -> List[Any]:
     """Convert item to list of values using specified type format.
 
     Parameters
     ----------
     item: bytes
         Bytes to convert.
-    type: str
+    format: str
         Struct format character.
 
     Returns
@@ -61,287 +62,42 @@ def dcm_to_list(item: bytes, type: str) -> List[Any]:
     converted = convert_numbers(
         item,
         is_little_endian=True,
-        struct_format=type
+        struct_format=format
     )
     if not isinstance(converted, list):
         return [converted]
     return converted
 
 
-class ConceptCode(Code):
-    """Help functions for handling SR codes.
-    Provides functions for converting between Code and dicom dataset.
-    For CIDs that are not-yet standardized, functions for creating Code from
-    code meaning is provided using the CID definitions in the sup 222 draft.
-    For standardized CIDs one can use pydicom.sr.codedict to create codes."""
-    code_dictionaries = {
-        'measurement': {'Area': Code('42798000', 'SCT', 'Area')},  # noqa
-        'typecode': {
-            'Nucleus': Code('84640000', 'SCT', 'Nucleus'),  # noqa
-            'Entire cell': Code('362837007', 'SCT', 'Entire cell')  # noqa
-        }
-    }
-    measurement_dictionary = {'Area': Code('42798000', 'SCT', 'Area')}  # noqa
-
-    typecode_dictionary = {
-        'Nucleus': Code('84640000', 'SCT', 'Nucleus'),  # noqa
-        'Entire cell': Code('362837007', 'SCT', 'Entire cell')  # noqa
-    }
-
-    def __hash__(self):
-        return hash((
-            self.value,
-            self.scheme_designator,
-            self.meaning,
-            self.scheme_version
-        ))
-
-    @property
-    def sequence(self) -> DicomSequence:
-        """Return code as DICOM sequence.
-
-        Returns
-        ----------
-        DicomSequence
-            Dicom sequence of dataset containing code.
-
-        """
-        ds = Dataset()
-        ds.CodeValue = self.value
-        ds.CodingSchemeDesignator = self.scheme_designator
-        ds.CodeMeaning = self.meaning
-        if self.scheme_version is not None:
-            ds.CodeSchemeVersion = self.scheme_version
-        sequence = DicomSequence([ds])
-        return sequence
-
-    @classmethod
-    def measurement(cls, value: Union[str, Dataset]) -> 'ConceptCode':
-        """Return measurement code for value. Value can be a code meaning (str)
-        or a DICOM dataset containing the code.
-
-        Parameters
-        ----------
-        value: Union[str, Dataset]
-            The value for creating the code.
-
-        Returns
-        ----------
-        ConceptCode
-            Measurement code created from value.
-
-        """
-        if isinstance(value, str):
-            return cls._from_dict('measurement', value)
-        elif isinstance(value, Dataset):
-            return cls._from_ds(value, 'ConceptNameCodeSequence')
-        raise NotImplementedError(value)
-
-    @classmethod
-    def type(cls, value: Union[str, Dataset]) -> 'ConceptCode':
-        """Return typecode code for value. Value can be a code meaning
-        (str) or a DICOM dataset containing the code.
-
-        Parameters
-        ----------
-        value: Union[str, Dataset]
-            The value for creating the code.
-
-        Returns
-        ----------
-        ConceptCode
-            typecode code created from value.
-
-        """
-        if isinstance(value, str):
-            return cls._from_dict('typecode', value)
-        elif isinstance(value, Dataset):
-            return cls._from_ds(value, 'AnnotationPropertyTypeCodeSequence')
-        raise NotImplementedError(value)
-
-    @classmethod
-    def category(cls, value: Union[str, Dataset]) -> 'ConceptCode':
-        """Return categorycode code for value. Value can be a code meaning
-        (str) or a DICOM dataset containing the code.
-
-        Parameters
-        ----------
-        value: Union[str, Dataset]
-            The value for creating the code.
-
-        Returns
-        ----------
-        ConceptCode
-            categorycode code created from value.
-
-        """
-        if isinstance(value, str):
-            return cls._from_cid('cid7150', value)
-        elif isinstance(value, Dataset):
-            return cls._from_ds(
-                value,
-                'AnnotationPropertyCategoryCodeSequence'
-            )
-        raise NotImplementedError(value)
-
-    @classmethod
-    def unit(cls, value: Union[str, Dataset]) -> 'ConceptCode':
-        """Return unit code for value. Value can be a code meaning
-        (str) or a DICOM dataset containing the code.
-
-        Parameters
-        ----------
-        value: Union[str, Dataset]
-            The value for creating the code.
-
-        Returns
-        ----------
-        ConceptCode
-            Unit code created from value.
-
-        """
-        if isinstance(value, str):
-            return cls._from_ucum(value)
-        elif isinstance(value, Dataset):
-            return cls._from_ds(value, 'MeasurementUnitsCodeSequence')
-        raise NotImplementedError(value)
-
-    @classmethod
-    def _from_ds(cls, ds: Dataset, sequence_name: str) -> 'ConceptCode':
-        """Return ConceptCode from sequence in dataset.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Datasete containing code sequence.
-        sequence_name: str
-            Name of the sequence containing code.
-
-        Returns
-        ----------
-        ConceptCode
-            Code created from sequence in dataset.
-
-        """
-        try:
-            code_ds = getattr(ds, sequence_name)[0]
-        except IndexError:
-            raise ValueError("ConceptCode expected in sequence")
-        value = code_ds.CodeValue
-        scheme = code_ds.CodingSchemeDesignator
-        meaning = code_ds.CodeMeaning
-        version = getattr(code_ds, 'CodeSchemeVersion', None)
-        return cls(
-            value=value,
-            scheme_designator=scheme,
-            meaning=meaning,
-            scheme_version=version
-        )
-
-    @classmethod
-    def _from_dict(cls, dict_name: str, meaning: str) -> 'ConceptCode':
-        """Return ConceptCode from dictionary.
-
-        Parameters
-        ----------
-        dict_name: str
-            Dictionary name to get code from.
-        meaning: str
-            Code meaning of  code to get.
-
-        Returns
-        ----------
-        ConceptCode
-            Code from dictionary.
-
-        """
-        try:
-            code_dict = cls.code_dictionaries[dict_name]
-        except KeyError:
-            raise NotImplementedError("Unkown dictionary")
-        try:
-            code = code_dict[meaning]
-        except KeyError:
-            raise NotImplementedError("Unsupported code")
-        return cls(*code)
-
-    @classmethod
-    def _from_ucum(cls, unit: str) -> 'ConceptCode':
-        """Return UCUM scheme ConceptCode.
-
-        Parameters
-        ----------
-        meaning: str
-            Code meaning.
-
-        Returns
-        ----------
-        ConceptCode
-            Code created from meaning.
-
-        """
-        return cls(
-            value=unit,
-            scheme_designator='UCUM',
-            meaning=unit
-        )
-
-    @classmethod
-    def _from_cid(cls, cid: str, meaning: str) -> 'ConceptCode':
-        """Return ConceptCode from CID and meaning. For a list of CIDs, see
-        http://dicom.nema.org/medical/dicom/current/output/chtml/part16/chapter_B.html # noqa
-
-        Parameters
-        ----------
-        cid: str
-            CID to use.
-        meaning: str
-            Code meaning to get.
-
-        Returns
-        ----------
-        ConceptCode
-            Code created from CID and meaning.
-
-        """
-        try:
-            cid = getattr(codes, cid)
-        except AttributeError:
-            raise NotImplementedError("Unsupported cid")
-        try:
-            code = getattr(cid, meaning)
-        except AttributeError:
-            raise NotImplementedError("Unsupported code")
-        return cls(*code)
-
-
 @dataclass
 class Measurement:
-    def __init__(self, type: ConceptCode, value: float, unit: ConceptCode):
+    def __init__(self, code: MeasurementCode, value: float, unit: UnitCode):
         """Represents a measurement.
 
         Parameters
         ----------
-        type: str
+        code: MeasurementCode
             Type of measurement.
         value: float
             Value of measurement.
-        unit: str
-            Unit of measruement.
+        unit: UnitCode
+            Unit of measurement.
         """
-        self.type = type
+        self.code = code
         self.value = value
         self.unit = unit
 
     def __repr__(self) -> str:
-        return f"Measurement({self.type}, {self.value},  {self.unit})"
+        return f"Measurement({self.code}, {self.value},  {self.unit})"
 
-    def same_type(self, other_type: ConceptCode, other_unit: ConceptCode):
+    def same_type(self, other_code: MeasurementCode, other_unit: UnitCode):
         """Return true if measurement base is same.
 
         Parameters
         ----------
-        other_base: MeasurementType
+        other_code: MeasurementCode
+            Other base to compare to.
+        other_unit: UnitCode
             Other base to compare to.
 
         Returns
@@ -350,14 +106,14 @@ class Measurement:
             True if bases are same.
         """
         return (
-            self.type == other_type and
+            self.code == other_code and
             self.unit == other_unit
         )
 
     @staticmethod
     def _get_measurement_type_from_ds(
         ds: Dataset
-    ) -> Tuple[ConceptCode, ConceptCode]:
+    ) -> Tuple[MeasurementCode, UnitCode]:
         """Get measurement type from dataset.
 
         Parameters
@@ -370,9 +126,15 @@ class Measurement:
         MeasurementType
             Measurement type of the measurement group.
         """
-        type = ConceptCode.measurement(ds)
-        unit = ConceptCode.unit(ds)
-        return (type, unit)
+        code = MeasurementCode.from_ds(ds)
+        if code is None:
+            raise ValueError(
+                f'Dataset is missing {MeasurementCode.sequence_name}.'
+            )
+        unit = UnitCode.from_ds(ds)
+        if unit is None:
+            raise ValueError(f'Dataset is missing {UnitCode.sequence_name}.')
+        return code, unit
 
     @staticmethod
     def _get_measurement_values_from_ds(
@@ -444,7 +206,7 @@ class Measurement:
             Generator for annotation index and measurement.
         """
         for group_ds in sequence:
-            type, unit = cls._get_measurement_type_from_ds(group_ds)
+            code, unit = cls._get_measurement_type_from_ds(group_ds)
             values = cls._get_measurement_values_from_ds(group_ds)
             indices = cls._get_measurement_indices_from_ds(
                 group_ds,
@@ -457,7 +219,7 @@ class Measurement:
             for index, annotation_index in enumerate(indices):
                 yield (
                     annotation_index,
-                    Measurement(type, values[index], unit)
+                    Measurement(code, values[index], unit)
                 )
 
     @classmethod
@@ -907,15 +669,17 @@ class Annotation:
 
     def get_measurements(
         self,
-        type: ConceptCode,
-        unit: ConceptCode
+        code: MeasurementCode,
+        unit: UnitCode
     ) -> List[Measurement]:
         """Return measurements of specified type.
 
         Parameters
         ----------
-        measurement_type: MeasurementType
-            Type of measurements to get.
+        code: MeasurementCode
+            Code of measurement type to get.
+        unit: UnitCode
+            Unit of measurement type to get.
 
         Returns
         ----------
@@ -925,20 +689,22 @@ class Annotation:
         return [
             measurement
             for measurement in self.measurements
-            if measurement.same_type(type, unit)
+            if measurement.same_type(code, unit)
         ]
 
     def get_measurement_values(
         self,
-        type: ConceptCode,
-        unit: ConceptCode
+        code: MeasurementCode,
+        unit: UnitCode
     ) -> List[float]:
         """Return values for measurements of specified type.
 
         Parameters
         ----------
-        measurement_type: MeasurementType
-            Type of measurements to get.
+        code: MeasurementCode
+            Code of measurement type to get.
+        unit: UnitCode
+            Unit of measurement type to get.
 
         Returns
         ----------
@@ -947,7 +713,7 @@ class Annotation:
         """
         return [
             measurement.value for measurement in self.measurements
-            if measurement.same_type(type, unit)
+            if measurement.same_type(code, unit)
         ]
 
 
@@ -958,8 +724,8 @@ class AnnotationGroup:
         self,
         annotations: Sequence[Annotation],
         label: str,
-        categorycode: ConceptCode,
-        typecode: ConceptCode,
+        category_code: AnnotationCategoryCode,
+        type_code: AnnotationTypeCode,
         description: Optional[str] = None,
         color: Optional[LabColor] = None,
         is_double: bool = True,
@@ -973,10 +739,10 @@ class AnnotationGroup:
             Annotations in the group.
         label: str
             Group label
-        categorycode: ConceptCode
-            Group categorycode.
-        typecode: ConceptCode
-            Group typecode.
+        category_code: AnnotationCategoryCode
+            Group category code.
+        type_code: AnnotationTypeCode
+            Group type code.
         description: Optional[str] = None
             Group description.
         color: Optional[LabColor] = None
@@ -991,8 +757,8 @@ class AnnotationGroup:
         self._z_planes: List[float] = []
         self._optical_paths: List[str] = []
         self._uid = generate_uid()
-        self._categorycode = categorycode
-        self._typecode = typecode
+        self._category_code = category_code
+        self._type_code = type_code
         self._is_double = is_double
         if self._is_double:
             self._point_data_type = np.float64
@@ -1011,7 +777,7 @@ class AnnotationGroup:
     def __repr__(self) -> str:
         return (
             f"{type(self).__name__}({self.annotations}, {self.label}, "
-            f"{self.categorycode}, {self.typecode}, "
+            f"{self.category_code}, {self.type_code}, "
             f"{self.description}, {self._is_double})"
         )
 
@@ -1021,20 +787,20 @@ class AnnotationGroup:
         return (
             self.annotations == other.annotations and
             self.label == other.label and
-            self.typecode == other.typecode and
-            self.categorycode == other.categorycode and
+            self.type_code == other.type_code and
+            self.category_code == other.category_code and
             self.description == other.description and
             self.color == other.color and
             self._is_double == other._is_double
         )
 
     @property
-    def categorycode(self) -> ConceptCode:
-        return self._categorycode
+    def category_code(self) -> AnnotationCategoryCode:
+        return self._category_code
 
     @property
-    def typecode(self) -> ConceptCode:
-        return self._typecode
+    def type_code(self) -> AnnotationTypeCode:
+        return self._type_code
 
     @property
     def annotations(self) -> Sequence[Annotation]:
@@ -1118,14 +884,22 @@ class AnnotationGroup:
         annotations = cls._get_annotations_from_ds(ds)
         label = cls._get_label_from_ds(ds)
         description = getattr(ds, 'AnnotationGroupDescription', None)
-        typecode = ConceptCode.type(ds)
-        categorycode = ConceptCode.category(ds)
+        type_code = AnnotationTypeCode.from_ds(ds)
+        if type_code is None:
+            raise ValueError(
+                f'Dataset is missing {AnnotationTypeCode.sequence_name}.'
+            )
+        category_code = AnnotationCategoryCode.from_ds(ds)
+        if category_code is None:
+            raise ValueError(
+                f'Dataset is missing {AnnotationCategoryCode.sequence_name}.'
+            )
         color = getattr(ds, 'RecommendedDisplayCIELabValue', None)
         return cls(
             annotations,
             label,
-            categorycode,
-            typecode,
+            category_code,
+            type_code,
             description,
             color,
             is_double,
@@ -1329,34 +1103,34 @@ class AnnotationGroup:
         ]
 
     @property
-    def measurement_types(self) -> List[Tuple[ConceptCode, ConceptCode]]:
+    def measurement_types(self) -> List[Tuple[MeasurementCode, UnitCode]]:
         """Return measurement types in annotation group.
 
         Returns
         ----------
-        List[Tuple[ConceptCode, ConceptCode]]
-            Measurement type-unit-pairs in annotation group.
+        List[Tuple[MeasurementCode, UnitCode]]
+            Measurement code-unit-pairs in annotation group.
         """
-        pairs: Set[Tuple[ConceptCode, ConceptCode]] = set()
+        pairs: Set[Tuple[MeasurementCode, UnitCode]] = set()
         for annotation in self.annotations:
             for measurement in annotation.measurements:
-                pair = (measurement.type, measurement.unit)
+                pair = (measurement.code, measurement.unit)
                 pairs.add(pair)
         return list(pairs)
 
     def get_measurements(
         self,
-        type: ConceptCode,
-        unit: ConceptCode
+        code: MeasurementCode,
+        unit: UnitCode
     ) -> List[Measurement]:
-        """Return measurements of specified type-unit-pair.
+        """Return measurements of specified code-unit-pair.
 
         Parameters
         ----------
-        type: ConceptCode
-            Type of measurement to get
-        unit: ConceptCode
-            Unit of measurement to get
+        code: MeasurementCode
+            Type of measurement type to get.
+        unit: UnitCode
+            Unit of measurement type to get.
 
         Returns
         ----------
@@ -1365,23 +1139,23 @@ class AnnotationGroup:
         """
         measurements: List[Measurement] = []
         for annotation in self.annotations:
-            measurements += annotation.get_measurements(type, unit)
+            measurements += annotation.get_measurements(code, unit)
         return measurements
 
     def create_measurement_indices(
         self,
-        type: ConceptCode,
-        unit: ConceptCode
+        code: MeasurementCode,
+        unit: UnitCode
     ) -> np.ndarray:
         """Return measurement indicies for all measurements of specified type.
         Indices are stored starting at index 1.
 
         Parameters
         ----------
-        type: ConceptCode
-            Type of measurement to get
-        unit: ConceptCode
-            Unit of measurement to get
+        code: MeasurementCode
+            Type of measurement type to create.
+        unit: UnitCode
+            Unit of measurement type to create.
 
         Returns
         ----------
@@ -1390,22 +1164,22 @@ class AnnotationGroup:
         """
         indices: List[int] = []
         for i, annotation in enumerate(self.annotations):
-            indices += [i + 1] * len(annotation.get_measurements(type, unit))
+            indices += [i + 1] * len(annotation.get_measurements(code, unit))
         return np.array(indices, dtype=np.int32)
 
     def _create_measurement_values(
         self,
-        type: ConceptCode,
-        unit: ConceptCode
+        code: MeasurementCode,
+        unit: UnitCode
     ) -> np.ndarray:
         """Return measurement values for all measurements of specified type.
 
         Parameters
         ----------
-        type: ConceptCode
-            Type of measurement to get
-        unit: ConceptCode
-            Unit of measurement to get
+        code: MeasurementCode
+            Code of measurement type to create.
+        unit: UnitCode
+            Unit of measurement type to create.
 
         Returns
         ----------
@@ -1414,48 +1188,48 @@ class AnnotationGroup:
         """
         values: List[float] = []
         for annotation in self.annotations:
-            values += annotation.get_measurement_values(type, unit)
+            values += annotation.get_measurement_values(code, unit)
         return np.array(values, dtype=np.float32)
 
     def _measurements_is_one_to_one(
         self,
-        type: ConceptCode,
-        unit: ConceptCode
+        code: MeasurementCode,
+        unit: UnitCode
     ) -> bool:
         """Check if all annotations in group have strictly one measurement
         of specified type-unit-pair.
 
         Parameters
         ----------
-        type: ConceptCode
-            Type of measurement to check
-        unit: ConceptCode
-            Unit of measurement to check
+        code: MeasurementCode
+            Code of measurement type to check.
+        unit: UnitCode
+            Unit of measurement type to check.
 
         Returns
         ----------
         bool
-            True if this measurement type-unit-pair maps one-to-one to
+            True if this measurement code-unit-pair maps one-to-one to
             annotations.
         """
         for annotation in self.annotations:
-            if not len(annotation.get_measurements(type, unit)) == 1:
+            if not len(annotation.get_measurements(code, unit)) == 1:
                 return False
         return True
 
     def _create_measurement_value_sequence(
         self,
-        type: ConceptCode,
-        unit: ConceptCode
+        code: MeasurementCode,
+        unit: UnitCode
     ) -> DicomSequence:
         """Return Measurement Value Sequence of measurements of specified
-        type and unit.
+        code and unit.
 
         Parameters
         ----------
-        type: ConceptCode
-            Type of measurement create sequence for.
-        unit: ConceptCode
+        code: MeasurementCode
+            Code of measurement create sequence for.
+        unit: UnitCode
             Unit of measurement create sequence for.
 
         Returns
@@ -1466,28 +1240,28 @@ class AnnotationGroup:
         measurements_ds = Dataset()
         # According to the standard the indices is not needed if each
         # annotation has one and only one measurement.
-        if not self._measurements_is_one_to_one(type, unit):
-            indices = self.create_measurement_indices(type, unit)
+        if not self._measurements_is_one_to_one(code, unit):
+            indices = self.create_measurement_indices(code, unit)
             measurements_ds.AnnotationIndexList = indices
-        values = self._create_measurement_values(type, unit)
+        values = self._create_measurement_values(code, unit)
         measurements_ds.FloatingPointValues = values
         measurement_value_sequence = DicomSequence([measurements_ds])
         return measurement_value_sequence
 
     def _create_measurement_sequence_item(
         self,
-        type: ConceptCode,
-        unit: ConceptCode
+        code: MeasurementCode,
+        unit: UnitCode
     ) -> Dataset:
-        """Return Measurement Sequence item of measurements of specified type
+        """Return Measurement Sequence item of measurements of specified code
         and unit.
 
         Parameters
         ----------
-        type: ConceptCode
-            Type of measurement create sequence for.
+        code: ConceptCode
+            Code of measurement to create sequence for.
         unit: ConceptCode
-            Unit of measurement create sequence for.
+            Unit of measurement to create sequence for.
 
         Returns
         ----------
@@ -1497,10 +1271,10 @@ class AnnotationGroup:
         """
         ds = Dataset()
         ds.MeasurementValuesSequence = self._create_measurement_value_sequence(
-            type, unit
+            code, unit
         )
-        ds.ConceptNameCodeSequence = type.sequence
-        ds.MeasurementUnitsCodeSequence = unit.sequence
+        code.insert_into_ds(ds)
+        unit.insert_into_ds(ds)
         return ds
 
     def _set_planes_in_ds(
@@ -1622,8 +1396,8 @@ class AnnotationGroup:
         ds.AnnotationGroupLabel = self.label
         if self.description is not None:
             ds.AnnotationGroupDescription = self.description
-        ds.AnnotationPropertyCategoryCodeSequence = self.categorycode.sequence
-        ds.AnnotationPropertyTypeCodeSequence = self.typecode.sequence
+        ds = self.category_code.insert_into_ds(ds)
+        ds = self.type_code.insert_into_ds(ds)
         ds = self._set_coordinates_data_in_ds(ds)
         ds = self._set_planes_in_ds(ds)
         ds = self._set_optical_paths_in_ds(ds)
@@ -1653,7 +1427,7 @@ class AnnotationGroup:
             if not isinstance(annotation.geometry, geometry_type):
                 raise TypeError(
                     f'annotation type {type(annotation.geometry)}'
-                    f' does not match Group typecode {geometry_type}'
+                    f' does not match Group type_code {geometry_type}'
                 )
 
     @classmethod
@@ -1682,8 +1456,8 @@ class AnnotationGroup:
         cls,
         geometries: Sequence[Geometry],
         label: str,
-        categorycode: ConceptCode,
-        typecode: ConceptCode,
+        category_code: AnnotationCategoryCode,
+        type_code: AnnotationTypeCode,
         is_double: bool = True
     ) -> 'AnnotationGroup':
         """Return AnnotationGroup created from list of geometries. The group
@@ -1696,10 +1470,10 @@ class AnnotationGroup:
             Geometries in the group.
         label: str
             Group label
-        categorycode: ConceptCode
-            Group categorycode.
-        typecode: ConceptCode
-            Group typecode.
+        category_code: AnnotationCategoryCode
+            Group category code.
+        type_code: AnnotationTypeCode
+            Group type code.
 
         Returns
         ----------
@@ -1712,8 +1486,8 @@ class AnnotationGroup:
         group: AnnotationGroup = group_type(
             annotations=[Annotation(geometry) for geometry in geometries],
             label=label,
-            categorycode=categorycode,
-            typecode=typecode,
+            category_code=category_code,
+            type_code=type_code,
             is_double=is_double
         )
         return group

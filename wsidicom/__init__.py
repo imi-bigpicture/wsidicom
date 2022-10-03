@@ -14,9 +14,9 @@
 
 from .config import settings
 from .graphical_annotations import (Annotation, AnnotationGroup,
-                                    AnnotationInstance, ConceptCode,
-                                    Measurement, Point, PointAnnotationGroup,
-                                    Polygon, PolygonAnnotationGroup, Polyline,
+                                    AnnotationInstance, Measurement, Point,
+                                    PointAnnotationGroup, Polygon,
+                                    PolygonAnnotationGroup, Polyline,
                                     PolylineAnnotationGroup)
 from .instance import WsiDataset, WsiInstance
 from .wsidicom import (ImageData, WsiDicom, WsiDicomLabels, WsiDicomLevels,
