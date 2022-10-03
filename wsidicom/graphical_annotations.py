@@ -17,8 +17,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import (Any, Callable, DefaultDict, Dict, Generator, List,
-                    Optional, Sequence, Set, Tuple, Type, Union)
+from typing import (Any, Callable, DefaultDict, Dict, Generator, Generic, List,
+                    Optional, Sequence, Set, Tuple, Type, TypeVar, Union)
 
 import numpy as np
 from pydicom.dataset import (Dataset, FileDataset, FileMetaDataset,
@@ -252,33 +252,36 @@ class Measurement:
 
 
 class Geometry(metaclass=ABCMeta):
+    name: str
+
     @property
     @abstractmethod
     def data(self) -> List[float]:
         """Return geometry content as a list of floats"""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     @abstractmethod
     def box(self) -> RegionMm:
         """Return Region that contains the geometry."""
+        raise NotImplementedError()
 
     @abstractmethod
     def to_coords(self) -> List[Tuple[float, float]]:
         """Return geometry content as a list of tuple of floats"""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def to_list_coords(self) -> List[List[float]]:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def __len__(self) -> int:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @abstractmethod
     def __repr__(self) -> str:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @classmethod
     @abstractmethod
@@ -287,13 +290,13 @@ class Geometry(metaclass=ABCMeta):
         coords: Union[Tuple[float, float], Sequence[Tuple[float, float]]]
     ) -> 'Geometry':
         """Return geometry object created from list of coordinates"""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @classmethod
     @abstractmethod
     def from_list(cls, list: Sequence[float]) -> 'Geometry':
         """Return geometry object created from list of floats"""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @classmethod
     def list_to_coords(
@@ -368,7 +371,7 @@ class Geometry(metaclass=ABCMeta):
         x: str,
         y: str,
     ) -> 'Geometry':
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @classmethod
     def from_shapely_like(cls, object: Any) -> 'Geometry':
@@ -439,6 +442,8 @@ class Geometry(metaclass=ABCMeta):
 @dataclass
 class Point(Geometry):
     """Geometry consisting of a single point"""
+    name = 'POINT'
+
     def __init__(self, x: float, y: float):
         self.x = float(x)
         self.y = float(y)
@@ -520,6 +525,8 @@ class Point(Geometry):
 @dataclass
 class Polyline(Geometry):
     """Geometry consisting of connected lines."""
+    name = 'POLYLINE'
+
     def __init__(self, points: Sequence[Tuple[float, float]]):
         self.points: List[Point] = [
             Point(point[0], point[1]) for point in points
@@ -592,6 +599,8 @@ class Polyline(Geometry):
 @dataclass
 class Polygon(Polyline):
     """Geometry consisting of connected lines implicity closed."""
+    name = 'POLYGON'
+
     def __init__(self, points: Sequence[Tuple[float, float]]):
         super().__init__(points)
 
@@ -717,7 +726,11 @@ class Annotation:
         ]
 
 
-class AnnotationGroup:
+GEOMETRY_TYPE = TypeVar('GEOMETRY_TYPE', bound=Geometry)
+ANNOTATION_GROUP = TypeVar('ANNOTATION_GROUP', bound='AnnotationGroup')
+
+
+class AnnotationGroup(Generic[GEOMETRY_TYPE]):
     _geometry_type: Type[Geometry]
 
     def __init__(
@@ -753,7 +766,7 @@ class AnnotationGroup:
             Uid this group was created from.
 
         """
-        self.validate_type(annotations, self._geometry_type)
+        self.validate_type(annotations)
         self._z_planes: List[float] = []
         self._optical_paths: List[str] = []
         self._uid = generate_uid()
@@ -848,9 +861,8 @@ class AnnotationGroup:
         return self._geometry_type
 
     @property
-    @abstractmethod
     def annotation_type(self) -> str:
-        raise NotImplementedError
+        return self._geometry_type.name
 
     def __getitem__(
         self,
@@ -862,10 +874,10 @@ class AnnotationGroup:
 
     @classmethod
     def from_ds(
-        cls,
+        cls: Type[ANNOTATION_GROUP],
         ds: Dataset,
         instance: UID
-    ) -> 'AnnotationGroup':
+    ) -> ANNOTATION_GROUP:
         """Return annotation group from Annotation Group Sequence dataset.
 
         Parameters
@@ -877,7 +889,7 @@ class AnnotationGroup:
 
         Returns
         ----------
-        AnnotationGroup
+        ANNOTATION_GROUP
             Annotation group from dataset.
         """
         is_double = cls._is_ds_double(ds)
@@ -1075,7 +1087,7 @@ class AnnotationGroup:
         List[Geometry]
             Geometries in the annotation group.
         """
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @classmethod
     def _get_annotations_from_ds(
@@ -1409,10 +1421,10 @@ class AnnotationGroup:
         ds.AnnotationGroupGenerationType = 'MANUAL'
         return ds
 
-    @staticmethod
+    @classmethod
     def validate_type(
-        annotations: Sequence[Annotation],
-        geometry_type: type
+        cls,
+        annotations: Sequence[Annotation]
     ):
         """Check that list of annotations are of the requested type.
 
@@ -1420,14 +1432,12 @@ class AnnotationGroup:
         ----------
         annotations: Sequence[Annotation]
             List of annotations to check
-        geometry_type: type
-            Requested type
         """
         for annotation in annotations:
-            if not isinstance(annotation.geometry, geometry_type):
+            if not isinstance(annotation.geometry, cls._geometry_type):
                 raise TypeError(
                     f'annotation type {type(annotation.geometry)}'
-                    f' does not match Group type_code {geometry_type}'
+                    f' does not match Group type code {cls._geometry_type}'
                 )
 
     @classmethod
@@ -1493,13 +1503,9 @@ class AnnotationGroup:
         return group
 
 
-class PointAnnotationGroup(AnnotationGroup):
+class PointAnnotationGroup(AnnotationGroup[Point]):
     """Point annotation group"""
     _geometry_type = Point
-
-    @property
-    def annotation_type(self) -> str:
-        return "POINT"
 
     @classmethod
     def _get_geometries_from_ds(
@@ -1525,13 +1531,8 @@ class PointAnnotationGroup(AnnotationGroup):
         return points
 
 
-class PolylineAnnotationGroupMeta(AnnotationGroup):
+class PolylineAnnotationGroupMeta(AnnotationGroup[GEOMETRY_TYPE]):
     """Meta class for line annotation goup"""
-    _geometry_type: Type[Geometry]
-
-    @property
-    def annotation_type(self) -> str:
-        raise NotImplementedError
 
     @property
     def point_index_list(self) -> np.ndarray:
@@ -1578,7 +1579,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
     def _get_geometries_from_ds(
         cls,
         ds: Dataset
-    ) -> List[Geometry]:
+    ) -> List[GEOMETRY_TYPE]:
         """Returns line geometries from dataset. Each line geometry consists of
         multiple points, and the first coordinate in the coordinate list is
 
@@ -1600,7 +1601,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
             )
         coordinates = cls._get_coordinates_from_ds(ds)
         indices += [len(coordinates)]  # Add end for last geometry
-        geometries: List[Geometry] = []
+        geometries: List[GEOMETRY_TYPE] = []
         for index in range(number_of_geometries):
             start = indices[index]
             end = indices[index+1]
@@ -1613,8 +1614,8 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
     @abstractmethod
     def _get_line_geometry_from_coords(
         coords: Sequence[Tuple[float, float]]
-    ) -> Geometry:
-        raise NotImplementedError
+    ) -> GEOMETRY_TYPE:
+        raise NotImplementedError()
 
     def to_ds(self, group_number: int) -> Dataset:
         """Return annotation group as a Annotation Group Sequence item.
@@ -1634,24 +1635,16 @@ class PolylineAnnotationGroupMeta(AnnotationGroup):
         return ds
 
 
-class PolylineAnnotationGroup(PolylineAnnotationGroupMeta):
+class PolylineAnnotationGroup(PolylineAnnotationGroupMeta[Polyline]):
     _geometry_type = Polyline
-
-    @property
-    def annotation_type(self) -> str:
-        return "POLYLINE"
 
     @staticmethod
     def _get_line_geometry_from_coords(coords: Sequence[Tuple[float, float]]):
         return Polyline.from_coords(coords)
 
 
-class PolygonAnnotationGroup(PolylineAnnotationGroupMeta):
+class PolygonAnnotationGroup(PolylineAnnotationGroupMeta[Polygon]):
     _geometry_type = Polygon
-
-    @property
-    def annotation_type(self) -> str:
-        return "POLYGON"
 
     @staticmethod
     def _get_line_geometry_from_coords(coords: Sequence[Tuple[float, float]]):
