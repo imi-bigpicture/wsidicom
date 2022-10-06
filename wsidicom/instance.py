@@ -24,7 +24,7 @@ from datetime import datetime
 from enum import IntEnum, auto
 from pathlib import Path
 from struct import pack, unpack
-from typing import (Any, BinaryIO, Dict, Generator, List, Optional,
+from typing import (Any, BinaryIO, Dict, Generator, Iterable, List, Optional,
                     OrderedDict, Sequence, Set, Tuple, Union, cast)
 
 import numpy as np
@@ -1832,7 +1832,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_decoded_tiles(
         self,
-        tiles: Sequence[Point],
+        tiles: Iterable[Point],
         z: float,
         path: str
     ) -> List[Image.Image]:
@@ -1841,7 +1841,7 @@ class ImageData(metaclass=ABCMeta):
 
         Parameters
         ----------
-        tiles: Sequence[Point]
+        tiles: Iterable[Point]
             Tiles to get.
         z: float
             Z coordinate.
@@ -1859,7 +1859,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_encoded_tiles(
         self,
-        tiles: Sequence[Point],
+        tiles: Iterable[Point],
         z: float,
         path: str
     ) -> List[bytes]:
@@ -1868,7 +1868,7 @@ class ImageData(metaclass=ABCMeta):
 
         Parameters
         ----------
-        tiles: Sequence[Point]
+        tiles: Iterable[Point]
             Tiles to get.
         z: float
             Z coordinate.
@@ -1976,7 +1976,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_scaled_encoded_tiles(
         self,
-        scaled_tile_points: Sequence[Point],
+        scaled_tile_points: Iterable[Point],
         z: float,
         path: str,
         scale: int,
@@ -1988,7 +1988,7 @@ class ImageData(metaclass=ABCMeta):
 
         Parameters
         ----------
-        scaled_tile_points: Sequence[Point],
+        scaled_tile_points: Iterable[Point],
             Scaled position of tiles to get.
         z: float
             Z coordinate.
@@ -3416,13 +3416,13 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         )
 
         if scale == 1:
-            def get_tiles_thread(tile_points: Sequence[Point]) -> List[bytes]:
+            def get_tiles_thread(tile_points: Iterable[Point]) -> List[bytes]:
                 """Thread function to get tiles as bytes."""
                 return image_data.get_encoded_tiles(tile_points, z, path)
             get_tiles = get_tiles_thread
         else:
             def get_scaled_tiles_thread(
-                scaled_tile_points: Sequence[Point]
+                scaled_tile_points: Iterable[Point]
             ) -> List[bytes]:
                 """Thread function to get scaled tiles as bytes."""
                 return image_data.get_scaled_encoded_tiles(
@@ -3434,19 +3434,31 @@ class WsiDicomFileWriter(WsiDicomFileBase):
                     image_options
                 )
             get_tiles = get_scaled_tiles_thread
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            # Each thread result is a list of tiles that is itemized and writen
-            frame_positions: List[int] = []
-            for thread_result in pool.map(
-                get_tiles,
-                chunked_tile_points
-            ):
-                for tile in thread_result:
-                    for frame in itemize_frame(tile, 1):
-                        frame_positions.append(self._fp.tell())
-                        self._fp.write(frame)
 
-        return frame_positions
+        def write_frame(frame: bytes) -> int:
+            """Itemize and write frame to file. Return frame position."""
+            position = self._fp.tell()
+            self._fp.write(frame)
+            return position
+
+        if workers == 1:
+            return [
+                write_frame(frame)
+                for chunk in chunked_tile_points
+                for tile in get_tiles(chunk)
+                for frame in itemize_frame(tile, 1)
+            ]
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return [
+                write_frame(frame)
+                for thread_result in pool.map(
+                    get_tiles,
+                    chunked_tile_points
+                )
+                for tile in thread_result
+                for frame in itemize_frame(tile, 1)
+            ]
 
     def _chunk_tile_points(
         self,
