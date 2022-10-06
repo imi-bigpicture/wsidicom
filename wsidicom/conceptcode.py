@@ -21,7 +21,7 @@ from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
 
 
-CONCEPTCODE = TypeVar('CONCEPTCODE', bound='ConceptCode')
+ConceptCodeType = TypeVar('ConceptCodeType', bound='ConceptCode')
 
 
 @dataclass
@@ -62,9 +62,9 @@ class ConceptCode:
 
     @classmethod
     def from_code(
-        cls: Type[CONCEPTCODE],
+        cls: Type[ConceptCodeType],
         code: Code
-    ) -> CONCEPTCODE:
+    ) -> ConceptCodeType:
         return cls(
             code.value,
             code.scheme_designator,
@@ -113,9 +113,9 @@ class ConceptCode:
 
     @classmethod
     def _from_ds(
-        cls: Type[CONCEPTCODE],
+        cls: Type[ConceptCodeType],
         ds: Dataset,
-    ) -> Optional[List[CONCEPTCODE]]:
+    ) -> Optional[List[ConceptCodeType]]:
         """Return list of ConceptCode from sequence in dataset.
 
         Parameters
@@ -125,7 +125,7 @@ class ConceptCode:
 
         Returns
         ----------
-        Optional[List[CONCEPTCODE]
+        Optional[List[ConceptCodeType]
             Codes created from sequence in dataset.
 
         """
@@ -146,9 +146,9 @@ class SingleConceptCode(ConceptCode):
     """Code for concepts  # type: ignore that only allow a single item"""
     @classmethod
     def from_ds(
-        cls: Type[CONCEPTCODE],
+        cls: Type[ConceptCodeType],
         ds: Dataset
-    ) -> Optional['CONCEPTCODE']:
+    ) -> Optional['ConceptCodeType']:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
@@ -159,7 +159,7 @@ class SingleConceptCode(ConceptCode):
 
         Returns
         ----------
-        Optional[CONCEPTCODE]
+        Optional[ConceptCodeType]
             Concept code created from value.
 
         """
@@ -172,7 +172,10 @@ class SingleConceptCode(ConceptCode):
 class MultipleConceptCode(ConceptCode):
     """Code for concepts  # type: ignore that allow multiple items"""
     @classmethod
-    def from_ds(cls: Type[CONCEPTCODE], ds: Dataset) -> List[CONCEPTCODE]:
+    def from_ds(
+        cls: Type[ConceptCodeType],
+        ds: Dataset
+    ) -> List[ConceptCodeType]:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
@@ -183,7 +186,7 @@ class MultipleConceptCode(ConceptCode):
 
         Returns
         ----------
-        List[CONCEPTCODE]
+        List[ConceptCodeType]
             Concept codes created from dataset.
 
         """

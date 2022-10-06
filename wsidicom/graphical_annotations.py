@@ -726,11 +726,11 @@ class Annotation:
         ]
 
 
-GEOMETRY_TYPE = TypeVar('GEOMETRY_TYPE', bound=Geometry)
-ANNOTATION_GROUP = TypeVar('ANNOTATION_GROUP', bound='AnnotationGroup')
+GeometryType = TypeVar('GeometryType', bound=Geometry)
+AnnotationGroupType = TypeVar('AnnotationGroupType', bound='AnnotationGroup')
 
 
-class AnnotationGroup(Generic[GEOMETRY_TYPE]):
+class AnnotationGroup(Generic[GeometryType]):
     _geometry_type: Type[Geometry]
 
     def __init__(
@@ -874,10 +874,10 @@ class AnnotationGroup(Generic[GEOMETRY_TYPE]):
 
     @classmethod
     def from_ds(
-        cls: Type[ANNOTATION_GROUP],
+        cls: Type[AnnotationGroupType],
         ds: Dataset,
         instance: UID
-    ) -> ANNOTATION_GROUP:
+    ) -> AnnotationGroupType:
         """Return annotation group from Annotation Group Sequence dataset.
 
         Parameters
@@ -889,7 +889,7 @@ class AnnotationGroup(Generic[GEOMETRY_TYPE]):
 
         Returns
         ----------
-        ANNOTATION_GROUP
+        AnnotationGroupType
             Annotation group from dataset.
         """
         is_double = cls._is_ds_double(ds)
@@ -1531,7 +1531,7 @@ class PointAnnotationGroup(AnnotationGroup[Point]):
         return points
 
 
-class PolylineAnnotationGroupMeta(AnnotationGroup[GEOMETRY_TYPE]):
+class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
     """Meta class for line annotation goup"""
 
     @property
@@ -1579,7 +1579,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GEOMETRY_TYPE]):
     def _get_geometries_from_ds(
         cls,
         ds: Dataset
-    ) -> List[GEOMETRY_TYPE]:
+    ) -> List[GeometryType]:
         """Returns line geometries from dataset. Each line geometry consists of
         multiple points, and the first coordinate in the coordinate list is
 
@@ -1601,7 +1601,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GEOMETRY_TYPE]):
             )
         coordinates = cls._get_coordinates_from_ds(ds)
         indices += [len(coordinates)]  # Add end for last geometry
-        geometries: List[GEOMETRY_TYPE] = []
+        geometries: List[GeometryType] = []
         for index in range(number_of_geometries):
             start = indices[index]
             end = indices[index+1]
@@ -1614,7 +1614,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GEOMETRY_TYPE]):
     @abstractmethod
     def _get_line_geometry_from_coords(
         coords: Sequence[Tuple[float, float]]
-    ) -> GEOMETRY_TYPE:
+    ) -> GeometryType:
         raise NotImplementedError()
 
     def to_ds(self, group_number: int) -> Dataset:
