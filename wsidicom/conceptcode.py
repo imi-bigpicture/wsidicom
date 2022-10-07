@@ -13,12 +13,15 @@
 #    limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Type, TypeVar
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
+
+
+ConceptCodeType = TypeVar('ConceptCodeType', bound='ConceptCode')
 
 
 @dataclass
@@ -59,9 +62,9 @@ class ConceptCode:
 
     @classmethod
     def from_code(
-        cls,
+        cls: Type[ConceptCodeType],
         code: Code
-    ) -> 'ConceptCode':
+    ) -> ConceptCodeType:
         return cls(
             code.value,
             code.scheme_designator,
@@ -110,9 +113,9 @@ class ConceptCode:
 
     @classmethod
     def _from_ds(
-        cls,
+        cls: Type[ConceptCodeType],
         ds: Dataset,
-    ) -> Optional[List['ConceptCode']]:
+    ) -> Optional[List[ConceptCodeType]]:
         """Return list of ConceptCode from sequence in dataset.
 
         Parameters
@@ -122,7 +125,7 @@ class ConceptCode:
 
         Returns
         ----------
-        Optional[List['ConceptCode']]
+        Optional[List[ConceptCodeType]
             Codes created from sequence in dataset.
 
         """
@@ -140,21 +143,24 @@ class ConceptCode:
 
 
 class SingleConceptCode(ConceptCode):
-    """Code for concepts that only allow a single item"""
+    """Code for concepts  # type: ignore that only allow a single item"""
     @classmethod
-    def from_ds(cls, ds: Dataset) -> Optional['ConceptCode']:
+    def from_ds(
+        cls: Type[ConceptCodeType],
+        ds: Dataset
+    ) -> Optional['ConceptCodeType']:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
         Parameters
         ----------
-        value: Union[str, Dataset]
-            The value for creating the code.
+        value: Dataset
+            The dataset for creating the code.
 
         Returns
         ----------
-        Optional['ConceptCode']
-            Measurement code created from value.
+        Optional[ConceptCodeType]
+            Concept code created from value.
 
         """
         codes = cls._from_ds(ds)
@@ -164,21 +170,24 @@ class SingleConceptCode(ConceptCode):
 
 
 class MultipleConceptCode(ConceptCode):
-    """Code for concepts that allow multiple items"""
+    """Code for concepts  # type: ignore that allow multiple items"""
     @classmethod
-    def from_ds(cls, ds: Dataset) -> List['ConceptCode']:
+    def from_ds(
+        cls: Type[ConceptCodeType],
+        ds: Dataset
+    ) -> List[ConceptCodeType]:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
         Parameters
         ----------
-        value: Union[str, Dataset]
-            The value for creating the code.
+        value: Dataset
+            The dataset for creating the code.
 
         Returns
         ----------
-        ConceptCode
-            Measurement code created from value.
+        List[ConceptCodeType]
+            Concept codes created from dataset.
 
         """
         codes = cls._from_ds(ds)
@@ -188,7 +197,7 @@ class MultipleConceptCode(ConceptCode):
 
 
 class CidConceptCode(ConceptCode):
-    """Code for concepts defined in Context groups"""
+    """Code for concepts  # type: ignore defined in Context groups"""
     cid: Dict[str, Code]
 
     def __init__(
@@ -288,7 +297,7 @@ class UnitCode(SingleConceptCode):
         )
 
     @classmethod
-    def measnings(cls) -> List[str]:
+    def meanings(cls) -> List[str]:
         """Return possible meanings for concept.
 
         Returns
@@ -327,7 +336,7 @@ class AnnotationCategoryCode(CidConceptCode, SingleConceptCode):
     From CID 7150 Segmentation Property Categories
     """
     sequence_name = 'AnnotationPropertyCategoryCodeSequence'
-    cid = codes.cid7150.concepts  # Segmentation Property Categories
+    cid = codes.cid7150.concepts  # type: ignore
 
 
 class IlluminationCode(CidConceptCode, MultipleConceptCode):
@@ -336,7 +345,7 @@ class IlluminationCode(CidConceptCode, MultipleConceptCode):
     From CID 8123 Microscopy Illumination Method
     """
     sequence_name = 'IlluminationTypeCodeSequence'
-    cid = codes.cid8123.concepts  # Microscopy Illumination Method
+    cid = codes.cid8123.concepts  # type: ignore
 
 
 class LenseCode(CidConceptCode, MultipleConceptCode):
@@ -345,7 +354,7 @@ class LenseCode(CidConceptCode, MultipleConceptCode):
     From CID 8121 Microscopy Lens Type
     """
     sequence_name = 'LensesCodeSequence'
-    cid = codes.cid8121.concepts  # Microscopy Lens Type
+    cid = codes.cid8121.concepts  # type: ignore
 
 
 class LightPathFilterCode(CidConceptCode, MultipleConceptCode):
@@ -354,7 +363,7 @@ class LightPathFilterCode(CidConceptCode, MultipleConceptCode):
     From CID 8124 Microscopy Filter
     """
     sequence_name = 'LightPathFilterTypeStackCodeSequence'
-    cid = codes.cid8124.concepts  # Microscopy Filter
+    cid = codes.cid8124.concepts  # type: ignore
 
 
 class ImagePathFilterCode(CidConceptCode, MultipleConceptCode):
@@ -363,7 +372,7 @@ class ImagePathFilterCode(CidConceptCode, MultipleConceptCode):
     From CID 8124 Microscopy Filter
     """
     sequence_name = 'ImagePathFilterTypeStackCodeSequence'
-    cid = codes.cid8124.concepts  # Microscopy Filter
+    cid = codes.cid8124.concepts  # type: ignore
 
 
 class IlluminationColorCode(CidConceptCode, SingleConceptCode):
@@ -372,7 +381,7 @@ class IlluminationColorCode(CidConceptCode, SingleConceptCode):
     From CID 8122 Microscopy Illuminator and Sensor Color
     """
     sequence_name = 'IlluminationColorCodeSequence'
-    cid = codes.cid8122.concepts  # Microscopy Illuminator and Sensor Color
+    cid = codes.cid8122.concepts  # type: ignore
 
 
 class IlluminatorCode(CidConceptCode, SingleConceptCode):
@@ -381,7 +390,7 @@ class IlluminatorCode(CidConceptCode, SingleConceptCode):
     From CID 8125 Microscopy Illuminator Type
     """
     sequence_name = 'IlluminatorTypeCodeSequence'
-    cid = codes.cid8125.concepts  # Microscopy Illuminator Type
+    cid = codes.cid8125.concepts  # type: ignore
 
 
 class ChannelDescriptionCode(CidConceptCode, MultipleConceptCode):
@@ -390,47 +399,47 @@ class ChannelDescriptionCode(CidConceptCode, MultipleConceptCode):
     From CID 8122 Microscopy Illuminator and Sensor Color
     """
     sequence_name = 'ChannelDescriptionCodeSequence'
-    cid = codes.cid8122.concepts  # Microscopy Illuminator and Sensor Color
+    cid = codes.cid8122.concepts  # type: ignore
 
 
 class SpecimenCollectionProcedureCode(CidConceptCode, SingleConceptCode):
     sequence_name = 'ConceptCodeSequence'
-    cid = codes.cid8109.concepts
+    cid = codes.cid8109.concepts  # type: ignore
 
 
 class SpecimenSamplingProcedureCode(CidConceptCode, SingleConceptCode):
     sequence_name = 'ConceptCodeSequence'
-    cid = codes.cid8110.concepts
+    cid = codes.cid8110.concepts  # type: ignore
 
 
 class SpecimenPreparationProcedureCode(CidConceptCode, SingleConceptCode):
     sequence_name = 'ConceptCodeSequence'
-    cid = codes.cid8111.concepts
+    cid = codes.cid8111.concepts  # type: ignore
 
 
 class SpecimenStainsCode(CidConceptCode, SingleConceptCode):
     sequence_name = 'ConceptCodeSequence'
-    cid = codes.cid8112.concepts
+    cid = codes.cid8112.concepts  # type: ignore
 
 
 class SpecimenPreparationStepsCode(CidConceptCode, SingleConceptCode):
     sequence_name = 'ConceptCodeSequence'
-    cid = codes.cid8113.concepts
+    cid = codes.cid8113.concepts  # type: ignore
 
 
 class SpecimenFixativesCode(CidConceptCode, SingleConceptCode):
     sequence_name = 'ConceptCodeSequence'
-    cid = codes.cid8114.concepts
+    cid = codes.cid8114.concepts  # type: ignore
 
 
 class SpecimenEmbeddingMediaCode(CidConceptCode, SingleConceptCode):
     sequence_name = 'ConceptCodeSequence'
-    cid = codes.cid8115.concepts
+    cid = codes.cid8115.concepts  # type: ignore
 
 
 class AnatomicPathologySpecimenTypesCode(CidConceptCode, SingleConceptCode):
     sequence_name = 'ConceptCodeSequence'
-    cid = codes.cid8103.concepts
+    cid = codes.cid8103.concepts  # type: ignore
 
 
 class ConceptNameCode(SingleConceptCode):
