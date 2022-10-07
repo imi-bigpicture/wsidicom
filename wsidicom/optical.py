@@ -22,13 +22,12 @@ from PIL import Image
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
+from wsidicom.conceptcode import (ChannelDescriptionCode, ConceptCode,
+                                  IlluminationCode, IlluminationColorCode,
+                                  IlluminatorCode, ImagePathFilterCode,
+                                  LenseCode, LightPathFilterCode)
+from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.instance import WsiInstance
-
-from .conceptcode import (ChannelDescriptionCode, ConceptCode,
-                          IlluminationCode, IlluminationColorCode,
-                          IlluminatorCode, ImagePathFilterCode, LenseCode,
-                          LightPathFilterCode)
-from .errors import WsiDicomNotFoundError
 
 
 class Lut:
@@ -262,7 +261,7 @@ class OpticalFilter(metaclass=ABCMeta):
 @dataclass
 class LightPathFilter(OpticalFilter):
     """Set of light path filter conditions for optical path"""
-    filters: Optional[List[ConceptCode]]
+    filters: Optional[List[LightPathFilterCode]]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'LightPathFilter':
@@ -292,7 +291,7 @@ class LightPathFilter(OpticalFilter):
 @dataclass
 class ImagePathFilter(OpticalFilter):
     """Set of image path filter conditions for optical path"""
-    filters: Optional[List[ConceptCode]]
+    filters: Optional[List[ImagePathFilterCode]]
 
     @classmethod
     def from_ds(cls, ds: Dataset) -> 'ImagePathFilter':
@@ -324,10 +323,10 @@ class Illumination:
     """Set of illumination conditions for optical path"""
     def __init__(
         self,
-        illumination_method: Optional[Sequence[ConceptCode]] = None,
+        illumination_method: Optional[Sequence[IlluminationCode]] = None,
         illumination_wavelength: Optional[float] = None,
-        illumination_color: Optional[ConceptCode] = None,
-        illuminator: Optional[ConceptCode] = None
+        illumination_color: Optional[IlluminationColorCode] = None,
+        illuminator: Optional[IlluminatorCode] = None
     ):
         if illumination_color is None and illumination_wavelength is None:
             raise ValueError("Illumination color or wavelenght need to be set")
@@ -391,7 +390,7 @@ class Illumination:
 @dataclass
 class Lenses:
     """Set of lens conditions for optical path"""
-    lenses: Optional[List[ConceptCode]]
+    lenses: Optional[List[LenseCode]]
     condenser_power: Optional[float]
     objective_power: Optional[float]
     objective_na: Optional[float]
@@ -458,7 +457,7 @@ class OpticalPath:
         lut: Optional[Lut] = None,
         light_path_filter: Optional[LightPathFilter] = None,
         image_path_filter: Optional[ImagePathFilter] = None,
-        channel_description: Optional[Sequence[ConceptCode]] = None,
+        channel_description: Optional[Sequence[ChannelDescriptionCode]] = None,
         lenses: Optional[Lenses] = None
     ):
         """Create a OpticalPath from identifier, illumination, photometric
@@ -482,7 +481,7 @@ class OpticalPath:
             Optional light path filter description for the optical path.
         image_path_filter: Optional[ImagePathFilter] = None
             Optional image path filter description for the optical path.
-        channel_description: Optional[Sequence[ConceptCode]] = None
+        channel_description: Optional[Sequence[ChannelDescriptionCode]] = None
             Optional channel description for the optical path.
         lenses: Optional[Lenses] = None
             Optional lens description for the optical path.

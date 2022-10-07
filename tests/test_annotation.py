@@ -22,28 +22,32 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, List, Tuple, Union
 
-from pydicom.uid import generate_uid
-
 import numpy as np
 import pytest
-import shapely
+from shapely.geometry import Point as ShapelyPoint
+from shapely.geometry import LineString as ShapelyLineString
+from shapely.geometry import Polygon as ShapelyPolygon
+
 import xmltodict
+from pydicom.uid import generate_uid
 from shapely import wkt
-from wsidicom.graphical_annotations import (Annotation, AnnotationGroup,
-                                            AnnotationInstance, ConceptCode,
-                                            Geometry, LabColor, Measurement,
-                                            Point, PointAnnotationGroup,
-                                            Polygon, PolygonAnnotationGroup,
-                                            Polyline, PolylineAnnotationGroup)
 from wsidicom import WsiDicom
+from wsidicom.conceptcode import (AnnotationCategoryCode, AnnotationTypeCode,
+                                  MeasurementCode, UnitCode)
+from wsidicom.graphical_annotations import (Annotation, AnnotationGroup,
+                                            AnnotationInstance, Geometry,
+                                            LabColor, Measurement, Point,
+                                            PointAnnotationGroup, Polygon,
+                                            PolygonAnnotationGroup, Polyline,
+                                            PolylineAnnotationGroup)
 from wsidicom.uid import SlideUids
 
 from .data_gen import create_layer_file
 
 ANNOTATION_FOLDER = Path('tests/testdata/annotation')
 
-typecode = ConceptCode.type('Nucleus')
-categorycode = ConceptCode.category('Tissue')
+type_code = AnnotationTypeCode('Nucleus')
+category_code = AnnotationCategoryCode('Tissue')
 slide_uids = SlideUids(
     study_instance=generate_uid(),
     series_instance=generate_uid(),
@@ -108,32 +112,31 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             List[List[float]],
             List[List[List[float]]]
     ]]:
-        coordinates: Union[
-            List[float],
-            List[List[float]],
-            List[List[List[float]]]
-        ]
         if(isinstance(group, PointAnnotationGroup)):
             if len(group) == 1:
-                geometry_type = 'Point'
-                annotation = group.annotations[0]
-                coordinates = annotation.geometry.to_list_coords()[0]
+                return (
+                    'Point',
+                    group.annotations[0].geometry.to_list_coords()[0]
+                )
             else:
-                geometry_type = 'MultiPoint'
                 coordinates = []
                 for annotation in group.annotations:
                     coordinates += annotation.geometry.to_list_coords()
+                return (
+                    'MultiPoint',
+                    coordinates
+                )
         elif(isinstance(group, PolylineAnnotationGroup)):
-            geometry_type = 'LineString'
-            annotation = group.annotations[0]
-            coordinates = annotation.geometry.to_list_coords()
+            return (
+                'LineString',
+                group.annotations[0].geometry.to_list_coords()
+            )
         elif(isinstance(group, PolygonAnnotationGroup)):
-            geometry_type = 'Polygon'
-            annotation = group.annotations[0]
-            coordinates = [annotation.geometry.to_list_coords()]
-        else:
-            raise NotImplementedError
-        return (geometry_type, coordinates)
+            return (
+                'Polygon',
+                [group.annotations[0].geometry.to_list_coords()]
+            )
+        raise NotImplementedError
 
     def test_qupath_geojson(self):
         files = self.test_files['qupath_geojson']
@@ -144,8 +147,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 group = AnnotationGroup.from_geometries(
                     Geometry.from_geojson(input_dict["geometry"]),
                     label=input_dict["properties"]["name"],
-                    categorycode=categorycode,
-                    typecode=typecode
+                    category_code=category_code,
+                    type_code=type_code
                 )
                 dicom = AnnotationInstance([group], 'volume', slide_uids)
                 dicom = self.dicom_round_trip(dicom)
@@ -160,9 +163,9 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 self.assertDictEqual(input_dict, output_dict)
 
     @staticmethod
-    def qupath_get_typecode(annotation: Dict) -> ConceptCode:
-        typecode = annotation["properties"]["classification"]["name"]
-        return ConceptCode.type(typecode)
+    def qupath_get_type_code(annotation: Dict) -> AnnotationTypeCode:
+        type_code = annotation["properties"]["classification"]["name"]
+        return AnnotationTypeCode(type_code)
 
     @staticmethod
     def qupath_get_color(annotation: Dict) -> Tuple[int, int, int]:
@@ -185,7 +188,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 @dataclass(unsafe_hash=True)
                 class Key:
                     annotation_type: type
-                    typecode: ConceptCode
+                    type_code: AnnotationTypeCode
 
                 @dataclass(unsafe_hash=True)
                 class Value:
@@ -204,7 +207,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     )
                     group_key = Key(
                         annotation_type=type(geometries[0]),
-                        typecode=self.qupath_get_typecode(
+                        type_code=self.qupath_get_type_code(
                             input_annotation
                         )
                     )
@@ -228,8 +231,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                     annotation_group = AnnotationGroup.from_geometries(
                         geometries=group_values.geometries,
                         label=group_values.label,
-                        categorycode=categorycode,
-                        typecode=group_keys.typecode
+                        category_code=category_code,
+                        type_code=group_keys.type_code
                     )
                     annotation_groups.append(annotation_group)
                 self.assertNotEqual(annotation_groups, [])
@@ -243,14 +246,14 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 dicom = self.dicom_round_trip(dicom)
 
                 self.assertNotEqual(dicom.groups, [])
-                # For each annotation group, produce a type-categorycode key.
+                # For each annotation group, produce a type-category_code key.
                 # Get the original group using the key and check that the
                 # annotations are the same.
                 for output_group in dicom.groups:
                     self.assertNotEqual(output_group.annotations, [])
                     key = Key(
                         annotation_type=output_group.geometry_type,
-                        typecode=output_group.typecode
+                        type_code=output_group.type_code
                     )
                     input_group = grouped_annotations[key]
                     output = enumerate(output_group.annotations)
@@ -316,8 +319,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 group = AnnotationGroup.from_geometries(
                     self.asap_to_geometries(input_dict),
                     label=input_dict["@Name"],
-                    categorycode=categorycode,
-                    typecode=typecode
+                    category_code=category_code,
+                    type_code=type_code
                 )
                 dicom = AnnotationInstance([group], 'volume', slide_uids)
                 dicom = self.dicom_round_trip(dicom)
@@ -375,8 +378,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 group = AnnotationGroup.from_geometries(
                     [self.sectra_to_geometry(input_dict)],
                     label=input_dict["name"],
-                    categorycode=categorycode,
-                    typecode=typecode
+                    category_code=category_code,
+                    type_code=type_code
                 )
                 dicom = AnnotationInstance([group], 'volume', slide_uids)
                 dicom = self.dicom_round_trip(dicom)
@@ -408,8 +411,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 group = AnnotationGroup.from_geometries(
                     [Geometry.from_shapely_like(geometry)],
                     label=str(input_dict["annotation"]["id"]),
-                    categorycode=categorycode,
-                    typecode=typecode
+                    category_code=category_code,
+                    type_code=type_code
                 )
                 dicom = AnnotationInstance([group], 'volume', slide_uids)
                 dicom = self.dicom_round_trip(dicom)
@@ -424,24 +427,24 @@ class WsiDicomAnnotationTests(unittest.TestCase):
     @staticmethod
     def annotation_to_shapely(annotation: Annotation):
         if(type(annotation.geometry) == Point):
-            return shapely.geometry.Point(annotation.geometry.to_coords())
+            return ShapelyPoint(annotation.geometry.to_coords())
         elif(type(annotation.geometry) == Polyline):
-            return shapely.geometry.LineString(annotation.geometry.to_coords())
+            return ShapelyLineString(annotation.geometry.to_coords())
         elif(type(annotation.geometry) == Polygon):
-            return shapely.geometry.Polygon(annotation.geometry.to_coords())
+            return ShapelyPolygon(annotation.geometry.to_coords())
         raise NotImplementedError(annotation)
 
     def test_shapely(self):
         input_geometries = [
-            shapely.geometry.Point(15123.21, 12410.01),
-            shapely.geometry.Polygon([
+            ShapelyPoint(15123.21, 12410.01),
+            ShapelyPolygon([
                 (26048, 17269.375),
                 (27408, 16449.375),
                 (27300, 15557.375),
                 (25056, 16817.375),
                 (26048, 17269.375)
             ]),
-            shapely.geometry.LineString([
+            ShapelyLineString([
                 (27448, 18266.75),
                 (29040, 19194.75),
                 (29088, 16618.75),
@@ -454,8 +457,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             group = AnnotationGroup.from_geometries(
                 [Geometry.from_shapely_like(input_geometry)],
                 label="shapely test",
-                categorycode=categorycode,
-                typecode=typecode
+                category_code=category_code,
+                type_code=type_code
             )
             dicom = AnnotationInstance([group], 'volume', slide_uids)
             dicom = self.dicom_round_trip(dicom)
@@ -469,8 +472,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PointAnnotationGroup(
             [input_annotation],
             'test',
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
         output_group = group[0]
         self.assertEqual(input_annotation, output_group)
@@ -482,8 +485,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PointAnnotationGroup(
             input_annotations,
             'test',
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
 
         output_group = group[0]
@@ -502,8 +505,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PolylineAnnotationGroup(
             [input_annotation],
             'test',
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
         output_group = group[0]
         self.assertEqual(input_annotation, output_group)
@@ -520,8 +523,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PolylineAnnotationGroup(
             input_annotations,
             'test',
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
         output_group = group[0]
         self.assertEqual(input_annotations[0], output_group)
@@ -539,8 +542,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PointAnnotationGroup(
             [input_annotation],
             "test",
-            categorycode,
-            typecode,
+            category_code,
+            type_code,
             is_double=False
         )
 
@@ -560,8 +563,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PointAnnotationGroup(
             [input_annotation],
             "test",
-            categorycode,
-            typecode,
+            category_code,
+            type_code,
             is_double=True
         )
         dicom = AnnotationInstance([group], 'volume', slide_uids)
@@ -581,8 +584,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PointAnnotationGroup(
             [input_annotation],
             "test",
-            categorycode,
-            typecode,
+            category_code,
+            type_code,
             is_double=True
         )
         dicom = AnnotationInstance([group], 'volume', slide_uids)
@@ -602,8 +605,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PointAnnotationGroup(
             [input_annotation],
             "test",
-            categorycode,
-            typecode,
+            category_code,
+            type_code,
             is_double=False
         )
 
@@ -617,8 +620,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             self.assertEqual(np_input.all(), np_output.all())
 
     def test_measurement(self):
-        area = ConceptCode.measurement('Area')
-        pixels = ConceptCode.unit('Pixels')
+        area = MeasurementCode('Area')
+        pixels = UnitCode('Pixels')
         measurement0 = Measurement(area, 5, pixels)
         point = Point(1, 1)
         annotation = Annotation(point, [measurement0])
@@ -631,8 +634,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         self.assertEqual([measurement0, measurement1], outputs)
 
     def test_measurement_one_to_one(self):
-        area = ConceptCode.measurement('Area')
-        pixels = ConceptCode.unit('Pixels')
+        area = MeasurementCode('Area')
+        pixels = UnitCode('Pixels')
         measurement0 = Measurement(area, 5, pixels)
         measurement1 = Measurement(area, 10, pixels)
         measurement2 = Measurement(area, 15, pixels)
@@ -642,8 +645,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         annotation_group = PointAnnotationGroup(
             [annotation0, annotation1],
             "label",
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
 
         self.assertTrue(
@@ -655,8 +658,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         annotation_group = PointAnnotationGroup(
             [annotation0, annotation1],
             "label",
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
         self.assertFalse(
             annotation_group._measurements_is_one_to_one(area, pixels)
@@ -667,16 +670,16 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         annotation_group = PointAnnotationGroup(
             [annotation0, annotation1],
             "label",
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
         self.assertFalse(
             annotation_group._measurements_is_one_to_one(area, pixels)
         )
 
     def test_measurement_cycle(self):
-        area = ConceptCode.measurement('Area')
-        pixels = ConceptCode.unit('Pixels')
+        area = MeasurementCode('Area')
+        pixels = UnitCode('Pixels')
         measurement0 = Measurement(area, 5, pixels)
         measurement1 = Measurement(area, 10, pixels)
         point = Point(1, 1)
@@ -685,8 +688,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         annotation_group = PointAnnotationGroup(
             [annotation0, annotation1],
             "label",
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
 
         dicom = AnnotationInstance([annotation_group], 'volume', slide_uids)
@@ -713,8 +716,8 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PointAnnotationGroup(
             point_annotations,
             'test',
-            categorycode,
-            typecode
+            category_code,
+            type_code
         )
 
         dicom = AnnotationInstance(
@@ -736,10 +739,11 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         group = PointAnnotationGroup(
             annotations=[point_annotation],
             label='group label',
-            categorycode=ConceptCode.category('Tissue'),
-            typecode=ConceptCode.type('Nucleus'),
+            category_code=AnnotationCategoryCode('Tissue'),
+            type_code=AnnotationTypeCode('Nucleus'),
             description='description'
         )
+        assert self.slide.uids is not None
         annotations = AnnotationInstance(
             [group],
             'volume',
