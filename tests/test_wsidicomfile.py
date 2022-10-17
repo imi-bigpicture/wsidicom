@@ -21,7 +21,7 @@ from typing import Optional
 
 import pytest
 from pydicom import Dataset, dcmread
-from wsidicom.instance import WsiDataset, WsiDicomFile
+from wsidicom.instance import WsiDicomDataset, WsiDicomFile
 
 from .data_gen import (TESTFRAME, create_layer_file, create_main_dataset,
                        create_meta_dataset)
@@ -133,7 +133,7 @@ class WsiDicomFileTests(unittest.TestCase):
     def test_dataset_property(self):
         for test_file in self.opened_files:
             path = test_file.filepath
-            ds = WsiDataset(dcmread(path, stop_before_pixels=True))
+            ds = WsiDicomDataset(dcmread(path, stop_before_pixels=True))
             self.assertEqual(test_file.dataset, ds)
 
     def test_wsi_type_property(self):

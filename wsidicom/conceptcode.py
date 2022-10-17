@@ -13,13 +13,12 @@
 #    limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Type, TypeVar
+from typing import Dict, List, Optional, Type, TypeVar
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
-
 
 ConceptCodeType = TypeVar('ConceptCodeType', bound='ConceptCode')
 

@@ -14,7 +14,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Generator, Tuple, Union, Sequence
+from typing import Generator, Sequence, Tuple, Union
 
 
 @dataclass

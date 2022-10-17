@@ -21,7 +21,7 @@ from wsidicom.instance import ImageOrgin
 
 
 @pytest.mark.unittest
-class WsiDicomGeomtryTests(unittest.TestCase):
+class WsiDicomGeometryTests(unittest.TestCase):
     def test_size_class(self):
         size0 = Size(10, 10)
         size1 = Size(1, 1)

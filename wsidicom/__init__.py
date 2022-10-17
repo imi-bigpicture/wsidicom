@@ -13,13 +13,15 @@
 #    limitations under the License.
 
 from .config import settings
+from .dataset import WsiDicomDataset
 from .graphical_annotations import (Annotation, AnnotationGroup,
                                     AnnotationInstance, Measurement, Point,
                                     PointAnnotationGroup, Polygon,
                                     PolygonAnnotationGroup, Polyline,
                                     PolylineAnnotationGroup)
-from .instance import WsiDataset, WsiInstance
-from .wsidicom import (ImageData, WsiDicom, WsiDicomLabels, WsiDicomLevels,
-                       WsiDicomOverviews)
+from .image_data import ImageData
+from .instance import Instance
+from .series import Labels, Levels, Overviews
+from .wsidicom import WsiDicom
 
 __version__ = '0.4.0'

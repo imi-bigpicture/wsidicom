@@ -33,9 +33,11 @@ from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 from wsidicom import WsiDicom
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.instance import ImageData, WsiDicomFile, WsiDicomFileWriter
+from wsidicom.image_data import ImageData
+from wsidicom.file import WsiDicomFile
+from wsidicom.file_writer import WsiDicomFileWriter
 from wsidicom.uid import WSI_SOP_CLASS_UID
-from wsidicom.wsidicom import WsiDicomLevel
+from wsidicom.instance import Level
 
 SLIDE_FOLDER = Path(os.environ.get(
     "WSIDICOM_TESTDIR",
@@ -459,8 +461,8 @@ class WsiDicomFileSaveTests(unittest.TestCase):
         for _, wsi in self.test_folders.items():
             with TemporaryDirectory() as tempdir:
                 print(f"running test create child on {wsi.files}")
-                target = cast(WsiDicomLevel, wsi.levels[-2])
-                source = cast(WsiDicomLevel, wsi.levels[-3])
+                target = cast(Level, wsi.levels[-2])
+                source = cast(Level, wsi.levels[-3])
                 new_level = source.create_child(
                     2,
                     Path(tempdir),
