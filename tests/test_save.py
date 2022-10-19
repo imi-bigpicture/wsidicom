@@ -33,11 +33,11 @@ from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 from wsidicom import WsiDicom
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.image_data import ImageData
+from wsidicom.image_data import WsiImageData
 from wsidicom.file import WsiDicomFile
 from wsidicom.file_writer import WsiDicomFileWriter
 from wsidicom.uid import WSI_SOP_CLASS_UID
-from wsidicom.instance import Level
+from wsidicom.image import WsiLevel
 
 SLIDE_FOLDER = Path(os.environ.get(
     "WSIDICOM_TESTDIR",
@@ -56,7 +56,7 @@ class WsiDicomTestFile(WsiDicomFile):
         self.__enter__()
 
 
-class WsiDicomTestImageData(ImageData):
+class WsiDicomTestWsiImageData(WsiImageData):
     def __init__(self, data: Sequence[bytes], tiled_size: Size) -> None:
         if len(data) != tiled_size.area:
             raise ValueError('Number of frames and tiled size area differ')
@@ -132,7 +132,10 @@ class WsiDicomFileSaveTests(unittest.TestCase):
             rng.getrandbits(length*8).to_bytes(length, sys.byteorder)
             for length in lengths
         ]
-        cls.image_data = WsiDicomTestImageData(cls.test_data, cls.tiled_size)
+        cls.image_data = WsiDicomTestWsiImageData(
+            cls.test_data,
+            cls.tiled_size
+        )
         cls.test_dataset = cls.create_test_dataset(
             cls.frame_count,
             cls.image_data
@@ -174,7 +177,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
     @staticmethod
     def create_test_dataset(
         frame_count: int,
-        image_data: WsiDicomTestImageData
+        image_data: WsiDicomTestWsiImageData
     ):
         dataset = Dataset()
         dataset.SOPClassUID = WSI_SOP_CLASS_UID
@@ -461,8 +464,8 @@ class WsiDicomFileSaveTests(unittest.TestCase):
         for _, wsi in self.test_folders.items():
             with TemporaryDirectory() as tempdir:
                 print(f"running test create child on {wsi.files}")
-                target = cast(Level, wsi.levels[-2])
-                source = cast(Level, wsi.levels[-3])
+                target = cast(WsiLevel, wsi.levels[-2])
+                source = cast(WsiLevel, wsi.levels[-3])
                 new_level = source.create_child(
                     2,
                     Path(tempdir),

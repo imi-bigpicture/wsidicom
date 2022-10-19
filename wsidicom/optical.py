@@ -27,7 +27,7 @@ from wsidicom.conceptcode import (ChannelDescriptionCode, ConceptCode,
                                   IlluminatorCode, ImagePathFilterCode,
                                   LenseCode, LightPathFilterCode)
 from wsidicom.errors import WsiDicomNotFoundError
-from wsidicom.instance import Instance
+from wsidicom.image import WsiImage
 
 
 class Lut:
@@ -580,14 +580,14 @@ class OpticalManager:
         }
 
     @classmethod
-    def open(cls, instances: Sequence[Instance]) -> 'OpticalManager':
-        """Parse optical path sequence in listed instances and create an
+    def open(cls, images: Sequence[WsiImage]) -> 'OpticalManager':
+        """Parse optical path sequence in listed images and create an
         OpticalManager out of the found (unique) OpticalPaths.
 
         Parameters
         ----------
-        files: Sequence[Instance]
-            List of WsiDicom instances to parse
+        images: Sequence[WsiImage]
+            List of images to parse
 
         Returns
         ----------
@@ -595,8 +595,8 @@ class OpticalManager:
             OpticalManager for the found OpticalPaths
         """
         optical_paths: Dict[str, OpticalPath] = {}
-        for instance in instances:
-            for dataset in instance.datasets:
+        for image in images:
+            for dataset in image.datasets:
                 optical_path_sequence = dataset.optical_path_sequence
                 if optical_path_sequence is None:
                     continue

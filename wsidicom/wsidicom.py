@@ -29,9 +29,9 @@ from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
 from wsidicom.file import WsiDicomFile
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import Instance, Level
+from wsidicom.image import WsiLevel, WsiImage
 from wsidicom.optical import OpticalManager
-from wsidicom.series import Labels, Levels, Overviews, Series
+from wsidicom.series import WsiLabels, WsiLevels, WsiOverviews, WsiSeries
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 
@@ -41,20 +41,20 @@ class WsiDicom:
     labels and/or overviews."""
     def __init__(
         self,
-        levels: Levels,
-        labels: Labels,
-        overviews: Overviews,
+        levels: WsiLevels,
+        labels: WsiLabels,
+        overviews: WsiOverviews,
         annotations: Optional[Sequence[AnnotationInstance]] = None
     ):
         """Holds wsi dicom levels, labels and overviews.
 
         Parameters
         ----------
-        levels: Levels
+        levels: WsiLevels
             Series of pyramidal levels.
-        labels: Labels
+        labels: WsiLabels
             Series of label images.
-        overviews: Overviews
+        overviews: WsiOverviews
             Series of overview images
         annotations: Optional[Sequence[AnnotationInstance]] = None
             Sup-222 annotation instances.
@@ -71,7 +71,7 @@ class WsiDicom:
         )
 
         self.optical = OpticalManager.open(
-            levels.instances + labels.instances + overviews.instances
+            levels.images + labels.images + overviews.images
         )
 
         if self.annotations != []:
@@ -97,7 +97,7 @@ class WsiDicom:
         return self.pretty_str()
 
     @property
-    def base_level(self) -> Level:
+    def base_level(self) -> WsiLevel:
         return self.levels.base_level
 
     @property
@@ -111,21 +111,21 @@ class WsiDicom:
         return self.base_level.tile_size
 
     @property
-    def levels(self) -> Levels:
+    def levels(self) -> WsiLevels:
         """Return contained levels"""
         if self._levels is not None:
             return self._levels
         raise WsiDicomNotFoundError("levels", str(self))
 
     @property
-    def labels(self) -> Labels:
+    def labels(self) -> WsiLabels:
         """Return contained labels"""
         if self._labels is not None:
             return self._labels
         raise WsiDicomNotFoundError("labels", str(self))
 
     @property
-    def overviews(self) -> Overviews:
+    def overviews(self) -> WsiOverviews:
         """Return contained overviews"""
         if self._overviews is not None:
             return self._overviews
@@ -146,12 +146,12 @@ class WsiDicom:
         )
 
     @property
-    def instances(self) -> List[Instance]:
-        """Return contained instances"""
+    def images(self) -> List[WsiImage]:
+        """Return contained images"""
         return (
-            self.levels.instances
-            + self.labels.instances
-            + self.overviews.instances
+            self.levels.images
+            + self.labels.images
+            + self.overviews.images
         )
 
     @property
@@ -210,11 +210,11 @@ class WsiDicom:
             sop_class_uid = cls._get_sop_class_uid(filepath)
             if sop_class_uid == WSI_SOP_CLASS_UID:
                 wsi_file = WsiDicomFile(filepath)
-                if(wsi_file.wsi_type == Levels.WSI_TYPE):
+                if(wsi_file.wsi_type == WsiLevels.WSI_TYPE):
                     level_files.append(wsi_file)
-                elif(wsi_file.wsi_type == Labels.WSI_TYPE):
+                elif(wsi_file.wsi_type == WsiLabels.WSI_TYPE):
                     label_files.append(wsi_file)
-                elif(wsi_file.wsi_type == Overviews.WSI_TYPE):
+                elif(wsi_file.wsi_type == WsiOverviews.WSI_TYPE):
                     overview_files.append(wsi_file)
                 else:
                     wsi_file.close()
@@ -223,17 +223,17 @@ class WsiDicom:
         base_dataset = cls._get_base_dataset(level_files)
         slide_uids = base_dataset.uids.slide
         base_tile_size = base_dataset.tile_size
-        level_instances = Instance.open(
+        level_images = WsiImage.open(
             level_files,
             slide_uids,
             base_tile_size
         )
-        label_instances = Instance.open(label_files, slide_uids)
-        overview_instances = Instance.open(overview_files, slide_uids)
+        label_images = WsiImage.open(label_files, slide_uids)
+        overview_images = WsiImage.open(overview_files, slide_uids)
 
-        levels = Levels.open(level_instances)
-        labels = Labels.open(label_instances)
-        overviews = Overviews.open(overview_instances)
+        levels = WsiLevels.open(level_images)
+        labels = WsiLabels.open(label_images)
+        overviews = WsiOverviews.open(overview_images)
         annotations = AnnotationInstance.open(annotation_files)
 
         return cls(levels, labels, overviews, annotations)
@@ -524,14 +524,14 @@ class WsiDicom:
                 path
             )
 
-    def get_instance(
+    def get_image(
         self,
         level: int,
         z: Optional[float] = None,
         path: Optional[str] = None
-    ) -> Instance:
+    ) -> WsiImage:
 
-        """Return instance fullfilling level, z and/or path.
+        """Return image fullfilling level, z and/or path.
 
         Parameters
         ----------
@@ -544,11 +544,11 @@ class WsiDicom:
 
         Returns
         ----------
-        Instance:
-            Instance
+        WsiImage:
+            Image
         """
         wsi_level = self.levels.get_level(level)
-        return wsi_level.get_instance(z, path)
+        return wsi_level.get_image(z, path)
 
     def close(self) -> None:
         """Close all files."""
@@ -563,11 +563,11 @@ class WsiDicom:
         chunk_size: Optional[int] = None,
         offset_table: Optional[str] = 'bot'
     ) -> List[Path]:
-        """Save wsi as DICOM-files in path. Instances for the same pyramid
+        """Save wsi as DICOM-files in path. Images for the same pyramid
         level will be combined when possible to one file (e.g. not split
-        for optical paths or focal planes). If instances are sparse tiled they
+        for optical paths or focal planes). If images are sparse tiled they
         will be converted to full tiled by inserting blank tiles. The PixelData
-        will contain a basic offset table. All instance uids will be changed.
+        will contain a basic offset table. All image uids will be changed.
 
         Parameters
         ----------
@@ -597,7 +597,7 @@ class WsiDicom:
         if chunk_size is None:
             chunk_size = 16
 
-        collections: List[Series] = [
+        collections: List[WsiSeries] = [
             self.levels, self.labels, self.overviews
         ]
 
@@ -696,9 +696,9 @@ class WsiDicom:
 
     def _validate_collection(
         self,
-        series: Sequence[Series]
+        series: Sequence[WsiSeries]
     ) -> SlideUids:
-        """Check that no files or instance in collection is duplicate, and, if
+        """Check that no files or images in collection is duplicate, and, if
         strict, that all series have the same base uids.
         Raises WsiDicomMatchError otherwise. Returns base uid for collection.
 
@@ -713,7 +713,7 @@ class WsiDicom:
             Matching uids
         """
         WsiDicomDataset.check_duplicate_dataset(self.datasets, self)
-        Instance.check_duplicate_instance(self.instances, self)
+        WsiImage.check_duplicate_image(self.images, self)
 
         try:
             slide_uids = next(

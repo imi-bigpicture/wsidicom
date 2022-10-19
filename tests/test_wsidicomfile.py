@@ -21,7 +21,7 @@ from typing import Optional
 
 import pytest
 from pydicom import Dataset, dcmread
-from wsidicom.instance import WsiDicomDataset, WsiDicomFile
+from wsidicom.image import WsiDicomDataset, WsiDicomFile
 
 from .data_gen import (TESTFRAME, create_layer_file, create_main_dataset,
                        create_meta_dataset)

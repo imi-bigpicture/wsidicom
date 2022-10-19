@@ -27,7 +27,7 @@ from pydicom.uid import UID
 
 from wsidicom.file import WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
-from wsidicom.image_data import ImageData
+from wsidicom.image_data import WsiImageData
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
@@ -50,7 +50,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         uid: UID,
         transfer_syntax: UID,
         dataset: Dataset,
-        data: Dict[Tuple[str, float], ImageData],
+        data: Dict[Tuple[str, float], WsiImageData],
         workers: int,
         chunk_size: int,
         offset_table: Optional[str],
@@ -66,7 +66,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Transfer syntax for file
         dataset: Dataset
             Dataset to write (exluding pixel data).
-        data: Dict[Tuple[str, float], ImageData]
+        data: Dict[Tuple[str, float], WsiImageData]
             Pixel data to write.
         workers: int
             Number of workers to use for writing pixel data.
@@ -365,7 +365,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
     def _write_pixel_data(
         self,
-        image_data: ImageData,
+        image_data: WsiImageData,
         z: float,
         path: str,
         workers: int,
@@ -378,7 +378,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         Parameters
         ----------
-        image_data: ImageData
+        image_data: WsiImageData
             Image data to read pixel tiles from.
         z: float
             Focal plane to write.
@@ -455,7 +455,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
     def _chunk_tile_points(
         self,
-        image_data: ImageData,
+        image_data: WsiImageData,
         chunk_size: int,
         scale: int = 1
     ) -> Generator[Generator[Point, None, None], None, None]:
@@ -463,7 +463,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         Parameters
         ----------
-        image_data: ImageData
+        image_data: WsiImageData
             Image data with tiles to chunk.
         chunk_size: int
             Requested chunk size

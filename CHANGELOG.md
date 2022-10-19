@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ...
 ### Changed
 - Do not use threads in method WsiDicomFileWriter._write_pixel_data() if only one worker.
-- Removed `WsiDicom` name of classes that can have generic image data.
+- Removed `Dicom` from name of classes that can have generic image data.
+- Renamed `WsiInstance` to `WsiImage`.
 
 ## [0.4.0] - 2022-06-30
 ### Added

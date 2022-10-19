@@ -15,9 +15,9 @@
 import unittest
 
 import pytest
-
-from wsidicom.geometry import Orientation, Point, PointMm, Region, RegionMm, Size, SizeMm
-from wsidicom.instance import ImageOrgin
+from wsidicom.geometry import (Orientation, Point, PointMm, RegionMm,
+                               Size, SizeMm)
+from wsidicom.image_data import WsiImageOrgin
 
 
 @pytest.mark.unittest
@@ -94,7 +94,7 @@ class WsiDicomGeometryTests(unittest.TestCase):
     def test_region_mm_to_other_origin_1(self):
         region = RegionMm(PointMm(2.0, 4.0), SizeMm(1.0, 2.0))
         # Image x along slide y, Image y along slide x
-        origin = ImageOrgin(
+        origin = WsiImageOrgin(
             PointMm(1.0, 2.0),
             Orientation([0, 1, 0, 1, 0, 0])
         )
@@ -111,7 +111,7 @@ class WsiDicomGeometryTests(unittest.TestCase):
     def test_region_mm_to_other_origin_2(self):
         region = RegionMm(PointMm(1.0, 4.0), SizeMm(2.0, 1.0))
         # Image x reversed to slide y, Image y reversed to slide x
-        origin = ImageOrgin(
+        origin = WsiImageOrgin(
             PointMm(4.0, 8.0),
             Orientation([0, -1, 0, -1, 0, 0])
         )
@@ -128,7 +128,7 @@ class WsiDicomGeometryTests(unittest.TestCase):
     def test_region_mm_to_other_origin_3(self):
         region = RegionMm(PointMm(2.0, 5.0), SizeMm(2.0, 1.0))
         # Image x along slide x, Image y reversed to slide y
-        origin = ImageOrgin(
+        origin = WsiImageOrgin(
             PointMm(1.0, 8.0),
             Orientation([1, 0, 0, 0, -1, 0])
         )
@@ -145,7 +145,7 @@ class WsiDicomGeometryTests(unittest.TestCase):
     def test_region_mm_to_other_origin_4(self):
         region = RegionMm(PointMm(2.0, 3.0), SizeMm(2.0, 3.0))
         # Image x reversed to slide x, Image y along slide y
-        origin = ImageOrgin(
+        origin = WsiImageOrgin(
             PointMm(5.0, 2.0),
             Orientation([-1, 0, 0, 0, 1, 0])
         )

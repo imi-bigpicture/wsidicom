@@ -19,26 +19,27 @@ from typing import Callable, List, Optional, OrderedDict, Sequence, Union
 
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.dataset import ImageOrgin, WsiDicomDataset
+from wsidicom.dataset import WsiDicomDataset
 from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.instance import Instance, InstanceGroup, Level
+from wsidicom.image import WsiImage, WsiImageGroup, WsiLevel
+from wsidicom.image_data import WsiImageOrgin
 from wsidicom.stringprinting import str_indent
 from wsidicom.uid import SlideUids
 
 
-class Series(metaclass=ABCMeta):
-    """Represents a series of InstanceGroups with the same image flavor, e.g.
-    pyramidal levels, lables, or overviews.
+class WsiSeries(metaclass=ABCMeta):
+    """Represents a series of WsiImageGroups with the same image flavor,
+    e.g. pyramidal levels, lables, or overviews.
     """
 
-    def __init__(self, groups: Sequence[InstanceGroup]):
-        """Create a Series from list of InstanceGroups.
+    def __init__(self, groups: Sequence[WsiImageGroup]):
+        """Create a WsiSeries from list of WsiImageGroups.
 
         Parameters
         ----------
-        groups: Sequence[InstanceGroup]
+        groups: Sequence[WsiImageGroup]
             List of groups to include in the series.
         """
         self._groups = groups
@@ -54,7 +55,7 @@ class Series(metaclass=ABCMeta):
     def __str__(self) -> str:
         return f"{type(self).__name__} of groups {self.groups}"
 
-    def __getitem__(self, index: int) -> InstanceGroup:
+    def __getitem__(self, index: int) -> WsiImageGroup:
         """Get group by index.
 
         Parameters
@@ -64,7 +65,7 @@ class Series(metaclass=ABCMeta):
 
         Returns
         ----------
-        InstanceGroup
+        WsiImageGroup
             The group at index in the series
         """
         return self.groups[index]
@@ -80,7 +81,7 @@ class Series(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @property
-    def groups(self) -> Sequence[InstanceGroup]:
+    def groups(self) -> Sequence[WsiImageGroup]:
         """Return contained groups."""
         return self._groups
 
@@ -112,32 +113,32 @@ class Series(metaclass=ABCMeta):
         ]
 
     @property
-    def instances(self) -> List[Instance]:
-        """Return contained instances"""
-        series_instances = [
-            series.instances.values() for series in self.groups
+    def images(self) -> List[WsiImage]:
+        """Return contained images"""
+        series_images = [
+            series.images.values() for series in self.groups
         ]
         return [
-            instance for sublist in series_instances for instance in sublist
+            image for sublist in series_images for image in sublist
         ]
 
     @classmethod
     @abstractmethod
-    def open(cls, instances: Sequence[Instance]) -> 'Series':
+    def open(cls, images: Sequence[WsiImage]) -> 'WsiSeries':
         raise NotImplementedError
 
     def _validate_series(
             self,
-            groups: Union[Sequence[InstanceGroup], Sequence[Level]]
+            groups: Union[Sequence[WsiImageGroup], Sequence[WsiLevel]]
     ) -> Optional[SlideUids]:
-        """Check that no files or instances in series is duplicate and that
+        """Check that no files or images in series is duplicate and that
         all groups in series matches.
         Raises WsiDicomMatchError otherwise.
         Returns the matching base uid. If list of groups is empty, return None.
 
         Parameters
         ----------
-        groups: Union[Sequence[InstanceGroup], Sequence[Level]]
+        groups: Union[Sequence[WsiImageGroup], Sequence[WsiLevel]]
             List of groups or levels to check
 
         Returns
@@ -146,7 +147,7 @@ class Series(metaclass=ABCMeta):
             Matching uids
         """
         WsiDicomDataset.check_duplicate_dataset(self.datasets, self)
-        Instance.check_duplicate_instance(self.instances, self)
+        WsiImage.check_duplicate_image(self.images, self)
 
         try:
             base_group = groups[0]
@@ -210,8 +211,8 @@ class Series(metaclass=ABCMeta):
         return filepaths
 
 
-class Labels(Series):
-    """Represents a series of InstanceGroups of the label wsi flavor."""
+class WsiLabels(WsiSeries):
+    """Represents a series of WsiImageGroups of the label wsi flavor."""
     WSI_TYPE = 'LABEL'
 
     @property
@@ -221,26 +222,26 @@ class Labels(Series):
     @classmethod
     def open(
         cls,
-        instances: Sequence[Instance]
-    ) -> 'Labels':
+        images: Sequence[WsiImage]
+    ) -> 'WsiLabels':
         """Return labels created from wsi files.
 
         Parameters
         ----------
-        instances: Sequence[Instance]
-            Instances to create labels from.
+        images: Sequence[WsiImage]
+            images to create labels from.
 
         Returns
         ----------
         Overviews
             Created labels.
         """
-        labels = InstanceGroup.open(instances)
+        labels = WsiImageGroup.open(images)
         return cls(labels)
 
 
-class Overviews(Series):
-    """Represents a series of InstanceGroups of the overview wsi flavor."""
+class WsiOverviews(WsiSeries):
+    """Represents a series of WsiImageGroups of the overview wsi flavor."""
     WSI_TYPE = 'OVERVIEW'
 
     @property
@@ -250,26 +251,26 @@ class Overviews(Series):
     @classmethod
     def open(
         cls,
-        instances: Sequence[Instance]
-    ) -> 'Overviews':
+        images: Sequence[WsiImage]
+    ) -> 'WsiOverviews':
         """Return overviews created from wsi files.
 
         Parameters
         ----------
-        instances: Sequence[Instance]
-            Instances to create overviews from.
+        images: Sequence[WsiImage]
+            images to create overviews from.
 
         Returns
         ----------
         Overviews
             Created overviews.
         """
-        overviews = InstanceGroup.open(instances)
+        overviews = WsiImageGroup.open(images)
         return cls(overviews)
 
 
-class Levels(Series):
-    """Represents a series of InstanceGroups of the volume (e.g. pyramidal
+class WsiLevels(WsiSeries):
+    """Represents a series of WsiImageGroups of the volume (e.g. pyramidal
     level) wsi flavor."""
     WSI_TYPE = 'VOLUME'
 
@@ -280,29 +281,29 @@ class Levels(Series):
     @classmethod
     def open(
         cls,
-        instances: Sequence[Instance]
-    ) -> 'Levels':
+        images: Sequence[WsiImage]
+    ) -> 'WsiLevels':
         """Return overviews created from wsi files.
 
         Parameters
         ----------
-        instances: Sequence[Instance]
-            Instances to create levels from.
+        images: Sequence[WsiImage]
+            images to create levels from.
 
         Returns
         ----------
         Overviews
             Created levels.
         """
-        levels = Level.open(instances)
+        levels = WsiLevel.open(images)
         return cls(levels)
 
-    def __init__(self, levels: Sequence[Level]):
+    def __init__(self, levels: Sequence[WsiLevel]):
         """Holds a stack of levels.
 
         Parameters
         ----------
-        levels: Sequence[Level]
+        levels: Sequence[WsiLevel]
             List of levels to include in series
         """
         self._levels = OrderedDict(
@@ -314,7 +315,7 @@ class Levels(Series):
         else:
             self._uids = None
 
-        mm_size = self.base_level.default_instance.mm_size
+        mm_size = self.base_level.default_image.mm_size
         if mm_size is None:
             raise ValueError(
                 'ImagedVolumeWidth and ImagedVolumeHeight must be set for '
@@ -334,7 +335,7 @@ class Levels(Series):
         )
 
     @property
-    def groups(self) -> List[InstanceGroup]:
+    def groups(self) -> List[WsiImageGroup]:
         """Return contained groups"""
         return list(self._levels.values())
 
@@ -349,7 +350,7 @@ class Levels(Series):
         return self.base_level.get_highest_level()
 
     @property
-    def base_level(self) -> Level:
+    def base_level(self) -> WsiLevel:
         """Return the base level of the pyramid"""
         return self._levels[0]
 
@@ -358,8 +359,8 @@ class Levels(Series):
         return self._mm_size
 
     @property
-    def image_origin(self) -> ImageOrgin:
-        return self.base_level.default_instance.image_origin
+    def image_origin(self) -> WsiImageOrgin:
+        return self.base_level.default_image.image_origin
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
@@ -377,7 +378,7 @@ class Levels(Series):
         """
         return level <= self.highest_level
 
-    def get_level(self, level: int) -> Level:
+    def get_level(self, level: int) -> WsiLevel:
         """Return wsi level.
 
         Parameters
@@ -387,17 +388,17 @@ class Levels(Series):
 
         Returns
         ----------
-        Level
+        WsiLevel
             The searched level
         """
         try:
             return self._levels[level]
         except KeyError:
             raise WsiDicomNotFoundError(
-                f"Level of {level}", "level series"
+                f"WsiLevel of {level}", "level series"
             )
 
-    def get_closest_by_level(self, level: int) -> Level:
+    def get_closest_by_level(self, level: int) -> WsiLevel:
         """Search for level that is closest to and smaller than the given
         level.
 
@@ -408,12 +409,12 @@ class Levels(Series):
 
         Returns
         ----------
-        Level
+        WsiLevel
             The level closest to searched level
         """
         if not self.valid_level(level):
             raise WsiDicomOutOfBoundsError(
-                f"Level {level}", f"maximum level {self.highest_level}"
+                f"WsiLevel {level}", f"maximum level {self.highest_level}"
             )
         closest_level = 0
         closest = None
@@ -424,11 +425,11 @@ class Levels(Series):
                 closest = wsi_level
         if closest is None:
             raise WsiDicomNotFoundError(
-                f"Level for {level}", "level series"
+                f"WsiLevel for {level}", "level series"
             )
         return closest
 
-    def get_closest_by_size(self, size: Size) -> Level:
+    def get_closest_by_size(self, size: Size) -> WsiLevel:
         """Search for level that by size is closest to and larger than the
         given size.
 
@@ -439,7 +440,7 @@ class Levels(Series):
 
         Returns
         ----------
-        Level
+        WsiLevel
             The level with size closest to searched size
         """
         closest_size = self.groups[0].size
@@ -451,14 +452,14 @@ class Levels(Series):
                 closest = wsi_level
         if closest is None:
             raise WsiDicomNotFoundError(
-                f"Level for size {size}", "level series"
+                f"WsiLevel for size {size}", "level series"
             )
         return closest
 
     def get_closest_by_pixel_spacing(
         self,
         pixel_spacing: SizeMm
-    ) -> Level:
+    ) -> WsiLevel:
         """Search for level that by pixel spacing is closest to and smaller
         than the given pixel spacing. Only the spacing in x-axis is used.
 
@@ -469,7 +470,7 @@ class Levels(Series):
 
         Returns
         ----------
-        Level
+        WsiLevel
             The level with pixel spacing closest to searched spacing
         """
         closest_pixel_spacing: float = 0
@@ -481,7 +482,7 @@ class Levels(Series):
                 closest = wsi_level
         if closest is None:
             raise WsiDicomNotFoundError(
-                f"Level for pixel spacing {pixel_spacing}", "level series")
+                f"WsiLevel for pixel spacing {pixel_spacing}", "level series")
         return closest
 
     def construct_pyramid(

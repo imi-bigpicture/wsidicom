@@ -29,7 +29,7 @@ from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
                              WsiDicomRequirementError,
                              WsiDicomStrictRequirementError,
                              WsiDicomUidDuplicateError)
-from wsidicom.geometry import Orientation, PointMm, RegionMm, Size, SizeMm
+from wsidicom.geometry import Size, SizeMm
 from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
 
 
@@ -210,55 +210,6 @@ WSI_ATTRIBUTES = {
 }
 
 
-class ImageOrgin:
-    def __init__(
-        self,
-        origin: PointMm,
-        orientation: Orientation
-    ):
-        self._origin = origin
-        self._orientation = orientation
-
-    @classmethod
-    def from_dataset(
-        cls,
-        dataset: Dataset
-    ):
-        try:
-            origin = PointMm(
-                dataset.TotalPixelMatrixOriginSequence[0].
-                XOffsetInSlideCoordinateSystem,
-                dataset.TotalPixelMatrixOriginSequence[0].
-                YOffsetInSlideCoordinateSystem
-            )
-        except (AttributeError, IndexError):
-            warnings.warn(
-                "Using default image origin as TotalPixelMatrixOriginSequence "
-                "not set in file"
-            )
-            origin = PointMm(0, 0)
-        try:
-            orientation = Orientation(dataset.ImageOrientationSlide)
-        except AttributeError:
-            warnings.warn(
-                "Using default image orientation as ImageOrientationSlide "
-                "not set in file"
-            )
-            orientation = Orientation([0, 1, 0, 1, 0, 0])
-        return cls(origin, orientation)
-
-    @property
-    def rotation(self) -> float:
-        return self._orientation.rotation
-
-    def transform_region(
-        self,
-        region: RegionMm
-    ) -> 'RegionMm':
-        region.position = region.position - self._origin
-        return self._orientation.apply(region)
-
-
 class WsiDicomDataset(Dataset):
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
     parsers for attributes specific for WSI. Use snake case to avoid name
@@ -275,10 +226,6 @@ class WsiDicomDataset(Dataset):
         dataset: Dataset
             Pydicom dataset containing WSI data.
 
-        Returns
-        ----------
-        bool
-            True if same instance.
         """
         super().__init__(dataset)
         self._uids = self._get_uids()
@@ -314,7 +261,6 @@ class WsiDicomDataset(Dataset):
             'OpticalPathSequence'
         )
         self._slice_thickness = self._get_slice_thickness(self.pixel_measure)
-        self._image_origin = ImageOrgin.from_dataset(dataset)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"
@@ -329,7 +275,7 @@ class WsiDicomDataset(Dataset):
 
     @property
     def concatenation_uid(self) -> Optional[UID]:
-        """Return concatenation uid, if defined, from dataset. An instance that
+        """Return concatenation uid, if defined, from dataset. An image that
         is concatenated (split into several files) should have the same
         concatenation uid."""
         return self.uids.concatenation
@@ -346,14 +292,14 @@ class WsiDicomDataset(Dataset):
 
     @property
     def frame_offset(self) -> int:
-        """Return frame offset (offset to first frame in instance if
-        concatenated). Is zero if non-catenated instance or first instance
-        in concatenated instance."""
+        """Return frame offset (offset to first frame in image if
+        concatenated). Is zero if non-catenated image or first image
+        in concatenated image."""
         return self._frame_offset
 
     @property
     def frame_count(self) -> int:
-        """Return number of frames in instance."""
+        """Return number of frames in image."""
         return cast(int, self._frame_count)
 
     @property
@@ -413,7 +359,7 @@ class WsiDicomDataset(Dataset):
 
     @property
     def ext_depth_of_field(self) -> bool:
-        """Return true if instance has extended depth of field
+        """Return true if image has extended depth of field
         (several focal planes are combined to one plane)."""
         return self._ext_depth_of_field
 
@@ -500,10 +446,6 @@ class WsiDicomDataset(Dataset):
     @property
     def wsi_type(self) -> str:
         return self._get_wsi_flavor(self.ImageType)
-
-    @property
-    def image_origin(self) -> ImageOrgin:
-        return self._image_origin
 
     @classmethod
     def is_supported_wsi_dicom(

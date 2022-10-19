@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import io
+import warnings
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
 from typing import (Any, Dict, Iterable, List, Optional, OrderedDict, Sequence,
@@ -28,16 +29,81 @@ from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
 from wsidicom.dataset import WsiDicomDataset
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.file import WsiDicomFile
-from wsidicom.geometry import Point, Region, Size, SizeMm
+from wsidicom.geometry import (Orientation, Point, PointMm, Region, RegionMm,
+                               Size, SizeMm)
 
 
-class ImageData(metaclass=ABCMeta):
+class WsiImageOrgin:
+    def __init__(
+        self,
+        origin: PointMm,
+        orientation: Orientation
+    ):
+        self._origin = origin
+        self._orientation = orientation
+
+    @classmethod
+    def from_dataset(
+        cls,
+        dataset: Dataset
+    ):
+        try:
+            origin = PointMm(
+                dataset.TotalPixelMatrixOriginSequence[0].
+                XOffsetInSlideCoordinateSystem,
+                dataset.TotalPixelMatrixOriginSequence[0].
+                YOffsetInSlideCoordinateSystem
+            )
+        except (AttributeError, IndexError):
+            warnings.warn(
+                "Using default image origin as TotalPixelMatrixOriginSequence "
+                "not set in file"
+            )
+            origin = cls.default.origin
+        try:
+            orientation = Orientation(dataset.ImageOrientationSlide)
+        except AttributeError:
+            warnings.warn(
+                "Using default image orientation as ImageOrientationSlide "
+                "not set in file"
+            )
+            orientation = cls.default.orientation
+        return cls(origin, orientation)
+
+    @classmethod
+    @property
+    def default(cls) -> 'WsiImageOrgin':
+        return cls(
+            PointMm(0, 0),
+            Orientation([0, 1, 0, 1, 0, 0])
+        )
+
+    @property
+    def origin(self) -> PointMm:
+        return self._origin
+
+    @property
+    def orientation(self) -> Orientation:
+        return self._orientation
+
+    @property
+    def rotation(self) -> float:
+        return self._orientation.rotation
+
+    def transform_region(
+        self,
+        region: RegionMm
+    ) -> RegionMm:
+        region.position = region.position - self._origin
+        return self._orientation.apply(region)
+
+
+class WsiImageData(metaclass=ABCMeta):
     """Generic class for image data that can be inherited to implement support
-    for other image/file formats. Subclasses should implement properties to get
-    transfer_syntax, image_size, tile_size, pixel_spacing,  samples_per_pixel,
-    and photometric_interpretation and methods get_tile() and close().
-    Additionally properties focal_planes and/or optical_paths should be
-    overridden if multiple focal planes or optical paths are implemented."""
+    for other image/file formats. Subclasses should implement the abstract
+    methods. Additionally properties focal_planes, optical_paths, and/or
+    image_origin should be overridden if multiple focal planes, optical paths,
+    or image origin are implemented."""
     _default_z: Optional[float] = None
     _blank_tile: Optional[Image.Image] = None
     _encoded_blank_tile: Optional[bytes] = None
@@ -131,6 +197,11 @@ class ImageData(metaclass=ABCMeta):
     def optical_paths(self) -> List[str]:
         """Optical paths avaiable in the image."""
         return ['0']
+
+    @property
+    def image_origin(self) -> WsiImageOrgin:
+        """Should return the image origin of the image data."""
+        return WsiImageOrgin.default
 
     @property
     def image_mode(self) -> str:
@@ -480,7 +551,7 @@ class ImageData(metaclass=ABCMeta):
         return (WHITE, WHITE, WHITE)
 
     def _create_blank_tile(self) -> Image.Image:
-        """Create blank tile for instance.
+        """Create blank tile for image.
 
         Returns
         ----------
@@ -677,7 +748,7 @@ class ImageData(metaclass=ABCMeta):
         return tile_frame
 
 
-class WsiDicomImageData(ImageData):
+class WsiDicomImageData(WsiImageData):
     """Represents image data read from dicom file(s). Image data can
     be sparsly or fully tiled and/or concatenated."""
     def __init__(
@@ -714,6 +785,7 @@ class WsiDicomImageData(ImageData):
             datasets[0].photometric_interpretation
         )
         self._samples_per_pixel = datasets[0].samples_per_pixel
+        self._image_origin = WsiImageOrgin.from_dataset(base_file.dataset)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._files.values()})"
@@ -749,6 +821,11 @@ class WsiDicomImageData(ImageData):
     def optical_paths(self) -> List[str]:
         """Optical paths avaiable in the image."""
         return self.tiles.optical_paths
+
+    @property
+    def image_origin(self) -> WsiImageOrgin:
+        """Image origin of the image."""
+        return self._image_origin
 
     @property
     def pixel_spacing(self) -> Optional[SizeMm]:
@@ -832,7 +909,7 @@ class WsiDicomImageData(ImageData):
                     frame_index >= frame_offset):
                 return file
 
-        raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
+        raise WsiDicomNotFoundError(f"Frame index {frame_index}", "image")
 
     def _get_tile_frame(self, frame_index: int) -> bytes:
         """Return tile frame for frame index.
@@ -1243,7 +1320,7 @@ class FullTileIndex(TileIndex):
         return sorted(list(focal_planes))
 
     def _get_optical_path_index(self, path: str) -> int:
-        """Return index of the optical path in instance.
+        """Return index of the optical path in image.
         This assumes that all files in a concatenated set contains all the
         optical path identifiers of the set.
 
@@ -1283,7 +1360,7 @@ class FullTileIndex(TileIndex):
             return next(index for index, plane in enumerate(self.focal_planes)
                         if plane == z)
         except StopIteration:
-            raise WsiDicomNotFoundError(f"Z {z} in instance", str(self))
+            raise WsiDicomNotFoundError(f"Z {z} in image", str(self))
 
 
 class SparseTileIndex(TileIndex):

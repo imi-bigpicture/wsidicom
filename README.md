@@ -83,9 +83,9 @@ A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of di
 - *WsiDicomFile*, represents a WSI DICOM file, used for accessing WsiDicomImageData and WsiDicomDataset.
 - *WsiDicomImageData*, represents the image data in one or several WSI DICOM files.
 - *WsiDicomDataset*, represents the image metadata in one or several WSI DICOM files.
-- *Instance*, represents image data and image metadata.
-- *Level*, represents a group of instances with the same image size, i.e. of the same level.
-- *Levels*, represents a group of levels, i.e. the pyrimidal structure.
+- *WsiImage*, represents image data and image metadata.
+- *WsiLevel*, represents a group of images with the same image size, i.e. of the same level.
+- *WsiLevels*, represents a group of levels, i.e. the pyrimidal structure.
 - *WsiDicom*, represents a collection of levels, labels and overviews.
 
 Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions.
@@ -98,20 +98,20 @@ slide = WsiDicom.open(path_to_folder)
 But the structure can also be created manually from the bottom:
 ```python
 file = WsiDicomFile(path_to_file)
-instance = Instance(file.dataset, WsiDicomImageData(files))
-level = Level([instance])
-levels = Levels([level])
+image = WsiImage(file.dataset, WsiDicomImageData(files))
+level = WsiLevel([image])
+levels = WsiLevels([level])
 slide = WsiDicom([levels])
 ```
 
 ## Adding support for other file formats.
-By subclassing *ImageData* and implementing the required properties (transfer_syntax, image_size, tile_size, and pixel_spacing) and methods (get_tile() and close()) *wsidicom* can be used to access wsi images in other file formats than DICOM. In addition to a ImageData-object, image data, specified in a DICOM dataset, must also be created. For example, assuming a implementation of MyImageData exists that takes a path to a image file as argument and create_dataset() produces a DICOM dataset (see is_wsi_dicom() of WsiDicomDataset for required attributes), Instancees could be created for each pyramidal level, label, or overview:
+By subclassing *WsiImageData* and implementing the required properties (transfer_syntax, image_size, tile_size, and pixel_spacing) and methods (get_tile() and close()) *wsidicom* can be used to access wsi images in other file formats than DICOM. In addition to a WsiImageData-object, image data, specified in a DICOM dataset, must also be created. For example, assuming a implementation of MyWsiImageData exists that takes a path to a image file as argument and create_dataset() produces a DICOM dataset (see is_wsi_dicom() of WsiDicomDataset for required attributes), Images could be created for each pyramidal level, label, or overview:
 ```python
-image_data = MyImageData('path_to_image_file')
+image_data = MyWsiImageData('path_to_image_file')
 dataset = create_dataset()
-instance = Instance(dataset, image_data)
+image = WsiImage(dataset, image_data)
 ```
-The created instances can then be arranged into levels etc, and opened as a WsiDicom-object as described in 'Data structure'.
+The created images can then be arranged into levels etc, and opened as a WsiDicom-object as described in 'Data structure'.
 
 ## Annotation usage
 Annotations are structured in a hierarchy:

@@ -19,9 +19,9 @@ from .graphical_annotations import (Annotation, AnnotationGroup,
                                     PointAnnotationGroup, Polygon,
                                     PolygonAnnotationGroup, Polyline,
                                     PolylineAnnotationGroup)
-from .image_data import ImageData
-from .instance import Instance
-from .series import Labels, Levels, Overviews
+from .image_data import WsiImageData
+from .image import WsiImage
+from .series import WsiLabels, WsiLevels, WsiOverviews
 from .wsidicom import WsiDicom
 
 __version__ = '0.4.0'
