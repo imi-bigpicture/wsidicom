@@ -84,7 +84,7 @@ class WsiInstance:
         )
         if depth is not None:
             depth -= 1
-            if(depth < 0):
+            if depth < 0:
                 return string
         string += (
             ' ImageData ' + self.image_data.pretty_str(indent+1, depth)
@@ -359,7 +359,7 @@ class WsiDicomGroup:
         )
         if depth is not None:
             depth -= 1
-            if(depth < 0):
+            if depth < 0:
                 return string
         string += (
             ' Instances: ' + dict_pretty_str(self.instances, indent, depth)
@@ -552,10 +552,10 @@ class WsiDicomGroup:
                 instance = next(i for i in sorted_instances
                                 if (z in i.focal_planes and
                                     path in i.optical_paths))
-        except StopIteration:
+        except StopIteration as exception:
             raise WsiDicomNotFoundError(
                 f"Instance for path: {path}, z: {z}", "group"
-            )
+            ) from exception
         if z is None:
             z = instance.default_z
         if path is None:
@@ -976,7 +976,7 @@ class WsiDicomLevel(WsiDicomGroup):
         )
         if depth is not None:
             depth -= 1
-            if(depth < 0):
+            if depth < 0:
                 return string
         string += (
             ' Instances: ' + dict_pretty_str(self.instances, indent, depth)

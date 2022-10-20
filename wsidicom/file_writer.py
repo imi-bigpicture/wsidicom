@@ -193,10 +193,10 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         BYTES_PER_ITEM = 8
         eot_length = BYTES_PER_ITEM * number_of_frames
         self._write_tag('ExtendedOffsetTable', 'OV', eot_length)
-        for index in range(number_of_frames):
+        for _ in range(number_of_frames):
             self._write_unsigned_long_long(0)
         self._write_tag('ExtendedOffsetTableLengths', 'OV', eot_length)
-        for index in range(number_of_frames):
+        for _ in range(number_of_frames):
             self._write_unsigned_long_long(0)
         return table_start
 
@@ -217,8 +217,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         tag_lengths = BYTES_PER_ITEM * number_of_frames
         self._fp.write_tag(ItemTag)
         self._fp.write_leUL(tag_lengths)
-        for index in range(number_of_frames):
-
+        for _ in range(number_of_frames):
             self._fp.write_leUL(0)
         return table_start
 
@@ -360,8 +359,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         # Last frame length, end does not include tag and length
         TAG_BYTES = 4
-        LENGHT_BYTES = 4
-        last_frame_start = frame_start + TAG_BYTES + LENGHT_BYTES
+        LENGTH_BYTES = 4
+        last_frame_start = frame_start + TAG_BYTES + LENGTH_BYTES
         last_frame_length = last_frame_end - last_frame_start
         self._write_unsigned_long_long(last_frame_length)
 
@@ -374,7 +373,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         chunk_size: int,
         scale: int = 1,
         image_format: str = 'jpeg',
-        image_options: Dict[str, Any] = {'quality': 95}
+        image_options: Optional[Dict[str, Any]] = None
     ) -> List[int]:
         """Writes pixel data to file.
 
@@ -395,7 +394,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Scale factor (1 = No scaling).
         image_format: str = 'jpeg'
             Image format if scaling.
-        image_options: Dict[str, Any] = {'quality': 95}
+        image_options: Optional[Dict[str, Any]] = None
             Image options if scaling.
 
         Returns
@@ -404,6 +403,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             List of frame position (position of ItemTag), relative to start of
             file.
         """
+        if image_options is None:
+            image_options = {'quality': 95}
         chunked_tile_points = self._chunk_tile_points(
             image_data,
             chunk_size,

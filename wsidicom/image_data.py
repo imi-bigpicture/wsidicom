@@ -862,7 +862,7 @@ class WsiDicomImageData(ImageData):
         z: float,
         path: str
     ) -> Optional[Tuple[DicomFileLike, int, int]]:
-        """Return file pointer, frame position, and frame lenght for tile with
+        """Return file pointer, frame position, and frame length for tile with
         z and path. If frame is inside tile geometry but no tile exists in
         frame data None is returned.
 
@@ -878,7 +878,7 @@ class WsiDicomImageData(ImageData):
         Returns
         ----------
         Optional[Tuple[pydicom.filebase.DicomFileLike, int, int]]:
-            File pointer, frame offset and frame lenght in number of bytes.
+            File pointer, frame offset and frame length in number of bytes.
         """
         frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:

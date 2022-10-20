@@ -278,10 +278,10 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                     )
 
         TAG_BYTES = 4
-        LENGHT_BYTES = 4
+        LENGTH_BYTES = 4
         frame_offsets = []
         for position in positions:  # Positions are from frame data start
-            frame_offsets.append(position + TAG_BYTES + LENGHT_BYTES)
+            frame_offsets.append(position + TAG_BYTES + LENGTH_BYTES)
         frame_lengths = [  # Lengths are disiable with 2
             2*math.ceil(len(frame) / 2) for frame in self.test_data
         ]

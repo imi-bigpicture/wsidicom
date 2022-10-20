@@ -176,7 +176,7 @@ class WsiDicom:
         string = self.__class__.__name__
         if depth is not None:
             depth -= 1
-            if(depth < 0):
+            if depth < 0:
                 return string
         return (
             string + ' of levels:\n'
@@ -211,11 +211,11 @@ class WsiDicom:
             sop_class_uid = cls._get_sop_class_uid(filepath)
             if sop_class_uid == WSI_SOP_CLASS_UID:
                 wsi_file = WsiDicomFile(filepath)
-                if(wsi_file.wsi_type == WsiDicomLevels.WSI_TYPE):
+                if wsi_file.wsi_type == WsiDicomLevels.WSI_TYPE:
                     level_files.append(wsi_file)
-                elif(wsi_file.wsi_type == WsiDicomLabels.WSI_TYPE):
+                elif wsi_file.wsi_type == WsiDicomLabels.WSI_TYPE:
                     label_files.append(wsi_file)
-                elif(wsi_file.wsi_type == WsiDicomOverviews.WSI_TYPE):
+                elif wsi_file.wsi_type == WsiDicomOverviews.WSI_TYPE:
                     overview_files.append(wsi_file)
                 else:
                     wsi_file.close()
@@ -256,8 +256,8 @@ class WsiDicom:
         try:
             label = self.labels[index]
             return label.get_default_full()
-        except IndexError:
-            raise WsiDicomNotFoundError("label", "series")
+        except IndexError as exception:
+            raise WsiDicomNotFoundError("label", "series") from exception
 
     def read_overview(self, index: int = 0) -> Image.Image:
         """Read overview image of the whole slide. If several overview
@@ -276,8 +276,8 @@ class WsiDicom:
         try:
             overview = self.overviews[index]
             return overview.get_default_full()
-        except IndexError:
-            raise WsiDicomNotFoundError("overview", "series")
+        except IndexError as exception:
+            raise WsiDicomNotFoundError("overview", "series") from exception
 
     def read_thumbnail(
         self,
@@ -349,7 +349,7 @@ class WsiDicom:
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
         image = wsi_level.get_region(scaled_region, z, path)
-        if(scale_factor != 1):
+        if scale_factor != 1:
             image = image.resize((size), resample=Image.Resampling.BILINEAR)
         return image
 
@@ -720,8 +720,11 @@ class WsiDicom:
             slide_uids = next(
                 item.uids for item in series if item.uids is not None
             )
-        except StopIteration:
-            raise WsiDicomNotFoundError("Valid series", "in collection")
+        except StopIteration as exception:
+            raise WsiDicomNotFoundError(
+                "Valid series",
+                "in collection"
+            ) from exception
         for item in series:
             if item.uids is not None and item.uids != slide_uids:
                 raise WsiDicomMatchError(str(item), str(self))
