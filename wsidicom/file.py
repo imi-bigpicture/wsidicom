@@ -512,13 +512,13 @@ class WsiDicomFile(WsiDicomFileBase):
             frame: bytes = fp.read(frame_length)
         return frame
 
-    def _validate_pixel_data_start(self, tag: BaseTag):
+    def _validate_pixel_data_start(self, tag: Union[BaseTag, Tuple[int, int]]):
         """Check that pixel data tag is present and that the tag length is
         set as undefined. Raises WsiDicomFileError otherwise.
 
         Parameters
         ----------
-        tag: BaseTag
+        tag: Union[BaseTag, Tuple[int, int]]
             Tag that should be pixel data tag.
         """
         if tag != Tag('PixelData'):

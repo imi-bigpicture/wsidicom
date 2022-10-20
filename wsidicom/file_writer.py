@@ -171,11 +171,11 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         """
         self._fp.write_tag(Tag(tag))
         self._fp.write(bytes(value_representation, "iso8859"))
-        self._fp.write_US(0)
+        self._fp.write_leUS(0)
         if length is not None:
-            self._fp.write_UL(length)
+            self._fp.write_leUL(length)
         else:
-            self._fp.write_UL(0xFFFFFFFF)
+            self._fp.write_leUL(0xFFFFFFFF)
 
     def _reserve_eot(
         self,
@@ -216,10 +216,10 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         BYTES_PER_ITEM = 4
         tag_lengths = BYTES_PER_ITEM * number_of_frames
         self._fp.write_tag(ItemTag)
-        self._fp.write_UL(tag_lengths)
+        self._fp.write_leUL(tag_lengths)
         for index in range(number_of_frames):
 
-            self._fp.write_UL(0)
+            self._fp.write_leUL(0)
         return table_start
 
     def _write_pixel_data_start(
@@ -253,7 +253,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             table_start = self._reserve_bot(number_of_frames)
         else:
             self._fp.write_tag(ItemTag)  # Empty BOT
-            self._fp.write_UL(0)
+            self._fp.write_leUL(0)
 
         pixel_data_start = self._fp.tell()
 
@@ -294,7 +294,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         )
 
         for frame_position in frame_positions:  # Write BOT
-            self._fp.write_UL(frame_position-pixel_data_start)
+            self._fp.write_leUL(frame_position-pixel_data_start)
 
     def _write_unsigned_long_long(
         self,
@@ -504,4 +504,4 @@ class WsiDicomFileWriter(WsiDicomFileBase):
     def _write_pixel_data_end(self) -> None:
         """Writes tags ending pixel data."""
         self._fp.write_tag(SequenceDelimiterTag)
-        self._fp.write_UL(0)
+        self._fp.write_leUL(0)
