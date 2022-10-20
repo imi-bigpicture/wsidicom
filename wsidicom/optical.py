@@ -329,7 +329,7 @@ class Illumination:
         illuminator: Optional[IlluminatorCode] = None
     ):
         if illumination_color is None and illumination_wavelength is None:
-            raise ValueError("Illumination color or wavelenght need to be set")
+            raise ValueError("Illumination color or wavelength need to be set")
         if illumination_method is None:
             illumination_method = []
         self.illumination_method = illumination_method

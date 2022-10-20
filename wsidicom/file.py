@@ -12,44 +12,23 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import io
 import threading
 import warnings
-from abc import ABCMeta, abstractmethod
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
-from copy import deepcopy
-from dataclasses import dataclass
-from datetime import datetime
-from enum import IntEnum, auto
 from pathlib import Path
-from struct import pack, unpack
-from typing import (Any, BinaryIO, Dict, Generator, Iterable, List, Optional,
-                    OrderedDict, Sequence, Set, Tuple, Union, cast)
+from struct import unpack
+from typing import (BinaryIO, Dict, List, Optional,
+                    Sequence, Tuple, Union, cast)
 
-import numpy as np
-from PIL import Image
-from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
-from pydicom.encaps import itemize_frame
 from pydicom.filebase import DicomFile, DicomFileLike
 from pydicom.filereader import read_file_meta_info, read_partial
-from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.misc import is_dicom
-from pydicom.pixel_data_handlers import pillow_handler
-from pydicom.sequence import Sequence as DicomSequence
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
-from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
-from pydicom.valuerep import DSfloat
+from pydicom.uid import UID
 
 from wsidicom.config import settings
-from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
-                             WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
-                             WsiDicomRequirementError,
-                             WsiDicomStrictRequirementError,
-                             WsiDicomUidDuplicateError)
-from wsidicom.geometry import (Orientation, Point, PointMm, Region, RegionMm,
-                               Size, SizeMm)
-from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
+from wsidicom.errors import (WsiDicomFileError)
+from wsidicom.geometry import (Size)
+from wsidicom.uid import FileUids, SlideUids
 from wsidicom.dataset import WsiDataset
 
 
@@ -259,7 +238,7 @@ class WsiDicomFile(WsiDicomFileBase):
         self,
         frame_index: int
     ) -> Tuple[DicomFileLike, int, int]:
-        """Return file pointer, frame position, and frame lenght for frame
+        """Return file pointer, frame position, and frame length for frame
         number.
 
         Parameters
@@ -270,7 +249,7 @@ class WsiDicomFile(WsiDicomFileBase):
         Returns
         ----------
         Tuple[DicomFileLike, int, int]:
-            File pointer, frame offset and frame lenght in number of bytes
+            File pointer, frame offset and frame length in number of bytes
         """
         frame_index -= self.frame_offset
         frame_position, frame_length = self.frame_positions[frame_index]
@@ -420,7 +399,7 @@ class WsiDicomFile(WsiDicomFileBase):
             raise ValueError("table type should be 'bot' or 'eot'")
         table_length = len(table)
         TAG_BYTES = 4
-        LENGHT_BYTES = 4
+        LENGTH_BYTES = 4
         positions: List[Tuple[int, int]] = []
         # Read through table to get offset and length for all but last item
         # All read offsets are for item tag of frame and relative to first
@@ -430,7 +409,7 @@ class WsiDicomFile(WsiDicomFileBase):
             raise ValueError("First item in table should be at offset 0")
         for index in range(bytes_per_item, table_length, bytes_per_item):
             next_offset = unpack(mode, table[index:index+bytes_per_item])[0]
-            offset = this_offset + TAG_BYTES + LENGHT_BYTES
+            offset = this_offset + TAG_BYTES + LENGTH_BYTES
             length = next_offset - offset
             if length == 0 or length % 2:
                 raise WsiDicomFileError(self.filepath, 'Invalid frame length')
@@ -447,7 +426,7 @@ class WsiDicomFile(WsiDicomFileBase):
         length: int = self._fp.read_UL()
         if length == 0 or length % 2:
             raise WsiDicomFileError(self.filepath, 'Invalid frame length')
-        offset = this_offset+TAG_BYTES+LENGHT_BYTES
+        offset = this_offset+TAG_BYTES+LENGTH_BYTES
         positions.append((pixels_start+offset, length))
 
         return positions
@@ -458,9 +437,9 @@ class WsiDicomFile(WsiDicomFileBase):
         BOT.
         Each frame contains:
         item tag (4 bytes)
-        item lenght (4 bytes)
+        item length (4 bytes)
         item data (item length)
-        The position of item data and the item lenght is stored.
+        The position of item data and the item length is stored.
 
         Returns
         ----------
@@ -468,16 +447,16 @@ class WsiDicomFile(WsiDicomFileBase):
             A list with frame positions and frame lengths
         """
         TAG_BYTES = 4
-        LENGHT_BYTES = 4
+        LENGTH_BYTES = 4
         positions: List[Tuple[int, int]] = []
         frame_position = self._fp.tell()
         # Read items until sequence delimiter
-        while(self._fp.read_tag() == ItemTag):
+        while self._fp.read_tag() == ItemTag:
             # Read item length
             length: int = self._fp.read_UL()
             if length == 0 or length % 2:
                 raise WsiDicomFileError(self.filepath, 'Invalid frame length')
-            positions.append((frame_position+TAG_BYTES+LENGHT_BYTES, length))
+            positions.append((frame_position+TAG_BYTES+LENGTH_BYTES, length))
             # Jump to end of frame
             self._fp.seek(length, 1)
             frame_position = self._fp.tell()
@@ -490,7 +469,7 @@ class WsiDicomFile(WsiDicomFileBase):
         """
         TAG_BYTES = 4
         self._fp.seek(-TAG_BYTES, 1)
-        if(self._fp.read_tag() != SequenceDelimiterTag):
+        if self._fp.read_tag() != SequenceDelimiterTag:
             raise WsiDicomFileError(self.filepath, 'No sequence delimeter tag')
 
     def read_frame(self, frame_index: int) -> bytes:
@@ -543,7 +522,7 @@ class WsiDicomFile(WsiDicomFileBase):
         Returns
         ----------
         Tuple[List[Tuple[int, int]], Optional[str]]
-            List of frame positions and lenghts, and table type.
+            List of frame positions and lengths, and table type.
         """
         table = None
         table_type = 'bot'
@@ -575,7 +554,7 @@ class WsiDicomFile(WsiDicomFileBase):
                 self._fp.tell()
             )
 
-        if(self.frame_count != len(frame_positions)):
+        if self.frame_count != len(frame_positions):
             raise WsiDicomFileError(
                 self.filepath,
                 (

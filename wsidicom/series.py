@@ -393,10 +393,10 @@ class WsiDicomLevels(WsiDicomSeries):
         """
         try:
             return self._levels[level]
-        except KeyError:
+        except KeyError as exception:
             raise WsiDicomNotFoundError(
                 f"Level of {level}", "level series"
-            )
+            ) from exception
 
     def get_closest_by_level(self, level: int) -> WsiDicomLevel:
         """Search for level that is closest to and smaller than the given
