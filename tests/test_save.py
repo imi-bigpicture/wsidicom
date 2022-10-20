@@ -33,7 +33,9 @@ from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 from wsidicom import WsiDicom
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.instance import ImageData, WsiDicomFile, WsiDicomFileWriter
+from wsidicom.image_data import ImageData
+from wsidicom.file import WsiDicomFile
+from wsidicom.file_writer import WsiDicomFileWriter
 from wsidicom.uid import WSI_SOP_CLASS_UID
 from wsidicom.wsidicom import WsiDicomLevel
 
