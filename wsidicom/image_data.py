@@ -13,45 +13,25 @@
 #    limitations under the License.
 
 import io
-import threading
 import warnings
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
-from copy import deepcopy
-from dataclasses import dataclass
-from datetime import datetime
-from enum import IntEnum, auto
 from pathlib import Path
-from struct import pack, unpack
-from typing import (Any, BinaryIO, Dict, Generator, Iterable, List, Optional,
-                    OrderedDict, Sequence, Set, Tuple, Union, cast)
+from typing import (Any, Dict, Iterable, List, Optional, OrderedDict, Sequence,
+                    Set, Tuple, Union)
 
 import numpy as np
 from PIL import Image
-from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
-from pydicom.encaps import itemize_frame
-from pydicom.filebase import DicomFile, DicomFileLike
-from pydicom.filereader import read_file_meta_info, read_partial
-from pydicom.filewriter import write_dataset, write_file_meta_info
-from pydicom.misc import is_dicom
-from pydicom.pixel_data_handlers import pillow_handler
+from pydicom.dataset import Dataset
+from pydicom.filebase import DicomFileLike
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
-from pydicom.valuerep import DSfloat
 
-from wsidicom.config import settings
-from wsidicom.errors import (WsiDicomError, WsiDicomFileError,
-                             WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
-                             WsiDicomRequirementError,
-                             WsiDicomStrictRequirementError,
-                             WsiDicomUidDuplicateError)
+from wsidicom.dataset import WsiDataset
+from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.file import WsiDicomFile
 from wsidicom.geometry import (Orientation, Point, PointMm, Region, RegionMm,
                                Size, SizeMm)
-from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
-from wsidicom.dataset import WsiDataset
+
 
 class ImageOrigin:
     def __init__(
