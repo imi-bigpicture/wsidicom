@@ -100,7 +100,7 @@ class WsiDicomTestImageData(ImageData):
         z: float,
         path: str
     ) -> Image.Image:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         return self._data[tile.x + tile.y * self.tiled_size.width]

@@ -931,8 +931,6 @@ class WsiDicomGroup:
         )
 
 
-
-
 class WsiDicomLevel(WsiDicomGroup):
     """Represents a level in the pyramid and contains one or more instances
     having the same pyramid level index, pixel spacing, and size but possibly
@@ -1230,7 +1228,6 @@ class WsiDicomLevel(WsiDicomGroup):
                 tiled_size,
                 scale
             )
-
 
             with WsiDicomFileWriter(filepath) as wsi_file:
                 wsi_file.write(

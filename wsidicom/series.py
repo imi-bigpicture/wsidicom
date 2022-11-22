@@ -125,7 +125,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
     @classmethod
     @abstractmethod
     def open(cls, instances: Sequence[WsiInstance]) -> 'WsiDicomSeries':
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def _validate_series(
             self,

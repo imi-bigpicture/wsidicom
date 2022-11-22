@@ -229,7 +229,7 @@ class OpticalFilter(metaclass=ABCMeta):
     @classmethod
     @abstractmethod
     def from_ds(cls, ds: Dataset) -> 'OpticalFilter':
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
         """Codes and insert object into dataset.
