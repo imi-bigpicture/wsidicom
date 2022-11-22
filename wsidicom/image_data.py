@@ -82,8 +82,6 @@ class ImageOrigin:
         return self._orientation.apply(region)
 
 
-
-
 class ImageData(metaclass=ABCMeta):
     """Generic class for image data that can be inherited to implement support
     for other image/file formats. Subclasses should implement properties to get
@@ -192,7 +190,7 @@ class ImageData(metaclass=ABCMeta):
             return 'L'
         elif(self.samples_per_pixel == 3):
             return 'RGB'
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     def blank_color(self) -> Tuple[int, int, int]:
@@ -1031,7 +1029,7 @@ class TileIndex(metaclass=ABCMeta):
     @abstractmethod
     def focal_planes(self) -> List[float]:
         """Return list of focal planes in index."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @property
     def image_size(self) -> Size:
@@ -1069,7 +1067,7 @@ class TileIndex(metaclass=ABCMeta):
     @abstractmethod
     def get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """Abstract method for getting the frame index for a tile"""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @staticmethod
     def _read_frame_count_from_datasets(
