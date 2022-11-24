@@ -189,7 +189,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(100, 100)
         )
-        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
@@ -197,7 +197,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(1024, 1024)
         )
-        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
@@ -205,7 +205,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(300, 400),
             size=Size(500, 500)
         )
-        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 

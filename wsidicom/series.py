@@ -360,7 +360,7 @@ class WsiDicomLevels(WsiDicomSeries):
 
     @property
     def image_origin(self) -> ImageOrigin:
-        return self.base_level.default_instance.image_origin
+        return self.base_level.image_origin
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level
