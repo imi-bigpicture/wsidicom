@@ -226,7 +226,7 @@ class WsiDicomFileTests(unittest.TestCase):
 
     def test_parse_bot_table(self):
         TAG_BYTES = 4
-        LENGHT_BYTES = 4
+        LENGTH_BYTES = 4
         for test_file, setting in self.opened_files.items():
             test_file._fp.seek(test_file._pixel_data_position)
             tag = test_file._fp.read_tag()
@@ -245,7 +245,7 @@ class WsiDicomFileTests(unittest.TestCase):
                 [
                     (
                         (
-                            first_frame_item + TAG_BYTES + LENGHT_BYTES
+                            first_frame_item + TAG_BYTES + LENGTH_BYTES
                         ),
                         math.ceil(len(TESTFRAME) / 2) * 2
                     )
@@ -254,7 +254,7 @@ class WsiDicomFileTests(unittest.TestCase):
 
     def test_read_positions_from_pixeldata(self):
         TAG_BYTES = 4
-        LENGHT_BYTES = 4
+        LENGTH_BYTES = 4
         for test_file, setting in self.opened_files.items():
             test_file._fp.seek(test_file._pixel_data_position)
             tag = test_file._fp.read_tag()
@@ -267,7 +267,7 @@ class WsiDicomFileTests(unittest.TestCase):
                 [
                     (
                         (
-                            first_frame_item + TAG_BYTES + LENGHT_BYTES
+                            first_frame_item + TAG_BYTES + LENGTH_BYTES
                         ),
                         len(self.padded_test_frame)
                     )

@@ -136,7 +136,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
                 'Polygon',
                 [group.annotations[0].geometry.to_list_coords()]
             )
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def test_qupath_geojson(self):
         files = self.test_files['qupath_geojson']
@@ -281,12 +281,12 @@ class WsiDicomAnnotationTests(unittest.TestCase):
             raise NotImplementedError(group)
         group_coordinates = [
             OrderedDict({
-                            '@Order': str(
-                                point_index +
-                                annotation_index * increase_order_by_annotation
-                            ),
-                            '@X': str(item[0]),
-                            '@Y': str(item[1])
+                '@Order': str(
+                    point_index +
+                    annotation_index * increase_order_by_annotation
+                ),
+                '@X': str(item[0]),
+                '@Y': str(item[1])
             })
             for annotation_index, annotation in enumerate(group.annotations)
             for point_index, item in enumerate(annotation.geometry.to_coords())
@@ -347,7 +347,7 @@ class WsiDicomAnnotationTests(unittest.TestCase):
         elif(type(annotation.geometry) == Polygon):
             geometry_type = 'Area'
         else:
-            raise NotImplementedError
+            raise NotImplementedError()
         group_coordinates = [
             {'x': float(item[0]), 'y': float(item[1])}
             for item in annotation.geometry.to_coords()

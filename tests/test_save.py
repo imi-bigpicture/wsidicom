@@ -33,7 +33,9 @@ from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 from wsidicom import WsiDicom
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.instance import ImageData, WsiDicomFile, WsiDicomFileWriter
+from wsidicom.image_data import ImageData, ImageOrigin
+from wsidicom.file import WsiDicomFile
+from wsidicom.file_writer import WsiDicomFileWriter
 from wsidicom.uid import WSI_SOP_CLASS_UID
 from wsidicom.wsidicom import WsiDicomLevel
 
@@ -91,6 +93,10 @@ class WsiDicomTestImageData(ImageData):
     def photometric_interpretation(self) -> str:
         return 'YBR'
 
+    @property
+    def image_origin(self) -> ImageOrigin:
+        return ImageOrigin()
+
     def _get_decoded_tile(
         self,
         tile_point:
@@ -98,7 +104,7 @@ class WsiDicomTestImageData(ImageData):
         z: float,
         path: str
     ) -> Image.Image:
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         return self._data[tile.x + tile.y * self.tiled_size.width]
@@ -276,10 +282,10 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                     )
 
         TAG_BYTES = 4
-        LENGHT_BYTES = 4
+        LENGTH_BYTES = 4
         frame_offsets = []
         for position in positions:  # Positions are from frame data start
-            frame_offsets.append(position + TAG_BYTES + LENGHT_BYTES)
+            frame_offsets.append(position + TAG_BYTES + LENGTH_BYTES)
         frame_lengths = [  # Lengths are disiable with 2
             2*math.ceil(len(frame) / 2) for frame in self.test_data
         ]
