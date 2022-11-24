@@ -80,7 +80,6 @@ class WsiInstance:
         string = (
             f"default z: {self.default_z} "
             f"default path: { self.default_path}"
-
         )
         if depth is not None:
             depth -= 1
@@ -201,7 +200,7 @@ class WsiInstance:
 
     @property
     def image_origin(self) -> ImageOrigin:
-        return self.dataset.image_origin
+        return self.image_data.image_origin
 
     @classmethod
     def open(

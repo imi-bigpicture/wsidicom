@@ -22,7 +22,6 @@ from typing import (Any, Dict, Iterable, List, Optional, OrderedDict, Sequence,
 import numpy as np
 from PIL import Image
 from pydicom.dataset import Dataset
-from pydicom.filebase import DicomFileLike
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
 
@@ -36,11 +35,23 @@ from wsidicom.geometry import (Orientation, Point, PointMm, Region, RegionMm,
 class ImageOrigin:
     def __init__(
         self,
-        origin: PointMm,
-        orientation: Orientation
+        origin: Optional[PointMm] = None,
+        orientation: Optional[Orientation] = None
     ):
+        if origin is None:
+            origin = PointMm(0, 0)
+        if orientation is None:
+            orientation = Orientation([0, 1, 0, 1, 0, 0])
         self._origin = origin
         self._orientation = orientation
+
+    @property
+    def origin(self) -> PointMm:
+        return self._origin
+
+    @property
+    def orientation(self) -> Orientation:
+        return self._orientation
 
     @classmethod
     def from_dataset(
@@ -59,7 +70,7 @@ class ImageOrigin:
                 "Using default image origin as TotalPixelMatrixOriginSequence "
                 "not set in file"
             )
-            origin = PointMm(0, 0)
+            origin = None
         try:
             orientation = Orientation(dataset.ImageOrientationSlide)
         except AttributeError:
@@ -67,7 +78,7 @@ class ImageOrigin:
                 "Using default image orientation as ImageOrientationSlide "
                 "not set in file"
             )
-            orientation = Orientation([0, 1, 0, 1, 0, 0])
+            orientation = None
         return cls(origin, orientation)
 
     @property
@@ -134,6 +145,12 @@ class ImageData(metaclass=ABCMeta):
     def photometric_interpretation(self) -> str:
         """Should return the photophotometric interpretation of the image
         data."""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def image_origin(self) -> ImageOrigin:
+        """Should return the image origin of the image data."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -571,7 +588,7 @@ class ImageData(metaclass=ABCMeta):
             mode=self.image_mode,  # type: ignore
             size=region.size.to_tuple()
         )
-        stitching_tiles = self.get_tile_range(region, z, path)
+        stitching_tiles = self._get_tile_range(region, z, path)
 
         write_index = Point(x=0, y=0)
         tile = stitching_tiles.position
@@ -585,7 +602,7 @@ class ImageData(metaclass=ABCMeta):
             )
         return image
 
-    def get_tile_range(
+    def _get_tile_range(
         self,
         pixel_region: Region,
         z: float,
@@ -765,6 +782,7 @@ class WsiDicomImageData(ImageData):
             datasets[0].photometric_interpretation
         )
         self._samples_per_pixel = datasets[0].samples_per_pixel
+        self._image_origin = ImageOrigin.from_dataset(datasets[0])
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._files.values()})"
@@ -816,6 +834,10 @@ class WsiDicomImageData(ImageData):
         """Return samples per pixel (1 or 3)."""
         return self._samples_per_pixel
 
+    @property
+    def image_origin(self) -> ImageOrigin:
+        return self._image_origin
+
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:
@@ -833,36 +855,6 @@ class WsiDicomImageData(ImageData):
             return self.blank_tile
         frame = self._get_tile_frame(frame_index)
         return Image.open(io.BytesIO(frame))
-
-    def get_filepointer(
-        self,
-        tile: Point,
-        z: float,
-        path: str
-    ) -> Optional[Tuple[DicomFileLike, int, int]]:
-        """Return file pointer, frame position, and frame length for tile with
-        z and path. If frame is inside tile geometry but no tile exists in
-        frame data None is returned.
-
-        Parameters
-        ----------
-        tile: Point
-            Tile coordinate to get.
-        z: float
-            z coordinate to get tile for.
-        path: str
-            Optical path to get tile for.
-
-        Returns
-        ----------
-        Optional[Tuple[pydicom.filebase.DicomFileLike, int, int]]:
-            File pointer, frame offset and frame length in number of bytes.
-        """
-        frame_index = self._get_frame_index(tile, z, path)
-        if frame_index == -1:
-            return None
-        file = self._get_file(frame_index)
-        return file.get_filepointer(frame_index)
 
     def _get_file(self, frame_index: int) -> WsiDicomFile:
         """Return file contaning frame index. Raises WsiDicomNotFoundError if

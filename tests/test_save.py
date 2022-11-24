@@ -33,7 +33,7 @@ from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 from wsidicom import WsiDicom
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.image_data import ImageData
+from wsidicom.image_data import ImageData, ImageOrigin
 from wsidicom.file import WsiDicomFile
 from wsidicom.file_writer import WsiDicomFileWriter
 from wsidicom.uid import WSI_SOP_CLASS_UID
@@ -92,6 +92,10 @@ class WsiDicomTestImageData(ImageData):
     @property
     def photometric_interpretation(self) -> str:
         return 'YBR'
+
+    @property
+    def image_origin(self) -> ImageOrigin:
+        return ImageOrigin()
 
     def _get_decoded_tile(
         self,
