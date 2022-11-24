@@ -1537,7 +1537,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
     @property
     def point_index_list(self) -> np.ndarray:
         """Return point index list for annotations in group. Indices are stored
-        starting at index 1 and in relation to geometry data lenght.
+        starting at index 1 and in relation to geometry data length.
 
         Returns
         ----------

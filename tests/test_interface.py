@@ -25,7 +25,7 @@ from wsidicom.conceptcode import (CidConceptCode, IlluminationCode,
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom import WsiDicom
-from wsidicom.instance import WsiDicomImageData
+from wsidicom.image_data import WsiDicomImageData
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 from .data_gen import create_layer_file, create_main_dataset
@@ -189,7 +189,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(100, 100)
         )
-        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
@@ -197,7 +197,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(0, 0),
             size=Size(1024, 1024)
         )
-        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 
@@ -205,7 +205,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             position=Point(300, 400),
             size=Size(500, 500)
         )
-        get_tiles = instance.image_data.get_tile_range(region, 0, '0')
+        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
         expected = Region(Point(0, 0), Size(0, 0))
         self.assertEqual(get_tiles, expected)
 

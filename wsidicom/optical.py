@@ -229,7 +229,7 @@ class OpticalFilter(metaclass=ABCMeta):
     @classmethod
     @abstractmethod
     def from_ds(cls, ds: Dataset) -> 'OpticalFilter':
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
         """Codes and insert object into dataset.
@@ -329,7 +329,7 @@ class Illumination:
         illuminator: Optional[IlluminatorCode] = None
     ):
         if illumination_color is None and illumination_wavelength is None:
-            raise ValueError("Illumination color or wavelenght need to be set")
+            raise ValueError("Illumination color or wavelength need to be set")
         if illumination_method is None:
             illumination_method = []
         self.illumination_method = illumination_method
