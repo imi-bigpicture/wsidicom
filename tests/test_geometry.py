@@ -15,8 +15,10 @@
 import unittest
 
 import pytest
+from parameterized import parameterized
 
-from wsidicom.geometry import Orientation, Point, PointMm, Region, RegionMm, Size, SizeMm
+from wsidicom.geometry import (Orientation, Point, PointMm, Region, RegionMm,
+                               Size, SizeMm)
 from wsidicom.instance import ImageOrgin
 
 
@@ -91,70 +93,78 @@ class WsiDicomGeomtryTests(unittest.TestCase):
             PointMm(5.0, 8.0)
         )
 
-    def test_region_mm_to_other_origin_1(self):
-        region = RegionMm(PointMm(2.0, 4.0), SizeMm(1.0, 2.0))
-        # Image x along slide y, Image y along slide x
-        origin = ImageOrgin(
-            PointMm(1.0, 2.0),
-            Orientation([0, 1, 0, 1, 0, 0])
-        )
-        region = origin.transform_region(region)
-        self.assertEqual(
-            region.start,
-            PointMm(2.0, 1.0)
-        )
-        self.assertEqual(
-            region.end,
+
+    @parameterized.expand([
+        (   # Image x along slide y, Image y along slide x
+            RegionMm(PointMm(2.0, 4.0), SizeMm(1.0, 2.0)),
+            ImageOrgin(PointMm(1.0, 2.0),  Orientation([0, 1, 0, 1, 0, 0])),
+            PointMm(2.0, 1.0),
             PointMm(4.0, 2.0)
-        )
-
-    def test_region_mm_to_other_origin_2(self):
-        region = RegionMm(PointMm(1.0, 4.0), SizeMm(2.0, 1.0))
-        # Image x reversed to slide y, Image y reversed to slide x
-        origin = ImageOrgin(
-            PointMm(4.0, 8.0),
-            Orientation([0, -1, 0, -1, 0, 0])
-        )
-        region = origin.transform_region(region)
-        self.assertEqual(
-            region.start,
-            PointMm(3.0, 1.0)
-        )
-        self.assertEqual(
-            region.end,
+        ),
+        (   # Image x reversed to slide y, Image y reversed to slide x
+            RegionMm(PointMm(1.0, 4.0), SizeMm(2.0, 1.0)),
+            ImageOrgin(PointMm(4.0, 8.0), Orientation([0, -1, 0, -1, 0, 0])),
+            PointMm(3.0, 1.0),
             PointMm(4.0, 3.0)
-        )
-
-    def test_region_mm_to_other_origin_3(self):
-        region = RegionMm(PointMm(2.0, 5.0), SizeMm(2.0, 1.0))
-        # Image x along slide x, Image y reversed to slide y
-        origin = ImageOrgin(
-            PointMm(1.0, 8.0),
-            Orientation([1, 0, 0, 0, -1, 0])
-        )
-        region = origin.transform_region(region)
-        self.assertEqual(
-            region.start,
-            PointMm(1.0, 2.0)
-        )
-        self.assertEqual(
-            region.end,
+        ),
+        (   # Image x along slide x, Image y reversed to slide y
+            RegionMm(PointMm(2.0, 5.0), SizeMm(2.0, 1.0)),
+            ImageOrgin(PointMm(1.0, 8.0),  Orientation([1, 0, 0, 0, -1, 0])),
+            PointMm(1.0, 2.0),
             PointMm(3.0, 3.0)
-        )
-
-    def test_region_mm_to_other_origin_4(self):
-        region = RegionMm(PointMm(2.0, 3.0), SizeMm(2.0, 3.0))
-        # Image x reversed to slide x, Image y along slide y
-        origin = ImageOrgin(
-            PointMm(5.0, 2.0),
-            Orientation([-1, 0, 0, 0, 1, 0])
-        )
-        region = origin.transform_region(region)
-        self.assertEqual(
-            region.start,
-            PointMm(1.0, 1.0)
-        )
-        self.assertEqual(
-            region.end,
+        ),
+        (   # Image x reversed to slide x, Image y along slide y
+            RegionMm(PointMm(2.0, 3.0), SizeMm(2.0, 3.0)),
+            ImageOrgin(PointMm(5.0, 2.0), Orientation([-1, 0, 0, 0, 1, 0])),
+            PointMm(1.0, 1.0),
             PointMm(3.0, 4.0)
         )
+    ])
+    def test_region_mm_to_other_origin(
+        self,
+        region: RegionMm,
+        origin: ImageOrgin,
+        expected_start: PointMm,
+        expected_end: PointMm
+    ):
+        transformed_region = origin.transform_region(region)
+        self.assertEqual(transformed_region.start, expected_start)
+        self.assertEqual(transformed_region.end, expected_end)
+
+    @parameterized.expand([
+        (Region(Point(3, 4), Size(6, 4)), Point(9, 10), 2.0),
+        (Region(Point(9, 10), Size(6, 4)), Point(3, 4), 0.5),
+        (Region(Point(3, 4), Size(6, 4)), Point(15, 16), 3.0),
+        (Region(Point(4, 7), Size(2, 6)), Point(9, 17), 2.0),
+        (Region(Point(9, 17), Size(2, 6)), Point(4, 7), 0.5),
+        (Region(Point(4, 7), Size(2, 6)), Point(14, 27), 3.0),
+    ])
+    def test_region_zoom(
+        self,
+        region: Region,
+        expected_start: Point,
+        zoom: float
+    ):
+        zoomed_region = region.zoom(zoom)
+
+        self.assertEqual(zoomed_region.start, expected_start)
+        self.assertEqual(zoomed_region.size, region.size)
+
+    @parameterized.expand([
+        (RegionMm(PointMm(3, 4), SizeMm(6, 4)), PointMm(9, 10), 2.0),
+        (RegionMm(PointMm(9, 10), SizeMm(6, 4)), PointMm(3, 4), 0.5),
+        (RegionMm(PointMm(3, 4), SizeMm(6, 4)), PointMm(15, 16), 3.0),
+        (RegionMm(PointMm(4, 7), SizeMm(2, 6)), PointMm(9, 17), 2.0),
+        (RegionMm(PointMm(9, 17), SizeMm(2, 6)), PointMm(4, 7), 0.5),
+        (RegionMm(PointMm(4, 7), SizeMm(2, 6)), PointMm(14, 27), 3.0),
+    ])
+    def test_region_mm_zoom(
+        self,
+        region: RegionMm,
+        expected_start: PointMm,
+        zoom: float
+    ):
+        zoomed_region = region.zoom(zoom)
+
+        self.assertEqual(zoomed_region.start, expected_start)
+        self.assertEqual(zoomed_region.size, region.size)

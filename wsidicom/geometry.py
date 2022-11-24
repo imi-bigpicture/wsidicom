@@ -73,6 +73,14 @@ class PointMm:
     x: float
     y: float
 
+    def __mul__(
+        self,
+        factor: Union[int, float]
+    ) -> 'PointMm':
+        if isinstance(factor, (int, float)):
+            return PointMm(factor*self.x, factor*self.y)
+        return NotImplemented
+
     def __truediv__(
         self,
         divider: Union[int, float, 'PointMm', 'SizeMm']
@@ -452,6 +460,23 @@ class Region:
         )
         return cropped_tile_region
 
+    def zoom(self, zoom: float) -> 'Region':
+        """Return center-zoomed region.
+
+        Parameters
+        ----------
+        zoom: float
+            The zoom level.
+
+        Returns
+        ----------
+        Region
+            Zoomed region.
+        """
+        center = self.start + self.size // 2
+        new_center = center * zoom
+        new_start = (new_center - self.size // 2)
+        return Region(new_start, self.size)
 
 @dataclass
 class RegionMm:
@@ -486,6 +511,24 @@ class RegionMm:
         if isinstance(value, PointMm):
             return RegionMm(self.position - value, self.size)
         return NotImplemented
+
+    def zoom(self, zoom: float) -> 'RegionMm':
+        """Return center-zoomed region.
+
+        Parameters
+        ----------
+        zoom: float
+            The zoom level.
+
+        Returns
+        ----------
+        RegionMm
+            Zoomed region.
+        """
+        center = self.start + self.size / 2
+        new_center = center * zoom
+        new_start = (new_center - self.size / 2)
+        return RegionMm(new_start, self.size)
 
 
 class Orientation:
