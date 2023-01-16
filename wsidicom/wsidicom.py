@@ -221,6 +221,8 @@ class WsiDicom:
                     wsi_file.close()
             elif sop_class_uid == ANN_SOP_CLASS_UID:
                 annotation_files.append(filepath)
+        if len(level_files) == 0:
+            raise WsiDicomNotFoundError("Level files", str(path))
         base_dataset = cls._get_base_dataset(level_files)
         slide_uids = base_dataset.uids.slide
         base_tile_size = base_dataset.tile_size

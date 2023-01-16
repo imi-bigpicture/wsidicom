@@ -211,8 +211,6 @@ WSI_ATTRIBUTES = {
 }
 
 
-
-
 class WsiDataset(Dataset):
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
     parsers for attributes specific for WSI. Use snake case to avoid name
