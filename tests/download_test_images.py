@@ -77,8 +77,13 @@ def download_file(ftp: FTP, file: str, filename: Path):
                 ftp.retrbinary(f'RETR {file}', fp.write)
                 break
         except ConnectionResetError:
+            delay = RETRY_SLEEP * 2 ** retry
+            print(
+                f"Connection was reset, retry {retry + 1} of {RETRIES}, "
+                f"sleep for {delay} s."
+            )
             os.remove(filename)
-            sleep(RETRY_SLEEP * 2 ** retry)
+            sleep(delay)
 
 
 def get_slide_dir() -> Path:
