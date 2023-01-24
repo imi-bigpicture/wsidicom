@@ -16,11 +16,14 @@ import os
 from pathlib import Path
 from hashlib import md5
 from ftplib import FTP
+from time import sleep
 from typing import Any, Dict
 
 
 FILESERVER = 'medical.nema.org'
 FILESERVER_SLIDE_PATH = Path('MEDICAL/Dicom/DataSets/WG26')
+RETRIES = 5
+RETRY_SLEEP = 10
 
 SLIDES: Dict[str, Dict[str, Any]] = {
     'FULL_WITH_BOT': {
@@ -68,8 +71,14 @@ def cwd_to_folder(ftp, folder: Path):
 
 
 def download_file(ftp: FTP, file: str, filename: Path):
-    with open(filename, 'wb') as fp:
-        ftp.retrbinary(f'RETR {file}', fp.write)
+    for retry in range(RETRIES):
+        try:
+            with open(filename, 'wb') as fp:
+                ftp.retrbinary(f'RETR {file}', fp.write)
+                break
+        except ConnectionResetError:
+            os.remove(filename)
+            sleep(RETRY_SLEEP * 2 ** retry)
 
 
 def get_slide_dir() -> Path:
