@@ -69,6 +69,7 @@ def cwd_to_folder(ftp, folder: Path):
 
 def download_file(ftp: FTP, file: str, filename: Path):
     with open(filename, 'wb') as fp:
+        ftp.set_pasv(False)
         ftp.retrbinary(f'RETR {file}', fp.write)
 
 
