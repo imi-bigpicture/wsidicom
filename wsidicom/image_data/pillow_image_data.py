@@ -24,7 +24,7 @@ from wsidicom.image_data import ImageData, ImageOrigin
 
 class PillowImageData(ImageData):
     def __init__(self, image: Image.Image):
-        self._image = image
+        self._image = image.convert('RGB')
 
     @classmethod
     def from_file(cls, file: Union[str, Path]) -> 'PillowImageData':
@@ -56,15 +56,11 @@ class PillowImageData(ImageData):
 
     @property
     def samples_per_pixel(self) -> int:
-        return len(self._image.getbands())
+        return 3
 
     @property
     def photometric_interpretation(self) -> str:
-        if self.samples_per_pixel == 1:
-            return 'MONOCHROME2'
-        elif self.samples_per_pixel == 3:
-            return 'YBR_FULL_422'
-        raise ValueError()
+        return 'YBR_FULL_422'
 
     @property
     def image_origin(self) -> ImageOrigin:

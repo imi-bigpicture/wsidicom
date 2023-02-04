@@ -271,7 +271,6 @@ class WsiDataset(Dataset):
         self._tile_size = Size(self.Columns, self.Rows)
         self._samples_per_pixel = self.SamplesPerPixel
         self._photometric_interpretation = self.PhotometricInterpretation
-        self._instance_number = self.InstanceNumber
         self._optical_path_sequence = self._get_dicom_attribute(
             'OpticalPathSequence'
         )
@@ -442,11 +441,6 @@ class WsiDataset(Dataset):
     def photometric_interpretation(self) -> str:
         """Return photometric interpretation."""
         return self._photometric_interpretation
-
-    @property
-    def instance_number(self) -> str:
-        """Return instance number."""
-        return self._instance_number
 
     @property
     def optical_path_sequence(self) -> Optional[DicomSequence]:

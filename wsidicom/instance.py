@@ -24,8 +24,9 @@ from pydicom import Dataset
 from pydicom.uid import UID
 
 from wsidicom.dataset import ImageType, WsiDataset
-from wsidicom.errors import (WsiDicomError, WsiDicomMatchError, WsiDicomNoResultionError,
-                             WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
+from wsidicom.errors import (WsiDicomError, WsiDicomMatchError,
+                             WsiDicomNoResultionError, WsiDicomNotFoundError,
+                             WsiDicomOutOfBoundsError,
                              WsiDicomUidDuplicateError)
 from wsidicom.file import WsiDicomFile, WsiDicomFileWriter
 from wsidicom.geometry import Point, Region, RegionMm, Size, SizeMm
@@ -172,10 +173,6 @@ class WsiInstance:
         """Return identifier (instance uid for single file instance or
         concatenation uid for multiple file instance)."""
         return self._identifier
-
-    @property
-    def instance_number(self) -> int:
-        return int(self.dataset.instance_number)
 
     @property
     def default_z(self) -> float:
