@@ -1,4 +1,4 @@
-#    Copyright 2021, 2022 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.dataset import WsiDataset
+from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.file import WsiDicomFile
@@ -186,7 +186,8 @@ class WsiDicom:
     @classmethod
     def open(
         cls,
-        path: Union[str, Sequence[str], Path, Sequence[Path]]
+        path: Union[str, Sequence[str], Path, Sequence[Path]],
+        label: Optional[Union[Image.Image, str, Path]] = None
     ) -> 'WsiDicom':
         """Open valid wsi dicom files in path and return a WsiDicom object.
         Non-valid files are ignored.
@@ -211,11 +212,11 @@ class WsiDicom:
             sop_class_uid = cls._get_sop_class_uid(filepath)
             if sop_class_uid == WSI_SOP_CLASS_UID:
                 wsi_file = WsiDicomFile(filepath)
-                if wsi_file.wsi_type == WsiDicomLevels.WSI_TYPE:
+                if wsi_file.image_type == ImageType.VOLUME:
                     level_files.append(wsi_file)
-                elif wsi_file.wsi_type == WsiDicomLabels.WSI_TYPE:
+                elif wsi_file.image_type == ImageType.LABEL:
                     label_files.append(wsi_file)
-                elif wsi_file.wsi_type == WsiDicomOverviews.WSI_TYPE:
+                elif wsi_file.image_type == ImageType.OVERVIEW:
                     overview_files.append(wsi_file)
                 else:
                     wsi_file.close()
@@ -231,9 +232,16 @@ class WsiDicom:
             slide_uids,
             base_tile_size
         )
-        label_instances = WsiInstance.open(label_files, slide_uids)
-        overview_instances = WsiInstance.open(overview_files, slide_uids)
 
+        overview_instances = WsiInstance.open(overview_files, slide_uids)
+        if label is None:
+            label_instances = WsiInstance.open(label_files, slide_uids)
+        else:
+            label_instances = [WsiInstance.create_label(
+                label,
+                base_dataset,
+                len(level_instances) + len(overview_instances)
+                )]
         levels = WsiDicomLevels.open(level_instances)
         labels = WsiDicomLabels.open(label_instances)
         overviews = WsiDicomOverviews.open(overview_instances)
@@ -753,7 +761,7 @@ class WsiDicom:
         filepaths.sort(key=os.path.getsize)
         for filepath in cls._filter_paths(filepaths):
             file = WsiDicomFile(filepath, parse_pixel_data=False)
-            if file.wsi_type is None:
+            if file.image_type is None:
                 continue
             if (
                 file.dataset.tile_type != 'TILED_FULL'

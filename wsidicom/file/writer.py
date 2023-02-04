@@ -26,7 +26,7 @@ from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 
-from wsidicom.file import WsiDicomFileBase
+from wsidicom.file.base import WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.image_data import ImageData
 from wsidicom.uid import WSI_SOP_CLASS_UID

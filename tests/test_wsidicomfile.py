@@ -21,6 +21,7 @@ from typing import Optional
 
 import pytest
 from pydicom import Dataset, dcmread
+from wsidicom.dataset import ImageType
 from wsidicom.instance import WsiDataset, WsiDicomFile
 
 from .data_gen import (TESTFRAME, create_layer_file, create_main_dataset,
@@ -136,9 +137,9 @@ class WsiDicomFileTests(unittest.TestCase):
             ds = WsiDataset(dcmread(path, stop_before_pixels=True))
             self.assertEqual(test_file.dataset, ds)
 
-    def test_wsi_type_property(self):
+    def test_image_type_property(self):
         for test_file in self.opened_files:
-            self.assertEqual(test_file.wsi_type, 'VOLUME')
+            self.assertEqual(test_file.image_type, ImageType.VOLUME)
 
     def test_uids_property(self):
         for test_file, settings in self.opened_files.items():

@@ -1,4 +1,4 @@
-#    Copyright 2021, 2022 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ from typing import Callable, List, Optional, OrderedDict, Sequence, Union
 
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.dataset import WsiDataset
+from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Size, SizeMm
@@ -75,7 +75,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def wsi_type(self) -> str:
+    def image_type(self) -> ImageType:
         """Should return the wsi type of the series ('VOLUME', 'LABEL', or
         'OVERVIEW'"""
         raise NotImplementedError()
@@ -93,7 +93,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
     @property
     def mpps(self) -> List[SizeMm]:
         """Return contained mpp (um/px)."""
-        return [group.mpp for group in self.groups]
+        return [group.mpp for group in self.groups if group.mpp is not None]
 
     @property
     def files(self) -> List[Path]:
@@ -151,7 +151,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         try:
             base_group = groups[0]
-            if base_group.wsi_type != self.wsi_type:
+            if base_group.image_type != self.image_type:
                 raise WsiDicomMatchError(
                     str(base_group), str(self)
                 )
@@ -175,7 +175,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[str]
+        offset_table: Optional[str],
     ) -> List[Path]:
         """Save WsiDicomSeries as DICOM-files in path.
 
@@ -213,11 +213,10 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
 class WsiDicomLabels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the label wsi flavor."""
-    WSI_TYPE = 'LABEL'
 
     @property
-    def wsi_type(self) -> str:
-        return self.WSI_TYPE
+    def image_type(self) -> ImageType:
+        return ImageType.LABEL
 
     @classmethod
     def open(
@@ -242,11 +241,10 @@ class WsiDicomLabels(WsiDicomSeries):
 
 class WsiDicomOverviews(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the overview wsi flavor."""
-    WSI_TYPE = 'OVERVIEW'
 
     @property
-    def wsi_type(self) -> str:
-        return self.WSI_TYPE
+    def image_type(self) -> ImageType:
+        return ImageType.OVERVIEW
 
     @classmethod
     def open(
@@ -272,11 +270,10 @@ class WsiDicomOverviews(WsiDicomSeries):
 class WsiDicomLevels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the volume (e.g. pyramidal
     level) wsi flavor."""
-    WSI_TYPE = 'VOLUME'
 
     @property
-    def wsi_type(self) -> str:
-        return self.WSI_TYPE
+    def image_type(self) -> ImageType:
+        return ImageType.VOLUME
 
     @classmethod
     def open(
