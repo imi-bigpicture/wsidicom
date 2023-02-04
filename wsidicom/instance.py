@@ -248,10 +248,7 @@ class WsiInstance:
     def create_label(
         cls,
         image: Union[Image.Image, str, Path],
-        base_dataset: Dataset,
-        instance_number: int
-        # TODO Should not need to specify instance number
-        # Should be set on write.
+        base_dataset: Dataset
     ) -> 'WsiInstance':
         if isinstance(image, Image.Image):
             image_data = PillowImageData(image)
@@ -260,8 +257,7 @@ class WsiInstance:
         return cls.create_instance(
             image_data,
             base_dataset,
-            ImageType.LABEL,
-            instance_number
+            ImageType.LABEL
         )
 
     @classmethod
@@ -269,8 +265,7 @@ class WsiInstance:
         cls,
         image_data: ImageData,
         base_dataset: Dataset,
-        image_type: ImageType,
-        instance_number: int
+        image_type: ImageType
     ) -> 'WsiInstance':
         """Create WsiInstance from ImageData.
 
@@ -282,8 +277,6 @@ class WsiInstance:
             Base dataset to include.
         image_type: ImageType
             Type of instance to create.
-        instance_number: int
-            The number of the instance (in a series).
 
         Returns
         ----------
@@ -293,7 +286,6 @@ class WsiInstance:
         instance_dataset = WsiDataset.create_instance_dataset(
             base_dataset,
             image_type,
-            instance_number,
             image_data
         )
 
@@ -903,7 +895,8 @@ class WsiDicomGroup:
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[str]
+        offset_table: Optional[str],
+        instance_number: int
     ) -> List[Path]:
         """Save a WsiDicomGroup to files in output_path. Instances are grouped
         by properties that cant differ in the same file:
@@ -955,7 +948,8 @@ class WsiDicomGroup:
                     image_data_list,
                     workers,
                     chunk_size,
-                    offset_table
+                    offset_table,
+                    instance_number
                 )
             filepaths.append(filepath)
         return filepaths
@@ -1253,7 +1247,8 @@ class WsiDicomLevel(WsiDicomGroup):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[str]
+        offset_table: Optional[str],
+        instance_number: int
     ) -> 'WsiDicomLevel':
         """Creates a new WsiDicomLevel from this level by scaling the image
         data.
@@ -1317,7 +1312,8 @@ class WsiDicomLevel(WsiDicomGroup):
                     workers,
                     chunk_size,
                     offset_table,
-                    scale
+                    instance_number,
+                    scale=scale
                 )
             filepaths.append(filepath)
 

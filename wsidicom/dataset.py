@@ -673,7 +673,6 @@ class WsiDataset(Dataset):
         cls,
         base_dataset: Dataset,
         image_type: ImageType,
-        instance_number: int,
         image_data: ImageData,
         pyramid_index: Optional[int] = None
     ) -> 'WsiDataset':
@@ -685,7 +684,6 @@ class WsiDataset(Dataset):
             Dataset common for all instances.
         image_type:
             Type of instance ('VOLUME', 'LABEL', 'OVERVIEW)
-        instance_number: int
         image_data:
             Image data to crate dataset for.
 
@@ -792,7 +790,6 @@ class WsiDataset(Dataset):
 
         dataset.PlanarConfiguration = 0
 
-        dataset.InstanceNumber = instance_number
         dataset.FocusMethod = 'AUTO'
         dataset.ExtendedDepthOfField = 'NO'
         return WsiDataset(dataset)

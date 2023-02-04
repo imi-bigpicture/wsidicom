@@ -240,7 +240,6 @@ class WsiDicom:
             label_instances = [WsiInstance.create_label(
                 label,
                 base_dataset,
-                len(level_instances) + len(overview_instances)
                 )]
         levels = WsiDicomLevels.open(level_instances)
         labels = WsiDicomLabels.open(label_instances)
@@ -613,15 +612,18 @@ class WsiDicom:
         ]
 
         filepaths: List[Path] = []
+        instance_number = 0
         for collection in collections:
             collection_filepaths = collection.save(
                 output_path,
                 uid_generator,
                 workers,
                 chunk_size,
-                offset_table
+                offset_table,
+                instance_number
             )
             filepaths.extend(collection_filepaths)
+            instance_number += len(filepaths)
         return filepaths
 
     @staticmethod

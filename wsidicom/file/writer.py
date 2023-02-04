@@ -55,6 +55,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         workers: int,
         chunk_size: int,
         offset_table: Optional[str],
+        instance_number: int,
         scale: int = 1
     ) -> None:
         """Writes data to file.
@@ -83,6 +84,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         self._write_preamble()
         self._write_file_meta(uid, transfer_syntax)
         dataset.SOPInstanceUID = uid
+        dataset.InstanceNumber = instance_number
         self._write_base(dataset)
         table_start, pixels_start = self._write_pixel_data_start(
             dataset.NumberOfFrames,

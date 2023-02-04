@@ -176,6 +176,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
         workers: int,
         chunk_size: int,
         offset_table: Optional[str],
+        instance_number: int
     ) -> List[Path]:
         """Save WsiDicomSeries as DICOM-files in path.
 
@@ -205,9 +206,11 @@ class WsiDicomSeries(metaclass=ABCMeta):
                 uid_generator,
                 workers,
                 chunk_size,
-                offset_table
+                offset_table,
+                instance_number
             )
             filepaths.extend(group_file_paths)
+            instance_number += len(group_file_paths)
         return filepaths
 
 
@@ -535,7 +538,8 @@ class WsiDicomLevels(WsiDicomSeries):
                     uid_generator=uid_generator,
                     workers=workers,
                     chunk_size=chunk_size,
-                    offset_table=offset_table
+                    offset_table=offset_table,
+                    instance_number=0  # TODO Should +1 of total instances
                 )
                 # Add level to available levels
                 if add_to_excisting:

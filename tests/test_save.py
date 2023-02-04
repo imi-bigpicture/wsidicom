@@ -446,7 +446,8 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                         }),
                         1,
                         100,
-                        table
+                        table,
+                        0
                     )
 
                 with WsiDicomFile(filepath) as read_file:
@@ -472,7 +473,8 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                     generate_uid,
                     1,
                     100,
-                    'bot'
+                    'bot',
+                    0
                 )
                 new_level.close()
                 with WsiDicom.open(tempdir) as created_wsi:
