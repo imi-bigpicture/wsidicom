@@ -24,7 +24,7 @@ from pydicom import Dataset
 from pydicom.uid import UID
 
 from wsidicom.dataset import ImageType, WsiDataset
-from wsidicom.errors import (WsiDicomError, WsiDicomMatchError,
+from wsidicom.errors import (WsiDicomError, WsiDicomMatchError, WsiDicomNoResultionError,
                              WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
                              WsiDicomUidDuplicateError)
 from wsidicom.file import WsiDicomFile, WsiDicomFileWriter
@@ -775,7 +775,7 @@ class WsiDicomGroup:
             Region in pixels
         """
         if self.pixel_spacing is None:
-            raise Exception()  # TODO
+            raise WsiDicomNoResultionError()
         pixel_region = Region(
             position=region.position // self.pixel_spacing,
             size=region.size // self.pixel_spacing
@@ -1061,13 +1061,13 @@ class WsiDicomLevel(WsiDicomGroup):
     @property
     def mpp(self) -> SizeMm:
         if self.pixel_spacing is None:
-            raise Exception()  # TODO
+            raise WsiDicomNoResultionError()
         return self.pixel_spacing*1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
         if self._pixel_spacing is None:
-            raise Exception()  # TODO
+            raise WsiDicomNoResultionError()
         return self._pixel_spacing
 
     @classmethod
@@ -1093,7 +1093,7 @@ class WsiDicomLevel(WsiDicomGroup):
         base_group = list(instances_grouped_by_level.values())[0]
         base_pixel_spacing = base_group[0].pixel_spacing
         if base_pixel_spacing is None:
-            raise Exception()  # TODO
+            raise WsiDicomNoResultionError()
         for level in instances_grouped_by_level.values():
             levels.append(cls(level, base_pixel_spacing))
         return levels
