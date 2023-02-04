@@ -488,6 +488,7 @@ class WsiDicomLevels(WsiDicomSeries):
     def construct_pyramid(
         self,
         highest_level: int,
+        instance_number: int,
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: int = 100,
@@ -539,7 +540,7 @@ class WsiDicomLevels(WsiDicomSeries):
                     workers=workers,
                     chunk_size=chunk_size,
                     offset_table=offset_table,
-                    instance_number=0  # TODO Should +1 of total instances
+                    instance_number=instance_number
                 )
                 # Add level to available levels
                 if add_to_excisting:
@@ -547,4 +548,5 @@ class WsiDicomLevels(WsiDicomSeries):
                 else:
                     new_level.close()
                 filepaths += new_level.files
+                instance_number += 1
         return filepaths
