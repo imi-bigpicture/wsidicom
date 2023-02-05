@@ -23,7 +23,8 @@ from tempfile import TemporaryDirectory
 from typing import List, Optional, OrderedDict, Sequence, Tuple, cast
 
 import pytest
-from PIL import Image, ImageChops, ImageFilter, ImageStat
+from PIL import ImageChops, ImageFilter, ImageStat
+from PIL.Image import Image as PILImage
 from pydicom import Sequence as DicomSequence
 from pydicom.dataset import Dataset
 from pydicom.filebase import DicomFile
@@ -102,7 +103,7 @@ class WsiDicomTestImageData(ImageData):
         Point,
         z: float,
         path: str
-    ) -> Image.Image:
+    ) -> PILImage:
         raise NotImplementedError()
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:

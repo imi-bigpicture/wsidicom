@@ -20,9 +20,11 @@ from typing import (Dict, List, Optional, OrderedDict, Sequence, Set, Tuple,
 
 import numpy as np
 from PIL import Image
+from PIL.Image import Image as PILImage
 from pydicom.dataset import Dataset
-from pydicom.uid import UID
 from pydicom.sequence import Sequence as DicomSequence
+from pydicom.uid import UID
+
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.file import WsiDicomFile
 from wsidicom.geometry import Point, Region, Size, SizeMm
@@ -133,7 +135,7 @@ class WsiDicomImageData(ImageData):
         tile_point: Point,
         z: float,
         path: str
-    ) -> Image.Image:
+    ) -> PILImage:
         frame_index = self._get_frame_index(tile_point, z, path)
         if frame_index == -1:
             return self.blank_tile

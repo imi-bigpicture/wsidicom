@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
+from PIL.Image import Image as PILImage
 from pydicom.dataset import FileMetaDataset
 from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
@@ -40,11 +41,12 @@ from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 class WsiDicom:
     """Represent a wsi slide containing pyramidal levels and optionally
     labels and/or overviews."""
+
     def __init__(
         self,
         levels: WsiDicomLevels,
-        labels: WsiDicomLabels,
-        overviews: WsiDicomOverviews,
+        labels: Optional[WsiDicomLabels] = None,
+        overviews: Optional[WsiDicomOverviews] = None,
         annotations: Optional[Sequence[AnnotationInstance]] = None
     ):
         """Holds wsi dicom levels, labels and overviews.
@@ -53,9 +55,9 @@ class WsiDicom:
         ----------
         levels: WsiDicomLevels
             Series of pyramidal levels.
-        labels: WsiDicomLabels
+        labels: Optional[WsiDicomLabels] = None,
             Series of label images.
-        overviews: WsiDicomOverviews
+        overviews: Optional[WsiDicomOverviews] = None,
             Series of overview images
         annotations: Optional[Sequence[AnnotationInstance]] = None
             Sup-222 annotation instances.
@@ -66,19 +68,15 @@ class WsiDicom:
         self._labels = labels
         self._overviews = overviews
         self.annotations = annotations
-
-        self._uids = self._validate_collection(
-            [self.levels, self.labels, self.overviews]
-        )
+        self._uids = self._validate_collection()
 
         self.optical = OpticalManager.open(
-            levels.instances + labels.instances + overviews.instances
+            [
+                instance
+                for series in self.collection
+                for instance in series.instances
+            ]
         )
-
-        if self.annotations != []:
-            for annotation in self.annotations:
-                if annotation.slide_uids != self.uids:
-                    warnings.warn("Annotations uids does not match")
 
         self.__enter__()
 
@@ -119,41 +117,30 @@ class WsiDicom:
         raise WsiDicomNotFoundError("levels", str(self))
 
     @property
-    def labels(self) -> WsiDicomLabels:
+    def labels(self) -> Optional[WsiDicomLabels]:
         """Return contained labels"""
-        if self._labels is not None:
-            return self._labels
-        raise WsiDicomNotFoundError("labels", str(self))
+        return self._labels
 
     @property
-    def overviews(self) -> WsiDicomOverviews:
+    def overviews(self) -> Optional[WsiDicomOverviews]:
         """Return contained overviews"""
-        if self._overviews is not None:
-            return self._overviews
-        raise WsiDicomNotFoundError("overviews", str(self))
+        return self._overviews
+
+    @property
+    def collection(self) -> List[WsiDicomSeries]:
+        collection: List[Optional[WsiDicomSeries]] = [
+            self._levels, self._labels, self._overviews
+        ]
+        return [series for series in collection if series is not None]
 
     @property
     def files(self) -> List[Path]:
         """Return contained files"""
-        return self.levels.files + self.labels.files + self.overviews.files
-
-    @property
-    def datasets(self) -> List[WsiDataset]:
-        """Return contained datasets."""
-        return (
-            self.levels.datasets
-            + self.labels.datasets
-            + self.overviews.datasets
-        )
-
-    @property
-    def instances(self) -> List[WsiInstance]:
-        """Return contained instances"""
-        return (
-            self.levels.instances
-            + self.labels.instances
-            + self.overviews.instances
-        )
+        return [
+            file
+            for series in self.collection
+            for file in series.files
+        ]
 
     @property
     def image_size(self) -> Size:
@@ -187,7 +174,7 @@ class WsiDicom:
     def open(
         cls,
         path: Union[str, Sequence[str], Path, Sequence[Path]],
-        label: Optional[Union[Image.Image, str, Path]] = None
+        label: Optional[Union[PILImage, str, Path]] = None
     ) -> 'WsiDicom':
         """Open valid wsi dicom files in path and return a WsiDicom object.
         Non-valid files are ignored.
@@ -196,6 +183,8 @@ class WsiDicom:
         ----------
         path: Union[str, Sequence[str], Path, Sequence[Path]]
             Path to files to open.
+        label: Optional[Union[PILImage, str, Path]] = None
+            Optional label image to use instead of label found in path.
 
         Returns
         ----------
@@ -248,7 +237,7 @@ class WsiDicom:
 
         return cls(levels, labels, overviews, annotations)
 
-    def read_label(self, index: int = 0) -> Image.Image:
+    def read_label(self, index: int = 0) -> PILImage:
         """Read label image of the whole slide. If several label
         images are present, index can be used to select a specific image.
 
@@ -259,16 +248,18 @@ class WsiDicom:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             label as image.
         """
+        if self.labels is None:
+            raise WsiDicomNotFoundError("label", str(self))
         try:
             label = self.labels[index]
             return label.get_default_full()
         except IndexError as exception:
             raise WsiDicomNotFoundError("label", "series") from exception
 
-    def read_overview(self, index: int = 0) -> Image.Image:
+    def read_overview(self, index: int = 0) -> PILImage:
         """Read overview image of the whole slide. If several overview
         images are present, index can be used to select a specific image.
 
@@ -279,9 +270,11 @@ class WsiDicom:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Overview as image.
         """
+        if self.overviews is None:
+            raise WsiDicomNotFoundError("overview", str(self))
         try:
             overview = self.overviews[index]
             return overview.get_default_full()
@@ -293,7 +286,7 @@ class WsiDicom:
         size: Tuple[int, int] = (512, 512),
         z: Optional[float] = None,
         path: Optional[str] = None
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read thumbnail image of the whole slide with dimensions
         no larger than given size.
 
@@ -308,7 +301,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Thumbnail as image,
         """
         thumbnail_size = Size.from_tuple(size)
@@ -325,7 +318,7 @@ class WsiDicom:
         size: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read region defined by pixels.
 
         Parameters
@@ -343,7 +336,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Region as image
         """
         wsi_level = self.levels.get_closest_by_level(level)
@@ -370,7 +363,7 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None,
         slide_origin: bool = False
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read image from region defined in mm.
 
         Parameters
@@ -391,7 +384,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Region as image
         """
         wsi_level = self.levels.get_closest_by_level(level)
@@ -417,7 +410,7 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None,
         slide_origin: bool = False
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read image from region defined in mm with set pixel spacing.
 
         Parameters
@@ -437,8 +430,8 @@ class WsiDicom:
             If to use the slide origin instead of image origin.
 
         Returns
-        ----------
-        Image.Image
+        -----------
+        PILImage
             Region as image
         """
         pixel_spacing = mpp/1000.0
@@ -462,7 +455,7 @@ class WsiDicom:
         tile: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read tile in pyramid level as image.
 
         Parameters
@@ -478,7 +471,7 @@ class WsiDicom:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Tile as image
         """
         tile_point = Point.from_tuple(tile)
@@ -540,7 +533,6 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None
     ) -> WsiInstance:
-
         """Return instance fullfilling level, z and/or path.
 
         Parameters
@@ -562,8 +554,9 @@ class WsiDicom:
 
     def close(self) -> None:
         """Close all files."""
-        for series in [self.levels, self.overviews, self.labels]:
-            series.close()
+        for series in [self._levels, self._overviews, self._labels]:
+            if series is not None:
+                series.close()
 
     def save(
         self,
@@ -607,14 +600,10 @@ class WsiDicom:
         if chunk_size is None:
             chunk_size = 16
 
-        collections: List[WsiDicomSeries] = [
-            self.levels, self.labels, self.overviews
-        ]
-
         filepaths: List[Path] = []
         instance_number = 0
-        for collection in collections:
-            collection_filepaths = collection.save(
+        for series in self.collection:
+            series_filepaths = series.save(
                 output_path,
                 uid_generator,
                 workers,
@@ -622,7 +611,7 @@ class WsiDicom:
                 offset_table,
                 instance_number
             )
-            filepaths.extend(collection_filepaths)
+            filepaths.extend(series_filepaths)
             instance_number += len(filepaths)
         return filepaths
 
@@ -707,39 +696,53 @@ class WsiDicom:
             path for path in filepaths if path.is_file() and is_dicom(path)
         ]
 
-    def _validate_collection(
-        self,
-        series: Sequence[WsiDicomSeries]
-    ) -> SlideUids:
+    def _validate_collection(self) -> SlideUids:
         """Check that no files or instance in collection is duplicate, and, if
         strict, that all series have the same base uids.
         Raises WsiDicomMatchError otherwise. Returns base uid for collection.
-
-        Parameters
-        ----------
-        series: Sequence[WsiDicomSeries]
-            List of series to check.
 
         Returns
         ----------
         SlideUids
             Matching uids
         """
-        WsiDataset.check_duplicate_dataset(self.datasets, self)
-        WsiInstance.check_duplicate_instance(self.instances, self)
+        datasets = [
+            dataset
+            for collection in self.collection
+            for dataset in collection.datasets
+        ]
+        WsiDataset.check_duplicate_dataset(datasets, self)
+
+        instances = [
+            instance
+            for collection in self.collection
+            for instance in collection.instances
+        ]
+
+        WsiInstance.check_duplicate_instance(instances, self)
 
         try:
             slide_uids = next(
-                item.uids for item in series if item.uids is not None
+                series.uids
+                for series in self.collection
+                if series.uids is not None
             )
         except StopIteration as exception:
             raise WsiDicomNotFoundError(
                 "Valid series",
                 "in collection"
             ) from exception
-        for item in series:
-            if item.uids is not None and item.uids != slide_uids:
-                raise WsiDicomMatchError(str(item), str(self))
+        for series in self.collection:
+            if (
+                series.uids is not None
+                and series.uids != slide_uids
+            ):
+                raise WsiDicomMatchError(str(series), str(self))
+
+        if self.annotations != []:
+            for annotation in self.annotations:
+                if annotation.slide_uids != slide_uids:
+                    warnings.warn("Annotations uids does not match")
         return slide_uids
 
     @classmethod

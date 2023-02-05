@@ -77,6 +77,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        instance_number: int
+            Instance number for file.
         scale: int = 1
             Scale factor.
 

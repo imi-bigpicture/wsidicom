@@ -16,10 +16,10 @@ import io
 import warnings
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import (Any, Dict, Iterable, List, Optional,
-                    Tuple, Union)
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from PIL import Image
+from PIL.Image import Image as PILImage
 from pydicom.dataset import Dataset
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
 
@@ -97,7 +97,7 @@ class ImageData(metaclass=ABCMeta):
     Additionally properties focal_planes and/or optical_paths should be
     overridden if multiple focal planes or optical paths are implemented."""
     _default_z: Optional[float] = None
-    _blank_tile: Optional[Image.Image] = None
+    _blank_tile: Optional[PILImage] = None
     _encoded_blank_tile: Optional[bytes] = None
 
     @property
@@ -155,7 +155,7 @@ class ImageData(metaclass=ABCMeta):
         tile_point: Point,
         z: float,
         path: str
-    ) -> Image.Image:
+    ) -> PILImage:
         """Should return Image for tile defined by tile (x, y), z,
         and optical path."""
         raise NotImplementedError()
@@ -246,7 +246,7 @@ class ImageData(metaclass=ABCMeta):
         return Region(position=Point(0, 0), size=self.tiled_size - 1)
 
     @property
-    def blank_tile(self) -> Image.Image:
+    def blank_tile(self) -> PILImage:
         """Return background tile."""
         if self._blank_tile is None:
             self._blank_tile = self._create_blank_tile()
@@ -264,7 +264,7 @@ class ImageData(metaclass=ABCMeta):
         tiles: Iterable[Point],
         z: float,
         path: str
-    ) -> List[Image.Image]:
+    ) -> List[PILImage]:
         """Return tiles for tile defined by tile (x, y), z, and optical
         path.
 
@@ -279,7 +279,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        List[Image.Image]
+        List[PILImage]
             Tiles as Images.
         """
         return [
@@ -319,7 +319,7 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str,
         scale: int
-    ) -> Image.Image:
+    ) -> PILImage:
         """Return scaled tile defined by tile (x, y), z, optical
         path and scale.
 
@@ -336,7 +336,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Scaled tiled as Image.
         """
         image = Image.new(
@@ -466,12 +466,12 @@ class ImageData(metaclass=ABCMeta):
             (path in self.optical_paths)
         )
 
-    def encode(self, image: Image.Image) -> bytes:
+    def encode(self, image: PILImage) -> bytes:
         """Encode image using transfer syntax.
 
         Parameters
         ----------
-        image: Image.Image
+        image: PILImage
             Image to encode
 
         Returns
@@ -543,12 +543,12 @@ class ImageData(metaclass=ABCMeta):
             return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
         return (WHITE, WHITE, WHITE)
 
-    def _create_blank_tile(self) -> Image.Image:
+    def _create_blank_tile(self) -> PILImage:
         """Create blank tile for instance.
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Blank tile image
         """
         return Image.new(
@@ -562,7 +562,7 @@ class ImageData(metaclass=ABCMeta):
         region: Region,
         path: str,
         z: float
-    ) -> Image.Image:
+    ) -> PILImage:
         """Stitches tiles together to form requested image.
 
         Parameters
@@ -576,7 +576,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Stitched image
         """
 
@@ -666,7 +666,7 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str,
         crop: Union[bool, Region] = True
-    ) -> Image.Image:
+    ) -> PILImage:
         """Get tile image at tile coordinate x, y. If frame is inside tile
         geometry but no tile exists in frame data (sparse) returns blank image.
         Optional crop tile to crop_region.
@@ -684,7 +684,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Tile image.
         """
         image = self._get_decoded_tile(tile, z, path)

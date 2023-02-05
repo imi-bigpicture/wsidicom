@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence
 
 import numpy as np
-from PIL import Image
+from PIL.Image import Image as PILImage
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
@@ -640,12 +640,12 @@ class OpticalManager:
                 "optical path manager"
             )
 
-    def apply_lut(self, image: Image.Image, identifier: str) -> Image.Image:
+    def apply_lut(self, image: PILImage, identifier: str) -> PILImage:
         """Apply LUT of identifier to image. Converts gray scale image to RGB.
 
         Parameters
         ----------
-        image: Image.Image
+        image: PILImage
             Pillow image to apply LUT to.
         identifier: str
             The identifier of the LUT to apply

@@ -193,6 +193,8 @@ class WsiDicomSeries(metaclass=ABCMeta):
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        instance_number: int
+            Instance number for first instance in series.
 
         Returns
         ----------
@@ -225,7 +227,7 @@ class WsiDicomLabels(WsiDicomSeries):
     def open(
         cls,
         instances: Sequence[WsiInstance]
-    ) -> 'WsiDicomLabels':
+    ) -> Optional['WsiDicomLabels']:
         """Return labels created from wsi files.
 
         Parameters
@@ -235,10 +237,12 @@ class WsiDicomLabels(WsiDicomSeries):
 
         Returns
         ----------
-        WsiDicomOverviews
+        Optional['WsiDicomLabels']
             Created labels.
         """
         labels = WsiDicomGroup.open(instances)
+        if len(labels) == 0:
+            return None
         return cls(labels)
 
 
@@ -253,7 +257,7 @@ class WsiDicomOverviews(WsiDicomSeries):
     def open(
         cls,
         instances: Sequence[WsiInstance]
-    ) -> 'WsiDicomOverviews':
+    ) -> Optional['WsiDicomOverviews']:
         """Return overviews created from wsi files.
 
         Parameters
@@ -263,10 +267,12 @@ class WsiDicomOverviews(WsiDicomSeries):
 
         Returns
         ----------
-        WsiDicomOverviews
+        Optional[WsiDicomOverviews]
             Created overviews.
         """
         overviews = WsiDicomGroup.open(instances)
+        if len(overviews) == 0:
+            return None
         return cls(overviews)
 
 

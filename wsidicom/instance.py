@@ -20,6 +20,7 @@ from typing import (Callable, DefaultDict, Dict, List, Optional, OrderedDict,
                     Sequence, Set, Tuple, Union, cast)
 
 from PIL import Image
+from PIL.Image import Image as PILImage
 from pydicom import Dataset
 from pydicom.uid import UID
 
@@ -244,10 +245,24 @@ class WsiInstance:
     @classmethod
     def create_label(
         cls,
-        image: Union[Image.Image, str, Path],
+        image: Union[PILImage, str, Path],
         base_dataset: Dataset
     ) -> 'WsiInstance':
-        if isinstance(image, Image.Image):
+        """Create a label WsiInstance.
+
+        Parameters
+        ----------
+        image: Union[PILImage, str, Path]
+            Image or path to image.
+        base_dataset: Dataset
+            Base dataset to include.
+
+        Returns
+        ----------
+        WsiInstance
+            Created label WsiInstance.
+        """
+        if isinstance(image, PILImage):
             image_data = PillowImageData(image)
         else:
             image_data = PillowImageData.from_file(image)
@@ -614,12 +629,12 @@ class WsiDicomGroup:
             path = instance.default_path
         return instance
 
-    def get_default_full(self) -> Image.Image:
+    def get_default_full(self) -> PILImage:
         """Read full image using default z coordinate and path.
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Full image of the group.
         """
         instance = self.default_instance
@@ -634,7 +649,7 @@ class WsiDicomGroup:
         region: Region,
         z: Optional[float] = None,
         path: Optional[str] = None,
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read region defined by pixels.
 
         Parameters
@@ -650,7 +665,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Region as image
         """
 
@@ -668,7 +683,7 @@ class WsiDicomGroup:
         z: Optional[float] = None,
         path: Optional[str] = None,
         slide_origin: bool = False
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read region defined by mm.
 
         Parameters
@@ -684,7 +699,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Region as image
         """
         if slide_origin:
@@ -704,7 +719,7 @@ class WsiDicomGroup:
         tile: Point,
         z: Optional[float] = None,
         path: Optional[str] = None
-    ) -> Image.Image:
+    ) -> PILImage:
         """Return tile at tile coordinate x, y as image.
 
         Parameters
@@ -718,7 +733,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             The tile as image
         """
 
@@ -917,6 +932,8 @@ class WsiDicomGroup:
         offset_table: Optional[str]
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        instance_number: int
+            Instance number for first instance in group.
 
         Returns
         ----------
@@ -949,6 +966,7 @@ class WsiDicomGroup:
                     instance_number
                 )
             filepaths.append(filepath)
+            instance_number += 1
         return filepaths
 
     @staticmethod
@@ -1133,7 +1151,7 @@ class WsiDicomLevel(WsiDicomGroup):
         level: int,
         z: Optional[float] = None,
         path: Optional[str] = None
-    ) -> Image.Image:
+    ) -> PILImage:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
         to remove part outside of the image (as defiend by level size).
@@ -1151,7 +1169,7 @@ class WsiDicomLevel(WsiDicomGroup):
 
         Returns
         ----------
-        Image.Image
+        PILImage
             A tile image
         """
         scale = self.calculate_scale(level)

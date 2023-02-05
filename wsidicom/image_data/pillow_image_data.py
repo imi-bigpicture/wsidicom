@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 from PIL import Image
+from PIL.Image import Image as PILImage
 from pydicom.uid import UID, JPEGBaseline8Bit
 
 from wsidicom.geometry import Point, Size, SizeMm
@@ -23,7 +24,7 @@ from wsidicom.image_data import ImageData, ImageOrigin
 
 
 class PillowImageData(ImageData):
-    def __init__(self, image: Image.Image):
+    def __init__(self, image: PILImage):
         self._image = image.convert('RGB')
 
     @classmethod
@@ -71,7 +72,7 @@ class PillowImageData(ImageData):
         tile_point: Point,
         z: float,
         path: str
-    ) -> Image.Image:
+    ) -> PILImage:
         if tile_point != Point(0, 0):
             raise ValueError('Can only get Point(0, 0) from non-tiled image.')
         return self._image
