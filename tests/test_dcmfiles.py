@@ -18,6 +18,7 @@ import unittest
 from hashlib import md5
 from pathlib import Path
 from typing import Any, Dict, List
+from PIL import Image
 
 import pytest
 from wsidicom import WsiDicom
@@ -181,3 +182,14 @@ class WsiDicomFilesTests(unittest.TestCase):
                     region["md5"],
                     msg=region
                 )
+
+    def test_replace_label(self):
+        path = next(
+            folders
+            for folders in self._get_folders(SLIDE_FOLDER)
+        )
+        while next(path.iterdir()).is_dir():
+            path = next(path.iterdir())
+        image = Image.new('RGB', (256, 256), (128, 128, 128))
+        with WsiDicom.open(path, label=image) as wsi:
+            self.assertEqual(image, wsi.read_label())
