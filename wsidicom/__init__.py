@@ -24,4 +24,4 @@ from .graphical_annotations import (Annotation, AnnotationGroup,
 from .instance import WsiDataset, WsiInstance
 from .wsidicom import WsiDicom
 
-__version__ = '0.6.0'
+__version__ = '0.7.0'
