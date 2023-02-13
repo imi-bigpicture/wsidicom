@@ -1,4 +1,4 @@
-#    Copyright 2021, 2022 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -20,16 +20,20 @@ from typing import (Callable, DefaultDict, Dict, List, Optional, OrderedDict,
                     Sequence, Set, Tuple, Union, cast)
 
 from PIL import Image
+from PIL.Image import Image as PILImage
+from pydicom import Dataset
 from pydicom.uid import UID
 
-from wsidicom.dataset import WsiDataset
+from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import (WsiDicomError, WsiDicomMatchError,
-                             WsiDicomNotFoundError, WsiDicomOutOfBoundsError,
+                             WsiDicomNoResultionError, WsiDicomNotFoundError,
+                             WsiDicomOutOfBoundsError,
                              WsiDicomUidDuplicateError)
-from wsidicom.file import WsiDicomFile
-from wsidicom.file_writer import WsiDicomFileWriter
+from wsidicom.file import WsiDicomFile, WsiDicomFileWriter
 from wsidicom.geometry import Point, Region, RegionMm, Size, SizeMm
-from wsidicom.image_data import ImageData, ImageOrigin, WsiDicomImageData
+from wsidicom.image_data import ImageData, ImageOrigin
+from wsidicom.image_data.dicom_image_data import WsiDicomImageData
+from wsidicom.image_data.pillow_image_data import PillowImageData
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
 
@@ -56,7 +60,7 @@ class WsiInstance:
         self._datasets = datasets
         self._image_data = image_data
         self._identifier, self._uids = self._validate_instance(self.datasets)
-        self._wsi_type = self.dataset.wsi_type
+        self._image_type = self.dataset.image_type
 
         if self.ext_depth_of_field:
             if self.ext_depth_of_field_planes is None:
@@ -91,9 +95,9 @@ class WsiInstance:
         return string
 
     @property
-    def wsi_type(self) -> str:
+    def image_type(self) -> ImageType:
         """Return wsi type."""
-        return self._wsi_type
+        return self._image_type
 
     @property
     def datasets(self) -> Sequence[WsiDataset]:
@@ -118,12 +122,14 @@ class WsiInstance:
         return self._image_data.tile_size
 
     @property
-    def mpp(self) -> SizeMm:
+    def mpp(self) -> Optional[SizeMm]:
         """Return pixel spacing in um/pixel."""
+        if self.pixel_spacing is None:
+            return None
         return self.pixel_spacing*1000.0
 
     @property
-    def pixel_spacing(self) -> SizeMm:
+    def pixel_spacing(self) -> Optional[SizeMm]:
         """Return pixel spacing in mm/pixel."""
         return self._image_data.pixel_spacing
 
@@ -168,10 +174,6 @@ class WsiInstance:
         """Return identifier (instance uid for single file instance or
         concatenation uid for multiple file instance)."""
         return self._identifier
-
-    @property
-    def instance_number(self) -> int:
-        return int(self.dataset.instance_number)
 
     @property
     def default_z(self) -> float:
@@ -240,6 +242,70 @@ class WsiInstance:
             for instance_files in files_grouped_by_instance.values()
         ]
 
+    @classmethod
+    def create_label(
+        cls,
+        image: Union[PILImage, str, Path],
+        base_dataset: Dataset
+    ) -> 'WsiInstance':
+        """Create a label WsiInstance.
+
+        Parameters
+        ----------
+        image: Union[PILImage, str, Path]
+            Image or path to image.
+        base_dataset: Dataset
+            Base dataset to include.
+
+        Returns
+        ----------
+        WsiInstance
+            Created label WsiInstance.
+        """
+        if isinstance(image, PILImage):
+            image_data = PillowImageData(image)
+        else:
+            image_data = PillowImageData.from_file(image)
+        return cls.create_instance(
+            image_data,
+            base_dataset,
+            ImageType.LABEL
+        )
+
+    @classmethod
+    def create_instance(
+        cls,
+        image_data: ImageData,
+        base_dataset: Dataset,
+        image_type: ImageType
+    ) -> 'WsiInstance':
+        """Create WsiInstance from ImageData.
+
+        Parameters
+        ----------
+        image_data: ImageData
+            Image data and metadata.
+        base_dataset: Dataset
+            Base dataset to include.
+        image_type: ImageType
+            Type of instance to create.
+
+        Returns
+        ----------
+        WsiInstance
+            Created WsiInstance.
+        """
+        instance_dataset = WsiDataset.create_instance_dataset(
+            base_dataset,
+            image_type,
+            image_data
+        )
+
+        return cls(
+            instance_dataset,
+            image_data
+        )
+
     @staticmethod
     def check_duplicate_instance(
         instances: Sequence['WsiInstance'],
@@ -307,7 +373,7 @@ class WsiInstance:
             self.uids.matches(other_instance.uids) and
             self.size == other_instance.size and
             self.tile_size == other_instance.tile_size and
-            self.wsi_type == other_instance.wsi_type
+            self.image_type == other_instance.image_type
         )
 
     def close(self) -> None:
@@ -335,7 +401,7 @@ class WsiDicomGroup:
         self._validate_group()
 
         base_instance = instances[0]
-        self._wsi_type = base_instance.wsi_type
+        self._image_type = base_instance.image_type
         self._uids = base_instance.uids
 
         self._size = base_instance.size
@@ -374,9 +440,9 @@ class WsiDicomGroup:
         return self._uids
 
     @property
-    def wsi_type(self) -> str:
+    def image_type(self) -> ImageType:
         """Return wsi type"""
-        return self._wsi_type
+        return self._image_type
 
     @property
     def size(self) -> Size:
@@ -384,12 +450,14 @@ class WsiDicomGroup:
         return self._size
 
     @property
-    def mpp(self) -> SizeMm:
+    def mpp(self) -> Optional[SizeMm]:
         """Return pixel spacing in um/pixel"""
+        if self.pixel_spacing is None:
+            return None
         return self.pixel_spacing*1000.0
 
     @property
-    def pixel_spacing(self) -> SizeMm:
+    def pixel_spacing(self) -> Optional[SizeMm]:
         """Return pixel spacing in mm/pixel"""
         return self._pixel_spacing
 
@@ -484,7 +552,7 @@ class WsiDicomGroup:
         """
         return (
             self.uids.matches(other_group.uids) and
-            other_group.wsi_type == self.wsi_type
+            other_group.image_type == self.image_type
         )
 
     def valid_pixels(self, region: Region) -> bool:
@@ -561,12 +629,12 @@ class WsiDicomGroup:
             path = instance.default_path
         return instance
 
-    def get_default_full(self) -> Image.Image:
+    def get_default_full(self) -> PILImage:
         """Read full image using default z coordinate and path.
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Full image of the group.
         """
         instance = self.default_instance
@@ -581,7 +649,7 @@ class WsiDicomGroup:
         region: Region,
         z: Optional[float] = None,
         path: Optional[str] = None,
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read region defined by pixels.
 
         Parameters
@@ -597,7 +665,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Region as image
         """
 
@@ -615,7 +683,7 @@ class WsiDicomGroup:
         z: Optional[float] = None,
         path: Optional[str] = None,
         slide_origin: bool = False
-    ) -> Image.Image:
+    ) -> PILImage:
         """Read region defined by mm.
 
         Parameters
@@ -631,7 +699,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             Region as image
         """
         if slide_origin:
@@ -651,7 +719,7 @@ class WsiDicomGroup:
         tile: Point,
         z: Optional[float] = None,
         path: Optional[str] = None
-    ) -> Image.Image:
+    ) -> PILImage:
         """Return tile at tile coordinate x, y as image.
 
         Parameters
@@ -665,7 +733,7 @@ class WsiDicomGroup:
 
         Returns
         ----------
-        Image.Image
+        PILImage
             The tile as image
         """
 
@@ -718,6 +786,8 @@ class WsiDicomGroup:
         Region
             Region in pixels
         """
+        if self.pixel_spacing is None:
+            raise WsiDicomNoResultionError()
         pixel_region = Region(
             position=region.position // self.pixel_spacing,
             size=region.size // self.pixel_spacing
@@ -837,7 +907,8 @@ class WsiDicomGroup:
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[str]
+        offset_table: Optional[str],
+        instance_number: int
     ) -> List[Path]:
         """Save a WsiDicomGroup to files in output_path. Instances are grouped
         by properties that cant differ in the same file:
@@ -861,6 +932,8 @@ class WsiDicomGroup:
         offset_table: Optional[str]
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        instance_number: int
+            Instance number for first instance in group.
 
         Returns
         ----------
@@ -889,9 +962,11 @@ class WsiDicomGroup:
                     image_data_list,
                     workers,
                     chunk_size,
-                    offset_table
+                    offset_table,
+                    instance_number
                 )
             filepaths.append(filepath)
+            instance_number += 1
         return filepaths
 
     @staticmethod
@@ -998,6 +1073,18 @@ class WsiDicomLevel(WsiDicomGroup):
         """Return pyramid level"""
         return self._level
 
+    @property
+    def mpp(self) -> SizeMm:
+        if self.pixel_spacing is None:
+            raise WsiDicomNoResultionError()
+        return self.pixel_spacing*1000.0
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
+        if self._pixel_spacing is None:
+            raise WsiDicomNoResultionError()
+        return self._pixel_spacing
+
     @classmethod
     def open(
         cls,
@@ -1020,6 +1107,8 @@ class WsiDicomLevel(WsiDicomGroup):
         instances_grouped_by_level = cls._group_instances(instances)
         base_group = list(instances_grouped_by_level.values())[0]
         base_pixel_spacing = base_group[0].pixel_spacing
+        if base_pixel_spacing is None:
+            raise WsiDicomNoResultionError()
         for level in instances_grouped_by_level.values():
             levels.append(cls(level, base_pixel_spacing))
         return levels
@@ -1041,7 +1130,7 @@ class WsiDicomLevel(WsiDicomGroup):
         other_level = cast(WsiDicomLevel, other_level)
         return (
             self.uids.matches(other_level.uids) and
-            other_level.wsi_type == self.wsi_type and
+            other_level.image_type == self.image_type and
             other_level.tile_size == self.tile_size
         )
 
@@ -1062,7 +1151,7 @@ class WsiDicomLevel(WsiDicomGroup):
         level: int,
         z: Optional[float] = None,
         path: Optional[str] = None
-    ) -> Image.Image:
+    ) -> PILImage:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
         to remove part outside of the image (as defiend by level size).
@@ -1080,7 +1169,7 @@ class WsiDicomLevel(WsiDicomGroup):
 
         Returns
         ----------
-        Image.Image
+        PILImage
             A tile image
         """
         scale = self.calculate_scale(level)
@@ -1173,7 +1262,8 @@ class WsiDicomLevel(WsiDicomGroup):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[str]
+        offset_table: Optional[str],
+        instance_number: int
     ) -> 'WsiDicomLevel':
         """Creates a new WsiDicomLevel from this level by scaling the image
         data.
@@ -1237,7 +1327,8 @@ class WsiDicomLevel(WsiDicomGroup):
                     workers,
                     chunk_size,
                     offset_table,
-                    scale
+                    instance_number,
+                    scale=scale
                 )
             filepaths.append(filepath)
 

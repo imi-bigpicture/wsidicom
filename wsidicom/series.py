@@ -1,4 +1,4 @@
-#    Copyright 2021, 2022 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ from typing import Callable, List, Optional, OrderedDict, Sequence, Union
 
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.dataset import WsiDataset
+from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
                              WsiDicomOutOfBoundsError)
 from wsidicom.geometry import Size, SizeMm
@@ -75,7 +75,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def wsi_type(self) -> str:
+    def image_type(self) -> ImageType:
         """Should return the wsi type of the series ('VOLUME', 'LABEL', or
         'OVERVIEW'"""
         raise NotImplementedError()
@@ -93,7 +93,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
     @property
     def mpps(self) -> List[SizeMm]:
         """Return contained mpp (um/px)."""
-        return [group.mpp for group in self.groups]
+        return [group.mpp for group in self.groups if group.mpp is not None]
 
     @property
     def files(self) -> List[Path]:
@@ -151,7 +151,7 @@ class WsiDicomSeries(metaclass=ABCMeta):
 
         try:
             base_group = groups[0]
-            if base_group.wsi_type != self.wsi_type:
+            if base_group.image_type != self.image_type:
                 raise WsiDicomMatchError(
                     str(base_group), str(self)
                 )
@@ -175,7 +175,8 @@ class WsiDicomSeries(metaclass=ABCMeta):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[str]
+        offset_table: Optional[str],
+        instance_number: int
     ) -> List[Path]:
         """Save WsiDicomSeries as DICOM-files in path.
 
@@ -192,6 +193,8 @@ class WsiDicomSeries(metaclass=ABCMeta):
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        instance_number: int
+            Instance number for first instance in series.
 
         Returns
         ----------
@@ -205,25 +208,26 @@ class WsiDicomSeries(metaclass=ABCMeta):
                 uid_generator,
                 workers,
                 chunk_size,
-                offset_table
+                offset_table,
+                instance_number
             )
             filepaths.extend(group_file_paths)
+            instance_number += len(group_file_paths)
         return filepaths
 
 
 class WsiDicomLabels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the label wsi flavor."""
-    WSI_TYPE = 'LABEL'
 
     @property
-    def wsi_type(self) -> str:
-        return self.WSI_TYPE
+    def image_type(self) -> ImageType:
+        return ImageType.LABEL
 
     @classmethod
     def open(
         cls,
         instances: Sequence[WsiInstance]
-    ) -> 'WsiDicomLabels':
+    ) -> Optional['WsiDicomLabels']:
         """Return labels created from wsi files.
 
         Parameters
@@ -233,26 +237,27 @@ class WsiDicomLabels(WsiDicomSeries):
 
         Returns
         ----------
-        WsiDicomOverviews
+        Optional['WsiDicomLabels']
             Created labels.
         """
         labels = WsiDicomGroup.open(instances)
+        if len(labels) == 0:
+            return None
         return cls(labels)
 
 
 class WsiDicomOverviews(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the overview wsi flavor."""
-    WSI_TYPE = 'OVERVIEW'
 
     @property
-    def wsi_type(self) -> str:
-        return self.WSI_TYPE
+    def image_type(self) -> ImageType:
+        return ImageType.OVERVIEW
 
     @classmethod
     def open(
         cls,
         instances: Sequence[WsiInstance]
-    ) -> 'WsiDicomOverviews':
+    ) -> Optional['WsiDicomOverviews']:
         """Return overviews created from wsi files.
 
         Parameters
@@ -262,21 +267,22 @@ class WsiDicomOverviews(WsiDicomSeries):
 
         Returns
         ----------
-        WsiDicomOverviews
+        Optional[WsiDicomOverviews]
             Created overviews.
         """
         overviews = WsiDicomGroup.open(instances)
+        if len(overviews) == 0:
+            return None
         return cls(overviews)
 
 
 class WsiDicomLevels(WsiDicomSeries):
     """Represents a series of WsiDicomGroups of the volume (e.g. pyramidal
     level) wsi flavor."""
-    WSI_TYPE = 'VOLUME'
 
     @property
-    def wsi_type(self) -> str:
-        return self.WSI_TYPE
+    def image_type(self) -> ImageType:
+        return ImageType.VOLUME
 
     @classmethod
     def open(
@@ -488,6 +494,7 @@ class WsiDicomLevels(WsiDicomSeries):
     def construct_pyramid(
         self,
         highest_level: int,
+        instance_number: int,
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: int = 100,
@@ -538,7 +545,8 @@ class WsiDicomLevels(WsiDicomSeries):
                     uid_generator=uid_generator,
                     workers=workers,
                     chunk_size=chunk_size,
-                    offset_table=offset_table
+                    offset_table=offset_table,
+                    instance_number=instance_number
                 )
                 # Add level to available levels
                 if add_to_excisting:
@@ -546,4 +554,5 @@ class WsiDicomLevels(WsiDicomSeries):
                 else:
                     new_level.close()
                 filepaths += new_level.files
+                instance_number += 1
         return filepaths

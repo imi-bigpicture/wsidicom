@@ -25,7 +25,7 @@ from wsidicom.conceptcode import (CidConceptCode, IlluminationCode,
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom import WsiDicom
-from wsidicom.image_data import WsiDicomImageData
+from wsidicom.image_data.dicom_image_data import WsiDicomImageData
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 from .data_gen import create_layer_file, create_main_dataset

@@ -86,3 +86,8 @@ class WsiDicomStrictRequirementError(Exception):
 
 class WsiDicomRequirementError(Exception):
     """Raised if required attribute is missing."""
+
+
+class WsiDicomNoResultionError(Exception):
+    """Raised if method is not possible as resolution is missing in image
+    data."""
