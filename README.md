@@ -3,7 +3,7 @@
 *wsidicom* is a Python package for reading [DICOM WSI](http://dicom.nema.org/Dicom/DICOMWSI/) file sets. The aims with the project are:
 
 - Easy to use interface for reading and writing WSI DICOM images and annotations using the DICOM Media Storage Model.
-- Support the latest and upcomming DICOM standards.
+- Support the latest and upcoming DICOM standards.
 - Platform independent installation via PyPI.
 
 ## Installing *wsidicom*
