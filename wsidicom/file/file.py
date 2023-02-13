@@ -1,4 +1,4 @@
-#    Copyright 2021, 2022 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -16,93 +16,20 @@ import threading
 import warnings
 from pathlib import Path
 from struct import unpack
-from typing import (BinaryIO, Dict, List, Optional,
-                    Sequence, Tuple, Union, cast)
+from typing import BinaryIO, Dict, List, Optional, Sequence, Tuple, Union, cast
 
-from pydicom.filebase import DicomFile, DicomFileLike
+from pydicom.filebase import DicomFileLike
 from pydicom.filereader import read_file_meta_info, read_partial
 from pydicom.misc import is_dicom
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 
 from wsidicom.config import settings
-from wsidicom.errors import (WsiDicomFileError)
-from wsidicom.geometry import (Size)
+from wsidicom.dataset import ImageType, WsiDataset
+from wsidicom.errors import WsiDicomFileError
+from wsidicom.geometry import Size
 from wsidicom.uid import FileUids, SlideUids
-from wsidicom.dataset import WsiDataset
-
-
-class WsiDicomFileBase():
-    def __init__(self, filepath: Path, mode: str):
-        """Base class for reading or writing DICOM WSI file.
-
-        Parameters
-        ----------
-        filepath: Path
-            Filepath to file to read or write.
-        mode: str
-            Mode for opening file.
-        """
-        self._filepath = filepath
-        self._fp = DicomFile(filepath, mode=mode)
-        self.__enter__()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.filepath})"
-
-    def __str__(self) -> str:
-        return self.pretty_str()
-
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
-        return f"File with path: {self.filepath}"
-
-    @property
-    def filepath(self) -> Path:
-        """Return filepath"""
-        return self._filepath
-
-    def _read_tag_length(self, with_vr: bool = True) -> int:
-        if (not self._fp.is_implicit_VR) and with_vr:
-            # Read VR
-            self._fp.read_UL()
-        return self._fp.read_UL()
-
-    def _check_tag_and_length(
-        self,
-        tag: BaseTag,
-        length: int,
-        with_vr: bool = True
-    ) -> None:
-        """Check if tag at position is expected tag with expected length.
-
-        Parameters
-        ----------
-        tag: BaseTag
-            Expected tag.
-        length: int
-            Expected length.
-
-        """
-        read_tag = self._fp.read_tag()
-        if tag != read_tag:
-            raise ValueError(f"Found tag {read_tag} expected {tag}")
-        read_length = self._read_tag_length(with_vr)
-        if length != read_length:
-            raise ValueError(f"Found length {read_length} expected {length}")
-
-    def close(self) -> None:
-        """Close the file."""
-        self._fp.close()
+from wsidicom.file.base import WsiDicomFileBase
 
 
 class WsiDicomFile(WsiDicomFileBase):
@@ -157,11 +84,11 @@ class WsiDicomFile(WsiDicomFileBase):
         )
         self._pixel_data_position = self._fp.tell()
 
-        self._wsi_type = WsiDataset.is_supported_wsi_dicom(
+        self._image_type = WsiDataset.is_supported_wsi_dicom(
             dataset,
             self.transfer_syntax
         )
-        if self._wsi_type is not None:
+        if self._image_type is not None:
             self._dataset = WsiDataset(dataset)
             instance_uid = self.dataset.uids.instance
             concatenation_uid = self.dataset.uids.concatenation
@@ -201,8 +128,8 @@ class WsiDicomFile(WsiDicomFileBase):
         return self._dataset
 
     @property
-    def wsi_type(self) -> Optional[str]:
-        return self._wsi_type
+    def image_type(self) -> Optional[ImageType]:
+        return self._image_type
 
     @property
     def uids(self) -> FileUids:

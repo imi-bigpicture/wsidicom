@@ -26,7 +26,7 @@ from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 
-from wsidicom.file import WsiDicomFileBase
+from wsidicom.file.base import WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.image_data import ImageData
 from wsidicom.uid import WSI_SOP_CLASS_UID
@@ -55,6 +55,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         workers: int,
         chunk_size: int,
         offset_table: Optional[str],
+        instance_number: int,
         scale: int = 1
     ) -> None:
         """Writes data to file.
@@ -76,6 +77,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        instance_number: int
+            Instance number for file.
         scale: int = 1
             Scale factor.
 
@@ -83,6 +86,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         self._write_preamble()
         self._write_file_meta(uid, transfer_syntax)
         dataset.SOPInstanceUID = uid
+        dataset.InstanceNumber = instance_number
         self._write_base(dataset)
         table_start, pixels_start = self._write_pixel_data_start(
             dataset.NumberOfFrames,

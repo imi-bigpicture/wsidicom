@@ -23,7 +23,8 @@ from tempfile import TemporaryDirectory
 from typing import List, Optional, OrderedDict, Sequence, Tuple, cast
 
 import pytest
-from PIL import Image, ImageChops, ImageFilter, ImageStat
+from PIL import ImageChops, ImageFilter, ImageStat
+from PIL.Image import Image as PILImage
 from pydicom import Sequence as DicomSequence
 from pydicom.dataset import Dataset
 from pydicom.filebase import DicomFile
@@ -34,8 +35,7 @@ from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 from wsidicom import WsiDicom
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.image_data import ImageData, ImageOrigin
-from wsidicom.file import WsiDicomFile
-from wsidicom.file_writer import WsiDicomFileWriter
+from wsidicom.file import WsiDicomFile, WsiDicomFileWriter
 from wsidicom.uid import WSI_SOP_CLASS_UID
 from wsidicom.wsidicom import WsiDicomLevel
 
@@ -103,7 +103,7 @@ class WsiDicomTestImageData(ImageData):
         Point,
         z: float,
         path: str
-    ) -> Image.Image:
+    ) -> PILImage:
         raise NotImplementedError()
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
@@ -447,7 +447,8 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                         }),
                         1,
                         100,
-                        table
+                        table,
+                        0
                     )
 
                 with WsiDicomFile(filepath) as read_file:
@@ -473,7 +474,8 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                     generate_uid,
                     1,
                     100,
-                    'bot'
+                    'bot',
+                    0
                 )
                 new_level.close()
                 with WsiDicom.open(tempdir) as created_wsi:
