@@ -21,18 +21,26 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.dataset import Dataset
+from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
 
 from wsidicom.errors import WsiDicomOutOfBoundsError
-from wsidicom.geometry import (Orientation, Point, PointMm, Region, RegionMm,
-                               Size, SizeMm)
+from wsidicom.geometry import (
+    Orientation,
+    Point,
+    PointMm,
+    Region,
+    RegionMm,
+    Size,
+    SizeMm,
+)
 
 
 class ImageOrigin:
     def __init__(
         self,
         origin: Optional[PointMm] = None,
-        orientation: Optional[Orientation] = None
+        orientation: Optional[Orientation] = None,
     ):
         if origin is None:
             origin = PointMm(0, 0)
@@ -50,16 +58,15 @@ class ImageOrigin:
         return self._orientation
 
     @classmethod
-    def from_dataset(
-        cls,
-        dataset: Dataset
-    ):
+    def from_dataset(cls, dataset: Dataset):
         try:
             origin = PointMm(
-                dataset.TotalPixelMatrixOriginSequence[0].
-                XOffsetInSlideCoordinateSystem,
-                dataset.TotalPixelMatrixOriginSequence[0].
-                YOffsetInSlideCoordinateSystem
+                dataset.TotalPixelMatrixOriginSequence[
+                    0
+                ].XOffsetInSlideCoordinateSystem,
+                dataset.TotalPixelMatrixOriginSequence[
+                    0
+                ].YOffsetInSlideCoordinateSystem,
             )
         except (AttributeError, IndexError):
             warnings.warn(
@@ -78,13 +85,25 @@ class ImageOrigin:
         return cls(origin, orientation)
 
     @property
+    def total_pixel_matrix_origin_sequence(self) -> DicomSequence:
+        """Return formatted TotalPixelMatrixOriginSequence."""
+        offset_item = Dataset()
+        offset_item.XOffsetInSlideCoordinateSystem = self.origin.x
+        offset_item.YOffsetInSlideCoordinateSystem = self.origin.y
+        return DicomSequence([offset_item])
+
+    @property
+    def image_orientation_slide(
+        self,
+    ) -> List[float]:
+        """Return formatted ImageOrientationSlide."""
+        return list(self.orientation.orientation)
+
+    @property
     def rotation(self) -> float:
         return self._orientation.rotation
 
-    def transform_region(
-        self,
-        region: RegionMm
-    ) -> 'RegionMm':
+    def transform_region(self, region: RegionMm) -> "RegionMm":
         region.position = region.position - self._origin
         return self._orientation.apply(region)
 
@@ -96,6 +115,7 @@ class ImageData(metaclass=ABCMeta):
     and photometric_interpretation and methods get_tile() and close().
     Additionally properties focal_planes and/or optical_paths should be
     overridden if multiple focal planes or optical paths are implemented."""
+
     _default_z: Optional[float] = None
     _blank_tile: Optional[PILImage] = None
     _encoded_blank_tile: Optional[bytes] = None
@@ -150,23 +170,13 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_decoded_tile(
-        self,
-        tile_point: Point,
-        z: float,
-        path: str
-    ) -> PILImage:
+    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
         """Should return Image for tile defined by tile (x, y), z,
         and optical path."""
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_encoded_tile(
-        self,
-        tile: Point,
-        z: float,
-        path: str
-    ) -> bytes:
+    def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         """Should return image bytes for tile defined by tile (x, y), z,
         and optical path."""
         raise NotImplementedError()
@@ -194,15 +204,15 @@ class ImageData(metaclass=ABCMeta):
     @property
     def optical_paths(self) -> List[str]:
         """Optical paths avaiable in the image."""
-        return ['0']
+        return ["0"]
 
     @property
     def image_mode(self) -> str:
         """Return Pillow image mode (e.g. RGB) for image data"""
-        if(self.samples_per_pixel == 1):
-            return 'L'
-        elif(self.samples_per_pixel == 3):
-            return 'RGB'
+        if self.samples_per_pixel == 1:
+            return "L"
+        elif self.samples_per_pixel == 3:
+            return "RGB"
         raise NotImplementedError()
 
     @property
@@ -210,11 +220,7 @@ class ImageData(metaclass=ABCMeta):
         """Return RGB background color."""
         return self._get_blank_color(self.photometric_interpretation)
 
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
+    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         return str(self)
 
     @property
@@ -224,12 +230,14 @@ class ImageData(metaclass=ABCMeta):
         defined."""
         if self._default_z is None:
             default = 0
-            if(len(self.focal_planes) > 1):
+            if len(self.focal_planes) > 1:
                 smallest = min(self.focal_planes)
                 largest = max(self.focal_planes)
-                middle = (largest - smallest)/2
-                default = min(range(len(self.focal_planes)),
-                              key=lambda i: abs(self.focal_planes[i]-middle))
+                middle = (largest - smallest) / 2
+                default = min(
+                    range(len(self.focal_planes)),
+                    key=lambda i: abs(self.focal_planes[i] - middle),
+                )
 
             self._default_z = self.focal_planes[default]
 
@@ -260,10 +268,7 @@ class ImageData(metaclass=ABCMeta):
         return self._encoded_blank_tile
 
     def get_decoded_tiles(
-        self,
-        tiles: Iterable[Point],
-        z: float,
-        path: str
+        self, tiles: Iterable[Point], z: float, path: str
     ) -> List[PILImage]:
         """Return tiles for tile defined by tile (x, y), z, and optical
         path.
@@ -282,15 +287,10 @@ class ImageData(metaclass=ABCMeta):
         List[PILImage]
             Tiles as Images.
         """
-        return [
-            self._get_decoded_tile(tile, z, path) for tile in tiles
-        ]
+        return [self._get_decoded_tile(tile, z, path) for tile in tiles]
 
     def get_encoded_tiles(
-        self,
-        tiles: Iterable[Point],
-        z: float,
-        path: str
+        self, tiles: Iterable[Point], z: float, path: str
     ) -> List[bytes]:
         """Return tiles for tile defined by tile (x, y), z, and optical
         path.
@@ -309,16 +309,10 @@ class ImageData(metaclass=ABCMeta):
         List[bytes]
             Tiles in bytes.
         """
-        return [
-            self._get_encoded_tile(tile, z, path) for tile in tiles
-        ]
+        return [self._get_encoded_tile(tile, z, path) for tile in tiles]
 
     def get_scaled_tile(
-        self,
-        scaled_tile_point: Point,
-        z: float,
-        path: str,
-        scale: int
+        self, scaled_tile_point: Point, z: float, path: str, scale: int
     ) -> PILImage:
         """Return scaled tile defined by tile (x, y), z, optical
         path and scale.
@@ -342,24 +336,22 @@ class ImageData(metaclass=ABCMeta):
         image = Image.new(
             mode=self.image_mode,  # type: ignore
             size=(self.tile_size * scale).to_tuple(),
-            color=self.blank_color[:self.samples_per_pixel]
+            color=self.blank_color[: self.samples_per_pixel],
         )
         # Get decoded tiles for the region covering the scaled tile
         # in the image data
-        tile_points = Region(scaled_tile_point*scale, Size(1, 1)*scale)
+        tile_points = Region(scaled_tile_point * scale, Size(1, 1) * scale)
         origin = tile_points.start
         for tile_point in tile_points.iterate_all():
-            if (
-                (tile_point.x < self.tiled_size.width) and
-                (tile_point.y < self.tiled_size.height)
+            if (tile_point.x < self.tiled_size.width) and (
+                tile_point.y < self.tiled_size.height
             ):
                 tile = self._get_decoded_tile(tile_point, z, path)
                 image_coordinate = (tile_point - origin) * self.tile_size
                 image.paste(tile, image_coordinate.to_tuple())
 
         return image.resize(
-            self.tile_size.to_tuple(),
-            resample=Image.Resampling.BILINEAR
+            self.tile_size.to_tuple(), resample=Image.Resampling.BILINEAR
         )
 
     def get_scaled_encoded_tile(
@@ -369,7 +361,7 @@ class ImageData(metaclass=ABCMeta):
         path: str,
         scale: int,
         image_format: str,
-        image_options: Dict[str, Any]
+        image_options: Dict[str, Any],
     ) -> bytes:
         """Return scaled encoded tile defined by tile (x, y), z, optical
         path and scale.
@@ -396,11 +388,7 @@ class ImageData(metaclass=ABCMeta):
         """
         image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
         with io.BytesIO() as buffer:
-            image.save(
-                buffer,
-                format=image_format,
-                **image_options
-            )
+            image.save(buffer, format=image_format, **image_options)
             return buffer.getvalue()
 
     def get_scaled_encoded_tiles(
@@ -410,7 +398,7 @@ class ImageData(metaclass=ABCMeta):
         path: str,
         scale: int,
         image_format: str,
-        image_options: Dict[str, Any]
+        image_options: Dict[str, Any],
     ) -> List[bytes]:
         """Return scaled encoded tiles defined by tile (x, y) positions, z,
         optical path and scale.
@@ -437,12 +425,7 @@ class ImageData(metaclass=ABCMeta):
         """
         return [
             self.get_scaled_encoded_tile(
-                scaled_tile_point,
-                z,
-                path,
-                scale,
-                image_format,
-                image_options
+                scaled_tile_point, z, path, scale, image_format, image_options
             )
             for scaled_tile_point in scaled_tile_points
         ]
@@ -461,9 +444,9 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
         """
         return (
-            region.is_inside(self.plane_region) and
-            (z in self.focal_planes) and
-            (path in self.optical_paths)
+            region.is_inside(self.plane_region)
+            and (z in self.focal_planes)
+            and (path in self.optical_paths)
         )
 
     def encode(self, image: PILImage) -> bytes:
@@ -480,17 +463,13 @@ class ImageData(metaclass=ABCMeta):
             Encoded image as bytes
 
         """
-        image_format, image_options = self._image_settings(
-            self.transfer_syntax
-        )
+        image_format, image_options = self._image_settings(self.transfer_syntax)
         with io.BytesIO() as buffer:
             image.save(buffer, format=image_format, **image_options)
             return buffer.getvalue()
 
     @staticmethod
-    def _image_settings(
-        transfer_syntax: UID
-    ) -> Tuple[str, Dict[str, Any]]:
+    def _image_settings(transfer_syntax: UID) -> Tuple[str, Dict[str, Any]]:
         """Return image format and options for creating encoded tiles as in the
         used transfer syntax.
 
@@ -505,25 +484,21 @@ class ImageData(metaclass=ABCMeta):
             image format and image options
 
         """
-        if(transfer_syntax == JPEGBaseline8Bit):
-            image_format = 'jpeg'
-            image_options = {'quality': 95}
-        elif(transfer_syntax == JPEG2000):
-            image_format = 'jpeg2000'
+        if transfer_syntax == JPEGBaseline8Bit:
+            image_format = "jpeg"
+            image_options = {"quality": 95}
+        elif transfer_syntax == JPEG2000:
+            image_format = "jpeg2000"
             image_options = {"irreversible": True}
-        elif(transfer_syntax == JPEG2000Lossless):
-            image_format = 'jpeg2000'
+        elif transfer_syntax == JPEG2000Lossless:
+            image_format = "jpeg2000"
             image_options = {"irreversible": False}
         else:
-            raise NotImplementedError(
-                "Only supports jpeg and jpeg2000"
-            )
+            raise NotImplementedError("Only supports jpeg and jpeg2000")
         return (image_format, image_options)
 
     @staticmethod
-    def _get_blank_color(
-        photometric_interpretation: str
-    ) -> Tuple[int, int, int]:
+    def _get_blank_color(photometric_interpretation: str) -> Tuple[int, int, int]:
         """Return color to use blank tiles.
 
         Parameters
@@ -539,7 +514,7 @@ class ImageData(metaclass=ABCMeta):
         """
         BLACK = 0
         WHITE = 255
-        if(photometric_interpretation == "MONOCHROME2"):
+        if photometric_interpretation == "MONOCHROME2":
             return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
         return (WHITE, WHITE, WHITE)
 
@@ -554,15 +529,10 @@ class ImageData(metaclass=ABCMeta):
         return Image.new(
             mode=self.image_mode,  # type: ignore
             size=self.tile_size.to_tuple(),
-            color=self.blank_color[:self.samples_per_pixel]
+            color=self.blank_color[: self.samples_per_pixel],
         )
 
-    def stitch_tiles(
-        self,
-        region: Region,
-        path: str,
-        z: float
-    ) -> PILImage:
+    def stitch_tiles(self, region: Region, path: str, z: float) -> PILImage:
         """Stitches tiles together to form requested image.
 
         Parameters
@@ -581,8 +551,7 @@ class ImageData(metaclass=ABCMeta):
         """
 
         image = Image.new(
-            mode=self.image_mode,  # type: ignore
-            size=region.size.to_tuple()
+            mode=self.image_mode, size=region.size.to_tuple()  # type: ignore
         )
         stitching_tiles = self._get_tile_range(region, z, path)
 
@@ -592,18 +561,11 @@ class ImageData(metaclass=ABCMeta):
             tile_image = self.get_tile(tile, z, path, region)
             image.paste(tile_image, write_index.to_tuple())
             write_index = self._write_indexer(
-                write_index,
-                Size.from_tuple(tile_image.size),
-                region.size
+                write_index, Size.from_tuple(tile_image.size), region.size
             )
         return image
 
-    def _get_tile_range(
-        self,
-        pixel_region: Region,
-        z: float,
-        path: str
-    ) -> Region:
+    def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:
         """Return range of tiles to cover pixel region.
 
         Parameters
@@ -625,17 +587,12 @@ class ImageData(metaclass=ABCMeta):
         tile_region = Region.from_points(start, end)
         if not self.valid_tiles(tile_region, z, path):
             raise WsiDicomOutOfBoundsError(
-                f"Tile region {tile_region}",
-                f"tiled size {self.tiled_size}"
+                f"Tile region {tile_region}", f"tiled size {self.tiled_size}"
             )
         return tile_region
 
     @staticmethod
-    def _write_indexer(
-        index: Point,
-        previous_size: Size,
-        image_size: Size
-    ) -> Point:
+    def _write_indexer(index: Point, previous_size: Size, image_size: Size) -> Point:
         """Increment index in x by previous width until index x exceds image
         size. Then resets index x to 0 and increments index y by previous
         height. Requires that tiles are scanned row by row.
@@ -655,17 +612,13 @@ class ImageData(metaclass=ABCMeta):
             The position (upper right) in image to insert the next tile into
         """
         index.x += previous_size.width
-        if(index.x >= image_size.width):
+        if index.x >= image_size.width:
             index.x = 0
             index.y += previous_size.height
         return index
 
     def get_tile(
-        self,
-        tile: Point,
-        z: float,
-        path: str,
-        crop: Union[bool, Region] = True
+        self, tile: Point, z: float, path: str, crop: Union[bool, Region] = True
     ) -> PILImage:
         """Get tile image at tile coordinate x, y. If frame is inside tile
         geometry but no tile exists in frame data (sparse) returns blank image.
@@ -700,11 +653,7 @@ class ImageData(metaclass=ABCMeta):
         return image.crop(box=tile_crop.box)
 
     def get_encoded_tile(
-        self,
-        tile: Point,
-        z: float,
-        path: str,
-        crop: Union[bool, Region] = True
+        self, tile: Point, z: float, path: str, crop: Union[bool, Region] = True
     ) -> bytes:
         """Get tile bytes at tile coordinate x, y
         If frame is inside tile geometry but no tile exists in
