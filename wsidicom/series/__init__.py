@@ -12,7 +12,5 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from wsidicom.series.labels import Labels
 from wsidicom.series.levels import Levels
-from wsidicom.series.overviews import Overviews
-from wsidicom.series.series import Series
+from wsidicom.series.series import Labels, Overviews, Series

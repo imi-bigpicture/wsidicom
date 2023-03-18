@@ -14,7 +14,7 @@
 
 import os
 from pathlib import Path
-from typing import Callable, List, Optional, OrderedDict, Sequence
+from typing import Callable, List, Optional, OrderedDict, Sequence, TypeVar
 
 from pydicom.uid import UID, generate_uid
 

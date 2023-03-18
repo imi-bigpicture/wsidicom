@@ -14,7 +14,7 @@
 
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, Union
+from typing import Callable, List, Optional, Sequence, Type, TypeVar, Union
 
 from pydicom.uid import UID
 
@@ -24,6 +24,8 @@ from wsidicom.geometry import SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import WsiInstance
 from wsidicom.uid import SlideUids
+
+SeriesType = TypeVar("SeriesType")
 
 
 class Series(metaclass=ABCMeta):
@@ -40,7 +42,7 @@ class Series(metaclass=ABCMeta):
             List of groups to include in the series.
         """
         self._groups = groups
-
+        self._group_type = Group
         if len(self.groups) != 0 and self.groups[0].uids is not None:
             self._uids = self._validate_series(self.groups)
         else:
@@ -111,10 +113,31 @@ class Series(metaclass=ABCMeta):
         series_instances = [series.instances.values() for series in self.groups]
         return [instance for sublist in series_instances for instance in sublist]
 
+    # @classmethod
+    # @abstractmethod
+    # def open(cls, instances: Sequence[WsiInstance]) -> "Series":
+    #     raise NotImplementedError()
+
     @classmethod
-    @abstractmethod
-    def open(cls, instances: Sequence[WsiInstance]) -> "Series":
-        raise NotImplementedError()
+    def open(
+        cls: Type[SeriesType], instances: Sequence[WsiInstance]
+    ) -> Optional[SeriesType]:
+        """Return series created from instances.
+
+        Parameters
+        ----------
+        instances: Sequence[WsiInstance]
+            Instances to create series from.
+
+        Returns
+        ----------
+        Optional[SeriesType]
+            Created series.
+        """
+        groups = Group.open(instances)
+        if len(groups) == 0:
+            return None
+        return cls(groups)
 
     def _validate_series(
         self, groups: Union[Sequence[Group], Sequence[Level]]
@@ -198,3 +221,19 @@ class Series(metaclass=ABCMeta):
             filepaths.extend(group_file_paths)
             instance_number += len(group_file_paths)
         return filepaths
+
+
+class Overviews(Series):
+    """Represents a series of Groups of the overview wsi flavor."""
+
+    @property
+    def image_type(self) -> ImageType:
+        return ImageType.OVERVIEW
+
+
+class Labels(Series):
+    """Represents a series of Groups of the label wsi flavor."""
+
+    @property
+    def image_type(self) -> ImageType:
+        return ImageType.LABEL
