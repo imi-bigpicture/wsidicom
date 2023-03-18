@@ -51,30 +51,33 @@ class WsiDicom:
 
     def __init__(
         self,
-        levels: Levels,
-        labels: Optional[Labels] = None,
-        overviews: Optional[Overviews] = None,
-        annotations: Optional[Sequence[AnnotationInstance]] = None,
+        source: Source,
+        label: Optional[Union[PILImage, str, Path]] = None,
     ):
         """Holds wsi dicom levels, labels and overviews.
 
+        Note that WsiDicom.open() should be used for opening dicom wsi files.
+
         Parameters
         ----------
-        levels: Levels
-            Series of pyramidal levels.
-        labels: Optional[Labels] = None,
-            Series of label images.
-        overviews: Optional[Overviews] = None,
-            Series of overview images
-        annotations: Optional[Sequence[AnnotationInstance]] = None
-            Sup-222 annotation instances.
+        source: Source
+            A source providing instances for the wsi to open.
+        label: Optional[Union[PILImage, str, Path]] = None
+            Optional label image to use instead of label found in source.
         """
-        if annotations is None:
-            annotations = []
-        self._levels = levels
-        self._labels = labels
-        self._overviews = overviews
-        self.annotations = annotations
+        if label is None:
+            label_instances = source.label_instances
+        else:
+            label_instances = [
+                WsiInstance.create_label(
+                    label,
+                    source.base_dataset,
+                )
+            ]
+        self._levels = Levels.open(source.level_instances)
+        self._labels = Labels.open(label_instances)
+        self._overviews = Overviews.open(source.overview_instances)
+        self._annotations = source.annotation_instances
         self._uids = self._validate_collection()
 
         self.optical = OpticalManager.open(
@@ -82,6 +85,56 @@ class WsiDicom:
         )
 
         self.__enter__()
+
+    @classmethod
+    def open(
+        cls,
+        path: Union[str, Sequence[str], Path, Sequence[Path]],
+        label: Optional[Union[PILImage, str, Path]] = None,
+    ) -> "WsiDicom":
+        """Open valid wsi dicom files in path and return a WsiDicom object.
+        Non-valid files are ignored.
+
+        Parameters
+        ----------
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
+            Path to files to open.
+        label: Optional[Union[PILImage, str, Path]] = None
+            Optional label image to use instead of label found in path.
+
+        Returns
+        ----------
+        WsiDicom
+            WsiDicom created from wsi dicom files in path.
+        """
+        source = WsiDicomFileSource(path)
+        return cls(source, label)
+
+    @classmethod
+    def open_web(
+        cls,
+        client: WsiDicomWebClient,
+        study_uid: Union[str, UID],
+        series_uid: Union[str, UID],
+    ) -> "WsiDicom":
+        """Open wsi dicom instances using dicom web client.
+
+        Parameters
+        ----------
+        client: WsiDicomWebClient
+            Configured dicom web client.
+        study_uid: Union[str, UID]
+            Study uid of wsi to open.
+        series_uid: Union[str, UID]
+            Series uid of wsi to open
+
+        Returns
+        ----------
+        WsiDicom
+            WsiDicom created from wsi dicom files in study-series.
+        """
+        source = WsiDicomWebSource(client, study_uid, series_uid)
+        return cls(source)
 
     def __enter__(self):
         return self
@@ -114,20 +167,25 @@ class WsiDicom:
 
     @property
     def levels(self) -> Levels:
-        """Return contained levels"""
+        """Return contained levels."""
         if self._levels is not None:
             return self._levels
         raise WsiDicomNotFoundError("levels", str(self))
 
     @property
     def labels(self) -> Optional[Labels]:
-        """Return contained labels"""
+        """Return contained labels."""
         return self._labels
 
     @property
     def overviews(self) -> Optional[Overviews]:
-        """Return contained overviews"""
+        """Return contained overviews."""
         return self._overviews
+
+    @property
+    def annotations(self) -> List[AnnotationInstance]:
+        """Return contained annotations."""
+        return self._annotations
 
     @property
     def collection(self) -> List[Series]:
@@ -166,62 +224,6 @@ class WsiDicom:
             string
             + " of levels:\n"
             + list_pretty_str(self.levels.groups, indent, depth, 0, 2)
-        )
-
-    @classmethod
-    def open(
-        cls,
-        path: Union[str, Sequence[str], Path, Sequence[Path]],
-        label: Optional[Union[PILImage, str, Path]] = None,
-    ) -> "WsiDicom":
-        """Open valid wsi dicom files in path and return a WsiDicom object.
-        Non-valid files are ignored.
-
-        Parameters
-        ----------
-        path: Union[str, Sequence[str], Path, Sequence[Path]]
-            Path to files to open.
-        label: Optional[Union[PILImage, str, Path]] = None
-            Optional label image to use instead of label found in path.
-
-        Returns
-        ----------
-        WsiDicom
-            Object created from wsi dicom files in path.
-        """
-        source = WsiDicomFileSource(path)
-        return cls.open_source(source, label)
-
-    @classmethod
-    def open_web(
-        cls,
-        client: WsiDicomWebClient,
-        study_uid: Union[str, UID],
-        series_uid: Union[str, UID],
-    ) -> "WsiDicom":
-        source = WsiDicomWebSource(client, study_uid, series_uid)
-        return cls.open_source(source)
-
-    @classmethod
-    def open_source(
-        cls,
-        source: Source,
-        label: Optional[Union[PILImage, str, Path]] = None,
-    ) -> "WsiDicom":
-        if label is None:
-            label_instances = source.label_instances
-        else:
-            label_instances = [
-                WsiInstance.create_label(
-                    label,
-                    source.base_dataset,
-                )
-            ]
-        return cls(
-            levels=Levels.open(source.level_instances),
-            labels=Labels.open(label_instances),
-            overviews=Overviews.open(source.overview_instances),
-            annotations=source.annotation_instances,
         )
 
     def read_label(self, index: int = 0) -> PILImage:
