@@ -33,6 +33,7 @@ from wsidicom.errors import (
 from wsidicom.file import WsiDicomFile
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
+from wsidicom.image_data.dicom_web_image_data import DicomWebImageData
 from wsidicom.instance import WsiDicomLevel, WsiInstance
 from wsidicom.optical import OpticalManager
 from wsidicom.series import (
@@ -43,6 +44,7 @@ from wsidicom.series import (
 )
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
+from wsidicom.web.web import DicomWebClient, WsiDicomWeb
 
 
 class WsiDicom:
@@ -232,6 +234,35 @@ class WsiDicom:
         annotations = AnnotationInstance.open(annotation_files)
 
         return cls(levels, labels, overviews, annotations)
+
+    @classmethod
+    def open_web(
+        cls,
+        client: DicomWebClient,
+        study_uid: Union[str, UID],
+        series_uid: Union[str, UID],
+    ) -> "WsiDicom":
+        if not isinstance(study_uid, UID):
+            study_uid = UID(study_uid)
+        if not isinstance(series_uid, UID):
+            series_uid = UID(series_uid)
+        level_instances = []
+        label_instances = []
+        overview_instances = []
+        for instance_uid in client.get_instances(study_uid, series_uid):
+            web_instance = WsiDicomWeb(client, study_uid, series_uid, instance_uid)
+            image_data = DicomWebImageData(web_instance)
+            instance = WsiInstance(web_instance.dataset, image_data)
+            if instance.image_type == ImageType.VOLUME:
+                level_instances.append(instance)
+            elif instance.image_type == ImageType.LABEL:
+                label_instances.append(instance)
+            elif instance.image_type == ImageType.OVERVIEW:
+                overview_instances.append(instance)
+        levels = WsiDicomLevels.open(level_instances)
+        labels = WsiDicomLabels.open(label_instances)
+        overviews = WsiDicomOverviews.open(overview_instances)
+        return cls(levels, labels, overviews)
 
     def read_label(self, index: int = 0) -> PILImage:
         """Read label image of the whole slide. If several label

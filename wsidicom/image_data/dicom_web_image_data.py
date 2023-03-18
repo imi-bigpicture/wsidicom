@@ -11,14 +11,12 @@ from wsidicom.dataset import TileType
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.image_data.dicom_image_data import FullTileIndex, SparseTileIndex
 from wsidicom.image_data.image_data import ImageData, ImageOrigin
-from wsidicom.web.web import DicomWebClient, WsiDicomWeb
+from wsidicom.web.web import WsiDicomWeb
 
 
 class DicomWebImageData(ImageData):
-    def __init__(
-        self, client: DicomWebClient, study_uid: UID, series_uid: UID, instance_uid: UID
-    ):
-        self._instance = WsiDicomWeb(client, study_uid, series_uid, instance_uid)
+    def __init__(self, instance: WsiDicomWeb):
+        self._instance = instance
         if self._instance.dataset.tile_type == TileType.FULL:
             self._tile_index = FullTileIndex([self._instance.dataset])
         else:
@@ -76,7 +74,7 @@ class DicomWebImageData(ImageData):
 
     def close(self) -> None:
         """Should close any open files."""
-        raise NotImplementedError()
+        pass
 
     def _get_tile(self, tile: Point, z: float, path: str) -> bytes:
         tile_index = self._tile_index.get_frame_index(tile, z, path)

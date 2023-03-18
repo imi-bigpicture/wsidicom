@@ -1,4 +1,6 @@
+from enum import Enum
 from functools import cached_property
+from typing import List
 
 from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
@@ -7,6 +9,12 @@ from pydicom.uid import UID
 from requests.auth import AuthBase
 
 from wsidicom.dataset import WsiDataset
+from wsidicom.uid import WSI_SOP_CLASS_UID
+
+
+class DicomTags(Enum):
+    SOP_CLASS_UID = "00080016"
+    SOP_INSTANCE_UID = "00080018"
 
 
 class DicomWebClient:
@@ -20,10 +28,13 @@ class DicomWebClient:
             session=create_session_from_auth(auth),
         )
 
-    def get_series(self, study_uid: UID, series_uid: UID) -> Dataset:
-        series = self._client.retrieve_series_metadata(study_uid, series_uid)
-        series_datasets = [Dataset.from_json(ds) for ds in series]
-        return series_datasets[0]
+    def get_instances(self, study_uid: UID, series_uid: UID) -> List[UID]:
+        return [
+            UID(instance[DicomTags.SOP_INSTANCE_UID.value]["Value"][0])
+            for instance in self._client.search_for_instances(study_uid, series_uid)
+            if UID(instance[DicomTags.SOP_CLASS_UID.value]["Value"][0])
+            == WSI_SOP_CLASS_UID
+        ]
 
     def get_instance(
         self, study_uid: UID, series_uid: UID, instance_uid: UID
@@ -68,6 +79,7 @@ class WsiDicomWeb:
         return UID(self.dataset["TransferSyntaxUID"].value)
 
     def get_tile(self, tile: int) -> bytes:
+        # First frame for DICOM web is 1.
         return self._client.get_frame(
-            self._study_uid, self._series_uid, self._instance_uid, tile
+            self._study_uid, self._series_uid, self._instance_uid, tile + 1
         )
