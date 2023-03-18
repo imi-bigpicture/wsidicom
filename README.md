@@ -113,12 +113,12 @@ settings._strict_attribute_check = True
 
 A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of different classes, starting from bottom:
 
-- *WsiDicomFile*, represents a WSI DICOM file, used for accessing DicomImageData and WsiDataset.
-- *DicomImageData*, represents the image data in one or several WSI DICOM files.
+- *WsiDicomFile*, represents a WSI DICOM file, used for accessing WsiDicomFileImageData and WsiDataset.
+- *WsiDicomFileImageData*, represents the image data in one or several WSI DICOM files.
 - *WsiDataset*, represents the image metadata in one or several WSI DICOM files.
 - *WsiInstance*, represents image data and image metadata.
-- *WsiDicomLevel*, represents a group of instances with the same image size, i.e. of the same level.
-- *WsiDicomLevels*, represents a group of levels, i.e. the pyrimidal structure.
+- *Level*, represents a group of instances with the same image size, i.e. of the same level.
+- *Levels*, represents a group of levels, i.e. the pyrimidal structure.
 - *WsiDicom*, represents a collection of levels, labels and overviews.
 
 Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions.
@@ -134,8 +134,8 @@ But the structure can also be created manually from the bottom:
 ```python
 file = WsiDicomFile(path_to_file)
 instance = WsiInstance(file.dataset, DicomImageData(files))
-level = WsiDicomLevel([instance])
-levels = WsiDicomLevels([level])
+level = Level([instance])
+levels = Levels([level])
 slide = WsiDicom([levels])
 ```
 

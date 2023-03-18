@@ -1,4 +1,4 @@
-#    Copyright 2021, 2022 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -25,8 +25,7 @@ from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 
-from wsidicom.file.base import WsiDicomFileBase
-from wsidicom.file.file import OffsetTableType
+from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.image_data import ImageData
 from wsidicom.uid import WSI_SOP_CLASS_UID

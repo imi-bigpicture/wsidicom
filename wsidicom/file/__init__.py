@@ -12,5 +12,5 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from wsidicom.file.file import WsiDicomFile
-from wsidicom.file.writer import WsiDicomFileWriter
+from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
+from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter

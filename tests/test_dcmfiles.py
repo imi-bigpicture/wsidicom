@@ -23,16 +23,12 @@ from PIL import Image
 import pytest
 from wsidicom import WsiDicom
 
-SLIDE_FOLDER = Path(os.environ.get(
-    "WSIDICOM_TESTDIR",
-    "tests/testdata/slides")
-)
-REGION_DEFINITIONS_FILE = 'tests/testdata/region_definitions.json'
+SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
+REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
 
 
 @pytest.mark.integration
 class WsiDicomFilesTests(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         folders = cls._get_folders(SLIDE_FOLDER)
@@ -43,15 +39,12 @@ class WsiDicomFilesTests(unittest.TestCase):
 
         if len(cls.test_folders) == 0:
             raise unittest.SkipTest(
-                f'no test slide files found for {SLIDE_FOLDER}, '
-                'skipping'
+                f"no test slide files found for {SLIDE_FOLDER}, " "skipping"
             )
         with open(REGION_DEFINITIONS_FILE) as json_file:
-            cls.test_definitions: Dict[str, Dict[str, Any]] = (
-                json.load(json_file)
-            )
+            cls.test_definitions: Dict[str, Dict[str, Any]] = json.load(json_file)
         if len(cls.test_definitions) == 0:
-            raise unittest.SkipTest('no test definition found, skipping.')
+            raise unittest.SkipTest("no test definition found, skipping.")
 
     @classmethod
     def tearDownClass(cls):
@@ -69,10 +62,7 @@ class WsiDicomFilesTests(unittest.TestCase):
         if not SLIDE_FOLDER.exists():
             print("slide folder does not exist")
             return []
-        return [
-            item for item in SLIDE_FOLDER.iterdir()
-            if item.is_dir
-        ]
+        return [item for item in SLIDE_FOLDER.iterdir() if item.is_dir]
 
     @staticmethod
     def _get_relative_path(slide_path: Path) -> Path:
@@ -84,17 +74,15 @@ class WsiDicomFilesTests(unittest.TestCase):
             if not Path(folder) in self.test_folders:
                 continue
             wsi = self.test_folders[Path(folder)]
-            for region in test_definitions['read_region']:
+            for region in test_definitions["read_region"]:
                 im = wsi.read_region(
                     (region["location"]["x"], region["location"]["y"]),
                     region["level"],
-                    (region["size"]["width"], region["size"]["height"])
+                    (region["size"]["width"], region["size"]["height"]),
                 )
                 print(region)
                 self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(),
-                    region["md5"],
-                    msg=region
+                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
                 )
 
     def test_read_region_mm(self):
@@ -102,17 +90,15 @@ class WsiDicomFilesTests(unittest.TestCase):
             if not Path(folder) in self.test_folders:
                 continue
             wsi = self.test_folders[Path(folder)]
-            for region in test_definitions['read_region_mm']:
+            for region in test_definitions["read_region_mm"]:
                 im = wsi.read_region_mm(
                     (region["location"]["x"], region["location"]["y"]),
                     region["level"],
-                    (region["size"]["width"], region["size"]["height"])
+                    (region["size"]["width"], region["size"]["height"]),
                 )
                 print(region)
                 self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(),
-                    region["md5"],
-                    msg=region
+                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
                 )
 
     def test_read_region_mpp(self):
@@ -120,17 +106,15 @@ class WsiDicomFilesTests(unittest.TestCase):
             if not Path(folder) in self.test_folders:
                 continue
             wsi = self.test_folders[Path(folder)]
-            for region in test_definitions['read_region_mpp']:
+            for region in test_definitions["read_region_mpp"]:
                 im = wsi.read_region_mpp(
                     (region["location"]["x"], region["location"]["y"]),
                     region["mpp"],
-                    (region["size"]["width"], region["size"]["height"])
+                    (region["size"]["width"], region["size"]["height"]),
                 )
                 print(region)
                 self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(),
-                    region["md5"],
-                    msg=region
+                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
                 )
 
     def test_read_tile(self):
@@ -138,16 +122,13 @@ class WsiDicomFilesTests(unittest.TestCase):
             if not Path(folder) in self.test_folders:
                 continue
             wsi = self.test_folders[Path(folder)]
-            for region in test_definitions['read_tile']:
+            for region in test_definitions["read_tile"]:
                 im = wsi.read_tile(
-                    region["level"],
-                    (region["location"]["x"], region["location"]["y"])
+                    region["level"], (region["location"]["x"], region["location"]["y"])
                 )
                 print(region)
                 self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(),
-                    region["md5"],
-                    msg=region
+                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
                 )
 
     def test_read_encoded_tile(self):
@@ -155,16 +136,13 @@ class WsiDicomFilesTests(unittest.TestCase):
             if not Path(folder) in self.test_folders:
                 continue
             wsi = self.test_folders[Path(folder)]
-            for region in test_definitions['read_encoded_tile']:
+            for region in test_definitions["read_encoded_tile"]:
                 im = wsi.read_encoded_tile(
-                    region["level"],
-                    (region["location"]["x"], region["location"]["y"])
+                    region["level"], (region["location"]["x"], region["location"]["y"])
                 )
                 print(region)
                 self.assertEqual(  # type: ignore
-                    md5(im).hexdigest(),
-                    region["md5"],
-                    msg=region
+                    md5(im).hexdigest(), region["md5"], msg=region
                 )
 
     def test_read_thumbnail(self):
@@ -172,24 +150,19 @@ class WsiDicomFilesTests(unittest.TestCase):
             if not Path(folder) in self.test_folders:
                 continue
             wsi = self.test_folders[Path(folder)]
-            for region in test_definitions['read_thumbnail']:
+            for region in test_definitions["read_thumbnail"]:
                 im = wsi.read_thumbnail(
                     (region["size"]["width"], region["size"]["height"])
                 )
                 print(region)
                 self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(),
-                    region["md5"],
-                    msg=region
+                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
                 )
 
     def test_replace_label(self):
-        path = next(
-            folders
-            for folders in self._get_folders(SLIDE_FOLDER)
-        )
+        path = next(folders for folders in self._get_folders(SLIDE_FOLDER))
         while next(path.iterdir()).is_dir():
             path = next(path.iterdir())
-        image = Image.new('RGB', (256, 256), (128, 128, 128))
+        image = Image.new("RGB", (256, 256), (128, 128, 128))
         with WsiDicom.open(path, label=image) as wsi:
             self.assertEqual(image, wsi.read_label())

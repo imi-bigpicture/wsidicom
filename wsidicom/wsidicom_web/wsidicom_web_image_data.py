@@ -1,3 +1,17 @@
+#    Copyright 2023 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
 import io
 from functools import cached_property
 from pathlib import Path
@@ -9,12 +23,12 @@ from pydicom.uid import UID
 
 from wsidicom.dataset import TileType
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.image_data.dicom_image_data import FullTileIndex, SparseTileIndex
-from wsidicom.image_data.image_data import ImageData, ImageOrigin
-from wsidicom.web.web import WsiDicomWeb
+from wsidicom.image_data import ImageData, ImageOrigin
+from wsidicom.tile_index import FullTileIndex, SparseTileIndex
+from wsidicom.wsidicom_web.wsidicom_web import WsiDicomWeb
 
 
-class DicomWebImageData(ImageData):
+class WsiDicomWebImageData(ImageData):
     def __init__(self, instance: WsiDicomWeb):
         self._instance = instance
         if self._instance.dataset.tile_type == TileType.FULL:

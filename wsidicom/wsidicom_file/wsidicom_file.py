@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from enum import Enum
 import threading
 import warnings
 from pathlib import Path
@@ -28,23 +27,9 @@ from pydicom.uid import UID
 from wsidicom.config import settings
 from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Size
 from wsidicom.uid import FileUids, SlideUids
-from wsidicom.file.base import WsiDicomFileBase
-
-
-class OffsetTableType(Enum):
-    NONE = "none"
-    BASIC = "BOT"
-    EXTENDED = "EOT"
-
-    @classmethod
-    def from_string(cls, offset_table: Optional[str]) -> "OffsetTableType":
-        if offset_table is None:
-            return OffsetTableType.NONE
-        if offset_table.strip().lower() == "eot":
-            return OffsetTableType.EXTENDED
-        return OffsetTableType.BASIC
 
 
 class WsiDicomFile(WsiDicomFileBase):
@@ -173,7 +158,7 @@ class WsiDicomFile(WsiDicomFileBase):
 
         Returns
         ----------
-        Tuple[DicomFileLike, int, int]:
+        Tuple[WsiDicomFileLike, int, int]:
             File pointer, frame offset and frame length in number of bytes
         """
         frame_index -= self.frame_offset

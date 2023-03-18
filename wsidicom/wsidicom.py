@@ -22,6 +22,8 @@ from PIL.Image import Image as PILImage
 from pydicom.uid import UID, generate_uid
 
 from wsidicom.dataset import TileType, WsiDataset
+from wsidicom.wsidicom_file import WsiDicomFileSource
+from wsidicom.wsidicom_web import WsiDicomWebClient, WsiDicomWebSource
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
@@ -29,18 +31,18 @@ from wsidicom.errors import (
 )
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import WsiDicomLevel, WsiInstance
+from wsidicom.instance import WsiInstance
+from wsidicom.group.level import Level
 from wsidicom.optical import OpticalManager
 from wsidicom.series import (
-    WsiDicomLabels,
-    WsiDicomLevels,
-    WsiDicomOverviews,
-    WsiDicomSeries,
+    Labels,
+    Levels,
+    Overviews,
+    Series,
 )
-from wsidicom.source import DicomFileSource, DicomWebSource, Source
+from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import SlideUids
-from wsidicom.web.web import DicomWebClient
 
 
 class WsiDicom:
@@ -49,20 +51,20 @@ class WsiDicom:
 
     def __init__(
         self,
-        levels: WsiDicomLevels,
-        labels: Optional[WsiDicomLabels] = None,
-        overviews: Optional[WsiDicomOverviews] = None,
+        levels: Levels,
+        labels: Optional[Labels] = None,
+        overviews: Optional[Overviews] = None,
         annotations: Optional[Sequence[AnnotationInstance]] = None,
     ):
         """Holds wsi dicom levels, labels and overviews.
 
         Parameters
         ----------
-        levels: WsiDicomLevels
+        levels: Levels
             Series of pyramidal levels.
-        labels: Optional[WsiDicomLabels] = None,
+        labels: Optional[Labels] = None,
             Series of label images.
-        overviews: Optional[WsiDicomOverviews] = None,
+        overviews: Optional[Overviews] = None,
             Series of overview images
         annotations: Optional[Sequence[AnnotationInstance]] = None
             Sup-222 annotation instances.
@@ -97,7 +99,7 @@ class WsiDicom:
         return self.pretty_str()
 
     @property
-    def base_level(self) -> WsiDicomLevel:
+    def base_level(self) -> Level:
         return self.levels.base_level
 
     @property
@@ -111,25 +113,25 @@ class WsiDicom:
         return self.base_level.tile_size
 
     @property
-    def levels(self) -> WsiDicomLevels:
+    def levels(self) -> Levels:
         """Return contained levels"""
         if self._levels is not None:
             return self._levels
         raise WsiDicomNotFoundError("levels", str(self))
 
     @property
-    def labels(self) -> Optional[WsiDicomLabels]:
+    def labels(self) -> Optional[Labels]:
         """Return contained labels"""
         return self._labels
 
     @property
-    def overviews(self) -> Optional[WsiDicomOverviews]:
+    def overviews(self) -> Optional[Overviews]:
         """Return contained overviews"""
         return self._overviews
 
     @property
-    def collection(self) -> List[WsiDicomSeries]:
-        collection: List[Optional[WsiDicomSeries]] = [
+    def collection(self) -> List[Series]:
+        collection: List[Optional[Series]] = [
             self._levels,
             self._labels,
             self._overviews,
@@ -187,17 +189,17 @@ class WsiDicom:
         WsiDicom
             Object created from wsi dicom files in path.
         """
-        source = DicomFileSource(path)
+        source = WsiDicomFileSource(path)
         return cls.open_source(source, label)
 
     @classmethod
     def open_web(
         cls,
-        client: DicomWebClient,
+        client: WsiDicomWebClient,
         study_uid: Union[str, UID],
         series_uid: Union[str, UID],
     ) -> "WsiDicom":
-        source = DicomWebSource(client, study_uid, series_uid)
+        source = WsiDicomWebSource(client, study_uid, series_uid)
         return cls.open_source(source)
 
     @classmethod
@@ -216,9 +218,9 @@ class WsiDicom:
                 )
             ]
         return cls(
-            levels=WsiDicomLevels.open(source.level_instances),
-            labels=WsiDicomLabels.open(label_instances),
-            overviews=WsiDicomOverviews.open(source.overview_instances),
+            levels=Levels.open(source.level_instances),
+            labels=Labels.open(label_instances),
+            overviews=Overviews.open(source.overview_instances),
             annotations=source.annotation_instances,
         )
 
@@ -627,7 +629,7 @@ class WsiDicom:
         Returns
             True if files in path are formated for fast viewing.
         """
-        source = DicomFileSource(path, parse_pixel_data=False)
+        source = WsiDicomFileSource(path, parse_pixel_data=False)
         files = source.image_files
         files.sort(key=lambda file: os.path.getsize(file.filepath))
         for file in files:

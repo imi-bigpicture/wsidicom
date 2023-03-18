@@ -17,13 +17,14 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Optional
 
 import pytest
 from pydicom import Dataset, dcmread
+
 from wsidicom.dataset import ImageType, TileType
-from wsidicom.file.file import OffsetTableType
-from wsidicom.instance import WsiDataset, WsiDicomFile
+from wsidicom.wsidicom_file import WsiDicomFile
+from wsidicom.file import OffsetTableType
+from wsidicom.instance import WsiDataset
 
 from .data_gen import (
     TESTFRAME,
