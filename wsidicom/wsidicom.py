@@ -19,21 +19,16 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.dataset import FileMetaDataset
-from pydicom.filereader import read_file_meta_info
-from pydicom.misc import is_dicom
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.dataset import ImageType, TileType, WsiDataset
+from wsidicom.dataset import TileType, WsiDataset
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
-from wsidicom.file import WsiDicomFile
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.image_data.dicom_web_image_data import DicomWebImageData
 from wsidicom.instance import WsiDicomLevel, WsiInstance
 from wsidicom.optical import OpticalManager
 from wsidicom.series import (
@@ -42,9 +37,10 @@ from wsidicom.series import (
     WsiDicomOverviews,
     WsiDicomSeries,
 )
+from wsidicom.source import DicomFileSource, DicomWebSource, Source
 from wsidicom.stringprinting import list_pretty_str
-from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
-from wsidicom.web.web import DicomWebClient, WsiDicomWeb
+from wsidicom.uid import SlideUids
+from wsidicom.web.web import DicomWebClient
 
 
 class WsiDicom:
@@ -191,49 +187,8 @@ class WsiDicom:
         WsiDicom
             Object created from wsi dicom files in path.
         """
-        filepaths = cls._get_filepaths(path)
-        level_files: List[WsiDicomFile] = []
-        label_files: List[WsiDicomFile] = []
-        overview_files: List[WsiDicomFile] = []
-        annotation_files: List[Path] = []
-
-        for filepath in cls._filter_paths(filepaths):
-            sop_class_uid = cls._get_sop_class_uid(filepath)
-            if sop_class_uid == WSI_SOP_CLASS_UID:
-                wsi_file = WsiDicomFile(filepath)
-                if wsi_file.image_type == ImageType.VOLUME:
-                    level_files.append(wsi_file)
-                elif wsi_file.image_type == ImageType.LABEL:
-                    label_files.append(wsi_file)
-                elif wsi_file.image_type == ImageType.OVERVIEW:
-                    overview_files.append(wsi_file)
-                else:
-                    wsi_file.close()
-            elif sop_class_uid == ANN_SOP_CLASS_UID:
-                annotation_files.append(filepath)
-        if len(level_files) == 0:
-            raise WsiDicomNotFoundError("Level files", str(path))
-        base_dataset = cls._get_base_dataset(level_files)
-        slide_uids = base_dataset.uids.slide
-        base_tile_size = base_dataset.tile_size
-        level_instances = WsiInstance.open(level_files, slide_uids, base_tile_size)
-
-        overview_instances = WsiInstance.open(overview_files, slide_uids)
-        if label is None:
-            label_instances = WsiInstance.open(label_files, slide_uids)
-        else:
-            label_instances = [
-                WsiInstance.create_label(
-                    label,
-                    base_dataset,
-                )
-            ]
-        levels = WsiDicomLevels.open(level_instances)
-        labels = WsiDicomLabels.open(label_instances)
-        overviews = WsiDicomOverviews.open(overview_instances)
-        annotations = AnnotationInstance.open(annotation_files)
-
-        return cls(levels, labels, overviews, annotations)
+        source = DicomFileSource(path)
+        return cls.open_source(source, label)
 
     @classmethod
     def open_web(
@@ -242,27 +197,30 @@ class WsiDicom:
         study_uid: Union[str, UID],
         series_uid: Union[str, UID],
     ) -> "WsiDicom":
-        if not isinstance(study_uid, UID):
-            study_uid = UID(study_uid)
-        if not isinstance(series_uid, UID):
-            series_uid = UID(series_uid)
-        level_instances = []
-        label_instances = []
-        overview_instances = []
-        for instance_uid in client.get_instances(study_uid, series_uid):
-            web_instance = WsiDicomWeb(client, study_uid, series_uid, instance_uid)
-            image_data = DicomWebImageData(web_instance)
-            instance = WsiInstance(web_instance.dataset, image_data)
-            if instance.image_type == ImageType.VOLUME:
-                level_instances.append(instance)
-            elif instance.image_type == ImageType.LABEL:
-                label_instances.append(instance)
-            elif instance.image_type == ImageType.OVERVIEW:
-                overview_instances.append(instance)
-        levels = WsiDicomLevels.open(level_instances)
-        labels = WsiDicomLabels.open(label_instances)
-        overviews = WsiDicomOverviews.open(overview_instances)
-        return cls(levels, labels, overviews)
+        source = DicomWebSource(client, study_uid, series_uid)
+        return cls.open_source(source)
+
+    @classmethod
+    def open_source(
+        cls,
+        source: Source,
+        label: Optional[Union[PILImage, str, Path]] = None,
+    ) -> "WsiDicom":
+        if label is None:
+            label_instances = source.label_instances
+        else:
+            label_instances = [
+                WsiInstance.create_label(
+                    label,
+                    source.base_dataset,
+                )
+            ]
+        return cls(
+            levels=WsiDicomLevels.open(source.level_instances),
+            labels=WsiDicomLabels.open(label_instances),
+            overviews=WsiDicomOverviews.open(source.overview_instances),
+            annotations=source.annotation_instances,
+        )
 
     def read_label(self, index: int = 0) -> PILImage:
         """Read label image of the whole slide. If several label
@@ -555,9 +513,8 @@ class WsiDicom:
 
     def close(self) -> None:
         """Close all files."""
-        for series in [self._levels, self._overviews, self._labels]:
-            if series is not None:
-                series.close()
+        for series in self.collection:
+            series.close()
 
     def save(
         self,
@@ -616,82 +573,6 @@ class WsiDicom:
             instance_number += len(filepaths)
         return filepaths
 
-    @staticmethod
-    def _get_sop_class_uid(path: Path) -> UID:
-        metadata: FileMetaDataset = read_file_meta_info(path)
-        return metadata.MediaStorageSOPClassUID
-
-    @staticmethod
-    def _get_filepaths(path: Union[str, Sequence[str], Path, Sequence[Path]]):
-        """Return file paths to files in path.
-        If path is folder, return list of folder files in path.
-        If path is single file, return list of that path.
-        If path is list, return list of paths that are files.
-        Raises WsiDicomNotFoundError if no files found
-
-        Parameters
-        ----------
-        path: path: Union[str, Sequence[str], Path, Sequence[Path]]
-            Path to folder, file or list of files
-
-        Returns
-        ----------
-        List[Path]
-            List of found file paths
-        """
-        if isinstance(path, (str, Path)):
-            single_path = Path(path)
-            if single_path.is_dir():
-                return list(single_path.iterdir())
-            elif single_path.is_file():
-                return [single_path]
-        elif isinstance(path, list):
-            multiple_paths = [
-                Path(file_path) for file_path in path if Path(file_path).is_file()
-            ]
-            if multiple_paths != []:
-                return multiple_paths
-
-        raise WsiDicomNotFoundError("No files found", str(path))
-
-    @staticmethod
-    def _get_base_dataset(files: Sequence[WsiDicomFile]) -> WsiDataset:
-        """Return file with largest image (width) from list of files.
-
-        Parameters
-        ----------
-        files: Sequence[WsiDicomFile]
-           List of files.
-
-        Returns
-        ----------
-        WsiDataset
-            Base layer dataset.
-        """
-        base_size = Size(0, 0)
-        base_dataset = files[0].dataset
-        for file in files[1:]:
-            if file.dataset.image_size.width > base_size.width:
-                base_dataset = file.dataset
-                base_size = file.dataset.image_size
-        return base_dataset
-
-    @staticmethod
-    def _filter_paths(filepaths: Sequence[Path]) -> List[Path]:
-        """Filter list of paths to only include valid dicom files.
-
-        Parameters
-        ----------
-        filepaths: Sequence[Path]
-            Paths to filter
-
-        Returns
-        ----------
-        List[Path]
-            List of paths with dicom files
-        """
-        return [path for path in filepaths if path.is_file() and is_dicom(path)]
-
     def _validate_collection(self) -> SlideUids:
         """Check that no files or instance in collection is duplicate, and, if
         strict, that all series have the same base uids.
@@ -746,11 +627,10 @@ class WsiDicom:
         Returns
             True if files in path are formated for fast viewing.
         """
-        filepaths = cls._get_filepaths(path)
-        # Sort files by file size to test smallest file first.
-        filepaths.sort(key=os.path.getsize)
-        for filepath in cls._filter_paths(filepaths):
-            file = WsiDicomFile(filepath, parse_pixel_data=False)
+        source = DicomFileSource(path, parse_pixel_data=False)
+        files = source.image_files
+        files.sort(key=lambda file: os.path.getsize(file.filepath))
+        for file in files:
             if file.image_type is None:
                 continue
             if (

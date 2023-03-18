@@ -9,7 +9,7 @@ from pydicom.uid import UID
 from requests.auth import AuthBase
 
 from wsidicom.dataset import WsiDataset
-from wsidicom.uid import WSI_SOP_CLASS_UID
+from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
 
 
 class DicomTags(Enum):
@@ -28,12 +28,20 @@ class DicomWebClient:
             session=create_session_from_auth(auth),
         )
 
-    def get_instances(self, study_uid: UID, series_uid: UID) -> List[UID]:
+    def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> List[UID]:
         return [
             UID(instance[DicomTags.SOP_INSTANCE_UID.value]["Value"][0])
             for instance in self._client.search_for_instances(study_uid, series_uid)
             if UID(instance[DicomTags.SOP_CLASS_UID.value]["Value"][0])
             == WSI_SOP_CLASS_UID
+        ]
+
+    def get_ann_instances(self, study_uid: UID, series_uid: UID) -> List[UID]:
+        return [
+            UID(instance[DicomTags.SOP_INSTANCE_UID.value]["Value"][0])
+            for instance in self._client.search_for_instances(study_uid, series_uid)
+            if UID(instance[DicomTags.SOP_CLASS_UID.value]["Value"][0])
+            == ANN_SOP_CLASS_UID
         ]
 
     def get_instance(
