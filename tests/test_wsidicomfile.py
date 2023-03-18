@@ -22,6 +22,7 @@ from typing import Optional
 import pytest
 from pydicom import Dataset, dcmread
 from wsidicom.dataset import ImageType, TileType
+from wsidicom.file.file import OffsetTableType
 from wsidicom.instance import WsiDataset, WsiDicomFile
 
 from .data_gen import (
@@ -35,8 +36,8 @@ from .data_gen import (
 @dataclass
 class WsiDicomFileTestFile:
     path: Path
-    tile_type: str
-    bot_type: Optional[str]
+    tile_type: TileType
+    bot_type: OffsetTableType
     ds: Dataset
 
 
@@ -56,22 +57,22 @@ class WsiDicomFileTests(unittest.TestCase):
             {
                 "name": "sparse_no_bot.dcm",
                 "tile_type": TileType.SPARSE,
-                "bot_type": None,
+                "bot_type": OffsetTableType.NONE,
             },
             {
                 "name": "sparse_with_bot.dcm",
                 "tile_type": TileType.SPARSE,
-                "bot_type": "bot",
+                "bot_type": OffsetTableType.BASIC,
             },
             {
                 "name": "full_no_bot_path.dcm",
                 "tile_type": TileType.FULL,
-                "bot_type": None,
+                "bot_type": OffsetTableType.BASIC,
             },
             {
                 "name": "full_with_bot_path.dcm",
                 "tile_type": TileType.FULL,
-                "bot_type": "bot",
+                "bot_type": OffsetTableType.BASIC,
             },
         ]
 
@@ -81,8 +82,7 @@ class WsiDicomFileTests(unittest.TestCase):
                 file_setting["tile_type"],
                 file_setting["bot_type"],
                 create_main_dataset(
-                    file_setting["tile_type"],
-                    (True if file_setting["bot_type"] else False),
+                    file_setting["tile_type"], file_setting["bot_type"]
                 ),
             )
             for file_setting in file_settings
@@ -175,7 +175,9 @@ class WsiDicomFileTests(unittest.TestCase):
             tag = test_file._fp.read_tag()
             test_file._validate_pixel_data_start(tag)
             length = test_file._read_bot_length()
-            self.assertEqual(length, (4 if setting.bot_type == "bot" else None))
+            self.assertEqual(
+                length, (4 if setting.bot_type == OffsetTableType.BASIC else None)
+            )
 
     def test_read_bot(self):
         for test_file, setting in self.opened_files.items():
@@ -185,7 +187,12 @@ class WsiDicomFileTests(unittest.TestCase):
             bot = test_file._read_bot()
             first_bot_entry = b"\x00\x00\x00\x00"
             self.assertEqual(
-                bot, (first_bot_entry if setting.bot_type == "bot" else None)
+                bot,
+                (
+                    first_bot_entry
+                    if setting.bot_type == OffsetTableType.BASIC
+                    else None
+                ),
             )
 
     def test_parse_bot_table(self):
@@ -199,7 +206,9 @@ class WsiDicomFileTests(unittest.TestCase):
             first_frame_item = test_file._fp.tell()
             if bot is None:
                 continue
-            positions = test_file._parse_table(bot, "bot", first_frame_item)
+            positions = test_file._parse_table(
+                bot, OffsetTableType.BASIC, first_frame_item
+            )
             self.assertEqual(
                 positions,
                 [
