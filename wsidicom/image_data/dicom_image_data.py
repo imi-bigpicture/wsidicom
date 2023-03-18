@@ -15,8 +15,7 @@
 import io
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import (Dict, List, Optional, OrderedDict, Sequence, Set, Tuple,
-                    Union)
+from typing import Dict, List, Optional, OrderedDict, Sequence, Set, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -24,6 +23,7 @@ from PIL.Image import Image as PILImage
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import UID
+from wsidicom.dataset import TileType
 
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.file import WsiDicomFile
@@ -34,10 +34,8 @@ from wsidicom.image_data import ImageData, ImageOrigin
 class WsiDicomImageData(ImageData):
     """Represents image data read from dicom file(s). Image data can
     be sparsly or fully tiled and/or concatenated."""
-    def __init__(
-        self,
-        files: Union[WsiDicomFile, Sequence[WsiDicomFile]]
-    ) -> None:
+
+    def __init__(self, files: Union[WsiDicomFile, Sequence[WsiDicomFile]]) -> None:
         """Create WsiDicomImageData from frame data in files.
 
         Parameters
@@ -50,13 +48,13 @@ class WsiDicomImageData(ImageData):
 
         # Key is frame offset
         self._files = OrderedDict(
-            (file.frame_offset, file) for file
-            in sorted(files, key=lambda file: file.frame_offset)
+            (file.frame_offset, file)
+            for file in sorted(files, key=lambda file: file.frame_offset)
         )
 
         base_file = files[0]
         datasets = [file.dataset for file in self._files.values()]
-        if base_file.dataset.tile_type == 'TILED_FULL':
+        if base_file.dataset.tile_type == TileType.FULL:
             self.tiles = FullTileIndex(datasets)
         else:
             self.tiles = SparseTileIndex(datasets)
@@ -64,9 +62,7 @@ class WsiDicomImageData(ImageData):
         self._pixel_spacing = datasets[0].pixel_spacing
         self._transfer_syntax = base_file.transfer_syntax
         self._default_z: Optional[float] = None
-        self._photometric_interpretation = (
-            datasets[0].photometric_interpretation
-        )
+        self._photometric_interpretation = datasets[0].photometric_interpretation
         self._samples_per_pixel = datasets[0].samples_per_pixel
         self._image_origin = ImageOrigin.from_dataset(datasets[0])
 
@@ -130,12 +126,7 @@ class WsiDicomImageData(ImageData):
             return self.blank_encoded_tile
         return self._get_tile_frame(frame_index)
 
-    def _get_decoded_tile(
-        self,
-        tile_point: Point,
-        z: float,
-        path: str
-    ) -> PILImage:
+    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
         frame_index = self._get_frame_index(tile_point, z, path)
         if frame_index == -1:
             return self.blank_tile
@@ -157,8 +148,10 @@ class WsiDicomImageData(ImageData):
             File containing the frame
         """
         for frame_offset, file in self._files.items():
-            if (frame_index < frame_offset + file.frame_count and
-                    frame_index >= frame_offset):
+            if (
+                frame_index < frame_offset + file.frame_count
+                and frame_index >= frame_offset
+            ):
                 return file
 
         raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
@@ -201,14 +194,13 @@ class WsiDicomImageData(ImageData):
         tile_region = Region(position=tile, size=Size(0, 0))
         if not self.valid_tiles(tile_region, z, path):
             raise WsiDicomOutOfBoundsError(
-                f"Tile region {tile_region}",
-                f"plane {self.tiles.tiled_size}"
+                f"Tile region {tile_region}", f"plane {self.tiles.tiled_size}"
             )
         frame_index = self.tiles.get_frame_index(tile, z, path)
         return frame_index
 
     def is_sparse(self, tile: Point, z: float, path: str) -> bool:
-        return (self.tiles.get_frame_index(tile, z, path) == -1)
+        return self.tiles.get_frame_index(tile, z, path) == -1
 
     def close(self) -> None:
         for file in self._files.values():
@@ -218,6 +210,7 @@ class WsiDicomImageData(ImageData):
 class SparseTilePlane:
     """Hold frame indices for the tiles in a sparse tiled file. Empty (sparse)
     frames are represented by -1."""
+
     def __init__(self, tiled_size: Size):
         """Create a SparseTilePlane of specified size.
 
@@ -263,21 +256,15 @@ class SparseTilePlane:
         """
         self.plane[position.x, position.y] = frame_index
 
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
+    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         return "Sparse tile plane"
 
 
 class TileIndex(metaclass=ABCMeta):
     """Index for mapping tile position to frame number. Is subclassed into
     FullTileIndex and SparseTileIndex."""
-    def __init__(
-        self,
-        datasets: Sequence[Dataset]
-    ):
+
+    def __init__(self, datasets: Sequence[Dataset]):
         """Create tile index for frames in datasets. Requires equal tile
         size for all tile planes.
 
@@ -335,11 +322,7 @@ class TileIndex(metaclass=ABCMeta):
         return self._optical_paths
 
     @abstractmethod
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
+    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         raise NotImplementedError()
 
     @abstractmethod
@@ -348,9 +331,7 @@ class TileIndex(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @staticmethod
-    def _read_frame_count_from_datasets(
-        datasets: Sequence[Dataset]
-    ) -> int:
+    def _read_frame_count_from_datasets(datasets: Sequence[Dataset]) -> int:
         """Return total frame count from files.
 
         Parameters
@@ -371,8 +352,7 @@ class TileIndex(metaclass=ABCMeta):
 
     @classmethod
     def _read_optical_paths_from_datasets(
-        cls,
-        datasets: Sequence[Dataset]
+        cls, datasets: Sequence[Dataset]
     ) -> List[str]:
         """Return list of optical path identifiers from files.
 
@@ -389,16 +369,14 @@ class TileIndex(metaclass=ABCMeta):
         """
         paths: Set[str] = set()
         for dataset in datasets:
-            paths.update(cls._get_path_identifers(
-                dataset.optical_path_sequence
-            ))
+            paths.update(cls._get_path_identifers(dataset.optical_path_sequence))
         if len(paths) == 0:
-            return ['0']
+            return ["0"]
         return list(paths)
 
     @staticmethod
     def _get_path_identifers(
-        optical_path_sequence: Optional[DicomSequence]
+        optical_path_sequence: Optional[DicomSequence],
     ) -> List[str]:
         """Parse optical path sequence and return list of optical path
         identifiers
@@ -414,16 +392,15 @@ class TileIndex(metaclass=ABCMeta):
             List of optical path identifiers.
         """
         if optical_path_sequence is None:
-            return ['0']
-        return list({
-            str(optical_ds.OpticalPathIdentifier)
-            for optical_ds in optical_path_sequence
-        })
+            return ["0"]
+        return list(
+            {
+                str(optical_ds.OpticalPathIdentifier)
+                for optical_ds in optical_path_sequence
+            }
+        )
 
-    def _read_frame_coordinates(
-        self,
-        frame: Dataset
-    ) -> Tuple[Point, float]:
+    def _read_frame_coordinates(self, frame: Dataset) -> Tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
         In the Plane Position Slide Sequence x and y are defined in mm and z in
         um.
@@ -442,7 +419,7 @@ class TileIndex(metaclass=ABCMeta):
         position = frame.PlanePositionSlideSequence[0]
         y = int(position.RowPositionInTotalImagePixelMatrix) - 1
         x = int(position.ColumnPositionInTotalImagePixelMatrix) - 1
-        z_offset = getattr(position, 'ZOffsetInSlideCoordinateSystem', 0.0)
+        z_offset = getattr(position, "ZOffsetInSlideCoordinateSystem", 0.0)
         z = round(float(z_offset), DECIMALS)
         tile = Point(x=x, y=y) // self.tile_size
         return tile, z
@@ -452,10 +429,8 @@ class FullTileIndex(TileIndex):
     """Index for mapping tile position to frame number for datasets containing
     full tiles. Pixel data tiles are ordered by colum, row, z and path, thus
     the frame index for a tile can directly be calculated."""
-    def __init__(
-        self,
-        datasets: Sequence[Dataset]
-    ):
+
+    def __init__(self, datasets: Sequence[Dataset]):
         """Create full tile index for frames in datasets. Requires equal tile
         size for all tile planes.
 
@@ -474,22 +449,16 @@ class FullTileIndex(TileIndex):
     def __str__(self) -> str:
         return self.pretty_str()
 
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
+    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         string = (
             f"Full tile index tile size: {self.tile_size}"
             f", plane size: {self.tiled_size}"
         )
         if depth is not None:
             depth -= 1
-            if(depth < 0):
+            if depth < 0:
                 return string
-        string += (
-            f" of z: {self.focal_planes} and path: {self.optical_paths}"
-        )
+        string += f" of z: {self.focal_planes} and path: {self.optical_paths}"
 
         return string
 
@@ -515,13 +484,13 @@ class FullTileIndex(TileIndex):
         z_offset = self._get_focal_plane_index(z) * self.tiled_size.area
         path_offset = (
             self._get_optical_path_index(path)
-            * len(self._focal_planes) * self.tiled_size.area
+            * len(self._focal_planes)
+            * self.tiled_size.area
         )
         return plane_offset + z_offset + path_offset
 
     def _read_focal_planes_from_datasets(
-        self,
-        datasets: Sequence[Dataset]
+        self, datasets: Sequence[Dataset]
     ) -> List[float]:
         """Return list of focal planes in datasets. Values in Pixel Measures
         Sequene are in mm.
@@ -565,9 +534,7 @@ class FullTileIndex(TileIndex):
                 z_offset = 0
 
             for plane in range(number_of_focal_planes):
-                z = z_offset + round(
-                    plane * slice_spacing * MM_TO_MICRON, DECIMALS
-                )
+                z = z_offset + round(plane * slice_spacing * MM_TO_MICRON, DECIMALS)
                 focal_planes.add(z)
         return sorted(list(focal_planes))
 
@@ -589,8 +556,11 @@ class FullTileIndex(TileIndex):
         """
         try:
             return next(
-                (index for index, plane_path in enumerate(self._optical_paths)
-                 if plane_path == path)
+                (
+                    index
+                    for index, plane_path in enumerate(self._optical_paths)
+                    if plane_path == path
+                )
             )
         except StopIteration:
             raise WsiDicomNotFoundError(f"Optical path {path}", str(self))
@@ -609,8 +579,9 @@ class FullTileIndex(TileIndex):
             Focal plane index for z coordinate.
         """
         try:
-            return next(index for index, plane in enumerate(self.focal_planes)
-                        if plane == z)
+            return next(
+                index for index, plane in enumerate(self.focal_planes) if plane == z
+            )
         except StopIteration:
             raise WsiDicomNotFoundError(f"Z {z} in instance", str(self))
 
@@ -621,10 +592,8 @@ class SparseTileIndex(TileIndex):
     by finding the corresponding matching SparseTilePlane (z and path) and
     returning the frame index at tile position. If the tile is missing (due to
     the sparseness), -1 is returned."""
-    def __init__(
-        self,
-        datasets: Sequence[Dataset]
-    ):
+
+    def __init__(self, datasets: Sequence[Dataset]):
         """Create sparse tile index for frames in datasets. Requires equal tile
         size for all tile planes. Pixel data tiles are identified by the Per
         Frame Functional Groups Sequence that contains tile colum, row, z,
@@ -647,11 +616,7 @@ class SparseTileIndex(TileIndex):
     def __str__(self) -> str:
         return self.pretty_str()
 
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
+    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         return (
             f"Sparse tile index tile size: {self.tile_size}, "
             f"plane size: {self.tiled_size}"
@@ -678,9 +643,7 @@ class SparseTileIndex(TileIndex):
         try:
             plane = self._planes[(z, path)]
         except KeyError:
-            raise WsiDicomNotFoundError(
-                f"Plane with z {z}, path {path}", str(self)
-            )
+            raise WsiDicomNotFoundError(f"Plane with z {z}, path {path}", str(self))
         frame_index = plane[tile]
         return frame_index
 
@@ -698,8 +661,7 @@ class SparseTileIndex(TileIndex):
         return sorted(list(focal_planes))
 
     def _read_planes_from_datasets(
-        self,
-        datasets: Sequence[Dataset]
+        self, datasets: Sequence[Dataset]
     ) -> Dict[Tuple[float, str], SparseTilePlane]:
         """Return SparseTilePlane from planes in datasets.
 

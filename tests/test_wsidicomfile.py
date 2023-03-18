@@ -21,11 +21,15 @@ from typing import Optional
 
 import pytest
 from pydicom import Dataset, dcmread
-from wsidicom.dataset import ImageType
+from wsidicom.dataset import ImageType, TileType
 from wsidicom.instance import WsiDataset, WsiDicomFile
 
-from .data_gen import (TESTFRAME, create_layer_file, create_main_dataset,
-                       create_meta_dataset)
+from .data_gen import (
+    TESTFRAME,
+    create_layer_file,
+    create_main_dataset,
+    create_meta_dataset,
+)
 
 
 @dataclass
@@ -50,51 +54,46 @@ class WsiDicomFileTests(unittest.TestCase):
         cls.meta_dataset = create_meta_dataset()
         file_settings = [
             {
-                'name': 'sparse_no_bot.dcm',
-                'tile_type': 'TILED_SPARSE',
-                'bot_type': None
+                "name": "sparse_no_bot.dcm",
+                "tile_type": TileType.SPARSE,
+                "bot_type": None,
             },
             {
-                'name': 'sparse_with_bot.dcm',
-                'tile_type': 'TILED_SPARSE',
-                'bot_type': 'bot'
+                "name": "sparse_with_bot.dcm",
+                "tile_type": TileType.SPARSE,
+                "bot_type": "bot",
             },
             {
-                'name': 'full_no_bot_path.dcm',
-                'tile_type': 'TILED_FULL',
-                'bot_type': None
+                "name": "full_no_bot_path.dcm",
+                "tile_type": TileType.FULL,
+                "bot_type": None,
             },
             {
-                'name': 'full_with_bot_path.dcm',
-                'tile_type': 'TILED_FULL',
-                'bot_type': 'bot'
+                "name": "full_with_bot_path.dcm",
+                "tile_type": TileType.FULL,
+                "bot_type": "bot",
             },
         ]
 
         cls.test_files = [
             WsiDicomFileTestFile(
-                dirpath.joinpath(file_setting['name']),
-                file_setting['tile_type'],
-                file_setting['bot_type'],
+                dirpath.joinpath(file_setting["name"]),
+                file_setting["tile_type"],
+                file_setting["bot_type"],
                 create_main_dataset(
-                    file_setting['tile_type'],
-                    (True if file_setting['bot_type'] else False)
-                )
+                    file_setting["tile_type"],
+                    (True if file_setting["bot_type"] else False),
+                ),
             )
             for file_setting in file_settings
         ]
         for test_file in cls.test_files:
-            create_layer_file(
-                test_file.path,
-                test_file.ds,
-                cls.meta_dataset
-            )
+            create_layer_file(test_file.path, test_file.ds, cls.meta_dataset)
 
         cls.opened_files = {
-            WsiDicomFile(test_file.path): test_file
-            for test_file in cls.test_files
+            WsiDicomFile(test_file.path): test_file for test_file in cls.test_files
         }
-        cls.padded_test_frame = TESTFRAME + b'\x00'*(len(TESTFRAME) % 2)
+        cls.padded_test_frame = TESTFRAME + b"\x00" * (len(TESTFRAME) % 2)
 
     @classmethod
     def tearDownClass(cls):
@@ -106,30 +105,18 @@ class WsiDicomFileTests(unittest.TestCase):
             print(test_file.path, test_file.tile_type, test_file.bot_type)
             with WsiDicomFile(test_file.path, True) as file:
                 self.assertIsNotNone(file._frame_positions)
-                self.assertEqual(
-                    file.offset_table_type,
-                    test_file.bot_type
-                )
+                self.assertEqual(file.offset_table_type, test_file.bot_type)
 
-                self.assertEqual(
-                    file.dataset.tile_type,
-                    test_file.tile_type
-                )
+                self.assertEqual(file.dataset.tile_type, test_file.tile_type)
 
     def test_open_without_parse(self):
         for test_file in self.test_files:
             with WsiDicomFile(test_file.path, False) as file:
                 self.assertIsNone(file._offset_table_type)
                 self.assertIsNone(file._frame_positions)
-                self.assertEqual(
-                    file.offset_table_type,
-                    test_file.bot_type
-                )
+                self.assertEqual(file.offset_table_type, test_file.bot_type)
 
-                self.assertEqual(
-                    file.dataset.tile_type,
-                    test_file.tile_type
-                )
+                self.assertEqual(file.dataset.tile_type, test_file.tile_type)
 
     def test_dataset_property(self):
         for test_file in self.opened_files:
@@ -143,58 +130,38 @@ class WsiDicomFileTests(unittest.TestCase):
 
     def test_uids_property(self):
         for test_file, settings in self.opened_files.items():
-            self.assertEqual(
-                test_file.uids.instance,
-                settings.ds.SOPInstanceUID
-            )
+            self.assertEqual(test_file.uids.instance, settings.ds.SOPInstanceUID)
             self.assertEqual(
                 test_file.uids.concatenation,
-                getattr(
-                    settings.ds,
-                    'SOPInstanceUIDOfConcatenationSource',
-                    None
-                )
+                getattr(settings.ds, "SOPInstanceUIDOfConcatenationSource", None),
             )
             self.assertEqual(
-                test_file.uids.slide.frame_of_reference,
-                settings.ds.FrameOfReferenceUID
+                test_file.uids.slide.frame_of_reference, settings.ds.FrameOfReferenceUID
             )
             self.assertEqual(
-                test_file.uids.slide.study_instance,
-                settings.ds.StudyInstanceUID
+                test_file.uids.slide.study_instance, settings.ds.StudyInstanceUID
             )
             self.assertEqual(
-                test_file.uids.slide.series_instance,
-                settings.ds.SeriesInstanceUID
+                test_file.uids.slide.series_instance, settings.ds.SeriesInstanceUID
             )
 
     def test_transfer_syntax_property(self):
         for test_file in self.opened_files:
             self.assertEqual(
-                test_file.transfer_syntax,
-                self.meta_dataset.TransferSyntaxUID
+                test_file.transfer_syntax, self.meta_dataset.TransferSyntaxUID
             )
 
     def test_frame_offset_property(self):
         for test_file in self.opened_files:
-            self.assertEqual(
-                test_file.frame_offset,
-                0
-            )
+            self.assertEqual(test_file.frame_offset, 0)
 
     def test_frame_count_property(self):
         for test_file in self.opened_files:
-            self.assertEqual(
-                test_file.frame_count,
-                1
-            )
+            self.assertEqual(test_file.frame_count, 1)
 
     def test_get_offset_table_type(self):
         for test_file, setting in self.opened_files.items():
-            self.assertEqual(
-                test_file._get_offset_table_type(),
-                setting.bot_type
-            )
+            self.assertEqual(test_file._get_offset_table_type(), setting.bot_type)
 
     def test_validate_pixel_data_start(self):
         for test_file in self.opened_files:
@@ -208,10 +175,7 @@ class WsiDicomFileTests(unittest.TestCase):
             tag = test_file._fp.read_tag()
             test_file._validate_pixel_data_start(tag)
             length = test_file._read_bot_length()
-            self.assertEqual(
-                length,
-                (4 if setting.bot_type == 'bot' else None)
-            )
+            self.assertEqual(length, (4 if setting.bot_type == "bot" else None))
 
     def test_read_bot(self):
         for test_file, setting in self.opened_files.items():
@@ -219,10 +183,9 @@ class WsiDicomFileTests(unittest.TestCase):
             tag = test_file._fp.read_tag()
             test_file._validate_pixel_data_start(tag)
             bot = test_file._read_bot()
-            first_bot_entry = b'\x00\x00\x00\x00'
+            first_bot_entry = b"\x00\x00\x00\x00"
             self.assertEqual(
-                bot,
-                (first_bot_entry if setting.bot_type == 'bot' else None)
+                bot, (first_bot_entry if setting.bot_type == "bot" else None)
             )
 
     def test_parse_bot_table(self):
@@ -236,21 +199,15 @@ class WsiDicomFileTests(unittest.TestCase):
             first_frame_item = test_file._fp.tell()
             if bot is None:
                 continue
-            positions = test_file._parse_table(
-                bot,
-                'bot',
-                first_frame_item
-            )
+            positions = test_file._parse_table(bot, "bot", first_frame_item)
             self.assertEqual(
                 positions,
                 [
                     (
-                        (
-                            first_frame_item + TAG_BYTES + LENGTH_BYTES
-                        ),
-                        math.ceil(len(TESTFRAME) / 2) * 2
+                        (first_frame_item + TAG_BYTES + LENGTH_BYTES),
+                        math.ceil(len(TESTFRAME) / 2) * 2,
                     )
-                ]
+                ],
             )
 
     def test_read_positions_from_pixeldata(self):
@@ -267,20 +224,15 @@ class WsiDicomFileTests(unittest.TestCase):
                 positions,
                 [
                     (
-                        (
-                            first_frame_item + TAG_BYTES + LENGTH_BYTES
-                        ),
-                        len(self.padded_test_frame)
+                        (first_frame_item + TAG_BYTES + LENGTH_BYTES),
+                        len(self.padded_test_frame),
                     )
-                ]
+                ],
             )
 
     def test_read_sequence_delimiter(self):
         for test_file in self.opened_files:
-            (
-                last_item_position,
-                last_item_length
-            ) = test_file.frame_positions[-1]
+            (last_item_position, last_item_length) = test_file.frame_positions[-1]
             last_item_end = last_item_position + last_item_length
             test_file._fp.seek(last_item_end)
             test_file._fp.read_tag()
@@ -289,7 +241,4 @@ class WsiDicomFileTests(unittest.TestCase):
     def test_read_frame(self):
         for test_file in self.opened_files:
             frame = test_file.read_frame(0)
-            self.assertEqual(
-                frame,
-                self.padded_test_frame
-            )
+            self.assertEqual(frame, self.padded_test_frame)

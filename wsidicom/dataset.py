@@ -177,6 +177,11 @@ WSI_ATTRIBUTES = {
 }
 
 
+class TileType(Enum):
+    FULL = "TILED_FULL"
+    SPARSE = "TILED_SPARSE"
+
+
 class WsiDataset(Dataset):
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
     parsers for attributes specific for WSI. Use snake case to avoid name
@@ -265,7 +270,7 @@ class WsiDataset(Dataset):
         return cast(int, self._frame_count)
 
     @property
-    def tile_type(self) -> str:
+    def tile_type(self) -> TileType:
         """Return tiling type from dataset. Raises WsiDicomError if type
         is undetermined.
 
@@ -782,7 +787,7 @@ class WsiDataset(Dataset):
                 "Concatenated file missing concatenation frame offset" "number"
             )
 
-    def _get_tile_organization_type(self) -> str:
+    def _get_tile_organization_type(self) -> TileType:
         """Return tile organization type ('TILLED_SPARSE' or 'TILED_FULL').
 
         Returns
@@ -792,9 +797,9 @@ class WsiDataset(Dataset):
         """
         tile_type = self._get_dicom_attribute("DimensionOrganizationType")
         if tile_type == "TILED_FULL":
-            return "TILED_FULL"
+            return TileType.FULL
         elif "PerFrameFunctionalGroupsSequence" in self:
-            return "TILED_SPARSE"
+            return TileType.SPARSE
         raise WsiDicomError("undetermined tile type")
 
     def _get_pixel_measure(self) -> Optional[Dataset]:
