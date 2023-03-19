@@ -26,8 +26,8 @@ from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import ImageType, WsiDataset, WsiInstance
 from wsidicom.source import Source
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
-from wsidicom.wsidicom_file.wsidicom_file import WsiDicomFile
-from wsidicom.wsidicom_file.wsidicom_file_image_data import WsiDicomFileImageData
+from wsidicom.file.wsidicom_file import WsiDicomFile
+from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 
 """A source for reading WSI DICOM files from disk."""
 

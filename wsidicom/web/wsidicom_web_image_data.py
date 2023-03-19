@@ -18,7 +18,7 @@ from typing import List
 from pydicom.uid import UID
 
 from wsidicom.instance import WsiDataset, WsiDicomImageData
-from wsidicom.wsidicom_web.wsidicom_web_client import WsiDicomWebClient
+from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 
 class WsiDicomWebImageData(WsiDicomImageData):

@@ -12,5 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module for handling tile indexing (full or sparse)."""
+
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex

@@ -12,5 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
+"""Module for handling DICOM WSI instances read from file."""
+
+from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
+from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
+from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter
+from wsidicom.file.wsidicom_file_base import OffsetTableType

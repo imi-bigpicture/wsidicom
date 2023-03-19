@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module for handling instance level objects."""
+
 from wsidicom.instance.instance import WsiInstance
 from wsidicom.instance.dataset import WsiDataset, ImageType, TileType
 from wsidicom.instance.image_data import ImageData

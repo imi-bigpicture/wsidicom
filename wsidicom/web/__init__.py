@@ -12,5 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from wsidicom.wsidicom_web.wsidicom_web_client import WsiDicomWebClient
-from wsidicom.wsidicom_web.wsidicom_web_source import WsiDicomWebSource
+"""Module for handling DICOM WSI instances read using DICOM Web."""
+
+from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
+from wsidicom.web.wsidicom_web_source import WsiDicomWebSource

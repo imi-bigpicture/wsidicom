@@ -27,7 +27,7 @@ from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Group
 from wsidicom.instance import WsiInstance
 from wsidicom.stringprinting import dict_pretty_str
-from wsidicom.wsidicom_file import (
+from wsidicom.file import (
     WsiDicomFile,
     WsiDicomFileImageData,
     WsiDicomFileSource,

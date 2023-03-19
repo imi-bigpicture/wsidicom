@@ -23,7 +23,7 @@ from pydicom import Dataset, dcmread
 
 from wsidicom.file import OffsetTableType
 from wsidicom.instance import ImageType, TileType, WsiDataset
-from wsidicom.wsidicom_file import WsiDicomFile
+from wsidicom.file import WsiDicomFile
 
 from .data_gen import (
     TESTFRAME,

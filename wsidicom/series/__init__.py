@@ -12,5 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module for handling series of groups, such as a series of levels."""
+
 from wsidicom.series.levels import Levels
 from wsidicom.series.series import Labels, Overviews, Series

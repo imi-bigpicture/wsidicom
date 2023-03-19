@@ -16,19 +16,31 @@
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import (Callable, DefaultDict, Dict, List, Optional, OrderedDict,
-                    Sequence, Set, Tuple)
+from typing import (
+    Callable,
+    DefaultDict,
+    Dict,
+    List,
+    Optional,
+    OrderedDict,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID
 
-from wsidicom.errors import (WsiDicomMatchError, WsiDicomNoResultionError,
-                             WsiDicomNotFoundError, WsiDicomOutOfBoundsError)
+from wsidicom.errors import (
+    WsiDicomMatchError,
+    WsiDicomNoResultionError,
+    WsiDicomNotFoundError,
+    WsiDicomOutOfBoundsError,
+)
 from wsidicom.file import OffsetTableType, WsiDicomFileWriter
 from wsidicom.geometry import Point, Region, RegionMm, Size, SizeMm
-from wsidicom.instance import (ImageData, ImageOrigin, ImageType, WsiDataset,
-                               WsiInstance)
+from wsidicom.instance import ImageData, ImageOrigin, ImageType, WsiDataset, WsiInstance
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
 

@@ -23,7 +23,7 @@ from pydicom.sequence import Sequence as DicomSequence
 
 from wsidicom import WsiDicom
 from wsidicom.conceptcode import CidConceptCode, IlluminationCode, IlluminationColorCode
-from wsidicom.wsidicom_file import WsiDicomFileImageData
+from wsidicom.file import WsiDicomFileImageData
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath

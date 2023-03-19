@@ -26,10 +26,10 @@ from pydicom.uid import UID
 
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Size
 from wsidicom.instance import ImageType, WsiDataset
 from wsidicom.uid import FileUids, SlideUids
+from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 
 
 class WsiDicomFile(WsiDicomFileBase):

@@ -19,7 +19,7 @@ from pydicom.uid import UID
 
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.instance import WsiDicomImageData
-from wsidicom.wsidicom_file.wsidicom_file import WsiDicomFile
+from wsidicom.file.wsidicom_file import WsiDicomFile
 
 
 class WsiDicomFileImageData(WsiDicomImageData):

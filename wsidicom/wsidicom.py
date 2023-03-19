@@ -35,8 +35,8 @@ from wsidicom.series import Labels, Levels, Overviews, Series
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import SlideUids
-from wsidicom.wsidicom_file import WsiDicomFileSource
-from wsidicom.wsidicom_web import WsiDicomWebClient, WsiDicomWebSource
+from wsidicom.file import WsiDicomFileSource
+from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
 
 
 class WsiDicom:

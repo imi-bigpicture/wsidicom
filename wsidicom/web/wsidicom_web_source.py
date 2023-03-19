@@ -20,8 +20,8 @@ from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import ImageType, WsiDataset, WsiInstance
 from wsidicom.source import Source
-from wsidicom.wsidicom_web.wsidicom_web_client import WsiDicomWebClient
-from wsidicom.wsidicom_web.wsidicom_web_image_data import WsiDicomWebImageData
+from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
+from wsidicom.web.wsidicom_web_image_data import WsiDicomWebImageData
 
 """A source for reading WSI DICOM files from DICOM Web."""
 

@@ -12,5 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module for handling group of instances, such as a level."""
+
 from wsidicom.group.group import Group
 from wsidicom.group.level import Level
