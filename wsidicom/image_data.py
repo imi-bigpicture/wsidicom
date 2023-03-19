@@ -16,13 +16,14 @@ import io
 import warnings
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
+from wsidicom.dataset import TileType, WsiDataset
 
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import (
@@ -34,6 +35,8 @@ from wsidicom.geometry import (
     Size,
     SizeMm,
 )
+from wsidicom.tile_index.full_tile_index import FullTileIndex
+from wsidicom.tile_index.sparse_tile_index import SparseTileIndex
 
 
 class ImageOrigin:
@@ -153,7 +156,7 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def samples_per_pixel(self) -> int:
-        """Should return number of samples per pixel (e.g. 3 for RGB."""
+        """Should return number of samples per pixel (e.g. 3 for RGB)."""
         raise NotImplementedError()
 
     @property
@@ -688,6 +691,122 @@ class ImageData(metaclass=ABCMeta):
             image.crop(box=cropped_tile_region.box_from_origin)
             tile_frame = self.encode(image)
         return tile_frame
+
+
+class WsiDicomImageData(ImageData, metaclass=ABCMeta):
+    def __init__(self, datasets: Sequence[WsiDataset]):
+
+        if datasets[0].tile_type == TileType.FULL:
+            self.tiles = FullTileIndex(datasets)
+        else:
+            self.tiles = SparseTileIndex(datasets)
+        self._pixel_spacing = datasets[0].pixel_spacing
+        self._default_z: Optional[float] = None
+        self._photometric_interpretation = datasets[0].photometric_interpretation
+        self._samples_per_pixel = datasets[0].samples_per_pixel
+        self._image_origin = ImageOrigin.from_dataset(datasets[0])
+
+    @abstractmethod
+    def _get_tile_frame(self, frame_index: int) -> bytes:
+        """Return tile frame for frame index.
+
+        Parameters
+        ----------
+        frame_index: int
+             Frame index to get
+
+        Returns
+        ----------
+        bytes
+            The frame in bytes
+        """
+        raise NotImplementedError()
+
+    @property
+    def image_size(self) -> Size:
+        """The pixel size of the image."""
+        return self.tiles.image_size
+
+    @property
+    def tile_size(self) -> Size:
+        """The pixel tile size of the image."""
+        return self.tiles.tile_size
+
+    @property
+    def focal_planes(self) -> List[float]:
+        """Focal planes avaiable in the image defined in um."""
+        return self.tiles.focal_planes
+
+    @property
+    def optical_paths(self) -> List[str]:
+        """Optical paths avaiable in the image."""
+        return self.tiles.optical_paths
+
+    @property
+    def pixel_spacing(self) -> Optional[SizeMm]:
+        """Size of the pixels in mm/pixel."""
+        return self._pixel_spacing
+
+    @property
+    def photometric_interpretation(self) -> str:
+        """Return photometric interpretation."""
+        return self._photometric_interpretation
+
+    @property
+    def samples_per_pixel(self) -> int:
+        """Return samples per pixel (1 or 3)."""
+        return self._samples_per_pixel
+
+    @property
+    def image_origin(self) -> ImageOrigin:
+        """Return the image origin of the image data."""
+        return self._image_origin
+
+    def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+        """Return image bytes for tile defined by tile (x, y), z,
+        and optical path."""
+        frame_index = self._get_frame_index(tile, z, path)
+        if frame_index == -1:
+            return self.blank_encoded_tile
+        return self._get_tile_frame(frame_index)
+
+    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
+        """Return Pillow image for tile defined by tile (x, y), z,
+        and optical path."""
+        frame_index = self._get_frame_index(tile_point, z, path)
+        if frame_index == -1:
+            return self.blank_tile
+        frame = self._get_tile_frame(frame_index)
+        return Image.open(io.BytesIO(frame))
+
+    def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
+        """Return frame index for tile. Raises WsiDicomOutOfBoundsError if
+        tile, z, or path is not valid.
+
+        Parameters
+        ----------
+        tile: Point
+             Tile coordinate
+        z: float
+            Z coordinate
+        path: str
+            Optical identifier
+
+        Returns
+        ----------
+        int
+            Tile frame index
+        """
+        tile_region = Region(position=tile, size=Size(0, 0))
+        if not self.valid_tiles(tile_region, z, path):
+            raise WsiDicomOutOfBoundsError(
+                f"Tile region {tile_region}", f"plane {self.tiles.tiled_size}"
+            )
+        frame_index = self.tiles.get_frame_index(tile, z, path)
+        return frame_index
+
+    def is_sparse(self, tile: Point, z: float, path: str) -> bool:
+        return self.tiles.get_frame_index(tile, z, path) == -1
 
 
 class PillowImageData(ImageData):

@@ -15,7 +15,6 @@
 from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
-from pydicom import Dataset
 from pydicom.dataset import FileMetaDataset
 from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
@@ -31,13 +30,26 @@ from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 from wsidicom.wsidicom_file.wsidicom_file import WsiDicomFile
 from wsidicom.wsidicom_file.wsidicom_file_image_data import WsiDicomFileImageData
 
+"""A source for reading WSI DICOM files from disk."""
+
 
 class WsiDicomFileSource(Source):
+    """Source reading WSI DICOM instances from disk."""
+
     def __init__(
         self,
         path: Union[str, Sequence[str], Path, Sequence[Path]],
         parse_pixel_data: bool = True,
     ) -> None:
+        """Create a WsiDicomFileSource.
+
+        Parameters
+        ----------
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
+            A path to WSI DICOM files for a slide image.
+        parse_pixel_data: bool = True
+            If to parse the pixel data on load.
+        """
         filepaths = self._get_filepaths(path)
         self._level_files: List[WsiDicomFile] = []
         self._label_files: List[WsiDicomFile] = []
@@ -65,29 +77,35 @@ class WsiDicomFileSource(Source):
         self._base_tile_size = self._base_dataset.tile_size
 
     @property
-    def base_dataset(self) -> Dataset:
+    def base_dataset(self) -> WsiDataset:
+        """The dataset of the base level instance."""
         return self._base_dataset
 
     @property
     def level_instances(self) -> List[WsiInstance]:
+        """The level instances parsed from the source."""
         return self.open_files(
             self._level_files, self._slide_uids, self._base_tile_size
         )
 
     @property
     def label_instances(self) -> List[WsiInstance]:
+        """The label instances parsed from the source."""
         return self.open_files(self._label_files, self._slide_uids)
 
     @property
     def overview_instances(self) -> List[WsiInstance]:
+        """The overview instances parsed from the source."""
         return self.open_files(self._overview_files, self._slide_uids)
 
     @property
     def annotation_instances(self) -> List[AnnotationInstance]:
+        """The annotation instances parsed from the source."""
         return AnnotationInstance.open(self._annotation_files)
 
     @property
     def image_files(self) -> List[WsiDicomFile]:
+        """Return the image files in the source."""
         file_lists: List[List[WsiDicomFile]] = [
             self._level_files,
             self._label_files,
@@ -98,6 +116,7 @@ class WsiDicomFileSource(Source):
     @staticmethod
     def _get_filepaths(path: Union[str, Sequence[str], Path, Sequence[Path]]):
         """Return file paths to files in path.
+
         If path is folder, return list of folder files in path.
         If path is single file, return list of that path.
         If path is list, return list of paths that are files.
@@ -142,13 +161,12 @@ class WsiDicomFileSource(Source):
         WsiDataset
             Base layer dataset.
         """
-        base_size = Size(0, 0)
-        base_dataset = files[0].dataset
-        for file in files[1:]:
-            if file.dataset.image_size.width > base_size.width:
-                base_dataset = file.dataset
-                base_size = file.dataset.image_size
-        return base_dataset
+        return next(
+            file.dataset
+            for file in sorted(
+                files, reverse=True, key=lambda file: file.dataset.image_size.width
+            )
+        )
 
     @staticmethod
     def _filter_paths(filepaths: Sequence[Path]) -> List[Path]:
@@ -168,6 +186,7 @@ class WsiDicomFileSource(Source):
 
     @staticmethod
     def _get_sop_class_uid(path: Path) -> UID:
+        """Return the SOP class UID from the file metadata."""
         metadata: FileMetaDataset = read_file_meta_info(path)
         return metadata.MediaStorageSOPClassUID
 

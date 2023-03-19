@@ -14,34 +14,46 @@
 
 from abc import ABCMeta, abstractmethod
 from typing import List
-from pydicom import Dataset
+from wsidicom.dataset import WsiDataset
 
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiInstance
 
+"""A Source provdes image instances that can be opened by WsiDicom. Implement this
+class to extend support to other DICOM sources or to read other WSI formats.
+"""
+
 
 class Source(metaclass=ABCMeta):
+    """A source should be initated with a path or similar, and parse the content into
+    instances."""
+
     @property
     @abstractmethod
-    def base_dataset(self) -> Dataset:
+    def base_dataset(self) -> WsiDataset:
+        """Should return a representative dataset for the source content."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def level_instances(self) -> List[WsiInstance]:
+        """Should return all level instances from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def label_instances(self) -> List[WsiInstance]:
+        """Should return all label instances from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def overview_instances(self) -> List[WsiInstance]:
+        """Should return all level overview from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def annotation_instances(self) -> List[AnnotationInstance]:
+        """Should return all annotation instances from the source."""
         raise NotImplementedError()

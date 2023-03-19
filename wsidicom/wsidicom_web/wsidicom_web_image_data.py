@@ -12,29 +12,38 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import io
-from functools import cached_property
 from pathlib import Path
-from typing import List, Optional
-
-from PIL import Image
-from PIL.Image import Image as PILImage
+from typing import List
 from pydicom.uid import UID
 
-from wsidicom.dataset import TileType
-from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.image_data import ImageData, ImageOrigin
-from wsidicom.tile_index import FullTileIndex, SparseTileIndex
-from wsidicom.wsidicom_web.wsidicom_web import WsiDicomWeb
+from wsidicom.dataset import WsiDataset
+from wsidicom.image_data import WsiDicomImageData
+from wsidicom.wsidicom_web.wsidicom_web_client import WsiDicomWebClient
 
 
-class WsiDicomWebImageData(ImageData):
-    def __init__(self, instance: WsiDicomWeb):
-        self._instance = instance
-        if self._instance.dataset.tile_type == TileType.FULL:
-            self._tile_index = FullTileIndex([self._instance.dataset])
-        else:
-            self._tile_index = SparseTileIndex([self._instance.dataset])
+class WsiDicomWebImageData(WsiDicomImageData):
+    """ImageData for WSI DICOM instances read from DICOM Web."""
+
+    def __init__(
+        self,
+        client: WsiDicomWebClient,
+        dataset: WsiDataset,
+    ):
+        """Create WsiDicomWebImageData from provided dataset and read image data using
+        provided client.
+
+        Parameters
+        ----------
+        client: WsiDicomWebClient
+            DICOM Web client for reading image data.
+        dataset: WsiDataset
+            Dataset for the image data.
+        """
+        self._client = client
+        self._study_uid = dataset.uids.slide.study_instance
+        self._series_uid = dataset.uids.slide.series_instance
+        self._instance_uid = dataset.uids.instance
+        super().__init__([dataset])
 
     @property
     def files(self) -> List[Path]:
@@ -42,54 +51,15 @@ class WsiDicomWebImageData(ImageData):
 
     @property
     def transfer_syntax(self) -> UID:
-        return self._instance.transfer_syntax
-
-    @property
-    def image_size(self) -> Size:
-        return self._instance.dataset.image_size
-
-    @property
-    def tile_size(self) -> Size:
-        """Should return the pixel tile size of the image, or pixel size of
-        the image if not tiled."""
-        return self._instance.dataset.tile_size
-
-    @property
-    def pixel_spacing(self) -> Optional[SizeMm]:
-        """Should return the size of the pixels in mm/pixel."""
-        return self._instance.dataset.pixel_spacing
-
-    @property
-    def samples_per_pixel(self) -> int:
-        """Should return number of samples per pixel (e.g. 3 for RGB."""
-        return self._instance.dataset.samples_per_pixel
-
-    @property
-    def photometric_interpretation(self) -> str:
-        """Should return the photophotometric interpretation of the image
-        data."""
-        return self._instance.dataset.photometric_interpretation
-
-    @cached_property
-    def image_origin(self) -> ImageOrigin:
-        """Should return the image origin of the image data."""
-        return ImageOrigin.from_dataset(self._instance.dataset)
-
-    def _get_decoded_tile(self, tile: Point, z: float, path: str) -> PILImage:
-        """Should return Image for tile defined by tile (x, y), z,
-        and optical path."""
-        frame = self._get_tile(tile, z, path)
-        return Image.open(io.BytesIO(frame))
-
-    def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
-        """Should return image bytes for tile defined by tile (x, y), z,
-        and optical path."""
-        return self._get_tile(tile, z, path)
+        """The uid of the transfer syntax of the image."""
+        return self._dataset.transfer_syntax  # TODO
 
     def close(self) -> None:
         """Should close any open files."""
         pass
 
-    def _get_tile(self, tile: Point, z: float, path: str) -> bytes:
-        tile_index = self._tile_index.get_frame_index(tile, z, path)
-        return self._instance.get_tile(tile_index)
+    def _get_tile_frame(self, frame_index: int) -> bytes:
+        # First frame for DICOM web is 1.
+        return self._client.get_frame(
+            self._study_uid, self._series_uid, self._instance_uid, frame_index + 1
+        )

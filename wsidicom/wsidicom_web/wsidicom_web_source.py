@@ -14,24 +14,39 @@
 
 from typing import List, Union
 
-from pydicom import Dataset
-from pydicom.uid import UID
+from pydicom.uid import UID, JPEGBaseline8Bit
 
-from wsidicom.dataset import ImageType
+from wsidicom.dataset import ImageType, WsiDataset
+from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiInstance
 from wsidicom.source import Source
-from wsidicom.wsidicom_web.wsidicom_web import WsiDicomWeb, WsiDicomWebClient
+from wsidicom.wsidicom_web.wsidicom_web_client import WsiDicomWebClient
 from wsidicom.wsidicom_web.wsidicom_web_image_data import WsiDicomWebImageData
+
+"""A source for reading WSI DICOM files from DICOM Web."""
 
 
 class WsiDicomWebSource(Source):
+    """Source reading WSI DICOM instances from DICOM Web."""
+
     def __init__(
         self,
         client: WsiDicomWebClient,
         study_uid: Union[str, UID],
         series_uid: Union[str, UID],
     ):
+        """Create a WsiDicomWebSource.
+
+        Parameters
+        ----------
+        client: WsiDicomWebClient
+            Client use for DICOM Web communication.
+        study_uid: Union[str, UID]
+            Study UID of DICOM WSI to open.
+        series_uid: Union[str, UID]
+            Series UID of DICOM WSI top open.
+        """
         if not isinstance(study_uid, UID):
             study_uid = UID(study_uid)
         if not isinstance(series_uid, UID):
@@ -40,9 +55,12 @@ class WsiDicomWebSource(Source):
         self._label_instances: List[WsiInstance] = []
         self._overview_instances: List[WsiInstance] = []
         for instance_uid in client.get_wsi_instances(study_uid, series_uid):
-            web_instance = WsiDicomWeb(client, study_uid, series_uid, instance_uid)
-            image_data = WsiDicomWebImageData(web_instance)
-            instance = WsiInstance(web_instance.dataset, image_data)
+            dataset = client.get_instance(study_uid, series_uid, instance_uid)
+            if not WsiDataset.is_supported_wsi_dicom(dataset, JPEGBaseline8Bit):
+                continue
+            dataset = WsiDataset(dataset)
+            image_data = WsiDicomWebImageData(client, dataset)
+            instance = WsiInstance(dataset, image_data)
             if instance.image_type == ImageType.VOLUME:
                 self._level_instances.append(instance)
             elif instance.image_type == ImageType.LABEL:
@@ -54,25 +72,41 @@ class WsiDicomWebSource(Source):
             instance = client.get_instance(study_uid, series_uid, instance_uid)
             annotation_instance = AnnotationInstance.open_dataset(instance)
             self._annotation_instances.append(annotation_instance)
-
-        self._base_dataset = self._level_instances[0].dataset
+        try:
+            self._base_dataset = next(
+                instance.dataset
+                for instance in sorted(
+                    self._level_instances,
+                    reverse=True,
+                    key=lambda instance: instance.dataset.image_size.width,
+                )
+            )
+        except StopIteration:
+            WsiDicomNotFoundError(
+                "No level instances found", f"{study_uid}, {series_uid}"
+            )
 
     @property
-    def base_dataset(self) -> Dataset:
+    def base_dataset(self) -> WsiDataset:
+        """The dataset of the one of the level instances."""
         return self._base_dataset
 
     @property
     def level_instances(self) -> List[WsiInstance]:
+        """The level instances parsed from the source."""
         return self._level_instances
 
     @property
     def label_instances(self) -> List[WsiInstance]:
+        """The label instances parsed from the source."""
         return self._label_instances
 
     @property
     def overview_instances(self) -> List[WsiInstance]:
+        """The overview instances parsed from the source."""
         return self._overview_instances
 
     @property
     def annotation_instances(self) -> List[AnnotationInstance]:
+        """The annotation instances parsed from the source."""
         return self._annotation_instances

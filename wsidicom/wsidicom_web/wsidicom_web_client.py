@@ -18,7 +18,7 @@ from typing import List
 from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
 from pydicom import Dataset
-from pydicom.uid import UID
+from pydicom.uid import UID, JPEGBaseline8Bit
 from requests.auth import AuthBase
 
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
@@ -72,6 +72,11 @@ class WsiDicomWebClient:
             series_uid,
             instance_uid,
             frame_numbers=[frame_index],
-            media_types=("image/jpeg",),
+            # media_types=(
+            #     (
+            #         "image/jpeg",
+            #         JPEGBaseline8Bit,
+            #     ),
+            # ),
         )
         return frames[0]
