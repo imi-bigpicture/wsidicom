@@ -46,10 +46,6 @@ class WsiDicomWebImageData(WsiDicomImageData):
         super().__init__([dataset])
 
     @property
-    def files(self) -> List[Path]:
-        return []
-
-    @property
     def transfer_syntax(self) -> UID:
         """The uid of the transfer syntax of the image."""
         return self._dataset.transfer_syntax  # TODO

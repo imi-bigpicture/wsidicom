@@ -37,13 +37,6 @@ class PillowImageData(ImageData):
         return cls(image)
 
     @property
-    def files(self) -> List[Path]:
-        filename = getattr(self._image, "filename", None)
-        if filename is None:
-            return []
-        return [filename]
-
-    @property
     def transfer_syntax(self) -> UID:
         return JPEGBaseline8Bit
 

@@ -94,12 +94,6 @@ class Series(metaclass=ABCMeta):
         return [group.mpp for group in self.groups if group.mpp is not None]
 
     @property
-    def files(self) -> List[Path]:
-        """Return contained files."""
-        series_files = [series.files for series in self.groups]
-        return [file for sublist in series_files for file in sublist]
-
-    @property
     def datasets(self) -> List[WsiDataset]:
         """Return contained datasets."""
 

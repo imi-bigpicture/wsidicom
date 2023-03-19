@@ -65,10 +65,6 @@ class WsiDicomTestImageData(ImageData):
         self._image_size = tiled_size * TILE_SIZE
 
     @property
-    def files(self) -> List[Path]:
-        return []
-
-    @property
     def transfer_syntax(self) -> UID:
         return JPEGBaseline8Bit
 

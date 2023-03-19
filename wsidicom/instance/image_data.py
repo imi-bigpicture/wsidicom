@@ -45,11 +45,6 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def files(self) -> List[Path]:
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
     def transfer_syntax(self) -> UID:
         """Should return the uid of the transfer syntax of the image."""
         raise NotImplementedError()

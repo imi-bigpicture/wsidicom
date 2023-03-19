@@ -192,11 +192,6 @@ class WsiDicom:
         return [series for series in collection if series is not None]
 
     @property
-    def files(self) -> List[Path]:
-        """Return contained files"""
-        return [file for series in self.collection for file in series.files]
-
-    @property
     def image_size(self) -> Size:
         """Size of base leve."""
         return self.base_level.size

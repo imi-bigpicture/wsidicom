@@ -127,14 +127,6 @@ class Group:
         return self.instances[self._default_instance_uid]
 
     @property
-    def files(self) -> List[Path]:
-        """Return contained files"""
-        instance_files = [
-            instance.image_data.files for instance in self.instances.values()
-        ]
-        return [file for sublist in instance_files for file in sublist]
-
-    @property
     def datasets(self) -> List[WsiDataset]:
         """Return contained datasets."""
         instance_datasets = [instance.datasets for instance in self.instances.values()]
