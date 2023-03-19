@@ -511,11 +511,12 @@ class WsiDicom:
 
     def save(
         self,
-        output_path: str,
+        output_path: Union[str, Path],
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None,
         offset_table: Optional[str] = "bot",
+        add_missing_levels: bool = False,
     ) -> List[Path]:
         """Save wsi as DICOM-files in path. Instances for the same pyramid
         level will be combined when possible to one file (e.g. not split
@@ -536,6 +537,8 @@ class WsiDicom:
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        add_missing_levels: bool = False
+            If to add missing dyadic levels up to the single tile level.
 
         Returns
         ----------
@@ -550,10 +553,26 @@ class WsiDicom:
                 workers = cpus
         if chunk_size is None:
             chunk_size = 16
+        if isinstance(output_path, str):
+            output_path = Path(output_path)
 
         filepaths: List[Path] = []
         instance_number = 0
-        for series in self.collection:
+        levels_filepaths = self.levels.save(
+            output_path,
+            uid_generator,
+            workers,
+            chunk_size,
+            offset_table,
+            instance_number,
+            add_missing_levels,
+        )
+        filepaths.extend(levels_filepaths)
+        instance_number += len(levels_filepaths)
+        associated_series: List[Optional[Series]] = [self.labels, self.overviews]
+        for series in associated_series:
+            if series is None:
+                continue
             series_filepaths = series.save(
                 output_path,
                 uid_generator,

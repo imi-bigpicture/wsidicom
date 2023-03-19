@@ -152,15 +152,31 @@ class Level(Group):
         )
 
     def get_highest_level(self) -> int:
-        """Return highest deep zoom scale that can be produced
-        from the image in the level.
+        """Return lowest level that produces a single pixel sized image.
 
         Returns
         ----------
         int
-            Relative level where the pixel size becomes 1x1
+            Relative level where the pixel size becomes 1x1.
         """
         return math.ceil(math.log2(max(self.size.width, self.size.height)))
+
+    def get_lowest_single_tile_level(self) -> int:
+        """Return lowest level that produces a single tile sized image.
+
+        Returns
+        ----------
+        int
+            Relative level where the pixel size becomes a single tile size.
+        """
+        return math.ceil(
+            math.log2(
+                max(
+                    self.size.width / self.tile_size.width,
+                    self.size.height / self.tile_size.height,
+                )
+            )
+        )
 
     def get_scaled_tile(
         self,
@@ -276,7 +292,7 @@ class Level(Group):
         chunk_size: int,
         offset_table: Optional[str],
         instance_number: int,
-    ) -> "Level":
+    ) -> List[Path]:
         """Creates a new Level from this level by scaling the image
         data.
 
@@ -334,10 +350,5 @@ class Level(Group):
                     scale=scale,
                 )
             filepaths.append(filepath)
-
-        created_instances = WsiDicomFileSource.open_files(
-            [WsiDicomFile(filepath) for filepath in filepaths],
-            self.uids,
-            self.tile_size,
-        )
-        return Level(created_instances, self._base_pixel_spacing)
+            instance_number += 1
+        return filepaths

@@ -99,6 +99,11 @@ class Levels(Series):
         return self.base_level.get_highest_level()
 
     @property
+    def lowest_single_tile_level(self) -> int:
+        """Return lowest pyramid level that has consists of a single tile."""
+        return self.base_level.get_lowest_single_tile_level()
+
+    @property
     def base_level(self) -> Level:
         """Return the base level of the pyramid"""
         return self._levels[0]
@@ -229,55 +234,47 @@ class Levels(Series):
             )
         return closest
 
-    def construct_pyramid(
+    def save(
         self,
-        highest_level: int,
+        output_path: Path,
+        uid_generator: Callable[..., UID],
+        workers: int,
+        chunk_size: int,
+        offset_table: Optional[str],
         instance_number: int,
-        uid_generator: Callable[..., UID] = generate_uid,
-        workers: Optional[int] = None,
-        chunk_size: int = 100,
-        offset_table: Optional[str] = "bot",
-        add_to_excisting: bool = True,
+        add_missing_levels: bool = False,
     ) -> List[Path]:
-        """Construct missing pyramid levels from excisting levels.
+        """Save Series as DICOM-files in path.
 
         Parameters
         ----------
-        highest_level: int
-        uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
+        output_path: str
+        uid_generator: Callable[..., UID]
              Function that can gernerate unique identifiers.
-        workers: Optional[int] = None
+        workers: int
             Maximum number of thread workers to use.
-        chunk_size: int = 100
+        chunk_size:
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
-        add_to_excisting: bool = True
-            If to add the created levels to excisting levels.
+        instance_number: int
+            Instance number for first instance in series.
+        add_missing_levels: bool = False
+            If to add missing dyadic levels up to the single tile level.
 
         Returns
         ----------
         List[Path]
             List of paths of created files.
         """
-        if workers is None:
-            cpus = os.cpu_count()
-            if cpus is None:
-                workers = 1
-            else:
-                workers = cpus
-
         filepaths: List[Path] = []
-
-        for pyramid_level in range(highest_level):
-            if pyramid_level not in self._levels.keys():
-                # Find the closest larger level for missing level
+        for pyramid_level in range(self.highest_level):
+            if pyramid_level not in self._levels.keys() and add_missing_levels:
                 closest_level = self.get_closest_by_level(pyramid_level)
                 # Create scaled level
-                output_path = closest_level.files[0].parent
-                new_level = closest_level.create_child(
+                new_level_file_paths = closest_level.create_child(
                     scale=2,
                     output_path=output_path,
                     uid_generator=uid_generator,
@@ -286,11 +283,18 @@ class Levels(Series):
                     offset_table=offset_table,
                     instance_number=instance_number,
                 )
-                # Add level to available levels
-                if add_to_excisting:
-                    self._levels[new_level.level] = new_level
-                else:
-                    new_level.close()
-                filepaths += new_level.files
-                instance_number += 1
+                filepaths.extend(new_level_file_paths)
+                instance_number += len(new_level_file_paths)
+            else:
+                level = self._levels[pyramid_level]
+                level_file_paths = level.save(
+                    output_path,
+                    uid_generator,
+                    workers,
+                    chunk_size,
+                    offset_table,
+                    instance_number,
+                )
+                filepaths.extend(level_file_paths)
+                instance_number += len(level_file_paths)
         return filepaths

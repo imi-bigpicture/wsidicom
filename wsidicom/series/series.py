@@ -171,7 +171,7 @@ class Series(metaclass=ABCMeta):
 
     def save(
         self,
-        output_path: str,
+        output_path: Path,
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
@@ -182,7 +182,7 @@ class Series(metaclass=ABCMeta):
 
         Parameters
         ----------
-        output_path: str
+        output_path: Path
         uid_generator: Callable[..., UID]
              Function that can gernerate unique identifiers.
         workers: int

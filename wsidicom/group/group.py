@@ -538,7 +538,7 @@ class Group:
 
     def save(
         self,
-        output_path: str,
+        output_path: Path,
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
@@ -555,7 +555,7 @@ class Group:
 
         Parameters
         ----------
-        output_path: str
+        output_path: Path
             Folder path to save files to.
         uid_generator: Callable[..., UID]
             Uid generator to use.

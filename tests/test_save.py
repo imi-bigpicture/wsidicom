@@ -410,13 +410,11 @@ class WsiDicomFileSaveTests(unittest.TestCase):
     def test_create_child(self):
         for _, wsi in self.test_folders.items():
             with TemporaryDirectory() as tempdir:
-                print(f"running test create child on {wsi.files}")
                 target = cast(Level, wsi.levels[-2])
                 source = cast(Level, wsi.levels[-3])
-                new_level = source.create_child(
+                new_level_files = source.create_child(
                     2, Path(tempdir), generate_uid, 1, 100, "bot", 0
                 )
-                new_level.close()
                 with WsiDicom.open(tempdir) as created_wsi:
                     created_size = created_wsi.levels[0].size.to_tuple()
                     target_size = target.size.to_tuple()
