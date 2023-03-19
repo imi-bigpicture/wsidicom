@@ -13,7 +13,9 @@
 #    limitations under the License.
 
 from enum import Enum
+from pathlib import Path
 from typing import List
+from dicomweb_client import DICOMfileClient
 
 from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
@@ -80,3 +82,10 @@ class WsiDicomWebClient:
             # ),
         )
         return frames[0]
+
+
+class WsiDicomFileClient(WsiDicomWebClient):
+    def __init__(self, path: Path):
+        self._client = DICOMfileClient(
+            f"file://{path.absolute().as_posix()}", in_memory=True
+        )

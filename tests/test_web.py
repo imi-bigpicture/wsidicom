@@ -18,22 +18,14 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytest
-from dicomweb_client import DICOMfileClient
 
 from tests.test_dcmfiles import (
-    WsiDicomFilesTests,
-    SLIDE_FOLDER,
     REGION_DEFINITIONS_FILE,
+    SLIDE_FOLDER,
+    WsiDicomFilesTests,
 )
 from wsidicom import WsiDicom
-from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
-
-
-class WsiDicomFileClient(WsiDicomWebClient):
-    def __init__(self, path: Path):
-        self._client = DICOMfileClient(
-            f"file://{path.absolute().as_posix()}", in_memory=True
-        )
+from wsidicom.web.wsidicom_web_client import WsiDicomFileClient
 
 
 @pytest.mark.integration
