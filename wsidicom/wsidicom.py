@@ -59,6 +59,7 @@ class WsiDicom:
         label: Optional[Union[PILImage, str, Path]] = None
             Optional label image to use instead of label found in source.
         """
+        self._source = source
         if label is None:
             label_instances = source.label_instances
         else:
@@ -511,8 +512,7 @@ class WsiDicom:
 
     def close(self) -> None:
         """Close all files."""
-        for series in self.collection:
-            series.close()
+        self._source.close()
 
     def save(
         self,

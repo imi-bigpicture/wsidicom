@@ -109,3 +109,6 @@ class WsiDicomWebSource(Source):
     def annotation_instances(self) -> List[AnnotationInstance]:
         """The annotation instances parsed from the source."""
         return self._annotation_instances
+
+    def close(self) -> None:
+        pass

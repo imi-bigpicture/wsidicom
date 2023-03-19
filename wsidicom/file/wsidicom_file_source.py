@@ -102,6 +102,10 @@ class WsiDicomFileSource(Source):
         """The annotation instances parsed from the source."""
         return AnnotationInstance.open(self._annotation_files)
 
+    def close(self) -> None:
+        for image_file in self.image_files:
+            image_file.close()
+
     @property
     def image_files(self) -> List[WsiDicomFile]:
         """Return the image files in the source."""

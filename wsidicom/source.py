@@ -56,3 +56,8 @@ class Source(metaclass=ABCMeta):
     def annotation_instances(self) -> List[AnnotationInstance]:
         """Should return all annotation instances from the source."""
         raise NotImplementedError()
+
+    @abstractmethod
+    def close(self) -> None:
+        """Should close any opened resouces (such as files)."""
+        raise NotImplementedError()
