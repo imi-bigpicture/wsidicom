@@ -1,5 +1,7 @@
 {
     "Histech^Samantha [1229631]": {
+        "StudyInstanceUID": "2.25.292315917905782003007355414279734624434",
+        "SeriesInstanceUID": "2.25.240842844665571684955379851385752717044",
         "read_region": [
             {
                 "location": {
@@ -177,6 +179,8 @@
         ]
     },
     "MoticWangjie^Professer [100001]": {
+        "StudyInstanceUID": "1.2.276.0.7230010.3.1.2.1145362585.2096.1567753444.779",
+        "SeriesInstanceUID": "1.2.276.0.7230010.3.1.3.1145362585.2096.1567753444.780",
         "read_region": [
             {
                 "location": {
