@@ -33,7 +33,7 @@ from wsidicom.errors import (
     WsiDicomUidDuplicateError,
 )
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.image_data import ImageData
+from wsidicom.instance.image_data import ImageData
 from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
 
 

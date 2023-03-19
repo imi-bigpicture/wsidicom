@@ -27,7 +27,7 @@ from pydicom.uid import UID
 
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
-from wsidicom.image_data import ImageData
+from wsidicom.instance import ImageData
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 

@@ -16,10 +16,9 @@ from typing import List, Union
 
 from pydicom.uid import UID, JPEGBaseline8Bit
 
-from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import WsiInstance
+from wsidicom.instance import ImageType, WsiDataset, WsiInstance
 from wsidicom.source import Source
 from wsidicom.wsidicom_web.wsidicom_web_client import WsiDicomWebClient
 from wsidicom.wsidicom_web.wsidicom_web_image_data import WsiDicomWebImageData

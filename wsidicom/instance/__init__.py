@@ -12,5 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from wsidicom.tile_index.full_tile_index import FullTileIndex
-from wsidicom.tile_index.sparse_tile_index import SparseTileIndex
+from wsidicom.instance.instance import WsiInstance
+from wsidicom.instance.dataset import WsiDataset, ImageType, TileType
+from wsidicom.instance.image_data import ImageData
+from wsidicom.instance.image_origin import ImageOrigin
+from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
+from wsidicom.instance.pillow_image_data import PillowImageData

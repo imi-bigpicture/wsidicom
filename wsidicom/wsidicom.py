@@ -21,9 +21,6 @@ from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.dataset import TileType, WsiDataset
-from wsidicom.wsidicom_file import WsiDicomFileSource
-from wsidicom.wsidicom_web import WsiDicomWebClient, WsiDicomWebSource
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
@@ -31,18 +28,15 @@ from wsidicom.errors import (
 )
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import WsiInstance
-from wsidicom.group.level import Level
+from wsidicom.group import Level
+from wsidicom.instance import TileType, WsiDataset, WsiInstance
 from wsidicom.optical import OpticalManager
-from wsidicom.series import (
-    Labels,
-    Levels,
-    Overviews,
-    Series,
-)
+from wsidicom.series import Labels, Levels, Overviews, Series
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import SlideUids
+from wsidicom.wsidicom_file import WsiDicomFileSource
+from wsidicom.wsidicom_web import WsiDicomWebClient, WsiDicomWebSource
 
 
 class WsiDicom:

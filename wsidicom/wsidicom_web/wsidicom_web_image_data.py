@@ -14,10 +14,10 @@
 
 from pathlib import Path
 from typing import List
+
 from pydicom.uid import UID
 
-from wsidicom.dataset import WsiDataset
-from wsidicom.image_data import WsiDicomImageData
+from wsidicom.instance import WsiDataset, WsiDicomImageData
 from wsidicom.wsidicom_web.wsidicom_web_client import WsiDicomWebClient
 
 

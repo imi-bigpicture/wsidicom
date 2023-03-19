@@ -14,10 +14,9 @@
 
 from abc import ABCMeta, abstractmethod
 from typing import List
-from wsidicom.dataset import WsiDataset
 
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import WsiInstance
+from wsidicom.instance import WsiDataset, WsiInstance
 
 """A Source provdes image instances that can be opened by WsiDicom. Implement this
 class to extend support to other DICOM sources or to read other WSI formats.

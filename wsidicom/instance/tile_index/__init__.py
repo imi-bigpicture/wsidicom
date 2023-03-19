@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,21 +12,5 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from .wsidicom import WsiDicom
-from wsidicom.config import settings
-from wsidicom.graphical_annotations import (
-    Annotation,
-    AnnotationGroup,
-    AnnotationInstance,
-    Measurement,
-    Point,
-    PointAnnotationGroup,
-    Polygon,
-    PolygonAnnotationGroup,
-    Polyline,
-    PolylineAnnotationGroup,
-)
-from wsidicom.instance import ImageData, WsiDataset, WsiInstance
-from wsidicom.series import Labels, Levels, Overviews
-
-__version__ = "0.8.0"
+from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
+from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex

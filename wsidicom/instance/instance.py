@@ -19,10 +19,12 @@ from PIL.Image import Image as PILImage
 from pydicom import Dataset
 from pydicom.uid import UID
 
-from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import WsiDicomError, WsiDicomUidDuplicateError
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.image_data import ImageData, ImageOrigin, PillowImageData
+from wsidicom.instance.dataset import ImageType, WsiDataset
+from wsidicom.instance.image_data import ImageData
+from wsidicom.instance.image_origin import ImageOrigin
+from wsidicom.instance.pillow_image_data import PillowImageData
 from wsidicom.uid import SlideUids
 
 

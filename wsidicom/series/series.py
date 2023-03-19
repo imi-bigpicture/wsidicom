@@ -18,11 +18,10 @@ from typing import Callable, List, Optional, Sequence, Type, TypeVar, Union
 
 from pydicom.uid import UID
 
-from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import WsiDicomMatchError
 from wsidicom.geometry import SizeMm
 from wsidicom.group import Group, Level
-from wsidicom.instance import WsiInstance
+from wsidicom.instance import ImageType, WsiDataset, WsiInstance
 from wsidicom.uid import SlideUids
 
 SeriesType = TypeVar("SeriesType")

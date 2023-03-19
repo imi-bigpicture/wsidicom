@@ -20,7 +20,7 @@ from pydicom.encaps import encapsulate
 
 from pathlib import Path
 
-from wsidicom.dataset import TileType
+from wsidicom.instance import TileType
 from wsidicom.file.wsidicom_file_base import OffsetTableType
 
 

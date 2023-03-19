@@ -18,7 +18,7 @@ from pydicom.dataset import Dataset
 
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.geometry import Point
-from wsidicom.tile_index.tile_index import TileIndex
+from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
 class FullTileIndex(TileIndex):

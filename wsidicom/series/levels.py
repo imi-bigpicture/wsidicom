@@ -18,12 +18,10 @@ from typing import Callable, List, Optional, OrderedDict, Sequence, TypeVar
 
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.dataset import ImageType
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
-from wsidicom.image_data import ImageOrigin
-from wsidicom.instance import WsiInstance
+from wsidicom.instance import ImageOrigin, ImageType, WsiInstance
 from wsidicom.series.series import Series
 from wsidicom.stringprinting import str_indent
 

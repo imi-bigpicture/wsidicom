@@ -20,11 +20,10 @@ from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.uid import UID
 
-from wsidicom.dataset import ImageType, WsiDataset
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.geometry import Size
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import WsiInstance
+from wsidicom.instance import ImageType, WsiDataset, WsiInstance
 from wsidicom.source import Source
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 from wsidicom.wsidicom_file.wsidicom_file import WsiDicomFile
