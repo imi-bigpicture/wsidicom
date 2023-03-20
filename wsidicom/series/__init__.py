@@ -15,4 +15,4 @@
 """Module for handling series of groups, such as a series of levels."""
 
 from wsidicom.series.levels import Levels
-from wsidicom.series.series import Labels, Overviews, Series
+from wsidicom.series.series import Labels, Overviews
