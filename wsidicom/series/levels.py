@@ -281,12 +281,10 @@ class Levels(Series):
                     offset_table,
                     instance_number,
                 )
-                filepaths.extend(level_file_paths)
-                instance_number += len(level_file_paths)
             elif add_missing_levels:
-                closest_level = self.get_closest_by_level(pyramid_level)
                 # Create scaled level
-                new_level_file_paths = closest_level.create_child(
+                closest_level = self.get_closest_by_level(pyramid_level)
+                level_file_paths = closest_level.create_child(
                     scale=2,
                     output_path=output_path,
                     uid_generator=uid_generator,
@@ -295,7 +293,9 @@ class Levels(Series):
                     offset_table=offset_table,
                     instance_number=instance_number,
                 )
-                filepaths.extend(new_level_file_paths)
-                instance_number += len(new_level_file_paths)
+            else:
+                continue
+            filepaths.extend(level_file_paths)
+            instance_number += len(level_file_paths)
 
         return filepaths
