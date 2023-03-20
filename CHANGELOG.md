@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] -
 
+### Added
+
+- Support for opening DICOM WSI using DICOM Web.
+- save() now takes the optional parameter add_missing_levels, that enables adding missing pyramid levels.
+
+### Changed
+
+- WsiDicom is not initalized using a Source, that is responsible for provides the instances to view.
+- Refactoring due to adding support for DICOM Web and opening instances using Source.
+
+### Removed
+
+- The construct_pyramid() method of the Levels-class has been removed in favour of the add_missing_levels-parameter in save()
+
 ## [0.8.0] - 2023-03-21
 
 ### Added
