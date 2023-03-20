@@ -72,7 +72,7 @@ class WsiDicom:
         self._levels = Levels.open(source.level_instances)
         self._labels = Labels.open(label_instances)
         self._overviews = Overviews.open(source.overview_instances)
-        self._annotations = source.annotation_instances
+        self._annotations = list(source.annotation_instances)
         self._uids = self._validate_collection()
 
         self.optical = OpticalManager.open(

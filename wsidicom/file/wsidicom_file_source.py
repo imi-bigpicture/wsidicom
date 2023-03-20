@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import List, Optional, Sequence, Union
+from typing import Iterable, List, Optional, Sequence, Union
 
 from pydicom.dataset import FileMetaDataset
 from pydicom.filereader import read_file_meta_info
@@ -81,24 +81,24 @@ class WsiDicomFileSource(Source):
         return self._base_dataset
 
     @property
-    def level_instances(self) -> List[WsiInstance]:
+    def level_instances(self) -> Iterable[WsiInstance]:
         """The level instances parsed from the source."""
         return self.open_files(
             self._level_files, self._slide_uids, self._base_tile_size
         )
 
     @property
-    def label_instances(self) -> List[WsiInstance]:
+    def label_instances(self) -> Iterable[WsiInstance]:
         """The label instances parsed from the source."""
         return self.open_files(self._label_files, self._slide_uids)
 
     @property
-    def overview_instances(self) -> List[WsiInstance]:
+    def overview_instances(self) -> Iterable[WsiInstance]:
         """The overview instances parsed from the source."""
         return self.open_files(self._overview_files, self._slide_uids)
 
     @property
-    def annotation_instances(self) -> List[AnnotationInstance]:
+    def annotation_instances(self) -> Iterable[AnnotationInstance]:
         """The annotation instances parsed from the source."""
         return AnnotationInstance.open(self._annotation_files)
 
@@ -117,13 +117,14 @@ class WsiDicomFileSource(Source):
         return [file for file_list in file_lists for file in file_list]
 
     @staticmethod
-    def _get_filepaths(path: Union[str, Sequence[str], Path, Sequence[Path]]):
+    def _get_filepaths(
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
+    ) -> Iterable[Path]:
         """Return file paths to files in path.
 
         If path is folder, return list of folder files in path.
         If path is single file, return list of that path.
         If path is list, return list of paths that are files.
-        Raises WsiDicomNotFoundError if no files found
 
         Parameters
         ----------
@@ -132,23 +133,15 @@ class WsiDicomFileSource(Source):
 
         Returns
         ----------
-        List[Path]
-            List of found file paths
+        Iterable[Path]
+            Iterable of found file paths
         """
         if isinstance(path, (str, Path)):
             single_path = Path(path)
             if single_path.is_dir():
-                return list(single_path.iterdir())
-            elif single_path.is_file():
-                return [single_path]
-        elif isinstance(path, list):
-            multiple_paths = [
-                Path(file_path) for file_path in path if Path(file_path).is_file()
-            ]
-            if multiple_paths != []:
-                return multiple_paths
-
-        raise WsiDicomNotFoundError("No files found", str(path))
+                return single_path.iterdir()
+            return [single_path]
+        return (Path(file_path) for file_path in path if Path(file_path).is_file())
 
     @staticmethod
     def _get_base_dataset(files: Sequence[WsiDicomFile]) -> WsiDataset:
@@ -172,20 +165,20 @@ class WsiDicomFileSource(Source):
         )
 
     @staticmethod
-    def _filter_paths(filepaths: Sequence[Path]) -> List[Path]:
+    def _filter_paths(filepaths: Iterable[Path]) -> Iterable[Path]:
         """Filter list of paths to only include valid dicom files.
 
         Parameters
         ----------
-        filepaths: Sequence[Path]
+        filepaths: Iterable[Path]
             Paths to filter
 
         Returns
         ----------
-        List[Path]
-            List of paths with dicom files
+        Iterable[Path]
+            Iterable of paths with dicom files
         """
-        return [path for path in filepaths if path.is_file() and is_dicom(path)]
+        return (path for path in filepaths if path.is_file() and is_dicom(path))
 
     @staticmethod
     def _get_sop_class_uid(path: Path) -> UID:
@@ -199,7 +192,7 @@ class WsiDicomFileSource(Source):
         files: Sequence[WsiDicomFile],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None,
-    ) -> List["WsiInstance"]:
+    ) -> Iterable["WsiInstance"]:
         """Create instances from Dicom files. Only files with matching series
         uid and tile size, if defined, are used. Other files are closed.
 
@@ -214,15 +207,15 @@ class WsiDicomFileSource(Source):
 
         Returns
         ----------
-        List[WsiInstancece]
-            List of created instances.
+        Iterable[WsiInstancece]
+            Iterable of created instances.
         """
         filtered_files = WsiDicomFile.filter_files(files, series_uids, series_tile_size)
         files_grouped_by_instance = WsiDicomFile.group_files(filtered_files)
-        return [
+        return (
             WsiInstance(
                 [file.dataset for file in instance_files],
                 WsiDicomFileImageData(instance_files),
             )
             for instance_files in files_grouped_by_instance.values()
-        ]
+        )

@@ -20,6 +20,7 @@ from typing import (
     Callable,
     DefaultDict,
     Dict,
+    Iterable,
     List,
     Optional,
     OrderedDict,
@@ -159,13 +160,13 @@ class Group:
     @classmethod
     def open(
         cls,
-        instances: Sequence[WsiInstance],
+        instances: Iterable[WsiInstance],
     ) -> List["Group"]:
         """Return list of groups created from wsi instances.
 
         Parameters
         ----------
-        files: Sequence[WsiInstance]
+        files: Iterable[WsiInstance]
             Instances to create groups from.
 
         Returns
@@ -451,13 +452,13 @@ class Group:
 
     @classmethod
     def _group_instances(
-        cls, instances: Sequence[WsiInstance]
+        cls, instances: Iterable[WsiInstance]
     ) -> OrderedDict[Size, List[WsiInstance]]:
         """Return instances grouped and sorted by image size.
 
         Parameters
         ----------
-        instances: Sequence[WsiInstance]
+        instances: Iterable[WsiInstance]
             Instances to group by image size.
 
         Returns

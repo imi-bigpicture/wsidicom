@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from typing import List
+from typing import Iterable
 
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -35,25 +35,25 @@ class Source(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def level_instances(self) -> List[WsiInstance]:
+    def level_instances(self) -> Iterable[WsiInstance]:
         """Should return all level instances from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def label_instances(self) -> List[WsiInstance]:
+    def label_instances(self) -> Iterable[WsiInstance]:
         """Should return all label instances from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def overview_instances(self) -> List[WsiInstance]:
+    def overview_instances(self) -> Iterable[WsiInstance]:
         """Should return all level overview from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def annotation_instances(self) -> List[AnnotationInstance]:
+    def annotation_instances(self) -> Iterable[AnnotationInstance]:
         """Should return all annotation instances from the source."""
         raise NotImplementedError()
 

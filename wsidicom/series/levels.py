@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Callable, List, Optional, OrderedDict, Sequence
+from typing import Callable, Iterable, List, Optional, OrderedDict, Sequence
 
 from pydicom.uid import UID
 
@@ -34,12 +34,12 @@ class Levels(Series):
         return ImageType.VOLUME
 
     @classmethod
-    def open(cls, instances: Sequence[WsiInstance]) -> "Levels":
+    def open(cls, instances: Iterable[WsiInstance]) -> "Levels":
         """Return overviews created from wsi files.
 
         Parameters
         ----------
-        instances: Sequence[WsiInstance]
+        instances: Iterable[WsiInstance]
             Instances to create levels from.
 
         Returns

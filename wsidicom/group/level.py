@@ -15,7 +15,7 @@
 import math
 import os
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, cast
+from typing import Callable, Iterable, List, Optional, Sequence, cast
 
 from PIL import Image
 from PIL.Image import Image as PILImage
@@ -27,11 +27,6 @@ from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Group
 from wsidicom.instance import WsiInstance
 from wsidicom.stringprinting import dict_pretty_str
-from wsidicom.file import (
-    WsiDicomFile,
-    WsiDicomFileImageData,
-    WsiDicomFileSource,
-)
 
 
 class Level(Group):
@@ -105,13 +100,13 @@ class Level(Group):
     @classmethod
     def open(
         cls,
-        instances: Sequence[WsiInstance],
+        instances: Iterable[WsiInstance],
     ) -> List["Level"]:
         """Return list of levels created wsi files.
 
         Parameters
         ----------
-        files: Sequence[WsiInstance]
+        files: Iterable[WsiInstance]
             Instances to create levels from.
 
         Returns
@@ -322,8 +317,6 @@ class Level(Group):
         filepaths: List[Path] = []
         if not isinstance(scale, int) or scale < 2:
             raise ValueError("Scale must be integer and larger than 2")
-        if not isinstance(self.default_instance.image_data, WsiDicomFileImageData):
-            raise NotImplementedError("Can only construct pyramid from DICOM WSI files")
 
         for instances in self._group_instances_to_file():
             uid = uid_generator()

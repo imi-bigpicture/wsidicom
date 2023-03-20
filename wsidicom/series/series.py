@@ -14,7 +14,16 @@
 
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, Type, TypeVar, Union
+from typing import (
+    Callable,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+)
 
 from pydicom.uid import UID
 
@@ -106,20 +115,15 @@ class Series(metaclass=ABCMeta):
         series_instances = [series.instances.values() for series in self.groups]
         return [instance for sublist in series_instances for instance in sublist]
 
-    # @classmethod
-    # @abstractmethod
-    # def open(cls, instances: Sequence[WsiInstance]) -> "Series":
-    #     raise NotImplementedError()
-
     @classmethod
     def open(
-        cls: Type[SeriesType], instances: Sequence[WsiInstance]
+        cls: Type[SeriesType], instances: Iterable[WsiInstance]
     ) -> Optional[SeriesType]:
         """Return series created from instances.
 
         Parameters
         ----------
-        instances: Sequence[WsiInstance]
+        instances: Iterable[WsiInstance]
             Instances to create series from.
 
         Returns
