@@ -12,11 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import os
 from pathlib import Path
-from typing import Callable, List, Optional, OrderedDict, Sequence, TypeVar
+from typing import Callable, List, Optional, OrderedDict, Sequence
 
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Size, SizeMm
