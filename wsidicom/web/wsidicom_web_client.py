@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Tuple, Generator
+from typing import Any, Dict, Iterator, Tuple
 from dicomweb_client import DICOMfileClient
 
 from dicomweb_client.api import DICOMwebClient

@@ -19,23 +19,23 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.uid import UID, generate_uid, JPEGBaseline8Bit
+from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
+from wsidicom.file import WsiDicomFileSource
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level
 from wsidicom.instance import TileType, WsiDataset, WsiInstance
 from wsidicom.optical import OpticalManager
-from wsidicom.series import Labels, Levels, Overviews, Series
+from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import SlideUids
-from wsidicom.file import WsiDicomFileSource
 from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
 
 
@@ -189,8 +189,8 @@ class WsiDicom:
         return self._annotations
 
     @property
-    def collection(self) -> List[Series]:
-        collection: List[Optional[Series]] = [
+    def collection(self) -> List[Union[Levels, Labels, Overviews]]:
+        collection: List[Optional[Union[Levels, Labels, Overviews]]] = [
             self._levels,
             self._labels,
             self._overviews,
@@ -575,7 +575,10 @@ class WsiDicom:
         )
         filepaths.extend(levels_filepaths)
         instance_number += len(levels_filepaths)
-        associated_series: List[Optional[Series]] = [self.labels, self.overviews]
+        associated_series: List[Optional[Union[Levels, Labels, Overviews]]] = [
+            self.labels,
+            self.overviews,
+        ]
         for series in associated_series:
             if series is None:
                 continue

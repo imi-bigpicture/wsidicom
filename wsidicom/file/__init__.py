@@ -14,8 +14,6 @@
 
 """Module for handling DICOM WSI instances read from file."""
 
-from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
-from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
-from wsidicom.file.wsidicom_file import WsiDicomFile
-from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter
 from wsidicom.file.wsidicom_file_base import OffsetTableType
+from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
+from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter

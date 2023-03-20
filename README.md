@@ -1,8 +1,8 @@
 # *wsidicom*
 
-*wsidicom* is a Python package for reading [DICOM WSI](http://dicom.nema.org/Dicom/DICOMWSI/) file sets. The aims with the project are:
+*wsidicom* is a Python package for reading [DICOM WSI](http://dicom.nema.org/Dicom/DICOMWSI/). The aims with the project are:
 
-- Easy to use interface for reading and writing WSI DICOM images and annotations using the DICOM Media Storage Model.
+- Easy to use interface for reading and writing WSI DICOM images and annotations either from file or through DICOM Web.
 - Support the latest and upcoming DICOM standards.
 - Platform independent installation via PyPI.
 
@@ -26,7 +26,7 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 ## Requirements
 
-*wsidicom* uses pydicom, numpy and Pillow (with jpeg and jpeg2000 plugins).
+*wsidicom* uses pydicom, numpy, Pillow (with jpeg and jpeg2000 plugins), and dicomweb-client.
 
 ## Limitations
 
@@ -43,6 +43,26 @@ Optical path identifiers needs to be unique across file set.
 ```python
 from wsidicom import WsiDicom
 slide = WsiDicom.open(path_to_folder)
+```
+
+***Or load a WSI dataset from DICOM Web.***
+
+```python
+from wsidicom import WsiDicom, WsiDicomWebClient
+from requests.auth import HTTPBasicAuth
+
+auth = HTTPBasicAuth('username', 'password')
+client = WsiDicomWebClient(
+    'dicom_web_hostname',
+    '/qido',
+    '/wado,
+    auth
+)
+slide = WsiDicom.open_web(
+    client,
+    "study uid to open",
+    "series uid top open"
+)
 ```
 
 ***Read a 200x200 px region starting from px 1000, 1000 at level 6.***
@@ -121,35 +141,45 @@ A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of di
 - *Levels*, represents a group of levels, i.e. the pyrimidal structure.
 - *WsiDicom*, represents a collection of levels, labels and overviews.
 
-Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions.
+Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions. For DICOM Web the WsiDicomFile\* classes are replaced with WsiDicomWeb\* classes.
 
-The structure is easiest created using the open() helper functions, e.g. to create a WsiDicom-object:
+A Source is used to create WsiInstances, either from files (*WsiDicomFileSource*) or DICOM Web (*WsiDicomWebSource*), and can be used to to initate a *WsiDicom* object. A source is easiest created with the open() and open_web() helper functions, e.g.:
 
 ```python
 slide = WsiDicom.open(path_to_folder)
 ```
 
-But the structure can also be created manually from the bottom:
+## Code structure
 
-```python
-file = WsiDicomFile(path_to_file)
-instance = WsiInstance(file.dataset, DicomImageData(files))
-level = Level([instance])
-levels = Levels([level])
-slide = WsiDicom([levels])
-```
+- [wsidicom.py](wsidicom/wsidicom.py) - Main class with methods to open DICOM WSI objects.
+- [source.py](wsidicom/source.py) - Metaclass Source for serving WsiInstances to WsiDicom.
+- [series](wsidicom/series) - Series implementations Levels, Labels, and Overview.
+- [group](wsidicom/group) - Group implementations, e.g. Level.
+- [instance](wsidicom/instance) - Instance implementations WsiIsntance and WsiDataset, the metaclass ImageData and ImageData implementations WsiDicomImageData and PillowImageData.
+- [file](wsidicom/file) - Implementation for reading and writing DICOM WSI files.
+- [web](wsidicom/web) - Implementation for reading DICOM WSI from DICOM Web.
+- [graphica_annotations](wsidicom/graphical_annotations.py) - Handling graphical annotations.
+- [conceptcode.py](wsidicom/conceptcode.py) - Handling of DICOM concept codes.
+- [config.py](wsidicom/config.py) - Handles configuration settings.
+- [errors.py](wsidicom/errors.py) - Custom errors.
+- [geometry.py](wsidicom/geometry.py) - Classes for geometry handling.
+- [optical.py](wsidicom/optical.py) - Handles optical paths.
+- [uid.py](wsidicom/uid.py) - Handles DICOM uids.
+- [stringprinting.py](wsidicom/stringprinting.py) - For nicer string printing of objects.
 
 ## Adding support for other file formats
 
-By subclassing *ImageData* and implementing the required properties (transfer_syntax, image_size, tile_size, and pixel_spacing) and methods (get_tile() and close()) *wsidicom* can be used to access wsi images in other file formats than DICOM. In addition to a ImageData-object, image data, specified in a DICOM dataset, must also be created. For example, assuming a implementation of MyImageData exists that takes a path to a image file as argument and create_dataset() produces a DICOM dataset (see is_wsi_dicom() of WsiDataset for required attributes), WsiInstancees could be created for each pyramidal level, label, or overview:
+Support for other formats (or methods to access DICOM data) can be implemented by creating a new Source implementation, that should create WsiInstances for the implemented formats. A format specific implementations of the *ImageData* is likely needed to access the WSI image data. Additionally a WsiDataset needs to be created that returns matching metadata for the WSI.
+
+The implemented Source can then create a instance from the implemented ImageData (and a method returning a WsiDataset):
 
 ```python
 image_data = MyImageData('path_to_image_file')
-dataset = create_dataset()
+dataset = create_dataset_from_image_data(image_data)
 instance = WsiInstance(dataset, image_data)
 ```
 
-The created instances can then be arranged into levels etc, and opened as a WsiDicom-object as described in 'Data structure'.
+The source should arrange the created instances and return them at the level_instances, label_instances, and overview_instances properties. WsiDicom can then open the source object and arrange the instances into levels etc as described in 'Data structure'.
 
 ## Annotation usage
 
@@ -258,6 +288,8 @@ poetry run pytest -m integration
 
 - [pydicom](https://pydicom.github.io/)
 - [highdicom](https://github.com/MGHComputationalPathology/highdicom)
+- [wsidicomizer](https://github.com/imi-bigpicture/wsidicomizer)
+- [dicomslide](https://github.com/ImagingDataCommons/dicomslide)
 
 ## Contributing
 

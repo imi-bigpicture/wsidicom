@@ -34,11 +34,12 @@ from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 
 from wsidicom import WsiDicom
+from wsidicom.file import OffsetTableType, WsiDicomFileWriter
+from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.group.level import Level
 from wsidicom.instance import ImageData, ImageOrigin
 from wsidicom.uid import WSI_SOP_CLASS_UID
-from wsidicom.file import OffsetTableType, WsiDicomFile, WsiDicomFileWriter
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 
