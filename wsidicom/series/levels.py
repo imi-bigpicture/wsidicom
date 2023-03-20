@@ -270,8 +270,20 @@ class Levels(Series):
             List of paths of created files.
         """
         filepaths: List[Path] = []
-        for pyramid_level in range(self.highest_level):
-            if pyramid_level not in self._levels.keys() and add_missing_levels:
+        for pyramid_level in range(self.lowest_single_tile_level):
+            if pyramid_level in self._levels.keys():
+                level = self._levels[pyramid_level]
+                level_file_paths = level.save(
+                    output_path,
+                    uid_generator,
+                    workers,
+                    chunk_size,
+                    offset_table,
+                    instance_number,
+                )
+                filepaths.extend(level_file_paths)
+                instance_number += len(level_file_paths)
+            elif add_missing_levels:
                 closest_level = self.get_closest_by_level(pyramid_level)
                 # Create scaled level
                 new_level_file_paths = closest_level.create_child(
@@ -285,16 +297,5 @@ class Levels(Series):
                 )
                 filepaths.extend(new_level_file_paths)
                 instance_number += len(new_level_file_paths)
-            else:
-                level = self._levels[pyramid_level]
-                level_file_paths = level.save(
-                    output_path,
-                    uid_generator,
-                    workers,
-                    chunk_size,
-                    offset_table,
-                    instance_number,
-                )
-                filepaths.extend(level_file_paths)
-                instance_number += len(level_file_paths)
+
         return filepaths
