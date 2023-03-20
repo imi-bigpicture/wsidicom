@@ -34,6 +34,7 @@ class WsiDicomWebSource(Source):
         client: WsiDicomWebClient,
         study_uid: Union[str, UID],
         series_uid: Union[str, UID],
+        requested_transfer_syntax: UID,
     ):
         """Create a WsiDicomWebSource.
 
@@ -45,6 +46,10 @@ class WsiDicomWebSource(Source):
             Study UID of DICOM WSI to open.
         series_uid: Union[str, UID]
             Series UID of DICOM WSI top open.
+        requested_transfer_syntax: UID
+            Transfer syntax to request for image data, for example
+            UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
+
         """
         if not isinstance(study_uid, UID):
             study_uid = UID(study_uid)
@@ -55,10 +60,14 @@ class WsiDicomWebSource(Source):
         self._overview_instances: List[WsiInstance] = []
         for instance_uid in client.get_wsi_instances(study_uid, series_uid):
             dataset = client.get_instance(study_uid, series_uid, instance_uid)
-            if not WsiDataset.is_supported_wsi_dicom(dataset, JPEGBaseline8Bit):
+            if not WsiDataset.is_supported_wsi_dicom(
+                dataset, requested_transfer_syntax
+            ):
                 continue
             dataset = WsiDataset(dataset)
-            image_data = WsiDicomWebImageData(client, dataset)
+            image_data = WsiDicomWebImageData(
+                client, dataset, requested_transfer_syntax
+            )
             instance = WsiInstance(dataset, image_data)
             if instance.image_type == ImageType.VOLUME:
                 self._level_instances.append(instance)

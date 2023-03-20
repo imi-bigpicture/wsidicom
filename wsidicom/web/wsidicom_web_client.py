@@ -13,13 +13,19 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from dicomweb_client import DICOMfileClient
 
 from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
 from pydicom import Dataset
-from pydicom.uid import UID, JPEGBaseline8Bit
+from pydicom.uid import (
+    UID,
+    JPEGBaseline8Bit,
+    JPEGExtended12Bit,
+    JPEG2000,
+    JPEG2000Lossless,
+)
 from requests.auth import AuthBase
 
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
@@ -55,19 +61,19 @@ class WsiDicomWebClient:
         return Dataset.from_json(instance)
 
     def get_frame(
-        self, study_uid: UID, series_uid: UID, instance_uid: UID, frame_index: int
+        self,
+        study_uid: UID,
+        series_uid: UID,
+        instance_uid: UID,
+        frame_index: int,
+        transfer_syntax: UID,
     ) -> bytes:
         frames = self._client.retrieve_instance_frames(
             study_uid,
             series_uid,
             instance_uid,
             frame_numbers=[frame_index],
-            # media_types=(
-            #     (
-            #         "image/jpeg",
-            #         JPEGBaseline8Bit,
-            #     ),
-            # ),
+            media_types=(self._transfer_syntax_to_media_type(transfer_syntax),),
         )
         return frames[0]
 
@@ -87,6 +93,20 @@ class WsiDicomWebClient:
     @staticmethod
     def _get_sop_class_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:
         return UID(response[SOP_CLASS_UID]["Value"][0])
+
+    @staticmethod
+    def _transfer_syntax_to_media_type(transfer_syntax: UID) -> Tuple[str, str]:
+        if transfer_syntax == JPEGBaseline8Bit or transfer_syntax == JPEGExtended12Bit:
+            return (
+                "image/jpeg",
+                transfer_syntax,
+            )
+        elif transfer_syntax == JPEG2000 or transfer_syntax == JPEG2000Lossless:
+            return (
+                "image/jp2",
+                transfer_syntax,
+            )
+        raise NotImplementedError()
 
 
 class WsiDicomFileClient(WsiDicomWebClient):

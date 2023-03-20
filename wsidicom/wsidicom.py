@@ -19,7 +19,7 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID, generate_uid, JPEGBaseline8Bit
 
 from wsidicom.errors import (
     WsiDicomMatchError,
@@ -111,6 +111,7 @@ class WsiDicom:
         client: WsiDicomWebClient,
         study_uid: Union[str, UID],
         series_uid: Union[str, UID],
+        requested_transfer_syntax: UID = JPEGBaseline8Bit,
     ) -> "WsiDicom":
         """Open wsi dicom instances using dicom web client.
 
@@ -122,13 +123,18 @@ class WsiDicom:
             Study uid of wsi to open.
         series_uid: Union[str, UID]
             Series uid of wsi to open
+        transfer_syntax: UID
+            Transfer syntax to request for image data, for example
+            UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
 
         Returns
         ----------
         WsiDicom
             WsiDicom created from wsi dicom files in study-series.
         """
-        source = WsiDicomWebSource(client, study_uid, series_uid)
+        source = WsiDicomWebSource(
+            client, study_uid, series_uid, requested_transfer_syntax
+        )
         return cls(source)
 
     def __enter__(self):
@@ -506,7 +512,7 @@ class WsiDicom:
         return wsi_level.get_instance(z, path)
 
     def close(self) -> None:
-        """Close all files."""
+        """Close source."""
         self._source.close()
 
     def save(
