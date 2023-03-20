@@ -14,7 +14,7 @@
 
 from typing import List, Union
 
-from pydicom.uid import UID, JPEGBaseline8Bit
+from pydicom.uid import UID
 
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance

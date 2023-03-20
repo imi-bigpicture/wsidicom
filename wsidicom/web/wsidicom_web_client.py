@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterator, List, Tuple, Generator
 from dicomweb_client import DICOMfileClient
 
 from dicomweb_client.api import DICOMwebClient
@@ -45,10 +45,10 @@ class WsiDicomWebClient:
             session=create_session_from_auth(auth),
         )
 
-    def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> List[UID]:
+    def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
         return self._get_instances_of_class(study_uid, series_uid, WSI_SOP_CLASS_UID)
 
-    def get_ann_instances(self, study_uid: UID, series_uid: UID) -> List[UID]:
+    def get_ann_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
         return self._get_instances_of_class(study_uid, series_uid, ANN_SOP_CLASS_UID)
 
     def get_instance(
@@ -79,12 +79,12 @@ class WsiDicomWebClient:
 
     def _get_instances_of_class(
         self, study_uid: UID, series_uid: UID, sop_class_uid: UID
-    ):
-        return [
+    ) -> Iterator[UID]:
+        return (
             self._get_sop_instance_uid_from_response(instance)
             for instance in self._client.search_for_instances(study_uid, series_uid)
             if self._get_sop_class_uid_from_response(instance) == sop_class_uid
-        ]
+        )
 
     @staticmethod
     def _get_sop_instance_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:
