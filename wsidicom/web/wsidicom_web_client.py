@@ -12,9 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from enum import Enum
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 from dicomweb_client import DICOMfileClient
 
 from dicomweb_client.api import DICOMwebClient
@@ -25,10 +24,8 @@ from requests.auth import AuthBase
 
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
 
-
-class DicomTags(Enum):
-    SOP_CLASS_UID = "00080016"
-    SOP_INSTANCE_UID = "00080018"
+SOP_CLASS_UID = "00080016"
+SOP_INSTANCE_UID = "00080018"
 
 
 class WsiDicomWebClient:
@@ -43,24 +40,15 @@ class WsiDicomWebClient:
         )
 
     def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> List[UID]:
-        return [
-            UID(instance[DicomTags.SOP_INSTANCE_UID.value]["Value"][0])
-            for instance in self._client.search_for_instances(study_uid, series_uid)
-            if UID(instance[DicomTags.SOP_CLASS_UID.value]["Value"][0])
-            == WSI_SOP_CLASS_UID
-        ]
+        return self._get_instances_of_class(study_uid, series_uid, WSI_SOP_CLASS_UID)
 
     def get_ann_instances(self, study_uid: UID, series_uid: UID) -> List[UID]:
-        return [
-            UID(instance[DicomTags.SOP_INSTANCE_UID.value]["Value"][0])
-            for instance in self._client.search_for_instances(study_uid, series_uid)
-            if UID(instance[DicomTags.SOP_CLASS_UID.value]["Value"][0])
-            == ANN_SOP_CLASS_UID
-        ]
+        return self._get_instances_of_class(study_uid, series_uid, ANN_SOP_CLASS_UID)
 
     def get_instance(
         self, study_uid: UID, series_uid: UID, instance_uid: UID
     ) -> Dataset:
+        self._client.retrieve_instance
         instance = self._client.retrieve_instance_metadata(
             study_uid, series_uid, instance_uid
         )
@@ -82,6 +70,23 @@ class WsiDicomWebClient:
             # ),
         )
         return frames[0]
+
+    def _get_instances_of_class(
+        self, study_uid: UID, series_uid: UID, sop_class_uid: UID
+    ):
+        return [
+            self._get_sop_instance_uid_from_response(instance)
+            for instance in self._client.search_for_instances(study_uid, series_uid)
+            if self._get_sop_class_uid_from_response(instance) == sop_class_uid
+        ]
+
+    @staticmethod
+    def _get_sop_instance_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:
+        return UID(response[SOP_INSTANCE_UID]["Value"][0])
+
+    @staticmethod
+    def _get_sop_class_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:
+        return UID(response[SOP_CLASS_UID]["Value"][0])
 
 
 class WsiDicomFileClient(WsiDicomWebClient):
