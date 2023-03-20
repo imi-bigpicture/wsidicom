@@ -299,6 +299,3 @@ class WsiInstance:
             and self.tile_size == other_instance.tile_size
             and self.image_type == other_instance.image_type
         )
-
-    def close(self) -> None:
-        self._image_data.close()

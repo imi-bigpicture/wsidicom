@@ -99,11 +99,6 @@ class ImageData(metaclass=ABCMeta):
         and optical path."""
         raise NotImplementedError()
 
-    @abstractmethod
-    def close(self) -> None:
-        """Should close any open files."""
-        raise NotImplementedError()
-
     @property
     def tiled_size(self) -> Size:
         """The size of the image when divided into tiles, e.g. number of

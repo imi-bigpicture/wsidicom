@@ -73,6 +73,3 @@ class PillowImageData(ImageData):
         if tile != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
         return self.encode(self._image)
-
-    def close(self):
-        self._image.close()

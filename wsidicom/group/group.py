@@ -436,11 +436,6 @@ class Group:
             )
         return pixel_region
 
-    def close(self) -> None:
-        """Close all instances on the group."""
-        for instance in self._instances.values():
-            instance.close()
-
     def _validate_group(self):
         """Check that no file or instance in group is duplicate, and if strict
         instances in group matches. Raises WsiDicomMatchError otherwise.

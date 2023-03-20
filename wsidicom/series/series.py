@@ -164,11 +164,6 @@ class Series(metaclass=ABCMeta):
         except IndexError:
             return None
 
-    def close(self) -> None:
-        """Close all groups in the series."""
-        for group in self.groups:
-            group.close()
-
     def save(
         self,
         output_path: Path,

@@ -98,9 +98,6 @@ class WsiDicomTestImageData(ImageData):
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         return self._data[tile.x + tile.y * self.tiled_size.width]
 
-    def close(self) -> None:
-        return super().close()
-
 
 @pytest.mark.save
 class WsiDicomFileSaveTests(unittest.TestCase):

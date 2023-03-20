@@ -99,7 +99,3 @@ class WsiDicomFileImageData(WsiDicomImageData):
         file = self._get_file(frame_index)
         tile_frame = file.read_frame(frame_index)
         return tile_frame
-
-    def close(self) -> None:
-        for file in self._files.values():
-            file.close()
