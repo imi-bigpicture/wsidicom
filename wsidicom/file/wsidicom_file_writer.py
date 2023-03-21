@@ -17,7 +17,16 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from struct import pack
-from typing import Any, Dict, Generator, Iterable, List, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
@@ -421,7 +430,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
     def _chunk_tile_points(
         self, image_data: ImageData, chunk_size: int, scale: int = 1
-    ) -> Generator[Generator[Point, None, None], None, None]:
+    ) -> Iterator[Iterator[Point]]:
         """Divides tile positions in image_data into chunks.
 
         Parameters
@@ -435,7 +444,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         Returns
         ----------
-        Generator[Generator[Point, None, None], None, None]
+        Iterator[Iterator[Point]]
             Chunked tile positions
         """
         minimum_chunk_size = getattr(image_data, "suggested_minimum_chunk_size", 1)
