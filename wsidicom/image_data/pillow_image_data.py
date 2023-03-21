@@ -25,16 +25,16 @@ from wsidicom.image_data import ImageData, ImageOrigin
 
 class PillowImageData(ImageData):
     def __init__(self, image: PILImage):
-        self._image = image.convert('RGB')
+        self._image = image.convert("RGB")
 
     @classmethod
-    def from_file(cls, file: Union[str, Path]) -> 'PillowImageData':
+    def from_file(cls, file: Union[str, Path]) -> "PillowImageData":
         image = Image.open(file)
         return cls(image)
 
     @property
     def files(self) -> List[Path]:
-        filename = getattr(self._image, 'filename', None)
+        filename = getattr(self._image, "filename", None)
         if filename is None:
             return []
         return [filename]
@@ -61,25 +61,20 @@ class PillowImageData(ImageData):
 
     @property
     def photometric_interpretation(self) -> str:
-        return 'YBR_FULL_422'
+        return "YBR_FULL_422"
 
     @property
     def image_origin(self) -> ImageOrigin:
-        return super().image_origin
+        return ImageOrigin()
 
-    def _get_decoded_tile(
-        self,
-        tile_point: Point,
-        z: float,
-        path: str
-    ) -> PILImage:
+    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
         if tile_point != Point(0, 0):
-            raise ValueError('Can only get Point(0, 0) from non-tiled image.')
+            raise ValueError("Can only get Point(0, 0) from non-tiled image.")
         return self._image
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         if tile != Point(0, 0):
-            raise ValueError('Can only get Point(0, 0) from non-tiled image.')
+            raise ValueError("Can only get Point(0, 0) from non-tiled image.")
         return self.encode(self._image)
 
     def close(self):
