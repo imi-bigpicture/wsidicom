@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] -
 
+## [0.8.0] - 2023-03-21
+
+### Added
+
+- Set TotalPixelMatrixOriginSequence and ImageOrientationSlide from ImageOrgin object.
+
 ## [0.7.0] - 2023-02-13
 
 ### Added

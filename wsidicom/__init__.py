@@ -16,12 +16,19 @@ from wsidicom.image_data import ImageData
 from wsidicom.series import WsiDicomLabels, WsiDicomLevels, WsiDicomOverviews
 
 from .config import settings
-from .graphical_annotations import (Annotation, AnnotationGroup,
-                                    AnnotationInstance, Measurement, Point,
-                                    PointAnnotationGroup, Polygon,
-                                    PolygonAnnotationGroup, Polyline,
-                                    PolylineAnnotationGroup)
+from .graphical_annotations import (
+    Annotation,
+    AnnotationGroup,
+    AnnotationInstance,
+    Measurement,
+    Point,
+    PointAnnotationGroup,
+    Polygon,
+    PolygonAnnotationGroup,
+    Polyline,
+    PolylineAnnotationGroup,
+)
 from .instance import WsiDataset, WsiInstance
 from .wsidicom import WsiDicom
 
-__version__ = '0.7.0'
+__version__ = "0.8.0"
