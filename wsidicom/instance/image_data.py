@@ -164,7 +164,7 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     def plane_region(self) -> Region:
-        return Region(position=Point(0, 0), size=self.tiled_size - 1)
+        return Region(position=Point(0, 0), size=self.tiled_size)
 
     @property
     def blank_tile(self) -> PILImage:
@@ -247,7 +247,7 @@ class ImageData(metaclass=ABCMeta):
             Scaled tiled as Image.
         """
         image = Image.new(
-            mode=self.image_mode,  # type: ignore
+            mode=self.image_mode,
             size=(self.tile_size * scale).to_tuple(),
             color=self.blank_color[: self.samples_per_pixel],
         )
@@ -463,15 +463,16 @@ class ImageData(metaclass=ABCMeta):
             Stitched image
         """
 
-        image = Image.new(
-            mode=self.image_mode, size=region.size.to_tuple()  # type: ignore
-        )
+        image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
         stitching_tiles = self._get_tile_range(region, z, path)
 
         write_index = Point(x=0, y=0)
         tile = stitching_tiles.position
-        for tile in stitching_tiles.iterate_all(include_end=True):
-            tile_image = self.get_tile(tile, z, path, region)
+        for tile in stitching_tiles.iterate_all():
+            tile_image = self.get_tile(tile, z, path)
+            tile_crop = region.inside_crop(tile, self.tile_size)
+            if tile_crop.size != self.tile_size:
+                tile_image = tile_image.crop(box=tile_crop.box)
             image.paste(tile_image, write_index.to_tuple())
             write_index = self._write_indexer(
                 write_index, Size.from_tuple(tile_image.size), region.size
@@ -496,7 +497,7 @@ class ImageData(metaclass=ABCMeta):
             Region of tiles for stitching image
         """
         start = pixel_region.start // self.tile_size
-        end = pixel_region.end.ceil_div(self.tile_size) - 1
+        end = pixel_region.end.ceil_div(self.tile_size)
         tile_region = Region.from_points(start, end)
         if not self.valid_tiles(tile_region, z, path):
             raise WsiDicomOutOfBoundsError(
@@ -530,9 +531,7 @@ class ImageData(metaclass=ABCMeta):
             index.y += previous_size.height
         return index
 
-    def get_tile(
-        self, tile: Point, z: float, path: str, crop: Union[bool, Region] = True
-    ) -> PILImage:
+    def get_tile(self, tile: Point, z: float, path: str, crop: bool = True) -> PILImage:
         """Get tile image at tile coordinate x, y. If frame is inside tile
         geometry but no tile exists in frame data (sparse) returns blank image.
         Optional crop tile to crop_region.
@@ -545,8 +544,8 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
-        crop: Union[bool, Region] = True
-            If to crop tile to image size (True, default) or to region.
+        crop: bool = True
+            If to crop tile to image boundary.
 
         Returns
         ----------
@@ -557,16 +556,14 @@ class ImageData(metaclass=ABCMeta):
         if crop is False:
             return image
 
-        if isinstance(crop, bool):
-            crop = self.image_region
-        tile_crop = crop.inside_crop(tile, self.tile_size)
+        tile_crop = self.image_region.inside_crop(tile, self.tile_size)
         if tile_crop.size == self.tile_size:
             return image
 
         return image.crop(box=tile_crop.box)
 
     def get_encoded_tile(
-        self, tile: Point, z: float, path: str, crop: Union[bool, Region] = True
+        self, tile: Point, z: float, path: str, crop: bool = True
     ) -> bytes:
         """Get tile bytes at tile coordinate x, y
         If frame is inside tile geometry but no tile exists in
@@ -580,8 +577,8 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
-        crop: Union[bool, Region] = True
-            If to crop tile to image size (True, default) or to region.
+        crop: bool = True
+            If to crop tile to image boundary.
 
         Returns
         ----------
@@ -592,10 +589,8 @@ class ImageData(metaclass=ABCMeta):
         if crop is False:
             return tile_frame
 
-        if isinstance(crop, bool):
-            crop = self.image_region
         # Check if tile is an edge tile that should be croped
-        cropped_tile_region = crop.inside_crop(tile, self.tile_size)
+        cropped_tile_region = self.image_region.inside_crop(tile, self.tile_size)
         if cropped_tile_region.size != self.tile_size:
             image = Image.open(io.BytesIO(tile_frame))
             image.crop(box=cropped_tile_region.box_from_origin)
