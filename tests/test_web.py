@@ -25,7 +25,7 @@ from tests.test_dcmfiles import (
     REGION_DEFINITIONS_FILE,
     SLIDE_FOLDER,
 )
-from wsidicom import WsiDicom
+from wsidicom import WsiDicom, settings
 from wsidicom.web.wsidicom_web_client import WsiDicomFileClient
 
 
@@ -33,6 +33,7 @@ from wsidicom.web.wsidicom_web_client import WsiDicomFileClient
 class WsiDicomWebTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        settings.stitching_workers = 1
         folders = cls._get_folders(SLIDE_FOLDER)
         cls.test_folders: Dict[Path, WsiDicom] = {}
 

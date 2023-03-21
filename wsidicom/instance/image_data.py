@@ -14,20 +14,16 @@
 
 import io
 from abc import ABCMeta, abstractmethod
-from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
 
+from wsidicom.config import settings
 from wsidicom.errors import WsiDicomOutOfBoundsError
-from wsidicom.geometry import (
-    Point,
-    Region,
-    Size,
-    SizeMm,
-)
+from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.image_origin import ImageOrigin
 
 
@@ -225,7 +221,12 @@ class ImageData(metaclass=ABCMeta):
         return [self._get_encoded_tile(tile, z, path) for tile in tiles]
 
     def get_scaled_tile(
-        self, scaled_tile_point: Point, z: float, path: str, scale: int
+        self,
+        scaled_tile_point: Point,
+        z: float,
+        path: str,
+        scale: int,
+        workers: int = 1,
     ) -> PILImage:
         """Return scaled tile defined by tile (x, y), z, optical
         path and scale.
@@ -238,8 +239,11 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
-        Scale: int
+        scale: int
             Scale to use for downscaling.
+        workers: int = 1
+            Workers to use for threading. Default to not use threading as method is
+            likely already used in a threading context.
 
         Returns
         ----------
@@ -254,14 +258,16 @@ class ImageData(metaclass=ABCMeta):
         # Get decoded tiles for the region covering the scaled tile
         # in the image data
         tile_points = Region(scaled_tile_point * scale, Size(1, 1) * scale)
-        origin = tile_points.start
-        for tile_point in tile_points.iterate_all():
+
+        def tile_paste(tile_point: Point) -> None:
             if (tile_point.x < self.tiled_size.width) and (
                 tile_point.y < self.tiled_size.height
             ):
                 tile = self._get_decoded_tile(tile_point, z, path)
-                image_coordinate = (tile_point - origin) * self.tile_size
+                image_coordinate = (tile_point - tile_points.start) * self.tile_size
                 image.paste(tile, image_coordinate.to_tuple())
+
+        self._paste_tiles(tile_points, tile_paste, workers)
 
         return image.resize(
             self.tile_size.to_tuple(), resample=Image.Resampling.BILINEAR
@@ -342,6 +348,133 @@ class ImageData(metaclass=ABCMeta):
             )
             for scaled_tile_point in scaled_tile_points
         ]
+
+    def get_tile(self, tile: Point, z: float, path: str) -> PILImage:
+        """Get tile image at tile coordinate x, y. If frame is inside tile
+        geometry but no tile exists in frame data (sparse) returns blank image. Crops
+        tile to be inside image boundary.
+
+        Parameters
+        ----------
+        tile: Point
+            Tile x, y coordinate.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+
+        Returns
+        ----------
+        PILImage
+            Tile image.
+        """
+        image = self._get_decoded_tile(tile, z, path)
+        tile_crop = self.image_region.inside_crop(tile, self.tile_size)
+        # Check if tile is an edge tile that should be cropped
+        if tile_crop.size != self.tile_size:
+            return image.crop(box=tile_crop.box)
+        return image
+
+    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+        """Get tile bytes at tile coordinate x, y. If frame is inside tile geometry
+        but no tile exists in frame data (sparse) returns encoded blank image. Crops
+        tile to be inside image boundary.
+
+        Parameters
+        ----------
+        tile: Point
+            Tile x, y coordinate.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        bytes
+            Tile image as bytes.
+        """
+        tile_frame = self._get_encoded_tile(tile, z, path)
+
+        # Check if tile is an edge tile that should be cropped
+        cropped_tile_region = self.image_region.inside_crop(tile, self.tile_size)
+        if cropped_tile_region.size != self.tile_size:
+            image = Image.open(io.BytesIO(tile_frame))
+            image.crop(box=cropped_tile_region.box_from_origin)
+            tile_frame = self.encode(image)
+        return tile_frame
+
+    def stitch_tiles(self, region: Region, path: str, z: float) -> PILImage:
+        """Stitches tiles together to form requested image.
+
+        Parameters
+        ----------
+        region: Region
+             Pixel region to stitch to image
+        path: str
+            Optical path
+        z: float
+            Z coordinate
+
+        Returns
+        ----------
+        PILImage
+            Stitched image
+        """
+
+        image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
+        tile_points = self._get_tile_range(region, z, path)
+        # The tiles are cropped prior to pasting. This offset is the equal to the first
+        # (upper left) tiles size, and is added to the image coordinate for tiles not
+        # in the first row or column.
+        offset = (tile_points.start * self.tile_size) - region.start
+
+        # Method that pastes tile at point into image.
+        def tile_paste(tile_point: Point) -> None:
+            tile = self._get_decoded_tile(tile_point, z, path)
+            tile_crop = region.inside_crop(tile_point, self.tile_size)
+            if tile_crop.size != self.tile_size:
+                tile = tile.crop(box=tile_crop.box)
+            image_coordinate = Point(
+                offset.x * (tile_point.x != tile_points.start.x),
+                offset.y * (tile_point.y != tile_points.start.y),
+            )
+            image_coordinate += (tile_point - tile_points.start) * self.tile_size
+            image.paste(tile, image_coordinate.to_tuple())
+
+        self._paste_tiles(tile_points, tile_paste)
+        return image
+
+    @staticmethod
+    def _paste_tiles(
+        tile_region: Region,
+        paste_method: Callable[[Point], None],
+        workers: Optional[int] = None,
+    ):
+        """Paste tiles in region using method. Use threading if number of tiles to paste
+        is larger than one and requested worker count is more than one.
+
+        Parameters
+        ----------
+        tile_region: Region
+            Tile region of tiles to paste.
+        paste_method: Callable[[Point], None]
+            Method that accepts a tile point to paste and returns None.
+        workers: Optional[int] = None
+            Optional number of workers to use if more than one tile. If not given use
+            setting.stitching_workers.
+        """
+        if tile_region.size.area == 1:
+            workers = 1
+        elif workers is None:
+            workers = settings.stitching_workers
+        if workers == 1:
+            for tile_point in tile_region.iterate_all():
+                paste_method(tile_point)
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                pool.map(paste_method, tile_region.iterate_all())
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
         """Check if tile region is inside tile geometry and z coordinate and
@@ -445,40 +578,6 @@ class ImageData(metaclass=ABCMeta):
             color=self.blank_color[: self.samples_per_pixel],
         )
 
-    def stitch_tiles(self, region: Region, path: str, z: float) -> PILImage:
-        """Stitches tiles together to form requested image.
-
-        Parameters
-        ----------
-        region: Region
-             Pixel region to stitch to image
-        path: str
-            Optical path
-        z: float
-            Z coordinate
-
-        Returns
-        ----------
-        PILImage
-            Stitched image
-        """
-
-        image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
-        stitching_tiles = self._get_tile_range(region, z, path)
-
-        write_index = Point(x=0, y=0)
-        tile = stitching_tiles.position
-        for tile in stitching_tiles.iterate_all():
-            tile_image = self.get_tile(tile, z, path)
-            tile_crop = region.inside_crop(tile, self.tile_size)
-            if tile_crop.size != self.tile_size:
-                tile_image = tile_image.crop(box=tile_crop.box)
-            image.paste(tile_image, write_index.to_tuple())
-            write_index = self._write_indexer(
-                write_index, Size.from_tuple(tile_image.size), region.size
-            )
-        return image
-
     def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:
         """Return range of tiles to cover pixel region.
 
@@ -496,103 +595,13 @@ class ImageData(metaclass=ABCMeta):
         Region
             Region of tiles for stitching image
         """
-        start = pixel_region.start // self.tile_size
-        end = pixel_region.end.ceil_div(self.tile_size)
-        tile_region = Region.from_points(start, end)
+
+        tile_region = Region.from_points(
+            pixel_region.start // self.tile_size,
+            pixel_region.end.ceil_div(self.tile_size),
+        )
         if not self.valid_tiles(tile_region, z, path):
             raise WsiDicomOutOfBoundsError(
                 f"Tile region {tile_region}", f"tiled size {self.tiled_size}"
             )
         return tile_region
-
-    @staticmethod
-    def _write_indexer(index: Point, previous_size: Size, image_size: Size) -> Point:
-        """Increment index in x by previous width until index x exceds image
-        size. Then resets index x to 0 and increments index y by previous
-        height. Requires that tiles are scanned row by row.
-
-        Parameters
-        ----------
-        index: Point
-            The last write index position
-        previouis_size: Size
-            The size of the last written last tile
-        image_size: Size
-            The size of the image to be written
-
-        Returns
-        ----------
-        Point
-            The position (upper right) in image to insert the next tile into
-        """
-        index.x += previous_size.width
-        if index.x >= image_size.width:
-            index.x = 0
-            index.y += previous_size.height
-        return index
-
-    def get_tile(self, tile: Point, z: float, path: str, crop: bool = True) -> PILImage:
-        """Get tile image at tile coordinate x, y. If frame is inside tile
-        geometry but no tile exists in frame data (sparse) returns blank image.
-        Optional crop tile to crop_region.
-
-        Parameters
-        ----------
-        tile: Point
-            Tile x, y coordinate.
-        z: float
-            Z coordinate.
-        path: str
-            Optical path.
-        crop: bool = True
-            If to crop tile to image boundary.
-
-        Returns
-        ----------
-        PILImage
-            Tile image.
-        """
-        image = self._get_decoded_tile(tile, z, path)
-        if crop is False:
-            return image
-
-        tile_crop = self.image_region.inside_crop(tile, self.tile_size)
-        if tile_crop.size == self.tile_size:
-            return image
-
-        return image.crop(box=tile_crop.box)
-
-    def get_encoded_tile(
-        self, tile: Point, z: float, path: str, crop: bool = True
-    ) -> bytes:
-        """Get tile bytes at tile coordinate x, y
-        If frame is inside tile geometry but no tile exists in
-        frame data (sparse) returns encoded blank image.
-
-        Parameters
-        ----------
-        tile: Point
-            Tile x, y coordinate.
-        z: float
-            Z coordinate.
-        path: str
-            Optical path.
-        crop: bool = True
-            If to crop tile to image boundary.
-
-        Returns
-        ----------
-        bytes
-            Tile image as bytes.
-        """
-        tile_frame = self._get_encoded_tile(tile, z, path)
-        if crop is False:
-            return tile_frame
-
-        # Check if tile is an edge tile that should be croped
-        cropped_tile_region = self.image_region.inside_crop(tile, self.tile_size)
-        if cropped_tile_region.size != self.tile_size:
-            image = Image.open(io.BytesIO(tile_frame))
-            image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.encode(image)
-        return tile_frame
