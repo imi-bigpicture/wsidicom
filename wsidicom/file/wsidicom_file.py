@@ -12,11 +12,22 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections import defaultdict
 import threading
 import warnings
 from pathlib import Path
 from struct import unpack
-from typing import BinaryIO, Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import (
+    BinaryIO,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+)
 
 from pydicom.filebase import DicomFileLike
 from pydicom.filereader import read_file_meta_info, read_partial
@@ -457,7 +468,7 @@ class WsiDicomFile(WsiDicomFileBase):
 
     @staticmethod
     def filter_files(
-        files: Sequence["WsiDicomFile"],
+        files: Iterable["WsiDicomFile"],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None,
     ) -> List["WsiDicomFile"]:
@@ -466,7 +477,7 @@ class WsiDicomFile(WsiDicomFileBase):
 
         Parameters
         ----------
-        files: Sequence['WsiDicomFile']
+        files: Iterable['WsiDicomFile']
             Wsi files to filter.
         series_uids: Uids
             Uids to check against.
@@ -495,13 +506,13 @@ class WsiDicomFile(WsiDicomFileBase):
 
     @classmethod
     def group_files(
-        cls, files: Sequence["WsiDicomFile"]
+        cls, files: Iterable["WsiDicomFile"]
     ) -> Dict[str, List["WsiDicomFile"]]:
         """Return files grouped by instance identifier (instances).
 
         Parameters
         ----------
-        files: Sequence[WsiDicomFile]
+        files: Iterable[WsiDicomFile]
             Files to group into instances
 
         Returns
@@ -509,10 +520,7 @@ class WsiDicomFile(WsiDicomFileBase):
         Dict[str, List[WsiDicomFile]]
             Files grouped by instance, with instance identifier as key.
         """
-        grouped_files: Dict[str, List[WsiDicomFile]] = {}
+        grouped_files: Dict[str, List[WsiDicomFile]] = defaultdict(list)
         for file in files:
-            try:
-                grouped_files[file.uids.identifier].append(file)
-            except KeyError:
-                grouped_files[file.uids.identifier] = [file]
+            grouped_files[file.uids.identifier].append(file)
         return grouped_files

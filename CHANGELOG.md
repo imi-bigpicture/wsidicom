@@ -9,13 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Support for opening DICOM WSI using DICOM Web.
+- Support for opening DICOM WSI using DICOMWeb.
 - save() now takes the optional parameter add_missing_levels, that enables adding missing pyramid levels.
 
 ### Changed
 
-- WsiDicom is not initalized using a Source, that is responsible for provides the instances to view.
-- Refactoring due to adding support for DICOM Web and opening instances using Source.
+- WsiDicom is now initalized using a Source, that is responsible for provides the instances to view.
+- Saving a WsiDicom is now handled by WsiDicomFileTarget.
+- Refactoring due to adding support for DICOMWeb and opening instances using Source and saving using Target.
 
 ### Removed
 

@@ -2,7 +2,7 @@
 
 *wsidicom* is a Python package for reading [DICOM WSI](http://dicom.nema.org/Dicom/DICOMWSI/). The aims with the project are:
 
-- Easy to use interface for reading and writing WSI DICOM images and annotations either from file or through DICOM Web.
+- Easy to use interface for reading and writing WSI DICOM images and annotations either from file or through DICOMWeb.
 - Support the latest and upcoming DICOM standards.
 - Platform independent installation via PyPI.
 
@@ -45,7 +45,7 @@ from wsidicom import WsiDicom
 slide = WsiDicom.open(path_to_folder)
 ```
 
-***Or load a WSI dataset from DICOM Web.***
+***Or load a WSI dataset from DICOMWeb.***
 
 ```python
 from wsidicom import WsiDicom, WsiDicomWebClient
@@ -141,9 +141,9 @@ A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of di
 - *Levels*, represents a group of levels, i.e. the pyrimidal structure.
 - *WsiDicom*, represents a collection of levels, labels and overviews.
 
-Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions. For DICOM Web the WsiDicomFile\* classes are replaced with WsiDicomWeb\* classes.
+Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions. For DICOMWeb the WsiDicomFile\* classes are replaced with WsiDicomWeb\* classes.
 
-A Source is used to create WsiInstances, either from files (*WsiDicomFileSource*) or DICOM Web (*WsiDicomWebSource*), and can be used to to initate a *WsiDicom* object. A source is easiest created with the open() and open_web() helper functions, e.g.:
+A Source is used to create WsiInstances, either from files (*WsiDicomFileSource*) or DICOMWeb (*WsiDicomWebSource*), and can be used to to initate a *WsiDicom* object. A source is easiest created with the open() and open_web() helper functions, e.g.:
 
 ```python
 slide = WsiDicom.open(path_to_folder)
@@ -157,7 +157,7 @@ slide = WsiDicom.open(path_to_folder)
 - [group](wsidicom/group) - Group implementations, e.g. Level.
 - [instance](wsidicom/instance) - Instance implementations WsiIsntance and WsiDataset, the metaclass ImageData and ImageData implementations WsiDicomImageData and PillowImageData.
 - [file](wsidicom/file) - Implementation for reading and writing DICOM WSI files.
-- [web](wsidicom/web) - Implementation for reading DICOM WSI from DICOM Web.
+- [web](wsidicom/web) - Implementation for reading DICOM WSI from DICOMWeb.
 - [graphica_annotations](wsidicom/graphical_annotations.py) - Handling graphical annotations.
 - [conceptcode.py](wsidicom/conceptcode.py) - Handling of DICOM concept codes.
 - [config.py](wsidicom/config.py) - Handles configuration settings.

@@ -13,16 +13,12 @@
 #    limitations under the License.
 
 import math
-import os
-from pathlib import Path
-from typing import Callable, Iterable, List, Optional, Sequence, cast
+from typing import Iterable, List, Optional, Sequence, cast
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.uid import UID
 
 from wsidicom.errors import WsiDicomNoResultionError, WsiDicomOutOfBoundsError
-from wsidicom.file import OffsetTableType, WsiDicomFileWriter
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Group
 from wsidicom.instance import WsiInstance
@@ -277,71 +273,3 @@ class Level(Group):
         if not math.isclose(float_level, level, rel_tol=TOLERANCE):
             raise NotImplementedError("Levels needs to be integer.")
         return level
-
-    def create_child(
-        self,
-        scale: int,
-        output_path: Path,
-        uid_generator: Callable[..., UID],
-        workers: int,
-        chunk_size: int,
-        offset_table: Optional[str],
-        instance_number: int,
-    ) -> List[Path]:
-        """Creates a new Level from this level by scaling the image
-        data.
-
-        Parameters
-        ----------
-        scale: int
-            Scale factor.
-        output_path: Path
-            The path to write child to.
-        uid_generator: Callable[..., UID]
-            Uid generator to use.
-        workers: int
-            Maximum number of thread workers to use.
-        chunk_size: int
-            Chunk size (number of tiles) to process at a time. Actual chunk
-            size also depends on minimun_chunk_size from image_data.
-        offset_table: Optional[str]
-            Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, None - no offset table.
-
-        Returns
-        ----------
-        'Level'
-            Created scaled level.
-        """
-
-        filepaths: List[Path] = []
-        if not isinstance(scale, int) or scale < 2:
-            raise ValueError("Scale must be integer and larger than 2")
-
-        for instances in self._group_instances_to_file():
-            uid = uid_generator()
-            filepath = Path(os.path.join(output_path, uid + ".dcm"))
-            transfer_syntax = instances[0].image_data.transfer_syntax
-            image_data_list = self._list_image_data(instances)
-            focal_planes, optical_paths, tiled_size = self._get_frame_information(
-                image_data_list
-            )
-            dataset = instances[0].dataset.as_tiled_full(
-                focal_planes, optical_paths, tiled_size, scale
-            )
-
-            with WsiDicomFileWriter(filepath) as wsi_file:
-                wsi_file.write(
-                    uid,
-                    transfer_syntax,
-                    dataset,
-                    image_data_list,
-                    workers,
-                    chunk_size,
-                    OffsetTableType.from_string(offset_table),
-                    instance_number,
-                    scale=scale,
-                )
-            filepaths.append(filepath)
-            instance_number += 1
-        return filepaths

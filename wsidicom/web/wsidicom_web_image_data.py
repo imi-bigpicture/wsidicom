@@ -19,7 +19,7 @@ from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 
 class WsiDicomWebImageData(WsiDicomImageData):
-    """ImageData for WSI DICOM instances read from DICOM Web."""
+    """ImageData for WSI DICOM instances read from DICOMWeb."""
 
     def __init__(
         self,
@@ -33,7 +33,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
         Parameters
         ----------
         client: WsiDicomWebClient
-            DICOM Web client for reading image data.
+            DICOMWeb client for reading image data.
         dataset: WsiDataset
             Dataset for the image data.
         transfer_syntax: UID

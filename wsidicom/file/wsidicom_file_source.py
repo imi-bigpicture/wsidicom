@@ -83,19 +83,19 @@ class WsiDicomFileSource(Source):
     @property
     def level_instances(self) -> Iterable[WsiInstance]:
         """The level instances parsed from the source."""
-        return self.open_files(
+        return self._open_files(
             self._level_files, self._slide_uids, self._base_tile_size
         )
 
     @property
     def label_instances(self) -> Iterable[WsiInstance]:
         """The label instances parsed from the source."""
-        return self.open_files(self._label_files, self._slide_uids)
+        return self._open_files(self._label_files, self._slide_uids)
 
     @property
     def overview_instances(self) -> Iterable[WsiInstance]:
         """The overview instances parsed from the source."""
-        return self.open_files(self._overview_files, self._slide_uids)
+        return self._open_files(self._overview_files, self._slide_uids)
 
     @property
     def annotation_instances(self) -> Iterable[AnnotationInstance]:
@@ -187,7 +187,7 @@ class WsiDicomFileSource(Source):
         return metadata.MediaStorageSOPClassUID
 
     @classmethod
-    def open_files(
+    def _open_files(
         cls,
         files: Sequence[WsiDicomFile],
         series_uids: SlideUids,

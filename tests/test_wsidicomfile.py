@@ -21,8 +21,8 @@ from tempfile import TemporaryDirectory
 import pytest
 from pydicom import Dataset, dcmread
 
-from wsidicom.file import OffsetTableType
 from wsidicom.file.wsidicom_file import WsiDicomFile
+from wsidicom.file.wsidicom_file_base import OffsetTableType
 from wsidicom.instance import ImageType, TileType, WsiDataset
 
 from .data_gen import (

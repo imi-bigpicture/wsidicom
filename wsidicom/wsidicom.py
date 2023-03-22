@@ -26,7 +26,7 @@ from wsidicom.errors import (
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
-from wsidicom.file import WsiDicomFileSource
+from wsidicom.file import WsiDicomFileSource, WsiDicomFileTarget
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level
@@ -205,6 +205,14 @@ class WsiDicom:
     @property
     def mm_size(self) -> SizeMm:
         return self.levels.mm_size
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
+        return self.base_level.pixel_spacing
+
+    @property
+    def mpp(self) -> SizeMm:
+        return self.base_level.mpp
 
     @property
     def uids(self) -> Optional[SlideUids]:
@@ -561,38 +569,20 @@ class WsiDicom:
             chunk_size = 16
         if isinstance(output_path, str):
             output_path = Path(output_path)
-
-        filepaths: List[Path] = []
-        instance_number = 0
-        levels_filepaths = self.levels.save(
+        target = WsiDicomFileTarget(
             output_path,
             uid_generator,
             workers,
             chunk_size,
             offset_table,
-            instance_number,
             add_missing_levels,
         )
-        filepaths.extend(levels_filepaths)
-        instance_number += len(levels_filepaths)
-        associated_series: List[Optional[Union[Levels, Labels, Overviews]]] = [
-            self.labels,
-            self.overviews,
-        ]
-        for series in associated_series:
-            if series is None:
-                continue
-            series_filepaths = series.save(
-                output_path,
-                uid_generator,
-                workers,
-                chunk_size,
-                offset_table,
-                instance_number,
-            )
-            filepaths.extend(series_filepaths)
-            instance_number += len(filepaths)
-        return filepaths
+        target.save_levels(self.levels)
+        if self.overviews is not None:
+            target.save_overviews(self.overviews)
+        if self.labels is not None:
+            target.save_labels(self.labels)
+        return target.filepaths
 
     def _validate_collection(self) -> SlideUids:
         """Check that no files or instance in collection is duplicate, and, if

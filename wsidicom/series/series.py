@@ -13,9 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from pathlib import Path
 from typing import (
-    Callable,
     Iterable,
     List,
     Optional,
@@ -25,7 +23,6 @@ from typing import (
     Union,
 )
 
-from pydicom.uid import UID
 
 from wsidicom.errors import WsiDicomMatchError
 from wsidicom.geometry import SizeMm
@@ -49,7 +46,7 @@ class Series(metaclass=ABCMeta):
         groups: Sequence[Group]
             List of groups to include in the series.
         """
-        self._groups = groups
+        self._groups = list(groups)
         self._group_type = Group
         if len(self.groups) != 0 and self.groups[0].uids is not None:
             self._uids = self._validate_series(self.groups)
@@ -88,7 +85,7 @@ class Series(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @property
-    def groups(self) -> Sequence[Group]:
+    def groups(self) -> List[Group]:
         """Return contained groups."""
         return self._groups
 
@@ -167,52 +164,6 @@ class Series(metaclass=ABCMeta):
             return base_group.uids
         except IndexError:
             return None
-
-    def save(
-        self,
-        output_path: Path,
-        uid_generator: Callable[..., UID],
-        workers: int,
-        chunk_size: int,
-        offset_table: Optional[str],
-        instance_number: int,
-    ) -> List[Path]:
-        """Save Series as DICOM-files in path.
-
-        Parameters
-        ----------
-        output_path: Path
-        uid_generator: Callable[..., UID]
-             Function that can gernerate unique identifiers.
-        workers: int
-            Maximum number of thread workers to use.
-        chunk_size:
-            Chunk size (number of tiles) to process at a time. Actual chunk
-            size also depends on minimun_chunk_size from image_data.
-        offset_table: Optional[str] = 'bot'
-            Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, None - no offset table.
-        instance_number: int
-            Instance number for first instance in series.
-
-        Returns
-        ----------
-        List[Path]
-            List of paths of created files.
-        """
-        filepaths: List[Path] = []
-        for group in self.groups:
-            group_file_paths = group.save(
-                output_path,
-                uid_generator,
-                workers,
-                chunk_size,
-                offset_table,
-                instance_number,
-            )
-            filepaths.extend(group_file_paths)
-            instance_number += len(group_file_paths)
-        return filepaths
 
 
 class Overviews(Series):

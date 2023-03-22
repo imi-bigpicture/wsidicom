@@ -53,9 +53,9 @@ class WsiInstance:
 
         if self.ext_depth_of_field:
             if self.ext_depth_of_field_planes is None:
-                raise WsiDicomError("Instance Missing NumberOfFocalPlanes")
+                raise WsiDicomError("Instance Missing NumberOfFocalPlanes.")
             if self.ext_depth_of_field_plane_distance is None:
-                raise WsiDicomError("Instance Missing DistanceBetweenFocalPlanes")
+                raise WsiDicomError("Instance Missing DistanceBetweenFocalPlanes.")
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.dataset}, {self.image_data})"

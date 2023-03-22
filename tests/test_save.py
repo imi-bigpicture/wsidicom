@@ -34,8 +34,10 @@ from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 
 from wsidicom import WsiDicom
-from wsidicom.file import OffsetTableType, WsiDicomFileWriter
 from wsidicom.file.wsidicom_file import WsiDicomFile
+from wsidicom.file.wsidicom_file_base import OffsetTableType
+from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
+from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.group.level import Level
 from wsidicom.instance import ImageData, ImageOrigin
@@ -408,18 +410,24 @@ class WsiDicomFileSaveTests(unittest.TestCase):
     def test_create_child(self):
         for _, wsi in self.test_folders.items():
             with TemporaryDirectory() as tempdir:
-                target = cast(Level, wsi.levels[-2])
-                source = cast(Level, wsi.levels[-3])
-                new_level_files = source.create_child(
-                    2, Path(tempdir), generate_uid, 1, 100, "bot", 0
-                )
+                target_level = cast(Level, wsi.levels[-2])
+                source_level = cast(Level, wsi.levels[-3])
+                with WsiDicomFileTarget(
+                    Path(tempdir),
+                    generate_uid,
+                    1,
+                    100,
+                    "bot",
+                ) as target:
+                    target._save_and_open_level(source_level, wsi.pixel_spacing, 2)
+
                 with WsiDicom.open(tempdir) as created_wsi:
                     created_size = created_wsi.levels[0].size.to_tuple()
-                    target_size = target.size.to_tuple()
+                    target_size = target_level.size.to_tuple()
                     self.assertEqual(created_size, target_size)
 
                     created = created_wsi.read_region((0, 0), 0, created_size)
-                    original = wsi.read_region((0, 0), target.level, target_size)
+                    original = wsi.read_region((0, 0), target_level.level, target_size)
                     blur = ImageFilter.GaussianBlur(2)
                     diff = ImageChops.difference(
                         created.filter(blur), original.filter(blur)

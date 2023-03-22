@@ -13,12 +13,8 @@
 #    limitations under the License.
 
 
-import os
 from collections import defaultdict
-from pathlib import Path
 from typing import (
-    Callable,
-    DefaultDict,
     Dict,
     Iterable,
     List,
@@ -39,7 +35,6 @@ from wsidicom.errors import (
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
-from wsidicom.file import OffsetTableType, WsiDicomFileWriter
 from wsidicom.geometry import Point, Region, RegionMm, Size, SizeMm
 from wsidicom.instance import ImageData, ImageOrigin, ImageType, WsiDataset, WsiInstance
 from wsidicom.stringprinting import dict_pretty_str
@@ -478,127 +473,6 @@ class Group:
                 grouped_instances.items(), key=lambda item: item[0].width, reverse=True
             )
         )
-
-    def _group_instances_to_file(
-        self,
-    ) -> List[List[WsiInstance]]:
-        """Group instances by properties that can't differ in a DICOM-file,
-        i.e. the instances are grouped by output file.
-
-        Returns
-        ----------
-        List[List[WsiInstance]]
-            Instances grouped by common properties.
-        """
-        groups: DefaultDict[
-            Tuple[str, UID, bool, Optional[int], Optional[float], str],
-            List[WsiInstance],
-        ] = defaultdict(list)
-
-        for instance in self.instances.values():
-            groups[
-                instance.image_data.photometric_interpretation,
-                instance.image_data.transfer_syntax,
-                instance.ext_depth_of_field,
-                instance.ext_depth_of_field_planes,
-                instance.ext_depth_of_field_plane_distance,
-                instance.focus_method,
-            ].append(instance)
-        return list(groups.values())
-
-    @staticmethod
-    def _list_image_data(
-        instances: Sequence[WsiInstance],
-    ) -> Dict[Tuple[str, float], ImageData]:
-        """Sort ImageData in instances by optical path and focal
-        plane.
-
-        Parameters
-        ----------
-        instances: Sequence[WsiInstance]
-            List of instances with optical paths and focal planes to list and
-            sort.
-
-        Returns
-        ----------
-        Dict[Tuple[str, float], ImageData]:
-            ImageData sorted by optical path and focal plane.
-        """
-        output: Dict[Tuple[str, float], ImageData] = {}
-        for instance in instances:
-            for optical_path in instance.optical_paths:
-                for z in sorted(instance.focal_planes):
-                    if (optical_path, z) not in output:
-                        output[optical_path, z] = instance.image_data
-        return output
-
-    def save(
-        self,
-        output_path: Path,
-        uid_generator: Callable[..., UID],
-        workers: int,
-        chunk_size: int,
-        offset_table: Optional[str],
-        instance_number: int,
-    ) -> List[Path]:
-        """Save a Group to files in output_path. Instances are grouped
-        by properties that cant differ in the same file:
-            - photometric interpretation
-            - transfer syntax
-            - extended depth of field (and planes and distance)
-            - focus method
-        Other properties are assumed to be equal or to be updated.
-
-        Parameters
-        ----------
-        output_path: Path
-            Folder path to save files to.
-        uid_generator: Callable[..., UID]
-            Uid generator to use.
-        workers: int
-            Maximum number of thread workers to use.
-        chunk_size: int
-            Chunk size (number of tiles) to process at a time. Actual chunk
-            size also depends on minimun_chunk_size from image_data.
-        offset_table: Optional[str]
-            Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, None - no offset table.
-        instance_number: int
-            Instance number for first instance in group.
-
-        Returns
-        ----------
-        List[str]
-            List of paths of created files.
-        """
-        filepaths: List[Path] = []
-        for instances in self._group_instances_to_file():
-            uid = uid_generator()
-            filepath = Path(os.path.join(output_path, uid + ".dcm"))
-            transfer_syntax = instances[0].image_data.transfer_syntax
-            image_data_list = self._list_image_data(instances)
-            focal_planes, optical_paths, tiled_size = self._get_frame_information(
-                image_data_list
-            )
-            dataset = instances[0].dataset.as_tiled_full(
-                focal_planes,
-                optical_paths,
-                tiled_size,
-            )
-            with WsiDicomFileWriter(filepath) as wsi_file:
-                wsi_file.write(
-                    uid,
-                    transfer_syntax,
-                    dataset,
-                    image_data_list,
-                    workers,
-                    chunk_size,
-                    OffsetTableType.from_string(offset_table),
-                    instance_number,
-                )
-            filepaths.append(filepath)
-            instance_number += 1
-        return filepaths
 
     @staticmethod
     def _get_frame_information(

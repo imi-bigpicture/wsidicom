@@ -23,11 +23,11 @@ from wsidicom.source import Source
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 from wsidicom.web.wsidicom_web_image_data import WsiDicomWebImageData
 
-"""A source for reading WSI DICOM files from DICOM Web."""
+"""A source for reading WSI DICOM files from DICOMWeb."""
 
 
 class WsiDicomWebSource(Source):
-    """Source reading WSI DICOM instances from DICOM Web."""
+    """Source reading WSI DICOM instances from DICOMWeb."""
 
     def __init__(
         self,
@@ -41,7 +41,7 @@ class WsiDicomWebSource(Source):
         Parameters
         ----------
         client: WsiDicomWebClient
-            Client use for DICOM Web communication.
+            Client use for DICOMWeb communication.
         study_uid: Union[str, UID]
             Study UID of DICOM WSI to open.
         series_uid: Union[str, UID]
