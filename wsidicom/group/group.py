@@ -14,16 +14,7 @@
 
 
 from collections import defaultdict
-from typing import (
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    OrderedDict,
-    Sequence,
-    Set,
-    Tuple,
-)
+from typing import Dict, Iterable, List, Optional, OrderedDict, Sequence, Set, Tuple
 
 from PIL import Image
 from PIL.Image import Image as PILImage

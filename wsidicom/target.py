@@ -1,6 +1,3 @@
-from abc import ABCMeta, abstractmethod
-from typing import Callable
-
 #    Copyright 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +12,12 @@ from typing import Callable
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from wsidicom.series import Labels, Levels, Overviews
+from abc import ABCMeta, abstractmethod
+from typing import Callable
+
 from pydicom.uid import UID
+
+from wsidicom.series import Labels, Levels, Overviews
 
 """A Target enables creating new instances."""
 

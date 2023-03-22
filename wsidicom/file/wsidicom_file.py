@@ -12,22 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from collections import defaultdict
 import threading
 import warnings
+from collections import defaultdict
 from pathlib import Path
 from struct import unpack
-from typing import (
-    BinaryIO,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-)
+from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union, cast
 
 from pydicom.filebase import DicomFileLike
 from pydicom.filereader import read_file_meta_info, read_partial
@@ -37,10 +27,10 @@ from pydicom.uid import UID
 
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Size
 from wsidicom.instance import ImageType, WsiDataset
 from wsidicom.uid import FileUids, SlideUids
-from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 
 
 class WsiDicomFile(WsiDicomFileBase):

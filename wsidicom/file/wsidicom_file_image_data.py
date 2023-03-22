@@ -18,8 +18,8 @@ from typing import List, OrderedDict, Sequence, Union
 from pydicom.uid import UID
 
 from wsidicom.errors import WsiDicomNotFoundError
-from wsidicom.instance import WsiDicomImageData
 from wsidicom.file.wsidicom_file import WsiDicomFile
+from wsidicom.instance import WsiDicomImageData
 
 
 class WsiDicomFileImageData(WsiDicomImageData):
