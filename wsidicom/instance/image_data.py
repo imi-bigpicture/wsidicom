@@ -423,8 +423,17 @@ class ImageData(metaclass=ABCMeta):
             Stitched image
         """
 
-        image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
+        def get_and_crop_tile(tile_point: Point) -> PILImage:
+            tile = self._get_decoded_tile(tile_points.start, z, path)
+            tile_crop = region.inside_crop(tile_points.start, self.tile_size)
+            if tile_crop.size != self.tile_size:
+                tile = tile.crop(box=tile_crop.box)
+            return tile
+
         tile_points = self._get_tile_range(region, z, path)
+        if tile_points.size.area == 1:
+            return get_and_crop_tile(tile_points.start)
+        image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
         # The tiles are cropped prior to pasting. This offset is the equal to the first
         # (upper left) tiles size, and is added to the image coordinate for tiles not
         # in the first row or column.
@@ -432,10 +441,7 @@ class ImageData(metaclass=ABCMeta):
 
         # Method that pastes tile at point into image.
         def tile_paste(tile_point: Point) -> None:
-            tile = self._get_decoded_tile(tile_point, z, path)
-            tile_crop = region.inside_crop(tile_point, self.tile_size)
-            if tile_crop.size != self.tile_size:
-                tile = tile.crop(box=tile_crop.box)
+            tile = get_and_crop_tile(tile_point)
             image_coordinate = Point(
                 offset.x * (tile_point.x != tile_points.start.x),
                 offset.y * (tile_point.y != tile_points.start.y),
@@ -465,9 +471,7 @@ class ImageData(metaclass=ABCMeta):
             Optional number of workers to use if more than one tile. If not given use
             setting.stitching_workers.
         """
-        if tile_region.size.area == 1:
-            workers = 1
-        elif workers is None:
+        if workers is None:
             workers = settings.stitching_workers
         if workers == 1:
             for tile_point in tile_region.iterate_all():
