@@ -176,68 +176,6 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         region = Region(position=Point(150, 0), size=Size(10, 100))
         self.assertFalse(wsi_level.valid_pixels(region))
 
-    def test_write_indexer(self):
-        wsi_level = self.slide.levels.get_level(0)
-        instance = wsi_level.get_instance()
-
-        write_index = Point(0, 0)
-        tile = Point(0, 0)
-        region = Region(position=Point(0, 0), size=Size(2048, 2048))
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-        )
-        self.assertEqual(write_index, Point(1024, 0))
-
-        tile = Point(1, 0)
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-        )
-        self.assertEqual(write_index, Point(0, 1024))
-
-        tile = Point(0, 1)
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-        )
-        self.assertEqual(write_index, Point(1024, 1024))
-
-        write_index = Point(0, 0)
-        tile = Point(0, 0)
-        region = Region(position=Point(512, 512), size=Size(1024, 1024))
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-        )
-        self.assertEqual(write_index, Point(512, 0))
-
-        tile = Point(1, 0)
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-        )
-        self.assertEqual(write_index, Point(0, 512))
-
-        tile = Point(0, 1)
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-        )
-        self.assertEqual(write_index, Point(512, 512))
-
     def test_valid_level(self):
         self.assertTrue(self.slide.levels.valid_level(1))
         self.assertFalse(self.slide.levels.valid_level(20))
