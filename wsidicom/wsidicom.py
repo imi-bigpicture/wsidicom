@@ -153,18 +153,30 @@ class WsiDicom:
         return self.pretty_str()
 
     @property
-    def base_level(self) -> Level:
-        return self.levels.base_level
-
-    @property
     def size(self) -> Size:
         """Return pixel size of base level."""
-        return self.base_level.size
+        return self.levels.size
+
+    @property
+    def mm_size(self) -> SizeMm:
+        return self.levels.mm_size
 
     @property
     def tile_size(self) -> Size:
         """Return tile size of levels."""
-        return self.base_level.tile_size
+        return self.levels.tile_size
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
+        return self.levels.pixel_spacing
+
+    @property
+    def mpp(self) -> SizeMm:
+        return self.levels.mpp
+
+    @property
+    def uids(self) -> Optional[SlideUids]:
+        return self._uids
 
     @property
     def levels(self) -> Levels:
@@ -196,27 +208,6 @@ class WsiDicom:
             self._overviews,
         ]
         return [series for series in collection if series is not None]
-
-    @property
-    def image_size(self) -> Size:
-        """Size of base leve."""
-        return self.base_level.size
-
-    @property
-    def mm_size(self) -> SizeMm:
-        return self.levels.mm_size
-
-    @property
-    def pixel_spacing(self) -> SizeMm:
-        return self.base_level.pixel_spacing
-
-    @property
-    def mpp(self) -> SizeMm:
-        return self.base_level.mpp
-
-    @property
-    def uids(self) -> Optional[SlideUids]:
-        return self._uids
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         string = self.__class__.__name__

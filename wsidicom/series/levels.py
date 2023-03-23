@@ -12,10 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from pathlib import Path
-from typing import Callable, Iterable, List, Optional, OrderedDict, Sequence
+from typing import Iterable, List, OrderedDict, Sequence
 
-from pydicom.uid import UID
 
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Size, SizeMm
@@ -29,9 +27,53 @@ class Levels(Series):
     """Represents a series of Groups of the volume (e.g. pyramidal
     level) wsi flavor."""
 
+    def __init__(self, levels: Sequence[Level]):
+        """Holds a stack of levels.
+
+        Parameters
+        ----------
+        levels: Sequence[Level]
+            List of levels to include in series
+        """
+        self._levels = OrderedDict(
+            (level.level, level)
+            for level in sorted(levels, key=lambda level: level.level)
+        )
+        if len(self.groups) != 0 and self.groups[0].uids is not None:
+            self._uids = self._validate_series(self.groups)
+        else:
+            self._uids = None
+        mm_size = next(
+            level.default_instance.mm_size
+            for level in self._levels.values()
+            if level.default_instance.mm_size is not None
+        )
+        if mm_size is None:
+            raise ValueError(
+                "ImagedVolumeWidth and ImagedVolumeHeight must be set for "
+                '"Volume" type'
+            )
+        self._mm_size = mm_size
+
     @property
     def image_type(self) -> ImageType:
         return ImageType.VOLUME
+
+    @property
+    def size(self) -> Size:
+        return self.base_level.size
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
+        return self.base_level.pixel_spacing
+
+    @property
+    def mpp(self) -> SizeMm:
+        return self.base_level.mpp
+
+    @property
+    def tile_size(self) -> Size:
+        return self.base_level.tile_size
 
     @classmethod
     def open(cls, instances: Iterable[WsiInstance]) -> "Levels":
@@ -50,51 +92,26 @@ class Levels(Series):
         levels = Level.open(instances)
         return cls(levels)
 
-    def __init__(self, levels: Sequence[Level]):
-        """Holds a stack of levels.
-
-        Parameters
-        ----------
-        levels: Sequence[Level]
-            List of levels to include in series
-        """
-        self._levels = OrderedDict(
-            (level.level, level)
-            for level in sorted(levels, key=lambda level: level.level)
-        )
-        if len(self.groups) != 0 and self.groups[0].uids is not None:
-            self._uids = self._validate_series(self.groups)
-        else:
-            self._uids = None
-
-        mm_size = self.base_level.default_instance.mm_size
-        if mm_size is None:
-            raise ValueError(
-                "ImagedVolumeWidth and ImagedVolumeHeight must be set for "
-                '"Volume" type'
-            )
-        self._mm_size = mm_size
-
     @property
     def pyramid(self) -> str:
-        """Return string representation of pyramid"""
+        """Return string representation of pyramid."""
         return "Pyramid levels in file:\n" + "\n".join(
             [str_indent(2) + level.pyramid for level in self._levels.values()]
         )
 
     @property
     def groups(self) -> List[Group]:
-        """Return contained groups"""
+        """Return contained groups."""
         return list(self._levels.values())
 
     @property
     def levels(self) -> List[int]:
-        """Return contained levels"""
+        """Return contained levels."""
         return list(self._levels.keys())
 
     @property
     def highest_level(self) -> int:
-        """Return highest valid pyramid level (which results in a 1x1 image)"""
+        """Return highest valid pyramid level (which results in a 1x1 image)."""
         return self.base_level.get_highest_level()
 
     @property
@@ -104,7 +121,7 @@ class Levels(Series):
 
     @property
     def base_level(self) -> Level:
-        """Return the base level of the pyramid"""
+        """Return the base level of the pyramid."""
         return self._levels[0]
 
     @property
