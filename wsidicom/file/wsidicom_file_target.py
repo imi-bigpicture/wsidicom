@@ -76,28 +76,27 @@ class WsiDicomFileTarget(Target):
     def save_levels(self, levels: Levels):
         """Save levels to target."""
         # Collection of new pyramid levels.
-        new_pyramid_levels: Optional[Levels] = None
+        new_levels: Optional[Levels] = None
         for pyramid_level in range(levels.lowest_single_tile_level):
             if pyramid_level in levels.levels:
                 level = levels.get_level(pyramid_level)
-                self._save_group(level)
-            elif self._add_missing_levels:
+                scale = 1
+            elif self._add_missing_levels and new_levels is not None:
                 # Create scaled level from closest level, prefer from original levels
                 level = levels.get_closest_by_level(pyramid_level)
-                if new_pyramid_levels is not None:
-                    closest_new_pyramid_level = new_pyramid_levels.get_closest_by_level(
-                        pyramid_level
-                    )
-                    if closest_new_pyramid_level.pyramid > level.pyramid:
-                        level = closest_new_pyramid_level
-                scale = 2
-                new_level = self._save_and_open_level(
-                    level, levels.base_level.pixel_spacing, scale
+                closest_new_pyramid_level = new_levels.get_closest_by_level(
+                    pyramid_level
                 )
-                if new_pyramid_levels is None:
-                    new_pyramid_levels = Levels([new_level])
-                else:
-                    new_pyramid_levels.groups.append(new_level)
+                if closest_new_pyramid_level.level > level.level:
+                    level = closest_new_pyramid_level
+                scale = int(2 ** (pyramid_level - level.level))
+            else:
+                continue
+            new_level = self._save_and_open_level(level, levels.pixel_spacing, scale)
+            if new_levels is None:
+                new_levels = Levels([new_level])
+            else:
+                new_levels._levels[new_level.level] = new_level
 
     def save_labels(self, labels: Labels):
         """Save labels to target."""
@@ -124,8 +123,8 @@ class WsiDicomFileTarget(Target):
 
     def _save_group(self, group: Group, scale: int = 1) -> List[Path]:
         """Save group to target."""
-        if not isinstance(scale, int) or scale < 2:
-            raise ValueError("Scale must be integer and larger than 2")
+        if not isinstance(scale, int) or scale < 1:
+            raise ValueError(f"Scale must be positive integer, got {scale}.")
         filepaths: List[Path] = []
         for instances in self._group_instances_to_file(group):
             uid = self._uid_generator()
@@ -156,7 +155,7 @@ class WsiDicomFileTarget(Target):
         return filepaths
 
     def _open_files(self, filepaths: Sequence[Path]) -> List[WsiInstance]:
-        files = [WsiDicomFile(filepath) for filepath in filepaths]
+        files = [WsiDicomFile(filepath, False) for filepath in filepaths]
         self._opened_files.extend(files)
         return [
             WsiInstance([file.dataset for file in files], WsiDicomFileImageData(files))
