@@ -12,12 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from functools import cached_property
 from typing import List, Optional, Sequence, Set
-
-from pydicom.dataset import Dataset
 
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.geometry import Point
+from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
@@ -26,7 +26,7 @@ class FullTileIndex(TileIndex):
     full tiles. Pixel data tiles are ordered by colum, row, z and path, thus
     the frame index for a tile can directly be calculated."""
 
-    def __init__(self, datasets: Sequence[Dataset]):
+    def __init__(self, datasets: Sequence[WsiDataset]):
         """Create full tile index for frames in datasets. Requires equal tile
         size for all tile planes.
 
@@ -36,11 +36,10 @@ class FullTileIndex(TileIndex):
             List of datasets containing full tiled image data.
         """
         super().__init__(datasets)
-        self._focal_planes = self._read_focal_planes_from_datasets(datasets)
 
-    @property
+    @cached_property
     def focal_planes(self) -> List[float]:
-        return self._focal_planes
+        return self._read_focal_planes_from_datasets()
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -80,21 +79,16 @@ class FullTileIndex(TileIndex):
         z_offset = self._get_focal_plane_index(z) * self.tiled_size.area
         path_offset = (
             self._get_optical_path_index(path)
-            * len(self._focal_planes)
+            * len(self.focal_planes)
             * self.tiled_size.area
         )
         return plane_offset + z_offset + path_offset
 
     def _read_focal_planes_from_datasets(
-        self, datasets: Sequence[Dataset]
+        self,
     ) -> List[float]:
         """Return list of focal planes in datasets. Values in Pixel Measures
         Sequene are in mm.
-
-        Parameters
-        ----------
-        datasets: Sequence[Dataset]
-           List of datasets to read focal planes from.
 
         Returns
         ----------
@@ -105,7 +99,7 @@ class FullTileIndex(TileIndex):
         MM_TO_MICRON = 1000.0
         DECIMALS = 3
         focal_planes: Set[float] = set()
-        for dataset in datasets:
+        for dataset in self._datasets:
             slice_spacing = dataset.spacing_between_slices
             number_of_focal_planes = dataset.number_of_focal_planes
             if slice_spacing is None:

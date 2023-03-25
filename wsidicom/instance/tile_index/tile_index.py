@@ -19,13 +19,14 @@ from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
 from wsidicom.geometry import Point, Size
+from wsidicom.instance.dataset import WsiDataset
 
 
 class TileIndex(metaclass=ABCMeta):
     """Index for mapping tile position to frame number. Is subclassed into
     FullTileIndex and SparseTileIndex."""
 
-    def __init__(self, datasets: Sequence[Dataset]):
+    def __init__(self, datasets: Sequence[WsiDataset]):
         """Create tile index for frames in datasets. Requires equal tile
         size for all tile planes.
 
@@ -35,9 +36,9 @@ class TileIndex(metaclass=ABCMeta):
             List of datasets containing tiled image data.
 
         """
-        base_dataset = datasets[0]
-        self._image_size = base_dataset.image_size
-        self._tile_size = base_dataset.tile_size
+        self._datasets = datasets
+        self._image_size = datasets[0].image_size
+        self._tile_size = datasets[0].tile_size
         self._frame_count = self._read_frame_count_from_datasets(datasets)
         self._optical_paths = self._read_optical_paths_from_datasets(datasets)
         self._tiled_size = self.image_size.ceil_div(self.tile_size)
