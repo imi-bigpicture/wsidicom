@@ -12,8 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Optional
-
 
 class Settings:
     """Class containing settings. Settings are to be accessed through the
@@ -24,7 +22,6 @@ class Settings:
         self._strict_attribute_check = False
         self._parse_pixel_data_on_load = True
         self._focal_plane_distance_threshold = 0.000001
-        self._stitching_workers = None
 
     @property
     def strict_uid_check(self) -> bool:
@@ -64,16 +61,6 @@ class Settings:
     @focal_plane_distance_threshold.setter
     def focal_plane_distance_threshold(self, value: float) -> None:
         self._focal_plane_distance_threshold = value
-
-    @property
-    def stitching_workers(self) -> Optional[int]:
-        """The number of threads to use for stitching tiles. Set to None to let the
-        implementation decided. Set to 1 to dissable threading."""
-        return self._stitching_workers
-
-    @stitching_workers.setter
-    def stitching_workers(self, value: Optional[int]) -> None:
-        self._stitching_workers = value
 
 
 settings = Settings()

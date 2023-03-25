@@ -405,7 +405,9 @@ class ImageData(metaclass=ABCMeta):
             tile_frame = self.encode(image)
         return tile_frame
 
-    def stitch_tiles(self, region: Region, path: str, z: float) -> PILImage:
+    def stitch_tiles(
+        self, region: Region, path: str, z: float, threads: int
+    ) -> PILImage:
         """Stitches tiles together to form requested image.
 
         Parameters
@@ -416,6 +418,8 @@ class ImageData(metaclass=ABCMeta):
             Optical path
         z: float
             Z coordinate
+        threads: int
+            Number of threads to use for read.
 
         Returns
         ----------
@@ -424,8 +428,8 @@ class ImageData(metaclass=ABCMeta):
         """
 
         def get_and_crop_tile(tile_point: Point) -> PILImage:
-            tile = self._get_decoded_tile(tile_points.start, z, path)
-            tile_crop = region.inside_crop(tile_points.start, self.tile_size)
+            tile = self._get_decoded_tile(tile_point, z, path)
+            tile_crop = region.inside_crop(tile_point, self.tile_size)
             if tile_crop.size != self.tile_size:
                 tile = tile.crop(box=tile_crop.box)
             return tile
@@ -449,14 +453,12 @@ class ImageData(metaclass=ABCMeta):
             image_coordinate += (tile_point - tile_points.start) * self.tile_size
             image.paste(tile, image_coordinate.to_tuple())
 
-        self._paste_tiles(tile_points, tile_paste)
+        self._paste_tiles(tile_points, tile_paste, threads)
         return image
 
     @staticmethod
     def _paste_tiles(
-        tile_region: Region,
-        paste_method: Callable[[Point], None],
-        workers: Optional[int] = None,
+        tile_region: Region, paste_method: Callable[[Point], None], threads: int
     ):
         """Paste tiles in region using method. Use threading if number of tiles to paste
         is larger than one and requested worker count is more than one.
@@ -467,17 +469,15 @@ class ImageData(metaclass=ABCMeta):
             Tile region of tiles to paste.
         paste_method: Callable[[Point], None]
             Method that accepts a tile point to paste and returns None.
-        workers: Optional[int] = None
-            Optional number of workers to use if more than one tile. If not given use
-            setting.stitching_workers.
+        threads: int
+            Number of workers to use.
         """
-        if workers is None:
-            workers = settings.stitching_workers
-        if workers == 1:
+
+        if threads == 1:
             for tile_point in tile_region.iterate_all():
                 paste_method(tile_point)
         else:
-            with ThreadPoolExecutor(max_workers=workers) as pool:
+            with ThreadPoolExecutor(max_workers=threads) as pool:
                 pool.map(paste_method, tile_region.iterate_all())
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:

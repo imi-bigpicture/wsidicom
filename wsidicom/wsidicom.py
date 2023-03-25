@@ -302,6 +302,7 @@ class WsiDicom:
         size: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None,
+        threads: int = 1,
     ) -> PILImage:
         """Read region defined by pixels.
 
@@ -317,6 +318,8 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
+        threads: int = 1
+            Number of threads to use for read.
 
         Returns
         ----------
@@ -334,7 +337,7 @@ class WsiDicom:
             raise WsiDicomOutOfBoundsError(
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
-        image = wsi_level.get_region(scaled_region, z, path)
+        image = wsi_level.get_region(scaled_region, z, path, threads)
         if scale_factor != 1:
             image = image.resize((size), resample=Image.Resampling.BILINEAR)
         return image
@@ -347,6 +350,7 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None,
         slide_origin: bool = False,
+        threads: int = 1,
     ) -> PILImage:
         """Read image from region defined in mm.
 
@@ -365,6 +369,8 @@ class WsiDicom:
             optical path, optional
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
+        threads: int = 1
+            Number of threads to use for read.
 
         Returns
         ----------
@@ -374,7 +380,7 @@ class WsiDicom:
         wsi_level = self.levels.get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
-        image = wsi_level.get_region_mm(region, z, path, slide_origin)
+        image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
         image_size = Size(width=image.size[0], height=image.size[1]) // scale_factor
         return image.resize(image_size.to_tuple(), resample=Image.Resampling.BILINEAR)
 
@@ -386,6 +392,7 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None,
         slide_origin: bool = False,
+        threads: int = 1,
     ) -> PILImage:
         """Read image from region defined in mm with set pixel spacing.
 
@@ -404,6 +411,8 @@ class WsiDicom:
             Optical path, optional.
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
+        threads: int = 1
+            Number of threads to use for read.
 
         Returns
         -----------
@@ -415,7 +424,7 @@ class WsiDicom:
             SizeMm(pixel_spacing, pixel_spacing)
         )
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
-        image = wsi_level.get_region_mm(region, z, path, slide_origin)
+        image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
         image_size = SizeMm.from_tuple(size) // pixel_spacing
         return image.resize(image_size.to_tuple(), resample=Image.Resampling.BILINEAR)
 

@@ -280,6 +280,7 @@ class Group:
         region: Region,
         z: Optional[float] = None,
         path: Optional[str] = None,
+        threads: int = 1,
     ) -> PILImage:
         """Read region defined by pixels.
 
@@ -293,6 +294,8 @@ class Group:
             Z coordinate, optional
         path: Optional[str] = None
             optical path, optional
+        threads: int = 1
+            Number of threads to use for read.
 
         Returns
         ----------
@@ -305,7 +308,7 @@ class Group:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        image = instance.image_data.stitch_tiles(region, path, z)
+        image = instance.image_data.stitch_tiles(region, path, z, threads)
         return image
 
     def get_region_mm(
@@ -314,6 +317,7 @@ class Group:
         z: Optional[float] = None,
         path: Optional[str] = None,
         slide_origin: bool = False,
+        threads: int = 1,
     ) -> PILImage:
         """Read region defined by mm.
 
@@ -327,6 +331,8 @@ class Group:
             optical path, optional.
         slide_origin: bool = False.
             If to use the slide origin instead of image origin.
+        threads: int = 1
+            Number of threads to use for read.
 
         Returns
         ----------
@@ -336,7 +342,7 @@ class Group:
         if slide_origin:
             region = self.image_origin.transform_region(region)
         pixel_region = self.mm_to_pixel(region)
-        image = self.get_region(pixel_region, z, path)
+        image = self.get_region(pixel_region, z, path, threads)
         if slide_origin:
             image = image.rotate(
                 self.image_origin.rotation,
