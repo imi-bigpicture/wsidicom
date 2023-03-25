@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import os
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Union
 
@@ -25,7 +26,7 @@ from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Size
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import ImageType, WsiDataset, WsiInstance
+from wsidicom.instance import ImageType, TileType, WsiDataset, WsiInstance
 from wsidicom.source import Source
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 
@@ -112,6 +113,32 @@ class WsiDicomFileSource(Source):
             self._overview_files,
         ]
         return [file for file_list in file_lists for file in file_list]
+
+    @property
+    def is_ready_for_viewing(self) -> Optional[bool]:
+        """Returns rue if files in source are formated for fast viewing, None if no
+        files are in source"""
+        if not self.contains_levels:
+            return None
+        files = sorted(
+            self.image_files, key=lambda file: os.path.getsize(file.filepath)
+        )
+        for file in files:
+            if file.image_type is None:
+                continue
+            if (
+                file.dataset.tile_type != TileType.SPARSE
+                or file.offset_table_type is None
+            ):
+                return False
+
+        return True
+
+    @property
+    def contains_levels(self) -> bool:
+        """Returns true if files in source have one level that can be read with
+        WsiDicom."""
+        return len(self.image_files) > 0
 
     @staticmethod
     def _get_filepaths(

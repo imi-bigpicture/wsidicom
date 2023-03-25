@@ -624,9 +624,9 @@ class WsiDicom:
         return slide_uids
 
     @classmethod
-    def ready_for_viewing(
+    def is_ready_for_viewing(
         cls, path: Union[str, Sequence[str], Path, Sequence[Path]]
-    ) -> bool:
+    ) -> Optional[bool]:
         """Return true if files in path are formated for fast viewing, i.e.
         have TILED_FULL tile arrangement and have an offset table.
 
@@ -636,21 +636,26 @@ class WsiDicom:
             Path to files to test.
 
         Returns
-            True if files in path are formated for fast viewing.
+            True if files in path are formated for fast viewing, None if no DICOM WSI
+            files are in the path.
         """
         source = WsiDicomFileSource(path)
-        if len(source.image_files) == 0:
-            return None
-        files = sorted(
-            source.image_files, key=lambda file: os.path.getsize(file.filepath)
-        )
-        for file in files:
-            if file.image_type is None:
-                continue
-            if (
-                file.dataset.tile_type != TileType.SPARSE
-                or file.offset_table_type is None
-            ):
-                return False
+        return source.is_ready_for_viewing
 
-        return True
+    @classmethod
+    def is_supported(
+        cls, path: Union[str, Sequence[str], Path, Sequence[Path]]
+    ) -> Optional[bool]:
+        """Return true if files in path have at least one level that can be read with
+        WsiDicom.
+
+        Parameters
+        ----------
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
+            Path to files to test.
+
+        Returns
+            True if files in path have one level that can be read with WsiDicom.
+        """
+        source = WsiDicomFileSource(path)
+        return source.contains_levels
