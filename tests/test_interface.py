@@ -142,17 +142,17 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         instance = base_level.get_instance()
         region = Region(position=Point(0, 0), size=Size(100, 100))
         get_tiles = instance.image_data._get_tile_range(region, 0, "0")
-        expected = Region(Point(0, 0), Size(0, 0))
+        expected = Region(Point(0, 0), Size(1, 1))
         self.assertEqual(get_tiles, expected)
 
         region = Region(position=Point(0, 0), size=Size(1024, 1024))
         get_tiles = instance.image_data._get_tile_range(region, 0, "0")
-        expected = Region(Point(0, 0), Size(0, 0))
+        expected = Region(Point(0, 0), Size(1, 1))
         self.assertEqual(get_tiles, expected)
 
         region = Region(position=Point(300, 400), size=Size(500, 500))
         get_tiles = instance.image_data._get_tile_range(region, 0, "0")
-        expected = Region(Point(0, 0), Size(0, 0))
+        expected = Region(Point(0, 0), Size(1, 1))
         self.assertEqual(get_tiles, expected)
 
     def test_crop_region_to_level_size(self):

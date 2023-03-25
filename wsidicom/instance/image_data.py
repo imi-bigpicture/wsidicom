@@ -602,7 +602,7 @@ class ImageData(metaclass=ABCMeta):
 
         tile_region = Region.from_points(
             pixel_region.start // self.tile_size,
-            pixel_region.end.ceil_div(self.tile_size),
+            (pixel_region.end - 1) // self.tile_size + 1,
         )
         if not self.valid_tiles(tile_region, z, path):
             raise WsiDicomOutOfBoundsError(
