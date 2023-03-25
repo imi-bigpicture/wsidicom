@@ -38,7 +38,6 @@ class WsiDicomFileSource(Source):
     def __init__(
         self,
         path: Union[str, Sequence[str], Path, Sequence[Path]],
-        parse_pixel_data: bool = True,
     ) -> None:
         """Create a WsiDicomFileSource.
 
@@ -46,8 +45,6 @@ class WsiDicomFileSource(Source):
         ----------
         path: Union[str, Sequence[str], Path, Sequence[Path]]
             A path to WSI DICOM files for a slide image.
-        parse_pixel_data: bool = True
-            If to parse the pixel data on load.
         """
         filepaths = self._get_filepaths(path)
         self._level_files: List[WsiDicomFile] = []
@@ -58,7 +55,7 @@ class WsiDicomFileSource(Source):
         for filepath in self._filter_paths(filepaths):
             sop_class_uid = self._get_sop_class_uid(filepath)
             if sop_class_uid == WSI_SOP_CLASS_UID:
-                wsi_file = WsiDicomFile(filepath, parse_pixel_data=parse_pixel_data)
+                wsi_file = WsiDicomFile(filepath)
                 if wsi_file.image_type == ImageType.VOLUME:
                     self._level_files.append(wsi_file)
                 elif wsi_file.image_type == ImageType.LABEL:

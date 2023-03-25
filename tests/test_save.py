@@ -55,6 +55,7 @@ class WsiDicomTestFile(WsiDicomFile):
         self._fp.is_little_endian = transfer_syntax.is_little_endian
         self._fp.is_implicit_VR = transfer_syntax.is_implicit_VR
         self._frame_count = frame_count
+        self._pixel_data_position = 0
         self.__enter__()
 
 
@@ -272,7 +273,6 @@ class WsiDicomFileSaveTests(unittest.TestCase):
                 OffsetTableType.BASIC,
                 OffsetTableType.EXTENDED,
             ]:
-
                 filepath = Path(tempdir + "/" + str(table))
                 expected_frame_index = self.write_table(filepath, table)
                 frame_index = self.read_table(filepath)

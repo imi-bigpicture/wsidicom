@@ -100,22 +100,13 @@ class WsiDicomFileTests(unittest.TestCase):
         [file.close() for file in cls.opened_files]
         cls.tempdir.cleanup()
 
-    def test_open_with_parse(self):
+    def test_open(self):
         for test_file in self.test_files:
             print(test_file.path, test_file.tile_type, test_file.bot_type)
-            with WsiDicomFile(test_file.path, True) as file:
-                self.assertIsNotNone(file._frame_positions)
-                self.assertEqual(file.offset_table_type, test_file.bot_type)
-
-                self.assertEqual(file.dataset.tile_type, test_file.tile_type)
-
-    def test_open_without_parse(self):
-        for test_file in self.test_files:
-            with WsiDicomFile(test_file.path, False) as file:
+            with WsiDicomFile(test_file.path) as file:
                 self.assertIsNone(file._offset_table_type)
                 self.assertIsNone(file._frame_positions)
                 self.assertEqual(file.offset_table_type, test_file.bot_type)
-
                 self.assertEqual(file.dataset.tile_type, test_file.tile_type)
 
     def test_dataset_property(self):

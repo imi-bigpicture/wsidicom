@@ -25,7 +25,6 @@ from pydicom.misc import is_dicom
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 
-from wsidicom.config import settings
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Size
@@ -36,7 +35,7 @@ from wsidicom.uid import FileUids, SlideUids
 class WsiDicomFile(WsiDicomFileBase):
     """Represents a DICOM file (potentially) containing WSI image and metadata."""
 
-    def __init__(self, filepath: Path, parse_pixel_data: Optional[bool] = None):
+    def __init__(self, filepath: Path):
         """Open dicom file in filepath. If valid wsi type read required
         parameters. Parses frames in pixel data but does not read the frames.
 
@@ -44,12 +43,7 @@ class WsiDicomFile(WsiDicomFileBase):
         ----------
         filepath: Path
             Path to file to open
-        parse_pixel_data: Optional[bool] = None
-            If to parse pixel data on load. Overrides
-            setting.parse_pixel_data_on_load.
         """
-        if parse_pixel_data is None:
-            parse_pixel_data = settings.parse_pixel_data_on_load
         self._lock = threading.Lock()
 
         if not is_dicom(filepath):
@@ -61,6 +55,8 @@ class WsiDicomFile(WsiDicomFileBase):
         super().__init__(filepath, mode="rb")
         self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
+        self._frame_positions = None
+        self._offset_table_type = None
         pixel_data_tags = {Tag("PixelData"), Tag("ExtendedOffsetTable")}
 
         def _stop_at(tag: BaseTag, VR: Optional[str], length: int) -> bool:
@@ -84,18 +80,8 @@ class WsiDicomFile(WsiDicomFileBase):
             concatenation_uid = self.dataset.uids.concatenation
             slide_uids = self.dataset.uids.slide
             self._uids = FileUids(instance_uid, concatenation_uid, slide_uids)
-
             self._frame_offset = self.dataset.frame_offset
             self._frame_count = self.dataset.frame_count
-            if parse_pixel_data:
-                (
-                    self._frame_positions,
-                    self._offset_table_type,
-                ) = self._parse_pixel_data()
-            else:
-                self._frame_positions = None
-                self._offset_table_type = None
-
         else:
             warnings.warn(f"Non-supported file {filepath}")
 
@@ -421,6 +407,7 @@ class WsiDicomFile(WsiDicomFileBase):
         Tuple[List[Tuple[int, int]], OffsetTableType]
             List of frame positions and lengths, and table type.
         """
+        self._fp.seek(self._pixel_data_position)
         table = None
         table_type = OffsetTableType.BASIC
         pixel_data_or_eot_tag = Tag(self._fp.read_tag())

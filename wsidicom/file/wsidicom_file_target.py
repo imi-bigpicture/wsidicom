@@ -155,7 +155,7 @@ class WsiDicomFileTarget(Target):
         return filepaths
 
     def _open_files(self, filepaths: Sequence[Path]) -> List[WsiInstance]:
-        files = [WsiDicomFile(filepath, False) for filepath in filepaths]
+        files = [WsiDicomFile(filepath) for filepath in filepaths]
         self._opened_files.extend(files)
         return [
             WsiInstance([file.dataset for file in files], WsiDicomFileImageData(files))

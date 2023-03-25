@@ -638,9 +638,12 @@ class WsiDicom:
         Returns
             True if files in path are formated for fast viewing.
         """
-        source = WsiDicomFileSource(path, parse_pixel_data=False)
-        files = source.image_files
-        files.sort(key=lambda file: os.path.getsize(file.filepath))
+        source = WsiDicomFileSource(path)
+        if len(source.image_files) == 0:
+            return None
+        files = sorted(
+            source.image_files, key=lambda file: os.path.getsize(file.filepath)
+        )
         for file in files:
             if file.image_type is None:
                 continue
