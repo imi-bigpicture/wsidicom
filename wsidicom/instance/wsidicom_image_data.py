@@ -14,6 +14,7 @@
 
 import io
 from abc import ABCMeta, abstractmethod
+from functools import cached_property
 from typing import List, Optional, Sequence
 
 from PIL import Image
@@ -26,20 +27,12 @@ from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.image_origin import ImageOrigin
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
+from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     def __init__(self, datasets: Sequence[WsiDataset]):
-
-        if datasets[0].tile_type == TileType.FULL:
-            self.tiles = FullTileIndex(datasets)
-        else:
-            self.tiles = SparseTileIndex(datasets)
-        self._pixel_spacing = datasets[0].pixel_spacing
-        self._default_z: Optional[float] = None
-        self._photometric_interpretation = datasets[0].photometric_interpretation
-        self._samples_per_pixel = datasets[0].samples_per_pixel
-        self._image_origin = ImageOrigin.from_dataset(datasets[0])
+        self._datasets = datasets
 
     @abstractmethod
     def _get_tile_frame(self, frame_index: int) -> bytes:
@@ -56,6 +49,13 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             The frame in bytes
         """
         raise NotImplementedError()
+
+    @cached_property
+    def tiles(self) -> TileIndex:
+        if self._datasets[0].tile_type == TileType.FULL:
+            return FullTileIndex(self._datasets)
+        else:
+            return SparseTileIndex(self._datasets)
 
     @property
     def image_size(self) -> Size:
@@ -80,22 +80,22 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     @property
     def pixel_spacing(self) -> Optional[SizeMm]:
         """Size of the pixels in mm/pixel."""
-        return self._pixel_spacing
+        return self._datasets[0].pixel_spacing
 
     @property
     def photometric_interpretation(self) -> str:
         """Return photometric interpretation."""
-        return self._photometric_interpretation
+        return self._datasets[0].photometric_interpretation
 
     @property
     def samples_per_pixel(self) -> int:
         """Return samples per pixel (1 or 3)."""
-        return self._samples_per_pixel
+        return self._datasets[0].samples_per_pixel
 
-    @property
+    @cached_property
     def image_origin(self) -> ImageOrigin:
         """Return the image origin of the image data."""
-        return self._image_origin
+        return ImageOrigin.from_dataset(self._datasets[0])
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         """Return image bytes for tile defined by tile (x, y), z,

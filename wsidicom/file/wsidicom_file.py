@@ -13,12 +13,10 @@
 #    limitations under the License.
 
 import threading
-import warnings
-from collections import defaultdict
 from functools import cached_property
 from pathlib import Path
 from struct import unpack
-from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import BinaryIO, List, Optional, Tuple, Union, cast
 
 from pydicom.filebase import DicomFileLike
 from pydicom.filereader import read_file_meta_info, read_partial
@@ -26,11 +24,10 @@ from pydicom.misc import is_dicom
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 
-from wsidicom.errors import WsiDicomFileError
+from wsidicom.errors import WsiDicomFileError, WsiDicomNotSupported
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
-from wsidicom.geometry import Size
 from wsidicom.instance import ImageType, WsiDataset
-from wsidicom.uid import FileUids, SlideUids
+from wsidicom.uid import FileUids
 
 
 class WsiDicomFile(WsiDicomFileBase):
@@ -56,10 +53,10 @@ class WsiDicomFile(WsiDicomFileBase):
         super().__init__(filepath, mode="rb")
         self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
-        pixel_data_tags = {Tag("PixelData"), Tag("ExtendedOffsetTable")}
+        extended_offset_table_tag = Tag("ExtendedOffsetTable")
 
         def _stop_at(tag: BaseTag, VR: Optional[str], length: int) -> bool:
-            return tag in pixel_data_tags
+            return tag >= extended_offset_table_tag
 
         dataset = read_partial(
             cast(BinaryIO, self._fp),
@@ -75,14 +72,8 @@ class WsiDicomFile(WsiDicomFileBase):
         )
         if self._image_type is not None:
             self._dataset = WsiDataset(dataset)
-            instance_uid = self.dataset.uids.instance
-            concatenation_uid = self.dataset.uids.concatenation
-            slide_uids = self.dataset.uids.slide
-            self._uids = FileUids(instance_uid, concatenation_uid, slide_uids)
-            self._frame_offset = self.dataset.frame_offset
-            self._frame_count = self.dataset.frame_count
         else:
-            warnings.warn(f"Non-supported file {filepath}")
+            raise WsiDicomNotSupported(f"Non-supported file {filepath}")
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.filepath})"
@@ -107,7 +98,7 @@ class WsiDicomFile(WsiDicomFileBase):
     @property
     def uids(self) -> FileUids:
         """Return uids"""
-        return self._uids
+        return self.dataset.uids
 
     @property
     def transfer_syntax(self) -> UID:
@@ -117,7 +108,7 @@ class WsiDicomFile(WsiDicomFileBase):
     @property
     def frame_offset(self) -> int:
         """Return frame offset (for concatenated file, 0 otherwise)"""
-        return self._frame_offset
+        return self.dataset.frame_offset
 
     @cached_property
     def frame_positions(self) -> List[Tuple[int, int]]:
@@ -129,7 +120,7 @@ class WsiDicomFile(WsiDicomFileBase):
     @property
     def frame_count(self) -> int:
         """Return number of frames"""
-        return self._frame_count
+        return self.dataset.frame_count
 
     def get_filepointer(self, frame_index: int) -> Tuple[DicomFileLike, int, int]:
         """Return file pointer, frame position, and frame length for frame
@@ -447,62 +438,3 @@ class WsiDicomFile(WsiDicomFileBase):
             )
 
         return frame_positions, table_type
-
-    @staticmethod
-    def filter_files(
-        files: Iterable["WsiDicomFile"],
-        series_uids: SlideUids,
-        series_tile_size: Optional[Size] = None,
-    ) -> List["WsiDicomFile"]:
-        """Filter list of wsi dicom files to only include matching uids and
-        tile size if defined.
-
-        Parameters
-        ----------
-        files: Iterable['WsiDicomFile']
-            Wsi files to filter.
-        series_uids: Uids
-            Uids to check against.
-        series_tile_size: Optional[Size] = None
-            Tile size to check against.
-
-        Returns
-        ----------
-        List['WsiDicomFile']
-            List of matching wsi dicom files.
-        """
-        valid_files: List[WsiDicomFile] = []
-
-        for file in files:
-            if file.dataset.matches_series(series_uids, series_tile_size):
-                valid_files.append(file)
-            else:
-                warnings.warn(
-                    f"{file.filepath} with uids {file.uids.slide} "
-                    f"did not match series with {series_uids} "
-                    f"and tile size {series_tile_size}"
-                )
-                file.close()
-
-        return valid_files
-
-    @classmethod
-    def group_files(
-        cls, files: Iterable["WsiDicomFile"]
-    ) -> Dict[str, List["WsiDicomFile"]]:
-        """Return files grouped by instance identifier (instances).
-
-        Parameters
-        ----------
-        files: Iterable[WsiDicomFile]
-            Files to group into instances
-
-        Returns
-        ----------
-        Dict[str, List[WsiDicomFile]]
-            Files grouped by instance, with instance identifier as key.
-        """
-        grouped_files: Dict[str, List[WsiDicomFile]] = defaultdict(list)
-        for file in files:
-            grouped_files[file.uids.identifier].append(file)
-        return grouped_files

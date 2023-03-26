@@ -12,9 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections import defaultdict
 import os
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Union
+import warnings
 
 from pydicom.dataset import FileMetaDataset
 from pydicom.filereader import read_file_meta_info
@@ -52,19 +54,19 @@ class WsiDicomFileSource(Source):
         self._label_files: List[WsiDicomFile] = []
         self._overview_files: List[WsiDicomFile] = []
         self._annotation_files: List[Path] = []
-
         for filepath in self._filter_paths(filepaths):
             sop_class_uid = self._get_sop_class_uid(filepath)
             if sop_class_uid == WSI_SOP_CLASS_UID:
-                wsi_file = WsiDicomFile(filepath)
-                if wsi_file.image_type == ImageType.VOLUME:
-                    self._level_files.append(wsi_file)
-                elif wsi_file.image_type == ImageType.LABEL:
-                    self._label_files.append(wsi_file)
-                elif wsi_file.image_type == ImageType.OVERVIEW:
-                    self._overview_files.append(wsi_file)
-                else:
-                    wsi_file.close()
+                try:
+                    wsi_file = WsiDicomFile(filepath)
+                    if wsi_file.image_type == ImageType.VOLUME:
+                        self._level_files.append(wsi_file)
+                    elif wsi_file.image_type == ImageType.LABEL:
+                        self._label_files.append(wsi_file)
+                    elif wsi_file.image_type == ImageType.OVERVIEW:
+                        self._overview_files.append(wsi_file)
+                except Exception:
+                    warnings.warn(f"Non-supported file {filepath}")
             elif sop_class_uid == ANN_SOP_CLASS_UID:
                 self._annotation_files.append(filepath)
         if len(self._level_files) == 0:
@@ -234,8 +236,8 @@ class WsiDicomFileSource(Source):
         Iterable[WsiInstancece]
             Iterable of created instances.
         """
-        filtered_files = WsiDicomFile.filter_files(files, series_uids, series_tile_size)
-        files_grouped_by_instance = WsiDicomFile.group_files(filtered_files)
+        filtered_files = cls._filter_files(files, series_uids, series_tile_size)
+        files_grouped_by_instance = cls._group_files(filtered_files)
         return (
             WsiInstance(
                 [file.dataset for file in instance_files],
@@ -243,3 +245,62 @@ class WsiDicomFileSource(Source):
             )
             for instance_files in files_grouped_by_instance.values()
         )
+
+    @staticmethod
+    def _filter_files(
+        files: Iterable[WsiDicomFile],
+        series_uids: SlideUids,
+        series_tile_size: Optional[Size] = None,
+    ) -> List[WsiDicomFile]:
+        """Filter list of wsi dicom files to only include matching uids and
+        tile size if defined.
+
+        Parameters
+        ----------
+        files: Iterable['WsiDicomFile']
+            Wsi files to filter.
+        series_uids: Uids
+            Uids to check against.
+        series_tile_size: Optional[Size] = None
+            Tile size to check against.
+
+        Returns
+        ----------
+        List['WsiDicomFile']
+            List of matching wsi dicom files.
+        """
+        valid_files: List[WsiDicomFile] = []
+
+        for file in files:
+            if file.dataset.matches_series(series_uids, series_tile_size):
+                valid_files.append(file)
+            else:
+                warnings.warn(
+                    f"{file.filepath} with uids {file.uids.slide} "
+                    f"did not match series with {series_uids} "
+                    f"and tile size {series_tile_size}"
+                )
+                file.close()
+
+        return valid_files
+
+    @staticmethod
+    def _group_files(
+        files: Iterable["WsiDicomFile"],
+    ) -> Dict[str, List["WsiDicomFile"]]:
+        """Return files grouped by instance identifier (instances).
+
+        Parameters
+        ----------
+        files: Iterable[WsiDicomFile]
+            Files to group into instances
+
+        Returns
+        ----------
+        Dict[str, List[WsiDicomFile]]
+            Files grouped by instance, with instance identifier as key.
+        """
+        grouped_files: Dict[str, List[WsiDicomFile]] = defaultdict(list)
+        for file in files:
+            grouped_files[file.uids.identifier].append(file)
+        return grouped_files

@@ -91,3 +91,7 @@ class WsiDicomRequirementError(Exception):
 class WsiDicomNoResultionError(Exception):
     """Raised if method is not possible as resolution is missing in image
     data."""
+
+
+class WsiDicomNotSupported(Exception):
+    """Raised if opened instance is not supported."""

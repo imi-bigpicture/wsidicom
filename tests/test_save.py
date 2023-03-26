@@ -58,6 +58,10 @@ class WsiDicomTestFile(WsiDicomFile):
         self._pixel_data_position = 0
         self.__enter__()
 
+    @property
+    def frame_count(self) -> int:
+        return self._frame_count
+
 
 class WsiDicomTestImageData(ImageData):
     def __init__(self, data: Sequence[bytes], tiled_size: Size) -> None:
