@@ -104,8 +104,6 @@ class WsiDicomFileTests(unittest.TestCase):
         for test_file in self.test_files:
             print(test_file.path, test_file.tile_type, test_file.bot_type)
             with WsiDicomFile(test_file.path) as file:
-                self.assertIsNone(file._offset_table_type)
-                self.assertIsNone(file._frame_positions)
                 self.assertEqual(file.offset_table_type, test_file.bot_type)
                 self.assertEqual(file.dataset.tile_type, test_file.tile_type)
 

@@ -15,6 +15,7 @@
 import threading
 import warnings
 from collections import defaultdict
+from functools import cached_property
 from pathlib import Path
 from struct import unpack
 from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union, cast
@@ -55,8 +56,6 @@ class WsiDicomFile(WsiDicomFileBase):
         super().__init__(filepath, mode="rb")
         self._fp.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._fp.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
-        self._frame_positions = None
-        self._offset_table_type = None
         pixel_data_tags = {Tag("PixelData"), Tag("ExtendedOffsetTable")}
 
         def _stop_at(tag: BaseTag, VR: Optional[str], length: int) -> bool:
@@ -91,12 +90,10 @@ class WsiDicomFile(WsiDicomFileBase):
     def __str__(self) -> str:
         return self.pretty_str()
 
-    @property
+    @cached_property
     def offset_table_type(self) -> OffsetTableType:
         """Return type of the offset table, or None if not present."""
-        if self._offset_table_type is None:
-            self._offset_table_type = self._get_offset_table_type()
-        return self._offset_table_type
+        return self._get_offset_table_type()
 
     @property
     def dataset(self) -> WsiDataset:
@@ -122,12 +119,12 @@ class WsiDicomFile(WsiDicomFileBase):
         """Return frame offset (for concatenated file, 0 otherwise)"""
         return self._frame_offset
 
-    @property
+    @cached_property
     def frame_positions(self) -> List[Tuple[int, int]]:
         """Return frame positions and lengths"""
-        if self._frame_positions is None:
-            (self._frame_positions, self._offset_table_type) = self._parse_pixel_data()
-        return self._frame_positions
+        (frame_positions, offset_table_type) = self._parse_pixel_data()
+        self._offset_table_type = offset_table_type
+        return frame_positions
 
     @property
     def frame_count(self) -> int:
@@ -154,7 +151,9 @@ class WsiDicomFile(WsiDicomFileBase):
 
     def _get_offset_table_type(self) -> OffsetTableType:
         """
-        Parse file for basic or extended offset table.
+        Parse file for basic (BOT) or extended offset table (EOT). Return if file has
+        EOT and do not check that the BOT is empty (it should be empty according to
+        specifications, but we do not care if it not).
         """
         self._fp.seek(self._pixel_data_position)
         pixel_data_or_eot_tag = Tag(self._fp.read_tag())
@@ -194,7 +193,8 @@ class WsiDicomFile(WsiDicomFileBase):
         return bot_length
 
     def _read_bot(self) -> Optional[bytes]:
-        """Read basic table offset (BOT). Returns None if BOT is empty
+        """Read basic table offset (BOT). Returns None if BOT is empty. Filepoiter
+        should be positionen to pixel data.
 
         Returns
         ----------
@@ -230,25 +230,29 @@ class WsiDicomFile(WsiDicomFileBase):
 
     def _read_eot_lengths_tag(self):
         """Skip over the length of the extended table offset lengths tag."""
-        tag = self._fp.read_tag()
-        if tag != Tag("ExtendedOffsetTableLengths"):
+        eot_lenths_tag = self._fp.read_tag()
+        if eot_lenths_tag != Tag("ExtendedOffsetTableLengths"):
             raise WsiDicomFileError(
                 self.filepath,
                 "Expected Extended offset table lengths tag after reading "
-                f"Extended offset table, found {tag}",
+                f"Extended offset table, found {eot_lenths_tag}",
             )
         length = self._read_tag_length()
         # Jump over EOT lengths for now
         self._fp.seek(length, 1)
 
     def _read_eot(self) -> bytes:
-        """Read extended table offset (EOT) and EOT lengths.
+        """Read extended table offset (EOT) and EOT lengths. Filepointer should be
+        positionend to extended offset table.
 
         Returns
         ----------
         bytes
             EOT in bytes.
         """
+        eot_tag = Tag(self._fp.read_tag())
+        if eot_tag != Tag("ExtendedOffsetTable"):
+            raise ValueError(f"Expected ExtendedOffsetTable tag, got {eot_tag}")
         eot_length = self._read_eot_length()
         # Read the EOT into bytes
         eot = self._fp.read(eot_length)
@@ -397,37 +401,38 @@ class WsiDicomFile(WsiDicomFileBase):
 
     def _parse_pixel_data(self) -> Tuple[List[Tuple[int, int]], OffsetTableType]:
         """Parse file pixel data, reads frame positions.
-        Note that fp needs to be positionend at Extended offset table (EOT)
-        or Pixel data. An EOT can be present before the pixel data, and must
+
+        An EOT can be present before the pixel data, and must
         then not be empty. A BOT most always be the first item in the Pixel
-        data, but can be empty (zero length). If EOT is used BOT must be empty.
+        data, but can be empty (zero length). If EOT is used BOT should be empty.
+
+        First seach to pixel data position, which is either EOT tag or PixelData tag.
+        If EOT read the EOT. For all cases validate that the filepointer now is at the
+        PixelData tag. If BOT read the BOT, otherwise skip the BOT. If EOT nor BOT has
+        been read, parse frame positions from pixel data. Otherwise parse frame
+        positions from EOT or BOT. Finaly check that the number of read frames equals
+        the specified number of frames, otherwise frames are fragmented which we dont
+        support.
 
         Returns
         ----------
         Tuple[List[Tuple[int, int]], OffsetTableType]
             List of frame positions and lengths, and table type.
         """
-        self._fp.seek(self._pixel_data_position)
+        table_type = self.offset_table_type
         table = None
-        table_type = OffsetTableType.BASIC
-        pixel_data_or_eot_tag = Tag(self._fp.read_tag())
-        if pixel_data_or_eot_tag == Tag("ExtendedOffsetTable"):
-            table_type = OffsetTableType.EXTENDED
+        self._fp.seek(self._pixel_data_position)
+        if table_type == OffsetTableType.EXTENDED:
             table = self._read_eot()
-            pixel_data_tag = Tag(self._fp.read_tag())
+
+        self._validate_pixel_data_start(Tag(self._fp.read_tag()))
+        if table_type == OffsetTableType.BASIC:
+            table = self._read_bot()
         else:
-            pixel_data_tag = pixel_data_or_eot_tag
+            self._read_bot_length()
 
-        self._validate_pixel_data_start(pixel_data_tag)
-        bot = self._read_bot()
-
-        if bot is not None:
-            if table is not None:
-                raise WsiDicomFileError(self.filepath, "Both BOT and EOT present")
-            table = bot
         if table is None:
             frame_positions = self._read_positions_from_pixeldata()
-            table_type = OffsetTableType.NONE
         else:
             frame_positions = self._parse_table(table, table_type, self._fp.tell())
 
