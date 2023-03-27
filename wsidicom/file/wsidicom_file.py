@@ -24,7 +24,7 @@ from pydicom.misc import is_dicom
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 
-from wsidicom.errors import WsiDicomFileError, WsiDicomNotSupported
+from wsidicom.errors import WsiDicomFileError, WsiDicomNotSupportedError
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.instance import ImageType, WsiDataset
 from wsidicom.uid import FileUids
@@ -73,7 +73,7 @@ class WsiDicomFile(WsiDicomFileBase):
         if self._image_type is not None:
             self._dataset = WsiDataset(dataset)
         else:
-            raise WsiDicomNotSupported(f"Non-supported file {filepath}")
+            raise WsiDicomNotSupportedError(f"Non-supported file {filepath}")
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.filepath})"

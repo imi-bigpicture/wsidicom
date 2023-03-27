@@ -93,5 +93,5 @@ class WsiDicomNoResultionError(Exception):
     data."""
 
 
-class WsiDicomNotSupported(Exception):
+class WsiDicomNotSupportedError(Exception):
     """Raised if opened instance is not supported."""

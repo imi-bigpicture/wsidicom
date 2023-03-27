@@ -23,7 +23,10 @@ from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.uid import UID
 
-from wsidicom.errors import WsiDicomNotFoundError
+from wsidicom.errors import (
+    WsiDicomNotFoundError,
+    WsiDicomNotSupportedError,
+)
 from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Size
@@ -65,7 +68,7 @@ class WsiDicomFileSource(Source):
                         self._label_files.append(wsi_file)
                     elif wsi_file.image_type == ImageType.OVERVIEW:
                         self._overview_files.append(wsi_file)
-                except Exception:
+                except WsiDicomNotSupportedError:
                     warnings.warn(f"Non-supported file {filepath}")
             elif sop_class_uid == ANN_SOP_CLASS_UID:
                 self._annotation_files.append(filepath)
