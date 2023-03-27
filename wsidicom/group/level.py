@@ -271,5 +271,10 @@ class Level(Group):
         level = int(round(float_level))
         TOLERANCE = 1e-2
         if not math.isclose(float_level, level, rel_tol=TOLERANCE):
-            raise NotImplementedError("Levels needs to be integer.")
+            raise NotImplementedError(
+                f"Levels needs to be integer. Got {float_level} that is more than set"
+                f"tolerance {TOLERANCE} from the closest integer {level}. "
+                f"Base spacing is {base_pixel_spacing}, this level has spacing "
+                f"{self.pixel_spacing}.",
+            )
         return level
