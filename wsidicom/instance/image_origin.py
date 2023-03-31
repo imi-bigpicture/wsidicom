@@ -13,9 +13,10 @@
 #    limitations under the License.
 
 import warnings
-from typing import Optional
+from typing import List, Optional
 
 from pydicom.dataset import Dataset
+from pydicom.sequence import Sequence as DicomSequence
 
 from wsidicom.geometry import Orientation, PointMm, RegionMm
 
@@ -67,6 +68,21 @@ class ImageOrigin:
             )
             orientation = None
         return cls(origin, orientation)
+
+    @property
+    def total_pixel_matrix_origin_sequence(self) -> DicomSequence:
+        """Return formatted TotalPixelMatrixOriginSequence."""
+        offset_item = Dataset()
+        offset_item.XOffsetInSlideCoordinateSystem = self.origin.x
+        offset_item.YOffsetInSlideCoordinateSystem = self.origin.y
+        return DicomSequence([offset_item])
+
+    @property
+    def image_orientation_slide(
+        self,
+    ) -> List[float]:
+        """Return formatted ImageOrientationSlide."""
+        return list(self.orientation.orientation)
 
     @property
     def rotation(self) -> float:

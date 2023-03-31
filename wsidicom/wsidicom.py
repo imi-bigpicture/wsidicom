@@ -29,8 +29,7 @@ from wsidicom.errors import (
 from wsidicom.file import WsiDicomFileSource, WsiDicomFileTarget
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.group import Level
-from wsidicom.instance import TileType, WsiDataset, WsiInstance
+from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.optical import OpticalManager
 from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.source import Source

@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from PIL import Image
 from PIL.Image import Image as PILImage
@@ -62,7 +62,7 @@ class PillowImageData(ImageData):
 
     @property
     def image_origin(self) -> ImageOrigin:
-        return super().image_origin
+        return ImageOrigin()
 
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
         if tile_point != Point(0, 0):
