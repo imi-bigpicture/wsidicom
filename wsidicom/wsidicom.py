@@ -539,7 +539,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        output_path: str
+        output_path: Union[str, Path]
         uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
              Function that can gernerate unique identifiers.
         workers: Optional[int] = None

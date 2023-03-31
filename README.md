@@ -65,65 +65,90 @@ slide = WsiDicom.open_web(
 )
 ```
 
+***Use as a context manager.***
+
+```python
+from wsidicom import WsiDicom
+with WsiDicom.open(path_to_folder) as slide:
+    ...
+```
+
 ***Read a 200x200 px region starting from px 1000, 1000 at level 6.***
 
- ```python
+```python
 region = slide.read_region((1000, 1000), 6, (200, 200))
 ```
 
 ***Read a 2000x2000 px region starting from px 1000, 1000 at level 4 using 4 threads.***
 
- ```python
+```python
 region = slide.read_region((1000, 1000), 6, (200, 200), threads=4)
 ```
 
 ***Read 3x3 mm region starting at 0, 0 mm at level 6.***
 
- ```python
+```python
 region_mm = slide.read_region_mm((0, 0), 6, (3, 3))
 ```
 
 ***Read 3x3 mm region starting at 0, 0 mm with pixel spacing 0.01 mm/px.***
 
- ```python
+```python
 region_mpp = slide.read_region_mpp((0, 0), 0.01, (3, 3))
 ```
 
 ***Read a thumbnail of the whole slide with maximum dimensions 200x200 px.***
 
- ```python
+```python
 thumbnail = slide.read_thumbnail(200, 200)
 ```
 
 ***Read an overview image (if available).***
 
- ```python
+```python
 overview = slide.read_overview()
 ```
 
 ***Read a label image (if available).***
 
- ```python
+```python
 label = slide.read_label()
 ```
 
 ***Read (decoded) tile from position 1, 1 in level 6.***
 
- ```python
+```python
 tile = slide.read_tile(6, (1, 1))
 ```
 
 ***Read (encoded) tile from position 1, 1 in level 6.***
 
- ```python
+```python
 tile_bytes = slide.read_encoded_tile(6, (1, 1))
 ```
 
 ***Close files***
 
- ```python
+```python
 slide.close()
 ```
+
+## Saving files
+
+An opened WsiDicom instance can be saved to a new path using the save()-method. The produced files will be:
+
+- Fully tiled. Any sparse tiles will be replaced with a blank tile with color depending on the photometric interpretation.
+- Have a basic offset table (or optionally an exteded offset table or no offset table).
+- Not be concatenated.
+
+The frames are copied as-is, i.e. without re-compression.
+
+```python
+with WsiDicom.open(path_to_folder) as slide:
+    slide.save(path_to_output)
+```
+
+The output folder must already exists. Be careful to specify a unique folder folder to avoid mixing files from diferent images.
 
 ## Settings
 
@@ -134,58 +159,6 @@ from wsidicom import settings
 settings.strict_uid_check = True
 settings._strict_attribute_check = True
 ```
-
-## Data structure
-
-A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of different classes, starting from bottom:
-
-- *WsiDicomFile*, represents a WSI DICOM file, used for accessing WsiDicomFileImageData and WsiDataset.
-- *WsiDicomFileImageData*, represents the image data in one or several WSI DICOM files.
-- *WsiDataset*, represents the image metadata in one or several WSI DICOM files.
-- *WsiInstance*, represents image data and image metadata.
-- *Level*, represents a group of instances with the same image size, i.e. of the same level.
-- *Levels*, represents a group of levels, i.e. the pyrimidal structure.
-- *WsiDicom*, represents a collection of levels, labels and overviews.
-
-Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions. For DICOMWeb the WsiDicomFile\* classes are replaced with WsiDicomWeb\* classes.
-
-A Source is used to create WsiInstances, either from files (*WsiDicomFileSource*) or DICOMWeb (*WsiDicomWebSource*), and can be used to to initate a *WsiDicom* object. A source is easiest created with the open() and open_web() helper functions, e.g.:
-
-```python
-slide = WsiDicom.open(path_to_folder)
-```
-
-## Code structure
-
-- [wsidicom.py](wsidicom/wsidicom.py) - Main class with methods to open DICOM WSI objects.
-- [source.py](wsidicom/source.py) - Metaclass Source for serving WsiInstances to WsiDicom.
-- [series](wsidicom/series) - Series implementations Levels, Labels, and Overview.
-- [group](wsidicom/group) - Group implementations, e.g. Level.
-- [instance](wsidicom/instance) - Instance implementations WsiIsntance and WsiDataset, the metaclass ImageData and ImageData implementations WsiDicomImageData and PillowImageData.
-- [file](wsidicom/file) - Implementation for reading and writing DICOM WSI files.
-- [web](wsidicom/web) - Implementation for reading DICOM WSI from DICOMWeb.
-- [graphica_annotations](wsidicom/graphical_annotations.py) - Handling graphical annotations.
-- [conceptcode.py](wsidicom/conceptcode.py) - Handling of DICOM concept codes.
-- [config.py](wsidicom/config.py) - Handles configuration settings.
-- [errors.py](wsidicom/errors.py) - Custom errors.
-- [geometry.py](wsidicom/geometry.py) - Classes for geometry handling.
-- [optical.py](wsidicom/optical.py) - Handles optical paths.
-- [uid.py](wsidicom/uid.py) - Handles DICOM uids.
-- [stringprinting.py](wsidicom/stringprinting.py) - For nicer string printing of objects.
-
-## Adding support for other file formats
-
-Support for other formats (or methods to access DICOM data) can be implemented by creating a new Source implementation, that should create WsiInstances for the implemented formats. A format specific implementations of the *ImageData* is likely needed to access the WSI image data. Additionally a WsiDataset needs to be created that returns matching metadata for the WSI.
-
-The implemented Source can then create a instance from the implemented ImageData (and a method returning a WsiDataset):
-
-```python
-image_data = MyImageData('path_to_image_file')
-dataset = create_dataset_from_image_data(image_data)
-instance = WsiInstance(dataset, image_data)
-```
-
-The source should arrange the created instances and return them at the level_instances, label_instances, and overview_instances properties. WsiDicom can then open the source object and arrange the instances into levels etc as described in 'Data structure'.
 
 ## Annotation usage
 
@@ -289,6 +262,58 @@ To run integration tests:
 ```console
 poetry run pytest -m integration
 ```
+
+## Data structure
+
+A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of different classes, starting from bottom:
+
+- *WsiDicomFile*, represents a WSI DICOM file, used for accessing WsiDicomFileImageData and WsiDataset.
+- *WsiDicomFileImageData*, represents the image data in one or several WSI DICOM files.
+- *WsiDataset*, represents the image metadata in one or several WSI DICOM files.
+- *WsiInstance*, represents image data and image metadata.
+- *Level*, represents a group of instances with the same image size, i.e. of the same level.
+- *Levels*, represents a group of levels, i.e. the pyrimidal structure.
+- *WsiDicom*, represents a collection of levels, labels and overviews.
+
+Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions. For DICOMWeb the WsiDicomFile\* classes are replaced with WsiDicomWeb\* classes.
+
+A Source is used to create WsiInstances, either from files (*WsiDicomFileSource*) or DICOMWeb (*WsiDicomWebSource*), and can be used to to initate a *WsiDicom* object. A source is easiest created with the open() and open_web() helper functions, e.g.:
+
+```python
+slide = WsiDicom.open(path_to_folder)
+```
+
+## Code structure
+
+- [wsidicom.py](wsidicom/wsidicom.py) - Main class with methods to open DICOM WSI objects.
+- [source.py](wsidicom/source.py) - Metaclass Source for serving WsiInstances to WsiDicom.
+- [series](wsidicom/series) - Series implementations Levels, Labels, and Overview.
+- [group](wsidicom/group) - Group implementations, e.g. Level.
+- [instance](wsidicom/instance) - Instance implementations WsiIsntance and WsiDataset, the metaclass ImageData and ImageData implementations WsiDicomImageData and PillowImageData.
+- [file](wsidicom/file) - Implementation for reading and writing DICOM WSI files.
+- [web](wsidicom/web) - Implementation for reading DICOM WSI from DICOMWeb.
+- [graphica_annotations](wsidicom/graphical_annotations.py) - Handling graphical annotations.
+- [conceptcode.py](wsidicom/conceptcode.py) - Handling of DICOM concept codes.
+- [config.py](wsidicom/config.py) - Handles configuration settings.
+- [errors.py](wsidicom/errors.py) - Custom errors.
+- [geometry.py](wsidicom/geometry.py) - Classes for geometry handling.
+- [optical.py](wsidicom/optical.py) - Handles optical paths.
+- [uid.py](wsidicom/uid.py) - Handles DICOM uids.
+- [stringprinting.py](wsidicom/stringprinting.py) - For nicer string printing of objects.
+
+## Adding support for other file formats
+
+Support for other formats (or methods to access DICOM data) can be implemented by creating a new Source implementation, that should create WsiInstances for the implemented formats. A format specific implementations of the *ImageData* is likely needed to access the WSI image data. Additionally a WsiDataset needs to be created that returns matching metadata for the WSI.
+
+The implemented Source can then create a instance from the implemented ImageData (and a method returning a WsiDataset):
+
+```python
+image_data = MyImageData('path_to_image_file')
+dataset = create_dataset_from_image_data(image_data)
+instance = WsiInstance(dataset, image_data)
+```
+
+The source should arrange the created instances and return them at the level_instances, label_instances, and overview_instances properties. WsiDicom can then open the source object and arrange the instances into levels etc as described in 'Data structure'.
 
 ## Other DICOM python tools
 
