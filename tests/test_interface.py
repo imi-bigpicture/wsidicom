@@ -20,12 +20,12 @@ import numpy as np
 import pytest
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
-from wsidicom.conceptcode import (CidConceptCode, IlluminationCode,
-                                  IlluminationColorCode)
-from wsidicom.errors import WsiDicomNotFoundError
-from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
+
 from wsidicom import WsiDicom
-from wsidicom.image_data.dicom_image_data import WsiDicomImageData
+from wsidicom.conceptcode import CidConceptCode, IlluminationCode, IlluminationColorCode
+from wsidicom.errors import WsiDicomNotFoundError
+from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
+from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 from .data_gen import create_layer_file, create_main_dataset
@@ -33,7 +33,6 @@ from .data_gen import create_layer_file, create_main_dataset
 
 @pytest.mark.unittest
 class WsiDicomInterfaceTests(unittest.TestCase):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tempdir: TemporaryDirectory
@@ -54,10 +53,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
     def test_mm_to_pixel(self):
         wsi_level = self.slide.levels.get_level(0)
-        mm_region = RegionMm(
-            position=PointMm(0, 0),
-            size=SizeMm(1, 1)
-        )
+        mm_region = RegionMm(position=PointMm(0, 0), size=SizeMm(1, 1))
         pixel_region = wsi_level.mm_to_pixel(mm_region)
         self.assertEqual(pixel_region.position, Point(0, 0))
         new_size = int(1 / 0.1242353)
@@ -68,9 +64,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_pixel_spacing(self):
-        closest_level = self.slide.levels.get_closest_by_pixel_spacing(
-            SizeMm(0.5, 0.5)
-        )
+        closest_level = self.slide.levels.get_closest_by_pixel_spacing(SizeMm(0.5, 0.5))
         self.assertEqual(closest_level.level, 0)
 
     def test_find_closest_size(self):
@@ -80,238 +74,107 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     def test_calculate_scale(self):
         wsi_level = self.slide.levels.get_level(0)
         scale = wsi_level.calculate_scale(5)
-        self.assertEqual(scale, 2 ** (5-0))
+        self.assertEqual(scale, 2 ** (5 - 0))
 
     def test_get_frame_number(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
         image_data = instance._image_data
-        assert(isinstance(image_data, WsiDicomImageData))
-        number = image_data.tiles.get_frame_index(Point(0, 0), 0, '0')
+        assert isinstance(image_data, WsiDicomFileImageData)
+        number = image_data.tiles.get_frame_index(Point(0, 0), 0, "0")
         self.assertEqual(number, 0)
 
     def test_get_blank_color(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
         image_data = instance.image_data
-        color = image_data._get_blank_color(
-            image_data.photometric_interpretation)
+        color = image_data._get_blank_color(image_data.photometric_interpretation)
         self.assertEqual(color, (255, 255, 255))
 
     def test_get_frame_file(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
         image_data = instance._image_data
-        assert(isinstance(image_data, WsiDicomImageData))
+        assert isinstance(image_data, WsiDicomFileImageData)
         file = image_data._get_file(0)
         self.assertEqual(file, (image_data._files[0]))
 
-        self.assertRaises(
-            WsiDicomNotFoundError,
-            image_data._get_file,
-            10
-        )
+        self.assertRaises(WsiDicomNotFoundError, image_data._get_file, 10)
 
     def test_valid_tiles(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
         image_data = instance._image_data
-        test = image_data.valid_tiles(
-
-            Region(Point(0, 0), Size(0, 0)), 0, '0'
-        )
+        test = image_data.valid_tiles(Region(Point(0, 0), Size(0, 0)), 0, "0")
         self.assertTrue(test)
 
-        test = image_data.valid_tiles(
-            Region(Point(0, 0), Size(0, 2)), 0, '0'
-        )
+        test = image_data.valid_tiles(Region(Point(0, 0), Size(0, 2)), 0, "0")
         self.assertFalse(test)
 
-        test = image_data.valid_tiles(
-            Region(Point(0, 0), Size(0, 0)), 1, '0'
-        )
+        test = image_data.valid_tiles(Region(Point(0, 0), Size(0, 0)), 1, "0")
         self.assertFalse(test)
 
-        test = image_data.valid_tiles(
-            Region(Point(0, 0), Size(0, 0)), 0, '1'
-        )
+        test = image_data.valid_tiles(Region(Point(0, 0), Size(0, 0)), 0, "1")
         self.assertFalse(test)
 
     def test_crop_tile(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        region = Region(
-            position=Point(x=0, y=0),
-            size=Size(width=100, height=100)
-        )
-        cropped_region = region.inside_crop(
-            Point(0, 0),
-            instance.tile_size
-        )
-        expected = Region(
-            position=Point(0, 0),
-            size=Size(100, 100)
-        )
+        region = Region(position=Point(x=0, y=0), size=Size(width=100, height=100))
+        cropped_region = region.inside_crop(Point(0, 0), instance.tile_size)
+        expected = Region(position=Point(0, 0), size=Size(100, 100))
+        self.assertEqual(cropped_region, expected)
+
+        region = Region(position=Point(x=0, y=0), size=Size(width=1500, height=1500))
+        cropped_region = region.inside_crop(Point(0, 0), instance.tile_size)
+        expected = Region(position=Point(0, 0), size=Size(1024, 1024))
         self.assertEqual(cropped_region, expected)
 
         region = Region(
-            position=Point(x=0, y=0),
-            size=Size(width=1500, height=1500)
+            position=Point(x=1200, y=1200), size=Size(width=300, height=300)
         )
-        cropped_region = region.inside_crop(
-            Point(0, 0),
-            instance.tile_size
-        )
-        expected = Region(
-            position=Point(0, 0),
-            size=Size(1024, 1024)
-        )
-        self.assertEqual(cropped_region, expected)
-
-        region = Region(
-            position=Point(x=1200, y=1200),
-            size=Size(width=300, height=300)
-        )
-        cropped_region = region.inside_crop(
-            Point(1, 1),
-            instance.tile_size
-        )
-        expected = Region(
-            position=Point(176, 176),
-            size=Size(300, 300)
-        )
+        cropped_region = region.inside_crop(Point(1, 1), instance.tile_size)
+        expected = Region(position=Point(176, 176), size=Size(300, 300))
         self.assertEqual(cropped_region, expected)
 
     def test_get_tiles(self):
         base_level = self.slide.levels.get_level(0)
         instance = base_level.get_instance()
-        region = Region(
-            position=Point(0, 0),
-            size=Size(100, 100)
-        )
-        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
-        expected = Region(Point(0, 0), Size(0, 0))
+        region = Region(position=Point(0, 0), size=Size(100, 100))
+        get_tiles = instance.image_data._get_tile_range(region, 0, "0")
+        expected = Region(Point(0, 0), Size(1, 1))
         self.assertEqual(get_tiles, expected)
 
-        region = Region(
-            position=Point(0, 0),
-            size=Size(1024, 1024)
-        )
-        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
-        expected = Region(Point(0, 0), Size(0, 0))
+        region = Region(position=Point(0, 0), size=Size(1024, 1024))
+        get_tiles = instance.image_data._get_tile_range(region, 0, "0")
+        expected = Region(Point(0, 0), Size(1, 1))
         self.assertEqual(get_tiles, expected)
 
-        region = Region(
-            position=Point(300, 400),
-            size=Size(500, 500)
-        )
-        get_tiles = instance.image_data._get_tile_range(region, 0, '0')
-        expected = Region(Point(0, 0), Size(0, 0))
+        region = Region(position=Point(300, 400), size=Size(500, 500))
+        get_tiles = instance.image_data._get_tile_range(region, 0, "0")
+        expected = Region(Point(0, 0), Size(1, 1))
         self.assertEqual(get_tiles, expected)
 
     def test_crop_region_to_level_size(self):
         base_level = self.slide.levels.get_level(0)
         image_size = base_level.size
-        region = Region(
-            position=Point(0, 0),
-            size=Size(100, 100)
-        )
+        region = Region(position=Point(0, 0), size=Size(100, 100))
         cropped_region = region.crop(image_size)
         self.assertEqual(region.size, cropped_region.size)
-        region = Region(
-            position=Point(0, 0),
-            size=Size(2000, 2000)
-        )
+        region = Region(position=Point(0, 0), size=Size(2000, 2000))
         cropped_region = region.crop(image_size)
         self.assertEqual(image_size - region.position, cropped_region.size)
-        region = Region(
-            position=Point(200, 300),
-            size=Size(100, 100)
-        )
+        region = Region(position=Point(200, 300), size=Size(100, 100))
         cropped_region = region.crop(image_size)
         self.assertEqual(Size(0, 0), cropped_region.size)
 
     def test_valid_pixel(self):
         wsi_level = self.slide.levels.get_level(0)
         # 154x290
-        region = Region(
-                position=Point(0, 0),
-                size=Size(100, 100)
-            )
+        region = Region(position=Point(0, 0), size=Size(100, 100))
         self.assertTrue(wsi_level.valid_pixels(region))
-        region = Region(
-            position=Point(150, 0),
-            size=Size(10, 100)
-        )
+        region = Region(position=Point(150, 0), size=Size(10, 100))
         self.assertFalse(wsi_level.valid_pixels(region))
-
-    def test_write_indexer(self):
-        wsi_level = self.slide.levels.get_level(0)
-        instance = wsi_level.get_instance()
-
-        write_index = Point(0, 0)
-        tile = Point(0, 0)
-        region = Region(
-            position=Point(0, 0),
-            size=Size(2048, 2048)
-        )
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-        )
-        self.assertEqual(write_index, Point(1024, 0))
-
-        tile = Point(1, 0)
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-            )
-        self.assertEqual(write_index, Point(0, 1024))
-
-        tile = Point(0, 1)
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-            )
-        self.assertEqual(write_index, Point(1024, 1024))
-
-        write_index = Point(0, 0)
-        tile = Point(0, 0)
-        region = Region(
-            position=Point(512, 512),
-            size=Size(1024, 1024)
-        )
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-        )
-        self.assertEqual(write_index, Point(512, 0))
-
-        tile = Point(1, 0)
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-            )
-        self.assertEqual(write_index, Point(0, 512))
-
-        tile = Point(0, 1)
-        tile_crop = region.inside_crop(tile, instance.tile_size)
-        write_index = instance.image_data._write_indexer(
-            write_index,
-            tile_crop.size,
-            region.size,
-            )
-        self.assertEqual(write_index, Point(512, 512))
 
     def test_valid_level(self):
         self.assertTrue(self.slide.levels.valid_level(1))
@@ -321,7 +184,7 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         wsi_level = self.slide.levels.get_level(0)
         instance = wsi_level.get_instance()
         self.assertEqual(instance, wsi_level.default_instance)
-        instance = wsi_level.get_instance(path='0')
+        instance = wsi_level.get_instance(path="0")
         self.assertEqual(instance, wsi_level.default_instance)
         instance = wsi_level.get_instance(z=0)
         self.assertEqual(instance, wsi_level.default_instance)
@@ -330,13 +193,13 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         ds = Dataset()
         ds.RedPaletteColorLookupTableDescriptor = [256, 0, 8]
         ds.SegmentedRedPaletteColorLookupTableData = (
-            b'\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00'
+            b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00"
         )
         ds.SegmentedGreenPaletteColorLookupTableData = (
-            b'\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00'
+            b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00"
         )
         ds.SegmentedBluePaletteColorLookupTableData = (
-            b'\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\xff\x00'
+            b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\xff\x00"
         )
         lut = Lut(DicomSequence([ds]))
         test = np.zeros((3, 256), dtype=np.uint16)
@@ -347,15 +210,9 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
         ds = Dataset()
         ds.RedPaletteColorLookupTableDescriptor = [256, 0, 16]
-        ds.SegmentedRedPaletteColorLookupTableData = (
-            b'\x01\x00\x00\x01\xff\xff'
-        )
-        ds.SegmentedGreenPaletteColorLookupTableData = (
-            b'\x01\x00\x00\x01\x00\x00'
-        )
-        ds.SegmentedBluePaletteColorLookupTableData = (
-            b'\x01\x00\x00\x01\x00\x00'
-        )
+        ds.SegmentedRedPaletteColorLookupTableData = b"\x01\x00\x00\x01\xff\xff"
+        ds.SegmentedGreenPaletteColorLookupTableData = b"\x01\x00\x00\x01\x00\x00"
+        ds.SegmentedBluePaletteColorLookupTableData = b"\x01\x00\x00\x01\x00\x00"
         lut = Lut(DicomSequence([ds]))
         test = np.zeros((3, 256), dtype=np.uint16)
         test[0, :] = np.linspace(0, 65535, 256, dtype=np.uint16)
@@ -370,21 +227,21 @@ class WsiDicomInterfaceTests(unittest.TestCase):
         self.assertEqual(original_optical, restored_optical_ds)
 
     def test_make_optical(self):
-        illumination_method = IlluminationCode('Transmission illumination')
-        illumination_color = IlluminationColorCode('Full Spectrum')
+        illumination_method = IlluminationCode("Transmission illumination")
+        illumination_color = IlluminationColorCode("Full Spectrum")
         illumination = Illumination(
             illumination_method=[illumination_method],
-            illumination_color=illumination_color
+            illumination_color=illumination_color,
         )
         path = OpticalPath(
-            identifier='1',
+            identifier="1",
             illumination=illumination,
-            photometric_interpretation='YBR_FULL_422',
-            icc_profile=bytes(0)
+            photometric_interpretation="YBR_FULL_422",
+            icc_profile=bytes(0),
         )
         optical = OpticalManager([path])
 
-        self.assertEqual(optical.get('1'), path)
+        self.assertEqual(optical.get("1"), path)
 
     def test_concept_codes(self):
         for code_class in CidConceptCode.__subclasses__():
@@ -392,7 +249,4 @@ class WsiDicomInterfaceTests(unittest.TestCase):
             available_codes = code_class.cid.values()
             for available_code in available_codes:
                 code = code_class(available_code.meaning)
-                self.assertEqual(
-                    available_code,
-                    code
-                )
+                self.assertEqual(available_code, code)

@@ -219,6 +219,18 @@ class CidConceptCode(ConceptCode):
         )
 
     @classmethod
+    def from_code(cls, code_value: str) -> Code:
+        try:
+            return next(
+                (
+                    code for code in cls.cid.values()
+                    if code.value == code_value
+                 )
+            )
+        except StopIteration:
+            raise ValueError("Unsupported code.")
+
+    @classmethod
     def _from_cid(cls, meaning: str) -> Code:
         """Return ConceptCode from CID and meaning. For a list of CIDs, see
         http://dicom.nema.org/medical/dicom/current/output/chtml/part16/chapter_B.html # noqa

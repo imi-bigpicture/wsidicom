@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -13,49 +13,53 @@
 #    limitations under the License.
 
 import json
-import os
 import unittest
 from hashlib import md5
 from pathlib import Path
 from typing import Any, Dict, List
-from PIL import Image
 
 import pytest
-from wsidicom import WsiDicom
+from PIL import Image
 
-SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
-REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
+from tests.test_dcmfiles import (
+    REGION_DEFINITIONS_FILE,
+    SLIDE_FOLDER,
+)
+from wsidicom import WsiDicom
+from wsidicom.web.wsidicom_web_client import WsiDicomFileClient
 
 
 @pytest.mark.integration
-class WsiDicomFilesTests(unittest.TestCase):
+class WsiDicomWebTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         folders = cls._get_folders(SLIDE_FOLDER)
         cls.test_folders: Dict[Path, WsiDicom] = {}
+
+        with open(REGION_DEFINITIONS_FILE) as json_file:
+            cls.test_definitions: Dict[str, Dict[str, Any]] = json.load(json_file)
+        if len(cls.test_definitions) == 0:
+            raise unittest.SkipTest("no test definition found, skipping.")
         for folder in folders:
             relative_path = cls._get_relative_path(folder)
-            cls.test_folders[relative_path] = cls.open(folder)
+            test_file_definition = cls.test_definitions[str(relative_path)]
+            cls.test_folders[relative_path] = cls.open(folder, test_file_definition)
 
         if len(cls.test_folders) == 0:
             raise unittest.SkipTest(
                 f"no test slide files found for {SLIDE_FOLDER}, " "skipping"
             )
-        with open(REGION_DEFINITIONS_FILE) as json_file:
-            cls.test_definitions: Dict[str, Dict[str, Any]] = json.load(json_file)
-        if len(cls.test_definitions) == 0:
-            raise unittest.SkipTest("no test definition found, skipping.")
-
-    @classmethod
-    def tearDownClass(cls):
-        for folder, wsi_dicom in cls.test_folders.items():
-            wsi_dicom.close()
 
     @staticmethod
-    def open(folder: Path) -> WsiDicom:
+    def open(folder: Path, test_file_definition: Dict[str, Any]) -> WsiDicom:
         while next(folder.iterdir()).is_dir():
             folder = next(folder.iterdir())
-        return WsiDicom.open(folder)
+        client = WsiDicomFileClient(folder)
+        return WsiDicom.open_web(
+            client,
+            test_file_definition["StudyInstanceUID"],
+            test_file_definition["SeriesInstanceUID"],
+        )
 
     @staticmethod
     def _get_folders(SLIDE_FOLDER: Path) -> List[Path]:
