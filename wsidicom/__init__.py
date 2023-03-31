@@ -30,4 +30,4 @@ from wsidicom.instance import ImageData, WsiDataset, WsiInstance
 from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.web import WsiDicomWebClient
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"

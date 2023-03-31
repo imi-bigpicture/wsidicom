@@ -7,16 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] -
 
+## [0.9.0] - 2023-03-31
+
 ### Added
 
 - Support for opening DICOM WSI using DICOMWeb.
-- save() now takes the optional parameter add_missing_levels, that enables adding missing pyramid levels.
+- save() now takes the optional parameter add_missing_levels, that enables adding missing pyramid levels up to the single-tile level.
+- read_region(), read_region_mm(), and read_region_mpp() takes an optional parameter threads, that allows multiple threads to be used for stitching togheter the region.
 
 ### Changed
 
 - WsiDicom is now initalized using a Source, that is responsible for provides the instances to view.
 - Saving a WsiDicom is now handled by WsiDicomFileTarget.
 - Refactoring due to adding support for DICOMWeb and opening instances using Source and saving using Target.
+- Frame positions and tiling for levels are now parsed lazily, e.g. on first tile access.
 
 ### Removed
 
@@ -133,7 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.8.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.9.0..HEAD
+[0.9.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.8.0..v0.9.0
 [0.8.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.7.0..v0.8.0
 [0.7.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.6.0..v0.7.0
 [0.6.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.5.0..v0.6.0

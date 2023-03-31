@@ -71,6 +71,12 @@ slide = WsiDicom.open_web(
 region = slide.read_region((1000, 1000), 6, (200, 200))
 ```
 
+***Read a 2000x2000 px region starting from px 1000, 1000 at level 4 using 4 threads.***
+
+ ```python
+region = slide.read_region((1000, 1000), 6, (200, 200), threads=4)
+```
+
 ***Read 3x3 mm region starting at 0, 0 mm at level 6.***
 
  ```python
