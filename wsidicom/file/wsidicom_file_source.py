@@ -106,6 +106,7 @@ class WsiDicomFileSource(Source):
         return AnnotationInstance.open(self._annotation_files)
 
     def close(self) -> None:
+        """Close all opened files in the source."""
         for image_file in self.image_files:
             image_file.close()
 

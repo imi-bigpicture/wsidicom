@@ -645,7 +645,7 @@ class WsiDicom:
     @classmethod
     def is_supported(
         cls, path: Union[str, Sequence[str], Path, Sequence[Path]]
-    ) -> Optional[bool]:
+    ) -> bool:
         """Return true if files in path have at least one level that can be read with
         WsiDicom.
 

@@ -77,7 +77,10 @@ class WsiDicomFileTarget(Target):
         """Save levels to target."""
         # Collection of new pyramid levels.
         new_levels: Optional[Levels] = None
-        for pyramid_level in range(levels.lowest_single_tile_level):
+        highest_level_in_file = levels.levels[-1]
+        lowest_single_tile_level = levels.lowest_single_tile_level
+        highest_level = max(highest_level_in_file, lowest_single_tile_level)
+        for pyramid_level in range(highest_level + 1):
             if pyramid_level in levels.levels:
                 level = levels.get_level(pyramid_level)
                 scale = 1
