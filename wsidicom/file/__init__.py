@@ -12,5 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from wsidicom.file.file import WsiDicomFile
-from wsidicom.file.writer import WsiDicomFileWriter
+"""Module for handling DICOM WSI instances read from file."""
+
+from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
+from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget

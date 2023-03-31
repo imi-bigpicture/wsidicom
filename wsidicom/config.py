@@ -12,13 +12,14 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+
 class Settings:
     """Class containing settings. Settings are to be accessed through the
     global variable settings."""
+
     def __init__(self) -> None:
         self._strict_uid_check = False
         self._strict_attribute_check = False
-        self._parse_pixel_data_on_load = True
         self._focal_plane_distance_threshold = 0.000001
 
     @property
@@ -38,15 +39,6 @@ class Settings:
     @strict_attribute_check.setter
     def strict_attribute_check(self, value: bool) -> None:
         self._strict_attribute_check = value
-
-    @property
-    def parse_pixel_data_on_load(self) -> bool:
-        """If to parse pixel data for frame positions on file load."""
-        return self._parse_pixel_data_on_load
-
-    @parse_pixel_data_on_load.setter
-    def parse_pixel_data_on_load(self, value: bool) -> None:
-        self._parse_pixel_data_on_load = value
 
     @property
     def focal_plane_distance_threshold(self) -> float:

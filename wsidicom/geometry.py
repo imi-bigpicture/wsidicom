@@ -14,7 +14,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Generator, Tuple, Union, Sequence
+from typing import Iterator, Tuple, Union, Sequence
 
 
 @dataclass
@@ -328,12 +328,11 @@ class Region:
     def box_from_origin(self) -> Tuple[int, int, int, int]:
         return 0, 0, self.size.width, self.size.height
 
-    def iterate_all(self, include_end: bool = False) -> Generator[Point, None, None]:
-        offset = 1 if include_end else 0
+    def iterate_all(self) -> Iterator[Point]:
         return (
             Point(x, y)
-            for y in range(self.start.y, self.end.y + offset)
-            for x in range(self.start.x, self.end.x + offset)
+            for y in range(self.start.y, self.end.y)
+            for x in range(self.start.x, self.end.x)
         )
 
     @classmethod

@@ -1,4 +1,4 @@
-#    Copyright 2021, 2022 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
+from functools import cached_property
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
 from pydicom.dataset import Dataset
@@ -33,7 +34,7 @@ from wsidicom.errors import (
     WsiDicomUidDuplicateError,
 )
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.image_data import ImageData
+from wsidicom.instance.image_data import ImageData
 from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
 
 
@@ -177,52 +178,16 @@ WSI_ATTRIBUTES = {
 }
 
 
+class TileType(Enum):
+    FULL = "TILED_FULL"
+    SPARSE = "TILED_SPARSE"
+
+
 class WsiDataset(Dataset):
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
     parsers for attributes specific for WSI. Use snake case to avoid name
     collision with dicom fields (that are handled by pydicom.dataset.Dataset).
     """
-
-    def __init__(self, dataset: Dataset):
-        """A WsiDataset wrapping a pydicom Dataset.
-
-        Parameters
-        ----------
-        dataset: Dataset
-            Pydicom dataset containing WSI data.
-
-        Returns
-        ----------
-        bool
-            True if same instance.
-        """
-        super().__init__(dataset)
-        self._uids = self._get_uids()
-        self._frame_offset = self._get_concatenation_offset()
-        self._frame_count = self._get_dicom_attribute("NumberOfFrames")
-        self._tile_type = self._get_tile_organization_type()
-        self._pixel_measure = self._get_pixel_measure()
-        self._pixel_spacing, self._spacing_between_slices = self._get_spacings(
-            self.pixel_measure
-        )
-        self._number_of_focal_planes = self._get_dicom_attribute(
-            "TotalPixelMatrixFocalPlanes"
-        )
-
-        self._frame_sequence = self._get_frame_sequence()
-        (
-            self._ext_depth_of_field,
-            self._ext_depth_of_field_planes,
-            self._ext_depth_of_field_plane_distance,
-        ) = self._get_ext_depth_of_field()
-
-        self._focus_method = self._get_dicom_attribute("FocusMethod")
-        (self._image_size, self._mm_size, self._mm_depth) = self._get_image_size()
-        self._tile_size = Size(self.Columns, self.Rows)
-        self._samples_per_pixel = self.SamplesPerPixel
-        self._photometric_interpretation = self.PhotometricInterpretation
-        self._optical_path_sequence = self._get_dicom_attribute("OpticalPathSequence")
-        self._slice_thickness = self._get_slice_thickness(self.pixel_measure)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"
@@ -230,63 +195,94 @@ class WsiDataset(Dataset):
     def __str__(self) -> str:
         return f"{type(self).__name__} of dataset {self.uids.instance}"
 
-    @property
-    def instance_uid(self) -> UID:
-        """Return instance uid from dataset."""
-        return self.uids.instance
-
-    @property
-    def concatenation_uid(self) -> Optional[UID]:
-        """Return concatenation uid, if defined, from dataset. An instance that
-        is concatenated (split into several files) should have the same
-        concatenation uid."""
-        return self.uids.concatenation
-
-    @property
-    def slide_uids(self) -> SlideUids:
-        """Return base uids (study, series, and frame of reference Uids)."""
-        return self.uids.slide
-
-    @property
+    @cached_property
     def uids(self) -> FileUids:
-        """Return instance, concatenation, and base Uids."""
-        return self._uids
-
-    @property
-    def frame_offset(self) -> int:
-        """Return frame offset (offset to first frame in instance if
-        concatenated). Is zero if non-catenated instance or first instance
-        in concatenated instance."""
-        return self._frame_offset
-
-    @property
-    def frame_count(self) -> int:
-        """Return number of frames in instance."""
-        return cast(int, self._frame_count)
-
-    @property
-    def tile_type(self) -> str:
-        """Return tiling type from dataset. Raises WsiDicomError if type
-        is undetermined.
-
-        Parameters
-        ----------
-        ds: Dataset
-            Pydicom dataset.
+        """Return UIDs from dataset.
 
         Returns
         ----------
-        str
+        FileUids
+            Found UIDs from dataset.
+        """
+        instance_uid = UID(self.SOPInstanceUID)
+        concatenation_uid = self._get_dicom_attribute(
+            "SOPInstanceUIDOfConcatenationSource"
+        )
+        frame_of_reference_uid = self._get_dicom_attribute("FrameOfReferenceUID")
+
+        slide_uids = SlideUids(
+            self.StudyInstanceUID,
+            self.SeriesInstanceUID,
+            frame_of_reference_uid,
+        )
+        file_uids = FileUids(instance_uid, concatenation_uid, slide_uids)
+        return file_uids
+
+    @cached_property
+    def frame_offset(self) -> int:
+        """Return frame offset (offset to first frame in instance if
+        concatenated). Is zero if non-concatenated instance or first instance
+        in concatenated instance.
+
+        Returns
+        ----------
+        int
+            Concatenation offset in number of frames.
+        """
+        if self.uids.concatenation is None:
+            return 0
+        try:
+            return int(self.ConcatenationFrameOffsetNumber)
+        except AttributeError:
+            raise WsiDicomError(
+                "Concatenated file missing concatenation frame offset" "number"
+            )
+
+    @cached_property
+    def frame_count(self) -> int:
+        """Return number of frames in instance."""
+        frame_count = self._get_dicom_attribute("NumberOfFrames")
+        return cast(int, frame_count)
+
+    @cached_property
+    def tile_type(self) -> TileType:
+        """Return tiling type of dataset. Raises WsiDicomError if type
+        is undetermined.
+
+        Returns
+        ----------
+        TileType
             Tiling type
         """
-        return self._tile_type
+        tile_type = self._get_dicom_attribute("DimensionOrganizationType")
+        if tile_type == "TILED_FULL":
+            return TileType.FULL
+        elif "PerFrameFunctionalGroupsSequence" in self:
+            return TileType.SPARSE
+        raise WsiDicomError("Undetermined tile type.")
 
-    @property
+    @cached_property
     def pixel_measure(self) -> Optional[Dataset]:
-        """Return pixel measure from dataset."""
-        return self._pixel_measure
+        """Return Pixel measure dataset from dataset if found.
 
-    @property
+        Returns
+        ----------
+        Optional[Dataset]
+            Found Pixel measure dataset.
+        """
+        shared_functional_group = self._get_dicom_attribute(
+            "SharedFunctionalGroupsSequence"
+        )
+        if shared_functional_group is None:
+            return None
+        pixel_measure_sequence = self._get_dicom_attribute(
+            "PixelMeasuresSequence", shared_functional_group[0]
+        )
+        if pixel_measure_sequence is None:
+            return None
+        return pixel_measure_sequence[0]
+
+    @cached_property
     def pixel_spacing(self) -> Optional[SizeMm]:
         """Read pixel spacing from dicom dataset.
 
@@ -300,48 +296,72 @@ class WsiDataset(Dataset):
         SizeMm
             The pixel spacing in mm/pixel.
         """
-        return self._pixel_spacing
+        if self.pixel_measure is None:
+            return None
+        pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
+        if pixel_spacing_values is not None:
+            if any([spacing == 0 for spacing in pixel_spacing_values]):
+                raise WsiDicomError("Pixel spacing is zero")
+            return SizeMm.from_tuple(pixel_spacing_values)
+        return None
 
-    @property
+    @cached_property
     def spacing_between_slices(self) -> Optional[float]:
         """Return spacing between slices."""
-        if self._spacing_between_slices is None:
+        if self.pixel_measure is None:
             return None
-        return cast(float, self._spacing_between_slices)
+        return getattr(self.pixel_measure, "SpacingBetweenSlices", None)
 
-    @property
+    @cached_property
     def number_of_focal_planes(self) -> int:
         """Return number of focal planes."""
-        return cast(int, self._number_of_focal_planes)
+        number_of_focal_planes = self._get_dicom_attribute(
+            "TotalPixelMatrixFocalPlanes"
+        )
+        return cast(int, number_of_focal_planes)
 
-    @property
+    @cached_property
     def frame_sequence(self) -> DicomSequence:
-        """Return frame sequence from dataset."""
-        return self._frame_sequence
+        """Return per frame functional group sequene if present, otherwise
+        shared functional group sequence.
+
+        Returns
+        ----------
+        DicomSequence
+            Per frame or shared functional group sequence.
+        """
+        if "PerFrameFunctionalGroupsSequence" in self and (
+            "PlanePositionSlideSequence" in self.PerFrameFunctionalGroupsSequence[0]
+        ):
+            return self.PerFrameFunctionalGroupsSequence
+        elif "SharedFunctionalGroupsSequence" in self:
+            return self.SharedFunctionalGroupsSequence
+        return DicomSequence([])
 
     @property
     def ext_depth_of_field(self) -> bool:
         """Return true if instance has extended depth of field
         (several focal planes are combined to one plane)."""
-        return self._ext_depth_of_field
+        return self._ext_depth_of_field[0]
 
     @property
     def ext_depth_of_field_planes(self) -> Optional[int]:
         """Return number of focal planes used for extended depth of
         field."""
-        return self._ext_depth_of_field_planes
+        return self._ext_depth_of_field[1]
 
     @property
     def ext_depth_of_field_plane_distance(self) -> Optional[float]:
         """Return total focal depth used for extended depth of field."""
-        return self._ext_depth_of_field_plane_distance
+        return self._ext_depth_of_field[0]
 
-    @property
+    @cached_property
     def focus_method(self) -> str:
         """Return focus method."""
-        return str(self._focus_method)
+        focus_method = self._get_dicom_attribute("FocusMethod")
+        return str(focus_method)
 
-    @property
+    @cached_property
     def image_size(self) -> Size:
         """Read total pixel size from dataset.
 
@@ -350,9 +370,12 @@ class WsiDataset(Dataset):
         Size
             The image size
         """
-        return self._image_size
+        image_size = Size(self.TotalPixelMatrixColumns, self.TotalPixelMatrixRows)
+        if image_size.width == 0 or image_size.height == 0:
+            raise WsiDicomFileError(self.filepath, "Image size is zero")
+        return image_size
 
-    @property
+    @cached_property
     def mm_size(self) -> Optional[SizeMm]:
         """Read mm size from dataset.
 
@@ -361,14 +384,20 @@ class WsiDataset(Dataset):
         SizeMm
             The size of the image in mm
         """
-        return self._mm_size
+        mm_width = self._get_dicom_attribute("ImagedVolumeWidth")
+        mm_height = self._get_dicom_attribute("ImagedVolumeHeight")
+        if mm_width is None or mm_height is None:
+            mm_size = None
+        else:
+            mm_size = SizeMm(mm_width, mm_height)
+        return mm_size
 
-    @property
+    @cached_property
     def mm_depth(self) -> Optional[float]:
         """Return depth of image in mm."""
-        return self._mm_depth
+        return self._get_dicom_attribute("ImagedVolumeDepth")
 
-    @property
+    @cached_property
     def tile_size(self) -> Size:
         """Read tile size from from dataset.
 
@@ -377,30 +406,48 @@ class WsiDataset(Dataset):
         Size
             The tile size
         """
-        return self._tile_size
+        return Size(self.Columns, self.Rows)
 
     @property
     def samples_per_pixel(self) -> int:
         """Return samples per pixel (3 for RGB)."""
-        return self._samples_per_pixel
+        return self.SamplesPerPixel
 
     @property
     def photometric_interpretation(self) -> str:
         """Return photometric interpretation."""
-        return self._photometric_interpretation
+        return self.PhotometricInterpretation
 
-    @property
+    @cached_property
     def optical_path_sequence(self) -> Optional[DicomSequence]:
         """Return optical path sequence from dataset."""
-        return self._optical_path_sequence
+        return self._get_dicom_attribute("OpticalPathSequence")
 
     @property
     def slice_thickness(self) -> Optional[float]:
-        """Return slice thickness."""
-        return self._slice_thickness
+        """Return slice thickness spacing from pixel measure dataset.
 
-    @property
+        Returns
+        ----------
+        Optional[float]
+            Slice thickess or None if unkown.
+        """
+        try:
+            return self._get_dicom_attribute("SliceThickness", self.pixel_measure)
+        except AttributeError:
+            if self.mm_depth is not None:
+                return self.mm_depth / self.number_of_focal_planes
+        return None
+
+    @cached_property
     def image_type(self) -> ImageType:
+        """Return wsi flavour from wsi type tuple.
+
+        Returns
+        ----------
+        ImageType
+            Wsi flavour.
+        """
         return self._get_image_type(self.ImageType)
 
     @classmethod
@@ -500,7 +547,7 @@ class WsiDataset(Dataset):
         if tile_size is not None and tile_size != self.tile_size:
             return False
 
-        return self.slide_uids.matches(uids)
+        return self.uids.slide.matches(uids)
 
     def read_optical_path_identifier(self, frame: Dataset) -> str:
         """Return optical path identifier from frame, or from self if not
@@ -742,110 +789,8 @@ class WsiDataset(Dataset):
             return WSI_ATTRIBUTES[name].get_default(self.image_type)
         return value
 
-    def _get_uids(self) -> FileUids:
-        """Return UIDs from dataset.
-
-        Returns
-        ----------
-        FileUids
-            Found UIDs from dataset.
-        """
-        instance_uid = UID(self.SOPInstanceUID)
-        concatenation_uid = self._get_dicom_attribute(
-            "SOPInstanceUIDOfConcatenationSource"
-        )
-        frame_of_reference_uid = self._get_dicom_attribute("FrameOfReferenceUID")
-
-        slide_uids = SlideUids(
-            self.StudyInstanceUID,
-            self.SeriesInstanceUID,
-            frame_of_reference_uid,
-        )
-        file_uids = FileUids(instance_uid, concatenation_uid, slide_uids)
-        return file_uids
-
-    def _get_concatenation_offset(self) -> int:
-        """Return concatenation offset (number of frames). Will be 0 if file
-        is not concatentated or first in concatenation.
-
-        Returns
-        ----------
-        int
-            Concatenation offset in number of frames.
-        """
-        if self.uids.concatenation is None:
-            return 0
-        try:
-            return int(self.ConcatenationFrameOffsetNumber)
-        except AttributeError:
-            raise WsiDicomError(
-                "Concatenated file missing concatenation frame offset" "number"
-            )
-
-    def _get_tile_organization_type(self) -> str:
-        """Return tile organization type ('TILLED_SPARSE' or 'TILED_FULL').
-
-        Returns
-        ----------
-        str
-            Tile organization type.
-        """
-        tile_type = self._get_dicom_attribute("DimensionOrganizationType")
-        if tile_type == "TILED_FULL":
-            return "TILED_FULL"
-        elif "PerFrameFunctionalGroupsSequence" in self:
-            return "TILED_SPARSE"
-        raise WsiDicomError("undetermined tile type")
-
-    def _get_pixel_measure(self) -> Optional[Dataset]:
-        """Return Pixel measure (sub)-dataset from dataset if found.
-
-        Returns
-        ----------
-        Optional[Dataset]
-            Found Pixel measure dataset.
-        """
-        shared_functional_group = self._get_dicom_attribute(
-            "SharedFunctionalGroupsSequence"
-        )
-        if shared_functional_group is None:
-            return None
-        pixel_measure_sequence = self._get_dicom_attribute(
-            "PixelMeasuresSequence", shared_functional_group[0]
-        )
-        if pixel_measure_sequence is None:
-            return None
-        return pixel_measure_sequence[0]
-
-    @staticmethod
-    def _get_spacings(
-        pixel_measure: Optional[Dataset],
-    ) -> Tuple[Optional[SizeMm], Optional[float]]:
-        """Return Pixel and slice spacing from pixel measure dataset.
-
-        Parameters
-        ----------
-        pixel_measure: Optional[Dataset]
-            Pixel measure dataset.
-
-        Returns
-        ----------
-        Tuple[Optional[SizeMm], Optional[float]]
-            Pixel spacing and slice spacing, or None.
-        """
-        if pixel_measure is None:
-            return None, None
-        pixel_spacing_values = getattr(pixel_measure, "PixelSpacing", None)
-        if pixel_spacing_values is not None:
-            if any([spacing == 0 for spacing in pixel_spacing_values]):
-                raise WsiDicomError("Pixel spacing is zero")
-            pixel_spacing = SizeMm.from_tuple(pixel_spacing_values)
-        else:
-            pixel_spacing = None
-        spacing_between_slices = getattr(pixel_measure, "SpacingBetweenSlices", None)
-        return pixel_spacing, spacing_between_slices
-
-    def _get_ext_depth_of_field(self) -> Tuple[bool, Optional[int], Optional[float]]:
+    @cached_property
+    def _ext_depth_of_field(self) -> Tuple[bool, Optional[int], Optional[float]]:
         """Return extended depth of field (enabled, number of focal planes,
         distance between focal planes) from dataset.
 
@@ -866,76 +811,6 @@ class WsiDataset(Dataset):
                 "Missing NumberOfFocalPlanes or DistanceBetweenFocalPlanes",
             )
         return True, planes, distance
-
-    def _get_image_size(self) -> Tuple[Size, Optional[SizeMm], Optional[float]]:
-        """Return image size and physical image size from dataset.
-
-        Returns
-        ----------
-        Tuple[Size, Optional[SizeMm], Optional[float]]:
-            Pixel image size, physical image size and physical depth.
-        """
-        image_size = Size(self.TotalPixelMatrixColumns, self.TotalPixelMatrixRows)
-        if image_size.width == 0 or image_size.height == 0:
-            raise WsiDicomFileError(self.filepath, "Image size is zero")
-
-        mm_width = self._get_dicom_attribute("ImagedVolumeWidth")
-        mm_height = self._get_dicom_attribute("ImagedVolumeHeight")
-        if mm_width is None or mm_height is None:
-            mm_size = None
-        else:
-            mm_size = SizeMm(mm_width, mm_height)
-        mm_depth = self._get_dicom_attribute("ImagedVolumeDepth")
-        return image_size, mm_size, mm_depth
-
-    def _get_slice_thickness(self, pixel_measure: Optional[Dataset]) -> Optional[float]:
-        """Return slice thickness spacing from pixel measure dataset.
-
-        Parameters
-        ----------
-        pixel_measure: Optional[Dataset]
-            Pixel measure dataset.
-
-        Returns
-        ----------
-        Optional[float]
-            Slice thickess or None if unkown.
-        """
-        try:
-            return self._get_dicom_attribute("SliceThickness", pixel_measure)
-        except AttributeError:
-            if self.mm_depth is not None:
-                return self.mm_depth / self.number_of_focal_planes
-        return None
-
-    def _get_frame_sequence(self) -> DicomSequence:
-        """Return per frame functional group sequene if present, otherwise
-        shared functional group sequence.
-
-        Returns
-        ----------
-        DicomSequence
-            Per frame or shared functional group sequence.
-        """
-        if "PerFrameFunctionalGroupsSequence" in self and (
-            "PlanePositionSlideSequence" in self.PerFrameFunctionalGroupsSequence[0]
-        ):
-            return self.PerFrameFunctionalGroupsSequence
-        elif "SharedFunctionalGroupsSequence" in self:
-            return self.SharedFunctionalGroupsSequence
-        return DicomSequence([])
-
-    @staticmethod
-    def _get_image_type(wsi_type: Tuple[str, str, str, str]) -> ImageType:
-        """Return wsi flavour from wsi type tuple.
-
-        Returns
-        ----------
-        str
-            Wsi flavour.
-        """
-        IMAGE_TYPE_INDEX_IN_WSI_TYPE = 2
-        return ImageType(wsi_type[IMAGE_TYPE_INDEX_IN_WSI_TYPE])
 
     @staticmethod
     def _get_spacing_between_slices_for_focal_planes(
@@ -974,3 +849,15 @@ class WsiDataset(Dataset):
         if spacing is None:
             raise ValueError("Could not calculate spacings.")
         return spacing / 1000.0
+
+    @staticmethod
+    def _get_image_type(wsi_type: Tuple[str, str, str, str]) -> ImageType:
+        """Return wsi flavour from wsi type tuple.
+
+        Returns
+        ----------
+        str
+            Wsi flavour.
+        """
+        IMAGE_TYPE_INDEX_IN_WSI_TYPE = 2
+        return ImageType(wsi_type[IMAGE_TYPE_INDEX_IN_WSI_TYPE])

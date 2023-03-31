@@ -19,23 +19,23 @@ from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.dataset import FileMetaDataset
-from pydicom.filereader import read_file_meta_info
-from pydicom.misc import is_dicom
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
 
-from wsidicom.dataset import ImageType, WsiDataset
-from wsidicom.errors import (WsiDicomMatchError, WsiDicomNotFoundError,
-                             WsiDicomOutOfBoundsError)
-from wsidicom.file import WsiDicomFile
+from wsidicom.errors import (
+    WsiDicomMatchError,
+    WsiDicomNotFoundError,
+    WsiDicomOutOfBoundsError,
+)
+from wsidicom.file import WsiDicomFileSource, WsiDicomFileTarget
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import WsiDicomLevel, WsiInstance
+from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.optical import OpticalManager
-from wsidicom.series import (WsiDicomLabels, WsiDicomLevels, WsiDicomOverviews,
-                             WsiDicomSeries)
+from wsidicom.series import Labels, Levels, Overviews
+from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
-from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
+from wsidicom.uid import SlideUids
+from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
 
 
 class WsiDicom:
@@ -44,41 +44,97 @@ class WsiDicom:
 
     def __init__(
         self,
-        levels: WsiDicomLevels,
-        labels: Optional[WsiDicomLabels] = None,
-        overviews: Optional[WsiDicomOverviews] = None,
-        annotations: Optional[Sequence[AnnotationInstance]] = None
+        source: Source,
+        label: Optional[Union[PILImage, str, Path]] = None,
     ):
         """Holds wsi dicom levels, labels and overviews.
 
+        Note that WsiDicom.open() should be used for opening dicom wsi files.
+
         Parameters
         ----------
-        levels: WsiDicomLevels
-            Series of pyramidal levels.
-        labels: Optional[WsiDicomLabels] = None,
-            Series of label images.
-        overviews: Optional[WsiDicomOverviews] = None,
-            Series of overview images
-        annotations: Optional[Sequence[AnnotationInstance]] = None
-            Sup-222 annotation instances.
+        source: Source
+            A source providing instances for the wsi to open.
+        label: Optional[Union[PILImage, str, Path]] = None
+            Optional label image to use instead of label found in source.
         """
-        if annotations is None:
-            annotations = []
-        self._levels = levels
-        self._labels = labels
-        self._overviews = overviews
-        self.annotations = annotations
+        self._source = source
+        if label is None:
+            label_instances = source.label_instances
+        else:
+            label_instances = [
+                WsiInstance.create_label(
+                    label,
+                    source.base_dataset,
+                )
+            ]
+        self._levels = Levels.open(source.level_instances)
+        self._labels = Labels.open(label_instances)
+        self._overviews = Overviews.open(source.overview_instances)
+        self._annotations = list(source.annotation_instances)
         self._uids = self._validate_collection()
 
         self.optical = OpticalManager.open(
-            [
-                instance
-                for series in self.collection
-                for instance in series.instances
-            ]
+            [instance for series in self.collection for instance in series.instances]
         )
 
         self.__enter__()
+
+    @classmethod
+    def open(
+        cls,
+        path: Union[str, Sequence[str], Path, Sequence[Path]],
+        label: Optional[Union[PILImage, str, Path]] = None,
+    ) -> "WsiDicom":
+        """Open valid wsi dicom files in path and return a WsiDicom object.
+        Non-valid files are ignored.
+
+        Parameters
+        ----------
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
+            Path to files to open.
+        label: Optional[Union[PILImage, str, Path]] = None
+            Optional label image to use instead of label found in path.
+
+        Returns
+        ----------
+        WsiDicom
+            WsiDicom created from wsi dicom files in path.
+        """
+        source = WsiDicomFileSource(path)
+        return cls(source, label)
+
+    @classmethod
+    def open_web(
+        cls,
+        client: WsiDicomWebClient,
+        study_uid: Union[str, UID],
+        series_uid: Union[str, UID],
+        requested_transfer_syntax: UID = JPEGBaseline8Bit,
+    ) -> "WsiDicom":
+        """Open wsi dicom instances using dicom web client.
+
+        Parameters
+        ----------
+        client: WsiDicomWebClient
+            Configured dicom web client.
+        study_uid: Union[str, UID]
+            Study uid of wsi to open.
+        series_uid: Union[str, UID]
+            Series uid of wsi to open
+        transfer_syntax: UID
+            Transfer syntax to request for image data, for example
+            UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
+
+        Returns
+        ----------
+        WsiDicom
+            WsiDicom created from wsi dicom files in study-series.
+        """
+        source = WsiDicomWebSource(
+            client, study_uid, series_uid, requested_transfer_syntax
+        )
+        return cls(source)
 
     def __enter__(self):
         return self
@@ -96,146 +152,73 @@ class WsiDicom:
         return self.pretty_str()
 
     @property
-    def base_level(self) -> WsiDicomLevel:
-        return self.levels.base_level
-
-    @property
     def size(self) -> Size:
         """Return pixel size of base level."""
-        return self.base_level.size
-
-    @property
-    def tile_size(self) -> Size:
-        """Return tile size of levels."""
-        return self.base_level.tile_size
-
-    @property
-    def levels(self) -> WsiDicomLevels:
-        """Return contained levels"""
-        if self._levels is not None:
-            return self._levels
-        raise WsiDicomNotFoundError("levels", str(self))
-
-    @property
-    def labels(self) -> Optional[WsiDicomLabels]:
-        """Return contained labels"""
-        return self._labels
-
-    @property
-    def overviews(self) -> Optional[WsiDicomOverviews]:
-        """Return contained overviews"""
-        return self._overviews
-
-    @property
-    def collection(self) -> List[WsiDicomSeries]:
-        collection: List[Optional[WsiDicomSeries]] = [
-            self._levels, self._labels, self._overviews
-        ]
-        return [series for series in collection if series is not None]
-
-    @property
-    def files(self) -> List[Path]:
-        """Return contained files"""
-        return [
-            file
-            for series in self.collection
-            for file in series.files
-        ]
-
-    @property
-    def image_size(self) -> Size:
-        """Size of base leve."""
-        return self.base_level.size
+        return self.levels.size
 
     @property
     def mm_size(self) -> SizeMm:
         return self.levels.mm_size
 
     @property
+    def tile_size(self) -> Size:
+        """Return tile size of levels."""
+        return self.levels.tile_size
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
+        return self.levels.pixel_spacing
+
+    @property
+    def mpp(self) -> SizeMm:
+        return self.levels.mpp
+
+    @property
     def uids(self) -> Optional[SlideUids]:
         return self._uids
 
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
+    @property
+    def levels(self) -> Levels:
+        """Return contained levels."""
+        if self._levels is not None:
+            return self._levels
+        raise WsiDicomNotFoundError("levels", str(self))
+
+    @property
+    def labels(self) -> Optional[Labels]:
+        """Return contained labels."""
+        return self._labels
+
+    @property
+    def overviews(self) -> Optional[Overviews]:
+        """Return contained overviews."""
+        return self._overviews
+
+    @property
+    def annotations(self) -> List[AnnotationInstance]:
+        """Return contained annotations."""
+        return self._annotations
+
+    @property
+    def collection(self) -> List[Union[Levels, Labels, Overviews]]:
+        collection: List[Optional[Union[Levels, Labels, Overviews]]] = [
+            self._levels,
+            self._labels,
+            self._overviews,
+        ]
+        return [series for series in collection if series is not None]
+
+    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         string = self.__class__.__name__
         if depth is not None:
             depth -= 1
             if depth < 0:
                 return string
         return (
-            string + ' of levels:\n'
+            string
+            + " of levels:\n"
             + list_pretty_str(self.levels.groups, indent, depth, 0, 2)
         )
-
-    @classmethod
-    def open(
-        cls,
-        path: Union[str, Sequence[str], Path, Sequence[Path]],
-        label: Optional[Union[PILImage, str, Path]] = None
-    ) -> 'WsiDicom':
-        """Open valid wsi dicom files in path and return a WsiDicom object.
-        Non-valid files are ignored.
-
-        Parameters
-        ----------
-        path: Union[str, Sequence[str], Path, Sequence[Path]]
-            Path to files to open.
-        label: Optional[Union[PILImage, str, Path]] = None
-            Optional label image to use instead of label found in path.
-
-        Returns
-        ----------
-        WsiDicom
-            Object created from wsi dicom files in path.
-        """
-        filepaths = cls._get_filepaths(path)
-        level_files: List[WsiDicomFile] = []
-        label_files: List[WsiDicomFile] = []
-        overview_files: List[WsiDicomFile] = []
-        annotation_files: List[Path] = []
-
-        for filepath in cls._filter_paths(filepaths):
-            sop_class_uid = cls._get_sop_class_uid(filepath)
-            if sop_class_uid == WSI_SOP_CLASS_UID:
-                wsi_file = WsiDicomFile(filepath)
-                if wsi_file.image_type == ImageType.VOLUME:
-                    level_files.append(wsi_file)
-                elif wsi_file.image_type == ImageType.LABEL:
-                    label_files.append(wsi_file)
-                elif wsi_file.image_type == ImageType.OVERVIEW:
-                    overview_files.append(wsi_file)
-                else:
-                    wsi_file.close()
-            elif sop_class_uid == ANN_SOP_CLASS_UID:
-                annotation_files.append(filepath)
-        if len(level_files) == 0:
-            raise WsiDicomNotFoundError("Level files", str(path))
-        base_dataset = cls._get_base_dataset(level_files)
-        slide_uids = base_dataset.uids.slide
-        base_tile_size = base_dataset.tile_size
-        level_instances = WsiInstance.open(
-            level_files,
-            slide_uids,
-            base_tile_size
-        )
-
-        overview_instances = WsiInstance.open(overview_files, slide_uids)
-        if label is None:
-            label_instances = WsiInstance.open(label_files, slide_uids)
-        else:
-            label_instances = [WsiInstance.create_label(
-                label,
-                base_dataset,
-                )]
-        levels = WsiDicomLevels.open(level_instances)
-        labels = WsiDicomLabels.open(label_instances)
-        overviews = WsiDicomOverviews.open(overview_instances)
-        annotations = AnnotationInstance.open(annotation_files)
-
-        return cls(levels, labels, overviews, annotations)
 
     def read_label(self, index: int = 0) -> PILImage:
         """Read label image of the whole slide. If several label
@@ -285,7 +268,7 @@ class WsiDicom:
         self,
         size: Tuple[int, int] = (512, 512),
         z: Optional[float] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
     ) -> PILImage:
         """Read thumbnail image of the whole slide with dimensions
         no larger than given size.
@@ -317,7 +300,8 @@ class WsiDicom:
         level: int,
         size: Tuple[int, int],
         z: Optional[float] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
+        threads: int = 1,
     ) -> PILImage:
         """Read region defined by pixels.
 
@@ -333,6 +317,8 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
+        threads: int = 1
+            Number of threads to use for read.
 
         Returns
         ----------
@@ -341,16 +327,16 @@ class WsiDicom:
         """
         wsi_level = self.levels.get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
-        scaled_region = Region(
-            position=Point.from_tuple(location),
-            size=Size.from_tuple(size)
-        ) * scale_factor
+        scaled_region = (
+            Region(position=Point.from_tuple(location), size=Size.from_tuple(size))
+            * scale_factor
+        )
 
         if not wsi_level.valid_pixels(scaled_region):
             raise WsiDicomOutOfBoundsError(
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
-        image = wsi_level.get_region(scaled_region, z, path)
+        image = wsi_level.get_region(scaled_region, z, path, threads)
         if scale_factor != 1:
             image = image.resize((size), resample=Image.Resampling.BILINEAR)
         return image
@@ -362,7 +348,8 @@ class WsiDicom:
         size: Tuple[float, float],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        slide_origin: bool = False
+        slide_origin: bool = False,
+        threads: int = 1,
     ) -> PILImage:
         """Read image from region defined in mm.
 
@@ -381,6 +368,8 @@ class WsiDicom:
             optical path, optional
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
+        threads: int = 1
+            Number of threads to use for read.
 
         Returns
         ----------
@@ -389,18 +378,10 @@ class WsiDicom:
         """
         wsi_level = self.levels.get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
-        region = RegionMm(
-            PointMm.from_tuple(location),
-            SizeMm.from_tuple(size)
-        )
-        image = wsi_level.get_region_mm(region, z, path, slide_origin)
-        image_size = (
-            Size(width=image.size[0], height=image.size[1]) // scale_factor
-        )
-        return image.resize(
-            image_size.to_tuple(),
-            resample=Image.Resampling.BILINEAR
-        )
+        region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
+        image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
+        image_size = Size(width=image.size[0], height=image.size[1]) // scale_factor
+        return image.resize(image_size.to_tuple(), resample=Image.Resampling.BILINEAR)
 
     def read_region_mpp(
         self,
@@ -409,7 +390,8 @@ class WsiDicom:
         size: Tuple[float, float],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        slide_origin: bool = False
+        slide_origin: bool = False,
+        threads: int = 1,
     ) -> PILImage:
         """Read image from region defined in mm with set pixel spacing.
 
@@ -428,33 +410,29 @@ class WsiDicom:
             Optical path, optional.
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
+        threads: int = 1
+            Number of threads to use for read.
 
         Returns
         -----------
         PILImage
             Region as image
         """
-        pixel_spacing = mpp/1000.0
+        pixel_spacing = mpp / 1000.0
         wsi_level = self.levels.get_closest_by_pixel_spacing(
             SizeMm(pixel_spacing, pixel_spacing)
         )
-        region = RegionMm(
-            PointMm.from_tuple(location),
-            SizeMm.from_tuple(size)
-        )
-        image = wsi_level.get_region_mm(region, z, path, slide_origin)
+        region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
+        image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
         image_size = SizeMm.from_tuple(size) // pixel_spacing
-        return image.resize(
-            image_size.to_tuple(),
-            resample=Image.Resampling.BILINEAR
-        )
+        return image.resize(image_size.to_tuple(), resample=Image.Resampling.BILINEAR)
 
     def read_tile(
         self,
         level: int,
         tile: Tuple[int, int],
         z: Optional[float] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
     ) -> PILImage:
         """Read tile in pyramid level as image.
 
@@ -481,18 +459,14 @@ class WsiDicom:
         except WsiDicomNotFoundError:
             # Scale from closest level
             wsi_level = self.levels.get_closest_by_level(level)
-            return wsi_level.get_scaled_tile(
-                tile_point,
-                level,
-                z,
-                path)
+            return wsi_level.get_scaled_tile(tile_point, level, z, path)
 
     def read_encoded_tile(
         self,
         level: int,
         tile: Tuple[int, int],
         z: Optional[float] = None,
-        path: Optional[str] = None
+        path: Optional[str] = None,
     ) -> bytes:
         """Read tile in pyramid level as encoded bytes. For non-existing levels
         the tile is scaled down from a lower level, using the similar encoding.
@@ -520,18 +494,10 @@ class WsiDicom:
         except WsiDicomNotFoundError:
             # Scale from closest level
             wsi_level = self.levels.get_closest_by_level(level)
-            return wsi_level.get_scaled_encoded_tile(
-                tile_point,
-                level,
-                z,
-                path
-            )
+            return wsi_level.get_scaled_encoded_tile(tile_point, level, z, path)
 
     def get_instance(
-        self,
-        level: int,
-        z: Optional[float] = None,
-        path: Optional[str] = None
+        self, level: int, z: Optional[float] = None, path: Optional[str] = None
     ) -> WsiInstance:
         """Return instance fullfilling level, z and/or path.
 
@@ -553,18 +519,17 @@ class WsiDicom:
         return wsi_level.get_instance(z, path)
 
     def close(self) -> None:
-        """Close all files."""
-        for series in [self._levels, self._overviews, self._labels]:
-            if series is not None:
-                series.close()
+        """Close source."""
+        self._source.close()
 
     def save(
         self,
-        output_path: str,
+        output_path: Union[str, Path],
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None,
-        offset_table: Optional[str] = 'bot'
+        offset_table: Optional[str] = "bot",
+        add_missing_levels: bool = False,
     ) -> List[Path]:
         """Save wsi as DICOM-files in path. Instances for the same pyramid
         level will be combined when possible to one file (e.g. not split
@@ -574,7 +539,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        output_path: str
+        output_path: Union[str, Path]
         uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
              Function that can gernerate unique identifiers.
         workers: Optional[int] = None
@@ -585,6 +550,8 @@ class WsiDicom:
         offset_table: Optional[str] = 'bot'
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, None - no offset table.
+        add_missing_levels: bool = False
+            If to add missing dyadic levels up to the single tile level.
 
         Returns
         ----------
@@ -599,102 +566,22 @@ class WsiDicom:
                 workers = cpus
         if chunk_size is None:
             chunk_size = 16
-
-        filepaths: List[Path] = []
-        instance_number = 0
-        for series in self.collection:
-            series_filepaths = series.save(
-                output_path,
-                uid_generator,
-                workers,
-                chunk_size,
-                offset_table,
-                instance_number
-            )
-            filepaths.extend(series_filepaths)
-            instance_number += len(filepaths)
-        return filepaths
-
-    @staticmethod
-    def _get_sop_class_uid(path: Path) -> UID:
-        metadata: FileMetaDataset = read_file_meta_info(path)
-        return metadata.MediaStorageSOPClassUID
-
-    @staticmethod
-    def _get_filepaths(path: Union[str, Sequence[str], Path, Sequence[Path]]):
-        """Return file paths to files in path.
-        If path is folder, return list of folder files in path.
-        If path is single file, return list of that path.
-        If path is list, return list of paths that are files.
-        Raises WsiDicomNotFoundError if no files found
-
-        Parameters
-        ----------
-        path: path: Union[str, Sequence[str], Path, Sequence[Path]]
-            Path to folder, file or list of files
-
-        Returns
-        ----------
-        List[Path]
-            List of found file paths
-        """
-        if isinstance(path, (str, Path)):
-            single_path = Path(path)
-            if single_path.is_dir():
-                return list(single_path.iterdir())
-            elif single_path.is_file():
-                return [single_path]
-        elif isinstance(path, list):
-            multiple_paths = [
-                Path(file_path) for file_path in path
-                if Path(file_path).is_file()
-            ]
-            if multiple_paths != []:
-                return multiple_paths
-
-        raise WsiDicomNotFoundError("No files found", str(path))
-
-    @staticmethod
-    def _get_base_dataset(
-        files: Sequence[WsiDicomFile]
-    ) -> WsiDataset:
-        """Return file with largest image (width) from list of files.
-
-        Parameters
-        ----------
-        files: Sequence[WsiDicomFile]
-           List of files.
-
-        Returns
-        ----------
-        WsiDataset
-            Base layer dataset.
-        """
-        base_size = Size(0, 0)
-        base_dataset = files[0].dataset
-        for file in files[1:]:
-            if file.dataset.image_size.width > base_size.width:
-                base_dataset = file.dataset
-                base_size = file.dataset.image_size
-        return base_dataset
-
-    @staticmethod
-    def _filter_paths(filepaths: Sequence[Path]) -> List[Path]:
-        """Filter list of paths to only include valid dicom files.
-
-        Parameters
-        ----------
-        filepaths: Sequence[Path]
-            Paths to filter
-
-        Returns
-        ----------
-        List[Path]
-            List of paths with dicom files
-        """
-        return [
-            path for path in filepaths if path.is_file() and is_dicom(path)
-        ]
+        if isinstance(output_path, str):
+            output_path = Path(output_path)
+        target = WsiDicomFileTarget(
+            output_path,
+            uid_generator,
+            workers,
+            chunk_size,
+            offset_table,
+            add_missing_levels,
+        )
+        target.save_levels(self.levels)
+        if self.overviews is not None:
+            target.save_overviews(self.overviews)
+        if self.labels is not None:
+            target.save_labels(self.labels)
+        return target.filepaths
 
     def _validate_collection(self) -> SlideUids:
         """Check that no files or instance in collection is duplicate, and, if
@@ -707,9 +594,7 @@ class WsiDicom:
             Matching uids
         """
         datasets = [
-            dataset
-            for collection in self.collection
-            for dataset in collection.datasets
+            dataset for collection in self.collection for dataset in collection.datasets
         ]
         WsiDataset.check_duplicate_dataset(datasets, self)
 
@@ -723,20 +608,12 @@ class WsiDicom:
 
         try:
             slide_uids = next(
-                series.uids
-                for series in self.collection
-                if series.uids is not None
+                series.uids for series in self.collection if series.uids is not None
             )
         except StopIteration as exception:
-            raise WsiDicomNotFoundError(
-                "Valid series",
-                "in collection"
-            ) from exception
+            raise WsiDicomNotFoundError("Valid series", "in collection") from exception
         for series in self.collection:
-            if (
-                series.uids is not None
-                and series.uids != slide_uids
-            ):
+            if series.uids is not None and series.uids != slide_uids:
                 raise WsiDicomMatchError(str(series), str(self))
 
         if self.annotations != []:
@@ -746,10 +623,9 @@ class WsiDicom:
         return slide_uids
 
     @classmethod
-    def ready_for_viewing(
-        cls,
-        path: Union[str, Sequence[str], Path, Sequence[Path]]
-    ) -> bool:
+    def is_ready_for_viewing(
+        cls, path: Union[str, Sequence[str], Path, Sequence[Path]]
+    ) -> Optional[bool]:
         """Return true if files in path are formated for fast viewing, i.e.
         have TILED_FULL tile arrangement and have an offset table.
 
@@ -759,19 +635,26 @@ class WsiDicom:
             Path to files to test.
 
         Returns
-            True if files in path are formated for fast viewing.
+            True if files in path are formated for fast viewing, None if no DICOM WSI
+            files are in the path.
         """
-        filepaths = cls._get_filepaths(path)
-        # Sort files by file size to test smallest file first.
-        filepaths.sort(key=os.path.getsize)
-        for filepath in cls._filter_paths(filepaths):
-            file = WsiDicomFile(filepath, parse_pixel_data=False)
-            if file.image_type is None:
-                continue
-            if (
-                file.dataset.tile_type != 'TILED_FULL'
-                or file.offset_table_type is None
-            ):
-                return False
+        source = WsiDicomFileSource(path)
+        return source.is_ready_for_viewing
 
-        return True
+    @classmethod
+    def is_supported(
+        cls, path: Union[str, Sequence[str], Path, Sequence[Path]]
+    ) -> bool:
+        """Return true if files in path have at least one level that can be read with
+        WsiDicom.
+
+        Parameters
+        ----------
+        path: Union[str, Sequence[str], Path, Sequence[Path]]
+            Path to files to test.
+
+        Returns
+            True if files in path have one level that can be read with WsiDicom.
+        """
+        source = WsiDicomFileSource(path)
+        return source.contains_levels

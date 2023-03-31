@@ -13,14 +13,18 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID, JPEGBaseline8Bit
-
-from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.image_data import ImageData, ImageOrigin
+from wsidicom.geometry import (
+    Point,
+    Size,
+    SizeMm,
+)
+from wsidicom.instance.image_data import ImageData
+from wsidicom.instance.image_origin import ImageOrigin
 
 
 class PillowImageData(ImageData):
@@ -31,13 +35,6 @@ class PillowImageData(ImageData):
     def from_file(cls, file: Union[str, Path]) -> "PillowImageData":
         image = Image.open(file)
         return cls(image)
-
-    @property
-    def files(self) -> List[Path]:
-        filename = getattr(self._image, "filename", None)
-        if filename is None:
-            return []
-        return [filename]
 
     @property
     def transfer_syntax(self) -> UID:
@@ -76,6 +73,3 @@ class PillowImageData(ImageData):
         if tile != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
         return self.encode(self._image)
-
-    def close(self):
-        self._image.close()

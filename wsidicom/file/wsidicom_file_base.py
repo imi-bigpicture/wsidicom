@@ -12,11 +12,26 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 from pydicom.filebase import DicomFile
 from pydicom.tag import BaseTag
+
+
+class OffsetTableType(Enum):
+    NONE = "none"
+    BASIC = "BOT"
+    EXTENDED = "EOT"
+
+    @classmethod
+    def from_string(cls, offset_table: Optional[str]) -> "OffsetTableType":
+        if offset_table is None:
+            return OffsetTableType.NONE
+        if offset_table.strip().lower() == "eot":
+            return OffsetTableType.EXTENDED
+        return OffsetTableType.BASIC
 
 
 class WsiDicomFileBase:
@@ -46,11 +61,7 @@ class WsiDicomFileBase:
     def __str__(self) -> str:
         return self.pretty_str()
 
-    def pretty_str(
-        self,
-        indent: int = 0,
-        depth: Optional[int] = None
-    ) -> str:
+    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         return f"File with path: {self.filepath}"
 
     @property
@@ -65,10 +76,7 @@ class WsiDicomFileBase:
         return self._fp.read_UL()
 
     def _check_tag_and_length(
-        self,
-        tag: BaseTag,
-        length: int,
-        with_vr: bool = True
+        self, tag: BaseTag, length: int, with_vr: bool = True
     ) -> None:
         """Check if tag at position is expected tag with expected length.
 
