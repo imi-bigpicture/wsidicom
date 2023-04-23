@@ -43,7 +43,8 @@ class WsiDicomFileTarget(Target):
         offset_table: Optional[str],
         add_missing_levels: bool = False,
     ):
-        """Create a WsiDicomFileTarget.
+        """
+        Create a WsiDicomFileTarget.
 
         Parameters
         ----------
@@ -141,7 +142,7 @@ class WsiDicomFileTarget(Target):
             dataset = instances[0].dataset.as_tiled_full(
                 focal_planes, optical_paths, tiled_size, scale
             )
-            with WsiDicomFileWriter(filepath) as wsi_file:
+            with WsiDicomFileWriter.open(filepath) as wsi_file:
                 wsi_file.write(
                     uid,
                     transfer_syntax,
@@ -159,7 +160,7 @@ class WsiDicomFileTarget(Target):
         return filepaths
 
     def _open_files(self, filepaths: Sequence[Path]) -> List[WsiInstance]:
-        files = [WsiDicomFile(filepath) for filepath in filepaths]
+        files = [WsiDicomFile.open(filepath) for filepath in filepaths]
         self._opened_files.extend(files)
         return [
             WsiInstance([file.dataset for file in files], WsiDicomFileImageData(files))
@@ -167,8 +168,8 @@ class WsiDicomFileTarget(Target):
 
     @staticmethod
     def _group_instances_to_file(group: Group) -> List[List[WsiInstance]]:
-        """Group instances by properties that can't differ in a DICOM-file,
-        i.e. the instances are grouped by output file.
+        """
+        Group instances by properties that can't differ in a DICOM-file.
 
         Returns
         ----------
@@ -195,8 +196,8 @@ class WsiDicomFileTarget(Target):
     def _list_image_data(
         instances: Sequence[WsiInstance],
     ) -> Dict[Tuple[str, float], ImageData]:
-        """Sort ImageData in instances by optical path and focal
-        plane.
+        """
+        Sort ImageData in instances by optical path and focal plane.
 
         Parameters
         ----------

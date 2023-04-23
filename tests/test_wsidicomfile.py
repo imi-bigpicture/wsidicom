@@ -91,7 +91,7 @@ class WsiDicomFileTests(unittest.TestCase):
             create_layer_file(test_file.path, test_file.ds, cls.meta_dataset)
 
         cls.opened_files = {
-            WsiDicomFile(test_file.path): test_file for test_file in cls.test_files
+            WsiDicomFile.open(test_file.path): test_file for test_file in cls.test_files
         }
         cls.padded_test_frame = TESTFRAME + b"\x00" * (len(TESTFRAME) % 2)
 
@@ -103,13 +103,14 @@ class WsiDicomFileTests(unittest.TestCase):
     def test_open(self):
         for test_file in self.test_files:
             print(test_file.path, test_file.tile_type, test_file.bot_type)
-            with WsiDicomFile(test_file.path) as file:
+            with WsiDicomFile.open(test_file.path) as file:
                 self.assertEqual(file.offset_table_type, test_file.bot_type)
                 self.assertEqual(file.dataset.tile_type, test_file.tile_type)
 
     def test_dataset_property(self):
         for test_file in self.opened_files:
             path = test_file.filepath
+            assert path is not None
             ds = WsiDataset(dcmread(path, stop_before_pixels=True))
             self.assertEqual(test_file.dataset, ds)
 
@@ -154,14 +155,14 @@ class WsiDicomFileTests(unittest.TestCase):
 
     def test_validate_pixel_data_start(self):
         for test_file in self.opened_files:
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
+            test_file._file.seek(test_file._pixel_data_position)
+            tag = test_file._file.read_tag()
             test_file._validate_pixel_data_start(tag)
 
     def test_read_bot_length(self):
         for test_file, setting in self.opened_files.items():
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
+            test_file._file.seek(test_file._pixel_data_position)
+            tag = test_file._file.read_tag()
             test_file._validate_pixel_data_start(tag)
             length = test_file._read_bot_length()
             self.assertEqual(
@@ -170,8 +171,8 @@ class WsiDicomFileTests(unittest.TestCase):
 
     def test_read_bot(self):
         for test_file, setting in self.opened_files.items():
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
+            test_file._file.seek(test_file._pixel_data_position)
+            tag = test_file._file.read_tag()
             test_file._validate_pixel_data_start(tag)
             bot = test_file._read_bot()
             first_bot_entry = b"\x00\x00\x00\x00"
@@ -188,11 +189,11 @@ class WsiDicomFileTests(unittest.TestCase):
         TAG_BYTES = 4
         LENGTH_BYTES = 4
         for test_file, setting in self.opened_files.items():
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
+            test_file._file.seek(test_file._pixel_data_position)
+            tag = test_file._file.read_tag()
             test_file._validate_pixel_data_start(tag)
             bot = test_file._read_bot()
-            first_frame_item = test_file._fp.tell()
+            first_frame_item = test_file._file.tell()
             if bot is None:
                 continue
             positions = test_file._parse_table(
@@ -212,11 +213,11 @@ class WsiDicomFileTests(unittest.TestCase):
         TAG_BYTES = 4
         LENGTH_BYTES = 4
         for test_file, setting in self.opened_files.items():
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
+            test_file._file.seek(test_file._pixel_data_position)
+            tag = test_file._file.read_tag()
             test_file._validate_pixel_data_start(tag)
             bot = test_file._read_bot()
-            first_frame_item = test_file._fp.tell()
+            first_frame_item = test_file._file.tell()
             positions = test_file._read_positions_from_pixeldata()
             self.assertEqual(
                 positions,
@@ -232,8 +233,8 @@ class WsiDicomFileTests(unittest.TestCase):
         for test_file in self.opened_files:
             (last_item_position, last_item_length) = test_file.frame_positions[-1]
             last_item_end = last_item_position + last_item_length
-            test_file._fp.seek(last_item_end)
-            test_file._fp.read_tag()
+            test_file._file.seek(last_item_end)
+            test_file._file.read_tag()
             test_file._read_sequence_delimiter()
 
     def test_read_frame(self):

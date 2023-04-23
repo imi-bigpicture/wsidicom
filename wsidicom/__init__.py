@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from .wsidicom import WsiDicom
+from wsidicom.wsidicom import WsiDicom
 from wsidicom.config import settings
 from wsidicom.graphical_annotations import (
     Annotation,

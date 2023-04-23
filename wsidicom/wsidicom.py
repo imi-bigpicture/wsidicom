@@ -15,7 +15,7 @@
 import os
 import warnings
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, Tuple, Union
+from typing import BinaryIO, Callable, List, Optional, Sequence, Tuple, Union
 
 from PIL import Image
 from PIL.Image import Image as PILImage
@@ -83,16 +83,18 @@ class WsiDicom:
     @classmethod
     def open(
         cls,
-        path: Union[str, Sequence[str], Path, Sequence[Path]],
+        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]],
         label: Optional[Union[PILImage, str, Path]] = None,
     ) -> "WsiDicom":
-        """Open valid wsi dicom files in path and return a WsiDicom object.
-        Non-valid files are ignored.
+        """Open valid wsi dicom files in path or stream and return a WsiDicom object.
+        Non-valid files are ignored. Only opened files (i.e. not streams) will e closed
+        by WsiDicom.
 
         Parameters
         ----------
-        path: Union[str, Sequence[str], Path, Sequence[Path]]
-            Path to files to open.
+        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]],
+            Files to open. Can be a single file, a list of files, or a folder containing
+            files.
         label: Optional[Union[PILImage, str, Path]] = None
             Optional label image to use instead of label found in path.
 
@@ -101,7 +103,7 @@ class WsiDicom:
         WsiDicom
             WsiDicom created from wsi dicom files in path.
         """
-        source = WsiDicomFileSource(path)
+        source = WsiDicomFileSource(files)
         return cls(source, label)
 
     @classmethod
@@ -531,7 +533,8 @@ class WsiDicom:
         offset_table: Optional[str] = "bot",
         add_missing_levels: bool = False,
     ) -> List[Path]:
-        """Save wsi as DICOM-files in path. Instances for the same pyramid
+        """
+        Save wsi as DICOM-files in path. Instances for the same pyramid
         level will be combined when possible to one file (e.g. not split
         for optical paths or focal planes). If instances are sparse tiled they
         will be converted to full tiled by inserting blank tiles. The PixelData
@@ -584,7 +587,8 @@ class WsiDicom:
         return target.filepaths
 
     def _validate_collection(self) -> SlideUids:
-        """Check that no files or instance in collection is duplicate, and, if
+        """
+        Check that no files or instance in collection is duplicate, and, if
         strict, that all series have the same base uids.
         Raises WsiDicomMatchError otherwise. Returns base uid for collection.
 
@@ -626,7 +630,8 @@ class WsiDicom:
     def is_ready_for_viewing(
         cls, path: Union[str, Sequence[str], Path, Sequence[Path]]
     ) -> Optional[bool]:
-        """Return true if files in path are formated for fast viewing, i.e.
+        """
+        Return true if files in path are formated for fast viewing, i.e.
         have TILED_FULL tile arrangement and have an offset table.
 
         Parameters

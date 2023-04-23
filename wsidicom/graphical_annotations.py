@@ -19,11 +19,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import (
     Any,
+    BinaryIO,
     Callable,
     DefaultDict,
     Dict,
     Generic,
-    Iterable,
     Iterator,
     List,
     Optional,
@@ -89,8 +89,11 @@ def dcm_to_list(item: bytes, format: str) -> List[Any]:
 
 @dataclass
 class Measurement:
+    """Represents a measurement."""
+
     def __init__(self, code: MeasurementCode, value: float, unit: UnitCode):
-        """Represents a measurement.
+        """
+        Create a measurement.
 
         Parameters
         ----------
@@ -1657,21 +1660,16 @@ class AnnotationInstance:
 
     @classmethod
     def open(
-        cls, paths: Union[Sequence[str], Sequence[Path]]
+        cls, files: Sequence[Union[str, Path, BinaryIO]]
     ) -> List["AnnotationInstance"]:
-        """Read annotations from DICOM file according to sup 222.
+        """Read annotations from DICOM files according to sup 222.
 
         Parameters
         ----------
-        paths: Sequence[str]
-            Paths to DICOM annotation files to read.
+        files: Sequence[Union[str, Path, BinaryIO]]
+            Files with DICOM annotations to read.
         """
-        instances: List["AnnotationInstance"] = []
-        for path in paths:
-            ds = dcmread(path)
-            instances.append(cls.open_dataset(ds))
-
-        return instances
+        return [cls.open_dataset(dcmread(file)) for file in files]
 
     @classmethod
     def open_dataset(cls, dataset: Dataset) -> "AnnotationInstance":
