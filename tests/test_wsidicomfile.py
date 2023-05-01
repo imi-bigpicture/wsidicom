@@ -67,7 +67,7 @@ class WsiDicomFileTests(unittest.TestCase):
             {
                 "name": "full_no_bot_path.dcm",
                 "tile_type": TileType.FULL,
-                "bot_type": OffsetTableType.BASIC,
+                "bot_type": OffsetTableType.NONE,
             },
             {
                 "name": "full_with_bot_path.dcm",
