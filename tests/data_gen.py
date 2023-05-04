@@ -268,7 +268,7 @@ def create_main_dataset(
     shared_functional_groups_sequence.append(shared_functional_groups1)
 
     frame = TESTFRAME
-    ds.PixelData = encapsulate([frame], has_bot=offset_table == offset_table.BASIC)
+    ds.PixelData = encapsulate([frame], has_bot=offset_table == OffsetTableType.BASIC)
 
     return ds
 
