@@ -15,11 +15,11 @@
 """A source for reading WSI DICOM files."""
 
 from collections import defaultdict
+import io
 from pathlib import Path
 from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union
 import warnings
 
-from pydicom.dataset import FileMetaDataset
 from pydicom.uid import UID
 
 from wsidicom.errors import (
@@ -68,7 +68,7 @@ class WsiDicomFileSource(Source):
                     elif wsi_file.image_type == ImageType.OVERVIEW:
                         self._overview_files.append(wsi_file)
                 except WsiDicomNotSupportedError:
-                    warnings.warn(f"Non-supported file {file}.")
+                    warnings.warn(f"Non-supported file {file.name}.")
                     if filepath is not None:
                         file.close()
             elif sop_class_uid == ANN_SOP_CLASS_UID:
@@ -181,16 +181,16 @@ class WsiDicomFileSource(Source):
             single_path = Path(files)
             if single_path.is_dir():
                 return (open_file(file) for file in single_path.iterdir())
-            yield open_file(single_path)
+            return [open_file(single_path)]
         elif isinstance(files, BinaryIO):
             # Single stream.
-            yield files, None
+            return [(files, None)]
         else:
             # Multiple paths or streams.
             return (
                 open_file(file)
                 for file in files
-                if isinstance(file, BinaryIO)
+                if isinstance(file, io.IOBase)
                 or (isinstance(file, (str, Path)) and Path(file).is_file())
             )
 
@@ -224,7 +224,11 @@ class WsiDicomFileSource(Source):
             metadata = _read_file_meta_info(file)
             file.seek(0)
             return metadata.MediaStorageSOPClassUID
-        except InvalidDicomError:
+        except InvalidDicomError as exception:
+            warnings.warn(
+                f"Failed to parse DICOM file metadata for file {file}, not DICOM? "
+                f"Got exception {exception}.",
+            )
             return None
 
     @classmethod
