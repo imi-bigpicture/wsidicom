@@ -25,7 +25,7 @@ from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.file.wsidicom_file_base import OffsetTableType
 from wsidicom.instance import ImageType, TileType, WsiDataset
 
-from .data_gen import (
+from tests.data_gen import (
     TESTFRAME,
     create_layer_file,
     create_main_dataset,

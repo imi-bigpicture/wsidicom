@@ -28,7 +28,7 @@ from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
-from .data_gen import create_layer_file, create_main_dataset
+from tests.data_gen import create_layer_file, create_main_dataset
 
 
 @pytest.mark.unittest

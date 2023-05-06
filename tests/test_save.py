@@ -139,7 +139,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
 
         if len(cls.test_folders) == 0:
             raise unittest.SkipTest(
-                f"no test slide files found for {SLIDE_FOLDER}, " "skipping"
+                f"No test slide files found for {SLIDE_FOLDER}, skipping."
             )
 
     @staticmethod

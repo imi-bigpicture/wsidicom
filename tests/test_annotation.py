@@ -54,7 +54,7 @@ from wsidicom.graphical_annotations import (
 )
 from wsidicom.uid import SlideUids
 
-from .data_gen import create_layer_file
+from tests.data_gen import create_layer_file
 
 ANNOTATION_FOLDER = Path("tests/testdata/annotation")
 

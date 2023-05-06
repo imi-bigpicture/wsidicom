@@ -12,157 +12,163 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import json
-import os
 import unittest
 from hashlib import md5
-from pathlib import Path
-from typing import Any, Dict, List
-from PIL import Image
+from typing import Any, Dict
 
 import pytest
-from wsidicom import WsiDicom
+from parameterized import parameterized, parameterized_class
+from PIL import Image
 
-SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
-REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
+from tests.wsi_test_files import WsiInputType, WsiTestDefinitions, WsiTestFiles
+from wsidicom import WsiDicom
 
 
 @pytest.mark.integration
+@parameterized_class(
+    [
+        {"input_type": WsiInputType.FILE},
+        {"input_type": WsiInputType.STREAM},
+        {"input_type": WsiInputType.WEB},
+    ]
+)
 class WsiDicomFilesTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        folders = cls._get_folders(SLIDE_FOLDER)
-        cls.test_folders: Dict[Path, WsiDicom] = {}
-        for folder in folders:
-            relative_path = cls._get_relative_path(folder)
-            cls.test_folders[relative_path] = cls.open(folder)
-
-        if len(cls.test_folders) == 0:
-            raise unittest.SkipTest(
-                f"no test slide files found for {SLIDE_FOLDER}, " "skipping"
-            )
-        with open(REGION_DEFINITIONS_FILE) as json_file:
-            cls.test_definitions: Dict[str, Dict[str, Any]] = json.load(json_file)
-        if len(cls.test_definitions) == 0:
-            raise unittest.SkipTest("no test definition found, skipping.")
+        cls.input_type: WsiInputType
+        cls.wsi_test_files = WsiTestFiles(cls.input_type)
 
     @classmethod
     def tearDownClass(cls):
-        for folder, wsi_dicom in cls.test_folders.items():
-            wsi_dicom.close()
+        cls.wsi_test_files.close()
 
-    @staticmethod
-    def open(folder: Path) -> WsiDicom:
-        while next(folder.iterdir()).is_dir():
-            folder = next(folder.iterdir())
-        return WsiDicom.open(folder)
+    @parameterized.expand(WsiTestDefinitions.read_region)
+    def test_read_region(self, folder: str, region: Dict[str, Any]):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
 
-    @staticmethod
-    def _get_folders(SLIDE_FOLDER: Path) -> List[Path]:
-        if not SLIDE_FOLDER.exists():
-            print("slide folder does not exist")
-            return []
-        return [item for item in SLIDE_FOLDER.iterdir() if item.is_dir]
+        # Act
+        im = wsi.read_region(
+            (region["location"]["x"], region["location"]["y"]),
+            region["level"],
+            (region["size"]["width"], region["size"]["height"]),
+        )
 
-    @staticmethod
-    def _get_relative_path(slide_path: Path) -> Path:
-        parts = slide_path.parts
-        return Path(parts[-1])
+        # Assert
+        self.assertEqual(md5(im.tobytes()).hexdigest(), region["md5"], msg=region)
 
-    def test_read_region(self):
-        for folder, test_definitions in self.test_definitions.items():
-            if not Path(folder) in self.test_folders:
-                continue
-            wsi = self.test_folders[Path(folder)]
-            for region in test_definitions["read_region"]:
-                im = wsi.read_region(
-                    (region["location"]["x"], region["location"]["y"]),
-                    region["level"],
-                    (region["size"]["width"], region["size"]["height"]),
-                )
-                print(region)
-                self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
-                )
+    @parameterized.expand(WsiTestDefinitions.read_region_mm)
+    def test_read_region_mm(self, folder: str, region: Dict[str, Any]):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
 
-    def test_read_region_mm(self):
-        for folder, test_definitions in self.test_definitions.items():
-            if not Path(folder) in self.test_folders:
-                continue
-            wsi = self.test_folders[Path(folder)]
-            for region in test_definitions["read_region_mm"]:
-                im = wsi.read_region_mm(
-                    (region["location"]["x"], region["location"]["y"]),
-                    region["level"],
-                    (region["size"]["width"], region["size"]["height"]),
-                )
-                print(region)
-                self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
-                )
+        # Act
+        im = wsi.read_region_mm(
+            (region["location"]["x"], region["location"]["y"]),
+            region["level"],
+            (region["size"]["width"], region["size"]["height"]),
+        )
 
-    def test_read_region_mpp(self):
-        for folder, test_definitions in self.test_definitions.items():
-            if not Path(folder) in self.test_folders:
-                continue
-            wsi = self.test_folders[Path(folder)]
-            for region in test_definitions["read_region_mpp"]:
-                im = wsi.read_region_mpp(
-                    (region["location"]["x"], region["location"]["y"]),
-                    region["mpp"],
-                    (region["size"]["width"], region["size"]["height"]),
-                )
-                print(region)
-                self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
-                )
+        # Assert
+        self.assertEqual(md5(im.tobytes()).hexdigest(), region["md5"], msg=region)
 
-    def test_read_tile(self):
-        for folder, test_definitions in self.test_definitions.items():
-            if not Path(folder) in self.test_folders:
-                continue
-            wsi = self.test_folders[Path(folder)]
-            for region in test_definitions["read_tile"]:
-                im = wsi.read_tile(
-                    region["level"], (region["location"]["x"], region["location"]["y"])
-                )
-                print(region)
-                self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
-                )
+    @parameterized.expand(WsiTestDefinitions.read_region_mpp)
+    def test_read_region_mpp(self, folder: str, region: Dict[str, Any]):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
 
-    def test_read_encoded_tile(self):
-        for folder, test_definitions in self.test_definitions.items():
-            if not Path(folder) in self.test_folders:
-                continue
-            wsi = self.test_folders[Path(folder)]
-            for region in test_definitions["read_encoded_tile"]:
-                im = wsi.read_encoded_tile(
-                    region["level"], (region["location"]["x"], region["location"]["y"])
-                )
-                print(region)
-                self.assertEqual(  # type: ignore
-                    md5(im).hexdigest(), region["md5"], msg=region
-                )
+        # Act
+        im = wsi.read_region_mpp(
+            (region["location"]["x"], region["location"]["y"]),
+            region["mpp"],
+            (region["size"]["width"], region["size"]["height"]),
+        )
 
-    def test_read_thumbnail(self):
-        for folder, test_definitions in self.test_definitions.items():
-            if not Path(folder) in self.test_folders:
-                continue
-            wsi = self.test_folders[Path(folder)]
-            for region in test_definitions["read_thumbnail"]:
-                im = wsi.read_thumbnail(
-                    (region["size"]["width"], region["size"]["height"])
-                )
-                print(region)
-                self.assertEqual(  # type: ignore
-                    md5(im.tobytes()).hexdigest(), region["md5"], msg=region
-                )
+        # Assert
+        self.assertEqual(md5(im.tobytes()).hexdigest(), region["md5"], msg=region)
+
+    @parameterized.expand(WsiTestDefinitions.read_tile)
+    def test_read_tile(self, folder: str, region: Dict[str, Any]):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
+
+        # Act
+        im = wsi.read_tile(
+            region["level"],
+            (region["location"]["x"], region["location"]["y"]),
+        )
+
+        # Assert
+        self.assertEqual(md5(im.tobytes()).hexdigest(), region["md5"], msg=region)
+
+    @parameterized.expand(WsiTestDefinitions.read_encoded_tile)
+    def test_read_encoded_tile(self, folder: str, region: Dict[str, Any]):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
+
+        # Act
+        im = wsi.read_encoded_tile(
+            region["level"],
+            (region["location"]["x"], region["location"]["y"]),
+        )
+
+        # Assert
+        self.assertEqual(md5(im).hexdigest(), region["md5"], msg=region)
+
+    @parameterized.expand(WsiTestDefinitions.read_thumbnail)
+    def test_read_thumbnail(self, folder: str, region: Dict[str, Any]):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
+
+        # Act
+        im = wsi.read_thumbnail((region["size"]["width"], region["size"]["height"]))
+
+        # Assert
+        self.assertEqual(md5(im.tobytes()).hexdigest(), region["md5"], msg=region)
 
     def test_replace_label(self):
-        path = next(folders for folders in self._get_folders(SLIDE_FOLDER))
+        # Arrange
+        path = next(folders for folders in self.wsi_test_files.wsi_folders.values())
         while next(path.iterdir()).is_dir():
             path = next(path.iterdir())
         image = Image.new("RGB", (256, 256), (128, 128, 128))
+
+        # Act
         with WsiDicom.open(path, label=image) as wsi:
-            self.assertEqual(image, wsi.read_label())
+            label = wsi.read_label()
+
+        # Assert
+        self.assertEqual(image, label)
+
+    @parameterized.expand(WsiTestDefinitions.levels)
+    def test_number_of_levels(self, folder: str, expected_level_count: int):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
+
+        # Act
+        levels_count = len(wsi.levels)
+
+        # Assert
+        self.assertEqual(levels_count, expected_level_count)
+
+    @parameterized.expand(WsiTestDefinitions.has_label)
+    def test_has_label(self, folder: str, expected_has_label: bool):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
+
+        # Act
+        has_label = wsi.labels is not None
+
+        # Assert
+        self.assertEqual(has_label, expected_has_label)
+
+    @parameterized.expand(WsiTestDefinitions.has_overview)
+    def test_has_overview(self, folder: str, expected_has_overview: bool):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(folder)
+
+        # Act
+        has_overview = wsi.overviews is not None
+
+        # Assert
+        self.assertEqual(has_overview, expected_has_overview)
