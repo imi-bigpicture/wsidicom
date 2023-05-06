@@ -17,7 +17,7 @@ from pathlib import Path
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.encaps import encapsulate
 from pydicom.sequence import Sequence
-from pydicom.uid import generate_uid
+from pydicom.uid import generate_uid, UID
 
 from wsidicom.file.wsidicom_file_base import OffsetTableType
 from wsidicom.instance import TileType
@@ -278,11 +278,11 @@ def create_meta_dataset() -> FileMetaDataset:
     file_meta = FileMetaDataset()
     file_meta.FileMetaInformationGroupLength = 204
     file_meta.FileMetaInformationVersion = b"\x00\x01"
-    file_meta.MediaStorageSOPClassUID = "1.2.840.10008.5.1.4.1.1.77.1.6"
+    file_meta.MediaStorageSOPClassUID = UID("1.2.840.10008.5.1.4.1.1.77.1.6")
     file_meta.MediaStorageSOPInstanceUID = generate_uid()
-    file_meta.TransferSyntaxUID = "1.2.840.10008.1.2.4.50"
-    file_meta.ImplementationClassUID = "1.2.826.0.1.3680043.8.498.1"
-    file_meta.ImplementationVersionName = "PYDICOM 2.2.2]"
+    file_meta.TransferSyntaxUID = UID("1.2.840.10008.1.2.4.50")
+    file_meta.ImplementationClassUID = UID("1.2.826.0.1.3680043.8.498.1")
+    file_meta.ImplementationVersionName = "PYDICOM 2.2.2"
 
     return file_meta
 
