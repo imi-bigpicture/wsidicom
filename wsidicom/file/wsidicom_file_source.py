@@ -12,9 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""A source for reading WSI DICOM files."""
+
 from collections import defaultdict
 from pathlib import Path
-from typing import BinaryIO, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union
 import warnings
 
 from pydicom.dataset import FileMetaDataset
@@ -34,32 +36,31 @@ from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 from pydicom.filereader import read_preamble, _read_file_meta_info
 from pydicom.errors import InvalidDicomError
 
-"""A source for reading WSI DICOM files."""
-
 
 class WsiDicomFileSource(Source):
     """Source reading WSI DICOM instances."""
 
     def __init__(
         self,
-        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]],
+        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
     ) -> None:
         """Create a WsiDicomFileSource.
 
         Parameters
         ----------
-        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]],
-            Files to open. Can be a single file, a list of files, or a folder containing
-            files.
+        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
+            Files to open. Can be a path or stream for a single file, a list of paths or
+            streams for multiple files, or a path to a folder containing files.
         """
         self._level_files: List[WsiDicomFile] = []
         self._label_files: List[WsiDicomFile] = []
         self._overview_files: List[WsiDicomFile] = []
         self._annotation_files: List[BinaryIO] = []
-        for file, sop_class_uid, filepath in self._get_sop_class_uids(files):
+        for file, filepath in self._open_files(files):
+            sop_class_uid = self._get_sop_class_uid(file)
             if sop_class_uid == WSI_SOP_CLASS_UID:
                 try:
-                    wsi_file = WsiDicomFile(file, filepath)
+                    wsi_file = WsiDicomFile(file, filepath, filepath is not None)
                     if wsi_file.image_type == ImageType.VOLUME:
                         self._level_files.append(wsi_file)
                     elif wsi_file.image_type == ImageType.LABEL:
@@ -67,7 +68,7 @@ class WsiDicomFileSource(Source):
                     elif wsi_file.image_type == ImageType.OVERVIEW:
                         self._overview_files.append(wsi_file)
                 except WsiDicomNotSupportedError:
-                    warnings.warn(f"Non-supported file {filepath}")
+                    warnings.warn(f"Non-supported file {file}.")
                     if filepath is not None:
                         file.close()
             elif sop_class_uid == ANN_SOP_CLASS_UID:
@@ -89,19 +90,19 @@ class WsiDicomFileSource(Source):
     @property
     def level_instances(self) -> Iterable[WsiInstance]:
         """The level instances parsed from the source."""
-        return self._open_files(
+        return self._create_instances(
             self._level_files, self._slide_uids, self._base_tile_size
         )
 
     @property
     def label_instances(self) -> Iterable[WsiInstance]:
         """The label instances parsed from the source."""
-        return self._open_files(self._label_files, self._slide_uids)
+        return self._create_instances(self._label_files, self._slide_uids)
 
     @property
     def overview_instances(self) -> Iterable[WsiInstance]:
         """The overview instances parsed from the source."""
-        return self._open_files(self._overview_files, self._slide_uids)
+        return self._create_instances(self._overview_files, self._slide_uids)
 
     @property
     def annotation_instances(self) -> Iterable[AnnotationInstance]:
@@ -109,7 +110,7 @@ class WsiDicomFileSource(Source):
         return AnnotationInstance.open(self._annotation_files)
 
     def close(self) -> None:
-        """Close all opened files in the source."""
+        """Close all opened files in the source. Does not close provided streams."""
         for image_file in self.image_files:
             image_file.close()
 
@@ -150,16 +151,16 @@ class WsiDicomFileSource(Source):
         return len(self.image_files) > 0
 
     @staticmethod
-    def _open_inputs(
-        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]],
+    def _open_files(
+        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
     ) -> Iterable[Tuple[BinaryIO, Optional[Path]]]:
         """
         Return streams for input files.
 
         Parameters
         ----------
-        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]],
-            Files to open
+        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
+            Files to open-
 
         Returns
         ----------
@@ -167,32 +168,39 @@ class WsiDicomFileSource(Source):
             Iterable of streams and optional filename (if opened file).
         """
 
-        def open_item(
-            item: Union[str, Path, BinaryIO]
+        def open_file(
+            file: Union[str, Path, BinaryIO]
         ) -> Tuple[BinaryIO, Optional[Path]]:
-            if isinstance(item, (str, Path)):
-                return open(item, "rb"), Path(item)
-            return item, None
+            """Open stream if file is path. Return stream and optional filepath."""
+            if isinstance(file, (str, Path)):
+                return open(file, "rb"), Path(file)
+            return file, None
 
         if isinstance(files, (str, Path)):
+            # Path to single file or folder with files.
             single_path = Path(files)
             if single_path.is_dir():
-                return [open_item(file) for file in single_path.iterdir()]
-            return [open_item(single_path)]
-        return (
-            open_item(file)
-            for file in files
-            if isinstance(file, BinaryIO)
-            or (isinstance(file, (str, Path)) and Path(file).is_file())
-        )
+                return (open_file(file) for file in single_path.iterdir())
+            yield open_file(single_path)
+        elif isinstance(files, BinaryIO):
+            # Single stream.
+            yield files, None
+        else:
+            # Multiple paths or streams.
+            return (
+                open_file(file)
+                for file in files
+                if isinstance(file, BinaryIO)
+                or (isinstance(file, (str, Path)) and Path(file).is_file())
+            )
 
     @staticmethod
-    def _get_base_dataset(files: Sequence[WsiDicomFile]) -> WsiDataset:
+    def _get_base_dataset(files: Iterable[WsiDicomFile]) -> WsiDataset:
         """Return file with largest image (width) from list of files.
 
         Parameters
         ----------
-        files: Sequence[WsiDicomFile]
+        files: Iterable[WsiDicomFile]
            List of files.
 
         Returns
@@ -207,43 +215,22 @@ class WsiDicomFileSource(Source):
             )
         )
 
-    @classmethod
-    def _get_sop_class_uids(
-        cls, files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]]
-    ) -> Iterable[Tuple[BinaryIO, Optional[UID], Optional[Path]]]:
-        """Read SOP class uids from inputs if DICOM.
-
-        Parameters
-        ----------
-        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]]
-            Files to get SOP class uids from.
-
-        Returns
-        ----------
-        Iterable[Tuple[BinaryIO, Optional[UID], Optional[Path]]]
-            Iterable of streams with dicom files
-        """
-        opened_files = cls._open_inputs(files)
-        return (
-            (file, cls._get_sop_class_uid(file), path) for (file, path) in opened_files
-        )
-
     @staticmethod
     def _get_sop_class_uid(file: BinaryIO) -> Optional[UID]:
-        """Return the SOP class UID from the file metadata."""
+        """Return the SOP class UID from the file metadata, or None if invalid DICOM."""
         try:
             file.seek(0)
             read_preamble(file, False)
-            metadata: FileMetaDataset = _read_file_meta_info(file)
+            metadata = _read_file_meta_info(file)
             file.seek(0)
             return metadata.MediaStorageSOPClassUID
         except InvalidDicomError:
             return None
 
     @classmethod
-    def _open_files(
+    def _create_instances(
         cls,
-        files: Sequence[WsiDicomFile],
+        files: Iterable[WsiDicomFile],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None,
     ) -> Iterable["WsiInstance"]:
@@ -282,7 +269,7 @@ class WsiDicomFileSource(Source):
         files: Iterable[WsiDicomFile],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None,
-    ) -> List[WsiDicomFile]:
+    ) -> Iterable[WsiDicomFile]:
         """
         Filter list of wsi dicom files on uids and tile size if defined.
 
@@ -300,11 +287,9 @@ class WsiDicomFileSource(Source):
         List['WsiDicomFile']
             List of matching wsi dicom files.
         """
-        valid_files: List[WsiDicomFile] = []
-
         for file in files:
             if file.dataset.matches_series(series_uids, series_tile_size):
-                valid_files.append(file)
+                yield file
             else:
                 warnings.warn(
                     f"{file.filepath} with uids {file.uids.slide} "
@@ -312,8 +297,6 @@ class WsiDicomFileSource(Source):
                     f"and tile size {series_tile_size}"
                 )
                 file.close()
-
-        return valid_files
 
     @staticmethod
     def _group_files(

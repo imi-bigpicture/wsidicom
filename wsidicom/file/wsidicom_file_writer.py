@@ -53,7 +53,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         file: BinaryIO
             Stream to open.
         filepath: Optional[Path] = None
-            Optional filepath of stream
+            Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
         """
@@ -63,9 +63,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
     @classmethod
     def open(cls, file: Path) -> "WsiDicomFileWriter":
-        """
-        Open file in path as WsiDicomFileWriter.
-        """
+        """Open file in path as WsiDicomFileWriter."""
         stream = open(
             file,
             "w+b",

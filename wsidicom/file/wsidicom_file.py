@@ -45,7 +45,7 @@ class WsiDicomFile(WsiDicomFileBase):
         file: BinaryIO
             Stream to open.
         filepath: Optional[Path] = None
-            Optional filepath of stream
+            Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
         """

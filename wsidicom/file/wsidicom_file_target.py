@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""A target for writing WSI DICOM files to disk."""
+
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
@@ -27,8 +29,6 @@ from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.target import Target
-
-"""A target for writing WSI DICOM files to disk."""
 
 
 class WsiDicomFileTarget(Target):

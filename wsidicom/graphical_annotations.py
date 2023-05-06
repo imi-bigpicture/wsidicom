@@ -24,6 +24,7 @@ from typing import (
     DefaultDict,
     Dict,
     Generic,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -1660,8 +1661,8 @@ class AnnotationInstance:
 
     @classmethod
     def open(
-        cls, files: Sequence[Union[str, Path, BinaryIO]]
-    ) -> List["AnnotationInstance"]:
+        cls, files: Iterable[Union[str, Path, BinaryIO]]
+    ) -> Iterable["AnnotationInstance"]:
         """Read annotations from DICOM files according to sup 222.
 
         Parameters
@@ -1669,7 +1670,7 @@ class AnnotationInstance:
         files: Sequence[Union[str, Path, BinaryIO]]
             Files with DICOM annotations to read.
         """
-        return [cls.open_dataset(dcmread(file)) for file in files]
+        return (cls.open_dataset(dcmread(file)) for file in files)
 
     @classmethod
     def open_dataset(cls, dataset: Dataset) -> "AnnotationInstance":

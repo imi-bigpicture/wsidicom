@@ -48,7 +48,7 @@ class WsiDicomFileBase:
         file: BinaryIO
             Stream to open.
         filepath: Optional[Path] = None
-            Optional filepath of stream
+            Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
         """
@@ -61,8 +61,7 @@ class WsiDicomFileBase:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._owned:
-            self.close()
+        self.close()
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.filepath})"
@@ -99,11 +98,12 @@ class WsiDicomFileBase:
         """
         read_tag = self._file.read_tag()
         if tag != read_tag:
-            raise ValueError(f"Found tag {read_tag} expected {tag}")
+            raise ValueError(f"Found tag {read_tag} expected {tag}.")
         read_length = self._read_tag_length(with_vr)
         if length != read_length:
-            raise ValueError(f"Found length {read_length} expected {length}")
+            raise ValueError(f"Found length {read_length} expected {length}.")
 
-    def close(self) -> None:
-        """Close the file."""
-        self._file.close()
+    def close(self, force: Optional[bool] = False) -> None:
+        """Close the file if owned by instance or forced."""
+        if self._owned or force:
+            self._file.close()

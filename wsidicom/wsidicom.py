@@ -15,7 +15,15 @@
 import os
 import warnings
 from pathlib import Path
-from typing import BinaryIO, Callable, List, Optional, Sequence, Tuple, Union
+from typing import (
+    BinaryIO,
+    Callable,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from PIL import Image
 from PIL.Image import Image as PILImage
@@ -39,17 +47,16 @@ from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
 
 
 class WsiDicom:
-    """Represent a wsi slide containing pyramidal levels and optionally
-    labels and/or overviews."""
+    """A WSI containing pyramidal levels and optionally labels and/or overviews."""
 
     def __init__(
         self,
         source: Source,
         label: Optional[Union[PILImage, str, Path]] = None,
     ):
-        """Holds wsi dicom levels, labels and overviews.
+        """Hold WSI DICOM levels, labels and overviews.
 
-        Note that WsiDicom.open() should be used for opening dicom wsi files.
+        Note that WsiDicom.open() should be used for opening DICOM WSI files.
 
         Parameters
         ----------
@@ -83,25 +90,26 @@ class WsiDicom:
     @classmethod
     def open(
         cls,
-        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]],
+        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
         label: Optional[Union[PILImage, str, Path]] = None,
     ) -> "WsiDicom":
-        """Open valid wsi dicom files in path or stream and return a WsiDicom object.
+        """Open valid WSI DICOM files in path or stream and return a WsiDicom object.
+
         Non-valid files are ignored. Only opened files (i.e. not streams) will e closed
         by WsiDicom.
 
         Parameters
         ----------
-        files: Union[str, Path, BinaryIO, Sequence[Union[str, Path, BinaryIO]]],
-            Files to open. Can be a single file, a list of files, or a folder containing
-            files.
+        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
+            Files to open. Can be a path or stream for a single file, a list of paths or
+            streams for multiple files, or a path to a folder containing files.
         label: Optional[Union[PILImage, str, Path]] = None
             Optional label image to use instead of label found in path.
 
         Returns
         ----------
         WsiDicom
-            WsiDicom created from wsi dicom files in path.
+            WsiDicom created from WSI DICOM files in path.
         """
         source = WsiDicomFileSource(files)
         return cls(source, label)
@@ -114,12 +122,12 @@ class WsiDicom:
         series_uid: Union[str, UID],
         requested_transfer_syntax: UID = JPEGBaseline8Bit,
     ) -> "WsiDicom":
-        """Open wsi dicom instances using dicom web client.
+        """Open WSI DICOM instances using DICOM web client.
 
         Parameters
         ----------
         client: WsiDicomWebClient
-            Configured dicom web client.
+            Configured DICOM web client.
         study_uid: Union[str, UID]
             Study uid of wsi to open.
         series_uid: Union[str, UID]
@@ -131,7 +139,7 @@ class WsiDicom:
         Returns
         ----------
         WsiDicom
-            WsiDicom created from wsi dicom files in study-series.
+            WsiDicom created from WSI DICOM instances in study-series.
         """
         source = WsiDicomWebSource(
             client, study_uid, series_uid, requested_transfer_syntax
@@ -628,7 +636,7 @@ class WsiDicom:
 
     @classmethod
     def is_ready_for_viewing(
-        cls, path: Union[str, Sequence[str], Path, Sequence[Path]]
+        cls, path: Union[str, Iterable[str], Path, Iterable[Path]]
     ) -> Optional[bool]:
         """
         Return true if files in path are formated for fast viewing, i.e.
@@ -636,7 +644,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        path: Union[str, Sequence[str], Path, Sequence[Path]]
+        path: Union[str, Iterable[str], Path, Iterable[Path]]
             Path to files to test.
 
         Returns
@@ -648,14 +656,14 @@ class WsiDicom:
 
     @classmethod
     def is_supported(
-        cls, path: Union[str, Sequence[str], Path, Sequence[Path]]
+        cls, path: Union[str, Iterable[str], Path, Iterable[Path]]
     ) -> bool:
         """Return true if files in path have at least one level that can be read with
         WsiDicom.
 
         Parameters
         ----------
-        path: Union[str, Sequence[str], Path, Sequence[Path]]
+        path: Union[str, Iterable[str], Path, Iterable[Path]]
             Path to files to test.
 
         Returns
