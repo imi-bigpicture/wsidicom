@@ -17,6 +17,7 @@ from typing import List, Optional
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
+from pydicom.valuerep import DSfloat
 
 from wsidicom.geometry import Orientation, PointMm, RegionMm
 
@@ -73,8 +74,8 @@ class ImageOrigin:
     def total_pixel_matrix_origin_sequence(self) -> DicomSequence:
         """Return formatted TotalPixelMatrixOriginSequence."""
         offset_item = Dataset()
-        offset_item.XOffsetInSlideCoordinateSystem = self.origin.x
-        offset_item.YOffsetInSlideCoordinateSystem = self.origin.y
+        offset_item.XOffsetInSlideCoordinateSystem = DSfloat(self.origin.x, True)
+        offset_item.YOffsetInSlideCoordinateSystem = DSfloat(self.origin.y, True)
         return DicomSequence([offset_item])
 
     @property

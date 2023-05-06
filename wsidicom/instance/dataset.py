@@ -598,7 +598,9 @@ class WsiDataset(Dataset):
             dataset, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()])
         )
         plane_position_slide = Dataset()
-        plane_position_slide.ZOffsetInSlideCoordinateSystem = focal_planes[0]
+        plane_position_slide.ZOffsetInSlideCoordinateSystem = DSfloat(
+            focal_planes[0], True
+        )
         shared_functional_group[0].PlanePositionSlideSequence = DicomSequence(
             [plane_position_slide]
         )
@@ -613,14 +615,12 @@ class WsiDataset(Dataset):
                 DSfloat(dataset.pixel_spacing.width * scale, True),
                 DSfloat(dataset.pixel_spacing.height * scale, True),
             ]
-        pixel_measure[
-            0
-        ].SpacingBetweenSlices = self._get_spacing_between_slices_for_focal_planes(
-            focal_planes
+        pixel_measure[0].SpacingBetweenSlices = DSfloat(
+            self._get_spacing_between_slices_for_focal_planes(focal_planes), True
         )
 
         if dataset.slice_thickness is not None:
-            pixel_measure[0].SliceThickness = dataset.slice_thickness
+            pixel_measure[0].SliceThickness = DSfloat(dataset.slice_thickness, True)
 
         shared_functional_group[0].PixelMeasuresSequence = pixel_measure
         dataset.SharedFunctionalGroupsSequence = shared_functional_group
@@ -684,10 +684,10 @@ class WsiDataset(Dataset):
                 DSfloat(image_data.pixel_spacing.width, True),
                 DSfloat(image_data.pixel_spacing.height, True),
             ]
-            pixel_measure_sequence.SpacingBetweenSlices = 0.0
+            pixel_measure_sequence.SpacingBetweenSlices = DSfloat(0.0, True)
             # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
             # Height, Depth. Depth must not be 0. Default to 0.5 microns
-            pixel_measure_sequence.SliceThickness = 0.0005
+            pixel_measure_sequence.SliceThickness = DSfloat(0.0005, True)
             shared_functional_group_sequence.PixelMeasuresSequence = DicomSequence(
                 [pixel_measure_sequence]
             )
