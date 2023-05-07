@@ -53,6 +53,7 @@ class WsiDicom:
         self,
         source: Source,
         label: Optional[Union[PILImage, str, Path]] = None,
+        source_owned: bool = False,
     ):
         """Hold WSI DICOM levels, labels and overviews.
 
@@ -64,8 +65,11 @@ class WsiDicom:
             A source providing instances for the wsi to open.
         label: Optional[Union[PILImage, str, Path]] = None
             Optional label image to use instead of label found in source.
+        source_owned: bool = False
+            If source should be closed by this instance if used in a context manager.
         """
         self._source = source
+        self._source_owned = source_owned
         if label is None:
             label_instances = source.label_instances
         else:
@@ -84,8 +88,6 @@ class WsiDicom:
         self.optical = OpticalManager.open(
             [instance for series in self.collection for instance in series.instances]
         )
-
-        self.__enter__()
 
     @classmethod
     def open(
@@ -112,7 +114,7 @@ class WsiDicom:
             WsiDicom created from WSI DICOM files in path.
         """
         source = WsiDicomFileSource(files)
-        return cls(source, label)
+        return cls(source, label, True)
 
     @classmethod
     def open_web(
@@ -121,6 +123,7 @@ class WsiDicom:
         study_uid: Union[str, UID],
         series_uid: Union[str, UID],
         requested_transfer_syntax: UID = JPEGBaseline8Bit,
+        label: Optional[Union[PILImage, str, Path]] = None,
     ) -> "WsiDicom":
         """Open WSI DICOM instances using DICOM web client.
 
@@ -135,6 +138,8 @@ class WsiDicom:
         transfer_syntax: UID
             Transfer syntax to request for image data, for example
             UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
+        label: Optional[Union[PILImage, str, Path]] = None
+            Optional label image to use instead of label found in source.
 
         Returns
         ----------
@@ -144,7 +149,7 @@ class WsiDicom:
         source = WsiDicomWebSource(
             client, study_uid, series_uid, requested_transfer_syntax
         )
-        return cls(source)
+        return cls(source, label, True)
 
     def __enter__(self):
         return self
@@ -529,8 +534,9 @@ class WsiDicom:
         return wsi_level.get_instance(z, path)
 
     def close(self) -> None:
-        """Close source."""
-        self._source.close()
+        """Close source if owned by this instance."""
+        if self._source_owned:
+            self._source.close()
 
     def save(
         self,
