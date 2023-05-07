@@ -15,30 +15,20 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Optional, Type
+from typing import Optional
 
-import numpy as np
 import pytest
 from parameterized import parameterized
-from pydicom.dataset import Dataset
-from pydicom.sequence import Sequence as DicomSequence
 
-from tests.data_gen import create_layer_file, create_main_dataset
+from tests.data_gen import create_layer_file
 from wsidicom import WsiDicom
-from wsidicom.conceptcode import (
-    CidConceptCode,
-    Code,
-    IlluminationCode,
-    IlluminationColorCode,
-)
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
-from wsidicom.optical import Illumination, Lut, OpticalManager, OpticalPath
 
 
 @pytest.mark.unittest
-class WsiDicomInterfaceTests(unittest.TestCase):
+class WsiDicomLevelsTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tempdir: TemporaryDirectory
@@ -177,41 +167,6 @@ class WsiDicomInterfaceTests(unittest.TestCase):
     @parameterized.expand(
         [
             (
-                Region(position=Point(x=0, y=0), size=Size(width=100, height=100)),
-                Point(0, 0),
-                Size(1024, 1024),
-                Region(position=Point(0, 0), size=Size(100, 100)),
-            ),
-            (
-                Region(position=Point(x=0, y=0), size=Size(width=1500, height=1500)),
-                Point(0, 0),
-                Size(1024, 1024),
-                Region(position=Point(0, 0), size=Size(1024, 1024)),
-            ),
-            (
-                Region(
-                    position=Point(x=1200, y=1200), size=Size(width=300, height=300)
-                ),
-                Point(1, 1),
-                Size(1024, 1024),
-                Region(position=Point(176, 176), size=Size(300, 300)),
-            ),
-        ]
-    )
-    def test_crop_tile(
-        self, region: Region, point: Point, size: Size, expected_result: Region
-    ):
-        # Arrange
-
-        # Act
-        cropped_region = region.inside_crop(point, size)
-
-        # Assert
-        self.assertEqual(cropped_region, expected_result)
-
-    @parameterized.expand(
-        [
-            (
                 Region(position=Point(0, 0), size=Size(100, 100)),
                 Region(Point(0, 0), Size(1, 1)),
             ),
@@ -290,100 +245,3 @@ class WsiDicomInterfaceTests(unittest.TestCase):
 
         # Assert
         self.assertEqual(instance, wsi_level.default_instance)
-
-    @parameterized.expand(
-        [
-            (
-                [256, 0, 8],
-                b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00",
-                b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00",
-                b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\xff\x00",
-                2,
-                np.linspace(0, 255, 256, dtype=np.uint16),
-            ),
-            (
-                [256, 0, 16],
-                b"\x01\x00\x00\x01\xff\xff",
-                b"\x01\x00\x00\x01\x00\x00",
-                b"\x01\x00\x00\x01\x00\x00",
-                0,
-                np.linspace(0, 65535, 256, dtype=np.uint16),
-            ),
-        ]
-    )
-    def test_parse_lut(
-        self,
-        red_lut_descriptor: List[int],
-        red_lut: bytes,
-        green_lut: bytes,
-        blue_lut: bytes,
-        channel: int,
-        expected: np.ndarray,
-    ):
-        # Arrange
-        ds = Dataset()
-        ds.RedPaletteColorLookupTableDescriptor = red_lut_descriptor
-        ds.SegmentedRedPaletteColorLookupTableData = red_lut
-        ds.SegmentedGreenPaletteColorLookupTableData = green_lut
-        ds.SegmentedBluePaletteColorLookupTableData = blue_lut
-        expected_lut = np.zeros((3, 256), dtype=np.uint16)
-        expected_lut[channel, :] = expected
-
-        # Act
-        lut = Lut(DicomSequence([ds]))
-
-        # Assert
-        self.assertTrue(np.array_equal(lut.get(), expected_lut))
-
-    def test_recreate_optical_module(self):
-        # Arrange
-        ds = create_main_dataset()
-        original_optical = Dataset()
-        original_optical.OpticalPathSequence = ds.OpticalPathSequence
-        original_optical.NumberOfOpticalPaths = ds.NumberOfOpticalPaths
-
-        # Act
-        restored_optical_ds = self.slide.optical.insert_into_ds(Dataset())
-
-        # Assert
-        self.assertEqual(original_optical, restored_optical_ds)
-
-    def test_make_optical(self):
-        # Arrange
-        illumination_method = IlluminationCode("Transmission illumination")
-        illumination_color = IlluminationColorCode("Full Spectrum")
-        illumination = Illumination(
-            illumination_method=[illumination_method],
-            illumination_color=illumination_color,
-        )
-        path = OpticalPath(
-            identifier="1",
-            illumination=illumination,
-            photometric_interpretation="YBR_FULL_422",
-            icc_profile=bytes(0),
-        )
-
-        # Act
-        optical = OpticalManager([path])
-
-        # Assert
-        self.assertEqual(optical.get("1"), path)
-
-    @parameterized.expand(
-        (
-            code_class,
-            code,
-        )
-        for code_class in CidConceptCode.__subclasses__()
-        for code in code_class.cid.values()
-    )
-    def test_create_code_from_meaning(
-        self, code_class: Type[CidConceptCode], code: Code
-    ):
-        # Arrange
-
-        # Act
-        created_code = code_class(code.meaning)
-
-        # Assert
-        self.assertEqual(code, created_code)

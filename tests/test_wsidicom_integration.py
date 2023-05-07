@@ -32,7 +32,7 @@ from wsidicom import WsiDicom
         {"input_type": WsiInputType.WEB},
     ]
 )
-class WsiDicomFilesTests(unittest.TestCase):
+class WsiDicomIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.input_type: WsiInputType
