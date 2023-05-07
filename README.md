@@ -45,6 +45,14 @@ from wsidicom import WsiDicom
 slide = WsiDicom.open(path_to_folder)
 ```
 
+***Or load a WSI dataset from opened streams.***
+
+```python
+from wsidicom import WsiDicom
+
+slide = WsiDicom.open([file_stream_1, file_stream_2, ... ])
+```
+
 ***Or load a WSI dataset from DICOMWeb.***
 
 ```python
