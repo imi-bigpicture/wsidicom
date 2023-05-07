@@ -24,40 +24,49 @@ class to extend support to other DICOM sources or to read other WSI formats.
 
 
 class Source(metaclass=ABCMeta):
-    """A source should be initated with a path or similar, and parse the content into
-    instances."""
+    """A source providing DICOM WSI instances to open.
+
+    A source should be initated with a path or similar, and parse the content into
+    instances.
+    """
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     @property
     @abstractmethod
     def base_dataset(self) -> WsiDataset:
-        """Should return a representative dataset for the source content."""
+        """Return a representative dataset for the source content."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def level_instances(self) -> Iterable[WsiInstance]:
-        """Should return all level instances from the source."""
+        """Return all level instances from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def label_instances(self) -> Iterable[WsiInstance]:
-        """Should return all label instances from the source."""
+        """Return all label instances from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def overview_instances(self) -> Iterable[WsiInstance]:
-        """Should return all level overview from the source."""
+        """Return all overview instances from the source."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def annotation_instances(self) -> Iterable[AnnotationInstance]:
-        """Should return all annotation instances from the source."""
+        """Return all annotation instances from the source."""
         raise NotImplementedError()
 
     @abstractmethod
     def close(self) -> None:
-        """Should close any opened resouces (such as files)."""
+        """Close any opened resouces (such as files)."""
         raise NotImplementedError()

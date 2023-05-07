@@ -23,11 +23,15 @@ from wsidicom.instance import WsiDicomImageData
 
 
 class WsiDicomFileImageData(WsiDicomImageData):
-    """Represents image data read from dicom file(s). Image data can
-    be sparsly or fully tiled and/or concatenated."""
+    """
+    Represents image data read from dicom file(s).
+
+    Image data can be sparsly or fully tiled and/or concatenated.
+    """
 
     def __init__(self, files: Union[WsiDicomFile, Sequence[WsiDicomFile]]) -> None:
-        """Create WsiDicomFileImageData from frame data in files.
+        """
+        Create WsiDicomFileImageData from frame data in files.
 
         Parameters
         ----------
@@ -53,7 +57,9 @@ class WsiDicomFileImageData(WsiDicomImageData):
 
     @property
     def files(self) -> List[Path]:
-        return [file.filepath for file in self._files.values()]
+        return [
+            file.filepath for file in self._files.values() if file.filepath is not None
+        ]
 
     @property
     def transfer_syntax(self) -> UID:
@@ -61,8 +67,10 @@ class WsiDicomFileImageData(WsiDicomImageData):
         return self._transfer_syntax
 
     def _get_file(self, frame_index: int) -> WsiDicomFile:
-        """Return file contaning frame index. Raises WsiDicomNotFoundError if
-        frame is not found.
+        """
+        Return file contaning frame index.
+
+        Raises WsiDicomNotFoundError if frame is not found.
 
         Parameters
         ----------

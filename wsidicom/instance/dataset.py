@@ -301,7 +301,8 @@ class WsiDataset(Dataset):
         pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
         if pixel_spacing_values is not None:
             if any([spacing == 0 for spacing in pixel_spacing_values]):
-                raise WsiDicomError("Pixel spacing is zero")
+                warnings.warn(f"Pixel spacing is zero, {pixel_spacing_values}")
+                return None
             return SizeMm.from_tuple(pixel_spacing_values)
         return None
 
@@ -741,7 +742,7 @@ class WsiDataset(Dataset):
             dataset.BitsStored = 8
             dataset.HighBit = 7
             dataset.PixelRepresentation = 0
-            # dataset.LossyImageCompressionRatio = 1
+            dataset.LossyImageCompressionRatio = 1
             dataset.LossyImageCompressionMethod = "ISO_15444_1"
             dataset.LossyImageCompression = "01"
         elif image_data.transfer_syntax == JPEG2000Lossless:

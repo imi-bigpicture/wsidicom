@@ -12,7 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from pathlib import Path
+from typing import BinaryIO, Union
+from pydicom.filebase import DicomFileLike
 
 
 class WsiDicomError(Exception):
@@ -28,12 +29,12 @@ class WsiDicomError(Exception):
 class WsiDicomFileError(Exception):
     """Raised if read file data is incorrect."""
 
-    def __init__(self, filepath: Path, error: str):
-        self.filepath = filepath
+    def __init__(self, file: Union[BinaryIO, DicomFileLike], error: str):
+        self.file = file
         self.error = error
 
     def __str__(self):
-        return f"{self.filepath}: {self.error}"
+        return f"{self.file}: {self.error}"
 
 
 class WsiDicomMatchError(Exception):

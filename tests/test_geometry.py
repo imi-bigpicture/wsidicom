@@ -66,19 +66,33 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         self.assertEqual(point0.to_tuple(), (10, 10))
 
     def test_region_mm(self):
+        # Arrange
+        # Act
         region = RegionMm(PointMm(1.0, 2.0), SizeMm(3.0, 4.0))
+
+        # Assert
         self.assertEqual(region.start, PointMm(1.0, 2.0))
         self.assertEqual(region.end, PointMm(4.0, 6.0))
 
     def test_region_mm_subtract(self):
+        # Arrange
         region = RegionMm(PointMm(1.0, 2.0), SizeMm(3.0, 4.0))
+
+        # Act
         region = region - PointMm(1.0, 2.0)
+
+        # Assert
         self.assertEqual(region.start, PointMm(0.0, 0.0))
         self.assertEqual(region.end, PointMm(3.0, 4.0))
 
     def test_region_mm_add(self):
+        # Arrange
         region = RegionMm(PointMm(1.0, 2.0), SizeMm(3.0, 4.0))
+
+        # Act
         region = region + PointMm(1.0, 2.0)
+
+        # Assert
         self.assertEqual(region.start, PointMm(2.0, 4.0))
         self.assertEqual(region.end, PointMm(5.0, 8.0))
 
@@ -117,7 +131,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         expected_start: PointMm,
         expected_end: PointMm,
     ):
+        # Arrange
+        # Act
         transformed_region = origin.transform_region(region)
+
+        # Assert
         self.assertEqual(transformed_region.start, expected_start)
         self.assertEqual(transformed_region.end, expected_end)
 
@@ -132,8 +150,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         ]
     )
     def test_region_zoom(self, region: Region, expected_start: Point, zoom: float):
+        # Arrange
+        # Act
         zoomed_region = region.zoom(zoom)
 
+        # Assert
         self.assertEqual(zoomed_region.start, expected_start)
         self.assertEqual(zoomed_region.size, region.size)
 
@@ -150,7 +171,45 @@ class WsiDicomGeomtryTests(unittest.TestCase):
     def test_region_mm_zoom(
         self, region: RegionMm, expected_start: PointMm, zoom: float
     ):
+        # Arrange
+        # Act
         zoomed_region = region.zoom(zoom)
 
+        # Assert
         self.assertEqual(zoomed_region.start, expected_start)
         self.assertEqual(zoomed_region.size, region.size)
+
+    @parameterized.expand(
+        [
+            (
+                Region(position=Point(x=0, y=0), size=Size(width=100, height=100)),
+                Point(0, 0),
+                Size(1024, 1024),
+                Region(position=Point(0, 0), size=Size(100, 100)),
+            ),
+            (
+                Region(position=Point(x=0, y=0), size=Size(width=1500, height=1500)),
+                Point(0, 0),
+                Size(1024, 1024),
+                Region(position=Point(0, 0), size=Size(1024, 1024)),
+            ),
+            (
+                Region(
+                    position=Point(x=1200, y=1200), size=Size(width=300, height=300)
+                ),
+                Point(1, 1),
+                Size(1024, 1024),
+                Region(position=Point(176, 176), size=Size(300, 300)),
+            ),
+        ]
+    )
+    def test_inside_crop(
+        self, region: Region, point: Point, size: Size, expected_result: Region
+    ):
+        # Arrange
+
+        # Act
+        cropped_region = region.inside_crop(point, size)
+
+        # Assert
+        self.assertEqual(cropped_region, expected_result)

@@ -19,6 +19,7 @@ from pathlib import Path
 from struct import pack
 from typing import (
     Any,
+    BinaryIO,
     Dict,
     Iterable,
     Iterator,
@@ -41,18 +42,33 @@ from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
 class WsiDicomFileWriter(WsiDicomFileBase):
-    def __init__(self, filepath: Path) -> None:
-        """Return a dicom filepointer.
+    def __init__(
+        self, file: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
+    ) -> None:
+        """
+        A writer for DICOM WSI files.
 
         Parameters
         ----------
-        filepath: Path
-            Path to filepointer.
-
+        file: BinaryIO
+            Stream to open.
+        filepath: Optional[Path] = None
+            Optional filepath of stream.
+        owned: bool = False
+            If the stream should be closed by this instance.
         """
-        super().__init__(filepath, mode="w+b")
-        self._fp.is_little_endian = True
-        self._fp.is_implicit_VR = False
+        super().__init__(file, filepath, owned)
+        self._file.is_little_endian = True
+        self._file.is_implicit_VR = False
+
+    @classmethod
+    def open(cls, file: Path) -> "WsiDicomFileWriter":
+        """Open file in path as WsiDicomFileWriter."""
+        stream = open(
+            file,
+            "w+b",
+        )
+        return cls(stream, file, True)
 
     def write(
         self,
@@ -66,7 +82,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         instance_number: int,
         scale: int = 1,
     ) -> None:
-        """Writes data to file.
+        """
+        Writes data to file.
 
         Parameters
         ----------
@@ -104,7 +121,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             frame_positions += self._write_pixel_data(
                 image_data, z, path, workers, chunk_size, scale
             )
-        pixels_end = self._fp.tell()
+        pixels_end = self._file.tell()
         self._write_pixel_data_end()
 
         if offset_table is not OffsetTableType.NONE:
@@ -119,8 +136,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
     def _write_preamble(self) -> None:
         """Writes file preamble to file."""
         preamble = b"\x00" * 128
-        self._fp.write(preamble)
-        self._fp.write(b"DICM")
+        self._file.write(preamble)
+        self._file.write(b"DICM")
 
     def _write_file_meta(self, uid: UID, transfer_syntax: UID) -> None:
         """Writes file meta dataset to file.
@@ -137,7 +154,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         meta_ds.MediaStorageSOPInstanceUID = uid
         meta_ds.MediaStorageSOPClassUID = WSI_SOP_CLASS_UID
         validate_file_meta(meta_ds)
-        write_file_meta_info(self._fp, meta_ds)
+        write_file_meta_info(self._file, meta_ds)
 
     def _write_base(self, dataset: Dataset) -> None:
         """Writes base dataset to file.
@@ -150,7 +167,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         now = datetime.now()
         dataset.ContentDate = datetime.date(now).strftime("%Y%m%d")
         dataset.ContentTime = datetime.time(now).strftime("%H%M%S.%f")
-        write_dataset(self._fp, dataset)
+        write_dataset(self._file, dataset)
 
     def _write_tag(
         self, tag: str, value_representation: str, length: Optional[int] = None
@@ -167,13 +184,13 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
 
         """
-        self._fp.write_tag(Tag(tag))
-        self._fp.write(bytes(value_representation, "iso8859"))
-        self._fp.write_leUS(0)
+        self._file.write_tag(Tag(tag))
+        self._file.write(bytes(value_representation, "iso8859"))
+        self._file.write_leUS(0)
         if length is not None:
-            self._fp.write_leUL(length)
+            self._file.write_leUL(length)
         else:
-            self._fp.write_leUL(0xFFFFFFFF)
+            self._file.write_leUL(0xFFFFFFFF)
 
     def _reserve_eot(self, number_of_frames: int) -> int:
         """Reserve space in file for extended offset table.
@@ -184,7 +201,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Number of frames to reserve space for.
 
         """
-        table_start = self._fp.tell()
+        table_start = self._file.tell()
         BYTES_PER_ITEM = 8
         eot_length = BYTES_PER_ITEM * number_of_frames
         self._write_tag("ExtendedOffsetTable", "OV", eot_length)
@@ -204,13 +221,13 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Number of frames to reserve space for.
 
         """
-        table_start = self._fp.tell()
+        table_start = self._file.tell()
         BYTES_PER_ITEM = 4
         tag_lengths = BYTES_PER_ITEM * number_of_frames
-        self._fp.write_tag(ItemTag)
-        self._fp.write_leUL(tag_lengths)
+        self._file.write_tag(ItemTag)
+        self._file.write_leUL(tag_lengths)
         for _ in range(number_of_frames):
-            self._fp.write_leUL(0)
+            self._file.write_leUL(0)
         return table_start
 
     def _write_pixel_data_start(
@@ -241,10 +258,10 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         if offset_table == OffsetTableType.BASIC:
             table_start = self._reserve_bot(number_of_frames)
         else:
-            self._fp.write_tag(ItemTag)  # Empty BOT
-            self._fp.write_leUL(0)
+            self._file.write_tag(ItemTag)  # Empty BOT
+            self._file.write_leUL(0)
 
-        pixel_data_start = self._fp.tell()
+        pixel_data_start = self._file.tell()
 
         return table_start, pixel_data_start
 
@@ -272,13 +289,13 @@ class WsiDicomFileWriter(WsiDicomFileBase):
                 "An extended offset table should be used"
             )
 
-        self._fp.seek(bot_start)  # Go to first BOT entry
+        self._file.seek(bot_start)  # Go to first BOT entry
         self._check_tag_and_length(
             ItemTag, BYTES_PER_ITEM * len(frame_positions), False
         )
 
         for frame_position in frame_positions:  # Write BOT
-            self._fp.write_leUL(frame_position - pixel_data_start)
+            self._file.write_leUL(frame_position - pixel_data_start)
 
     def _write_unsigned_long_long(self, value: int):
         """Write unsigned long long integer (64 bits) as little endian.
@@ -289,7 +306,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Value to write.
 
         """
-        self._fp.write(pack("<Q", value))
+        self._file.write(pack("<Q", value))
 
     def _write_eot(
         self,
@@ -319,7 +336,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             raise ValueError(
                 "Image data exceeds 2^64 - 1 bytes, likely something is wrong"
             )
-        self._fp.seek(eot_start)  # Go to EOT table
+        self._file.seek(eot_start)  # Go to EOT table
         self._check_tag_and_length(
             Tag("ExtendedOffsetTable"), BYTES_PER_ITEM * len(frame_positions)
         )
@@ -408,8 +425,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         def write_frame(frame: bytes) -> int:
             """Itemize and write frame to file. Return frame position."""
-            position = self._fp.tell()
-            self._fp.write(frame)
+            position = self._file.tell()
+            self._file.write(frame)
             return position
 
         if workers == 1:
@@ -467,5 +484,5 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
     def _write_pixel_data_end(self) -> None:
         """Writes tags ending pixel data."""
-        self._fp.write_tag(SequenceDelimiterTag)
-        self._fp.write_leUL(0)
+        self._file.write_tag(SequenceDelimiterTag)
+        self._file.write_leUL(0)

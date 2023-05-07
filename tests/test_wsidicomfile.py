@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import math
+from typing import Any, Dict, Tuple
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,8 +25,9 @@ from pydicom import Dataset, dcmread
 from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.file.wsidicom_file_base import OffsetTableType
 from wsidicom.instance import ImageType, TileType, WsiDataset
+from parameterized import parameterized
 
-from .data_gen import (
+from tests.data_gen import (
     TESTFRAME,
     create_layer_file,
     create_main_dataset,
@@ -41,6 +43,30 @@ class WsiDicomFileTestFile:
     ds: Dataset
 
 
+FILE_SETTINGS = {
+    "sparse_no_bot": {
+        "name": "sparse_no_bot.dcm",
+        "tile_type": TileType.SPARSE,
+        "bot_type": OffsetTableType.NONE,
+    },
+    "sparse_with_bot": {
+        "name": "sparse_with_bot.dcm",
+        "tile_type": TileType.SPARSE,
+        "bot_type": OffsetTableType.BASIC,
+    },
+    "full_no_bot_": {
+        "name": "full_no_bot.dcm",
+        "tile_type": TileType.FULL,
+        "bot_type": OffsetTableType.NONE,
+    },
+    "full_with_bot": {
+        "name": "full_with_bot.dcm",
+        "tile_type": TileType.FULL,
+        "bot_type": OffsetTableType.BASIC,
+    },
+}
+
+
 @pytest.mark.unittest
 class WsiDicomFileTests(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -51,192 +77,250 @@ class WsiDicomFileTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tempdir = TemporaryDirectory()
-        dirpath = Path(cls.tempdir.name)
         cls.meta_dataset = create_meta_dataset()
-        file_settings = [
-            {
-                "name": "sparse_no_bot.dcm",
-                "tile_type": TileType.SPARSE,
-                "bot_type": OffsetTableType.NONE,
-            },
-            {
-                "name": "sparse_with_bot.dcm",
-                "tile_type": TileType.SPARSE,
-                "bot_type": OffsetTableType.BASIC,
-            },
-            {
-                "name": "full_no_bot_path.dcm",
-                "tile_type": TileType.FULL,
-                "bot_type": OffsetTableType.NONE,
-            },
-            {
-                "name": "full_with_bot_path.dcm",
-                "tile_type": TileType.FULL,
-                "bot_type": OffsetTableType.BASIC,
-            },
-        ]
-
-        cls.test_files = [
-            WsiDicomFileTestFile(
-                dirpath.joinpath(file_setting["name"]),
-                file_setting["tile_type"],
-                file_setting["bot_type"],
-                create_main_dataset(
-                    file_setting["tile_type"], file_setting["bot_type"]
-                ),
-            )
-            for file_setting in file_settings
-        ]
-        for test_file in cls.test_files:
-            create_layer_file(test_file.path, test_file.ds, cls.meta_dataset)
-
-        cls.opened_files = {
-            WsiDicomFile(test_file.path): test_file for test_file in cls.test_files
-        }
         cls.padded_test_frame = TESTFRAME + b"\x00" * (len(TESTFRAME) % 2)
+        cls._files: Dict[str, Tuple[WsiDicomFile, Dataset]] = {}
 
     @classmethod
     def tearDownClass(cls):
-        [file.close() for file in cls.opened_files]
+        [file.close() for (file, _) in cls._files.values()]
         cls.tempdir.cleanup()
 
-    def test_open(self):
-        for test_file in self.test_files:
-            print(test_file.path, test_file.tile_type, test_file.bot_type)
-            with WsiDicomFile(test_file.path) as file:
-                self.assertEqual(file.offset_table_type, test_file.bot_type)
-                self.assertEqual(file.dataset.tile_type, test_file.tile_type)
+    def get_file(self, name: str) -> Tuple[WsiDicomFile, Dataset]:
+        if name in self._files:
+            return self._files[name]
+        file_setting = FILE_SETTINGS[name]
+        dataset = create_main_dataset(
+            file_setting["tile_type"], file_setting["bot_type"]
+        )
+        test_file = WsiDicomFileTestFile(
+            Path(self.tempdir.name).joinpath(file_setting["name"]),
+            file_setting["tile_type"],
+            file_setting["bot_type"],
+            dataset,
+        )
+        create_layer_file(test_file.path, test_file.ds, self.meta_dataset)
+        file = WsiDicomFile.open(test_file.path)
+        self._files[name] = file, dataset
+        return file, dataset
 
-    def test_dataset_property(self):
-        for test_file in self.opened_files:
-            path = test_file.filepath
-            ds = WsiDataset(dcmread(path, stop_before_pixels=True))
-            self.assertEqual(test_file.dataset, ds)
+    @parameterized.expand((FILE_SETTINGS.items))
+    def test_open(self, name: str, settings: Dict[str, Any]):
+        # Arrange
+        test_file, _ = self.get_file(name)
 
-    def test_image_type_property(self):
-        for test_file in self.opened_files:
-            self.assertEqual(test_file.image_type, ImageType.VOLUME)
+        # Act
+        offset_table_type = test_file.offset_table_type
+        tile_type = test_file.dataset.tile_type
 
-    def test_uids_property(self):
-        for test_file, settings in self.opened_files.items():
-            self.assertEqual(test_file.uids.instance, settings.ds.SOPInstanceUID)
-            self.assertEqual(
-                test_file.uids.concatenation,
-                getattr(settings.ds, "SOPInstanceUIDOfConcatenationSource", None),
-            )
-            self.assertEqual(
-                test_file.uids.slide.frame_of_reference, settings.ds.FrameOfReferenceUID
-            )
-            self.assertEqual(
-                test_file.uids.slide.study_instance, settings.ds.StudyInstanceUID
-            )
-            self.assertEqual(
-                test_file.uids.slide.series_instance, settings.ds.SeriesInstanceUID
-            )
+        # Assert
+        self.assertEqual(offset_table_type, settings["bot_type"])
+        self.assertEqual(tile_type, settings["tile_type"])
 
-    def test_transfer_syntax_property(self):
-        for test_file in self.opened_files:
-            self.assertEqual(
-                test_file.transfer_syntax, self.meta_dataset.TransferSyntaxUID
-            )
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_dataset_property(self, name: str):
+        # Arrange
+        test_file, _ = self.get_file(name)
+        path = test_file.filepath
+        assert path is not None
 
-    def test_frame_offset_property(self):
-        for test_file in self.opened_files:
-            self.assertEqual(test_file.frame_offset, 0)
+        # Act
+        ds = WsiDataset(dcmread(path, stop_before_pixels=True))
 
-    def test_frame_count_property(self):
-        for test_file in self.opened_files:
-            self.assertEqual(test_file.frame_count, 1)
+        # Assert
+        self.assertEqual(test_file.dataset, ds)
 
-    def test_get_offset_table_type(self):
-        for test_file, setting in self.opened_files.items():
-            self.assertEqual(test_file._get_offset_table_type(), setting.bot_type)
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_image_type_property(self, name: str):
+        # Arrage
+        test_file, _ = self.get_file(name)
 
-    def test_validate_pixel_data_start(self):
-        for test_file in self.opened_files:
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
-            test_file._validate_pixel_data_start(tag)
+        # Act
+        image_type = test_file.image_type
 
-    def test_read_bot_length(self):
-        for test_file, setting in self.opened_files.items():
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
-            test_file._validate_pixel_data_start(tag)
-            length = test_file._read_bot_length()
-            self.assertEqual(
-                length, (4 if setting.bot_type == OffsetTableType.BASIC else None)
-            )
+        # Assert
+        self.assertEqual(image_type, ImageType.VOLUME)
 
-    def test_read_bot(self):
-        for test_file, setting in self.opened_files.items():
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
-            test_file._validate_pixel_data_start(tag)
-            bot = test_file._read_bot()
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_uids_property(self, name: str):
+        # Arrange
+        test_file, dataset = self.get_file(name)
+
+        # Act
+        uids = test_file.uids
+        # Assert
+        self.assertEqual(uids.instance, dataset.SOPInstanceUID)
+        self.assertEqual(
+            uids.concatenation,
+            getattr(dataset, "SOPInstanceUIDOfConcatenationSource", None),
+        )
+        self.assertEqual(uids.slide.frame_of_reference, dataset.FrameOfReferenceUID)
+        self.assertEqual(uids.slide.study_instance, dataset.StudyInstanceUID)
+        self.assertEqual(uids.slide.series_instance, dataset.SeriesInstanceUID)
+
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_transfer_syntax_property(self, name: str):
+        # Arrange
+        test_file, _ = self.get_file(name)
+
+        # Act
+        transfer_syntax = test_file.transfer_syntax
+
+        # Assert
+        self.assertEqual(transfer_syntax, self.meta_dataset.TransferSyntaxUID)
+
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_frame_offset_property(self, name: str):
+        # Arrange
+        test_file, _ = self.get_file(name)
+
+        # Act
+        frame_offset = test_file.frame_offset
+
+        # Assert
+        self.assertEqual(frame_offset, 0)
+
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_frame_count_property(self, name: str):
+        # Arrange
+        test_file, _ = self.get_file(name)
+
+        # Act
+        frame_count = test_file.frame_count
+
+        # Assert
+        self.assertEqual(frame_count, 1)
+
+    @parameterized.expand((FILE_SETTINGS.items))
+    def test_get_offset_table_type(self, name: str, settings: Dict[str, Any]):
+        # Arrange
+        test_file, _ = self.get_file(name)
+
+        # Act
+        offset_type = test_file._get_offset_table_type()
+
+        # Assert
+        self.assertEqual(offset_type, settings["bot_type"])
+
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_validate_pixel_data_start(self, name: str):
+        # Arrange
+        test_file, _ = self.get_file(name)
+        test_file._file.seek(test_file._pixel_data_position)
+
+        # Act
+        tag = test_file._file.read_tag()
+
+        # Assert
+        test_file._validate_pixel_data_start(tag)
+
+    @parameterized.expand((FILE_SETTINGS.items))
+    def test_read_bot_length(self, name: str, settings: Dict[str, Any]):
+        # Arrange
+        test_file, _ = self.get_file(name)
+        test_file._file.seek(test_file._pixel_data_position)
+        tag = test_file._file.read_tag()
+        test_file._validate_pixel_data_start(tag)
+        if settings["bot_type"] == OffsetTableType.BASIC:
+            expected_bot_length = 4
+        else:
+            expected_bot_length = None
+
+        # Act
+        length = test_file._read_bot_length()
+
+        # Assert
+        self.assertEqual(length, expected_bot_length)
+
+    @parameterized.expand((FILE_SETTINGS.items))
+    def test_read_bot(self, name: str, settings: Dict[str, Any]):
+        # Arrange
+        test_file, _ = self.get_file(name)
+        test_file._file.seek(test_file._pixel_data_position)
+        tag = test_file._file.read_tag()
+        test_file._validate_pixel_data_start(tag)
+        if settings["bot_type"] == OffsetTableType.BASIC:
             first_bot_entry = b"\x00\x00\x00\x00"
-            self.assertEqual(
-                bot,
-                (
-                    first_bot_entry
-                    if setting.bot_type == OffsetTableType.BASIC
-                    else None
-                ),
-            )
+        else:
+            first_bot_entry = None
 
-    def test_parse_bot_table(self):
+        # Act
+        bot = test_file._read_bot()
+
+        # Assert
+        self.assertEqual(bot, first_bot_entry)
+
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_parse_bot_table(self, name: str):
+        # Arrange
+        test_file, _ = self.get_file(name)
         TAG_BYTES = 4
         LENGTH_BYTES = 4
-        for test_file, setting in self.opened_files.items():
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
-            test_file._validate_pixel_data_start(tag)
-            bot = test_file._read_bot()
-            first_frame_item = test_file._fp.tell()
-            if bot is None:
-                continue
+        test_file._file.seek(test_file._pixel_data_position)
+        tag = test_file._file.read_tag()
+        test_file._validate_pixel_data_start(tag)
+        bot = test_file._read_bot()
+        first_frame_item_position = test_file._file.tell()
+
+        # Act
+        if bot is not None:
             positions = test_file._parse_table(
-                bot, OffsetTableType.BASIC, first_frame_item
+                bot, OffsetTableType.BASIC, first_frame_item_position
             )
+
+            # Assert
             self.assertEqual(
                 positions,
                 [
                     (
-                        (first_frame_item + TAG_BYTES + LENGTH_BYTES),
+                        (first_frame_item_position + TAG_BYTES + LENGTH_BYTES),
                         math.ceil(len(TESTFRAME) / 2) * 2,
                     )
                 ],
             )
 
-    def test_read_positions_from_pixeldata(self):
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_read_positions_from_pixeldata(self, name: str):
+        # Arrange
+        test_file, _ = self.get_file(name)
         TAG_BYTES = 4
         LENGTH_BYTES = 4
-        for test_file, setting in self.opened_files.items():
-            test_file._fp.seek(test_file._pixel_data_position)
-            tag = test_file._fp.read_tag()
-            test_file._validate_pixel_data_start(tag)
-            bot = test_file._read_bot()
-            first_frame_item = test_file._fp.tell()
-            positions = test_file._read_positions_from_pixeldata()
-            self.assertEqual(
-                positions,
-                [
-                    (
-                        (first_frame_item + TAG_BYTES + LENGTH_BYTES),
-                        len(self.padded_test_frame),
-                    )
-                ],
-            )
+        test_file._file.seek(test_file._pixel_data_position)
+        tag = test_file._file.read_tag()
+        test_file._validate_pixel_data_start(tag)
+        bot = test_file._read_bot()
+        first_frame_item = test_file._file.tell()
 
-    def test_read_sequence_delimiter(self):
-        for test_file in self.opened_files:
-            (last_item_position, last_item_length) = test_file.frame_positions[-1]
-            last_item_end = last_item_position + last_item_length
-            test_file._fp.seek(last_item_end)
-            test_file._fp.read_tag()
-            test_file._read_sequence_delimiter()
+        # Act
+        positions = test_file._read_positions_from_pixeldata()
 
-    def test_read_frame(self):
-        for test_file in self.opened_files:
-            frame = test_file.read_frame(0)
-            self.assertEqual(frame, self.padded_test_frame)
+        # Assert
+        self.assertEqual(
+            positions,
+            [
+                (
+                    (first_frame_item + TAG_BYTES + LENGTH_BYTES),
+                    len(self.padded_test_frame),
+                )
+            ],
+        )
+
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_read_sequence_delimiter(self, name: str):
+        test_file, _ = self.get_file(name)
+        (last_item_position, last_item_length) = test_file.frame_positions[-1]
+        last_item_end = last_item_position + last_item_length
+        test_file._file.seek(last_item_end)
+        test_file._file.read_tag()
+        test_file._read_sequence_delimiter()
+
+    @parameterized.expand((FILE_SETTINGS.keys))
+    def test_read_frame(self, name: str):
+        # Arrange
+        test_file, _ = self.get_file(name)
+
+        # Act
+        frame = test_file.read_frame(0)
+
+        # Assert
+        self.assertEqual(frame, self.padded_test_frame)

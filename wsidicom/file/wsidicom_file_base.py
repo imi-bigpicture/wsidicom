@@ -14,9 +14,9 @@
 
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import BinaryIO, Optional
 
-from pydicom.filebase import DicomFile
+from pydicom.filebase import DicomFileLike
 from pydicom.tag import BaseTag
 
 
@@ -35,18 +35,26 @@ class OffsetTableType(Enum):
 
 
 class WsiDicomFileBase:
-    def __init__(self, filepath: Path, mode: str):
-        """Base class for reading or writing DICOM WSI file.
+    """Base class for reading or writing DICOM WSI file."""
+
+    def __init__(
+        self, file: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
+    ):
+        """
+        Create a WsiDicomFileBase.
 
         Parameters
         ----------
-        filepath: Path
-            Filepath to file to read or write.
-        mode: str
-            Mode for opening file.
+        file: BinaryIO
+            Stream to open.
+        filepath: Optional[Path] = None
+            Optional filepath of stream.
+        owned: bool = False
+            If the stream should be closed by this instance.
         """
+        self._file = DicomFileLike(file)
         self._filepath = filepath
-        self._fp = DicomFile(filepath, mode=mode)
+        self._owned = owned
         self.__enter__()
 
     def __enter__(self):
@@ -62,18 +70,18 @@ class WsiDicomFileBase:
         return self.pretty_str()
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
-        return f"File with path: {self.filepath}"
+        return f"File of stream: {self._file}"
 
     @property
-    def filepath(self) -> Path:
-        """Return filepath"""
+    def filepath(self) -> Optional[Path]:
+        """Return filepath."""
         return self._filepath
 
     def _read_tag_length(self, with_vr: bool = True) -> int:
-        if (not self._fp.is_implicit_VR) and with_vr:
+        if (not self._file.is_implicit_VR) and with_vr:
             # Read VR
-            self._fp.read_UL()
-        return self._fp.read_UL()
+            self._file.read_UL()
+        return self._file.read_UL()
 
     def _check_tag_and_length(
         self, tag: BaseTag, length: int, with_vr: bool = True
@@ -88,13 +96,14 @@ class WsiDicomFileBase:
             Expected length.
 
         """
-        read_tag = self._fp.read_tag()
+        read_tag = self._file.read_tag()
         if tag != read_tag:
-            raise ValueError(f"Found tag {read_tag} expected {tag}")
+            raise ValueError(f"Found tag {read_tag} expected {tag}.")
         read_length = self._read_tag_length(with_vr)
         if length != read_length:
-            raise ValueError(f"Found length {read_length} expected {length}")
+            raise ValueError(f"Found length {read_length} expected {length}.")
 
-    def close(self) -> None:
-        """Close the file."""
-        self._fp.close()
+    def close(self, force: Optional[bool] = False) -> None:
+        """Close the file if owned by instance or forced."""
+        if self._owned or force:
+            self._file.close()
