@@ -128,7 +128,7 @@ class WsiDicomFilesTests(unittest.TestCase):
 
     def test_replace_label(self):
         # Arrange
-        path = next(folders for folders in self.wsi_test_files.wsi_folders.values())
+        path = next(folders for folders in self.wsi_test_files.folders.values())
         while next(path.iterdir()).is_dir():
             path = next(path.iterdir())
         image = Image.new("RGB", (256, 256), (128, 128, 128))

@@ -32,6 +32,8 @@ from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
 from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
+from parameterized import parameterized
+from tests.wsi_test_files import WsiTestFiles
 
 from wsidicom import WsiDicom
 from wsidicom.file.wsidicom_file import WsiDicomFile
@@ -130,7 +132,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
         ]
         cls.image_data = WsiDicomTestImageData(cls.test_data, cls.tiled_size)
         cls.test_dataset = cls.create_test_dataset(cls.frame_count, cls.image_data)
-
+        cls.wsi_test_files = WsiTestFiles()
         folders = cls._get_folders(SLIDE_FOLDER)
         cls.test_folders = {}
         for folder in folders:
@@ -141,6 +143,16 @@ class WsiDicomFileSaveTests(unittest.TestCase):
             raise unittest.SkipTest(
                 f"No test slide files found for {SLIDE_FOLDER}, skipping."
             )
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.wsi_test_files.close()
+
+    def setUp(self):
+        self.tempdir = TemporaryDirectory()
+
+    def tearDown(self):
+        self.tempdir.cleanup()
 
     @staticmethod
     def open(folder: Path) -> WsiDicom:
@@ -201,22 +213,30 @@ class WsiDicomFileSaveTests(unittest.TestCase):
         return dataset
 
     def test_write_preamble(self):
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + "/1.dcm")
-            with WsiDicomFileWriter.open(filepath) as write_file:
-                write_file._write_preamble()
-            self.assertTrue(is_dicom(filepath))
+        # Arrange
+        filepath = Path(self.tempdir.name + "/1.dcm")
+
+        # Act
+        with WsiDicomFileWriter.open(filepath) as write_file:
+            write_file._write_preamble()
+
+        # Assert
+        self.assertTrue(is_dicom(filepath))
 
     def test_write_meta(self):
+        # Arrange
         transfer_syntax = JPEGBaseline8Bit
         instance_uid = generate_uid()
         class_uid = WSI_SOP_CLASS_UID
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + "/1.dcm")
-            with WsiDicomFileWriter.open(filepath) as write_file:
-                write_file._write_preamble()
-                write_file._write_file_meta(instance_uid, transfer_syntax)
-            file_meta = read_file_meta_info(filepath)
+        filepath = Path(self.tempdir.name + "/1.dcm")
+
+        # Act
+        with WsiDicomFileWriter.open(filepath) as write_file:
+            write_file._write_preamble()
+            write_file._write_file_meta(instance_uid, transfer_syntax)
+        file_meta = read_file_meta_info(filepath)
+
+        # Assert
         self.assertEqual(file_meta.TransferSyntaxUID, transfer_syntax)
         self.assertEqual(file_meta.MediaStorageSOPInstanceUID, instance_uid)
         self.assertEqual(file_meta.MediaStorageSOPClassUID, class_uid)
@@ -260,182 +280,211 @@ class WsiDicomFileSaveTests(unittest.TestCase):
         ]
         return expected_frame_index
 
-    def read_table(self, file_path: Path) -> List[Tuple[int, int]]:
-        with WsiDicomTestFile(
-            file_path, JPEGBaseline8Bit, self.frame_count
-        ) as read_file:
-            frame_index, table_type = read_file._parse_pixel_data()
-            return frame_index
-
     def assertEndOfFile(self, file: WsiDicomTestFile):
         with self.assertRaises(EOFError):
             file._file.read(1, need_exact_length=True)
 
-    def test_write_and_read_table(self):
-        with TemporaryDirectory() as tempdir:
-            for table in [
-                OffsetTableType.NONE,
-                OffsetTableType.BASIC,
-                OffsetTableType.EXTENDED,
-            ]:
-                filepath = Path(tempdir + "/" + str(table))
-                expected_frame_index = self.write_table(filepath, table)
-                frame_index = self.read_table(filepath)
-                self.assertEqual(expected_frame_index, frame_index)
+    @parameterized.expand(
+        [
+            (OffsetTableType.NONE,),
+            (OffsetTableType.BASIC,),
+            (OffsetTableType.EXTENDED,),
+        ]
+    )
+    def test_write_and_read_table(self, writen_table_type: OffsetTableType):
+        # Arrange
+        filepath = Path(self.tempdir.name + "/" + str(writen_table_type))
+        writen_frame_indices = self.write_table(filepath, writen_table_type)
+
+        # Act
+        with WsiDicomTestFile(
+            filepath, JPEGBaseline8Bit, self.frame_count
+        ) as read_file:
+            read_frame_indices, read_table_type = read_file._parse_pixel_data()
+
+        # Assert
+        self.assertEqual(writen_frame_indices, read_frame_indices)
+        self.assertEqual(writen_table_type, read_table_type)
 
     def test_reserve_bot(self):
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + "/1.dcm")
-            with WsiDicomFileWriter.open(filepath) as write_file:
-                write_file._reserve_bot(self.frame_count)
-            with WsiDicomTestFile(
-                filepath, JPEGBaseline8Bit, self.frame_count
-            ) as read_file:
-                tag = read_file._file.read_tag()
-                self.assertEqual(tag, ItemTag)
-                length = read_file._read_tag_length(False)
-                BOT_ITEM_LENGTH = 4
-                self.assertEqual(length, BOT_ITEM_LENGTH * self.frame_count)
-                for frame in range(self.frame_count):
-                    self.assertEqual(read_file._file.read_UL(), 0)
-                self.assertEndOfFile(read_file)
+        # Arrange
+        filepath = Path(self.tempdir.name + "/1.dcm")
+
+        # Act
+        with WsiDicomFileWriter.open(filepath) as write_file:
+            write_file._reserve_bot(self.frame_count)
+
+        # Assert
+        with WsiDicomTestFile(
+            filepath, JPEGBaseline8Bit, self.frame_count
+        ) as read_file:
+            tag = read_file._file.read_tag()
+            self.assertEqual(tag, ItemTag)
+            BOT_ITEM_LENGTH = 4
+            length = read_file._read_tag_length(False)
+            self.assertEqual(length, BOT_ITEM_LENGTH * self.frame_count)
+            for frame in range(self.frame_count):
+                self.assertEqual(read_file._file.read_UL(), 0)
+            self.assertEndOfFile(read_file)
 
     def test_reserve_eot(self):
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + "/1.dcm")
-            with WsiDicomFileWriter.open(filepath) as write_file:
-                write_file._reserve_eot(self.frame_count)
-            with WsiDicomTestFile(
-                filepath, JPEGBaseline8Bit, self.frame_count
-            ) as read_file:
-                tag = read_file._file.read_tag()
-                self.assertEqual(tag, Tag("ExtendedOffsetTable"))
-                length = read_file._read_tag_length(True)
-                EOT_ITEM_LENGTH = 8
-                self.assertEqual(length, EOT_ITEM_LENGTH * self.frame_count)
-                for frame in range(self.frame_count):
-                    self.assertEqual(
-                        unpack("<Q", read_file._file.read(EOT_ITEM_LENGTH))[0], 0
-                    )
+        # Arrange
+        filepath = Path(self.tempdir.name + "/1.dcm")
 
-                tag = read_file._file.read_tag()
-                self.assertEqual(tag, Tag("ExtendedOffsetTableLengths"))
-                length = read_file._read_tag_length(True)
-                EOT_ITEM_LENGTH = 8
-                self.assertEqual(length, EOT_ITEM_LENGTH * self.frame_count)
-                for frame in range(self.frame_count):
-                    self.assertEqual(
-                        unpack("<Q", read_file._file.read(EOT_ITEM_LENGTH))[0], 0
-                    )
-                self.assertEndOfFile(read_file)
+        # Act
+        with WsiDicomFileWriter.open(filepath) as write_file:
+            write_file._reserve_eot(self.frame_count)
+
+        # Assert
+        with WsiDicomTestFile(
+            filepath, JPEGBaseline8Bit, self.frame_count
+        ) as read_file:
+            tag = read_file._file.read_tag()
+            self.assertEqual(tag, Tag("ExtendedOffsetTable"))
+            EOT_ITEM_LENGTH = 8
+            length = read_file._read_tag_length(True)
+            self.assertEqual(length, EOT_ITEM_LENGTH * self.frame_count)
+            for frame in range(self.frame_count):
+                self.assertEqual(
+                    unpack("<Q", read_file._file.read(EOT_ITEM_LENGTH))[0], 0
+                )
+
+            tag = read_file._file.read_tag()
+            self.assertEqual(tag, Tag("ExtendedOffsetTableLengths"))
+            length = read_file._read_tag_length(True)
+            EOT_ITEM_LENGTH = 8
+            self.assertEqual(length, EOT_ITEM_LENGTH * self.frame_count)
+            for frame in range(self.frame_count):
+                self.assertEqual(
+                    unpack("<Q", read_file._file.read(EOT_ITEM_LENGTH))[0], 0
+                )
+            self.assertEndOfFile(read_file)
 
     def test_write_pixel_end(self):
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + "/1.dcm")
-            with WsiDicomFileWriter.open(filepath) as write_file:
-                write_file._write_pixel_data_end()
-            with WsiDicomTestFile(
-                filepath, JPEGBaseline8Bit, self.frame_count
-            ) as read_file:
-                tag = read_file._file.read_tag()
-                self.assertEqual(tag, SequenceDelimiterTag)
-                length = read_file._read_tag_length(False)
-                self.assertEqual(length, 0)
+        # Arrange
+        filepath = Path(self.tempdir.name + "/1.dcm")
+
+        # Act
+        with WsiDicomFileWriter.open(filepath) as write_file:
+            write_file._write_pixel_data_end()
+
+        # Assert
+        with WsiDicomTestFile(
+            filepath, JPEGBaseline8Bit, self.frame_count
+        ) as read_file:
+            tag = read_file._file.read_tag()
+            self.assertEqual(tag, SequenceDelimiterTag)
+            length = read_file._read_tag_length(False)
+            self.assertEqual(length, 0)
 
     def test_write_pixel_data(self):
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + "/1.dcm")
-            with WsiDicomFileWriter.open(filepath) as write_file:
-                positions = write_file._write_pixel_data(
-                    image_data=self.image_data,
-                    z=self.image_data.default_z,
-                    path=self.image_data.default_path,
-                    workers=1,
-                    chunk_size=10,
-                )
-            with WsiDicomTestFile(
-                filepath, JPEGBaseline8Bit, self.frame_count
-            ) as read_file:
-                for position in positions:
-                    read_file._file.seek(position)
-                    tag = read_file._file.read_tag()
-                    self.assertEqual(tag, ItemTag)
+        # Arrange
+        filepath = Path(self.tempdir.name + "/1.dcm")
+
+        # Act
+        with WsiDicomFileWriter.open(filepath) as write_file:
+            positions = write_file._write_pixel_data(
+                image_data=self.image_data,
+                z=self.image_data.default_z,
+                path=self.image_data.default_path,
+                workers=1,
+                chunk_size=10,
+            )
+
+        # Assert
+        with WsiDicomTestFile(
+            filepath, JPEGBaseline8Bit, self.frame_count
+        ) as read_file:
+            for position in positions:
+                read_file._file.seek(position)
+                tag = read_file._file.read_tag()
+                self.assertEqual(tag, ItemTag)
 
     def test_write_unsigned_long_long(self):
+        # Arrange
         values = [0, 4294967295]
         MODE = "<Q"
         BYTES_PER_ITEM = 8
-        with TemporaryDirectory() as tempdir:
-            filepath = Path(tempdir + "/1.dcm")
-            with WsiDicomFileWriter.open(filepath) as write_file:
-                for value in values:
-                    write_file._write_unsigned_long_long(value)
 
-            with WsiDicomTestFile(
-                filepath, JPEGBaseline8Bit, self.frame_count
-            ) as read_file:
-                for value in values:
-                    read_value = unpack(MODE, read_file._file.read(BYTES_PER_ITEM))[0]
-                    self.assertEqual(read_value, value)
+        # Act
+        filepath = Path(self.tempdir.name + "/1.dcm")
+        with WsiDicomFileWriter.open(filepath) as write_file:
+            for value in values:
+                write_file._write_unsigned_long_long(value)
 
-    def test_write(self):
-        with TemporaryDirectory() as tempdir:
-            for table in [
-                OffsetTableType.NONE,
-                OffsetTableType.BASIC,
-                OffsetTableType.EXTENDED,
-            ]:
-                filepath = Path(tempdir + "/" + str(table) + ".dcm")
-                with WsiDicomFileWriter.open(filepath) as write_file:
-                    write_file.write(
-                        generate_uid(),
-                        JPEGBaseline8Bit,
-                        self.test_dataset,
-                        OrderedDict(
-                            {
-                                (
-                                    self.image_data.default_path,
-                                    self.image_data.default_z,
-                                ): self.image_data
-                            }
-                        ),
-                        1,
-                        100,
-                        table,
-                        0,
-                    )
+        # Assert
+        with WsiDicomTestFile(
+            filepath, JPEGBaseline8Bit, self.frame_count
+        ) as read_file:
+            for value in values:
+                read_value = unpack(MODE, read_file._file.read(BYTES_PER_ITEM))[0]
+                self.assertEqual(read_value, value)
 
-                with WsiDicomFile.open(filepath) as read_file:
-                    for index, frame in enumerate(self.test_data):
-                        read_frame = read_file.read_frame(index)
-                        # Stored frame can be up to one byte longer
-                        self.assertTrue(0 <= len(read_frame) - len(frame) <= 1)
-                        self.assertEqual(read_frame[: len(frame)], frame)
+    @parameterized.expand(
+        [
+            (OffsetTableType.NONE,),
+            (OffsetTableType.BASIC,),
+            (OffsetTableType.EXTENDED,),
+        ]
+    )
+    def test_write(self, table_type: OffsetTableType):
+        # Arrange
+        filepath = Path(self.tempdir.name + "/" + str(table_type) + ".dcm")
 
-    def test_create_child(self):
-        for _, wsi in self.test_folders.items():
-            with TemporaryDirectory() as tempdir:
-                target_level = cast(Level, wsi.levels[-2])
-                source_level = cast(Level, wsi.levels[-3])
-                with WsiDicomFileTarget(
-                    Path(tempdir),
-                    generate_uid,
-                    1,
-                    100,
-                    "bot",
-                ) as target:
-                    target._save_and_open_level(source_level, wsi.pixel_spacing, 2)
+        # Act
+        with WsiDicomFileWriter.open(filepath) as write_file:
+            write_file.write(
+                generate_uid(),
+                JPEGBaseline8Bit,
+                self.test_dataset,
+                OrderedDict(
+                    {
+                        (
+                            self.image_data.default_path,
+                            self.image_data.default_z,
+                        ): self.image_data
+                    }
+                ),
+                1,
+                100,
+                table_type,
+                0,
+            )
 
-                with WsiDicom.open(tempdir) as created_wsi:
-                    created_size = created_wsi.levels[0].size.to_tuple()
-                    target_size = target_level.size.to_tuple()
-                    self.assertEqual(created_size, target_size)
+        # Assert
+        with WsiDicomFile.open(filepath) as read_file:
+            for index, frame in enumerate(self.test_data):
+                read_frame = read_file.read_frame(index)
+                # Stored frame can be up to one byte longer
+                self.assertTrue(0 <= len(read_frame) - len(frame) <= 1)
+                self.assertEqual(read_frame[: len(frame)], frame)
 
-                    created = created_wsi.read_region((0, 0), 0, created_size)
-                    original = wsi.read_region((0, 0), target_level.level, target_size)
-                    blur = ImageFilter.GaussianBlur(2)
-                    diff = ImageChops.difference(
-                        created.filter(blur), original.filter(blur)
-                    )
-                    for band_rms in ImageStat.Stat(diff).rms:
-                        self.assertLess(band_rms, 2)  # type: ignore
+    @parameterized.expand(WsiTestFiles().folders.keys)
+    def test_create_child(self, wsi_folder: str):
+        # Arrange
+        wsi = self.wsi_test_files.get_wsi(wsi_folder)
+        target_level = cast(Level, wsi.levels[-2])
+        source_level = cast(Level, wsi.levels[-3])
+
+        # Act
+        with WsiDicomFileTarget(
+            Path(self.tempdir.name),
+            generate_uid,
+            1,
+            100,
+            "bot",
+        ) as target:
+            target._save_and_open_level(source_level, wsi.pixel_spacing, 2)
+
+        # Assert
+        with WsiDicom.open(self.tempdir.name) as created_wsi:
+            created_size = created_wsi.levels[0].size.to_tuple()
+            target_size = target_level.size.to_tuple()
+            self.assertEqual(created_size, target_size)
+
+            created = created_wsi.read_region((0, 0), 0, created_size)
+            original = wsi.read_region((0, 0), target_level.level, target_size)
+            blur = ImageFilter.GaussianBlur(2)
+            diff = ImageChops.difference(created.filter(blur), original.filter(blur))
+            for band_rms in ImageStat.Stat(diff).rms:
+                self.assertLess(band_rms, 2)

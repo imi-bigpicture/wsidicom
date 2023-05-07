@@ -91,11 +91,20 @@ class WsiTestDefinitions:
 
 
 class WsiTestFiles:
-    def __init__(self, input_type: WsiInputType):
+    folders = {}
+    if SLIDE_FOLDER.exists():
+        folders = {
+            item.parts[-1]: item for item in SLIDE_FOLDER.iterdir() if item.is_dir
+        }
+    if len(folders) == 0:
+        raise unittest.SkipTest(
+            f"No test slide files found for {SLIDE_FOLDER}, skipping."
+        )
+
+    def __init__(self, input_type: WsiInputType = WsiInputType.FILE):
         self._input_type = input_type
         self._wsis: Dict[str, WsiDicom] = {}
         self._opened_streams: List[BinaryIO] = []
-        self._wsi_folders: Dict[str, Path] = self._get_folders()
 
     def __enter__(self):
         return self
@@ -109,16 +118,12 @@ class WsiTestFiles:
         for stream in self._opened_streams:
             stream.close()
 
-    @property
-    def wsi_folders(self) -> Dict[str, Path]:
-        return self._wsi_folders
-
     def get_wsi(self, wsi_name: str) -> WsiDicom:
         if wsi_name in self._wsis:
             return self._wsis[wsi_name]
-        if not wsi_name in self._wsi_folders:
+        if not wsi_name in self.folders:
             raise unittest.SkipTest("WSI files not found, skipping.")
-        folder = self._wsi_folders[wsi_name]
+        folder = self.folders[wsi_name]
         try:
             while next(folder.iterdir()).is_dir():
                 folder = next(folder.iterdir())
@@ -142,23 +147,3 @@ class WsiTestFiles:
             raise ValueError(f"Unknown test_type {self._input_type}.")
         self._wsis[(wsi_name)] = wsi
         return wsi
-
-    @classmethod
-    def _get_folders(cls) -> Dict[str, Path]:
-        folders = {}
-        if SLIDE_FOLDER.exists():
-            folders = {
-                cls._get_wsi_name(item): item
-                for item in SLIDE_FOLDER.iterdir()
-                if item.is_dir
-            }
-        if len(folders) == 0:
-            raise unittest.SkipTest(
-                f"No test slide files found for {SLIDE_FOLDER}, skipping."
-            )
-        return folders
-
-    @staticmethod
-    def _get_wsi_name(slide_path: Path) -> str:
-        parts = slide_path.parts
-        return parts[-1]
