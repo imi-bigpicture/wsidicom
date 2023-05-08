@@ -16,7 +16,7 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from pydicom.uid import UID
 
@@ -77,31 +77,33 @@ class WsiDicomFileTarget(Target):
     def save_levels(self, levels: Levels):
         """Save levels to target."""
         # Collection of new pyramid levels.
-        new_levels: Optional[Levels] = None
+        new_levels: List[Level] = []
         highest_level_in_file = levels.levels[-1]
         lowest_single_tile_level = levels.lowest_single_tile_level
         highest_level = max(highest_level_in_file, lowest_single_tile_level)
         for pyramid_level in range(highest_level + 1):
             if pyramid_level in levels.levels:
                 level = levels.get_level(pyramid_level)
-                scale = 1
-                self._save_group(level, scale)
-            elif self._add_missing_levels and new_levels is not None:
+                self._save_group(level, 1)
+            elif self._add_missing_levels:
                 # Create scaled level from closest level, prefer from original levels
-                level = levels.get_closest_by_level(pyramid_level)
-                closest_new_pyramid_level = new_levels.get_closest_by_level(
-                    pyramid_level
+                closest_level = levels.get_closest_by_level(pyramid_level)
+                closest_new_level = next(
+                    (
+                        level
+                        for level in new_levels
+                        if level.level < pyramid_level
+                        and level.level > closest_level.level
+                    ),
+                    None,
                 )
-                if closest_new_pyramid_level.level > level.level:
-                    level = closest_new_pyramid_level
-                scale = int(2 ** (pyramid_level - level.level))
+                if closest_new_level is not None:
+                    closest_level = closest_new_level
+                scale = int(2 ** (pyramid_level - closest_level.level))
                 new_level = self._save_and_open_level(
-                    level, levels.pixel_spacing, scale
+                    closest_level, levels.pixel_spacing, scale
                 )
-                if new_levels is None:
-                    new_levels = Levels([new_level])
-                else:
-                    new_levels._levels[new_level.level] = new_level
+                new_levels.append(new_level)
 
     def save_labels(self, labels: Labels):
         """Save labels to target."""
@@ -159,7 +161,7 @@ class WsiDicomFileTarget(Target):
         self._filepaths.extend(filepaths)
         return filepaths
 
-    def _open_files(self, filepaths: Sequence[Path]) -> List[WsiInstance]:
+    def _open_files(self, filepaths: Iterable[Path]) -> List[WsiInstance]:
         files = [WsiDicomFile.open(filepath) for filepath in filepaths]
         self._opened_files.extend(files)
         return [
@@ -194,14 +196,14 @@ class WsiDicomFileTarget(Target):
 
     @staticmethod
     def _list_image_data(
-        instances: Sequence[WsiInstance],
+        instances: Iterable[WsiInstance],
     ) -> Dict[Tuple[str, float], ImageData]:
         """
         Sort ImageData in instances by optical path and focal plane.
 
         Parameters
         ----------
-        instances: Sequence[WsiInstance]
+        instances: Iterable[WsiInstance]
             List of instances with optical paths and focal planes to list and
             sort.
 

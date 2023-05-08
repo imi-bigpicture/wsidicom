@@ -38,12 +38,12 @@ class Series(metaclass=ABCMeta):
     pyramidal levels, lables, or overviews.
     """
 
-    def __init__(self, groups: Sequence[Group]):
+    def __init__(self, groups: Iterable[Group]):
         """Create a Series from list of Groups.
 
         Parameters
         ----------
-        groups: Sequence[Group]
+        groups: Iterable[Group]
             List of groups to include in the series.
         """
         self._groups = list(groups)

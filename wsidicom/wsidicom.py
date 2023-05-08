@@ -585,20 +585,20 @@ class WsiDicom:
             chunk_size = 16
         if isinstance(output_path, str):
             output_path = Path(output_path)
-        target = WsiDicomFileTarget(
+        with WsiDicomFileTarget(
             output_path,
             uid_generator,
             workers,
             chunk_size,
             offset_table,
             add_missing_levels,
-        )
-        target.save_levels(self.levels)
-        if self.overviews is not None:
-            target.save_overviews(self.overviews)
-        if self.labels is not None:
-            target.save_labels(self.labels)
-        return target.filepaths
+        ) as target:
+            target.save_levels(self.levels)
+            if self.overviews is not None:
+                target.save_overviews(self.overviews)
+            if self.labels is not None:
+                target.save_labels(self.labels)
+            return target.filepaths
 
     def _validate_collection(self) -> SlideUids:
         """
