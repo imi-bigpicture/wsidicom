@@ -25,6 +25,7 @@ from wsidicom import WsiDicom
 
 
 @pytest.mark.integration
+@pytest.mark.filterwarnings("ignore")
 @parameterized_class(
     [
         {"input_type": WsiInputType.FILE},
