@@ -14,7 +14,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Iterator, Tuple, Union, Sequence
+from typing import Callable, Iterable, Iterator, Tuple, Union, Sequence
 
 
 @dataclass
@@ -182,20 +182,47 @@ class Size:
     def __hash__(self) -> int:
         return hash((self.width, self.height))
 
-    def __eq__(self, item: "Size") -> bool:
-        if isinstance(item, Size):
-            return self.width == item.width and self.height == item.height
-        return NotImplemented
+    def all_less_than(self, item: "Size") -> bool:
+        """If all dimensions is smaller than corresponding dimension in item."""
+        return all(self._comparision_operation(item, int.__lt__))
 
-    def __lt__(self, item: "Size") -> bool:
-        if isinstance(item, Size):
-            return self.width < item.width
-        return NotImplemented
+    def all_less_than_or_equal(self, item: "Size") -> bool:
+        """If all dimensions is smaller or equal to corresponding dimension in item."""
+        return all(self._comparision_operation(item, int.__le__))
 
-    def __le__(self, item: "Size") -> bool:
-        if isinstance(item, Size):
-            return self.__eq__(item) or self.__lt__(item)
-        return NotImplemented
+    def all_greater_than(self, item: "Size") -> bool:
+        """If all dimensions is greater than to corresponding dimension in item."""
+        return all(self._comparision_operation(item, int.__gt__))
+
+    def all_greater_than_or_equal(self, item: "Size") -> bool:
+        """If all dimensions is greater or equal to corresponding dimension in item."""
+        return all(self._comparision_operation(item, int.__ge__))
+
+    def any_less_than(self, item: "Size") -> bool:
+        """If any dimension is smaller than corresponding dimension in item."""
+        return any(self._comparision_operation(item, int.__lt__))
+
+    def any_less_than_or_equal(self, item: "Size") -> bool:
+        """If any dimension is smaller or equal to corresponding dimension in item."""
+        return any(self._comparision_operation(item, int.__le__))
+
+    def any_greater_than(self, item: "Size") -> bool:
+        """If any dimension is greater than to corresponding dimension in item."""
+        return any(self._comparision_operation(item, int.__gt__))
+
+    def any_greater_than_or_equal(self, item: "Size") -> bool:
+        """If any dimension is greater or equal to corresponding dimension in item."""
+        return any(self._comparision_operation(item, int.__ge__))
+
+    def _comparision_operation(
+        self, item: "Size", operation: Callable[[int, int], bool]
+    ) -> Iterable[bool]:
+        return (
+            operation(dimension, other_dimension)
+            for (dimension, other_dimension) in zip(
+                [self.width, self.height], [item.width, item.height]
+            )
+        )
 
     @classmethod
     def from_points(cls, point_1: "Point", point_2: "Point") -> "Size":

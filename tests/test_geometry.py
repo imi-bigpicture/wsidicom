@@ -32,38 +32,194 @@ from wsidicom.instance import ImageOrigin
 @pytest.mark.unittest
 class WsiDicomGeomtryTests(unittest.TestCase):
     def test_size_class(self):
-        size0 = Size(10, 10)
-        size1 = Size(1, 1)
-        self.assertEqual(size0 - size1, Size(9, 9))
+        size_0 = Size(10, 10)
+        size_1 = Size(1, 1)
+        self.assertEqual(size_0 - size_1, Size(9, 9))
 
-        self.assertEqual(size0 * 2, Size(20, 20))
+        self.assertEqual(size_0 * 2, Size(20, 20))
 
-        self.assertEqual(size0 // 3, Size(3, 3))
+        self.assertEqual(size_0 // 3, Size(3, 3))
 
-        self.assertEqual(size0.to_tuple(), (10, 10))
+        self.assertEqual(size_0.to_tuple(), (10, 10))
+
+    @parameterized.expand(
+        [
+            (Size(10, 10), Size(1, 1), False),
+            (Size(10, 10), Size(20, 1), True),
+            (Size(10, 10), Size(1, 20), True),
+            (Size(10, 10), Size(20, 20), True),
+        ]
+    )
+    def test_size_any_less_than(
+        self, size_1: Size, size_2: Size, expected_result: bool
+    ):
+        # Arrange
+        # Act
+        result = size_1.any_less_than(size_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [
+            (Size(10, 10), Size(1, 1), False),
+            (Size(10, 10), Size(20, 1), True),
+            (Size(10, 10), Size(1, 20), True),
+            (Size(10, 10), Size(20, 20), True),
+            (Size(10, 10), Size(10, 10), True),
+            (Size(10, 10), Size(1, 10), True),
+            (Size(10, 10), Size(10, 1), True),
+        ]
+    )
+    def test_size_any_less_than_or_equal(
+        self, size_1: Size, size_2: Size, expected_result: bool
+    ):
+        # Arrange
+        # Act
+        result = size_1.any_less_than_or_equal(size_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [
+            (Size(10, 10), Size(1, 1), True),
+            (Size(10, 10), Size(20, 1), True),
+            (Size(10, 10), Size(1, 20), True),
+            (Size(10, 10), Size(20, 20), False),
+        ]
+    )
+    def test_size_any_greater_than(
+        self, size_1: Size, size_2: Size, expected_result: bool
+    ):
+        # Arrange
+        # Act
+        result = size_1.any_greater_than(size_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [
+            (Size(10, 10), Size(1, 1), True),
+            (Size(10, 10), Size(20, 1), True),
+            (Size(10, 10), Size(1, 20), True),
+            (Size(10, 10), Size(20, 20), False),
+            (Size(10, 10), Size(10, 10), True),
+            (Size(10, 10), Size(1, 10), True),
+            (Size(10, 10), Size(10, 1), True),
+        ]
+    )
+    def test_size_any_greater_than_or_equal(
+        self, size_1: Size, size_2: Size, expected_result: bool
+    ):
+        # Arrange
+        # Act
+        result = size_1.any_greater_than_or_equal(size_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [
+            (Size(10, 10), Size(1, 1), False),
+            (Size(10, 10), Size(20, 1), False),
+            (Size(10, 10), Size(1, 20), False),
+            (Size(10, 10), Size(20, 20), True),
+        ]
+    )
+    def test_size_all_less_than(
+        self, size_1: Size, size_2: Size, expected_result: bool
+    ):
+        # Arrange
+        # Act
+        result = size_1.all_less_than(size_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [
+            (Size(10, 10), Size(1, 1), False),
+            (Size(10, 10), Size(20, 1), False),
+            (Size(10, 10), Size(1, 20), False),
+            (Size(10, 10), Size(20, 20), True),
+            (Size(10, 10), Size(10, 10), True),
+            (Size(10, 10), Size(1, 10), False),
+            (Size(10, 10), Size(10, 1), False),
+        ]
+    )
+    def test_size_all_less_than_or_equal(
+        self, size_1: Size, size_2: Size, expected_result: bool
+    ):
+        # Arrange
+        # Act
+        result = size_1.all_less_than_or_equal(size_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [
+            (Size(10, 10), Size(1, 1), True),
+            (Size(10, 10), Size(20, 1), False),
+            (Size(10, 10), Size(1, 20), False),
+            (Size(10, 10), Size(20, 20), False),
+        ]
+    )
+    def test_size_all_greater_than(
+        self, size_1: Size, size_2: Size, expected_result: bool
+    ):
+        # Arrange
+        # Act
+        result = size_1.all_greater_than(size_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [
+            (Size(10, 10), Size(1, 1), True),
+            (Size(10, 10), Size(20, 1), False),
+            (Size(10, 10), Size(1, 20), False),
+            (Size(10, 10), Size(20, 20), False),
+            (Size(10, 10), Size(10, 10), True),
+            (Size(10, 10), Size(1, 10), True),
+            (Size(10, 10), Size(10, 1), True),
+        ]
+    )
+    def test_size_all_greater_than_or_equal(
+        self, size_1: Size, size_2: Size, expected_result: bool
+    ):
+        # Arrange
+        # Act
+        result = size_1.all_greater_than_or_equal(size_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
 
     def test_point_class(self):
-        point0 = Point(10, 10)
-        point1 = Point(2, 2)
-        point2 = Point(3, 3)
-        size0 = Size(2, 2)
+        point_0 = Point(10, 10)
+        point_1 = Point(2, 2)
+        point_2 = Point(3, 3)
+        size_0 = Size(2, 2)
 
-        self.assertEqual(point1 * point0, Point(20, 20))
-        self.assertEqual(point0 * size0, Point(20, 20))
-        self.assertEqual(point0 * 2, Point(20, 20))
-        self.assertEqual(point0 // 3, Point(3, 3))
-        self.assertEqual(point0 % point1, Point(0, 0))
-        self.assertEqual(point0 % point2, Point(1, 1))
-        self.assertEqual(point0 % size0, Point(0, 0))
-        self.assertEqual(point0 + point1, Point(12, 12))
-        self.assertEqual(point0 + 2, Point(12, 12))
-        self.assertEqual(point0 + size0, Point(12, 12))
-        self.assertEqual(point0 - point1, Point(8, 8))
-        self.assertEqual(point0 - 2, Point(8, 8))
-        self.assertEqual(point0 - size0, Point(8, 8))
-        self.assertEqual(Point.max(point0, point1), point0)
-        self.assertEqual(Point.min(point0, point1), point1)
-        self.assertEqual(point0.to_tuple(), (10, 10))
+        self.assertEqual(point_1 * point_0, Point(20, 20))
+        self.assertEqual(point_0 * size_0, Point(20, 20))
+        self.assertEqual(point_0 * 2, Point(20, 20))
+        self.assertEqual(point_0 // 3, Point(3, 3))
+        self.assertEqual(point_0 % point_1, Point(0, 0))
+        self.assertEqual(point_0 % point_2, Point(1, 1))
+        self.assertEqual(point_0 % size_0, Point(0, 0))
+        self.assertEqual(point_0 + point_1, Point(12, 12))
+        self.assertEqual(point_0 + 2, Point(12, 12))
+        self.assertEqual(point_0 + size_0, Point(12, 12))
+        self.assertEqual(point_0 - point_1, Point(8, 8))
+        self.assertEqual(point_0 - 2, Point(8, 8))
+        self.assertEqual(point_0 - size_0, Point(8, 8))
+        self.assertEqual(Point.max(point_0, point_1), point_0)
+        self.assertEqual(Point.min(point_0, point_1), point_1)
+        self.assertEqual(point_0.to_tuple(), (10, 10))
 
     def test_region_mm(self):
         # Arrange

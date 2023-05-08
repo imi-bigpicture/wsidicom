@@ -62,7 +62,7 @@ class WsiDicomFileTargetIntegrationTests(unittest.TestCase):
         # Arrange
         wsi = self.wsi_test_files.get_wsi(wsi_name)
         levels_larger_than_tile_size = [
-            level for level in wsi.levels if level.size > wsi.tile_size
+            level for level in wsi.levels if level.size.any_greater_than(wsi.tile_size)
         ]
         expected_levels_count = len(levels_larger_than_tile_size) + 1
         levels_missing_smallest_levels = Levels(levels_larger_than_tile_size)
@@ -76,5 +76,9 @@ class WsiDicomFileTargetIntegrationTests(unittest.TestCase):
         # Assert
         with WsiDicom.open(self.tempdir.name) as saved_wsi:
             self.assertEqual(expected_levels_count, len(saved_wsi.levels))
-            self.assertTrue(saved_wsi.levels[-1].size <= saved_wsi.tile_size)
-            self.assertTrue(saved_wsi.levels[-2].size > saved_wsi.tile_size)
+            self.assertTrue(
+                saved_wsi.levels[-1].size.all_less_than_or_equal(saved_wsi.tile_size)
+            )
+            self.assertTrue(
+                saved_wsi.levels[-2].size.any_greater_than(saved_wsi.tile_size)
+            )

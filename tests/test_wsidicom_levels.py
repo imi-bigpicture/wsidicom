@@ -245,3 +245,22 @@ class WsiDicomLevelsTests(unittest.TestCase):
 
         # Assert
         self.assertEqual(instance, wsi_level.default_instance)
+
+    def test_lowest_single_tile_level(self):
+        # Arrange
+        tile_size = self.slide.tile_size
+
+        # Act
+        lowest_single_tile_level = self.slide.levels.lowest_single_tile_level
+
+        # Assert
+        self.assertTrue(
+            tile_size.all_greater_than(
+                self.slide.size // (2**lowest_single_tile_level)
+            )
+        )
+        self.assertTrue(
+            tile_size.any_less_than(
+                self.slide.size // (2 ** (lowest_single_tile_level - 1))
+            )
+        )
