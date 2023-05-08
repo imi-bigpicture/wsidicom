@@ -12,27 +12,27 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Iterable, List, OrderedDict, Sequence
+from typing import Iterable, List, OrderedDict
 
 
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.group import Group, Level
+from wsidicom.group import Level
 from wsidicom.instance import ImageOrigin, ImageType, WsiInstance
 from wsidicom.series.series import Series
 from wsidicom.stringprinting import str_indent
 
 
 class Levels(Series):
-    """Represents a series of Groups of the volume (e.g. pyramidal
+    """Represents a series of Levels of the volume (e.g. pyramidal
     level) wsi flavor."""
 
-    def __init__(self, levels: Sequence[Level]):
+    def __init__(self, levels: Iterable[Level]):
         """Holds a stack of levels.
 
         Parameters
         ----------
-        levels: Sequence[Level]
+        levels: Iterable[Level]
             List of levels to include in series
         """
         self._levels = OrderedDict(
@@ -54,6 +54,21 @@ class Levels(Series):
                 '"Volume" type'
             )
         self._mm_size = mm_size
+
+    def __getitem__(self, index: int) -> Level:
+        """Get level by index.
+
+        Parameters
+        ----------
+        index: int
+            Index in series to get
+
+        Returns
+        ----------
+        Level
+            The level at index in the series
+        """
+        return self.groups[index]
 
     @property
     def image_type(self) -> ImageType:
@@ -100,7 +115,7 @@ class Levels(Series):
         )
 
     @property
-    def groups(self) -> List[Group]:
+    def groups(self) -> List[Level]:
         """Return contained groups."""
         return list(self._levels.values())
 

@@ -182,9 +182,20 @@ class Size:
     def __hash__(self) -> int:
         return hash((self.width, self.height))
 
+    def __eq__(self, item: "Size") -> bool:
+        if isinstance(item, Size):
+            return self.width == item.width and self.height == item.height
+        return NotImplemented
+
     def __lt__(self, item: "Size") -> bool:
         if isinstance(item, Size):
             return self.width < item.width
+        return NotImplemented
+
+    def __le__(self, item: "Size") -> bool:
+        if isinstance(item, Size):
+            return self.__eq__(item) or self.__lt__(item)
+        return NotImplemented
 
     @classmethod
     def from_points(cls, point_1: "Point", point_2: "Point") -> "Size":

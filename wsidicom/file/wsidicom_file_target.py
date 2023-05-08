@@ -16,7 +16,7 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from pydicom.uid import UID
 
@@ -161,7 +161,7 @@ class WsiDicomFileTarget(Target):
         self._filepaths.extend(filepaths)
         return filepaths
 
-    def _open_files(self, filepaths: Sequence[Path]) -> List[WsiInstance]:
+    def _open_files(self, filepaths: Iterable[Path]) -> List[WsiInstance]:
         files = [WsiDicomFile.open(filepath) for filepath in filepaths]
         self._opened_files.extend(files)
         return [
@@ -196,14 +196,14 @@ class WsiDicomFileTarget(Target):
 
     @staticmethod
     def _list_image_data(
-        instances: Sequence[WsiInstance],
+        instances: Iterable[WsiInstance],
     ) -> Dict[Tuple[str, float], ImageData]:
         """
         Sort ImageData in instances by optical path and focal plane.
 
         Parameters
         ----------
-        instances: Sequence[WsiInstance]
+        instances: Iterable[WsiInstance]
             List of instances with optical paths and focal planes to list and
             sort.
 
