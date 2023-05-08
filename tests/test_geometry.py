@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import unittest
+from typing import Union
 
 import pytest
 from parameterized import parameterized
@@ -31,16 +32,46 @@ from wsidicom.instance import ImageOrigin
 
 @pytest.mark.unittest
 class WsiDicomGeomtryTests(unittest.TestCase):
-    def test_size_class(self):
+    def test_size_subraction(self):
+        # Arrange
         size_0 = Size(10, 10)
         size_1 = Size(1, 1)
-        self.assertEqual(size_0 - size_1, Size(9, 9))
 
-        self.assertEqual(size_0 * 2, Size(20, 20))
+        # Act
+        result = size_0 - size_1
 
-        self.assertEqual(size_0 // 3, Size(3, 3))
+        # Assert
+        self.assertEqual(result, Size(9, 9))
 
-        self.assertEqual(size_0.to_tuple(), (10, 10))
+    def test_size_multiplication(self):
+        # Arrange
+        size_0 = Size(10, 10)
+
+        # Act
+        result = size_0 * 2
+
+        # Assert
+        self.assertEqual(result, Size(20, 20))
+
+    def test_size_division(self):
+        # Arrange
+        size_0 = Size(10, 10)
+
+        # Act
+        result = size_0 // 3
+
+        # Assert
+        self.assertEqual(result, Size(3, 3))
+
+    def test_size_to_tuple(self):
+        # Arrange
+        size_0 = Size(10, 10)
+
+        # Act
+        result = size_0.to_tuple()
+
+        # Assert
+        self.assertEqual(result, (10, 10))
 
     @parameterized.expand(
         [
@@ -198,28 +229,112 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         # Assert
         self.assertEqual(expected_result, result)
 
-    def test_point_class(self):
-        point_0 = Point(10, 10)
-        point_1 = Point(2, 2)
-        point_2 = Point(3, 3)
-        size_0 = Size(2, 2)
+    @parameterized.expand(
+        [(Point(3, 2), Point(30, 20)), (Size(3, 2), Point(30, 20)), (2, Point(20, 20))]
+    )
+    def test_point_multiplication(
+        self, by: Union[Point, Size, int], expected_result: Point
+    ):
+        # Arrange
+        point = Point(10, 10)
 
-        self.assertEqual(point_1 * point_0, Point(20, 20))
-        self.assertEqual(point_0 * size_0, Point(20, 20))
-        self.assertEqual(point_0 * 2, Point(20, 20))
-        self.assertEqual(point_0 // 3, Point(3, 3))
-        self.assertEqual(point_0 % point_1, Point(0, 0))
-        self.assertEqual(point_0 % point_2, Point(1, 1))
-        self.assertEqual(point_0 % size_0, Point(0, 0))
-        self.assertEqual(point_0 + point_1, Point(12, 12))
-        self.assertEqual(point_0 + 2, Point(12, 12))
-        self.assertEqual(point_0 + size_0, Point(12, 12))
-        self.assertEqual(point_0 - point_1, Point(8, 8))
-        self.assertEqual(point_0 - 2, Point(8, 8))
-        self.assertEqual(point_0 - size_0, Point(8, 8))
-        self.assertEqual(Point.max(point_0, point_1), point_0)
-        self.assertEqual(Point.min(point_0, point_1), point_1)
-        self.assertEqual(point_0.to_tuple(), (10, 10))
+        # Act
+        result = point * by
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    def test_point_division(self):
+        # Arrange
+        point = Point(12, 10)
+        expected_result = Point(4, 3)
+        by = 3
+
+        # Act
+        result = point // by
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [
+            (Point(2, 2), Point(0, 0)),
+            (Point(3, 3), Point(1, 1)),
+            (Size(2, 2), Point(0, 0)),
+        ]
+    )
+    def test_point_mod(self, by: Union[Point, Size], expected_result: Point):
+        # Arrange
+        point = Point(10, 10)
+
+        # Act
+        result = point % by
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [(Point(3, 2), Point(13, 12)), (2, Point(12, 12)), (Size(3, 2), Point(13, 12))]
+    )
+    def test_point_addition(self, by: Union[Point, Size, int], expected_result: Point):
+        # Arrange
+        point = Point(10, 10)
+
+        # Act
+        result = point + by
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    @parameterized.expand(
+        [(Point(3, 2), Point(7, 8)), (2, Point(8, 8)), (Size(3, 2), Point(7, 8))]
+    )
+    def test_point_subtraction(
+        self, by: Union[Point, Size, int], expected_result: Point
+    ):
+        # Arrange
+        point = Point(10, 10)
+
+        # Act
+        result = point - by
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    def test_point_max(self):
+        # Arrange
+        point_1 = Point(10, 1)
+        point_2 = Point(2, 12)
+        expected_result = Point(10, 12)
+
+        # Act
+        result = Point.max(point_1, point_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    def test_point_min(self):
+        # Arrange
+        point_1 = Point(10, 1)
+        point_2 = Point(2, 12)
+        expected_result = Point(2, 1)
+
+        # Act
+        result = Point.min(point_1, point_2)
+
+        # Assert
+        self.assertEqual(expected_result, result)
+
+    def test_point_to_tuple(self):
+        # Arrange
+        point = Point(1, 2)
+        expected_result = (1, 2)
+
+        # Act
+        result = point.to_tuple()
+
+        # Assert
+        self.assertEqual(expected_result, result)
 
     def test_region_mm(self):
         # Arrange
