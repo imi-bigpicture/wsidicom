@@ -34,7 +34,7 @@ class WsiDicomFile(WsiDicomFileBase):
     """Represents a DICOM file (potentially) containing WSI image and metadata."""
 
     def __init__(
-        self, file: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
+        self, stream: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
     ):
         """
         Parse DICOM file in stream. If valid WSI type read required
@@ -42,7 +42,7 @@ class WsiDicomFile(WsiDicomFileBase):
 
         Parameters
         ----------
-        file: BinaryIO
+        stream: BinaryIO
             Stream to open.
         filepath: Optional[Path] = None
             Optional filepath of stream.
@@ -51,14 +51,14 @@ class WsiDicomFile(WsiDicomFileBase):
         """
         self._lock = threading.Lock()
         try:
-            file.seek(0)
-            read_preamble(file, False)
+            stream.seek(0)
+            read_preamble(stream, False)
         except InvalidDicomError:
-            raise WsiDicomFileError(file, "is not a DICOM file")
-        file_meta = _read_file_meta_info(file)
+            raise WsiDicomFileError(stream, "is not a DICOM file.")
+        file_meta = _read_file_meta_info(stream)
         self._transfer_syntax_uid = UID(file_meta.TransferSyntaxUID)
 
-        super().__init__(file, filepath, owned)
+        super().__init__(stream, filepath, owned)
         self._file.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._file.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
         extended_offset_table_tag = Tag("ExtendedOffsetTable")
@@ -82,7 +82,7 @@ class WsiDicomFile(WsiDicomFileBase):
         if self._image_type is not None:
             self._dataset = WsiDataset(dataset)
         else:
-            raise WsiDicomNotSupportedError(f"Non-supported file {self._file}")
+            raise WsiDicomNotSupportedError(f"Non-supported file {self._file}.")
 
     def __str__(self) -> str:
         return self.pretty_str()
@@ -441,13 +441,21 @@ class WsiDicomFile(WsiDicomFileBase):
         else:
             frame_positions = self._parse_table(table, table_type, self._file.tell())
 
-        if self.frame_count != len(frame_positions):
+        if len(frame_positions) < self.frame_count:
             raise WsiDicomFileError(
                 self._file,
                 (
-                    f"Frame count {self.frame_count} "
-                    f"!= Fragments {len(frame_positions)}."
-                    " Fragmented frames are not supported"
+                    f"ImageData contained less frames {len(frame_positions)} than "
+                    f"NumberOfFrames {self.frame_count}."
+                ),
+            )
+        if len(frame_positions) > self.frame_count:
+            raise WsiDicomFileError(
+                self._file,
+                (
+                    f"ImageData contained more fragments {len(frame_positions)} than "
+                    f"NumberOfFrames {self.frame_count} and fragmented frames are not "
+                    "supported."
                 ),
             )
 
