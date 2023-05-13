@@ -259,6 +259,8 @@ class WsiDataset(Dataset):
             return TileType.FULL
         elif "PerFrameFunctionalGroupsSequence" in self:
             return TileType.SPARSE
+        elif self.frame_count == 1:
+            return TileType.FULL
         raise WsiDicomError("Undetermined tile type.")
 
     @cached_property
@@ -274,11 +276,14 @@ class WsiDataset(Dataset):
             "SharedFunctionalGroupsSequence"
         )
         if shared_functional_group is None:
+            print("no shared functional group")
             return None
         pixel_measure_sequence = self._get_dicom_attribute(
             "PixelMeasuresSequence", shared_functional_group[0]
         )
         if pixel_measure_sequence is None:
+            print("no pixel_measure_sequence")
+
             return None
         return pixel_measure_sequence[0]
 
