@@ -254,19 +254,6 @@ class CidConceptCode(ConceptCode):
             code.meaning, code.value, code.scheme_designator, code.scheme_version
         )
 
-    @classmethod
-    def from_code_meaning(
-        cls: Type[CidConceptCodeType], meaning: str
-    ) -> CidConceptCodeType:
-        try:
-            code = next((code for code in cls.cid.values() if code.meaning == meaning))
-        except StopIteration:
-            raise ValueError("Unsupported code.")
-        return cls(
-            code.value, code.scheme_designator, code.meaning, code.scheme_version
-        )
-
-
 class UnitCode(SingleConceptCode):
     """Code for concepts representing units according to UCUM scheme"""
 
