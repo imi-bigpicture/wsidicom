@@ -17,6 +17,6 @@
 from wsidicom.instance.instance import WsiInstance
 from wsidicom.instance.dataset import WsiDataset, ImageType, TileType
 from wsidicom.instance.image_data import ImageData
-from wsidicom.instance.image_origin import ImageOrigin
+from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
 from wsidicom.instance.pillow_image_data import PillowImageData

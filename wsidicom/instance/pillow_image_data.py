@@ -24,7 +24,7 @@ from wsidicom.geometry import (
     SizeMm,
 )
 from wsidicom.instance.image_data import ImageData
-from wsidicom.instance.image_origin import ImageOrigin
+from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 
 
 class PillowImageData(ImageData):
@@ -61,8 +61,8 @@ class PillowImageData(ImageData):
         return "YBR_FULL_422"
 
     @property
-    def image_origin(self) -> ImageOrigin:
-        return ImageOrigin()
+    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+        return None
 
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
         if tile_point != Point(0, 0):

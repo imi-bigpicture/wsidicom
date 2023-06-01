@@ -27,7 +27,13 @@ from wsidicom.errors import (
     WsiDicomOutOfBoundsError,
 )
 from wsidicom.geometry import Point, Region, RegionMm, Size, SizeMm
-from wsidicom.instance import ImageData, ImageOrigin, ImageType, WsiDataset, WsiInstance
+from wsidicom.instance import (
+    ImageCoordinateSystem,
+    ImageData,
+    ImageType,
+    WsiDataset,
+    WsiInstance,
+)
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
 
@@ -140,8 +146,8 @@ class Group:
         )
 
     @property
-    def image_origin(self) -> ImageOrigin:
-        return self.default_instance.image_origin
+    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+        return self.default_instance.image_coordinate_system
 
     @classmethod
     def open(
@@ -339,13 +345,18 @@ class Group:
         PILImage
             Region as image
         """
+        if slide_origin and self.image_coordinate_system is None:
+            raise ValueError(
+                "Cant map to slide region as image coordinate system is not defined."
+            )
+
         if slide_origin:
-            region = self.image_origin.transform_region(region)
+            region = self.image_coordinate_system.slide_to_image(region)
         pixel_region = self.mm_to_pixel(region)
         image = self.get_region(pixel_region, z, path, threads)
         if slide_origin:
             image = image.rotate(
-                self.image_origin.rotation,
+                self.image_coordinate_system.rotation,
                 resample=Image.Resampling.BILINEAR,
                 expand=True,
             )
