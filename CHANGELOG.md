@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] -
 
+### Changed
+
+- Consider image as full tiled if only one tile.
+
 ### Fixed
 
 - Correct formatting of decimal string values when writing dataset.
