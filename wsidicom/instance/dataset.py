@@ -259,6 +259,8 @@ class WsiDataset(Dataset):
             return TileType.FULL
         elif "PerFrameFunctionalGroupsSequence" in self:
             return TileType.SPARSE
+        elif self.frame_count == 1:
+            return TileType.FULL
         raise WsiDicomError("Undetermined tile type.")
 
     @cached_property
