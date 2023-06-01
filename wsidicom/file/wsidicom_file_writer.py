@@ -42,22 +42,24 @@ from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
 class WsiDicomFileWriter(WsiDicomFileBase):
+    """Writer for DICOM WSI files."""
+
     def __init__(
-        self, file: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
+        self, stream: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
     ) -> None:
         """
-        A writer for DICOM WSI files.
+        Create a writer for DICOM WSI data.
 
         Parameters
         ----------
-        file: BinaryIO
+        stream: BinaryIO
             Stream to open.
         filepath: Optional[Path] = None
             Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
         """
-        super().__init__(file, filepath, owned)
+        super().__init__(stream, filepath, owned)
         self._file.is_little_endian = True
         self._file.is_implicit_VR = False
 
@@ -83,7 +85,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         scale: int = 1,
     ) -> None:
         """
-        Writes data to file.
+        Write data to file.
 
         Parameters
         ----------
@@ -134,13 +136,13 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         self.close()
 
     def _write_preamble(self) -> None:
-        """Writes file preamble to file."""
+        """Write file preamble to file."""
         preamble = b"\x00" * 128
         self._file.write(preamble)
         self._file.write(b"DICM")
 
     def _write_file_meta(self, uid: UID, transfer_syntax: UID) -> None:
-        """Writes file meta dataset to file.
+        """Write file meta dataset to file.
 
         Parameters
         ----------
@@ -157,7 +159,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         write_file_meta_info(self._file, meta_ds)
 
     def _write_base(self, dataset: Dataset) -> None:
-        """Writes base dataset to file.
+        """Write base dataset to file.
 
         Parameters
         ----------
@@ -233,7 +235,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
     def _write_pixel_data_start(
         self, number_of_frames: int, offset_table: OffsetTableType
     ) -> Tuple[Optional[int], int]:
-        """Writes tags starting pixel data and reserves space for BOT or EOT.
+        """Write tags starting pixel data and reserves space for BOT or EOT.
 
         Parameters
         ----------
@@ -268,7 +270,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
     def _write_bot(
         self, bot_start: int, pixel_data_start: int, frame_positions: Sequence[int]
     ) -> None:
-        """Writes BOT to file.
+        """Write BOT to file.
 
         Parameters
         ----------
@@ -315,7 +317,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         frame_positions: Sequence[int],
         last_frame_end: int,
     ) -> None:
-        """Writes EOT to file.
+        """Write EOT to file.
 
         Parameters
         ----------
@@ -372,7 +374,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         image_format: str = "jpeg",
         image_options: Optional[Dict[str, Any]] = None,
     ) -> List[int]:
-        """Writes pixel data to file.
+        """Write pixel data to file.
 
         Parameters
         ----------
@@ -448,7 +450,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
     def _chunk_tile_points(
         self, image_data: ImageData, chunk_size: int, scale: int = 1
     ) -> Iterator[Iterator[Point]]:
-        """Divides tile positions in image_data into chunks.
+        """Divide tile positions in image_data into chunks.
 
         Parameters
         ----------

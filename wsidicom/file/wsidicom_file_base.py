@@ -38,21 +38,21 @@ class WsiDicomFileBase:
     """Base class for reading or writing DICOM WSI file."""
 
     def __init__(
-        self, file: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
+        self, stream: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
     ):
         """
         Create a WsiDicomFileBase.
 
         Parameters
         ----------
-        file: BinaryIO
+        stream: BinaryIO
             Stream to open.
         filepath: Optional[Path] = None
             Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
         """
-        self._file = DicomFileLike(file)
+        self._file = DicomFileLike(stream)
         self._filepath = filepath
         self._owned = owned
         self.__enter__()
@@ -63,14 +63,11 @@ class WsiDicomFileBase:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({self.filepath})"
-
     def __str__(self) -> str:
         return self.pretty_str()
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
-        return f"File of stream: {self._file}"
+        return f"File of stream: {self._file.name}"
 
     @property
     def filepath(self) -> Optional[Path]:
