@@ -21,10 +21,9 @@ from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
 
-from wsidicom.config import settings
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.instance.image_origin import ImageOrigin
+from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 
 
 class ImageData(metaclass=ABCMeta):
@@ -79,7 +78,7 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def image_origin(self) -> ImageOrigin:
+    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         """Should return the image origin of the image data."""
         raise NotImplementedError()
 
