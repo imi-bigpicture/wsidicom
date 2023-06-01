@@ -276,14 +276,11 @@ class WsiDataset(Dataset):
             "SharedFunctionalGroupsSequence"
         )
         if shared_functional_group is None:
-            print("no shared functional group")
             return None
         pixel_measure_sequence = self._get_dicom_attribute(
             "PixelMeasuresSequence", shared_functional_group[0]
         )
         if pixel_measure_sequence is None:
-            print("no pixel_measure_sequence")
-
             return None
         return pixel_measure_sequence[0]
 
