@@ -27,7 +27,7 @@ from wsidicom.geometry import (
     Size,
     SizeMm,
 )
-from wsidicom.instance import ImageOrigin
+from wsidicom.instance import ImageCoordinateSystem
 
 
 @pytest.mark.unittest
@@ -371,25 +371,33 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         [
             (  # Image x along slide y, Image y along slide x
                 RegionMm(PointMm(2.0, 4.0), SizeMm(1.0, 2.0)),
-                ImageOrigin(PointMm(1.0, 2.0), Orientation([0, 1, 0, 1, 0, 0])),
+                ImageCoordinateSystem(
+                    PointMm(1.0, 2.0), Orientation([0, 1, 0, 1, 0, 0])
+                ),
                 PointMm(2.0, 1.0),
                 PointMm(4.0, 2.0),
             ),
             (  # Image x reversed to slide y, Image y reversed to slide x
                 RegionMm(PointMm(1.0, 4.0), SizeMm(2.0, 1.0)),
-                ImageOrigin(PointMm(4.0, 8.0), Orientation([0, -1, 0, -1, 0, 0])),
+                ImageCoordinateSystem(
+                    PointMm(4.0, 8.0), Orientation([0, -1, 0, -1, 0, 0])
+                ),
                 PointMm(3.0, 1.0),
                 PointMm(4.0, 3.0),
             ),
             (  # Image x along slide x, Image y reversed to slide y
                 RegionMm(PointMm(2.0, 5.0), SizeMm(2.0, 1.0)),
-                ImageOrigin(PointMm(1.0, 8.0), Orientation([1, 0, 0, 0, -1, 0])),
+                ImageCoordinateSystem(
+                    PointMm(1.0, 8.0), Orientation([1, 0, 0, 0, -1, 0])
+                ),
                 PointMm(1.0, 2.0),
                 PointMm(3.0, 3.0),
             ),
             (  # Image x reversed to slide x, Image y along slide y
                 RegionMm(PointMm(2.0, 3.0), SizeMm(2.0, 3.0)),
-                ImageOrigin(PointMm(5.0, 2.0), Orientation([-1, 0, 0, 0, 1, 0])),
+                ImageCoordinateSystem(
+                    PointMm(5.0, 2.0), Orientation([-1, 0, 0, 0, 1, 0])
+                ),
                 PointMm(1.0, 1.0),
                 PointMm(3.0, 4.0),
             ),
@@ -398,13 +406,13 @@ class WsiDicomGeomtryTests(unittest.TestCase):
     def test_region_mm_to_other_origin(
         self,
         region: RegionMm,
-        origin: ImageOrigin,
+        origin: ImageCoordinateSystem,
         expected_start: PointMm,
         expected_end: PointMm,
     ):
         # Arrange
         # Act
-        transformed_region = origin.transform_region(region)
+        transformed_region = origin.slide_to_image(region)
 
         # Assert
         self.assertEqual(transformed_region.start, expected_start)
