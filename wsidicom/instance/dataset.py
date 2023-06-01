@@ -659,7 +659,7 @@ class WsiDataset(Dataset):
         image_type:
             Type of instance ('VOLUME', 'LABEL', 'OVERVIEW)
         image_data:
-            Image data to crate dataset for.
+            Image data to create dataset for.
 
         Returns
         ----------
@@ -711,12 +711,13 @@ class WsiDataset(Dataset):
                 shared_functional_group_sequence.WholeSlideMicroscopyImageFrameTypeSequence
             ) = DicomSequence([wsi_frame_type_item])
 
-        dataset.ImageOrientationSlide = list(
-            image_data.image_origin.image_orientation_slide
-        )
-        dataset.TotalPixelMatrixOriginSequence = (
-            image_data.image_origin.total_pixel_matrix_origin_sequence
-        )
+        if image_data.image_coordinate_system is not None:
+            dataset.ImageOrientationSlide = list(
+                image_data.image_coordinate_system.image_orientation_slide
+            )
+            dataset.TotalPixelMatrixOriginSequence = (
+                image_data.image_coordinate_system.total_pixel_matrix_origin_sequence
+            )
 
         dataset.DimensionOrganizationType = "TILED_FULL"
         dataset.TotalPixelMatrixColumns = image_data.image_size.width

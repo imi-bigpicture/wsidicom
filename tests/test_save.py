@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 from struct import unpack
 from tempfile import TemporaryDirectory
-from typing import List, OrderedDict, Sequence, Tuple, cast
+from typing import List, Optional, OrderedDict, Sequence, Tuple, cast
 
 import pytest
 from PIL import ImageChops, ImageFilter, ImageStat
@@ -42,7 +42,7 @@ from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
 from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.group.level import Level
-from wsidicom.instance import ImageData, ImageOrigin
+from wsidicom.instance import ImageData, ImageCoordinateSystem
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
@@ -100,8 +100,8 @@ class WsiDicomTestImageData(ImageData):
         return "YBR"
 
     @property
-    def image_origin(self) -> ImageOrigin:
-        return ImageOrigin()
+    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+        return None
 
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
         raise NotImplementedError()

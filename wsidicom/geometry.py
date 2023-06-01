@@ -15,6 +15,7 @@
 import math
 from dataclasses import dataclass
 from typing import Callable, Iterable, Iterator, Tuple, Union, Sequence
+import warnings
 
 
 @dataclass
@@ -504,41 +505,61 @@ class RegionMm:
 
 
 class Orientation:
-    # Only 90 degree rotations implemented
-    IMPLEMENTED_ORIENTATIONS = {
-        (0.0, 1.0, 0.0, 1.0, 0.0, 0.0): 90.0,
-        (0.0, -1.0, 0.0, -1.0, 0.0, 0.0): 270.0,
-        (1.0, 0.0, 0.0, 0.0, -1.0, 0.0): 0.0,
-        (-1.0, 0.0, 0.0, 0.0, 1.0, 0.0): 180.0,
-    }
-
     def __init__(self, orientation: Sequence[float]):
+        if orientation[0] != -orientation[4] or orientation[1] != orientation[3]:
+            warnings.warn(
+                f"Orientation {orientation} is not "
+                "orthogonal with equal lengths with column rotated 90 deg from row"
+            )
         orientation = tuple(orientation)
-        if orientation not in self.IMPLEMENTED_ORIENTATIONS:
-            NotImplementedError("Non-implemented orientation.")
         self._orientation = orientation
-
-    @property
-    def orientation(self) -> Tuple[float, float, float, float, float, float]:
-        return self._orientation
+        self._transform = self._create_transform(orientation)
+        self._reverse = self._create_reverse(self._transform)
 
     @property
     def rotation(self) -> float:
-        return self.IMPLEMENTED_ORIENTATIONS[self._orientation]
+        return (
+            (math.atan2(-self._orientation[0], self._orientation[3]) / math.pi)
+            * 180
+            % 360
+        )
 
-    def apply(self, region: RegionMm):
-        if self._orientation == (0, 1, 0, 1, 0, 0):
-            position = PointMm(region.position.y, region.position.x)
-            size = SizeMm(region.size.height, region.size.width)
-        elif self._orientation == (0, -1, 0, -1, 0, 0):
-            position = PointMm(-region.position.y, -region.position.x)
-            size = SizeMm(-region.size.height, -region.size.width)
-        elif self._orientation == (1, 0, 0, 0, -1, 0):
-            position = PointMm(region.position.x, -region.position.y)
-            size = SizeMm(region.size.width, -region.size.height)
-        elif self._orientation == (-1, 0, 0, 0, 1, 0):
-            position = PointMm(-region.position.x, region.position.y)
-            size = SizeMm(-region.size.width, region.size.height)
-        else:
-            raise NotImplementedError("Non-implemented orientation.")
-        return RegionMm(position, size)
+    @property
+    def values(self) -> Tuple[float, float, float, float, float, float]:
+        return self._orientation
+
+    def apply_transform(self, point: PointMm):
+        return PointMm(
+            self._transform[0][0] * point.x + self._transform[0][1] * point.y,
+            self._transform[1][0] * point.x + self._transform[1][1] * point.y,
+        )
+
+    def apply_reverse_transform(self, point: PointMm):
+        return PointMm(
+            self._reverse[0][0] * point.x + self._reverse[0][1] * point.y,
+            self._reverse[1][0] * point.x + self._reverse[1][1] * point.y,
+        )
+
+    @staticmethod
+    def _create_transform(
+        orientation: Tuple[float, float, float, float, float, float]
+    ) -> Tuple[Tuple[float, float], Tuple[float, float],]:
+        return (
+            (orientation[0], orientation[3]),
+            (orientation[1], orientation[4]),
+        )
+
+    @staticmethod
+    def _create_reverse(
+        transform: Tuple[
+            Tuple[float, float],
+            Tuple[float, float],
+        ]
+    ) -> Tuple[Tuple[float, float], Tuple[float, float],]:
+        determinant = 1 / (
+            transform[0][0] * transform[1][1] - transform[0][1] * transform[1][0]
+        )
+        return (
+            (determinant * transform[1][1], -determinant * transform[0][1]),
+            (-determinant * transform[1][0], determinant * transform[0][0]),
+        )

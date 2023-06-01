@@ -13,25 +13,23 @@
 #    limitations under the License.
 
 import warnings
-from typing import List, Optional
+from typing import List, Optional, TypeVar
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.valuerep import DSfloat
 
-from wsidicom.geometry import Orientation, PointMm, RegionMm
+from wsidicom.geometry import Orientation, PointMm, RegionMm, SizeMm
+
+GeometryType = TypeVar("GeometryType", PointMm, RegionMm)
 
 
-class ImageOrigin:
+class ImageCoordinateSystem:
     def __init__(
         self,
-        origin: Optional[PointMm] = None,
-        orientation: Optional[Orientation] = None,
+        origin: PointMm,
+        orientation: Orientation,
     ):
-        if origin is None:
-            origin = PointMm(0, 0)
-        if orientation is None:
-            orientation = Orientation([0, 1, 0, 1, 0, 0])
         self._origin = origin
         self._orientation = orientation
 
@@ -44,7 +42,7 @@ class ImageOrigin:
         return self._orientation
 
     @classmethod
-    def from_dataset(cls, dataset: Dataset):
+    def from_dataset(cls, dataset: Dataset) -> Optional["ImageCoordinateSystem"]:
         try:
             origin = PointMm(
                 dataset.TotalPixelMatrixOriginSequence[
@@ -55,19 +53,11 @@ class ImageOrigin:
                 ].YOffsetInSlideCoordinateSystem,
             )
         except (AttributeError, IndexError):
-            warnings.warn(
-                "Using default image origin as TotalPixelMatrixOriginSequence "
-                "not set in file"
-            )
-            origin = None
+            return None
         try:
             orientation = Orientation(dataset.ImageOrientationSlide)
         except AttributeError:
-            warnings.warn(
-                "Using default image orientation as ImageOrientationSlide "
-                "not set in file"
-            )
-            orientation = None
+            return None
         return cls(origin, orientation)
 
     @property
@@ -83,12 +73,31 @@ class ImageOrigin:
         self,
     ) -> List[float]:
         """Return formatted ImageOrientationSlide."""
-        return list(self.orientation.orientation)
+        return [DSfloat(value, True) for value in self.orientation.values]
 
     @property
     def rotation(self) -> float:
+        """The rotation of the image in relation to the slide coordiante system in degrees."""
         return self._orientation.rotation
 
-    def transform_region(self, region: RegionMm) -> "RegionMm":
-        region.position = region.position - self._origin
-        return self._orientation.apply(region)
+    def image_to_slide(self, image: GeometryType) -> GeometryType:
+        if isinstance(image, PointMm):
+            offset = self._orientation.apply_transform(image)
+            return self._origin + offset
+        start = self.image_to_slide(image.start)
+        end = self.image_to_slide(image.end)
+        return RegionMm(start, SizeMm(end.x - start.x, end.y - start.y))
+
+    def slide_to_image(self, slide: GeometryType) -> GeometryType:
+        if isinstance(slide, PointMm):
+            offset = slide - self._origin
+            return self._orientation.apply_reverse_transform(offset)
+        start = self.slide_to_image(slide.start)
+        end = self.slide_to_image(slide.end)
+        return RegionMm(start, SizeMm(end.x - start.x, end.y - start.y))
+
+    def to_other_corrdinate_system(
+        self, other: "ImageCoordinateSystem", image: GeometryType
+    ) -> GeometryType:
+        slide = self.image_to_slide(image)
+        return other.slide_to_image(slide)

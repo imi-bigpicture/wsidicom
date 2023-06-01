@@ -12,13 +12,13 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Iterable, List, OrderedDict
+from typing import Iterable, List, Optional, OrderedDict
 
 
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level
-from wsidicom.instance import ImageOrigin, ImageType, WsiInstance
+from wsidicom.instance import ImageCoordinateSystem, ImageType, WsiInstance
 from wsidicom.series.series import Series
 from wsidicom.stringprinting import str_indent
 
@@ -144,8 +144,8 @@ class Levels(Series):
         return self._mm_size
 
     @property
-    def image_origin(self) -> ImageOrigin:
-        return self.base_level.image_origin
+    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+        return self.base_level.image_coordinate_system
 
     def valid_level(self, level: int) -> bool:
         """Check that given level is less or equal to the highest level

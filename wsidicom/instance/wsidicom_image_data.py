@@ -24,7 +24,7 @@ from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
 from wsidicom.instance.image_data import ImageData
-from wsidicom.instance.image_origin import ImageOrigin
+from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex
@@ -93,9 +93,9 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return self._datasets[0].samples_per_pixel
 
     @cached_property
-    def image_origin(self) -> ImageOrigin:
+    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         """Return the image origin of the image data."""
-        return ImageOrigin.from_dataset(self._datasets[0])
+        return ImageCoordinateSystem.from_dataset(self._datasets[0])
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         """Return image bytes for tile defined by tile (x, y), z,

@@ -23,7 +23,7 @@ from wsidicom.errors import WsiDicomError, WsiDicomUidDuplicateError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.dataset import ImageType, WsiDataset
 from wsidicom.instance.image_data import ImageData
-from wsidicom.instance.image_origin import ImageOrigin
+from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 from wsidicom.instance.pillow_image_data import PillowImageData
 from wsidicom.uid import SlideUids
 
@@ -179,8 +179,8 @@ class WsiInstance:
         return self._uids
 
     @property
-    def image_origin(self) -> ImageOrigin:
-        return self.image_data.image_origin
+    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+        return self.image_data.image_coordinate_system
 
     @classmethod
     def create_label(
