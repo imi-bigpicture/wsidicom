@@ -32,7 +32,7 @@ class Level(Group):
     """
 
     def __init__(self, instances: Sequence[WsiInstance], base_pixel_spacing: SizeMm):
-        """Create a level from list of WsiInstances. Asign the pyramid level
+        """Create a level from list of WsiInstances. Assign the pyramid level
         index from pixel spacing of base level.
 
         Parameters
@@ -178,7 +178,7 @@ class Level(Group):
     ) -> PILImage:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
-        to remove part outside of the image (as defiend by level size).
+        to remove part outside of the image (as defined by level size).
 
         Parameters
         ----------
@@ -260,7 +260,7 @@ class Level(Group):
         Parameters
         ----------
         base_pixel_spacing: SizeMm
-            The pixel spacing of the base lavel
+            The pixel spacing of the base level
 
         Returns
         ----------

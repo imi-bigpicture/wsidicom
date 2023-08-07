@@ -366,7 +366,7 @@ class WsiDicomFile(WsiDicomFileBase):
         TAG_BYTES = 4
         self._file.seek(-TAG_BYTES, 1)
         if self._file.read_tag() != SequenceDelimiterTag:
-            raise WsiDicomFileError(self._file, "No sequence delimeter tag")
+            raise WsiDicomFileError(self._file, "No sequence delimiter tag")
 
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
@@ -411,11 +411,11 @@ class WsiDicomFile(WsiDicomFileBase):
         then not be empty. A BOT most always be the first item in the Pixel
         data, but can be empty (zero length). If EOT is used BOT should be empty.
 
-        First seach to pixel data position, which is either EOT tag or PixelData tag.
+        First search to pixel data position, which is either EOT tag or PixelData tag.
         If EOT read the EOT. For all cases validate that the filepointer now is at the
         PixelData tag. If BOT read the BOT, otherwise skip the BOT. If EOT nor BOT has
         been read, parse frame positions from pixel data. Otherwise parse frame
-        positions from EOT or BOT. Finaly check that the number of read frames equals
+        positions from EOT or BOT. Finally check that the number of read frames equals
         the specified number of frames, otherwise frames are fragmented which we dont
         support.
 

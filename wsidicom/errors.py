@@ -38,14 +38,14 @@ class WsiDicomFileError(Exception):
 
 
 class WsiDicomMatchError(Exception):
-    """Raised if item in group that should match doesnt match."""
+    """Raised if item in group that should match doesn' match."""
 
     def __init__(self, item: str, group: str):
         self.item = item
         self.group = group
 
     def __str__(self):
-        return f"{self.item} doesnt match {self.group}"
+        return f"{self.item} doesn' match {self.group}"
 
 
 class WsiDicomUidDuplicateError(Exception):
