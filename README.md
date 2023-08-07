@@ -146,7 +146,7 @@ slide.close()
 An opened WsiDicom instance can be saved to a new path using the save()-method. The produced files will be:
 
 - Fully tiled. Any sparse tiles will be replaced with a blank tile with color depending on the photometric interpretation.
-- Have a basic offset table (or optionally an exteded offset table or no offset table).
+- Have a basic offset table (or optionally an extended offset table or no offset table).
 - Not be concatenated.
 
 The frames are copied as-is, i.e. without re-compression.
@@ -156,7 +156,7 @@ with WsiDicom.open(path_to_folder) as slide:
     slide.save(path_to_output)
 ```
 
-The output folder must already exists. Be careful to specify a unique folder folder to avoid mixing files from diferent images.
+The output folder must already exists. Be careful to specify a unique folder folder to avoid mixing files from different images.
 
 ## Settings
 
@@ -175,7 +175,7 @@ Annotations are structured in a hierarchy:
 - AnnotationInstance
     Represents a collection of AnnotationGroups. All the groups have the same frame of reference, i.e. annotations are from the same wsi stack.
 - AnnotationGroup
-    Represents a group of annotations. All annotations in the group are of the same type (e.g. PointAnnotation), have the same label, description and category and type. The category and type are codes that are used to define the annotated feature. A good resource for working with codes is avaiable [here](https://qiicr.gitbook.io/dcmqi-guide/opening/coding_schemes).
+    Represents a group of annotations. All annotations in the group are of the same type (e.g. PointAnnotation), have the same label, description and category and type. The category and type are codes that are used to define the annotated feature. A good resource for working with codes is available [here](https://qiicr.gitbook.io/dcmqi-guide/opening/coding_schemes).
 - Annotation
     Represents a annotation. An Annotation has a geometry (currently Point, Polyline, Polygon) and an optional list of Measurements.
 - Measurement
@@ -257,7 +257,7 @@ To watch unit tests use:
 poetry run pytest-watch -- -m unittest
 ```
 
-The integration tests uses test images from nema.org thats needs to be downloaded. The location of the test images can be changed from the default tests\testdata\slides using the enviroment variable WSIDICOM_TESTDIR. Download the images using the supplied script:
+The integration tests uses test images from nema.org that's needs to be downloaded. The location of the test images can be changed from the default tests\testdata\slides using the environment variable WSIDICOM_TESTDIR. Download the images using the supplied script:
 
 ```console
 python .\tests\download_test_images.py
