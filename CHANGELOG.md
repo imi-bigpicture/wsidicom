@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.10.0] - 2023-06-01
 
+### Fixed
+
+- Error in documentation of read_overview() in readme.
+- Spellings.
+
 ### Added
 
 - Support for using opened streams.
