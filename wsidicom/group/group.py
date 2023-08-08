@@ -22,7 +22,7 @@ from pydicom.uid import UID
 
 from wsidicom.errors import (
     WsiDicomMatchError,
-    WsiDicomNoResultionError,
+    WsiDicomNoResolutionError,
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
@@ -429,7 +429,7 @@ class Group:
             Region in pixels
         """
         if self.pixel_spacing is None:
-            raise WsiDicomNoResultionError()
+            raise WsiDicomNoResolutionError()
         pixel_region = Region(
             position=region.position // self.pixel_spacing,
             size=region.size // self.pixel_spacing,

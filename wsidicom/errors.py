@@ -38,14 +38,14 @@ class WsiDicomFileError(Exception):
 
 
 class WsiDicomMatchError(Exception):
-    """Raised if item in group that should match doesn' match."""
+    """Raised if item in group that should match does not match."""
 
     def __init__(self, item: str, group: str):
         self.item = item
         self.group = group
 
     def __str__(self):
-        return f"{self.item} doesn' match {self.group}"
+        return f"{self.item} does not match {self.group}"
 
 
 class WsiDicomUidDuplicateError(Exception):
@@ -89,7 +89,7 @@ class WsiDicomRequirementError(Exception):
     """Raised if required attribute is missing."""
 
 
-class WsiDicomNoResultionError(Exception):
+class WsiDicomNoResolutionError(Exception):
     """Raised if method is not possible as resolution is missing in image
     data."""
 
