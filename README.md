@@ -108,7 +108,7 @@ region_mpp = slide.read_region_mpp((0, 0), 0.01, (3, 3))
 ***Read a thumbnail of the whole slide with maximum dimensions 200x200 px.***
 
 ```python
-thumbnail = slide.read_thumbnail(200, 200)
+thumbnail = slide.read_thumbnail((200, 200))
 ```
 
 ***Read an overview image (if available).***
@@ -342,4 +342,4 @@ Our aim is to provide constructive and positive code reviews for all submissions
 
 *wsidicom*: Copyright 2021 Sectra AB, licensed under Apache 2.0.
 
-This project is part of a project that has received funding from the Innovative Medicines Initiative 2 Joint Undertaking under grant agreement No 945358. This Joint Undertaking receives support from the European Union’s Horizon 2020 research and innovation programme and EFPIA. IMI website: www.imi.europa.eu
+This project is part of a project that has received funding from the Innovative Medicines Initiative 2 Joint Undertaking under grant agreement No 945358. This Joint Undertaking receives support from the European Union’s Horizon 2020 research and innovation programme and EFPIA. IMI website: <www.imi.europa.eu>
