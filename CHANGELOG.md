@@ -7,12 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.10.0] - 2023-06-01
-
 ### Fixed
 
 - Error in documentation of read_overview() in readme.
 - Spellings.
+
+## [0.10.0] - 2023-06-01
 
 ### Added
 
