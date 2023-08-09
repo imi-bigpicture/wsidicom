@@ -374,8 +374,23 @@ class WsiDataset(Dataset):
             The image size
         """
         image_size = Size(self.TotalPixelMatrixColumns, self.TotalPixelMatrixRows)
-        if image_size.width == 0 or image_size.height == 0:
-            raise WsiDicomFileError(self.filepath, "Image size is zero")
+        if image_size.width <= 0 or image_size.height <= 0:
+            raise WsiDicomError("Image size is zero")
+        if self.tile_type == TileType.FULL:
+            expected_tiled_size = image_size.ceil_div(self.tile_size)
+            if expected_tiled_size.area != self.frame_count:
+                error = (
+                    f"Image size {image_size} does not match tile size "
+                    f"{self.tile_size} and number of frames {self.frame_count} "
+                    f"for tile type {TileType.FULL}."
+                )
+                if self.image_type == ImageType.VOLUME or self.frame_count != 1:
+                    # Be strict on volume images.
+                    raise WsiDicomError(error)
+                # Labels and overviews are likely to have only one tile.
+                error += " Overriding image size to tile size."
+                logging.warn(error)
+                image_size = self.tile_size
         return image_size
 
     @cached_property
