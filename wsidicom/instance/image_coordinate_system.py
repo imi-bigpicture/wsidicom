@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import warnings
 from typing import List, Optional, TypeVar
 
 from pydicom.dataset import Dataset
@@ -77,7 +76,7 @@ class ImageCoordinateSystem:
 
     @property
     def rotation(self) -> float:
-        """The rotation of the image in relation to the slide coordiante system in degrees."""
+        """The rotation of the image in relation to the slide coordinate system in degrees."""
         return self._orientation.rotation
 
     def image_to_slide(self, image: GeometryType) -> GeometryType:

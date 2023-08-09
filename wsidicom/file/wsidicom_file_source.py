@@ -16,9 +16,9 @@
 
 from collections import defaultdict
 import io
+import logging
 from pathlib import Path
 from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union
-import warnings
 
 from pydicom.uid import UID
 
@@ -70,21 +70,21 @@ class WsiDicomFileSource(Source):
                         elif wsi_file.image_type == ImageType.OVERVIEW:
                             self._overview_files.append(wsi_file)
                     except WsiDicomNotSupportedError:
-                        warnings.warn(f"Non-supported file {stream.name}.")
+                        logging.debug(f"Non-supported file {stream.name}.")
                         if filepath is not None:
                             stream.close()
                 elif sop_class_uid == ANN_SOP_CLASS_UID:
                     self._annotation_files.append(stream)
                 elif filepath is not None:
-                    warnings.warn(
+                    logging.debug(
                         f"Non-supported SOP class {sop_class_uid} "
                         f"for file {stream.name}."
                     )
                     # File was opened but not supported SOP class.
                     stream.close()
             except Exception as exception:
-                warnings.warn(
-                    f"Failed to open file {file.name} due to " f"exception: {exception}"
+                logging.error(
+                    f"Failed to open file {file.name} due to exception: {exception}"
                 )
         if len(self._level_files) == 0:
             raise WsiDicomNotFoundError("Level files", str(files))
@@ -137,7 +137,7 @@ class WsiDicomFileSource(Source):
     @property
     def is_ready_for_viewing(self) -> Optional[bool]:
         """
-        Returns True if files in source are formated for fast viewing.
+        Returns True if files in source are formatted for fast viewing.
 
         Returns None if no files are in source.
         """
@@ -236,7 +236,7 @@ class WsiDicomFileSource(Source):
             stream.seek(0)
             return metadata.MediaStorageSOPClassUID
         except InvalidDicomError as exception:
-            warnings.warn(
+            logging.debug(
                 f"Failed to parse DICOM file metadata for file {stream}, not DICOM? "
                 f"Got exception {exception}"
             )
@@ -306,7 +306,7 @@ class WsiDicomFileSource(Source):
             if file.dataset.matches_series(series_uids, series_tile_size):
                 yield file
             else:
-                warnings.warn(
+                logging.warn(
                     f"{file.filepath} with uids {file.uids.slide} "
                     f"did not match series with {series_uids} "
                     f"and tile size {series_tile_size}"

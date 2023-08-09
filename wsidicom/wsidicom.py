@@ -12,8 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import logging
 import os
-import warnings
 from pathlib import Path
 from typing import (
     BinaryIO,
@@ -514,7 +514,7 @@ class WsiDicom:
     def get_instance(
         self, level: int, z: Optional[float] = None, path: Optional[str] = None
     ) -> WsiInstance:
-        """Return instance fullfilling level, z and/or path.
+        """Return instance fulfilling level, z and/or path.
 
         Parameters
         ----------
@@ -558,7 +558,7 @@ class WsiDicom:
         ----------
         output_path: Union[str, Path]
         uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
-             Function that can gernerate unique identifiers.
+             Function that can generate unique identifiers.
         workers: Optional[int] = None
             Maximum number of thread workers to use.
         chunk_size: Optional[int] = None
@@ -637,7 +637,7 @@ class WsiDicom:
         if self.annotations != []:
             for annotation in self.annotations:
                 if annotation.slide_uids != slide_uids:
-                    warnings.warn("Annotations uids does not match")
+                    logging.warn("Annotations uids does not match.")
         return slide_uids
 
     @classmethod
@@ -645,7 +645,7 @@ class WsiDicom:
         cls, path: Union[str, Iterable[str], Path, Iterable[Path]]
     ) -> Optional[bool]:
         """
-        Return true if files in path are formated for fast viewing, i.e.
+        Return true if files in path are formatted for fast viewing, i.e.
         have TILED_FULL tile arrangement and have an offset table.
 
         Parameters
@@ -654,7 +654,7 @@ class WsiDicom:
             Path to files to test.
 
         Returns
-            True if files in path are formated for fast viewing, None if no DICOM WSI
+            True if files in path are formatted for fast viewing, None if no DICOM WSI
             files are in the path.
         """
         source = WsiDicomFileSource(path)

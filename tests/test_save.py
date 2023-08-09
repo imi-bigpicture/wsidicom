@@ -111,7 +111,6 @@ class WsiDicomTestImageData(ImageData):
 
 
 @pytest.mark.save
-@pytest.mark.filterwarnings("ignore")
 class WsiDicomFileSaveTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -177,7 +176,7 @@ class WsiDicomFileSaveTests(unittest.TestCase):
     def create_test_dataset(frame_count: int, image_data: WsiDicomTestImageData):
         dataset = Dataset()
         dataset.SOPClassUID = WSI_SOP_CLASS_UID
-        dataset.ImageType = ["ORGINAL", "PRIMARY", "VOLUME", "NONE"]
+        dataset.ImageType = ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]
         dataset.NumberOfFrames = frame_count
         dataset.SOPInstanceUID = generate_uid()
         dataset.StudyInstanceUID = generate_uid()

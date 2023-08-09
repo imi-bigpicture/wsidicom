@@ -86,7 +86,7 @@ class SparseTileIndex(TileIndex):
     def __init__(self, datasets: Sequence[WsiDataset]):
         """Create sparse tile index for frames in datasets. Requires equal tile
         size for all tile planes. Pixel data tiles are identified by the Per
-        Frame Functional Groups Sequence that contains tile colum, row, z,
+        Frame Functional Groups Sequence that contains tile column, row, z,
         path, and frame index. These are stored in a SparseTilePlane
         (one plane for every combination of z and path).
 
@@ -140,7 +140,7 @@ class SparseTileIndex(TileIndex):
         return frame_index
 
     def _get_focal_planes(self) -> List[float]:
-        """Return list of focal planes defiend in planes.
+        """Return list of focal planes defined in planes.
 
         Returns
         ----------

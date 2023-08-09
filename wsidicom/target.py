@@ -23,7 +23,7 @@ from wsidicom.series import Labels, Levels, Overviews
 
 
 class Target(metaclass=ABCMeta):
-    """A target should be initated with a path or similar, and enable saving of
+    """A target should be initiated with a path or similar, and enable saving of
     instances into that path."""
 
     def __init__(
@@ -33,7 +33,7 @@ class Target(metaclass=ABCMeta):
         chunk_size: int,
         add_missing_levels: bool = False,
     ) -> None:
-        """Initate a target.
+        """Initiate a target.
 
         Parameters
         ----------

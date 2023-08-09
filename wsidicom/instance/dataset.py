@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 import logging
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
@@ -304,7 +303,7 @@ class WsiDataset(Dataset):
         pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
         if pixel_spacing_values is not None:
             if any([spacing == 0 for spacing in pixel_spacing_values]):
-                warnings.warn(f"Pixel spacing is zero, {pixel_spacing_values}")
+                logging.warn(f"Pixel spacing is zero, {pixel_spacing_values}")
                 return None
             return SizeMm.from_tuple(pixel_spacing_values)
         return None
@@ -449,7 +448,7 @@ class WsiDataset(Dataset):
         Returns
         ----------
         Optional[float]
-            Slice thickess or None if unkown.
+            Slice thickess or None if unknown.
         """
         try:
             return self._get_dicom_attribute("SliceThickness", self.pixel_measure)
@@ -475,7 +474,7 @@ class WsiDataset(Dataset):
     ) -> Optional[ImageType]:
         """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
-        Warn if attribute listed as requierd in the library or required in the
+        Warn if attribute listed as required in the library or required in the
         standard is missing.
 
         Parameters
@@ -493,23 +492,23 @@ class WsiDataset(Dataset):
 
         sop_class_uid: UID = getattr(dataset, "SOPClassUID")
         if sop_class_uid != WSI_SOP_CLASS_UID:
-            warnings.warn(f"Non-wsi image, SOP class {sop_class_uid.name}")
+            logging.debug(f"Non-wsi image, SOP class {sop_class_uid.name}")
             return None
 
         try:
             image_type = cls._get_image_type(dataset.ImageType)
         except ValueError:
-            warnings.warn(f"Non-supported image type {dataset.ImageType}")
+            logging.debug(f"Non-supported image type {dataset.ImageType}")
             return None
 
         for name, attribute in WSI_ATTRIBUTES.items():
             if name not in dataset and attribute.evaluate(image_type):
-                warnings.warn(f"Missing required attribute {name}")
+                logging.debug(f"Missing required attribute {name}")
                 return None
 
         syntax_supported = pillow_handler.supports_transfer_syntax(transfer_syntax)
         if not syntax_supported:
-            warnings.warn(f"Non-supported transfer syntax {transfer_syntax}")
+            logging.debug(f"Non-supported transfer syntax {transfer_syntax}")
             return None
 
         return image_type
@@ -609,7 +608,6 @@ class WsiDataset(Dataset):
 
         dataset = deepcopy(self)
         dataset.DimensionOrganizationType = "TILED_FULL"
-
         # Make a new Shared functional group sequence and Pixel measure
         # sequence if not in dataset, otherwise update the Pixel measure
         # sequence

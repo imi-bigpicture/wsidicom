@@ -87,7 +87,7 @@ class FileUids:
     @property
     def identifier(self) -> UID:
         """Return identifier for the instance the file belongs to. Either its
-        own intance uid or, if not none, the concnatenation uid.
+        own instance uid or, if not none, the concnatenation uid.
 
         Returns
         ----------

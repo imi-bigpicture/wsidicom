@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional, Sequence
 
 
 def str_indent(indent: int = 0) -> str:
-    """Returns a string for indention
+    """Returns a string for indentation
 
     Parameters
     ----------
@@ -50,11 +50,11 @@ def list_pretty_str(
     items: sequence
         List of items to pretty-print
     indent: int
-        Identation for the string and list
+        Indentation for the string and list
     depth: Optional[int] = None
         Depth to print, if item contains list
     pre_new_lines: int
-        Number of new lines at begining of string
+        Number of new lines at beginning of string
     list_new_lines: int
         Number of new lines between list items
     space: bool
@@ -97,11 +97,11 @@ def dict_pretty_str(
     items: sequence
         List of items to pretty-print
     indent: int
-        Identation for the string and list
+        Indentation for the string and list
     depth: Optional[int] = None
         Depth to print, if item contains list
     pre_new_lines: int
-        Number of new lines at begining of string
+        Number of new lines at beginning of string
     list_new_lines: int
         Number of new lines between list items
     space: bool
