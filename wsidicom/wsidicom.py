@@ -12,8 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import logging
 import os
-import warnings
 from pathlib import Path
 from typing import (
     BinaryIO,
@@ -637,7 +637,7 @@ class WsiDicom:
         if self.annotations != []:
             for annotation in self.annotations:
                 if annotation.slide_uids != slide_uids:
-                    warnings.warn("Annotations uids does not match")
+                    logging.warn("Annotations uids does not match.")
         return slide_uids
 
     @classmethod
