@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Error in documentation of read_overview() in readme.
+- Spellings.
+
 ## [0.10.0] - 2023-06-01
 
 ### Added
@@ -31,11 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Support for opening DICOM WSI using DICOMWeb.
 - save() now takes the optional parameter add_missing_levels, that enables adding missing pyramid levels up to the single-tile level.
-- read_region(), read_region_mm(), and read_region_mpp() takes an optional parameter threads, that allows multiple threads to be used for stitching togheter the region.
+- read_region(), read_region_mm(), and read_region_mpp() takes an optional parameter threads, that allows multiple threads to be used for stitching together the region.
 
 ### Changed
 
-- WsiDicom is now initalized using a Source, that is responsible for provides the instances to view.
+- WsiDicom is now initialized using a Source, that is responsible for provides the instances to view.
 - Saving a WsiDicom is now handled by WsiDicomFileTarget.
 - Refactoring due to adding support for DICOMWeb and opening instances using Source and saving using Target.
 - Frame positions and tiling for levels are now parsed lazily, e.g. on first tile access.
@@ -81,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Focal planes are considered equal if configurable withing threshold distance, see config.focal_plane_distance_threshold
+- Focal planes are considered equal if configurable within threshold distance, see config.focal_plane_distance_threshold
 - Option to read region defined in slide coordinate system for get_region_mm().
 
 ### Changed
@@ -109,7 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Order of paramaters for ConceptCode matches pydicom Code.
+- Order of parameters for ConceptCode matches pydicom Code.
 
 ## [0.3.0] - 2022-04-20
 

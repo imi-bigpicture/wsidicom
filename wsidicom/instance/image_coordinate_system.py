@@ -77,7 +77,7 @@ class ImageCoordinateSystem:
 
     @property
     def rotation(self) -> float:
-        """The rotation of the image in relation to the slide coordiante system in degrees."""
+        """The rotation of the image in relation to the slide coordinate system in degrees."""
         return self._orientation.rotation
 
     def image_to_slide(self, image: GeometryType) -> GeometryType:

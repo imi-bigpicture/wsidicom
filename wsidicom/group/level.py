@@ -18,7 +18,7 @@ from typing import Iterable, List, Optional, Sequence, cast
 from PIL import Image
 from PIL.Image import Image as PILImage
 
-from wsidicom.errors import WsiDicomNoResultionError, WsiDicomOutOfBoundsError
+from wsidicom.errors import WsiDicomNoResolutionError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Group
 from wsidicom.instance import WsiInstance
@@ -32,7 +32,7 @@ class Level(Group):
     """
 
     def __init__(self, instances: Sequence[WsiInstance], base_pixel_spacing: SizeMm):
-        """Create a level from list of WsiInstances. Asign the pyramid level
+        """Create a level from list of WsiInstances. Assign the pyramid level
         index from pixel spacing of base level.
 
         Parameters
@@ -84,13 +84,13 @@ class Level(Group):
     @property
     def mpp(self) -> SizeMm:
         if self.pixel_spacing is None:
-            raise WsiDicomNoResultionError()
+            raise WsiDicomNoResolutionError()
         return self.pixel_spacing * 1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
         if self._pixel_spacing is None:
-            raise WsiDicomNoResultionError()
+            raise WsiDicomNoResolutionError()
         return self._pixel_spacing
 
     @classmethod
@@ -116,7 +116,7 @@ class Level(Group):
         base_group = list(instances_grouped_by_level.values())[0]
         base_pixel_spacing = base_group[0].pixel_spacing
         if base_pixel_spacing is None:
-            raise WsiDicomNoResultionError()
+            raise WsiDicomNoResolutionError()
         for level in instances_grouped_by_level.values():
             levels.append(cls(level, base_pixel_spacing))
         return levels
@@ -178,7 +178,7 @@ class Level(Group):
     ) -> PILImage:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
-        to remove part outside of the image (as defiend by level size).
+        to remove part outside of the image (as defined by level size).
 
         Parameters
         ----------
@@ -260,7 +260,7 @@ class Level(Group):
         Parameters
         ----------
         base_pixel_spacing: SizeMm
-            The pixel spacing of the base lavel
+            The pixel spacing of the base level
 
         Returns
         ----------
