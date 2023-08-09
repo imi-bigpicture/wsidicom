@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import warnings
+import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
@@ -303,7 +303,7 @@ class WsiDataset(Dataset):
         pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
         if pixel_spacing_values is not None:
             if any([spacing == 0 for spacing in pixel_spacing_values]):
-                warnings.warn(f"Pixel spacing is zero, {pixel_spacing_values}")
+                logging.warn(f"Pixel spacing is zero, {pixel_spacing_values}")
                 return None
             return SizeMm.from_tuple(pixel_spacing_values)
         return None
@@ -477,23 +477,23 @@ class WsiDataset(Dataset):
 
         sop_class_uid: UID = getattr(dataset, "SOPClassUID")
         if sop_class_uid != WSI_SOP_CLASS_UID:
-            warnings.warn(f"Non-wsi image, SOP class {sop_class_uid.name}")
+            logging.debug(f"Non-wsi image, SOP class {sop_class_uid.name}")
             return None
 
         try:
             image_type = cls._get_image_type(dataset.ImageType)
         except ValueError:
-            warnings.warn(f"Non-supported image type {dataset.ImageType}")
+            logging.debug(f"Non-supported image type {dataset.ImageType}")
             return None
 
         for name, attribute in WSI_ATTRIBUTES.items():
             if name not in dataset and attribute.evaluate(image_type):
-                warnings.warn(f"Missing required attribute {name}")
+                logging.debug(f"Missing required attribute {name}")
                 return None
 
         syntax_supported = pillow_handler.supports_transfer_syntax(transfer_syntax)
         if not syntax_supported:
-            warnings.warn(f"Non-supported transfer syntax {transfer_syntax}")
+            logging.debug(f"Non-supported transfer syntax {transfer_syntax}")
             return None
 
         return image_type

@@ -12,10 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Callable, Iterable, Iterator, Tuple, Union, Sequence
-import warnings
 
 
 @dataclass
@@ -507,7 +507,7 @@ class RegionMm:
 class Orientation:
     def __init__(self, orientation: Sequence[float]):
         if orientation[0] != -orientation[4] or orientation[1] != orientation[3]:
-            warnings.warn(
+            logging.warn(
                 f"Orientation {orientation} is not "
                 "orthogonal with equal lengths with column rotated 90 deg from row"
             )

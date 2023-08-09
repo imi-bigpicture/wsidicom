@@ -111,7 +111,6 @@ class WsiDicomTestImageData(ImageData):
 
 
 @pytest.mark.save
-@pytest.mark.filterwarnings("ignore")
 class WsiDicomFileSaveTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

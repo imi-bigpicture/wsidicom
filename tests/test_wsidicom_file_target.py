@@ -26,7 +26,6 @@ from wsidicom.series.levels import Levels
 
 
 @pytest.mark.integration
-@pytest.mark.filterwarnings("ignore")
 class WsiDicomFileTargetIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
