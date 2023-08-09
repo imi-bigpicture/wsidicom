@@ -23,7 +23,7 @@ from wsidicom.instance.tile_index.tile_index import TileIndex
 
 class FullTileIndex(TileIndex):
     """Index for mapping tile position to frame number for datasets containing
-    full tiles. Pixel data tiles are ordered by colum, row, z and path, thus
+    full tiles. Pixel data tiles are ordered by column, row, z and path, thus
     the frame index for a tile can directly be calculated."""
 
     def __init__(self, datasets: Sequence[WsiDataset]):
@@ -107,7 +107,7 @@ class FullTileIndex(TileIndex):
                     slice_spacing = 0.0
                 else:
                     raise ValueError(
-                        "Slice spacing must be known if multple focal planes."
+                        "Slice spacing must be known if multiple focal planes."
                     )
             elif slice_spacing == 0 and number_of_focal_planes != 1:
                 raise ValueError(

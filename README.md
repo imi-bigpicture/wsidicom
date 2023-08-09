@@ -108,7 +108,7 @@ region_mpp = slide.read_region_mpp((0, 0), 0.01, (3, 3))
 ***Read a thumbnail of the whole slide with maximum dimensions 200x200 px.***
 
 ```python
-thumbnail = slide.read_thumbnail(200, 200)
+thumbnail = slide.read_thumbnail((200, 200))
 ```
 
 ***Read an overview image (if available).***
@@ -146,7 +146,7 @@ slide.close()
 An opened WsiDicom instance can be saved to a new path using the save()-method. The produced files will be:
 
 - Fully tiled. Any sparse tiles will be replaced with a blank tile with color depending on the photometric interpretation.
-- Have a basic offset table (or optionally an exteded offset table or no offset table).
+- Have a basic offset table (or optionally an extended offset table or no offset table).
 - Not be concatenated.
 
 The frames are copied as-is, i.e. without re-compression.
@@ -156,7 +156,7 @@ with WsiDicom.open(path_to_folder) as slide:
     slide.save(path_to_output)
 ```
 
-The output folder must already exists. Be careful to specify a unique folder folder to avoid mixing files from diferent images.
+The output folder must already exists. Be careful to specify a unique folder folder to avoid mixing files from different images.
 
 ## Settings
 
@@ -175,7 +175,7 @@ Annotations are structured in a hierarchy:
 - AnnotationInstance
     Represents a collection of AnnotationGroups. All the groups have the same frame of reference, i.e. annotations are from the same wsi stack.
 - AnnotationGroup
-    Represents a group of annotations. All annotations in the group are of the same type (e.g. PointAnnotation), have the same label, description and category and type. The category and type are codes that are used to define the annotated feature. A good resource for working with codes is avaiable [here](https://qiicr.gitbook.io/dcmqi-guide/opening/coding_schemes).
+    Represents a group of annotations. All annotations in the group are of the same type (e.g. PointAnnotation), have the same label, description and category and type. The category and type are codes that are used to define the annotated feature. A good resource for working with codes is available [here](https://qiicr.gitbook.io/dcmqi-guide/opening/coding_schemes).
 - Annotation
     Represents a annotation. An Annotation has a geometry (currently Point, Polyline, Polygon) and an optional list of Measurements.
 - Measurement
@@ -257,7 +257,7 @@ To watch unit tests use:
 poetry run pytest-watch -- -m unittest
 ```
 
-The integration tests uses test images from nema.org thats needs to be downloaded. The location of the test images can be changed from the default tests\testdata\slides using the enviroment variable WSIDICOM_TESTDIR. Download the images using the supplied script:
+The integration tests uses test images from nema.org that's needs to be downloaded. The location of the test images can be changed from the default tests\testdata\slides using the environment variable WSIDICOM_TESTDIR. Download the images using the supplied script:
 
 ```console
 python .\tests\download_test_images.py
@@ -285,7 +285,7 @@ A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of di
 
 Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions. For DICOMWeb the WsiDicomFile\* classes are replaced with WsiDicomWeb\* classes.
 
-A Source is used to create WsiInstances, either from files (*WsiDicomFileSource*) or DICOMWeb (*WsiDicomWebSource*), and can be used to to initate a *WsiDicom* object. A source is easiest created with the open() and open_web() helper functions, e.g.:
+A Source is used to create WsiInstances, either from files (*WsiDicomFileSource*) or DICOMWeb (*WsiDicomWebSource*), and can be used to to Initiate a *WsiDicom* object. A source is easiest created with the open() and open_web() helper functions, e.g.:
 
 ```python
 slide = WsiDicom.open(path_to_folder)
@@ -342,4 +342,4 @@ Our aim is to provide constructive and positive code reviews for all submissions
 
 *wsidicom*: Copyright 2021 Sectra AB, licensed under Apache 2.0.
 
-This project is part of a project that has received funding from the Innovative Medicines Initiative 2 Joint Undertaking under grant agreement No 945358. This Joint Undertaking receives support from the European Union’s Horizon 2020 research and innovation programme and EFPIA. IMI website: www.imi.europa.eu
+This project is part of a project that has received funding from the Innovative Medicines Initiative 2 Joint Undertaking under grant agreement No 945358. This Joint Undertaking receives support from the European Union’s Horizon 2020 research and innovation programme and EFPIA. IMI website: <www.imi.europa.eu>

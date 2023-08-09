@@ -433,7 +433,7 @@ class WsiDataset(Dataset):
         Returns
         ----------
         Optional[float]
-            Slice thickess or None if unkown.
+            Slice thickess or None if unknown.
         """
         try:
             return self._get_dicom_attribute("SliceThickness", self.pixel_measure)
@@ -459,7 +459,7 @@ class WsiDataset(Dataset):
     ) -> Optional[ImageType]:
         """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
-        Warn if attribute listed as requierd in the library or required in the
+        Warn if attribute listed as required in the library or required in the
         standard is missing.
 
         Parameters
@@ -593,7 +593,6 @@ class WsiDataset(Dataset):
 
         dataset = deepcopy(self)
         dataset.DimensionOrganizationType = "TILED_FULL"
-
         # Make a new Shared functional group sequence and Pixel measure
         # sequence if not in dataset, otherwise update the Pixel measure
         # sequence

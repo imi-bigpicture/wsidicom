@@ -35,7 +35,7 @@ SeriesType = TypeVar("SeriesType")
 
 class Series(metaclass=ABCMeta):
     """Represents a series of Groups with the same image flavor, e.g.
-    pyramidal levels, lables, or overviews.
+    pyramidal levels, labels, or overviews.
     """
 
     def __init__(self, groups: Iterable[Group]):

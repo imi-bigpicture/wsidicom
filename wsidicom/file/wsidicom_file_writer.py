@@ -94,7 +94,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         transfer_syntax: UID.
             Transfer syntax for file
         dataset: Dataset
-            Dataset to write (exluding pixel data).
+            Dataset to write (excluding pixel data).
         data: Dict[Tuple[str, float], ImageData]
             Pixel data to write.
         workers: int

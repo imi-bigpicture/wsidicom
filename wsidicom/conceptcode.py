@@ -228,7 +228,7 @@ class CidConceptCode(ConceptCode):
         for code in cls.cid.values():
             if code.meaning == meaning:
                 return code
-        raise ValueError("Unsupported code")
+        raise ValueError(f"Unsupported code with meaning {meaning}.")
 
     @classmethod
     def list(cls) -> List[str]:
@@ -253,6 +253,7 @@ class CidConceptCode(ConceptCode):
         return cls(
             code.meaning, code.value, code.scheme_designator, code.scheme_version
         )
+
 
 class UnitCode(SingleConceptCode):
     """Code for concepts representing units according to UCUM scheme"""

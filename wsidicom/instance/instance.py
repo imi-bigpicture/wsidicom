@@ -290,7 +290,7 @@ class WsiInstance:
         Returns
         ----------
         bool
-            True if instanes are of same group.
+            True if instances are of same group.
 
         """
         return (
