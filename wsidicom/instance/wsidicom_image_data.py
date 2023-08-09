@@ -69,12 +69,12 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
 
     @property
     def focal_planes(self) -> List[float]:
-        """Focal planes avaiable in the image defined in um."""
+        """Focal planes available in the image defined in um."""
         return self.tiles.focal_planes
 
     @property
     def optical_paths(self) -> List[str]:
-        """Optical paths avaiable in the image."""
+        """Optical paths available in the image."""
         return self.tiles.optical_paths
 
     @property

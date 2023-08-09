@@ -137,7 +137,7 @@ class WsiDicomFileSource(Source):
     @property
     def is_ready_for_viewing(self) -> Optional[bool]:
         """
-        Returns True if files in source are formated for fast viewing.
+        Returns True if files in source are formatted for fast viewing.
 
         Returns None if no files are in source.
         """

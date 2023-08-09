@@ -296,7 +296,7 @@ class Geometry(metaclass=ABCMeta):
 
     @classmethod
     def list_to_coords(cls, data: Sequence[float]) -> List[Tuple[float, float]]:
-        """Return cordinates in list of floats as list of tuple of floats
+        """Return coordinates in list of floats as list of tuple of floats
 
         Parameters
         ----------
@@ -367,7 +367,7 @@ class Geometry(metaclass=ABCMeta):
 
         Parameters
         ----------
-        ojbect
+        object
             Object with shapely-like attributes.
 
         Returns
@@ -572,7 +572,7 @@ class Polyline(Geometry):
 
 @dataclass
 class Polygon(Polyline):
-    """Geometry consisting of connected lines implicity closed."""
+    """Geometry consisting of connected lines implicitly closed."""
 
     name = "POLYGON"
 
@@ -1097,7 +1097,7 @@ class AnnotationGroup(Generic[GeometryType]):
     def create_measurement_indices(
         self, code: MeasurementCode, unit: UnitCode
     ) -> np.ndarray:
-        """Return measurement indicies for all measurements of specified type.
+        """Return measurement indices for all measurements of specified type.
         Indices are stored starting at index 1.
 
         Parameters
@@ -1440,7 +1440,7 @@ class PointAnnotationGroup(AnnotationGroup[Point]):
 
 
 class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
-    """Meta class for line annotation goup"""
+    """Meta class for line annotation group"""
 
     @property
     def point_index_list(self) -> np.ndarray:
@@ -1581,7 +1581,7 @@ class AnnotationInstance:
         """
         self.groups = groups
         if coordinate_type not in ["image", "volume"]:
-            raise ValueError("Coordiante type should be 'image' or 'volume'")
+            raise ValueError("Coordinate type should be 'image' or 'volume'")
         self.coordinate_type = coordinate_type
         self.slide_uids = slide_uids
         self.datetime = datetime.now()
@@ -1697,7 +1697,7 @@ class AnnotationInstance:
         elif dataset.AnnotationCoordinateType == "3D":
             coordinate_type = "volume"
         else:
-            raise ValueError("Unkown coordiante type")
+            raise ValueError("Unknown coordinate type")
         if coordinate_type == "volume" and frame_of_reference_uid is None:
             raise ValueError(
                 "volume annotation corrindate type requires frame of reference"

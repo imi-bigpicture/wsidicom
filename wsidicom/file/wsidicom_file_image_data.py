@@ -68,7 +68,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
 
     def _get_file(self, frame_index: int) -> WsiDicomFile:
         """
-        Return file contaning frame index.
+        Return file containing frame index.
 
         Raises WsiDicomNotFoundError if frame is not found.
 

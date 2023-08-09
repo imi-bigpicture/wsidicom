@@ -26,7 +26,7 @@ class to extend support to other DICOM sources or to read other WSI formats.
 class Source(metaclass=ABCMeta):
     """A source providing DICOM WSI instances to open.
 
-    A source should be initated with a path or similar, and parse the content into
+    A source should be initiated with a path or similar, and parse the content into
     instances.
     """
 
@@ -68,5 +68,5 @@ class Source(metaclass=ABCMeta):
 
     @abstractmethod
     def close(self) -> None:
-        """Close any opened resouces (such as files)."""
+        """Close any opened resources (such as files)."""
         raise NotImplementedError()

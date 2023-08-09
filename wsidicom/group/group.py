@@ -22,7 +22,7 @@ from pydicom.uid import UID
 
 from wsidicom.errors import (
     WsiDicomMatchError,
-    WsiDicomNoResultionError,
+    WsiDicomNoResolutionError,
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
@@ -196,7 +196,7 @@ class Group:
         )
 
     def valid_pixels(self, region: Region) -> bool:
-        """Check if pixel region is withing the size of the group image size.
+        """Check if pixel region is within the size of the group image size.
 
         Parameters
         ----------
@@ -215,7 +215,7 @@ class Group:
     def get_instance(
         self, z: Optional[float] = None, path: Optional[str] = None
     ) -> WsiInstance:
-        """Search for instance fullfilling the parameters.
+        """Search for instance fulfilling the parameters.
         The behavior when z and/or path is none could be made more
         clear.
 
@@ -347,7 +347,7 @@ class Group:
         """
         if slide_origin and self.image_coordinate_system is None:
             raise ValueError(
-                "Cant map to slide region as image coordinate system is not defined."
+                "Can't map to slide region as image coordinate system is not defined."
             )
 
         if slide_origin:
@@ -429,7 +429,7 @@ class Group:
             Region in pixels
         """
         if self.pixel_spacing is None:
-            raise WsiDicomNoResultionError()
+            raise WsiDicomNoResolutionError()
         pixel_region = Region(
             position=region.position // self.pixel_spacing,
             size=region.size // self.pixel_spacing,
