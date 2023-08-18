@@ -276,10 +276,6 @@ class Geometry(metaclass=ABCMeta):
     def __len__(self) -> int:
         raise NotImplementedError()
 
-    @abstractmethod
-    def __repr__(self) -> str:
-        raise NotImplementedError()
-
     @classmethod
     @abstractmethod
     def from_coords(
@@ -1233,7 +1229,7 @@ class AnnotationGroup(Generic[GeometryType]):
         Dataset
             The Annotation Group Sequence with focal plane attributes.
         """
-        if self._z_planes is []:
+        if len(self._z_planes) == 0:
             ds.AnnotationAppliesToAllZPlanes = "YES"
         else:
             ds.AnnotationAppliesToAllZPlanes = "NO"
@@ -1254,7 +1250,7 @@ class AnnotationGroup(Generic[GeometryType]):
         Dataset
             The Annotation Group Sequence with optical path attributes.
         """
-        if self._optical_paths is []:
+        if len(self._optical_paths) == 0:
             ds.AnnotationAppliesToAllOpticalPaths = "YES"
         else:
             ds.AnnotationAppliesToAllOpticalPaths = "NO"

@@ -31,7 +31,6 @@ shapely = "^1.7.0"
 pycodestyle = "^2.8.0"
 black = "^23.1.0"
 flake8 = "^4.0.1"
-parameterized = "^0.8.1"
 codespell = "^2.2.5"
 
 [build-system]
