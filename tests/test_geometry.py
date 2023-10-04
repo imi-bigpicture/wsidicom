@@ -1,4 +1,4 @@
-#    Copyright 2022 SECTRA AB
+#    Copyright 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,11 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import unittest
 from typing import Union
 
 import pytest
-from parameterized import parameterized
 
 from wsidicom.geometry import (
     Orientation,
@@ -31,7 +29,7 @@ from wsidicom.instance import ImageCoordinateSystem
 
 
 @pytest.mark.unittest
-class WsiDicomGeomtryTests(unittest.TestCase):
+class TestWsiDicomGeomtry:
     def test_size_subraction(self):
         # Arrange
         size_0 = Size(10, 10)
@@ -41,7 +39,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_0 - size_1
 
         # Assert
-        self.assertEqual(result, Size(9, 9))
+        assert result == Size(9, 9)
 
     def test_size_multiplication(self):
         # Arrange
@@ -51,7 +49,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_0 * 2
 
         # Assert
-        self.assertEqual(result, Size(20, 20))
+        assert result == Size(20, 20)
 
     def test_size_division(self):
         # Arrange
@@ -61,7 +59,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_0 // 3
 
         # Assert
-        self.assertEqual(result, Size(3, 3))
+        assert result == Size(3, 3)
 
     def test_size_to_tuple(self):
         # Arrange
@@ -71,15 +69,16 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_0.to_tuple()
 
         # Assert
-        self.assertEqual(result, (10, 10))
+        assert result == (10, 10)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["size_1", "size_2", "expected_result"],
         [
             (Size(10, 10), Size(1, 1), False),
             (Size(10, 10), Size(20, 1), True),
             (Size(10, 10), Size(1, 20), True),
             (Size(10, 10), Size(20, 20), True),
-        ]
+        ],
     )
     def test_size_any_less_than(
         self, size_1: Size, size_2: Size, expected_result: bool
@@ -89,9 +88,10 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_1.any_less_than(size_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["size_1", "size_2", "expected_result"],
         [
             (Size(10, 10), Size(1, 1), False),
             (Size(10, 10), Size(20, 1), True),
@@ -100,7 +100,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
             (Size(10, 10), Size(10, 10), True),
             (Size(10, 10), Size(1, 10), True),
             (Size(10, 10), Size(10, 1), True),
-        ]
+        ],
     )
     def test_size_any_less_than_or_equal(
         self, size_1: Size, size_2: Size, expected_result: bool
@@ -110,15 +110,16 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_1.any_less_than_or_equal(size_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["size_1", "size_2", "expected_result"],
         [
             (Size(10, 10), Size(1, 1), True),
             (Size(10, 10), Size(20, 1), True),
             (Size(10, 10), Size(1, 20), True),
             (Size(10, 10), Size(20, 20), False),
-        ]
+        ],
     )
     def test_size_any_greater_than(
         self, size_1: Size, size_2: Size, expected_result: bool
@@ -128,9 +129,10 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_1.any_greater_than(size_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["size_1", "size_2", "expected_result"],
         [
             (Size(10, 10), Size(1, 1), True),
             (Size(10, 10), Size(20, 1), True),
@@ -139,7 +141,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
             (Size(10, 10), Size(10, 10), True),
             (Size(10, 10), Size(1, 10), True),
             (Size(10, 10), Size(10, 1), True),
-        ]
+        ],
     )
     def test_size_any_greater_than_or_equal(
         self, size_1: Size, size_2: Size, expected_result: bool
@@ -149,15 +151,16 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_1.any_greater_than_or_equal(size_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["size_1", "size_2", "expected_result"],
         [
             (Size(10, 10), Size(1, 1), False),
             (Size(10, 10), Size(20, 1), False),
             (Size(10, 10), Size(1, 20), False),
             (Size(10, 10), Size(20, 20), True),
-        ]
+        ],
     )
     def test_size_all_less_than(
         self, size_1: Size, size_2: Size, expected_result: bool
@@ -167,9 +170,10 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_1.all_less_than(size_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert expected_result == result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["size_1", "size_2", "expected_result"],
         [
             (Size(10, 10), Size(1, 1), False),
             (Size(10, 10), Size(20, 1), False),
@@ -178,7 +182,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
             (Size(10, 10), Size(10, 10), True),
             (Size(10, 10), Size(1, 10), False),
             (Size(10, 10), Size(10, 1), False),
-        ]
+        ],
     )
     def test_size_all_less_than_or_equal(
         self, size_1: Size, size_2: Size, expected_result: bool
@@ -188,15 +192,16 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_1.all_less_than_or_equal(size_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["size_1", "size_2", "expected_result"],
         [
             (Size(10, 10), Size(1, 1), True),
             (Size(10, 10), Size(20, 1), False),
             (Size(10, 10), Size(1, 20), False),
             (Size(10, 10), Size(20, 20), False),
-        ]
+        ],
     )
     def test_size_all_greater_than(
         self, size_1: Size, size_2: Size, expected_result: bool
@@ -206,9 +211,10 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_1.all_greater_than(size_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["size_1", "size_2", "expected_result"],
         [
             (Size(10, 10), Size(1, 1), True),
             (Size(10, 10), Size(20, 1), False),
@@ -217,7 +223,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
             (Size(10, 10), Size(10, 10), True),
             (Size(10, 10), Size(1, 10), True),
             (Size(10, 10), Size(10, 1), True),
-        ]
+        ],
     )
     def test_size_all_greater_than_or_equal(
         self, size_1: Size, size_2: Size, expected_result: bool
@@ -227,10 +233,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = size_1.all_greater_than_or_equal(size_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
-        [(Point(3, 2), Point(30, 20)), (Size(3, 2), Point(30, 20)), (2, Point(20, 20))]
+    @pytest.mark.parametrize(
+        ["by", "expected_result"],
+        [(Point(3, 2), Point(30, 20)), (Size(3, 2), Point(30, 20)), (2, Point(20, 20))],
     )
     def test_point_multiplication(
         self, by: Union[Point, Size, int], expected_result: Point
@@ -242,7 +249,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = point * by
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
     def test_point_division(self):
         # Arrange
@@ -254,14 +261,15 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = point // by
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["by", "expected_result"],
         [
             (Point(2, 2), Point(0, 0)),
             (Point(3, 3), Point(1, 1)),
             (Size(2, 2), Point(0, 0)),
-        ]
+        ],
     )
     def test_point_mod(self, by: Union[Point, Size], expected_result: Point):
         # Arrange
@@ -271,10 +279,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = point % by
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
-        [(Point(3, 2), Point(13, 12)), (2, Point(12, 12)), (Size(3, 2), Point(13, 12))]
+    @pytest.mark.parametrize(
+        ["by", "expected_result"],
+        [(Point(3, 2), Point(13, 12)), (2, Point(12, 12)), (Size(3, 2), Point(13, 12))],
     )
     def test_point_addition(self, by: Union[Point, Size, int], expected_result: Point):
         # Arrange
@@ -284,10 +293,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = point + by
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
-    @parameterized.expand(
-        [(Point(3, 2), Point(7, 8)), (2, Point(8, 8)), (Size(3, 2), Point(7, 8))]
+    @pytest.mark.parametrize(
+        ["by", "expected_result"],
+        [(Point(3, 2), Point(7, 8)), (2, Point(8, 8)), (Size(3, 2), Point(7, 8))],
     )
     def test_point_subtraction(
         self, by: Union[Point, Size, int], expected_result: Point
@@ -299,7 +309,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = point - by
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
     def test_point_max(self):
         # Arrange
@@ -311,7 +321,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = Point.max(point_1, point_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
     def test_point_min(self):
         # Arrange
@@ -323,7 +333,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = Point.min(point_1, point_2)
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
     def test_point_to_tuple(self):
         # Arrange
@@ -334,7 +344,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         result = point.to_tuple()
 
         # Assert
-        self.assertEqual(expected_result, result)
+        assert result == expected_result
 
     def test_region_mm(self):
         # Arrange
@@ -342,8 +352,8 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         region = RegionMm(PointMm(1.0, 2.0), SizeMm(3.0, 4.0))
 
         # Assert
-        self.assertEqual(region.start, PointMm(1.0, 2.0))
-        self.assertEqual(region.end, PointMm(4.0, 6.0))
+        assert region.start == PointMm(1.0, 2.0)
+        assert region.end == PointMm(4.0, 6.0)
 
     def test_region_mm_subtract(self):
         # Arrange
@@ -353,8 +363,8 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         region = region - PointMm(1.0, 2.0)
 
         # Assert
-        self.assertEqual(region.start, PointMm(0.0, 0.0))
-        self.assertEqual(region.end, PointMm(3.0, 4.0))
+        assert region.start == PointMm(0.0, 0.0)
+        assert region.end == PointMm(3.0, 4.0)
 
     def test_region_mm_add(self):
         # Arrange
@@ -364,10 +374,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         region = region + PointMm(1.0, 2.0)
 
         # Assert
-        self.assertEqual(region.start, PointMm(2.0, 4.0))
-        self.assertEqual(region.end, PointMm(5.0, 8.0))
+        assert region.start == PointMm(2.0, 4.0)
+        assert region.end == PointMm(5.0, 8.0)
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["region", "origin", "expected_start", "expected_end"],
         [
             (  # Image x along slide y, Image y along slide x
                 RegionMm(PointMm(2.0, 4.0), SizeMm(1.0, 2.0)),
@@ -401,7 +412,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
                 PointMm(1.0, 1.0),
                 PointMm(3.0, 4.0),
             ),
-        ]
+        ],
     )
     def test_region_mm_to_other_origin(
         self,
@@ -415,10 +426,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         transformed_region = origin.slide_to_image(region)
 
         # Assert
-        self.assertEqual(transformed_region.start, expected_start)
-        self.assertEqual(transformed_region.end, expected_end)
+        assert transformed_region.start == expected_start
+        assert transformed_region.end == expected_end
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["region", "expected_start", "zoom"],
         [
             (Region(Point(3, 4), Size(6, 4)), Point(9, 10), 2.0),
             (Region(Point(9, 10), Size(6, 4)), Point(3, 4), 0.5),
@@ -426,7 +438,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
             (Region(Point(4, 7), Size(2, 6)), Point(9, 17), 2.0),
             (Region(Point(9, 17), Size(2, 6)), Point(4, 7), 0.5),
             (Region(Point(4, 7), Size(2, 6)), Point(14, 27), 3.0),
-        ]
+        ],
     )
     def test_region_zoom(self, region: Region, expected_start: Point, zoom: float):
         # Arrange
@@ -434,10 +446,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         zoomed_region = region.zoom(zoom)
 
         # Assert
-        self.assertEqual(zoomed_region.start, expected_start)
-        self.assertEqual(zoomed_region.size, region.size)
+        assert zoomed_region.start == expected_start
+        assert zoomed_region.size == region.size
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["region", "expected_start", "zoom"],
         [
             (RegionMm(PointMm(3, 4), SizeMm(6, 4)), PointMm(9, 10), 2.0),
             (RegionMm(PointMm(9, 10), SizeMm(6, 4)), PointMm(3, 4), 0.5),
@@ -445,7 +458,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
             (RegionMm(PointMm(4, 7), SizeMm(2, 6)), PointMm(9, 17), 2.0),
             (RegionMm(PointMm(9, 17), SizeMm(2, 6)), PointMm(4, 7), 0.5),
             (RegionMm(PointMm(4, 7), SizeMm(2, 6)), PointMm(14, 27), 3.0),
-        ]
+        ],
     )
     def test_region_mm_zoom(
         self, region: RegionMm, expected_start: PointMm, zoom: float
@@ -455,10 +468,11 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         zoomed_region = region.zoom(zoom)
 
         # Assert
-        self.assertEqual(zoomed_region.start, expected_start)
-        self.assertEqual(zoomed_region.size, region.size)
+        assert zoomed_region.start == expected_start
+        assert zoomed_region.size == region.size
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        ["region", "point", "size", "expected_result"],
         [
             (
                 Region(position=Point(x=0, y=0), size=Size(width=100, height=100)),
@@ -480,7 +494,7 @@ class WsiDicomGeomtryTests(unittest.TestCase):
                 Size(1024, 1024),
                 Region(position=Point(176, 176), size=Size(300, 300)),
             ),
-        ]
+        ],
     )
     def test_inside_crop(
         self, region: Region, point: Point, size: Size, expected_result: Region
@@ -491,4 +505,4 @@ class WsiDicomGeomtryTests(unittest.TestCase):
         cropped_region = region.inside_crop(point, size)
 
         # Assert
-        self.assertEqual(cropped_region, expected_result)
+        assert cropped_region == expected_result
