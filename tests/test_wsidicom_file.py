@@ -1,4 +1,4 @@
-#    Copyright 2022 SECTRA AB
+#    Copyright 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -13,19 +13,17 @@
 #    limitations under the License.
 
 import math
-from typing import Any, Dict, Tuple
-import unittest
-from dataclasses import dataclass
+from typing import Any, Dict
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
 from pydicom import Dataset, dcmread
+from pydicom.dataset import FileMetaDataset
 
 from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.file.wsidicom_file_base import OffsetTableType
 from wsidicom.instance import ImageType, TileType, WsiDataset
-from parameterized import parameterized
 
 from tests.data_gen import (
     TESTFRAME,
@@ -33,15 +31,6 @@ from tests.data_gen import (
     create_main_dataset,
     create_meta_dataset,
 )
-
-
-@dataclass
-class WsiDicomFileTestFile:
-    path: Path
-    tile_type: TileType
-    bot_type: OffsetTableType
-    ds: Dataset
-
 
 FILE_SETTINGS = {
     "sparse_no_bot": {
@@ -67,145 +56,147 @@ FILE_SETTINGS = {
 }
 
 
+@pytest.fixture()
+def meta_dataset():
+    yield create_meta_dataset()
+
+
+@pytest.fixture()
+def padded_test_frame():
+    yield TESTFRAME + b"\x00" * (len(TESTFRAME) % 2)
+
+
+@pytest.fixture()
+def dataset(name: str):
+    file_setting = FILE_SETTINGS[name]
+    dataset = create_main_dataset(file_setting["tile_type"], file_setting["bot_type"])
+    yield dataset
+
+
+@pytest.fixture()
+def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
+    file_setting = FILE_SETTINGS[name]
+    with TemporaryDirectory() as tempdir:
+        path = Path(tempdir).joinpath(file_setting["name"])
+        create_layer_file(path, dataset, meta_dataset)
+        with WsiDicomFile.open(path) as test_file:
+            yield test_file
+
+
 @pytest.mark.unittest
-class WsiDicomFileTests(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tempdir: TemporaryDirectory
-        self.file: WsiDicomFile
-
-    @classmethod
-    def setUpClass(cls):
-        cls.tempdir = TemporaryDirectory()
-        cls.meta_dataset = create_meta_dataset()
-        cls.padded_test_frame = TESTFRAME + b"\x00" * (len(TESTFRAME) % 2)
-        cls._files: Dict[str, Tuple[WsiDicomFile, Dataset]] = {}
-
-    @classmethod
-    def tearDownClass(cls):
-        [file.close() for (file, _) in cls._files.values()]
-        cls.tempdir.cleanup()
-
-    def get_file(self, name: str) -> Tuple[WsiDicomFile, Dataset]:
-        if name in self._files:
-            return self._files[name]
-        file_setting = FILE_SETTINGS[name]
-        dataset = create_main_dataset(
-            file_setting["tile_type"], file_setting["bot_type"]
-        )
-        test_file = WsiDicomFileTestFile(
-            Path(self.tempdir.name).joinpath(file_setting["name"]),
-            file_setting["tile_type"],
-            file_setting["bot_type"],
-            dataset,
-        )
-        create_layer_file(test_file.path, test_file.ds, self.meta_dataset)
-        file = WsiDicomFile.open(test_file.path)
-        self._files[name] = file, dataset
-        return file, dataset
-
-    @parameterized.expand((FILE_SETTINGS.items))
-    def test_open(self, name: str, settings: Dict[str, Any]):
+class TestWsiDicomFile:
+    @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
+    def test_offset_table_type_property(
+        self, test_file: WsiDicomFile, settings: Dict[str, Any]
+    ):
         # Arrange
-        test_file, _ = self.get_file(name)
 
         # Act
         offset_table_type = test_file.offset_table_type
+
+        # Assert
+        assert offset_table_type == settings["bot_type"]
+
+    @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
+    def test_tile_type_property(
+        self, test_file: WsiDicomFile, settings: Dict[str, Any]
+    ):
+        # Arrange
+
+        # Act
         tile_type = test_file.dataset.tile_type
 
         # Assert
-        self.assertEqual(offset_table_type, settings["bot_type"])
-        self.assertEqual(tile_type, settings["tile_type"])
+        assert tile_type == settings["tile_type"]
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_dataset_property(self, name: str):
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_dataset_property(self, test_file: WsiDicomFile):
         # Arrange
-        test_file, _ = self.get_file(name)
         path = test_file.filepath
         assert path is not None
 
         # Act
-        ds = WsiDataset(dcmread(path, stop_before_pixels=True))
+        dataset = WsiDataset(dcmread(path, stop_before_pixels=True))
 
         # Assert
-        self.assertEqual(test_file.dataset, ds)
+        assert test_file.dataset == dataset
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_image_type_property(self, name: str):
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_image_type_property(
+        self,
+        test_file: WsiDicomFile,
+    ):
         # Arrage
-        test_file, _ = self.get_file(name)
 
         # Act
         image_type = test_file.image_type
 
         # Assert
-        self.assertEqual(image_type, ImageType.VOLUME)
+        assert image_type == ImageType.VOLUME
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_uids_property(self, name: str):
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_uids_property(self, test_file: WsiDicomFile, dataset: Dataset):
         # Arrange
-        test_file, dataset = self.get_file(name)
 
         # Act
         uids = test_file.uids
-        # Assert
-        self.assertEqual(uids.instance, dataset.SOPInstanceUID)
-        self.assertEqual(
-            uids.concatenation,
-            getattr(dataset, "SOPInstanceUIDOfConcatenationSource", None),
-        )
-        self.assertEqual(uids.slide.frame_of_reference, dataset.FrameOfReferenceUID)
-        self.assertEqual(uids.slide.study_instance, dataset.StudyInstanceUID)
-        self.assertEqual(uids.slide.series_instance, dataset.SeriesInstanceUID)
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_transfer_syntax_property(self, name: str):
+        # Assert
+        assert uids.instance == dataset.SOPInstanceUID
+        assert uids.concatenation == getattr(
+            dataset, "SOPInstanceUIDOfConcatenationSource", None
+        )
+        assert uids.slide.frame_of_reference == dataset.FrameOfReferenceUID
+        assert uids.slide.study_instance == dataset.StudyInstanceUID
+        assert uids.slide.series_instance == dataset.SeriesInstanceUID
+
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_transfer_syntax_property(
+        self, test_file: WsiDicomFile, meta_dataset: FileMetaDataset
+    ):
         # Arrange
-        test_file, _ = self.get_file(name)
 
         # Act
         transfer_syntax = test_file.transfer_syntax
 
         # Assert
-        self.assertEqual(transfer_syntax, self.meta_dataset.TransferSyntaxUID)
+        assert transfer_syntax == meta_dataset.TransferSyntaxUID
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_frame_offset_property(self, name: str):
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_frame_offset_property(self, test_file: WsiDicomFile):
         # Arrange
-        test_file, _ = self.get_file(name)
 
         # Act
         frame_offset = test_file.frame_offset
 
         # Assert
-        self.assertEqual(frame_offset, 0)
+        assert frame_offset == 0
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_frame_count_property(self, name: str):
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_frame_count_property(self, test_file: WsiDicomFile):
         # Arrange
-        test_file, _ = self.get_file(name)
 
         # Act
         frame_count = test_file.frame_count
 
         # Assert
-        self.assertEqual(frame_count, 1)
+        assert frame_count == 1
 
-    @parameterized.expand((FILE_SETTINGS.items))
-    def test_get_offset_table_type(self, name: str, settings: Dict[str, Any]):
+    @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
+    def test_get_offset_table_type(
+        self, test_file: WsiDicomFile, settings: Dict[str, Any]
+    ):
         # Arrange
-        test_file, _ = self.get_file(name)
 
         # Act
         offset_type = test_file._get_offset_table_type()
 
         # Assert
-        self.assertEqual(offset_type, settings["bot_type"])
+        assert offset_type == settings["bot_type"]
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_validate_pixel_data_start(self, name: str):
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_validate_pixel_data_start(self, test_file: WsiDicomFile):
         # Arrange
-        test_file, _ = self.get_file(name)
         test_file._file.seek(test_file._pixel_data_position)
 
         # Act
@@ -214,10 +205,9 @@ class WsiDicomFileTests(unittest.TestCase):
         # Assert
         test_file._validate_pixel_data_start(tag)
 
-    @parameterized.expand((FILE_SETTINGS.items))
-    def test_read_bot_length(self, name: str, settings: Dict[str, Any]):
+    @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
+    def test_read_bot_length(self, test_file: WsiDicomFile, settings: Dict[str, Any]):
         # Arrange
-        test_file, _ = self.get_file(name)
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
         test_file._validate_pixel_data_start(tag)
@@ -230,12 +220,11 @@ class WsiDicomFileTests(unittest.TestCase):
         length = test_file._read_bot_length()
 
         # Assert
-        self.assertEqual(length, expected_bot_length)
+        assert length == expected_bot_length
 
-    @parameterized.expand((FILE_SETTINGS.items))
-    def test_read_bot(self, name: str, settings: Dict[str, Any]):
+    @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
+    def test_read_bot(self, test_file: WsiDicomFile, settings: Dict[str, Any]):
         # Arrange
-        test_file, _ = self.get_file(name)
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
         test_file._validate_pixel_data_start(tag)
@@ -248,12 +237,11 @@ class WsiDicomFileTests(unittest.TestCase):
         bot = test_file._read_bot()
 
         # Assert
-        self.assertEqual(bot, first_bot_entry)
+        assert bot == first_bot_entry
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_parse_bot_table(self, name: str):
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_parse_bot_table(self, test_file: WsiDicomFile):
         # Arrange
-        test_file, _ = self.get_file(name)
         TAG_BYTES = 4
         LENGTH_BYTES = 4
         test_file._file.seek(test_file._pixel_data_position)
@@ -269,20 +257,18 @@ class WsiDicomFileTests(unittest.TestCase):
             )
 
             # Assert
-            self.assertEqual(
-                positions,
-                [
-                    (
-                        (first_frame_item_position + TAG_BYTES + LENGTH_BYTES),
-                        math.ceil(len(TESTFRAME) / 2) * 2,
-                    )
-                ],
-            )
+            assert positions == [
+                (
+                    (first_frame_item_position + TAG_BYTES + LENGTH_BYTES),
+                    math.ceil(len(TESTFRAME) / 2) * 2,
+                )
+            ]
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_read_positions_from_pixeldata(self, name: str):
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_read_positions_from_pixeldata(
+        self, test_file: WsiDicomFile, padded_test_frame: bytes
+    ):
         # Arrange
-        test_file, _ = self.get_file(name)
         TAG_BYTES = 4
         LENGTH_BYTES = 4
         test_file._file.seek(test_file._pixel_data_position)
@@ -295,32 +281,33 @@ class WsiDicomFileTests(unittest.TestCase):
         positions = test_file._read_positions_from_pixeldata()
 
         # Assert
-        self.assertEqual(
-            positions,
-            [
-                (
-                    (first_frame_item + TAG_BYTES + LENGTH_BYTES),
-                    len(self.padded_test_frame),
-                )
-            ],
-        )
+        assert positions == [
+            (
+                (first_frame_item + TAG_BYTES + LENGTH_BYTES),
+                len(padded_test_frame),
+            )
+        ]
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_read_sequence_delimiter(self, name: str):
-        test_file, _ = self.get_file(name)
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_read_sequence_delimiter(self, test_file: WsiDicomFile):
+        # Arrange
         (last_item_position, last_item_length) = test_file.frame_positions[-1]
         last_item_end = last_item_position + last_item_length
         test_file._file.seek(last_item_end)
         test_file._file.read_tag()
-        test_file._read_sequence_delimiter()
 
-    @parameterized.expand((FILE_SETTINGS.keys))
-    def test_read_frame(self, name: str):
+        # Act & Assert
+        try:
+            test_file._read_sequence_delimiter()
+        except:
+            pytest.fail()
+
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_read_frame(self, test_file: WsiDicomFile, padded_test_frame: bytes):
         # Arrange
-        test_file, _ = self.get_file(name)
 
         # Act
         frame = test_file.read_frame(0)
 
         # Assert
-        self.assertEqual(frame, self.padded_test_frame)
+        assert frame == padded_test_frame

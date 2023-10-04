@@ -565,10 +565,11 @@ class OpticalManager:
             List of OpticalPaths.
         """
         if optical_paths is None:
-            optical_paths = []
-        self._optical_paths: Dict[str, OpticalPath] = {
-            optical_path.identifier: optical_path for optical_path in optical_paths
-        }
+            self._optical_paths = {}
+        else:
+            self._optical_paths: Dict[str, OpticalPath] = {
+                optical_path.identifier: optical_path for optical_path in optical_paths
+            }
 
     @classmethod
     def open(cls, instances: Sequence[WsiInstance]) -> "OpticalManager":

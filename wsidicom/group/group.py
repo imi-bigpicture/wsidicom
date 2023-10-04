@@ -33,6 +33,7 @@ from wsidicom.instance import (
     ImageType,
     WsiDataset,
     WsiInstance,
+    image_coordinate_system,
 )
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
@@ -345,18 +346,19 @@ class Group:
         PILImage
             Region as image
         """
-        if slide_origin and self.image_coordinate_system is None:
-            raise ValueError(
-                "Can't map to slide region as image coordinate system is not defined."
-            )
-
+        to_coordinate_system = None
         if slide_origin:
-            region = self.image_coordinate_system.slide_to_image(region)
+            if self.image_coordinate_system is None:
+                raise ValueError(
+                    "Can't map to slide region as image coordinate system is not defined."
+                )
+            to_coordinate_system = self.image_coordinate_system
+            region = to_coordinate_system.slide_to_image(region)
         pixel_region = self.mm_to_pixel(region)
         image = self.get_region(pixel_region, z, path, threads)
-        if slide_origin:
+        if to_coordinate_system:
             image = image.rotate(
-                self.image_coordinate_system.rotation,
+                to_coordinate_system.rotation,
                 resample=Image.Resampling.BILINEAR,
                 expand=True,
             )

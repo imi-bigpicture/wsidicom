@@ -1,4 +1,4 @@
-#    Copyright 2021, 2022, 2023 SECTRA AB
+#    Copyright 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -14,11 +14,15 @@
 
 import json
 import os
-import unittest
 from enum import Enum
+from io import BufferedReader
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, Iterable, List, Tuple
+from tempfile import TemporaryDirectory
+from typing import Any, Dict, Iterable, List, Tuple
 
+import pytest
+
+from tests.data_gen import create_layer_file
 from wsidicom import WsiDicom
 from wsidicom.web.wsidicom_web_client import WsiDicomFileClient
 
@@ -33,34 +37,47 @@ class WsiInputType(Enum):
 
 
 class WsiTestDefinitions:
+    """Interface for reading test parameters from definition file."""
+
     with open(REGION_DEFINITIONS_FILE) as json_file:
         test_definitions: Dict[str, Dict[str, Any]] = json.load(json_file)
     if len(test_definitions) == 0:
-        raise unittest.SkipTest("No test definition found, skipping.")
+        pytest.skip("No test definition found, skipping.")
+
+    @classmethod
+    def folders(cls) -> Iterable[Path]:
+        return (
+            SLIDE_FOLDER.joinpath(wsi_name, path)
+            for wsi_name, path in cls._get_parameter("path")
+        )
+
+    @classmethod
+    def wsi_names(cls) -> Iterable[str]:
+        return cls.test_definitions.keys()
 
     @classmethod
     def read_region(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_region("read_region")
+        return cls._get_dict("read_region")
 
     @classmethod
     def read_region_mm(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_region("read_region_mm")
+        return cls._get_dict("read_region_mm")
 
     @classmethod
     def read_region_mpp(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_region("read_region_mpp")
+        return cls._get_dict("read_region_mpp")
 
     @classmethod
     def read_tile(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_region("read_tile")
+        return cls._get_dict("read_tile")
 
     @classmethod
     def read_encoded_tile(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_region("read_encoded_tile")
+        return cls._get_dict("read_encoded_tile")
 
     @classmethod
     def read_thumbnail(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_region("read_thumbnail")
+        return cls._get_dict("read_thumbnail")
 
     @classmethod
     def levels(cls) -> Iterable[Tuple[str, int]]:
@@ -75,75 +92,68 @@ class WsiTestDefinitions:
         return cls._get_parameter("overview")
 
     @classmethod
-    def _get_region(cls, region_name: str) -> Iterable[Tuple[str, Dict[str, Any]]]:
+    def _get_dict(cls, region_name: str) -> Iterable[Tuple[str, Dict[str, Any]]]:
         return [
-            (folder, region)
-            for folder, folder_definition in cls.test_definitions.items()
-            for region in folder_definition[region_name]
+            (wsi_name, region)
+            for wsi_name, wsi_definition in cls.test_definitions.items()
+            for region in wsi_definition[region_name]
         ]
 
     @classmethod
     def _get_parameter(cls, parameter_name: str) -> Iterable[Tuple[str, Any]]:
         return [
-            (folder, folder_definition[parameter_name])
-            for folder, folder_definition in cls.test_definitions.items()
+            (
+                wsi_name,
+                wsi_definition[parameter_name],
+            )
+            for wsi_name, wsi_definition in cls.test_definitions.items()
         ]
 
 
-class WsiTestFiles:
-    folders = {}
-    if SLIDE_FOLDER.exists():
-        folders = {
-            item.parts[-1]: item for item in SLIDE_FOLDER.iterdir() if item.is_dir
-        }
-    if len(folders) == 0:
-        raise unittest.SkipTest(
-            f"No test slide files found for {SLIDE_FOLDER}, skipping."
-        )
+@pytest.fixture()
+def wsi(tmp_path: Path):
+    test_file_path = tmp_path.joinpath("test_im.dcm")
+    create_layer_file(test_file_path)
+    with WsiDicom.open(tmp_path) as wsi:
+        yield wsi
 
-    def __init__(self, input_type: WsiInputType = WsiInputType.FILE):
-        self._input_type = input_type
-        self._wsis: Dict[str, WsiDicom] = {}
-        self._opened_streams: List[BinaryIO] = []
 
-    def __enter__(self):
-        return self
+@pytest.fixture(scope="module")
+def wsi_factory():
+    """Fixture providing a callable that takes a wsi name and input type and returns a
+    WsiDicom object. Caches opened objects and closes when tests using fixture are done.
+    """
+    streams: List[BufferedReader] = []
+    wsis: Dict[Tuple[WsiInputType, Path], WsiDicom] = {}
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.close()
-
-    def close(self):
-        for wsi in self._wsis.values():
-            wsi.close()
-        for stream in self._opened_streams:
-            stream.close()
-
-    def get_wsi(self, wsi_name: str) -> WsiDicom:
-        if wsi_name in self._wsis:
-            return self._wsis[wsi_name]
-        if not wsi_name in self.folders:
-            raise unittest.SkipTest("WSI files not found, skipping.")
-        folder = self.folders[wsi_name]
-        try:
-            while next(folder.iterdir()).is_dir():
-                folder = next(folder.iterdir())
-        except StopIteration:
-            raise unittest.SkipTest("WSI files not found, skipping.")
-        if self._input_type == WsiInputType.FILE:
+    def open_wsi(
+        wsi_name: str, input_type: WsiInputType = WsiInputType.FILE
+    ) -> WsiDicom:
+        test_definition = WsiTestDefinitions.test_definitions[wsi_name]
+        folder = Path(SLIDE_FOLDER).joinpath(wsi_name, test_definition["path"])
+        if (input_type, folder) in wsis:
+            return wsis[(input_type, folder)]
+        if not folder.exists():
+            pytest.skip(f"Folder {folder} does not exist.")
+        if input_type == WsiInputType.FILE:
             wsi = WsiDicom.open(folder)
-        elif self._input_type == WsiInputType.WEB:
+        elif input_type == WsiInputType.WEB:
             client = WsiDicomFileClient(folder)
-            test_definition = WsiTestDefinitions.test_definitions[wsi_name]
             wsi = WsiDicom.open_web(
                 client,
                 test_definition["study_instance_uid"],
                 test_definition["series_instance_uid"],
             )
-        elif self._input_type == WsiInputType.STREAM:
+        elif input_type == WsiInputType.STREAM:
             streams = [open(file, "rb") for file in folder.iterdir() if file.is_file()]
-            self._opened_streams.extend(streams)
             wsi = WsiDicom.open(streams)
         else:
-            raise ValueError(f"Unknown test_type {self._input_type}.")
-        self._wsis[(wsi_name)] = wsi
+            raise NotImplementedError()
+        wsis[(input_type, folder)] = wsi
         return wsi
+
+    yield open_wsi
+    for wsi in wsis.values():
+        wsi.close()
+    for stream in streams:
+        stream.close()

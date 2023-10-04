@@ -1,4 +1,4 @@
-#    Copyright 2021 SECTRA AB
+#    Copyright 2021, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,24 +12,25 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import unittest
 from typing import Type
 
 import pytest
-from parameterized import parameterized
 
 from wsidicom.conceptcode import CidConceptCode, Code
 
 
 @pytest.mark.unittest
-class WsiDicomCodeTests(unittest.TestCase):
-    @parameterized.expand(
+class TestWsiDicomCode:
+    @pytest.mark.parametrize(
+        ["code_class", "code"],
         (
-            code_class,
-            code,
-        )
-        for code_class in CidConceptCode.__subclasses__()
-        for code in code_class.cid.values()
+            (
+                code_class,
+                code,
+            )
+            for code_class in CidConceptCode.__subclasses__()
+            for code in code_class.cid.values()
+        ),
     )
     def test_create_code_from_meaning(
         self, code_class: Type[CidConceptCode], code: Code
@@ -40,4 +41,4 @@ class WsiDicomCodeTests(unittest.TestCase):
         created_code = code_class(code.meaning)
 
         # Assert
-        self.assertEqual(code, created_code)
+        assert code == created_code
