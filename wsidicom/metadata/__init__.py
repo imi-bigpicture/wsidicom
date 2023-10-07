@@ -21,16 +21,20 @@ from wsidicom.metadata.image import (
     Image,
     ImageCoordinateSystem,
 )
-from wsidicom.metadata.label import Label
-from wsidicom.metadata.optical_path import (
+from wsidicomizer.metadata.label import Label
+from wsidicomizer.metadata.optical_path import (
+    ConstantLutSegment,
+    DiscreteLutSegment,
     ImagePathFilter,
     LightPathFilter,
+    LinearLutSegment,
+    Lut,
     Objectives,
     OpticalPath,
 )
-from wsidicom.metadata.patient import Patient, PatientDeIdentification, PatientSex
-from wsidicom.metadata.series import Series
-from wsidicom.metadata.slide import Slide
-from wsidicom.metadata.study import Study
-from wsidicom.metadata.wsi import WsiMetadata
-from wsidicom.metadata.sample import ExtractedSpecimen, SampledSpecimen, SlideSample
+from wsidicomizer.metadata.patient import Patient, PatientDeIdentification, PatientSex
+from wsidicomizer.metadata.sample import ExtractedSpecimen, SampledSpecimen, SlideSample
+from wsidicomizer.metadata.series import Series
+from wsidicomizer.metadata.slide import Slide
+from wsidicomizer.metadata.study import Study
+from wsidicomizer.metadata.wsi import WsiMetadata

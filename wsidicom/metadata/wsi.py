@@ -41,7 +41,7 @@ class WsiMetadata:
     label: Optional[Label] = None
     image: Optional[Image] = None
     frame_of_reference_uid: Optional[UID] = None
-    dimension_organization_uid: Optional[UID] = None
+    dimension_organization_uids: Sequence[UID] = field(default_factory=lambda: list())
 
     @cached_property
     def _frame_of_reference_uid(self) -> UID:
@@ -50,10 +50,10 @@ class WsiMetadata:
         return generate_uid()
 
     @cached_property
-    def _dimension_organization_uid(self) -> UID:
-        if self.dimension_organization_uid is not None:
-            return self.dimension_organization_uid
-        return generate_uid()
+    def _dimension_organization_uids(self) -> Sequence[UID]:
+        if self.dimension_organization_uids is not None:
+            return self.dimension_organization_uids
+        return [generate_uid()]
 
     @classmethod
     def merge_image_types(

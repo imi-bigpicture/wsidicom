@@ -14,6 +14,7 @@
 
 import datetime
 from typing import Optional, Sequence, Union
+import numpy as np
 
 import pytest
 from pydicom.sr.coding import Code
@@ -50,6 +51,7 @@ from wsidicom.metadata import (
     PatientSex,
     Series,
     Study,
+    Lut,
 )
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import (
@@ -58,8 +60,9 @@ from wsidicom.metadata.image import (
     Image,
     ImageCoordinateSystem,
 )
-from wsidicom.metadata.label import Label
-from wsidicom.metadata.sample import (
+from wsidicomizer.metadata.label import Label
+from wsidicomizer.metadata.optical_path import ConstantLutSegment, LinearLutSegment
+from wsidicomizer.metadata.sample import (
     Collection,
     Embedding,
     ExtractedSpecimen,
@@ -157,11 +160,22 @@ def objectives():
 
 
 @pytest.fixture()
+def lut():
+    yield Lut(
+        [ConstantLutSegment(0, 256)],
+        [ConstantLutSegment(0, 256)],
+        [LinearLutSegment(0, 255, 256)],
+        np.dtype(np.uint16),
+    )
+
+
+@pytest.fixture()
 def optical_path(
     illumination: Union[IlluminationColorCode, float],
     light_path_filter: LightPathFilter,
     image_path_filter: ImagePathFilter,
     objectives: Objectives,
+    lut: Lut,
 ):
     yield OpticalPath(
         "identifier",
@@ -169,7 +183,7 @@ def optical_path(
         [IlluminationCode("Brightfield illumination")],
         illumination,
         None,
-        None,
+        lut,
         light_path_filter,
         image_path_filter,
         objectives,
