@@ -270,6 +270,27 @@ pycodestyle = ">=2.8.0,<2.9.0"
 pyflakes = ">=2.4.0,<2.5.0"
 
 [[package]]
+name = "highdicom"
+version = "0.21.1"
+description = "High-level DICOM abstractions."
+category = "main"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "highdicom-0.21.1-py3-none-any.whl", hash = "sha256:c90224bc8016de3aa3b4ce94a07ee4aef2aa2b313b0c11596b44ab725b235fbe"},
+    {file = "highdicom-0.21.1.tar.gz", hash = "sha256:9e40ef62e4e5ea316382456facbd19424301a8c8f5586e8b88d8f0f4f55d5c51"},
+]
+
+[package.dependencies]
+numpy = ">=1.19"
+pillow = ">=8.3"
+pillow-jpls = ">=1.0"
+pydicom = ">=2.3.0"
+
+[package.extras]
+libjpeg = ["pylibjpeg (>=1.4)", "pylibjpeg-libjpeg (>=1.3)", "pylibjpeg-openjpeg (>=1.2)"]
+
+[[package]]
 name = "idna"
 version = "3.4"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -292,6 +313,27 @@ files = [
     {file = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"},
     {file = "iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"},
 ]
+
+[[package]]
+name = "marshmallow"
+version = "3.20.1"
+description = "A lightweight library for converting complex datatypes to and from native Python datatypes."
+category = "main"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "marshmallow-3.20.1-py3-none-any.whl", hash = "sha256:684939db93e80ad3561392f47be0230743131560a41c5110684c16e21ade0a5c"},
+    {file = "marshmallow-3.20.1.tar.gz", hash = "sha256:5d2371bbe42000f2b3fb5eaa065224df7d8f8597bc19a1bbfa5bfe7fba8da889"},
+]
+
+[package.dependencies]
+packaging = ">=17.0"
+
+[package.extras]
+dev = ["flake8 (==6.0.0)", "flake8-bugbear (==23.7.10)", "mypy (==1.4.1)", "pre-commit (>=2.4,<4.0)", "pytest", "pytz", "simplejson", "tox"]
+docs = ["alabaster (==0.7.13)", "autodocsumm (==0.2.11)", "sphinx (==7.0.1)", "sphinx-issues (==3.0.1)", "sphinx-version-warning (==1.1.2)"]
+lint = ["flake8 (==6.0.0)", "flake8-bugbear (==23.7.10)", "mypy (==1.4.1)", "pre-commit (>=2.4,<4.0)"]
+tests = ["pytest", "pytz", "simplejson"]
 
 [[package]]
 name = "mccabe"
@@ -359,7 +401,7 @@ files = [
 name = "packaging"
 version = "23.2"
 description = "Core utilities for Python packages"
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
@@ -446,6 +488,58 @@ files = [
 [package.extras]
 docs = ["furo", "olefile", "sphinx (>=2.4)", "sphinx-copybutton", "sphinx-inline-tabs", "sphinx-removed-in", "sphinxext-opengraph"]
 tests = ["check-manifest", "coverage", "defusedxml", "markdown2", "olefile", "packaging", "pyroma", "pytest", "pytest-cov", "pytest-timeout"]
+
+[[package]]
+name = "pillow-jpls"
+version = "1.2.0"
+description = "A JPEG-LS plugin for the Pillow imaging library"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "pillow-jpls-1.2.0.tar.gz", hash = "sha256:4b1b285ecc59d1a31110cfb4077e31e4e291b4694fca5a226afbf460be9870ac"},
+    {file = "pillow_jpls-1.2.0-cp310-cp310-macosx_10_15_universal2.whl", hash = "sha256:f3a619e1934d1923d82fc770f897454f8628844bc777b4cb9104a2bfa56d1c50"},
+    {file = "pillow_jpls-1.2.0-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:aecf53f4fe1a7aaf08a8839340e2c4ae115b5980eee733c4aee142a3aa447520"},
+    {file = "pillow_jpls-1.2.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:ccb19ddc49ec0772bad8cbe217835a2a39674cce6508ef6d65a1e3d6565815a0"},
+    {file = "pillow_jpls-1.2.0-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:1c3b4fc262df2d914c2852c09cca389aedc13a12dc54ed1c24ae578b7832bb2f"},
+    {file = "pillow_jpls-1.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d097919801afeb0a236f22036cbbae0fdf698ff97e935040844123a7a3ff4b29"},
+    {file = "pillow_jpls-1.2.0-cp310-cp310-win32.whl", hash = "sha256:5ae956ca935c4c9f818376a43d11bff1f3c9a2905f52b79cbb12b2e6628ad863"},
+    {file = "pillow_jpls-1.2.0-cp310-cp310-win_amd64.whl", hash = "sha256:966c90c2653ee425dbd52f9b4377cbce7fa0e6c9747af14b715c41c7a0a4e188"},
+    {file = "pillow_jpls-1.2.0-cp311-cp311-macosx_10_15_universal2.whl", hash = "sha256:ad3a105c7aa8518d55d110dda7f5d65aa3fc987e2311aa9e1bca19f510428ee3"},
+    {file = "pillow_jpls-1.2.0-cp311-cp311-macosx_10_15_x86_64.whl", hash = "sha256:5dc36edb87ce80726f06a94118958373a2304ef0370607f513211b2b9997b4cc"},
+    {file = "pillow_jpls-1.2.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:9aa8525e8fd53f7e5fb3fe59ebcc3e92bc582eb65babf1b96b6dc3e8fcae8757"},
+    {file = "pillow_jpls-1.2.0-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:783064b5815dae3701d6454dff8c65858e97bb9946db701c1ea42453b36829c5"},
+    {file = "pillow_jpls-1.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ce938087e4cfa4ee18b657837c75d3b484a96b789b4dbabd13b078936b258440"},
+    {file = "pillow_jpls-1.2.0-cp311-cp311-win32.whl", hash = "sha256:da95a67f1be200c85d24fba79383542a3d9207276260fed5e459d7120d0c9cf3"},
+    {file = "pillow_jpls-1.2.0-cp311-cp311-win_amd64.whl", hash = "sha256:f70de9adc3e27bfdc757637c81f30aacbaa7eaf786b879e1c90192922600900d"},
+    {file = "pillow_jpls-1.2.0-cp36-cp36m-macosx_10_15_x86_64.whl", hash = "sha256:1b509870d0e3c17c6f96a3b2ca0a0a8343cbf5f0e50d4ca189896076d21996ca"},
+    {file = "pillow_jpls-1.2.0-cp36-cp36m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:e85ea9f635102d924df64f6e9933a20885f423931e8b0770015099e9fe64a6e1"},
+    {file = "pillow_jpls-1.2.0-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4b700669c6cdbfe361885ae6772121a91996c0cd4f1616251ec31665dbcc113e"},
+    {file = "pillow_jpls-1.2.0-cp36-cp36m-win32.whl", hash = "sha256:6228a421e6f5582f2cb0659228874f0cb1242cb30740c5a1c9e1accaeeee5b96"},
+    {file = "pillow_jpls-1.2.0-cp36-cp36m-win_amd64.whl", hash = "sha256:1a44beaaa9d9c64c38522a1b98a1202c68138cd14541ee945c68ddb6003ae434"},
+    {file = "pillow_jpls-1.2.0-cp37-cp37m-macosx_10_15_x86_64.whl", hash = "sha256:6c2ab026ce5c3e7c6d1537c4ecb1b63521e4976bef870d8ee00fcd97065f9cac"},
+    {file = "pillow_jpls-1.2.0-cp37-cp37m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:0885fb3e650c077e4b2fcd43bf08f04e704f8f8aaab9019e2b8620fe4ad35562"},
+    {file = "pillow_jpls-1.2.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:53ebbcade7c27dae1f163aee546c248557436e41dcd01e1eadd7085bb4e1b789"},
+    {file = "pillow_jpls-1.2.0-cp37-cp37m-win32.whl", hash = "sha256:1f0faa99deed7a72b1b26d348c6be0503f9a74dc99a826aac4a6d95a93edefa3"},
+    {file = "pillow_jpls-1.2.0-cp37-cp37m-win_amd64.whl", hash = "sha256:a52945adbc15b8664171ad086aed6a94ea2f68e1cb399ecbff86a7cf00d67668"},
+    {file = "pillow_jpls-1.2.0-cp38-cp38-macosx_10_15_universal2.whl", hash = "sha256:94a5475163d5728f653fbfc0bc168e117d6e2b3c062068c677c1349ddb67e15f"},
+    {file = "pillow_jpls-1.2.0-cp38-cp38-macosx_10_15_x86_64.whl", hash = "sha256:812ab217d4e1ac98b2353d131f3ad51bda3a65dd011c9d9b11e5ad9eefa2838e"},
+    {file = "pillow_jpls-1.2.0-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:26474fe0715b647d817f6e41a5f93f4117cb00a7fcd9c0a29332b703556a2495"},
+    {file = "pillow_jpls-1.2.0-cp38-cp38-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:ad4768f1675a292091f1a3648840765831a2b706b443b64b47187dae62f5501a"},
+    {file = "pillow_jpls-1.2.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:b118e066a8137dc20a634b36502c0364334a47b33d81df3c3814f795f90056ce"},
+    {file = "pillow_jpls-1.2.0-cp38-cp38-win32.whl", hash = "sha256:17bc9568db6f9465f187212237bbab61d0dd599dc6036c5c3bb1ac29a7c218b2"},
+    {file = "pillow_jpls-1.2.0-cp38-cp38-win_amd64.whl", hash = "sha256:12ab82406580c8720a26c766f0477d7bd017481ba4f69cebdb7024b84f6570a5"},
+    {file = "pillow_jpls-1.2.0-cp39-cp39-macosx_10_15_universal2.whl", hash = "sha256:fd321e346fd4a171c359e0d90795bc2f1e50728555784be40694cd6b8248c843"},
+    {file = "pillow_jpls-1.2.0-cp39-cp39-macosx_10_15_x86_64.whl", hash = "sha256:ed41d83d8f2318411764c238f45b66cad96a0480c023f28a23e99b59d4afa7f7"},
+    {file = "pillow_jpls-1.2.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:5c9ae685edb008006e0dacde3bf24f6383c68b244eeb9dca57fb9d37b4c31125"},
+    {file = "pillow_jpls-1.2.0-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:33c3ee8d467cb818244fc26ba1ea2907c95e1cf850d67a533419865db8f4a272"},
+    {file = "pillow_jpls-1.2.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2b23168c5de51f09c57f511b57cf76087955b735967d22d60e59fb567180f326"},
+    {file = "pillow_jpls-1.2.0-cp39-cp39-win32.whl", hash = "sha256:7204dfe76a66983a41e348ad7a41e253cb526bb871a52930d06b44da40bf72de"},
+    {file = "pillow_jpls-1.2.0-cp39-cp39-win_amd64.whl", hash = "sha256:7caae70057443d236ec4f7a50847c6b35e5080b3658427726b5e98eb0175a1fa"},
+]
+
+[package.dependencies]
+Pillow = "*"
 
 [[package]]
 name = "platformdirs"
@@ -761,4 +855,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "1bd30d70c31c0d5a9b24a42b60389309f77d0868825e77f5c5c18800f3623432"
+content-hash = "c69492ed227844758994f18b7c8f17907598f4414a95d221e4f791c628cb5daf"

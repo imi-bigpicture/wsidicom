@@ -249,10 +249,12 @@ class ImageData(metaclass=ABCMeta):
         PILImage
             Scaled tiled as Image.
         """
+        color = self.blank_color[: self.samples_per_pixel]
+        assert len(color) == 1 or len(color) == 3
         image = Image.new(
             mode=self.image_mode,
             size=(self.tile_size * scale).to_tuple(),
-            color=self.blank_color[: self.samples_per_pixel],
+            color=color,
         )
         # Get decoded tiles for the region covering the scaled tile
         # in the image data
@@ -575,10 +577,12 @@ class ImageData(metaclass=ABCMeta):
         PILImage
             Blank tile image
         """
+        color = self.blank_color[: self.samples_per_pixel]
+        assert len(color) == 1 or len(color) == 3
         return Image.new(
-            mode=self.image_mode,  # type: ignore
+            mode=self.image_mode,
             size=self.tile_size.to_tuple(),
-            color=self.blank_color[: self.samples_per_pixel],
+            color=color,
         )
 
     def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:

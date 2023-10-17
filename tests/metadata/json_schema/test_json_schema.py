@@ -21,7 +21,7 @@ from wsidicom.conceptcode import Code, IlluminationColorCode
 from wsidicom.geometry import PointMm
 from tests.metadata.helpers import assert_dict_equals_code
 
-from wsidicomizer.metadata import (
+from wsidicom.metadata import (
     Equipment,
     ExtendedDepthOfField,
     FocusMethod,
@@ -34,13 +34,13 @@ from wsidicomizer.metadata import (
     Series,
     Study,
 )
-from wsidicomizer.metadata.json_schema.equipment import EquipmentJsonSchema
-from wsidicomizer.metadata.json_schema.image import ImageJsonSchema
-from wsidicomizer.metadata.json_schema.label import LabelJsonSchema
-from wsidicomizer.metadata.json_schema.optical import OpticalPathJsonSchema
-from wsidicomizer.metadata.json_schema.patient import PatientJsonSchema
-from wsidicomizer.metadata.json_schema.series import SeriesJsonSchema
-from wsidicomizer.metadata.json_schema.study import StudyJsonSchema
+from wsidicom.metadata.json_schema.equipment import EquipmentJsonSchema
+from wsidicom.metadata.json_schema.image import ImageJsonSchema
+from wsidicom.metadata.json_schema.label import LabelJsonSchema
+from wsidicom.metadata.json_schema.optical import OpticalPathJsonSchema
+from wsidicom.metadata.json_schema.patient import PatientJsonSchema
+from wsidicom.metadata.json_schema.series import SeriesJsonSchema
+from wsidicom.metadata.json_schema.study import StudyJsonSchema
 
 
 class TestJsonSchema:

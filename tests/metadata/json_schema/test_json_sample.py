@@ -24,7 +24,7 @@ from wsidicom.conceptcode import (
 )
 from tests.metadata.helpers import assert_dict_equals_code
 
-from wsidicomizer.metadata.sample import (
+from wsidicom.metadata.sample import (
     Collection,
     Embedding,
     ExtractedSpecimen,
@@ -33,7 +33,7 @@ from wsidicomizer.metadata.sample import (
     Sample,
     SlideSample,
 )
-from wsidicomizer.metadata.json_schema.sample import (
+from wsidicom.metadata.json_schema.sample import (
     ExtractedSpecimenJsonSchema,
     PreparationStepJsonSchema,
     SampleJsonSchema,

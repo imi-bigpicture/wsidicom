@@ -19,7 +19,7 @@ from tests.metadata.helpers import (
     bool_to_dicom_literal,
     code_to_code_dataset,
 )
-from wsidicomizer.metadata import (
+from wsidicom.metadata import (
     Equipment,
     ExtendedDepthOfField,
     FocusMethod,
@@ -36,17 +36,17 @@ from wsidicomizer.metadata import (
     LightPathFilter,
     Objectives,
 )
-from wsidicomizer.metadata.defaults import Defaults
+from wsidicom.metadata.defaults import Defaults
 
-from wsidicomizer.metadata.dicom_schema.equipment import EquipmentDicomSchema
-from wsidicomizer.metadata.dicom_schema.image import ImageDicomSchema
-from wsidicomizer.metadata.dicom_schema.label import LabelDicomSchema
-from wsidicomizer.metadata.dicom_schema.optical_path import OpticalPathDicomSchema
-from wsidicomizer.metadata.dicom_schema.patient import PatientDicomSchema
-from wsidicomizer.metadata.dicom_schema.series import SeriesDicomSchema
-from wsidicomizer.metadata.dicom_schema.slide import SlideDicomSchema
-from wsidicomizer.metadata.dicom_schema.study import StudyDicomSchema
-from wsidicomizer.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
+from wsidicom.metadata.dicom_schema.equipment import EquipmentDicomSchema
+from wsidicom.metadata.dicom_schema.image import ImageDicomSchema
+from wsidicom.metadata.dicom_schema.label import LabelDicomSchema
+from wsidicom.metadata.dicom_schema.optical_path import OpticalPathDicomSchema
+from wsidicom.metadata.dicom_schema.patient import PatientDicomSchema
+from wsidicom.metadata.dicom_schema.series import SeriesDicomSchema
+from wsidicom.metadata.dicom_schema.slide import SlideDicomSchema
+from wsidicom.metadata.dicom_schema.study import StudyDicomSchema
+from wsidicom.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
 
 
 class TestDicomSchema:

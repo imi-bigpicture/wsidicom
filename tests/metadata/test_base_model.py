@@ -14,11 +14,11 @@
 
 import pytest
 
-from wsidicomizer.metadata.equipment import Equipment
-from wsidicomizer.metadata.patient import Patient
-from wsidicomizer.metadata.series import Series
-from wsidicomizer.metadata.study import Study
-from wsidicomizer.metadata.wsi import WsiMetadata
+from wsidicom.metadata.equipment import Equipment
+from wsidicom.metadata.patient import Patient
+from wsidicom.metadata.series import Series
+from wsidicom.metadata.study import Study
+from wsidicom.metadata.wsi import WsiMetadata
 
 
 @pytest.fixture

@@ -33,7 +33,6 @@ from wsidicom.instance import (
     ImageType,
     WsiDataset,
     WsiInstance,
-    image_coordinate_system,
 )
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids

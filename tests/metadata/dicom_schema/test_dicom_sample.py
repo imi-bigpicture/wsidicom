@@ -32,7 +32,7 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     AnatomicPathologySpecimenTypesCode,
 )
-from wsidicomizer.metadata.dicom_schema.sample import (
+from wsidicom.metadata.dicom_schema.sample import (
     CollectionDicom,
     EmbeddingDicom,
     FixationDicom,
@@ -41,7 +41,7 @@ from wsidicomizer.metadata.dicom_schema.sample import (
     StainingDicom,
 )
 
-from wsidicomizer.metadata.sample import (
+from wsidicom.metadata.sample import (
     Collection,
     Embedding,
     ExtractedSpecimen,

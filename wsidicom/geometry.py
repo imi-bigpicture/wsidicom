@@ -512,6 +512,7 @@ class Orientation:
                 "orthogonal with equal lengths with column rotated 90 deg from row"
             )
         orientation = tuple(orientation)
+        assert len(orientation) == 6
         self._orientation = orientation
         self._transform = self._create_transform(orientation)
         self._reverse = self._create_reverse(self._transform)

@@ -6,7 +6,7 @@ from wsidicom.conceptcode import IlluminationColorCode
 from wsidicom.instance import ImageType
 
 from tests.metadata.helpers import bool_to_dicom_literal, code_to_code_dataset
-from wsidicomizer.metadata import (
+from wsidicom.metadata import (
     Equipment,
     Image,
     OpticalPath,
@@ -17,7 +17,7 @@ from wsidicomizer.metadata import (
     WsiMetadata,
     Label,
 )
-from wsidicomizer.metadata.dicom_schema.slide import SlideDicomSchema
+from wsidicom.metadata.dicom_schema.slide import SlideDicomSchema
 
 
 @pytest.fixture()

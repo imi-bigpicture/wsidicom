@@ -34,7 +34,7 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
 )
 
-from wsidicomizer.metadata import (
+from wsidicom.metadata import (
     Equipment,
     ExtendedDepthOfField,
     FocusMethod,
@@ -51,15 +51,15 @@ from wsidicomizer.metadata import (
     Series,
     Study,
 )
-from wsidicomizer.metadata.equipment import Equipment
-from wsidicomizer.metadata.image import (
+from wsidicom.metadata.equipment import Equipment
+from wsidicom.metadata.image import (
     ExtendedDepthOfField,
     FocusMethod,
     Image,
     ImageCoordinateSystem,
 )
-from wsidicomizer.metadata.label import Label
-from wsidicomizer.metadata.sample import (
+from wsidicom.metadata.label import Label
+from wsidicom.metadata.sample import (
     Collection,
     Embedding,
     ExtractedSpecimen,
@@ -70,8 +70,8 @@ from wsidicomizer.metadata.sample import (
     SlideSamplePosition,
     Staining,
 )
-from wsidicomizer.metadata.slide import Slide
-from wsidicomizer.metadata.wsi import WsiMetadata
+from wsidicom.metadata.slide import Slide
+from wsidicom.metadata.wsi import WsiMetadata
 
 
 @pytest.fixture
