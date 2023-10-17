@@ -15,8 +15,8 @@
 from typing import Dict, Union
 import pytest
 from tests.metadata.helpers import assert_dict_equals_code
-from wsidicomizer.metadata.sample import SlideSamplePosition, SpecimenIdentifier
-from wsidicomizer.metadata.json_schema.fields import (
+from wsidicom.metadata.sample import SlideSamplePosition, SpecimenIdentifier
+from wsidicom.metadata.json_schema.fields import (
     CodeJsonField,
     JsonFieldFactory,
     PointMmJsonField,
@@ -237,8 +237,10 @@ class TestFields:
         # Assert
         if isinstance(value, float):
             assert dumped == value
-        else:
+        elif isinstance(value, IlluminationColorCode):
             assert_dict_equals_code(dumped, value)
+        else:
+            raise TypeError(f"Unknown value {type(value)}.")
 
     @pytest.mark.parametrize(
         "dumped",
@@ -263,9 +265,11 @@ class TestFields:
         # Assert
         if isinstance(dumped, float):
             assert loaded == dumped
-        else:
+        elif isinstance(dumped, dict):
             assert isinstance(loaded, IlluminationColorCode)
             assert_dict_equals_code(dumped, loaded)
+        else:
+            raise TypeError(f"Unknown dumped type {type(dumped)}.")
 
     @pytest.mark.parametrize(
         "value",
