@@ -507,7 +507,7 @@ class RegionMm:
 class Orientation:
     def __init__(self, orientation: Sequence[float]):
         if orientation[0] != -orientation[4] or orientation[1] != orientation[3]:
-            logging.warn(
+            logging.warning(
                 f"Orientation {orientation} is not "
                 "orthogonal with equal lengths with column rotated 90 deg from row"
             )
