@@ -74,7 +74,9 @@ class PatientDicomSchema(DicomSchema[Patient]):
     species_description_code = SingleCodeDicomField(
         Code, data_key="PatientSpeciesCodeSequence", allow_none=True
     )
-    de_identification = FlatteningNestedField(PatientDeIdentificationDicomSchema())
+    de_identification = FlatteningNestedField(
+        PatientDeIdentificationDicomSchema(), allow_none=True
+    )
 
     @property
     def load_type(self) -> Type[Patient]:

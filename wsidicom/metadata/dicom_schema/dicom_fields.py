@@ -14,7 +14,7 @@ from typing import (
 )
 
 from marshmallow.utils import missing
-from marshmallow import Schema, fields
+from marshmallow import Schema, ValidationError, fields
 from marshmallow.fields import Field
 from pydicom import DataElement, Dataset
 from pydicom.multival import MultiValue
