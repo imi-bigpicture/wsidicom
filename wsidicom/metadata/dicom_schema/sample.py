@@ -72,6 +72,13 @@ class SpecimenIdentifierDicom:
         # TODO update this for id issuer
         return step.specimen_id
 
+    @classmethod
+    def from_description(
+        cls, description: SpecimenDescription
+    ) -> Union[str, SpecimenIdentifier]:
+        # TODO update this for id issuer
+        return description.specimen_id
+
 
 class PreparationStepDicom(metaclass=ABCMeta):
     @classmethod
@@ -838,7 +845,6 @@ class SlideSampleDicom(SampledSpecimenDicom):
         steps_by_identifier: Dict[
             Union[str, SpecimenIdentifier], List[Optional[SpecimenPreparationStep]]
         ] = defaultdict(list)
-
         for step in description.specimen_preparation_steps:
             if isinstance(step.processing_procedure, SpecimenStaining):
                 staining = StainingDicom.from_dataset(step)
@@ -852,10 +858,7 @@ class SlideSampleDicom(SampledSpecimenDicom):
             identifier = SpecimenIdentifierDicom.from_step(step)
             steps_by_identifier[identifier].append(step)
 
-        identifier = SpecimenIdentifierDicom.from_step(
-            description.specimen_preparation_steps[-1]
-        )
-
+        identifier = SpecimenIdentifierDicom.from_description(description)
         preparation_steps, samplings = cls._parse_preparation_steps_for_specimen(
             identifier, steps_by_identifier, existing_specimens
         )
