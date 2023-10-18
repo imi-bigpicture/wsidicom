@@ -20,7 +20,6 @@ from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level
 from wsidicom.instance import ImageCoordinateSystem, ImageType, WsiInstance
 from wsidicom.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
-from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.series.series import Series
 from wsidicom.stringprinting import str_indent
 
