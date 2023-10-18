@@ -23,7 +23,7 @@ pydicom = ">=2.1.0"
 Pillow = ">=9.1.1, <11.0.0"
 dicomweb-client = "^0.59.1"
 marshmallow = "^3.20.1"
-highdicom = "^0.21.1"
+highdicom = "^0.20.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.0"
