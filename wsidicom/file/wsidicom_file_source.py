@@ -86,7 +86,7 @@ class WsiDicomFileSource(Source):
                     stream.close()
             except Exception:
                 logging.error(
-                    f"Failed to open file {file.name} due to exception", exc_info=True
+                    f"Failed to open file {file} due to exception.", exc_info=True
                 )
         if len(self._level_files) == 0:
             raise WsiDicomNotFoundError("Level files", str(files))
@@ -329,7 +329,7 @@ class WsiDicomFileSource(Source):
             if file.dataset.matches_series(series_uids, series_tile_size):
                 yield file
             else:
-                logging.warn(
+                logging.warning(
                     f"{file.filepath} with uids {file.uids.slide} "
                     f"did not match series with {series_uids} "
                     f"and tile size {series_tile_size}"
