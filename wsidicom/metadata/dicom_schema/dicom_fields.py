@@ -269,7 +269,10 @@ class TypeDicomField(fields.Field, Generic[ValueType]):
         return self._nested._serialize(value, attr, obj, **kwargs)
 
     def _deserialize(self, value: Any, attr, data, **kwargs):
-        return self._nested._deserialize(value, attr, data, **kwargs)
+        try:
+            return self._nested._deserialize(value, attr, data, **kwargs)
+        except ValidationError:
+            return None
 
 
 class DefaultingDicomField(TypeDicomField[ValueType]):
