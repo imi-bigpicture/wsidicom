@@ -39,7 +39,6 @@ from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.metadata.wsi import WsiMetadata
-from wsidicom.optical import OpticalManager
 from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -86,9 +85,6 @@ class WsiDicom:
         self._annotations = list(source.annotation_instances)
         self._uids = self._validate_collection()
 
-        self.optical = OpticalManager.open(
-            [instance for series in self.collection for instance in series.instances]
-        )
         if self.labels is not None:
             label_metadata = self.labels.metadata
         else:
