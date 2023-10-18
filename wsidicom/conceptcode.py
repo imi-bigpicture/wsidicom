@@ -13,13 +13,13 @@
 #    limitations under the License.
 
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Type, TypeVar
+from typing import Any, ClassVar, List, Dict, Optional, Type, TypeVar, Union
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
-
+from highdicom.sr.coding import CodedConcept
 
 ConceptCodeType = TypeVar("ConceptCodeType", bound="ConceptCode")
 CidConceptCodeType = TypeVar("CidConceptCodeType", bound="CidConceptCode")
@@ -31,24 +31,25 @@ class ConceptCode:
     Provides functions for converting between Code and dicom dataset.
     """
 
-    sequence_name: str
-
-    def __init__(
-        self,
-        value: str,
-        scheme_designator: str,
-        meaning: str,
-        scheme_version: Optional[str] = None,
-    ):
-        self.value = value
-        self.scheme_designator = scheme_designator
-        self.meaning = meaning
-        self.scheme_version = scheme_version
+    value: str
+    scheme_designator: str
+    meaning: str
+    scheme_version: Optional[str] = None
+    sequence_name: ClassVar[str]
 
     def __hash__(self):
         return hash(
             (self.value, self.scheme_designator, self.meaning, self.scheme_version)
         )
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, (ConceptCode, Code)):
+            return (
+                other.value == self.value
+                and other.scheme_designator == self.scheme_designator
+                and other.scheme_version == self.scheme_version
+            )
+        return NotImplemented
 
     @property
     def code(self) -> Code:
@@ -60,9 +61,14 @@ class ConceptCode:
         )
 
     @classmethod
-    def from_code(cls: Type[ConceptCodeType], code: Code) -> ConceptCodeType:
+    def from_code(
+        cls: Type[ConceptCodeType], code: Union[Code, CodedConcept]
+    ) -> ConceptCodeType:
         return cls(
-            code.value, code.scheme_designator, code.meaning, code.scheme_version
+            value=code.value,
+            scheme_designator=code.scheme_designator,
+            meaning=code.meaning,
+            scheme_version=code.scheme_version,
         )
 
     def to_ds(self) -> Dataset:
@@ -188,7 +194,7 @@ class MultipleConceptCode(ConceptCode):
 class CidConceptCode(ConceptCode):
     """Code for concepts  # type: ignore defined in Context groups"""
 
-    cid: Dict[str, Code]
+    cid: ClassVar[Dict[str, Code]]
 
     def __init__(
         self,
@@ -198,37 +204,27 @@ class CidConceptCode(ConceptCode):
         scheme_version: Optional[str] = None,
     ):
         if value is None or scheme_designator is None:
-            code = self._from_cid(meaning)
+            code = self._from_meaning(meaning)
+            super().__init__(
+                value=code.value,
+                scheme_designator=code.scheme_designator,
+                meaning=code.meaning,
+                scheme_version=code.scheme_version,
+            )
         else:
-            code = Code(value, scheme_designator, meaning, scheme_version)
-        super().__init__(
-            meaning=code.meaning,
-            value=code.value,
-            scheme_designator=code.scheme_designator,
-            scheme_version=code.scheme_version,
-        )
+            super().__init__(
+                value=value,
+                scheme_designator=scheme_designator,
+                meaning=meaning,
+                scheme_version=scheme_version,
+            )
 
     @classmethod
-    def _from_cid(cls, meaning: str) -> Code:
-        """Return ConceptCode from CID and meaning. For a list of CIDs, see
-        http://dicom.nema.org/medical/dicom/current/output/chtml/part16/chapter_B.html # noqa
-
-        Parameters
-        ----------
-        meaning: str
-            Code meaning to get.
-
-        Returns
-        ----------
-        ConceptCode
-            Code created from CID and meaning.
-
-        """
-        # The keys are camelcase meanings, dont use.
-        for code in cls.cid.values():
-            if code.meaning == meaning:
-                return code
-        raise ValueError(f"Unsupported code with meaning {meaning}.")
+    def _from_meaning(cls: Type[CidConceptCodeType], meaning: str) -> Code:
+        try:
+            return next(code for code in cls.cid.values() if code.meaning == meaning)
+        except StopIteration:
+            raise ValueError(f"Unsupported code with meaning {meaning}.")
 
     @classmethod
     def list(cls) -> List[str]:
@@ -241,18 +237,6 @@ class CidConceptCode(ConceptCode):
 
         """
         return [code.meaning for code in cls.cid.values()]
-
-    @classmethod
-    def from_code_value(
-        cls: Type[CidConceptCodeType], value: str
-    ) -> CidConceptCodeType:
-        try:
-            code = next((code for code in cls.cid.values() if code.value == value))
-        except StopIteration:
-            raise ValueError("Unsupported code.")
-        return cls(
-            code.meaning, code.value, code.scheme_designator, code.scheme_version
-        )
 
 
 class UnitCode(SingleConceptCode):
@@ -268,18 +252,46 @@ class UnitCode(SingleConceptCode):
         scheme_version: Optional[str] = None,
     ):
         if value is None or scheme_designator is None:
-            code = self._from_ucum(meaning)
+            code = self._from_unit(meaning)
+            super().__init__(
+                value=code.value,
+                scheme_designator=code.scheme_designator,
+                meaning=code.meaning,
+                scheme_version=code.scheme_version,
+            )
         else:
-            code = Code(value, scheme_designator, meaning, scheme_version)
-        super().__init__(
-            meaning=code.meaning,
+            super().__init__(
+                value=value,
+                scheme_designator=scheme_designator,
+                meaning=meaning,
+                scheme_version=scheme_version,
+            )
+
+    @classmethod
+    def from_unit(cls, unit: str) -> "UnitCode":
+        """Return UCUM scheme ConceptCode.
+
+        Parameters
+        ----------
+        meaning: str
+            Code meaning.
+
+        Returns
+        ----------
+        ConceptCode
+            Code created from meaning.
+
+        """
+        code = cls._from_unit(unit)
+        return cls(
             value=code.value,
             scheme_designator=code.scheme_designator,
+            meaning=code.meaning,
             scheme_version=code.scheme_version,
         )
 
     @classmethod
-    def _from_ucum(cls, unit: str) -> Code:
+    def _from_unit(cls, unit: str) -> Code:
         """Return UCUM scheme ConceptCode.
 
         Parameters
@@ -327,7 +339,7 @@ class AnnotationTypeCode(CidConceptCode, SingleConceptCode):
     sequence_name = "AnnotationPropertyTypeCodeSequence"
     cid = {
         "Nucleus": Code("84640000", "SCT", "Nucleus"),
-        "EntireCell": Code("362837007", "SCT", "Entire cell"),
+        "EntireCell": Code("4421005", "SCT", "Cell"),
     }
 
 

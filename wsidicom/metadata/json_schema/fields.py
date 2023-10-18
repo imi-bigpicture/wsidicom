@@ -197,7 +197,7 @@ class JsonFieldFactory:
             if isinstance(value, (int, float)):
                 return value
             try:
-                return concept_code_type.from_code_value(value["value"])
+                return concept_code_type(**value)
             except (ValueError, KeyError) as error:
                 raise ValidationError("Could not deserialize Code.") from error
 

@@ -215,8 +215,8 @@ class CollectionDicom(PreparationStepDicom):
         """Create `Collection` from parsing of a `SpecimenPreparationStep`."""
         assert isinstance(dataset.processing_procedure, SpecimenCollection)
         return Collection(
-            SpecimenCollectionProcedureCode.from_code_value(
-                dataset.processing_procedure.procedure.value
+            SpecimenCollectionProcedureCode.from_code(
+                dataset.processing_procedure.procedure
             ),
             # date_time=dataset.processing_datetime,
         )
@@ -259,8 +259,8 @@ class ProcessingDicom(PreparationStepDicom):
         """Create `Processing` from parsing of a `SpecimenPreparationStep`."""
         assert isinstance(dataset.processing_procedure, SpecimenProcessing)
         return Processing(
-            SpecimenPreparationStepsCode.from_code_value(
-                dataset.processing_procedure.description.value
+            SpecimenPreparationStepsCode.from_code(
+                dataset.processing_procedure.description
             ),
             # date_time=dataset.processing_datetime,
         )
@@ -302,7 +302,7 @@ class EmbeddingDicom(PreparationStepDicom):
         """Create `Embedding` from parsing of a `SpecimenPreparationStep`."""
         assert dataset.embedding_medium is not None
         return Embedding(
-            SpecimenEmbeddingMediaCode.from_code_value(dataset.embedding_medium.value),
+            SpecimenEmbeddingMediaCode.from_code(dataset.embedding_medium),
             # date_time=dataset.processing_datetime,
         )
 
@@ -343,7 +343,7 @@ class FixationDicom(PreparationStepDicom):
         """Create `Fixation` from parsing of a `SpecimenPreparationStep`."""
         assert dataset.fixative is not None
         return Fixation(
-            SpecimenFixativesCode.from_code_value(dataset.fixative.value),
+            SpecimenFixativesCode.from_code(dataset.fixative),
             # date_time=dataset.processing_datetime,
         )
 
@@ -389,7 +389,7 @@ class StainingDicom(PreparationStepDicom):
         substances: List[Union[str, SpecimenStainsCode]] = []
         for substance in dataset.processing_procedure.substances:
             if isinstance(substance, CodedConcept):
-                substances.append(SpecimenStainsCode.from_code_value(substance.value))
+                substances.append(SpecimenStainsCode.from_code(substance))
             elif isinstance(substance, str):
                 substances.append(substance)
             else:
@@ -705,8 +705,8 @@ class SlideSampleDicom(SampledSpecimenDicom):
                         parent._sampled_from.extend(sampling_constraints)
                 else:
                     # Need to create parent
-                    parent_type = AnatomicPathologySpecimenTypesCode.from_code_value(
-                        procedure.parent_specimen_type.value
+                    parent_type = AnatomicPathologySpecimenTypesCode.from_code(
+                        procedure.parent_specimen_type
                     )
                     parent = cls._create_specimen(
                         parent_identifier,
@@ -725,17 +725,13 @@ class SlideSampleDicom(SampledSpecimenDicom):
                 if isinstance(parent, Sample):
                     # If Sample create sampling with constraint
                     sampling = parent.sample(
-                        SpecimenSamplingProcedureCode.from_code_value(
-                            procedure.method.value
-                        ),
+                        SpecimenSamplingProcedureCode.from_code(procedure.method),
                         sampling_chain_constraints=sampling_constraints,
                     )
                 else:
                     # Extracted specimen can not have constraint
                     sampling = parent.sample(
-                        SpecimenSamplingProcedureCode.from_code_value(
-                            procedure.method.value
-                        ),
+                        SpecimenSamplingProcedureCode.from_code(procedure.method),
                     )
 
                 samplings.append(sampling)
