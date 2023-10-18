@@ -61,7 +61,7 @@ class SlideDicomSchema(DicomSchema[Slide]):
     def pre_load(self, dataset: Dataset, **kwargs):
         # move staining steps from SpecimenDescriptionSequence to staining
         data = super().pre_load(dataset, **kwargs)
-        specimen_description_sequence = data.pop("SpecimenDescriptionSequence", None)
+        specimen_description_sequence = data.get("SpecimenDescriptionSequence", None)
         if specimen_description_sequence is not None:
             samples, stainings = SlideSampleDicom().from_dataset(
                 specimen_description_sequence

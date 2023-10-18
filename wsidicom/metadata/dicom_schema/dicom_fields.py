@@ -148,10 +148,10 @@ class FlatteningNestedField(fields.Nested):
                 if de_flatten_nested_field is not None:
                     nested.update(de_flatten_nested_field)
             elif nested_field.data_key is not None:
-                nested_value = dataset.pop(nested_field.data_key, None)
+                nested_value = dataset.get(nested_field.data_key, None)
                 # TODO is this correct?
                 if nested_value is not None:
-                    nested[nested_field.data_key] = nested_value
+                    setattr(nested, nested_field.data_key, nested_value)
         if len(nested) == 0:
             return None
         return nested
