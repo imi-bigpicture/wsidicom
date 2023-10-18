@@ -561,8 +561,10 @@ class SlideSampleDicom(SampledSpecimenDicom):
                 SpecimenDescription.from_dataset(specimen_description_dataset)
                 for specimen_description_dataset in specimen_description_datasets
             ]
-        except (AttributeError, ValueError) as exception:
-            logging.warn("Failed to parse SpecimenDescriptionSequence", exception)
+        except (AttributeError, ValueError):
+            logging.warning(
+                "Failed to parse SpecimenDescriptionSequence", exc_info=True
+            )
             return None, None
         created_specimens: Dict[
             Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
