@@ -205,10 +205,10 @@ class CodeDicomField(fields.Field, Generic[CodeType]):
         **kwargs,
     ):
         return self._load_type(
-            value.CodeValue,
-            value.CodingSchemeDesignator,
-            value.CodeMeaning,
-            value.get("CodingSchemeVersion", None),
+            value=value.CodeValue,
+            scheme_designator=value.CodingSchemeDesignator,
+            meaning=value.CodeMeaning,
+            scheme_version=value.get("CodingSchemeVersion", None),
         )
 
 
