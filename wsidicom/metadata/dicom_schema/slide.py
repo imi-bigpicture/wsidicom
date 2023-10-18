@@ -24,10 +24,15 @@ class SlideDicomSchema(DicomSchema[Slide]):
     """
 
     identifier = DefaultingDicomField(
-        fields.String(), dump_default=Defaults.string, data_key="ContainerIdentifier"
+        fields.String(),
+        dump_default=Defaults.string,
+        data_key="ContainerIdentifier",
+        allow_none=True,
     )
-    stainings = fields.List(fields.Field, load_only=True)
-    samples = fields.List(fields.Field, data_key="SpecimenDescriptionSequence")
+    stainings = fields.List(fields.Field, load_only=True, allow_none=True)
+    samples = fields.List(
+        fields.Field, data_key="SpecimenDescriptionSequence", allow_none=True
+    )
     container_type = SingleCodeDicomField(
         ContainerTypeCode,
         data_key="ContainerTypeCodeSequence",

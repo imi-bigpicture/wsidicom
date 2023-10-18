@@ -18,8 +18,6 @@ from functools import cached_property
 from typing import List, Optional
 
 from pydicom.uid import UID, generate_uid
-from wsidicom.metadata import equipment
-from wsidicom.metadata import optical_path
 
 from wsidicom.metadata.base_model import BaseModel
 from wsidicom.metadata.equipment import Equipment

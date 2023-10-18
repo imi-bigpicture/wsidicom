@@ -105,7 +105,7 @@ class ObjectivesSchema(DicomSchema[Objectives]):
 
 class OpticalPathDicomSchema(DicomSchema[OpticalPath]):
     identifier = fields.String(data_key="OpticalPathIdentifier")
-    description = fields.String(data_key="OpticalPathDescription")
+    description = fields.String(data_key="OpticalPathDescription", allow_none=True)
     illumination_types = DefaultingDicomField(
         fields.List(CodeDicomField(IlluminationCode)),
         data_key="IlluminationTypeCodeSequence",

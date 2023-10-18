@@ -22,7 +22,7 @@ class SeriesDicomSchema(DicomSchema[Series]):
         UidDicomField(), tag="_uid", data_key="SeriesInstanceUID"
     )
     number = DefaultingDicomField(
-        fields.Integer(), dump_default=1, data_key="SeriesNumber"
+        fields.Integer(), dump_default=1, data_key="SeriesNumber", allow_none=True
     )
 
     @property
