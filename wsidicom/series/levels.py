@@ -19,6 +19,8 @@ from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level
 from wsidicom.instance import ImageCoordinateSystem, ImageType, WsiInstance
+from wsidicom.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
+from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.series.series import Series
 from wsidicom.stringprinting import str_indent
 
@@ -54,6 +56,7 @@ class Levels(Series):
                 '"Volume" type'
             )
         self._mm_size = mm_size
+        self._metadata = WsiMetadataDicomSchema().load(self.datasets[0])
 
     def __getitem__(self, index: int) -> Level:
         """Get level by index.

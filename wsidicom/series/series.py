@@ -28,6 +28,8 @@ from wsidicom.errors import WsiDicomMatchError
 from wsidicom.geometry import SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageType, WsiDataset, WsiInstance
+from wsidicom.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
+from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.uid import SlideUids
 
 SeriesType = TypeVar("SeriesType")
@@ -52,6 +54,7 @@ class Series(metaclass=ABCMeta):
             self._uids = self._validate_series(self.groups)
         else:
             self._uids = None
+        self._metadata = WsiMetadataDicomSchema().load(self.datasets[0])
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.groups})"
@@ -111,6 +114,10 @@ class Series(metaclass=ABCMeta):
         """Return contained instances"""
         series_instances = [series.instances.values() for series in self.groups]
         return [instance for sublist in series_instances for instance in sublist]
+
+    @property
+    def metadata(self) -> WsiMetadata:
+        return self._metadata
 
     @classmethod
     def open(

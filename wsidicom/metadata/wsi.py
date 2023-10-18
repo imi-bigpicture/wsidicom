@@ -18,6 +18,8 @@ from functools import cached_property
 from typing import List, Optional
 
 from pydicom.uid import UID, generate_uid
+from wsidicom.metadata import equipment
+from wsidicom.metadata import optical_path
 
 from wsidicom.metadata.base_model import BaseModel
 from wsidicom.metadata.equipment import Equipment
@@ -54,3 +56,38 @@ class WsiMetadata(BaseModel):
         if self.dimension_organization_uid is not None:
             return self.dimension_organization_uid
         return generate_uid()
+
+    @classmethod
+    def merge_image_types(
+        cls,
+        volume: "WsiMetadata",
+        label: Optional["WsiMetadata"],
+        overview: Optional["WsiMetadata"],
+    ):
+        if volume.label is not None:
+            if label is not None:
+                label_label = label.label
+            else:
+                label_label = None
+            if overview is not None:
+                overview_label = overview.label
+            else:
+                overview_label = None
+
+            merged_label = Label.merge_image_types(
+                volume.label, label_label, overview_label
+            )
+        else:
+            merged_label = None
+        return cls(
+            study=volume.study,
+            series=volume.series,
+            patient=volume.patient,
+            equipment=volume.equipment,
+            optical_paths=volume.optical_paths,
+            slide=volume.slide,
+            label=merged_label,
+            image=volume.image,
+            frame_of_reference_uid=volume.frame_of_reference_uid,
+            dimension_organization_uid=volume.dimension_organization_uid,
+        )

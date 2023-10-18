@@ -38,6 +38,7 @@ from wsidicom.file import WsiDicomFileSource, WsiDicomFileTarget
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
+from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.optical import OpticalManager
 from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.source import Source
@@ -87,6 +88,17 @@ class WsiDicom:
 
         self.optical = OpticalManager.open(
             [instance for series in self.collection for instance in series.instances]
+        )
+        if self.labels is not None:
+            label_metadata = self.labels.metadata
+        else:
+            label_metadata = None
+        if self.overviews is not None:
+            overview_metadata = self.overviews.metadata
+        else:
+            overview_metadata = None
+        self._metadata = WsiMetadata.merge_image_types(
+            self._levels.metadata, label_metadata, overview_metadata
         )
 
     @classmethod
@@ -222,6 +234,10 @@ class WsiDicom:
             self._overviews,
         ]
         return [series for series in collection if series is not None]
+
+    @property
+    def metadata(self) -> WsiMetadata:
+        return self._metadata
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         string = self.__class__.__name__
