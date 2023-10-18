@@ -17,11 +17,9 @@
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
-from wsidicom.metadata.base_model import BaseModel
-
 
 @dataclass
-class Equipment(BaseModel):
+class Equipment:
     """
     Equipment used to produce the slide.
 

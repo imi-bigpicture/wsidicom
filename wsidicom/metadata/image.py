@@ -21,8 +21,6 @@ from typing import Optional
 
 from wsidicom.geometry import Orientation, PointMm
 
-from wsidicom.metadata.base_model import BaseModel
-
 
 class FocusMethod(Enum):
     AUTO = "auto"
@@ -30,13 +28,13 @@ class FocusMethod(Enum):
 
 
 @dataclass
-class ExtendedDepthOfField(BaseModel):
+class ExtendedDepthOfField:
     number_of_focal_planes: int
     distance_between_focal_planes: float
 
 
 @dataclass
-class ImageCoordinateSystem(BaseModel):
+class ImageCoordinateSystem:
     origin: PointMm
     rotation: float
 
@@ -48,7 +46,7 @@ class ImageCoordinateSystem(BaseModel):
 
 
 @dataclass
-class Image(BaseModel):
+class Image:
     """
     Image metadata.
 

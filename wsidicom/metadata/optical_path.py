@@ -28,8 +28,6 @@ from wsidicom.conceptcode import (
     LightPathFilterCode,
 )
 
-from wsidicom.metadata.base_model import BaseModel
-
 
 class Lut:
     """Represents a LUT."""
@@ -250,7 +248,7 @@ class Objectives:
 
 
 @dataclass
-class OpticalPath(BaseModel):
+class OpticalPath:
     """
     Optical path metadata.
 

@@ -19,7 +19,7 @@ from typing import List, Optional
 
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.metadata.base_model import BaseModel
+
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import Image
 from wsidicom.metadata.label import Label
@@ -31,7 +31,7 @@ from wsidicom.metadata.study import Study
 
 
 @dataclass
-class WsiMetadata(BaseModel):
+class WsiMetadata:
     study: Optional[Study] = None
     series: Optional[Series] = None
     patient: Optional[Patient] = None

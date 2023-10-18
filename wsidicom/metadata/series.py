@@ -19,11 +19,9 @@ from typing import Optional
 
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.metadata.base_model import BaseModel
-
 
 @dataclass
-class Series(BaseModel):
+class Series:
     """
     Series metadata.
 

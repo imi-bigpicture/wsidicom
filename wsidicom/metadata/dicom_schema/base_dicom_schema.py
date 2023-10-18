@@ -1,9 +1,9 @@
 from abc import abstractmethod
 from typing import Any, Dict, Generic, Type, TypeVar
-from marshmallow import Schema, post_dump, pre_load, post_load, types
+from marshmallow import Schema, post_dump, pre_load, post_load
 from pydicom import Dataset
 
-from wsidicom.metadata.base_model import BaseModel
+
 from wsidicom.metadata.dicom_schema.dicom_fields import (
     FlatteningNestedField,
 )
