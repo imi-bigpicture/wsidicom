@@ -20,8 +20,6 @@ from typing import Optional, Sequence, Union
 
 from pydicom.sr.coding import Code
 
-from wsidicom.metadata.base_model import BaseModel
-
 
 class PatientSex(Enum):
     F = "female"
@@ -30,13 +28,13 @@ class PatientSex(Enum):
 
 
 @dataclass
-class PatientDeIdentification(BaseModel):
+class PatientDeIdentification:
     identity_removed: bool
     methods: Optional[Sequence[Union[str, Code]]] = None
 
 
 @dataclass
-class Patient(BaseModel):
+class Patient:
     """
     Patient metadata.
 

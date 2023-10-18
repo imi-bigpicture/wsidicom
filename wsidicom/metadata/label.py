@@ -16,11 +16,9 @@
 from dataclasses import dataclass
 from typing import List, Optional
 
-from wsidicom.metadata.base_model import BaseModel
-
 
 @dataclass
-class Label(BaseModel):
+class Label:
     """
     Label metadata.
 

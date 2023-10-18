@@ -20,11 +20,9 @@ from typing import Optional
 
 from pydicom.uid import UID, generate_uid
 
-from wsidicom.metadata.base_model import BaseModel
-
 
 @dataclass
-class Study(BaseModel):
+class Study:
     """
     Study metadata.
 

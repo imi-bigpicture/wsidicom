@@ -17,13 +17,11 @@ from dataclasses import dataclass
 from typing import Sequence, Optional, Sequence
 
 
-from wsidicom.metadata.base_model import BaseModel
-
 from wsidicom.metadata.sample import SlideSample, Staining
 
 
 @dataclass
-class Slide(BaseModel):
+class Slide:
     """
     Metadata for a slide.
 
