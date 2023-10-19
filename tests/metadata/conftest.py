@@ -60,9 +60,9 @@ from wsidicom.metadata.image import (
     Image,
     ImageCoordinateSystem,
 )
-from wsidicomizer.metadata.label import Label
-from wsidicomizer.metadata.optical_path import ConstantLutSegment, LinearLutSegment
-from wsidicomizer.metadata.sample import (
+from wsidicom.metadata.label import Label
+from wsidicom.metadata.optical_path import ConstantLutSegment, LinearLutSegment
+from wsidicom.metadata.sample import (
     Collection,
     Embedding,
     ExtractedSpecimen,
@@ -165,7 +165,7 @@ def lut():
         [ConstantLutSegment(0, 256)],
         [ConstantLutSegment(0, 256)],
         [LinearLutSegment(0, 255, 256)],
-        np.dtype(np.uint16),
+        np.uint16,
     )
 
 

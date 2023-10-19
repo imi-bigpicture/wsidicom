@@ -1,13 +1,14 @@
-from typing import Type
+from typing import Sequence, Type
 
 from marshmallow import fields
+from pydicom import Dataset
 from pydicom.uid import VLWholeSlideMicroscopyImageStorage
+from wsidicom.instance.dataset import ImageType
 
 from wsidicom.metadata.dicom_schema.base_dicom_schema import DicomSchema
 from wsidicom.metadata.dicom_schema.dicom_fields import (
     DefaultingTagDicomField,
     FlatteningNestedField,
-    SequenceWrappingField,
     UidDicomField,
 )
 from wsidicom.metadata.dicom_schema.equipment import EquipmentDicomSchema
@@ -62,7 +63,7 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
         data_key="FrameOfReferenceUID",
         tag="_frame_of_reference_uid",
     )
-    dimension_organization_uid = SequenceWrappingField(
+    dimension_organization_uids = fields.List(
         DefaultingTagDicomField(
             UidDicomField(),
             allow_none=True,
@@ -88,3 +89,43 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
     @property
     def load_type(self) -> Type[WsiMetadata]:
         return WsiMetadata
+
+    @classmethod
+    def from_datasets(cls, datasets: Sequence[Dataset]) -> WsiMetadata:
+        label_dataset = next(
+            (
+                dataset
+                for dataset in datasets
+                if dataset.ImageType[2] == ImageType.LABEL.value
+            ),
+            None,
+        )
+        overview_dataset = next(
+            (
+                dataset
+                for dataset in datasets
+                if dataset.ImageType[2] == ImageType.OVERVIEW.value
+            ),
+            None,
+        )
+        volume_dataset = next(
+            dataset
+            for dataset in datasets
+            if dataset.ImageType[2] == ImageType.VOLUME.value
+        )
+        label_dicom_schema = LabelDicomSchema()
+        metadata = WsiMetadataDicomSchema().load(volume_dataset)
+        if label_dataset is None:
+            label_label = None
+        else:
+            label_label = label_dicom_schema.load(label_dataset)
+        if overview_dataset is None:
+            overview_label = None
+        else:
+            overview_label = label_dicom_schema.load(overview_dataset)
+        assert metadata.label is not None
+        merged_label = Label.merge_image_types(
+            metadata.label, label_label, overview_label
+        )
+        metadata.label = merged_label
+        return metadata

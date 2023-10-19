@@ -22,7 +22,7 @@ class WsiMetadataJsonSchema(Schema):
     label = fields.Nested(LabelJsonSchema(), allow_none=True)
     image = fields.Nested(ImageJsonSchema(), allow_none=True)
     frame_of_reference_uid = UidJsonField(allow_none=True)
-    dimension_organization_uid = UidJsonField(allow_none=True)
+    dimension_organization_uids = UidJsonField(allow_none=True)
 
     @post_load
     def load_to_object(self, data, **kwargs):

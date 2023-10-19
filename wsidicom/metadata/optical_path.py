@@ -15,7 +15,7 @@
 """Optical path model."""
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Generic, Optional, Sequence, TypeVar, Union
+from typing import Generic, Optional, Sequence, Type, TypeVar, Union
 
 import numpy as np
 from wsidicom.conceptcode import (
@@ -26,6 +26,8 @@ from wsidicom.conceptcode import (
     LightPathFilterCode,
 )
 
+LutDataType = Type[Union[np.uint8, np.uint16]]
+
 
 class LutSegment:
     @abstractmethod
@@ -33,9 +35,7 @@ class LutSegment:
         raise NotImplementedError()
 
     @abstractmethod
-    def array(
-        self, data_type: Union[np.dtype[np.uint8], np.dtype[np.uint16]]
-    ) -> np.ndarray:
+    def array(self, data_type: LutDataType) -> np.ndarray:
         raise NotImplementedError()
 
 
@@ -51,9 +51,7 @@ class DiscreteLutSegment(LutSegment):
     def __len__(self) -> int:
         return len(self.values)
 
-    def array(
-        self, data_type: Union[np.dtype[np.uint8], np.dtype[np.uint16]]
-    ) -> np.ndarray:
+    def array(self, data_type: LutDataType) -> np.ndarray:
         return np.array(self.values, dtype=data_type)
 
 
@@ -73,9 +71,7 @@ class LinearLutSegment(LutSegment):
     def __len__(self) -> int:
         return self.length
 
-    def array(
-        self, data_type: Union[np.dtype[np.uint8], np.dtype[np.uint16]]
-    ) -> np.ndarray:
+    def array(self, data_type: LutDataType) -> np.ndarray:
         return np.linspace(
             start=self.start_value,
             stop=self.end_value,
@@ -94,9 +90,7 @@ class ConstantLutSegment(LutSegment):
     def __len__(self) -> int:
         return self.length
 
-    def array(
-        self, data_type: Union[np.dtype[np.uint8], np.dtype[np.uint16]]
-    ) -> np.ndarray:
+    def array(self, data_type: LutDataType) -> np.ndarray:
         return np.full(
             self.length,
             self.value,
@@ -111,7 +105,7 @@ class Lut:
     red: Sequence[LutSegment]
     green: Sequence[LutSegment]
     blue: Sequence[LutSegment]
-    data_type: Union[np.dtype[np.uint8], np.dtype[np.uint16]]
+    data_type: LutDataType
 
     @property
     def bits(self) -> int:

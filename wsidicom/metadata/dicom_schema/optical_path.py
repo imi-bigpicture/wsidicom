@@ -1,7 +1,18 @@
 from enum import Enum
 import io
 import struct
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Type
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+)
 
 import numpy as np
 from marshmallow import fields, post_load, pre_dump
@@ -15,17 +26,16 @@ from wsidicom.conceptcode import (
     LightPathFilterCode,
 )
 
-from wsidicomizer.metadata.defaults import Defaults
-from wsidicomizer.metadata.dicom_schema.base_dicom_schema import DicomSchema, LoadType
-from wsidicomizer.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.defaults import Defaults
+from wsidicom.metadata.dicom_schema.base_dicom_schema import DicomSchema, LoadType
+from wsidicom.metadata.dicom_schema.dicom_fields import (
     CodeDicomField,
     DefaultingDicomField,
     FlatteningNestedField,
     FloatDicomField,
-    SingleItemSequenceDicomField,
     SingleCodeDicomField,
 )
-from wsidicomizer.metadata.optical_path import (
+from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
     DiscreteLutSegment,
     ImagePathFilter,
@@ -36,6 +46,7 @@ from wsidicomizer.metadata.optical_path import (
     Objectives,
     OpticalFilter,
     OpticalPath,
+    LutDataType,
 )
 
 
@@ -63,9 +74,9 @@ class LutDicomParser:
 
         bits = bits
         if bits == 8:
-            data_type = np.dtype(np.uint8)
+            data_type = np.uint8
         else:
-            data_type = np.dtype(np.uint16)
+            data_type = np.uint16
 
         segmented_keys = (
             "SegmentedRedPaletteColorLookupTableData",
@@ -132,7 +143,7 @@ class LutDicomParser:
 
     @classmethod
     def _parse_segments(
-        cls, segmented_lut_data: bytes, data_type: np.dtype
+        cls, segmented_lut_data: bytes, data_type: LutDataType
     ) -> Iterator[LutSegment]:
         """Parse segments from segmented lut data."""
         previous_segment_type: Optional[LutSegmentType] = None
@@ -238,7 +249,7 @@ class LutDicomParser:
 
     @classmethod
     def _read_next_segment_type(
-        cls, buffer: io.BytesIO, data_type: np.dtype
+        cls, buffer: io.BytesIO, data_type: LutDataType
     ) -> Optional[LutSegmentType]:
         """
         Read next segment type from buffer.
@@ -251,30 +262,34 @@ class LutDicomParser:
             return None
 
     @staticmethod
-    def _read_value(buffer: io.BytesIO, data_type: np.dtype) -> int:
+    def _read_value(buffer: io.BytesIO, data_type: LutDataType) -> int:
         """Read a single value from buffer."""
-        if data_type == np.dtype(np.uint8):
+        if data_type == np.uint8:
             format = "<B"
         else:
             format = "<H"
-        return struct.unpack(format, buffer.read(data_type.itemsize))[0]
+        return struct.unpack(format, buffer.read(np.dtype(data_type).itemsize))[0]
 
     @staticmethod
-    def _read_values(buffer: io.BytesIO, count: int, data_type: np.dtype) -> List[int]:
+    def _read_values(
+        buffer: io.BytesIO, count: int, data_type: LutDataType
+    ) -> List[int]:
         """Read multiple values from buffer."""
-        if data_type == np.dtype(np.uint8):
+        if data_type == np.uint8:
             format = f'<{count*"B"}'
         else:
             format = f'<{count*"H"}'
-        return list(struct.unpack(format, buffer.read(data_type.itemsize * count)))
+        return list(
+            struct.unpack(format, buffer.read(np.dtype(data_type).itemsize * count))
+        )
 
     @classmethod
     def _parse_single_discrete_segment(
-        cls, segment_data: bytes, data_type: np.dtype
+        cls, segment_data: bytes, data_type: LutDataType
     ) -> DiscreteLutSegment:
         """Read discrete segment from data."""
-        length = len(segment_data) // data_type.itemsize
-        if data_type == np.dtype(np.uint8):
+        length = len(segment_data) // np.dtype(data_type).itemsize
+        if data_type == np.uint8:
             format = f'<{length*"B"}'
         else:
             format = f'<{length*"H"}'
@@ -283,8 +298,8 @@ class LutDicomParser:
 
     @classmethod
     def _determine_correct_data_type(
-        cls, buffer: io.BytesIO, data_type: np.dtype
-    ) -> np.dtype:
+        cls, buffer: io.BytesIO, data_type: LutDataType
+    ) -> LutDataType:
         """Determine correct data type for reading segment.
 
         The segment can either have 8- or 16-bits values. The first value indicates the
@@ -303,9 +318,9 @@ class LutDicomParser:
             cls._read_next_segment_type(buffer, data_type)
         except ValueError as exception:
             # Throws if first read data is not a valid segment type (0, 1, or 2.)
-            if data_type == np.dtype(np.uint16):
+            if data_type == np.uint16:
                 # Try reading the segment type as 8 bits
-                return cls._determine_correct_data_type(buffer, np.dtype(np.uint8))
+                return cls._determine_correct_data_type(buffer, np.uint8)
             raise ValueError("Failed to parse first segment type from data", exception)
 
         length = cls._read_value(buffer, data_type)
@@ -313,9 +328,9 @@ class LutDicomParser:
             # Length should be positive for all segment types
             buffer.seek(0)
             return data_type
-        if data_type == np.dtype(np.uint8):
+        if data_type == np.uint8:
             # Try reading the segment as 16 bits.
-            return cls._determine_correct_data_type(buffer, np.dtype(np.uint16))
+            return cls._determine_correct_data_type(buffer, np.uint16)
         raise ValueError("Failed to parse first segment length from data.")
 
 
@@ -343,13 +358,13 @@ class LutDicomFormatter:
     def _pack_segments(
         cls,
         segments: Sequence[LutSegment],
-        data_type: np.dtype,
+        data_type: LutDataType,
     ) -> Tuple[int, bytes]:
         """Pack segments into bytes.
 
         Return start position (if constant first segment could be skipped) and bytes.
         """
-        if data_type == np.dtype(np.uint8):
+        if data_type == np.uint8:
             data_format = "B"
         else:
             data_format = "H"
@@ -480,7 +495,7 @@ class LutDicomField(fields.Field):
 
     def _deserialize(
         self,
-        value: Optional[Dataset],
+        value: Optional[Sequence[Dataset]],
         attr: Optional[str],
         data: Optional[Dict[str, Any]],
         **kwargs,

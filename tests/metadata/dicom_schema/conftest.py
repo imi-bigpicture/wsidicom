@@ -19,9 +19,9 @@ from wsidicom.metadata import (
     WsiMetadata,
     Label,
 )
-from wsidicomizer.metadata.dicom_schema.optical_path import LutDicomFormatter
-from wsidicomizer.metadata.dicom_schema.slide import SlideDicomSchema
-from wsidicomizer.metadata.image import (
+from wsidicom.metadata.dicom_schema.optical_path import LutDicomFormatter
+from wsidicom.metadata.dicom_schema.slide import SlideDicomSchema
+from wsidicom.metadata.image import (
     ExtendedDepthOfField,
     FocusMethod,
     ImageCoordinateSystem,
