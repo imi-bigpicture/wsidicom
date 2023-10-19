@@ -15,7 +15,7 @@
 """Complete WSI model."""
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from pydicom.uid import UID, generate_uid
 
@@ -32,14 +32,14 @@ from wsidicom.metadata.study import Study
 
 @dataclass
 class WsiMetadata:
-    study: Optional[Study] = None
-    series: Optional[Series] = None
-    patient: Optional[Patient] = None
-    equipment: Optional[Equipment] = None
-    optical_paths: List[OpticalPath] = field(default_factory=lambda: list())
-    slide: Optional[Slide] = None
-    label: Optional[Label] = None
-    image: Optional[Image] = None
+    study: Study
+    series: Series
+    patient: Patient
+    equipment: Equipment
+    optical_paths: List[OpticalPath]
+    slide: Slide
+    label: Label
+    image: Image
     frame_of_reference_uid: Optional[UID] = None
     dimension_organization_uids: Sequence[UID] = field(default_factory=lambda: list())
 
@@ -76,7 +76,7 @@ class WsiMetadata:
                 volume.label, label_label, overview_label
             )
         else:
-            merged_label = None
+            merged_label = Label()
         return cls(
             study=volume.study,
             series=volume.series,
