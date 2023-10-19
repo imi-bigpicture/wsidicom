@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 
-from wsidicomizer.metadata.optical_path import (
+from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
     DiscreteLutSegment,
     LinearLutSegment,
@@ -19,7 +19,7 @@ class TestDicomLut:
                     [ConstantLutSegment(0, 256)],
                     [ConstantLutSegment(0, 256)],
                     [LinearLutSegment(0, 255, 256)],
-                    np.dtype(np.uint16),
+                    np.uint16,
                 ),
                 [
                     np.full(256, 0, dtype=np.uint16),
@@ -36,7 +36,7 @@ class TestDicomLut:
                         LinearLutSegment(0, 255, 100),
                         ConstantLutSegment(255, 56),
                     ],
-                    np.dtype(np.uint16),
+                    np.uint16,
                 ),
                 [
                     np.full(256, 0, dtype=np.uint16),

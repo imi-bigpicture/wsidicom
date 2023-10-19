@@ -3,17 +3,17 @@ import numpy as np
 from typing import Sequence, Tuple
 from pydicom import Dataset
 import pytest
-from wsidicomizer.metadata.dicom_schema.optical_path import (
+from wsidicom.metadata.dicom_schema.optical_path import (
     LutDicomParser,
     LutDicomFormatter,
 )
 
-from wsidicomizer.metadata.optical_path import (
+from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
-    DiscreteLutSegment,
     LinearLutSegment,
     Lut,
     LutSegment,
+    LutDataType,
 )
 
 
@@ -36,7 +36,7 @@ class TestDicomLut:
                     [ConstantLutSegment(0, 256)],
                     [ConstantLutSegment(0, 256)],
                     [LinearLutSegment(0, 255, 256)],
-                    np.dtype(np.uint8),
+                    np.uint8,
                 ),
             ),
             (
@@ -48,7 +48,7 @@ class TestDicomLut:
                     [LinearLutSegment(0, 65535, 256)],
                     [ConstantLutSegment(0, 256)],
                     [ConstantLutSegment(0, 256)],
-                    np.dtype(np.uint16),
+                    np.uint16,
                 ),
             ),
             (
@@ -60,7 +60,7 @@ class TestDicomLut:
                     [ConstantLutSegment(0, 256)],
                     [ConstantLutSegment(0, 256)],
                     [LinearLutSegment(0, 255, 256)],
-                    np.dtype(np.uint16),
+                    np.uint16,
                 ),
             ),
         ],
@@ -107,7 +107,7 @@ class TestDicomLut:
         # Arrange
 
         # Act
-        parsed = LutDicomParser._parse_segments(segment_data, np.dtype(np.uint16))
+        parsed = LutDicomParser._parse_segments(segment_data, np.uint16)
 
         # Assert
         assert list(parsed) == expected_segments
@@ -126,7 +126,7 @@ class TestDicomLut:
                     [ConstantLutSegment(0, 256)],
                     [ConstantLutSegment(0, 256)],
                     [LinearLutSegment(0, 255, 256)],
-                    np.dtype(np.uint8),
+                    np.uint8,
                 ),
                 (256, 0, 8),
                 b"\x00\x01\x00\x01\xff\x00",
@@ -138,7 +138,7 @@ class TestDicomLut:
                     [LinearLutSegment(0, 65535, 256)],
                     [ConstantLutSegment(0, 256)],
                     [ConstantLutSegment(0, 256)],
-                    np.dtype(np.uint16),
+                    np.uint16,
                 ),
                 (256, 0, 16),
                 b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\xff\xff",
@@ -174,14 +174,17 @@ class TestDicomLut:
     @pytest.mark.parametrize(
         ["given_data_type", "data", "expected_data_type"],
         [
-            (np.dtype(np.uint8), b"\x00\x01", np.dtype(np.uint8)),
-            (np.dtype(np.uint16), b"\x00\x01", np.dtype(np.uint8)),
-            (np.dtype(np.uint8), b"\x00\x00\x01\x00", np.dtype(np.uint16)),
-            (np.dtype(np.uint16), b"\x00\x00\x01\x00", np.dtype(np.uint16)),
+            (np.uint8, b"\x00\x01", np.uint8),
+            (np.uint16, b"\x00\x01", np.uint8),
+            (np.uint8, b"\x00\x00\x01\x00", np.uint16),
+            (np.uint16, b"\x00\x00\x01\x00", np.uint16),
         ],
     )
     def test_determine_correct_data_type(
-        self, given_data_type: np.dtype, data: bytes, expected_data_type: np.dtype
+        self,
+        given_data_type: LutDataType,
+        data: bytes,
+        expected_data_type: LutDataType,
     ):
         # Arrange
 

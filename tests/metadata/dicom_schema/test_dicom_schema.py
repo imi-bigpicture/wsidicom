@@ -42,7 +42,10 @@ from wsidicom.metadata.defaults import Defaults
 from wsidicom.metadata.dicom_schema.equipment import EquipmentDicomSchema
 from wsidicom.metadata.dicom_schema.image import ImageDicomSchema
 from wsidicom.metadata.dicom_schema.label import LabelDicomSchema
-from wsidicom.metadata.dicom_schema.optical_path import OpticalPathDicomSchema
+from wsidicom.metadata.dicom_schema.optical_path import (
+    LutDicomParser,
+    OpticalPathDicomSchema,
+)
 from wsidicom.metadata.dicom_schema.patient import PatientDicomSchema
 from wsidicom.metadata.dicom_schema.series import SeriesDicomSchema
 from wsidicom.metadata.dicom_schema.slide import SlideDicomSchema

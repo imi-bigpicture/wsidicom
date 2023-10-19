@@ -15,7 +15,7 @@
 """Complete WSI model."""
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from pydicom.uid import UID, generate_uid
 
@@ -87,5 +87,5 @@ class WsiMetadata:
             label=merged_label,
             image=volume.image,
             frame_of_reference_uid=volume.frame_of_reference_uid,
-            dimension_organization_uid=volume.dimension_organization_uid,
+            dimension_organization_uids=volume.dimension_organization_uids,
         )
