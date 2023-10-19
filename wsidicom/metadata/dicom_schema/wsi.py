@@ -32,30 +32,33 @@ from wsidicom.metadata.wsi import WsiMetadata
 
 class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
     study = FlatteningNestedField(
-        StudyDicomSchema(), dump_default=Study(), allow_none=True
+        StudyDicomSchema(), dump_default=Study(), load_default=Study()
     )
     series = FlatteningNestedField(
-        SeriesDicomSchema(), dump_default=Series(), allow_none=True
+        SeriesDicomSchema(), dump_default=Series(), load_default=Series()
     )
     patient = FlatteningNestedField(
-        PatientDicomSchema(), dump_default=Patient(), allow_none=True
+        PatientDicomSchema(), dump_default=Patient(), load_default=Patient()
     )
     equipment = FlatteningNestedField(
-        EquipmentDicomSchema(), dump_default=Equipment(), allow_none=True
+        EquipmentDicomSchema(), dump_default=Equipment(), load_default=Equipment()
     )
     optical_paths = fields.List(
-        FlatteningNestedField(OpticalPathDicomSchema(), dump_default=OpticalPath()),
+        FlatteningNestedField(
+            OpticalPathDicomSchema(),
+            dump_default=OpticalPath(),
+            load_default=OpticalPath(),
+        ),
         data_key="OpticalPathSequence",
-        allow_none=True,
     )
     slide = FlatteningNestedField(
-        SlideDicomSchema(), dump_default=Slide(), allow_none=True
+        SlideDicomSchema(), dump_default=Slide(), load_default=Slide()
     )
     label = FlatteningNestedField(
-        LabelDicomSchema(), dump_default=Label(), allow_none=True
+        LabelDicomSchema(), dump_default=Label(), load_defaut=Label()
     )
     image = FlatteningNestedField(
-        ImageDicomSchema(), dump_default=Image(), allow_none=True
+        ImageDicomSchema(), dump_default=Image(), load_default=Image()
     )
     frame_of_reference_uid = DefaultingTagDicomField(
         UidDicomField(),
