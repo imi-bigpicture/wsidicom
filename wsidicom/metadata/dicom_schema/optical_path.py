@@ -106,17 +106,17 @@ class LutDicomParser:
             )
 
         elif all(key in dataset for key in non_segmented_keys):
-            red = [
+            red: List[LutSegment] = [
                 cls._parse_single_discrete_segment(
                     dataset.RedPaletteColorLookupTableData, data_type
                 )
             ]
-            green = [
+            green: List[LutSegment] = [
                 cls._parse_single_discrete_segment(
                     dataset.GreenPaletteColorLookupTableData, data_type
                 )
             ]
-            blue = [
+            blue: List[LutSegment] = [
                 cls._parse_single_discrete_segment(
                     dataset.BluePaletteColorLookupTableData, data_type
                 )
