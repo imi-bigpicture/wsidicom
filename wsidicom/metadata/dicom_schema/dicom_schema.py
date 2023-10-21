@@ -13,11 +13,13 @@ LoadType = TypeVar("LoadType")
 
 class DicomSchema(Schema, Generic[LoadType]):
     def dump(self, obj: LoadType, **kwargs) -> Dataset:
+        """Dump object to pydicom Dataset."""
         dataset = super().dump(obj, **kwargs)
         assert isinstance(dataset, Dataset)
         return dataset
 
     def load(self, dataset: Dataset, **kwargs) -> LoadType:
+        """Load object from pydicom Dataset."""
         item = super().load(dataset, **kwargs)  # type: ignore
         assert isinstance(item, self.load_type)
         return item
@@ -28,7 +30,8 @@ class DicomSchema(Schema, Generic[LoadType]):
         raise NotImplementedError()
 
     @post_dump
-    def post_dump(self, data: Dict[str, Any], many: bool, **kwargs):
+    def post_dump(self, data: Dict[str, Any], many: bool, **kwargs) -> Dataset:
+        """Create pydicom Dataset from attributes in dictionary."""
         for field in self.fields.values():
             if isinstance(field, FlatteningNestedField):
                 field.flatten(data)
@@ -37,22 +40,21 @@ class DicomSchema(Schema, Generic[LoadType]):
         return dataset
 
     @pre_load
-    def pre_load(self, dataset: Dataset, many: bool, **kwargs):
+    def pre_load(self, dataset: Dataset, many: bool, **kwargs) -> Dict[str, Any]:
+        """Return dictionary of attributes from dataset."""
         attributes = {}
         for key, field in self.fields.items():
             if field.dump_only:
                 continue
-            if field.data_key is not None:
-                key = field.data_key
-            if isinstance(field, FlatteningNestedField):
+            if field.data_key is not None and field.data_key in dataset:
+                attributes[field.data_key] = dataset.get(field.data_key)
+            elif isinstance(field, FlatteningNestedField):
                 de_flattened = field.de_flatten(dataset)
-                print("de flattened", key, de_flattened)
                 if de_flattened is not None:
                     attributes[key] = de_flattened
-            else:
-                attributes[key] = dataset.get(key, None)
         return attributes
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs):
+    def post_load(self, data: Dict[str, Any], **kwargs) -> LoadType:
+        """Load object from dictionary."""
         return self.load_type(**data)

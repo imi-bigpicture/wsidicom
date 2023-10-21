@@ -139,6 +139,7 @@ class FlatteningNestedField(fields.Nested):
         return self._nested
 
     def de_flatten(self, dataset: Dataset) -> Optional[Dataset]:
+        """Create new dataset containing the attributes defined in nested schema."""
         nested = Dataset()
         for nested_field in self.nested_schema.fields.values():
             if nested_field.dump_only:
@@ -147,15 +148,15 @@ class FlatteningNestedField(fields.Nested):
                 de_flatten_nested_field = nested_field.de_flatten(dataset)
                 if de_flatten_nested_field is not None:
                     nested.update(de_flatten_nested_field)
-            elif nested_field.data_key is not None:
-                nested_value = dataset.get(nested_field.data_key, None)
-                if nested_value is not None:
-                    setattr(nested, nested_field.data_key, nested_value)
+            elif nested_field.data_key is not None and nested_field.data_key in dataset:
+                nested_value = dataset.get(nested_field.data_key)
+                setattr(nested, nested_field.data_key, nested_value)
         if len(nested) == 0:
             return None
         return nested
 
     def flatten(self, data: Dict[str, Any]):
+        """Insert attributes from nested dataset into data."""
         key = self.name
         if self.data_key is not None:
             key = self.data_key
