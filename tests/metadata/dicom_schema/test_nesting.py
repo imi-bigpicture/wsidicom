@@ -3,7 +3,7 @@ from typing import Type
 import marshmallow
 from marshmallow import pre_load
 from pydicom import Dataset
-from wsidicom.metadata.dicom_schema.base_dicom_schema import DicomSchema
+from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
 from wsidicom.metadata.dicom_schema.dicom_fields import FlatteningNestedField
 
 

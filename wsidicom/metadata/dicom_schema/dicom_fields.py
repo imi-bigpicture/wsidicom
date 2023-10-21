@@ -149,7 +149,6 @@ class FlatteningNestedField(fields.Nested):
                     nested.update(de_flatten_nested_field)
             elif nested_field.data_key is not None:
                 nested_value = dataset.get(nested_field.data_key, None)
-                # TODO is this correct?
                 if nested_value is not None:
                     setattr(nested, nested_field.data_key, nested_value)
         if len(nested) == 0:
@@ -269,6 +268,7 @@ class TypeDicomField(fields.Field, Generic[ValueType]):
         return self._nested._serialize(value, attr, obj, **kwargs)
 
     def _deserialize(self, value: Any, attr, data, **kwargs):
+        print("deserialize", attr, value)
         try:
             return self._nested._deserialize(value, attr, data, **kwargs)
         except ValidationError:
@@ -291,8 +291,8 @@ class DefaultingDicomField(TypeDicomField[ValueType]):
 
 
 class DefaultingTagDicomField(TypeDicomField[ValueType]):
-    """Wrapper around a field that should always be present and have a value. Takes
-    default value from attribute in object."""
+    """Wrapper around a field that should always be present and have a value. Default
+    value is taken from object by attribute defined by tag."""
 
     def __init__(self, nested: Field, tag: str, **kwargs):
         self._tag = tag

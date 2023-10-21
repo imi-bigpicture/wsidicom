@@ -5,7 +5,7 @@ from pydicom import Dataset
 from pydicom.uid import VLWholeSlideMicroscopyImageStorage
 from wsidicom.instance.dataset import ImageType
 
-from wsidicom.metadata.dicom_schema.base_dicom_schema import DicomSchema
+from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
 from wsidicom.metadata.dicom_schema.dicom_fields import (
     DefaultingTagDicomField,
     FlatteningNestedField,
@@ -55,7 +55,7 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
         SlideDicomSchema(), dump_default=Slide(), load_default=Slide()
     )
     label = FlatteningNestedField(
-        LabelDicomSchema(), dump_default=Label(), load_defaut=Label()
+        LabelDicomSchema(), dump_default=Label(), load_default=Label()
     )
     image = FlatteningNestedField(
         ImageDicomSchema(), dump_default=Image(), load_default=Image()
@@ -64,13 +64,12 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
         UidDicomField(),
         allow_none=True,
         data_key="FrameOfReferenceUID",
-        tag="_frame_of_reference_uid",
+        tag="default_frame_of_reference_uid",
     )
     dimension_organization_uids = fields.List(
         DefaultingTagDicomField(
             UidDicomField(),
-            allow_none=True,
-            tag="_dimension_organization_uid",
+            tag="default_dimension_organization_uids",
             data_key="DimensionOrganizationUID",
         ),
         data_key="DimensionOrganizationSequence",
@@ -79,7 +78,7 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
         VLWholeSlideMicroscopyImageStorage, dump_only=True, data_key="SOPClassUID"
     )
     modality = fields.Constant("SM", dump_only=True, data_key="Modality")
-    positiion_reference_indicator = fields.Constant(
+    position_reference_indicator = fields.Constant(
         "SLIDE_CORNER", dump_only=True, data_key="PositionReferenceIndicator"
     )
     volumetric_properties = fields.Constant(

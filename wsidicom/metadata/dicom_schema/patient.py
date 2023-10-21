@@ -1,6 +1,6 @@
 from collections import defaultdict
 from typing import Any, Dict, Type
-from wsidicom.metadata.dicom_schema.base_dicom_schema import DicomSchema
+from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
 from wsidicom.metadata.dicom_schema.dicom_fields import (
     BooleanDicomField,
     CodeDicomField,
@@ -64,10 +64,18 @@ class PatientDicomSchema(DicomSchema[Patient]):
     - identity_removed
     """
 
-    name = NoneDicomField(PatientNameDicomField(), data_key="PatientName")
-    identifier = NoneDicomField(fields.String(), data_key="PatientID")
-    birth_date = NoneDicomField(DateDicomField(), data_key="PatientBirthDate")
-    sex = NoneDicomField(fields.Enum(PatientSex), data_key="PatientSex")
+    name = NoneDicomField(
+        PatientNameDicomField(), data_key="PatientName", load_default=True
+    )
+    identifier = NoneDicomField(
+        fields.String(), data_key="PatientID", load_default=True
+    )
+    birth_date = NoneDicomField(
+        DateDicomField(), data_key="PatientBirthDate", load_default=True
+    )
+    sex = NoneDicomField(
+        fields.Enum(PatientSex), data_key="PatientSex", load_default=True
+    )
     species_description_string = fields.String(
         data_key="PatientSpeciesDescription", allow_none=True
     )
