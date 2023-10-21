@@ -621,6 +621,19 @@ class TestDicomSchema:
         assert deserialized.patient == patient
         assert deserialized.label == label
 
+    def test_deserialize_wsi_metadata_from_empty_dataset(
+        self,
+    ):
+        # Arrange
+        dataset = Dataset()
+        schema = WsiMetadataDicomSchema()
+
+        # Act
+        deserialized = schema.load(dataset)
+
+        # Assert
+        assert isinstance(deserialized, WsiMetadata)
+
 
 def assert_dicom_equipment_equals_equipment(
     dicom_equipment: Dataset, equipment: Equipment

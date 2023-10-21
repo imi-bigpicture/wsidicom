@@ -44,12 +44,10 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
         EquipmentDicomSchema(), dump_default=Equipment(), load_default=Equipment()
     )
     optical_paths = fields.List(
-        FlatteningNestedField(
-            OpticalPathDicomSchema(),
-            dump_default=OpticalPath(),
-            load_default=OpticalPath(),
-        ),
+        FlatteningNestedField(OpticalPathDicomSchema()),
         data_key="OpticalPathSequence",
+        dump_default=[OpticalPath()],
+        load_default=[],
     )
     slide = FlatteningNestedField(
         SlideDicomSchema(), dump_default=Slide(), load_default=Slide()
