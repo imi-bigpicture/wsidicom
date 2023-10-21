@@ -1,13 +1,14 @@
 from typing import Type
+
+from marshmallow import fields
+
 from wsidicom.metadata.defaults import Defaults
 from wsidicom.metadata.dicom_schema.dicom_fields import (
     DefaultingDicomField,
     ListDicomField,
 )
+from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
 from wsidicom.metadata.equipment import Equipment
-from wsidicom.metadata.dicom_schema.base_dicom_schema import DicomSchema
-
-from marshmallow import fields
 
 
 class EquipmentDicomSchema(DicomSchema[Equipment]):

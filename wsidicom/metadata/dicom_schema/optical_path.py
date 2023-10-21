@@ -27,7 +27,7 @@ from wsidicom.conceptcode import (
 )
 
 from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.base_dicom_schema import DicomSchema, LoadType
+from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema, LoadType
 from wsidicom.metadata.dicom_schema.dicom_fields import (
     CodeDicomField,
     DefaultingDicomField,

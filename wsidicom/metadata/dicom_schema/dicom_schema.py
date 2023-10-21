@@ -45,7 +45,10 @@ class DicomSchema(Schema, Generic[LoadType]):
             if field.data_key is not None:
                 key = field.data_key
             if isinstance(field, FlatteningNestedField):
-                attributes[key] = field.de_flatten(dataset)
+                de_flattened = field.de_flatten(dataset)
+                print("de flattened", key, de_flattened)
+                if de_flattened is not None:
+                    attributes[key] = de_flattened
             else:
                 attributes[key] = dataset.get(key, None)
         return attributes

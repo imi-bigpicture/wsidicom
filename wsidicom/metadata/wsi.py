@@ -15,7 +15,7 @@
 """Complete WSI model."""
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Dict, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 from pydicom.uid import UID, generate_uid
 
@@ -44,13 +44,13 @@ class WsiMetadata:
     dimension_organization_uids: Sequence[UID] = field(default_factory=lambda: list())
 
     @cached_property
-    def _frame_of_reference_uid(self) -> UID:
+    def default_frame_of_reference_uid(self) -> UID:
         if self.frame_of_reference_uid is not None:
             return self.frame_of_reference_uid
         return generate_uid()
 
     @cached_property
-    def _dimension_organization_uids(self) -> Sequence[UID]:
+    def default_dimension_organization_uids(self) -> Sequence[UID]:
         if self.dimension_organization_uids is not None:
             return self.dimension_organization_uids
         return [generate_uid()]

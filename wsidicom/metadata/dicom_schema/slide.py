@@ -6,7 +6,7 @@ from pydicom import Dataset
 from wsidicom.conceptcode import ContainerTypeCode
 
 from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.base_dicom_schema import DicomSchema
+from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
 from wsidicom.metadata.dicom_schema.dicom_fields import (
     DefaultingDicomField,
     SingleCodeDicomField,
