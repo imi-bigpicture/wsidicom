@@ -5,6 +5,7 @@ from wsidicom.metadata.dicom_schema.fields import (
     BooleanDicomField,
     CodeDicomField,
     DateDicomField,
+    EnumDicomField,
     FlatteningNestedField,
     ListDicomField,
     PatientNameDicomField,
@@ -67,7 +68,7 @@ class PatientDicomSchema(DicomSchema[Patient]):
     name = PatientNameDicomField(data_key="PatientName", load_default=None)
     identifier = StringDicomField(data_key="PatientID", load_default=None)
     birth_date = DateDicomField(data_key="PatientBirthDate", load_default=None)
-    sex = fields.Enum(PatientSex, data_key="PatientSex", load_default=None)
+    sex = EnumDicomField(PatientSex, data_key="PatientSex", load_default=None)
     species_description_string = StringDicomField(
         data_key="PatientSpeciesDescription", allow_none=True
     )

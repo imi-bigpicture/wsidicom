@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from typing import Any, Dict
 from marshmallow import Schema, fields, post_load
 from wsidicom.conceptcode import (
     ImagePathFilterCode,
@@ -66,6 +67,8 @@ class ObjectivesJsonSchema(Schema):
 
 
 class OpticalPathJsonSchema(Schema):
+    """Optical path. Icc profile is not included but can be loaded from context."""
+
     identifier = fields.String(allow_none=True)
     description = fields.String(allow_none=True)
     illumination_types = fields.List(
@@ -74,12 +77,19 @@ class OpticalPathJsonSchema(Schema):
     illumination = JsonFieldFactory.float_or_concept_code(IlluminationColorCode)(
         allow_none=True
     )
-    # icc_profile: Optional[bytes] = None
     # lut: Optional[Lut] = None
     light_path_filter = fields.Nested(LightPathFilterJsonSchema(), allow_none=True)
     image_path_filter = fields.Nested(ImagePathFilterJsonSchema(), allow_none=True)
     objective = fields.Nested(ObjectivesJsonSchema(), allow_none=True)
 
     @post_load
-    def load_to_object(self, data, **kwargs):
+    def load_to_object(self, data: Dict[str, Any], **kwargs):
+        icc_profile = self.context.get("icc_profile", None)
+        if icc_profile is not None:
+            if isinstance(icc_profile, bytes):
+                data["icc_profile"] = icc_profile
+            elif isinstance(icc_profile, dict):
+                identifier = data.get("identifier", None)
+                if identifier in icc_profile:
+                    data["icc_profile"] = icc_profile[identifier]
         return OpticalPath(**data)

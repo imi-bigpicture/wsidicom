@@ -414,9 +414,12 @@ class TestJsonSchema:
             },
         }
         dumped["illumination"] = illumination
+        icc_profile = bytes([0x00, 0x01, 0x02, 0x03])
 
         # Act
-        loaded = OpticalPathJsonSchema().load(dumped)
+        loaded = OpticalPathJsonSchema(context={"icc_profile": icc_profile}).load(
+            dumped
+        )
 
         # Assert
         assert isinstance(loaded, OpticalPath)
@@ -481,6 +484,7 @@ class TestJsonSchema:
             loaded.objective.objective_numerical_aperature
             == dumped["objective"]["objective_numerical_aperature"]
         )
+        assert loaded.icc_profile == icc_profile
 
     def test_patient_serialize(self, patient: Patient):
         # Arrange

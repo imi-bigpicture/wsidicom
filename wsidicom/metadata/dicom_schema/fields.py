@@ -37,6 +37,13 @@ class StringDicomField(StringLikeDicomField):
     pass
 
 
+class EnumDicomField(fields.Enum):
+    def _deserialize(self, value, attr, data, **kwargs):
+        if value == "":
+            return None
+        return super()._deserialize(value, attr, data, **kwargs)
+
+
 class DateTimeDicomField(StringLikeDicomField):
     def _serialize(
         self,

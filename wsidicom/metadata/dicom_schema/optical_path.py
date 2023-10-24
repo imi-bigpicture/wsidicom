@@ -596,7 +596,7 @@ class OpticalPathDicomSchema(DicomSchema[OpticalPath]):
         load_default=None,
     )
 
-    # icc_profile: Optional[bytes] = None
+    icc_profile = fields.Raw(data_key="ICCProfile", load_default=None)
     lut = LutDicomField(data_key="PaletteColorLookupTableSequence", load_default=None)
     light_path_filter = FlatteningNestedField(
         LightPathFilterDicomSchema(), load_default=None
@@ -620,6 +620,7 @@ class OpticalPathDicomSchema(DicomSchema[OpticalPath]):
             "image_path_filter": optical_path.image_path_filter,
             "objective": optical_path.objective,
             "lut": optical_path.lut,
+            "icc_profile": optical_path.icc_profile,
         }
 
         if isinstance(optical_path.illumination, float):
