@@ -269,11 +269,14 @@ class TypeDicomField(fields.Field, Generic[ValueType]):
         return self._nested._serialize(value, attr, obj, **kwargs)
 
     def _deserialize(self, value: Any, attr, data, **kwargs):
-        print("deserialize", attr, value)
         try:
-            return self._nested._deserialize(value, attr, data, **kwargs)
+            de_serialized = self._nested._deserialize(value, attr, data, **kwargs)
         except ValidationError:
             return None
+        # By default pydicom return empty string for empty string-VR values.
+        if de_serialized == "":
+            return None
+        return de_serialized
 
 
 class DefaultingDicomField(TypeDicomField[ValueType]):

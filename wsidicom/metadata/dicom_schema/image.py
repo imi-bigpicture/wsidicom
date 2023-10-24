@@ -60,6 +60,8 @@ class ImageDicomSchema(DicomSchema[Image]):
     image_coordinate_system
     """
 
+    # TODO pixel_spacing, focal_plane_spacing, and depth_of_field
+
     acquisition_datetime = DefaultingDicomField(
         DateTimeDicomField(),
         data_key="AcquisitionDateTime",

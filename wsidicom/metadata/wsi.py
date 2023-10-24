@@ -13,9 +13,9 @@
 #    limitations under the License.
 
 """Complete WSI model."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 from pydicom.uid import UID, generate_uid
 
@@ -36,12 +36,12 @@ class WsiMetadata:
     series: Series
     patient: Patient
     equipment: Equipment
-    optical_paths: List[OpticalPath]
+    optical_paths: Sequence[OpticalPath]
     slide: Slide
     label: Label
     image: Image
     frame_of_reference_uid: Optional[UID] = None
-    dimension_organization_uids: Sequence[UID] = field(default_factory=lambda: list())
+    dimension_organization_uids: Optional[Sequence[UID]] = None
 
     @cached_property
     def default_frame_of_reference_uid(self) -> UID:

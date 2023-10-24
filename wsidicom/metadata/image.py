@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from wsidicom.geometry import Orientation, PointMm
+from wsidicom.geometry import Orientation, PointMm, SizeMm
 
 
 class FocusMethod(Enum):
@@ -59,3 +59,6 @@ class Image:
     focus_method: Optional[FocusMethod] = None
     extended_depth_of_field: Optional[ExtendedDepthOfField] = None
     image_coordinate_system: Optional[ImageCoordinateSystem] = None
+    pixel_spacing: Optional[SizeMm] = None
+    focal_plane_spacing: Optional[float] = None
+    depth_of_field: Optional[float] = None

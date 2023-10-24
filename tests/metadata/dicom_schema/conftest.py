@@ -245,12 +245,12 @@ def dicom_wsi_metadata(
     dataset.update(dicom_patient)
     dataset.OpticalPathSequence = [dicom_optical_path]
     dimension_organization_sequence = list()
-    for uid in wsi_metadata.dimension_organization_uids:
+    for uid in wsi_metadata.default_dimension_organization_uids:
         dimension_organization = Dataset()
         dimension_organization.DimensionOrganizationUID = uid
         dimension_organization_sequence.append(dimension_organization)
     dataset.DimensionOrganizationSequence = dimension_organization_sequence
-    dataset.FrameOfReferenceUID = wsi_metadata.frame_of_reference_uid
+    dataset.FrameOfReferenceUID = wsi_metadata.default_frame_of_reference_uid
     yield dataset
 
 
@@ -277,6 +277,21 @@ def extended_depth_of_field():
 @pytest.fixture()
 def image_coordinate_system():
     yield ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0)
+
+
+@pytest.fixture()
+def pixel_spacing():
+    yield None
+
+
+@pytest.fixture()
+def focal_plane_spacing():
+    yield None
+
+
+@pytest.fixture()
+def depth_of_field():
+    yield None
 
 
 @pytest.fixture()

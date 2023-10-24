@@ -160,7 +160,6 @@ def create_description(
             specimen_type.code,
         ),
     )
-    print("sampling to block", block_id, specimen_id)
     embedding = SpecimenPreparationStep(
         block_id,
         SpecimenProcessing("Embedding"),

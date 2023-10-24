@@ -65,16 +65,16 @@ class PatientDicomSchema(DicomSchema[Patient]):
     """
 
     name = NoneDicomField(
-        PatientNameDicomField(), data_key="PatientName", load_default=True
+        PatientNameDicomField(), data_key="PatientName", load_default=None
     )
     identifier = NoneDicomField(
-        fields.String(), data_key="PatientID", load_default=True
+        fields.String(), data_key="PatientID", load_default=None
     )
     birth_date = NoneDicomField(
-        DateDicomField(), data_key="PatientBirthDate", load_default=True
+        DateDicomField(), data_key="PatientBirthDate", load_default=None
     )
     sex = NoneDicomField(
-        fields.Enum(PatientSex), data_key="PatientSex", load_default=True
+        fields.Enum(PatientSex), data_key="PatientSex", load_default=None
     )
     species_description_string = fields.String(
         data_key="PatientSpeciesDescription", allow_none=True
