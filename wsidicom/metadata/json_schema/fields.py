@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import dataclasses
+from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Type, Union
 
 from marshmallow import ValidationError, fields
@@ -339,3 +340,21 @@ class NpUIntDTypeField(fields.Field):
         if value == 16:
             return np.uint16
         raise NotImplementedError(f"Not-implemented bit count {value}.")
+
+
+class FileLoadingField(fields.Field):
+    def _serialize(self, value: bytes, attr: Optional[str], obj: Any, **kwargs):
+        raise NotImplementedError("Dumping bytes to file not implemented.")
+
+    def _deserialize(
+        self,
+        value: str,
+        attr: Optional[str],
+        data: Optional[Mapping[str, Any]],
+        **kwargs,
+    ):
+        path = Path(value)
+        if not path.exists() or not path.is_file():
+            raise ValidationError(f"File {path} does not exist or is not a file.")
+        with open(path, "rb") as file:
+            return file.read()

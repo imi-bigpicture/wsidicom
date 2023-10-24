@@ -1,4 +1,6 @@
+from tempfile import tempdir
 import pytest
+from pathlib import Path
 
 
 @pytest.fixture()
@@ -173,3 +175,12 @@ def json_slide():
             },
         ],
     }
+
+
+@pytest.fixture
+def icc_file(icc_profile: bytes, tmp_path: Path):
+    icc_filename = "test.icc"
+    icc_filepath = tmp_path.joinpath(icc_filename)
+    with open(tmp_path.joinpath(icc_filepath), "wb") as file:
+        file.write(icc_profile)
+    yield icc_filepath
