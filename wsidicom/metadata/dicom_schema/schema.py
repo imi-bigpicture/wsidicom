@@ -4,7 +4,7 @@ from marshmallow import Schema, post_dump, pre_load, post_load
 from pydicom import Dataset
 
 
-from wsidicom.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.dicom_schema.fields import (
     FlatteningNestedField,
 )
 

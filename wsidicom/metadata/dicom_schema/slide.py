@@ -1,15 +1,15 @@
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, Type
 
-from highdicom import SpecimenStaining
-from marshmallow import fields, post_dump, post_load, pre_dump, pre_load
+from marshmallow import fields, post_dump, pre_dump, pre_load
 from pydicom import Dataset
 from wsidicom.conceptcode import ContainerTypeCode
 
 from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
-from wsidicom.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.fields import (
     DefaultingDicomField,
     SingleCodeDicomField,
+    StringDicomField,
 )
 from wsidicom.metadata.dicom_schema.sample import SlideSampleDicom
 from wsidicom.metadata.slide import Slide
@@ -24,7 +24,7 @@ class SlideDicomSchema(DicomSchema[Slide]):
     """
 
     identifier = DefaultingDicomField(
-        fields.String(),
+        StringDicomField(),
         dump_default=Defaults.string,
         data_key="ContainerIdentifier",
         allow_none=True,

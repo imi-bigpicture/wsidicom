@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Any, Dict, Type
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
-from wsidicom.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.fields import (
     BooleanDicomField,
     CodeDicomField,
     DateDicomField,
@@ -9,7 +9,7 @@ from wsidicom.metadata.dicom_schema.dicom_fields import (
     ListDicomField,
     PatientNameDicomField,
     SingleCodeDicomField,
-    NoneDicomField,
+    StringDicomField,
 )
 from marshmallow import fields, pre_dump, post_load
 from pydicom.sr.coding import Code
@@ -64,19 +64,11 @@ class PatientDicomSchema(DicomSchema[Patient]):
     - identity_removed
     """
 
-    name = NoneDicomField(
-        PatientNameDicomField(), data_key="PatientName", load_default=None
-    )
-    identifier = NoneDicomField(
-        fields.String(), data_key="PatientID", load_default=None
-    )
-    birth_date = NoneDicomField(
-        DateDicomField(), data_key="PatientBirthDate", load_default=None
-    )
-    sex = NoneDicomField(
-        fields.Enum(PatientSex), data_key="PatientSex", load_default=None
-    )
-    species_description_string = fields.String(
+    name = PatientNameDicomField(data_key="PatientName", load_default=None)
+    identifier = StringDicomField(data_key="PatientID", load_default=None)
+    birth_date = DateDicomField(data_key="PatientBirthDate", load_default=None)
+    sex = fields.Enum(PatientSex, data_key="PatientSex", load_default=None)
+    species_description_string = StringDicomField(
         data_key="PatientSpeciesDescription", allow_none=True
     )
     species_description_code = SingleCodeDicomField(

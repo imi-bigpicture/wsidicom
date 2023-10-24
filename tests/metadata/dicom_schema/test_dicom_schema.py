@@ -18,7 +18,6 @@ from tests.metadata.helpers import (
     assert_dicom_code_dataset_equals_code,
     assert_dicom_code_sequence_equals_codes,
     bool_to_dicom_literal,
-    code_to_code_dataset,
 )
 from wsidicom.metadata import (
     Equipment,

@@ -3,8 +3,8 @@ from typing import Type
 import marshmallow
 from marshmallow import pre_load
 from pydicom import Dataset
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
-from wsidicom.metadata.dicom_schema.dicom_fields import FlatteningNestedField
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.fields import FlatteningNestedField
 
 
 class PropertySchema(DicomSchema):

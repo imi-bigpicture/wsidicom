@@ -1,7 +1,7 @@
 from typing import Any, Dict, Type
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
 from marshmallow import fields, post_load, pre_dump
-from wsidicom.metadata.dicom_schema.dicom_fields import BooleanDicomField
+from wsidicom.metadata.dicom_schema.fields import BooleanDicomField, StringDicomField
 
 from wsidicom.metadata.label import Label
 from wsidicom.instance import ImageType
@@ -18,14 +18,14 @@ class LabelDicomSchema(DicomSchema[Label]):
     barcode (if label type)
     """
 
-    text = fields.String(data_key="LabelText", allow_none=True)
-    barcode = fields.String(data_key="BarcodeValue", allow_none=True)
+    text = StringDicomField(data_key="LabelText", allow_none=True)
+    barcode = StringDicomField(data_key="BarcodeValue", allow_none=True)
     label_in_volume_image = BooleanDicomField(load_only=True, allow_none=True)
     label_in_overview_image = BooleanDicomField(load_only=True, allow_none=True)
     label_is_phi = BooleanDicomField(load_only=True, allow_none=True)
     burned_in_annotation = BooleanDicomField(data_key="BurnedInAnnotation")
     specimen_label_in_image = BooleanDicomField(data_key="SpecimenLabelInImage")
-    image_type = fields.List(fields.String(), load_only=True, data_key="ImageType")
+    image_type = fields.List(StringDicomField(), load_only=True, data_key="ImageType")
 
     @property
     def load_type(self) -> Type[Label]:
