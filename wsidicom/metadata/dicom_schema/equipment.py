@@ -1,13 +1,12 @@
 from typing import Type
 
-from marshmallow import fields
-
 from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.dicom_schema.fields import (
     DefaultingDicomField,
     ListDicomField,
+    StringDicomField,
 )
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
 from wsidicom.metadata.equipment import Equipment
 
 
@@ -21,25 +20,25 @@ class EquipmentDicomSchema(DicomSchema[Equipment]):
     """
 
     manufacturer = DefaultingDicomField(
-        fields.String(),
+        StringDicomField(),
         dump_default=Defaults.string,
         load_default=None,
         data_key="Manufacturer",
     )
     model_name = DefaultingDicomField(
-        fields.String(),
+        StringDicomField(),
         dump_default=Defaults.string,
         load_default=None,
         data_key="ManufacturerModelName",
     )
     device_serial_number = DefaultingDicomField(
-        fields.String(),
+        StringDicomField(),
         dump_default=Defaults.string,
         load_default=None,
         data_key="DeviceSerialNumber",
     )
     software_versions = DefaultingDicomField(
-        ListDicomField(fields.String()),
+        ListDicomField(StringDicomField()),
         dump_default=[Defaults.string],
         load_default=None,
         data_key="SoftwareVersions",

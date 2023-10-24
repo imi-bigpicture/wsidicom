@@ -1,10 +1,9 @@
 from typing import Any, Dict, Type
 
-from pydicom import Dataset
 from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
-from marshmallow import fields, post_dump, post_load, pre_dump
-from wsidicom.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from marshmallow import fields, post_load, pre_dump
+from wsidicom.metadata.dicom_schema.fields import (
     BooleanDicomField,
     DateTimeDicomField,
     DefaultingDicomField,
@@ -104,7 +103,7 @@ class ImageDicomSchema(DicomSchema[Image]):
     def post_load(self, data: Dict[str, Any], **kwargs):
         extended_depth_of_field_bool = data.pop("extended_depth_of_field_bool")
         extended_depth_of_field = data.get("extended_depth_of_field", None)
-        if (extended_depth_of_field_bool) != (extended_depth_of_field != None):
+        if (extended_depth_of_field_bool) != (extended_depth_of_field is not None):
             raise ValueError(
                 (
                     f"Extended depth of field bool {extended_depth_of_field_bool} did ",

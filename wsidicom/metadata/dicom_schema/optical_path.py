@@ -25,13 +25,14 @@ from wsidicom.conceptcode import (
 )
 
 from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema, LoadType
-from wsidicom.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.dicom_schema.schema import DicomSchema, LoadType
+from wsidicom.metadata.dicom_schema.fields import (
     CodeDicomField,
     DefaultingDicomField,
     FlatteningNestedField,
     FloatDicomField,
     SingleCodeDicomField,
+    StringDicomField,
 )
 from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
@@ -579,8 +580,8 @@ class ObjectivesSchema(DicomSchema[Objectives]):
 
 
 class OpticalPathDicomSchema(DicomSchema[OpticalPath]):
-    identifier = fields.String(data_key="OpticalPathIdentifier", load_default=None)
-    description = fields.String(data_key="OpticalPathDescription", load_default=None)
+    identifier = StringDicomField(data_key="OpticalPathIdentifier", load_default=None)
+    description = StringDicomField(data_key="OpticalPathDescription", load_default=None)
     illumination_types = DefaultingDicomField(
         fields.List(CodeDicomField(IlluminationCode)),
         data_key="IlluminationTypeCodeSequence",

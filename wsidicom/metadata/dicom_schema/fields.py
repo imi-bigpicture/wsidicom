@@ -14,7 +14,7 @@ from typing import (
 )
 
 from marshmallow.utils import missing
-from marshmallow import Schema, ValidationError, fields
+from marshmallow import Schema, fields
 from marshmallow.fields import Field
 from pydicom import DataElement, Dataset
 from pydicom.multival import MultiValue
@@ -24,7 +24,20 @@ from wsidicom.conceptcode import ConceptCode
 from wsidicom.geometry import Orientation, PointMm
 
 
-class DateTimeDicomField(fields.Field):
+class StringLikeDicomField(fields.Field):
+    def _deserialize(self, value, attr, data, **kwargs) -> Any:
+        """By default pydicom returns empty string for empty string-like elements."""
+        deserialized = super()._deserialize(value, attr, data, **kwargs)
+        if deserialized == "":
+            return None
+        return deserialized
+
+
+class StringDicomField(StringLikeDicomField):
+    pass
+
+
+class DateTimeDicomField(StringLikeDicomField):
     def _serialize(
         self,
         value: Optional[datetime.datetime],
@@ -37,7 +50,7 @@ class DateTimeDicomField(fields.Field):
         return DT(value)
 
 
-class DateDicomField(fields.Field):
+class DateDicomField(StringLikeDicomField):
     def _serialize(
         self, value: Optional[datetime.date], attr: Optional[str], obj: Any, **kwargs
     ):
@@ -46,7 +59,7 @@ class DateDicomField(fields.Field):
         return DA(value)
 
 
-class TimeDicomField(fields.Field):
+class TimeDicomField(StringLikeDicomField):
     def _serialize(
         self, value: Optional[datetime.time], attr: Optional[str], obj: Any, **kwargs
     ):
@@ -65,6 +78,12 @@ class BooleanDicomField(fields.Boolean):
         else:
             string_value = self.falsy
         return list(string_value)[0]
+
+    def _deserialize(self, value, attr, data, **kwargs) -> Any:
+        deserialized = super()._deserialize(value, attr, data, **kwargs)
+        if deserialized == "":
+            return None
+        return deserialized
 
 
 class OffsetInSlideCoordinateSystemField(fields.Field):
@@ -254,6 +273,9 @@ class PatientNameDicomField(fields.String):
     def _deserialize(self, value: PersonName, attr, data, **kwargs) -> Any:
         return str(value)
 
+    def _serialize(self, value: str, attr, obj, **kwargs) -> PersonName:
+        return PersonName(value)
+
 
 ValueType = TypeVar("ValueType")
 
@@ -269,18 +291,13 @@ class TypeDicomField(fields.Field, Generic[ValueType]):
         return self._nested._serialize(value, attr, obj, **kwargs)
 
     def _deserialize(self, value: Any, attr, data, **kwargs):
-        try:
-            de_serialized = self._nested._deserialize(value, attr, data, **kwargs)
-        except ValidationError:
-            return None
-        # By default pydicom return empty string for empty string-VR values.
-        if de_serialized == "":
-            return None
+        de_serialized = self._nested._deserialize(value, attr, data, **kwargs)
         return de_serialized
 
 
 class DefaultingDicomField(TypeDicomField[ValueType]):
-    """Wrapper around a field that should always be present and have a value."""
+    """Wrapper around a field that should always be present and have a value. Default
+    value is constant."""
 
     def __init__(self, nested: Field, dump_default: ValueType, **kwargs):
         self._dump_default = dump_default
@@ -308,34 +325,3 @@ class DefaultingTagDicomField(TypeDicomField[ValueType]):
         if value is None:
             value = getattr(obj, self._tag)
         return super()._serialize(value, attr, obj, **kwargs)
-
-
-class NoneDicomField(TypeDicomField):
-    """Wrapper around a field that should always be present but can be empty."""
-
-
-class NotNoneDicomField(TypeDicomField[ValueType]):
-    """Wrapper around a field that does not always need be present."""
-
-    def _serialize(
-        self, value: Optional[ValueType], attr: Optional[str], obj: Any, **kwargs
-    ):
-        if value is None:
-            raise ValueError("Should not serialize a Type3 field with no value")
-        return super()._serialize(value, attr, obj, **kwargs)
-
-
-class SingleItemSequenceDicomField(fields.Field, Generic[ValueType]):
-    def __init__(self, nested: Field, **kwargs):
-        self._nested = nested
-        super().__init__(**kwargs)
-
-    def _serialize(
-        self, value: Optional[ValueType], attr: Optional[str], obj: Any, **kwargs
-    ):
-        nested_value = self._nested._serialize(value, attr, obj, **kwargs)
-        return [nested_value]
-
-    def _deserialize(self, value: Sequence[Dataset], attr, data, **kwargs):
-        nested_value = value[0]
-        return self._nested._deserialize(nested_value, attr, data, **kwargs)

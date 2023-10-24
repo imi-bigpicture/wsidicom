@@ -5,8 +5,8 @@ from pydicom import Dataset
 from pydicom.uid import VLWholeSlideMicroscopyImageStorage
 from wsidicom.instance.dataset import ImageType
 
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
-from wsidicom.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.fields import (
     DefaultingTagDicomField,
     FlatteningNestedField,
     UidDicomField,
@@ -31,9 +31,9 @@ from wsidicom.metadata.wsi import WsiMetadata
 
 from pydicom import config
 
-# TODO read empty text vr as null wihtout pydicom config
-# As the config might be changed by user
-config.use_none_as_empty_text_VR_value = True
+# # TODO read empty text vr as null wihtout pydicom config
+# # As the config might be changed by user
+# config.use_none_as_empty_text_VR_value = True
 
 
 class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):

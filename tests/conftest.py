@@ -17,7 +17,6 @@ import os
 from enum import Enum
 from io import BufferedReader
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Dict, Iterable, List, Tuple
 
 import pytest

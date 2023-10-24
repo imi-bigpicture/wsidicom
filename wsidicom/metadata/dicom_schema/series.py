@@ -1,6 +1,6 @@
 from typing import Type
-from wsidicom.metadata.dicom_schema.dicom_schema import DicomSchema
-from wsidicom.metadata.dicom_schema.dicom_fields import (
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.fields import (
     DefaultingDicomField,
     DefaultingTagDicomField,
     UidDicomField,
