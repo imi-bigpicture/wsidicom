@@ -19,7 +19,7 @@ import pytest
 from pydicom.uid import UID
 from wsidicom.conceptcode import Code, IlluminationColorCode
 from wsidicom.geometry import PointMm, SizeMm
-from tests.metadata.helpers import assert_dict_equals_code
+from tests.metadata.helpers import assert_dict_equals_code, assert_lut_is_equal
 
 from wsidicom.metadata import (
     Equipment,
@@ -293,6 +293,7 @@ class TestJsonSchema:
         assert optical_path.light_path_filter is not None
         assert optical_path.image_path_filter is not None
         assert optical_path.objective is not None
+        assert optical_path.lut is not None
         assert dumped["identifier"] == optical_path.identifier
         assert dumped["description"] == optical_path.description
         assert len(dumped["illumination_types"]) == len(optical_path.illumination_types)
@@ -353,6 +354,8 @@ class TestJsonSchema:
             dumped["objective"]["objective_numerical_aperature"]
             == optical_path.objective.objective_numerical_aperature
         )
+        if optical_path.lut is not None:
+            assert_lut_is_equal(dumped["lut"], optical_path.lut)
 
     @pytest.mark.parametrize(
         "illumination",
@@ -412,6 +415,12 @@ class TestJsonSchema:
                 "objective_power": 20.0,
                 "objective_numerical_aperature": 0.5,
             },
+            "lut": {
+                "bits": 16,
+                "red": [{"value": 0, "length": 256}],
+                "green": [{"value": 0, "length": 256}],
+                "blue": [{"start_value": 0, "end_value": 255, "length": 256}],
+            },
         }
         dumped["illumination"] = illumination
         icc_profile = bytes([0x00, 0x01, 0x02, 0x03])
@@ -427,6 +436,7 @@ class TestJsonSchema:
         assert loaded.light_path_filter is not None
         assert loaded.image_path_filter is not None
         assert loaded.objective is not None
+        assert loaded.lut is not None
         assert loaded.identifier == dumped["identifier"]
         assert loaded.description == dumped["description"]
         assert len(loaded.illumination_types) == len(dumped["illumination_types"])
@@ -485,6 +495,7 @@ class TestJsonSchema:
             == dumped["objective"]["objective_numerical_aperature"]
         )
         assert loaded.icc_profile == icc_profile
+        assert_lut_is_equal(dumped["lut"], loaded.lut)
 
     def test_patient_serialize(self, patient: Patient):
         # Arrange

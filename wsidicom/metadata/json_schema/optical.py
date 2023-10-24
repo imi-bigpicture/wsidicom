@@ -12,7 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict
+import dataclasses
+from typing import Any, Dict, Iterable, Mapping, Type, Union
 from marshmallow import Schema, fields, post_load
 from wsidicom.conceptcode import (
     ImagePathFilterCode,
@@ -22,13 +23,117 @@ from wsidicom.conceptcode import (
     IlluminationColorCode,
 )
 from wsidicom.metadata.optical_path import (
+    ConstantLutSegment,
+    DiscreteLutSegment,
     ImagePathFilter,
+    LinearLutSegment,
+    Lut,
+    LutSegment,
     Objectives,
     LightPathFilter,
     OpticalPath,
 )
 
-from wsidicom.metadata.json_schema.fields import JsonFieldFactory
+from wsidicom.metadata.json_schema.fields import JsonFieldFactory, NpUIntDTypeField
+
+
+class BaseLutSegmentJsonSchema(Schema):
+    _load_class: Type[Union[LinearLutSegment, ConstantLutSegment, DiscreteLutSegment]]
+
+    @post_load
+    def post_load(self, data: Dict[str, Any], **kwargs) -> LutSegment:
+        """Return a object of given load class using the defined dataclass fields."""
+        return self._load_class(
+            **{
+                field.name: data[field.name]
+                for field in dataclasses.fields(self._load_class)
+                if field.name in data
+            }
+        )
+
+
+class DiscreteLutSegmentJsonSchema(BaseLutSegmentJsonSchema):
+    values = fields.List(fields.Integer())
+    _load_class = DiscreteLutSegment
+
+
+class LinearLutSegmentJsonSchema(BaseLutSegmentJsonSchema):
+    start_value = fields.Integer()
+    end_value = fields.Integer()
+    length = fields.Integer()
+    _load_class = LinearLutSegment
+
+
+class ConstantLutSegmentJsonSchema(BaseLutSegmentJsonSchema):
+    value = fields.Integer()
+    length = fields.Integer()
+    _load_class = ConstantLutSegment
+
+
+class LutSegmentJsonSchema(Schema):
+    """Mapping segment type to schema."""
+
+    _type_to_schema_mapping: Dict[Type[LutSegment], Type[Schema]] = {
+        DiscreteLutSegment: DiscreteLutSegmentJsonSchema,
+        LinearLutSegment: LinearLutSegmentJsonSchema,
+        ConstantLutSegment: ConstantLutSegmentJsonSchema,
+    }
+
+    """Mapping key in serialized segment to schema."""
+    _key_to_schema_mapping: Dict[str, Type[Schema]] = {
+        "values": DiscreteLutSegmentJsonSchema,
+        "start_value": LinearLutSegmentJsonSchema,
+        "value": ConstantLutSegmentJsonSchema,
+    }
+
+    def dump(
+        self,
+        data: Union[LutSegment, Iterable[LutSegment]],
+        **kwargs,
+    ):
+        if isinstance(data, LutSegment):
+            return self._subschema_dump(data)
+        return [self._subschema_dump(item) for item in data]
+
+    def load(
+        self,
+        data: Union[Mapping[str, Any], Iterable[Mapping[str, Any]]],
+        **kwargs,
+    ):
+        if isinstance(data, Mapping):
+            return self._subschema_load(data)
+        return [self._subschema_load(step) for step in data]
+
+    def _subschema_load(self, segment: Mapping) -> LutSegment:
+        """Select a schema and load and return step using the schema."""
+        try:
+            schema = next(
+                schema
+                for key, schema in self._key_to_schema_mapping.items()
+                if key in segment
+            )
+        except StopIteration:
+            raise NotImplementedError()
+        loaded = schema().load(segment, many=False)
+        print(loaded, type(loaded))
+        assert isinstance(loaded, LutSegment)
+        return loaded
+
+    def _subschema_dump(self, segment: LutSegment):
+        """Select a schema and dump the step using the schema."""
+        schema = self._type_to_schema_mapping[type(segment)]
+        return schema().dump(segment, many=False)
+
+
+class LutJsonSchema(Schema):
+    red = fields.List(fields.Nested(LutSegmentJsonSchema()))
+    green = fields.List(fields.Nested(LutSegmentJsonSchema()))
+    blue = fields.List(fields.Nested(LutSegmentJsonSchema()))
+    data_type = NpUIntDTypeField(data_key="bits")
+
+    @post_load
+    def load_to_object(self, data, **kwargs):
+        return Lut(**data)
 
 
 class LightPathFilterJsonSchema(Schema):
@@ -77,7 +182,7 @@ class OpticalPathJsonSchema(Schema):
     illumination = JsonFieldFactory.float_or_concept_code(IlluminationColorCode)(
         allow_none=True
     )
-    # lut: Optional[Lut] = None
+    lut = fields.Nested(LutJsonSchema(), allow_none=True)
     light_path_filter = fields.Nested(LightPathFilterJsonSchema(), allow_none=True)
     image_path_filter = fields.Nested(ImagePathFilterJsonSchema(), allow_none=True)
     objective = fields.Nested(ObjectivesJsonSchema(), allow_none=True)

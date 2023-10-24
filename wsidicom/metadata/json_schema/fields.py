@@ -16,10 +16,12 @@ import dataclasses
 from typing import Any, Dict, Mapping, Optional, Type, Union
 
 from marshmallow import ValidationError, fields
+import numpy as np
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
 from wsidicom.conceptcode import CidConceptCode, CidConceptCodeType
 from wsidicom.geometry import PointMm, SizeMm
+from wsidicom.metadata.optical_path import LutDataType
 
 from wsidicom.metadata.sample import (
     SlideSamplePosition,
@@ -317,3 +319,23 @@ class JsonFieldFactory:
 
         except Exception as exception:
             raise ValueError(f"Failed to serialize code {code}") from exception
+
+
+class NpUIntDTypeField(fields.Field):
+    def _serialize(
+        self, value: LutDataType, attr: Optional[str], obj: Any, **kwargs
+    ) -> int:
+        return 8 * value().itemsize
+
+    def _deserialize(
+        self,
+        value: int,
+        attr: Optional[str],
+        data: Optional[Mapping[str, Any]],
+        **kwargs,
+    ) -> LutDataType:
+        if value == 8:
+            return np.uint8
+        if value == 16:
+            return np.uint16
+        raise NotImplementedError(f"Not-implemented bit count {value}.")
