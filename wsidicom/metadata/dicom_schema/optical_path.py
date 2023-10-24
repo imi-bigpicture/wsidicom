@@ -620,7 +620,6 @@ class OpticalPathDicomSchema(DicomSchema[OpticalPath]):
             "image_path_filter": optical_path.image_path_filter,
             "objective": optical_path.objective,
             "lut": optical_path.lut,
-            # "icc_profile": optical_path.icc_profile,
         }
         if optical_path.icc_profile is not None:
             fields["icc_profile"] = optical_path.icc_profile

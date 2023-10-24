@@ -34,7 +34,11 @@ from wsidicom.metadata.optical_path import (
     OpticalPath,
 )
 
-from wsidicom.metadata.json_schema.fields import JsonFieldFactory, NpUIntDTypeField
+from wsidicom.metadata.json_schema.fields import (
+    FileLoadingField,
+    JsonFieldFactory,
+    NpUIntDTypeField,
+)
 
 
 class BaseLutSegmentJsonSchema(Schema):
@@ -183,6 +187,7 @@ class OpticalPathJsonSchema(Schema):
         allow_none=True
     )
     lut = fields.Nested(LutJsonSchema(), allow_none=True)
+    icc_profile = FileLoadingField(load_only=True, load_default=None)
     light_path_filter = fields.Nested(LightPathFilterJsonSchema(), allow_none=True)
     image_path_filter = fields.Nested(ImagePathFilterJsonSchema(), allow_none=True)
     objective = fields.Nested(ObjectivesJsonSchema(), allow_none=True)

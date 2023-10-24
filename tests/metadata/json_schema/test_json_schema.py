@@ -12,15 +12,16 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from datetime import datetime, date, time
+from datetime import date, datetime, time
+from pathlib import Path
 from typing import Dict, Optional, Sequence, Union
 
 import pytest
 from pydicom.uid import UID
+
+from tests.metadata.helpers import assert_dict_equals_code, assert_lut_is_equal
 from wsidicom.conceptcode import Code, IlluminationColorCode
 from wsidicom.geometry import PointMm, SizeMm
-from tests.metadata.helpers import assert_dict_equals_code, assert_lut_is_equal
-
 from wsidicom.metadata import (
     Equipment,
     ExtendedDepthOfField,
@@ -368,7 +369,12 @@ class TestJsonSchema:
             400.0,
         ],
     )
-    def test_optical_path_deserialize(self, illumination: Union[Dict[str, str], float]):
+    def test_optical_path_deserialize(
+        self,
+        illumination: Union[Dict[str, str], float],
+        icc_profile: bytes,
+        icc_file: Path,
+    ):
         dumped = {
             "identifier": "identifier",
             "description": "description",
@@ -421,14 +427,12 @@ class TestJsonSchema:
                 "green": [{"value": 0, "length": 256}],
                 "blue": [{"start_value": 0, "end_value": 255, "length": 256}],
             },
+            "icc_profile": str(icc_file),
         }
         dumped["illumination"] = illumination
-        icc_profile = bytes([0x00, 0x01, 0x02, 0x03])
 
         # Act
-        loaded = OpticalPathJsonSchema(context={"icc_profile": icc_profile}).load(
-            dumped
-        )
+        loaded = OpticalPathJsonSchema().load(dumped)
 
         # Assert
         assert isinstance(loaded, OpticalPath)
@@ -496,6 +500,7 @@ class TestJsonSchema:
         )
         assert loaded.icc_profile == icc_profile
         assert_lut_is_equal(dumped["lut"], loaded.lut)
+        assert loaded.icc_profile == icc_profile
 
     def test_patient_serialize(self, patient: Patient):
         # Arrange
