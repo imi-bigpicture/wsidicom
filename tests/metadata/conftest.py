@@ -168,19 +168,25 @@ def lut():
 
 
 @pytest.fixture()
+def icc_profile():
+    yield bytes([0x00, 0x01, 0x02, 0x03])
+
+
+@pytest.fixture()
 def optical_path(
     illumination: Union[IlluminationColorCode, float],
     light_path_filter: LightPathFilter,
     image_path_filter: ImagePathFilter,
     objectives: Objectives,
     lut: Lut,
+    icc_profile: bytes,
 ):
     yield OpticalPath(
         "identifier",
         "description",
         [IlluminationCode("Brightfield illumination")],
         illumination,
-        None,
+        icc_profile,
         lut,
         light_path_filter,
         image_path_filter,

@@ -316,6 +316,7 @@ class TestDicomSchema:
         assert "ImagePathFilterTypeStackCodeSequence" not in serialized
         assert "ImagePathFilterPassThroughWavelength" not in serialized
         assert "ImagePathFilterPassBand" not in serialized
+        assert "ICCProfile" not in serialized
 
     @pytest.mark.parametrize(
         "illumination", [IlluminationColorCode("Full Spectrum"), 400.0, None]
@@ -793,6 +794,10 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.PaletteColorLookupTableSequence
         )
         assert parsed_lut == optical_path.lut
+    if optical_path.icc_profile is not None:
+        assert "ICCProfile" in dicom_optical_path
+        assert isinstance(dicom_optical_path.ICCProfile, bytes)
+        assert dicom_optical_path.ICCProfile == optical_path.icc_profile
 
 
 def assert_dicom_patient_equals_patient(dicom_patient: Dataset, patient: Patient):

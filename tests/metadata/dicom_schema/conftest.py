@@ -159,6 +159,8 @@ def dicom_optical_path(optical_path: OpticalPath):
         dataset.PaletteColorLookupTableSequence = LutDicomFormatter.to_dataset(
             optical_path.lut
         )
+    if optical_path.icc_profile is not None:
+        dataset.ICCProfile = optical_path.icc_profile
 
     yield dataset
 
