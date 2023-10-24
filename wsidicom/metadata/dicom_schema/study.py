@@ -27,7 +27,7 @@ class StudyDicomSchema(DicomSchema[Study]):
     """
 
     uid = DefaultingTagDicomField(
-        UidDicomField(), tag="_uid", data_key="StudyInstanceUID", allow_none=True
+        UidDicomField(), tag="default_uid", data_key="StudyInstanceUID", allow_none=True
     )
     identifier = fields.String(data_key="StudyID", allow_none=True)
     date = DateDicomField(data_key="StudyDate", allow_none=True)

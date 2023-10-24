@@ -4,14 +4,12 @@ import struct
 from typing import (
     Any,
     Dict,
-    Iterable,
     Iterator,
     List,
     Optional,
     Sequence,
     Tuple,
     Type,
-    Union,
 )
 
 import numpy as np
@@ -151,7 +149,7 @@ class LutDicomParser:
         with io.BytesIO(segmented_lut_data) as buffer:
             data_type = cls._determine_correct_data_type(buffer, data_type)
             next_segment_type = cls._read_next_segment_type(buffer, data_type)
-            while next_segment_type != None:
+            while next_segment_type is not None:
                 segment_type = next_segment_type
                 if segment_type == LutSegmentType.DISCRETE:
                     length = cls._read_value(buffer, data_type)
@@ -500,7 +498,7 @@ class LutDicomField(fields.Field):
         data: Optional[Dict[str, Any]],
         **kwargs,
     ) -> Optional[Lut]:
-        if value is None:
+        if value is None or len(value) == 0:
             return None
         return LutDicomParser.from_dataset(value)
 
@@ -581,8 +579,8 @@ class ObjectivesSchema(DicomSchema[Objectives]):
 
 
 class OpticalPathDicomSchema(DicomSchema[OpticalPath]):
-    identifier = fields.String(data_key="OpticalPathIdentifier")
-    description = fields.String(data_key="OpticalPathDescription", allow_none=True)
+    identifier = fields.String(data_key="OpticalPathIdentifier", load_default=None)
+    description = fields.String(data_key="OpticalPathDescription", load_default=None)
     illumination_types = DefaultingDicomField(
         fields.List(CodeDicomField(IlluminationCode)),
         data_key="IlluminationTypeCodeSequence",

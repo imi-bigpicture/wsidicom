@@ -29,6 +29,12 @@ from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study
 from wsidicom.metadata.wsi import WsiMetadata
 
+from pydicom import config
+
+# TODO read empty text vr as null wihtout pydicom config
+# As the config might be changed by user
+config.use_none_as_empty_text_VR_value = True
+
 
 class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
     study = FlatteningNestedField(

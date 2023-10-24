@@ -39,7 +39,7 @@ class Study:
     referring_physician_name: Optional[str] = None
 
     @cached_property
-    def _uid(self) -> UID:
+    def default_uid(self) -> UID:
         if self.uid is not None:
             return self.uid
         return generate_uid()

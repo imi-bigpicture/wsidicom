@@ -19,7 +19,7 @@ from marshmallow import ValidationError, fields
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
 from wsidicom.conceptcode import CidConceptCode, CidConceptCodeType
-from wsidicom.geometry import PointMm
+from wsidicom.geometry import PointMm, SizeMm
 
 from wsidicom.metadata.sample import (
     SlideSamplePosition,
@@ -116,6 +116,30 @@ class PointMmJsonField(fields.Field):
     ) -> PointMm:
         try:
             return PointMm(**value)
+        except ValueError as error:
+            raise ValidationError("Could not deserialize PointMm.") from error
+
+
+class SizeMmJsonField(fields.Field):
+    def _serialize(
+        self, value: Optional[SizeMm], attr, obj, **kwargs
+    ) -> Optional[Dict]:
+        if value is None:
+            return None
+        return {
+            field.name: getattr(value, field.name)
+            for field in dataclasses.fields(value)
+        }
+
+    def _deserialize(
+        self,
+        value: Dict,
+        attr: Optional[str],
+        data: Optional[Mapping[str, Any]],
+        **kwargs,
+    ) -> SizeMm:
+        try:
+            return SizeMm(**value)
         except ValueError as error:
             raise ValidationError("Could not deserialize PointMm.") from error
 

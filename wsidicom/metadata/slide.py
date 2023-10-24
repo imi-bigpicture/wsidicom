@@ -14,7 +14,7 @@
 
 """Slide model."""
 from dataclasses import dataclass
-from typing import Sequence, Optional, Sequence
+from typing import Sequence, Optional
 
 
 from wsidicom.metadata.sample import SlideSample, Staining

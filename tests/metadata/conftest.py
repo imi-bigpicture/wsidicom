@@ -14,11 +14,11 @@
 
 import datetime
 from typing import Optional, Sequence, Union
-import numpy as np
 
+import numpy as np
 import pytest
-from pydicom.sr.coding import Code
 from pydicom.uid import UID
+
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     Code,
@@ -34,7 +34,7 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
 )
-
+from wsidicom.geometry import SizeMm
 from wsidicom.metadata import (
     Equipment,
     ExtendedDepthOfField,
@@ -44,23 +44,17 @@ from wsidicom.metadata import (
     ImagePathFilter,
     Label,
     LightPathFilter,
+    Lut,
     Objectives,
     OpticalPath,
     Patient,
     PatientDeIdentification,
     PatientSex,
     Series,
+    Slide,
     Study,
-    Lut,
+    WsiMetadata,
 )
-from wsidicom.metadata.equipment import Equipment
-from wsidicom.metadata.image import (
-    ExtendedDepthOfField,
-    FocusMethod,
-    Image,
-    ImageCoordinateSystem,
-)
-from wsidicom.metadata.label import Label
 from wsidicom.metadata.optical_path import ConstantLutSegment, LinearLutSegment
 from wsidicom.metadata.sample import (
     Collection,
@@ -73,8 +67,6 @@ from wsidicom.metadata.sample import (
     SlideSamplePosition,
     Staining,
 )
-from wsidicom.metadata.slide import Slide
-from wsidicom.metadata.wsi import WsiMetadata
 
 
 @pytest.fixture
@@ -118,12 +110,18 @@ def image(
     focus_method: Optional[FocusMethod],
     extended_depth_of_field: Optional[ExtendedDepthOfField],
     image_coordinate_system: Optional[ImageCoordinateSystem],
+    pixel_spacing: Optional[SizeMm],
+    focal_plane_spacing: Optional[float],
+    depth_of_field: Optional[float],
 ):
     yield Image(
         acquisition_datetime,
         focus_method,
         extended_depth_of_field,
         image_coordinate_system,
+        pixel_spacing,
+        focal_plane_spacing,
+        depth_of_field,
     )
 
 

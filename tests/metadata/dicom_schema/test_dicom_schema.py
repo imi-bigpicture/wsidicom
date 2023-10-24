@@ -115,6 +115,9 @@ class TestDicomSchema:
             "focus_method",
             "extended_depth_of_field",
             "image_coordinate_system",
+            "pixel_spacing",
+            "focal_plane_spacing",
+            "depth_of_field",
         ],
         [
             [
@@ -122,12 +125,18 @@ class TestDicomSchema:
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
+                None,
+                None,
+                None,
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
+                None,
+                None,
+                None,
             ],
         ],
     )
@@ -162,6 +171,9 @@ class TestDicomSchema:
             "focus_method",
             "extended_depth_of_field",
             "image_coordinate_system",
+            "pixel_spacing",
+            "focal_plane_spacing",
+            "depth_of_field",
         ],
         [
             [
@@ -169,14 +181,20 @@ class TestDicomSchema:
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
+                None,
+                None,
+                None,
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
+                None,
+                None,
+                None,
             ],
-            [None, None, None, None],
+            [None, None, None, None, None, None, None],
         ],
     )
     def test_deserialize_image(self, dicom_image: Dataset, image: Image):
@@ -216,8 +234,8 @@ class TestDicomSchema:
         # Assert
         assert isinstance(serialized, Dataset)
         if image_type == ImageType.LABEL:
-            assert serialized.LabelText == None
-            assert serialized.BarcodeValue == None
+            assert serialized.LabelText is None
+            assert serialized.BarcodeValue is None
             assert serialized.SpecimenLabelInImage == "YES"
             assert serialized.BurnedInAnnotation == "YES"
         else:
@@ -357,10 +375,10 @@ class TestDicomSchema:
         # Act
         serialized = schema.dump(patient)
         assert isinstance(serialized, Dataset)
-        assert serialized.PatientName == None
-        assert serialized.PatientID == None
-        assert serialized.PatientBirthDate == None
-        assert serialized.PatientSex == None
+        assert serialized.PatientName is None
+        assert serialized.PatientID is None
+        assert serialized.PatientBirthDate is None
+        assert serialized.PatientSex is None
         assert "PatientSpeciesDescription" not in serialized
         assert "PatientSpeciesCodeSequence" not in serialized
         assert "PatientIdentityRemoved" not in serialized
@@ -400,7 +418,7 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(serialized, Dataset)
-        assert serialized.SeriesInstanceUID == series._uid
+        assert serialized.SeriesInstanceUID == series.default_uid
         assert serialized.SeriesNumber == 1
 
     def test_deserialize_series(self, dicom_series: Dataset, series: Series):
@@ -436,12 +454,12 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(serialized, Dataset)
-        assert serialized.StudyInstanceUID == study._uid
-        assert serialized.StudyID == None
-        assert serialized.StudyDate == None
-        assert serialized.StudyTime == None
-        assert serialized.AccessionNumber == None
-        assert serialized.ReferringPhysicianName == None
+        assert serialized.StudyInstanceUID == study.default_uid
+        assert serialized.StudyID is None
+        assert serialized.StudyDate is None
+        assert serialized.StudyTime is None
+        assert serialized.AccessionNumber is None
+        assert serialized.ReferringPhysicianName is None
 
     def test_deserialize_study(self, dicom_study: Dataset, study: Study):
         # Arrange
@@ -512,6 +530,9 @@ class TestDicomSchema:
             "focus_method",
             "extended_depth_of_field",
             "image_coordinate_system",
+            "pixel_spacing",
+            "focal_plane_spacing",
+            "depth_of_field",
         ],
         [
             [
@@ -519,12 +540,18 @@ class TestDicomSchema:
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
+                None,
+                None,
+                None,
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
+                None,
+                None,
+                None,
             ],
         ],
     )

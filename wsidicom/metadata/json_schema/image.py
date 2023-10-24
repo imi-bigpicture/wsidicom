@@ -20,7 +20,7 @@ from wsidicom.metadata.image import (
     Image,
     ImageCoordinateSystem,
 )
-from wsidicom.metadata.json_schema.fields import PointMmJsonField
+from wsidicom.metadata.json_schema.fields import PointMmJsonField, SizeMmJsonField
 
 
 class ExtendedDepthOfFieldJsonSchema(Schema):
@@ -50,6 +50,9 @@ class ImageJsonSchema(Schema):
     image_coordinate_system = fields.Nested(
         ImageCoordinateSystemJsonSchema(), allow_none=True
     )
+    pixel_spacing = SizeMmJsonField()
+    focal_plane_spacing = fields.Float()
+    depth_of_field = fields.Float()
 
     @post_load
     def load_to_object(self, data, **kwargs):

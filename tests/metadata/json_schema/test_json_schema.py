@@ -18,7 +18,7 @@ from typing import Dict, Optional, Sequence, Union
 import pytest
 from pydicom.uid import UID
 from wsidicom.conceptcode import Code, IlluminationColorCode
-from wsidicom.geometry import PointMm
+from wsidicom.geometry import PointMm, SizeMm
 from tests.metadata.helpers import assert_dict_equals_code
 
 from wsidicom.metadata import (
@@ -104,6 +104,9 @@ class TestJsonSchema:
             "focus_method",
             "extended_depth_of_field",
             "image_coordinate_system",
+            "pixel_spacing",
+            "focal_plane_spacing",
+            "depth_of_field",
         ],
         [
             [
@@ -111,14 +114,20 @@ class TestJsonSchema:
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
+                SizeMm(0.01, 0.01),
+                0.001,
+                0.01,
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
+                SizeMm(0.02, 0.02),
+                0.002,
+                0.02,
             ],
-            [None, None, None, None],
+            [None, None, None, None, None, None, None],
         ],
     )
     def test_image_serialize(self, image: Image):
@@ -130,17 +139,17 @@ class TestJsonSchema:
         # Assert
         assert isinstance(dumped, dict)
         if image.acquisition_datetime is None:
-            assert dumped["acquisition_datetime"] == None
+            assert dumped["acquisition_datetime"] is None
         else:
             assert (
                 dumped["acquisition_datetime"] == image.acquisition_datetime.isoformat()
             )
         if image.focus_method is None:
-            assert dumped["focus_method"] == None
+            assert dumped["focus_method"] is None
         else:
             assert dumped["focus_method"] == image.focus_method.value
         if image.extended_depth_of_field is None:
-            assert dumped["extended_depth_of_field"] == None
+            assert dumped["extended_depth_of_field"] is None
         else:
             assert (
                 dumped["extended_depth_of_field"]["number_of_focal_planes"]
@@ -151,7 +160,7 @@ class TestJsonSchema:
                 == image.extended_depth_of_field.distance_between_focal_planes
             )
         if image.image_coordinate_system is None:
-            assert dumped["image_coordinate_system"] == None
+            assert dumped["image_coordinate_system"] is None
         else:
             assert (
                 dumped["image_coordinate_system"]["origin"]["x"]
@@ -165,6 +174,19 @@ class TestJsonSchema:
                 dumped["image_coordinate_system"]["rotation"]
                 == image.image_coordinate_system.rotation
             )
+        if image.pixel_spacing is None:
+            assert dumped["pixel_spacing"] is None
+        else:
+            assert dumped["pixel_spacing"]["width"] == image.pixel_spacing.width
+            assert dumped["pixel_spacing"]["height"] == image.pixel_spacing.height
+        if image.focal_plane_spacing is None:
+            assert dumped["focal_plane_spacing"] is None
+        else:
+            assert dumped["focal_plane_spacing"] == image.focal_plane_spacing
+        if image.depth_of_field is None:
+            assert dumped["depth_of_field"] is None
+        else:
+            assert dumped["depth_of_field"] == image.depth_of_field
 
     def test_image_deserialize(self):
         # Arrange
@@ -179,6 +201,9 @@ class TestJsonSchema:
                 "origin": {"x": 20.0, "y": 30.0},
                 "rotation": 90.0,
             },
+            "pixel_spacing": {"width": 0.01, "height": 0.01},
+            "focal_plane_spacing": 0.001,
+            "depth_of_field": 0.01,
         }
 
         # Act
@@ -188,6 +213,7 @@ class TestJsonSchema:
         assert isinstance(loaded, Image)
         assert loaded.extended_depth_of_field is not None
         assert loaded.image_coordinate_system is not None
+        assert loaded.pixel_spacing is not None
         assert loaded.acquisition_datetime == datetime.fromisoformat(
             dumped["acquisition_datetime"]
         )
@@ -212,6 +238,10 @@ class TestJsonSchema:
             loaded.image_coordinate_system.rotation
             == dumped["image_coordinate_system"]["rotation"]
         )
+        assert loaded.pixel_spacing.width == dumped["pixel_spacing"]["width"]
+        assert loaded.pixel_spacing.height == dumped["pixel_spacing"]["height"]
+        assert loaded.focal_plane_spacing == dumped["focal_plane_spacing"]
+        assert loaded.depth_of_field == dumped["depth_of_field"]
 
     def test_label_serialize(self, label: Label):
         # Arrange

@@ -16,7 +16,6 @@ class PropertySchema(DicomSchema):
 
     @pre_load
     def pre_load(self, dataset: Dataset, many: bool, **kwargs):
-        print("property pre load", dataset)
         return super().pre_load(dataset, many, **kwargs)
 
 
@@ -29,7 +28,6 @@ class ChildSchema(DicomSchema):
 
     @pre_load
     def pre_load(self, dataset: Dataset, many: bool, **kwargs):
-        print("child pre load", dataset)
         return super().pre_load(dataset, many, **kwargs)
 
 
@@ -42,7 +40,6 @@ class ParentSchema(DicomSchema):
 
     @pre_load
     def pre_load(self, dataset: Dataset, many: bool, **kwargs):
-        print("parent pre load", dataset)
         return super().pre_load(dataset, many, **kwargs)
 
 
