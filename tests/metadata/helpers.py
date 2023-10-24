@@ -12,11 +12,18 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Dict, Sequence, Union
+from typing import Any, Dict, Sequence, Union
 from pydicom import Dataset
 
 from pydicom.sr.coding import Code
 from wsidicom.conceptcode import ConceptCode
+from wsidicom.metadata.optical_path import (
+    ConstantLutSegment,
+    DiscreteLutSegment,
+    LinearLutSegment,
+    Lut,
+    LutSegment,
+)
 
 
 def bool_to_dicom_literal(value: bool) -> str:
@@ -66,3 +73,26 @@ def code_to_code_dataset(code: Code):
     dataset.CodingSchemeVersion = code.scheme_version
 
     return dataset
+
+
+def assert_lut_is_equal(dumped: Dict[str, Any], lut: Lut):
+    assert dumped["bits"] == 8 * lut.data_type().itemsize
+    for dumped_component, component in zip(
+        (dumped["red"], dumped["green"], dumped["blue"]),
+        (lut.red, lut.green, lut.blue),
+    ):
+        assert len(dumped_component) == len(component)
+        for dumped_segment, segment in zip(dumped_component, component):
+            assert_lut_segment_is_equal(dumped_segment, segment)
+
+
+def assert_lut_segment_is_equal(dumped: Dict[str, Any], segment: LutSegment):
+    if isinstance(segment, LinearLutSegment):
+        assert dumped["start_value"] == segment.start_value
+        assert dumped["end_value"] == segment.end_value
+        assert dumped["length"] == segment.length
+    elif isinstance(segment, ConstantLutSegment):
+        assert dumped["value"] == segment.value
+        assert dumped["length"] == segment.length
+    elif isinstance(segment, DiscreteLutSegment):
+        assert dumped["values"] == segment.values
