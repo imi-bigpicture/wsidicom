@@ -15,6 +15,7 @@
 import datetime
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from highdicom import (
@@ -22,7 +23,7 @@ from highdicom import (
     UniversalEntityIDTypeValues,
 )
 from pydicom.sr.coding import Code
-from pydicom.uid import UID
+from pydicom.uid import UID, generate_uid
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     SpecimenCollectionProcedureCode,
@@ -391,7 +392,7 @@ class SlideSample(SampledSpecimen):
     """A sample that has been placed on a slide."""
 
     identifier: Union[str, SpecimenIdentifier]
-    anatomical_sites: Sequence[Code]
+    anatomical_sites: Optional[Sequence[Code]] = None
     sampled_from: Optional[Sampling] = None
     uid: Optional[UID] = None
     position: Optional[Union[str, SlideSamplePosition]] = None
@@ -404,3 +405,10 @@ class SlideSample(SampledSpecimen):
             sampled_from=self.sampled_from,
             steps=self.steps,
         )
+
+    @cached_property
+    def default_uid(self) -> UID:
+        """Uid used if not set."""
+        if self.uid is not None:
+            return self.uid
+        return generate_uid()

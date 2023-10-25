@@ -346,3 +346,44 @@ class DefaultingTagDicomField(TypeDicomField[ValueType]):
         if value is None:
             value = getattr(obj, self._tag)
         return super()._serialize(value, attr, obj, **kwargs)
+
+
+class DefaultingListDicomField(fields.List):
+    def __init__(self, nested: Field, dump_default: List, **kwargs):
+        self._dump_default = dump_default
+        super().__init__(cls_or_instance=nested, dump_default=dump_default, **kwargs)
+
+    def _serialize(self, value, attr, obj, **kwargs) -> Any:
+        if value is None or len(value) == 0:
+            value = self.dump_default
+        return super()._serialize(value, attr, obj, **kwargs)
+
+
+class DefaultingListTagDicomField(fields.List):
+    def __init__(self, nested: Field, tag: str, **kwargs):
+        self._tag = tag
+        super().__init__(cls_or_instance=nested, **kwargs)
+
+    def _serialize(self, value, attr, obj, **kwargs) -> Any:
+        if value is None or len(value) == 0:
+            value = getattr(obj, self._tag)
+        return super()._serialize(value, attr, obj, **kwargs)
+
+
+class SingleItemSequenceDicomField(fields.Field, Generic[ValueType]):
+    def __init__(self, nested: Field, data_key: str, **kwargs):
+        self._nested = nested
+        self._data_key = data_key
+        super().__init__(data_key=data_key, **kwargs)
+
+    def _serialize(
+        self, value: Optional[ValueType], attr: Optional[str], obj: Any, **kwargs
+    ):
+        nested_value = self._nested._serialize(value, attr, obj, **kwargs)
+        dataset = Dataset()
+        setattr(dataset, self._data_key, nested_value)
+        return dataset
+
+    def _deserialize(self, value: Dataset, attr, data, **kwargs):
+        nested_value = getattr(value, self._data_key)
+        return self._nested._deserialize(nested_value, attr, data, **kwargs)

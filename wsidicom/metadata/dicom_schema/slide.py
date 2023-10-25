@@ -17,6 +17,7 @@ from typing import Any, Dict, Type
 from marshmallow import fields, post_dump, pre_dump, pre_load
 from pydicom import Dataset
 from wsidicom.conceptcode import ContainerTypeCode
+from wsidicom.metadata.defaults import defaults
 
 from wsidicom.metadata.defaults import Defaults
 from wsidicom.metadata.dicom_schema.schema import DicomSchema
@@ -26,6 +27,7 @@ from wsidicom.metadata.dicom_schema.fields import (
     StringDicomField,
 )
 from wsidicom.metadata.dicom_schema.sample import SlideSampleDicom
+from wsidicom.metadata.sample import SlideSample
 from wsidicom.metadata.slide import Slide
 
 
@@ -61,14 +63,16 @@ class SlideDicomSchema(DicomSchema[Slide]):
     @pre_dump
     def pre_dump(self, slide: Slide, **kwargs):
         # move staining to samples so that sample field can serialize both
-        if slide.samples is not None:
-            samples = [
-                SlideSampleDicom.to_dataset(slide_sample, slide.stainings)
-                for slide_sample in slide.samples
-            ]
+        if slide.samples is None:
+            samples = [SlideSample(identifier=defaults.string)]
         else:
-            samples = []
-        return {"identifier": slide.identifier, "samples": samples}
+            samples = slide.samples
+        serialied_samples = [
+            SlideSampleDicom.to_dataset(slide_sample, slide.stainings)
+            for slide_sample in samples
+        ]
+
+        return {"identifier": slide.identifier, "samples": serialied_samples}
 
     @post_dump
     def post_dump(self, data: Dict[str, Any], **kwargs):

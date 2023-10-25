@@ -21,8 +21,11 @@ from wsidicom.instance.dataset import ImageType
 
 from wsidicom.metadata.dicom_schema.schema import DicomSchema
 from wsidicom.metadata.dicom_schema.fields import (
+    DefaultingListDicomField,
+    DefaultingListTagDicomField,
     DefaultingTagDicomField,
     FlatteningNestedField,
+    SingleItemSequenceDicomField,
     UidDicomField,
 )
 from wsidicom.metadata.dicom_schema.equipment import EquipmentDicomSchema
@@ -57,7 +60,7 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
     equipment = FlatteningNestedField(
         EquipmentDicomSchema(), dump_default=Equipment(), load_default=Equipment()
     )
-    optical_paths = fields.List(
+    optical_paths = DefaultingListDicomField(
         FlatteningNestedField(OpticalPathDicomSchema()),
         data_key="OpticalPathSequence",
         dump_default=[OpticalPath()],
@@ -78,12 +81,11 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
         data_key="FrameOfReferenceUID",
         tag="default_frame_of_reference_uid",
     )
-    dimension_organization_uids = fields.List(
-        DefaultingTagDicomField(
-            UidDicomField(),
-            tag="default_dimension_organization_uids",
-            data_key="DimensionOrganizationUID",
+    dimension_organization_uids = DefaultingListTagDicomField(
+        SingleItemSequenceDicomField(
+            UidDicomField(), data_key="DimensionOrganizationUID"
         ),
+        tag="default_dimension_organization_uids",
         data_key="DimensionOrganizationSequence",
     )
     sop_class_uid = fields.Constant(

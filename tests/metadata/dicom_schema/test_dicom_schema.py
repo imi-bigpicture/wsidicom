@@ -65,6 +65,7 @@ from wsidicom.metadata.dicom_schema.series import SeriesDicomSchema
 from wsidicom.metadata.dicom_schema.slide import SlideDicomSchema
 from wsidicom.metadata.dicom_schema.study import StudyDicomSchema
 from wsidicom.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
+from wsidicom.metadata.sample import SlideSample
 
 
 class TestDicomSchema:
@@ -490,6 +491,10 @@ class TestDicomSchema:
     def test_serialize_slide(self, slide: Slide):
         # Arrange
         schema = SlideDicomSchema()
+        if slide.samples is not None:
+            expected_samples = slide.samples
+        else:
+            expected_samples = [SlideSample(identifier=Defaults.string)]
 
         # Act
         serialized = schema.dump(slide)
@@ -500,18 +505,18 @@ class TestDicomSchema:
         assert_dicom_code_dataset_equals_code(
             serialized.ContainerTypeCodeSequence[0], Defaults.slide_container_type
         )
-        if slide.samples is not None:
-            assert len(serialized.SpecimenDescriptionSequence) == len(slide.samples)
-            for specimen_description, sample in zip(
-                serialized.SpecimenDescriptionSequence, slide.samples
-            ):
-                assert specimen_description.SpecimenIdentifier == sample.identifier
-                assert specimen_description.SpecimenUID == sample.uid
+        assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
+        for specimen_description, sample in zip(
+            serialized.SpecimenDescriptionSequence, expected_samples
+        ):
+            assert specimen_description.SpecimenIdentifier == sample.identifier
+            assert specimen_description.SpecimenUID == sample.uid
 
     def test_serialize_default_slide(self):
         # Arrange
         slide = Slide()
         schema = SlideDicomSchema()
+        expected_samples = [SlideSample(identifier=Defaults.string)]
 
         # Act
         serialized = schema.dump(slide)
@@ -519,10 +524,14 @@ class TestDicomSchema:
         # Assert
         assert isinstance(serialized, Dataset)
         assert serialized.ContainerIdentifier == Defaults.string
-        assert serialized.SpecimenDescriptionSequence == []
         assert_dicom_code_dataset_equals_code(
             serialized.ContainerTypeCodeSequence[0], Defaults.slide_container_type
         )
+        assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
+        for specimen_description, sample in zip(
+            serialized.SpecimenDescriptionSequence, expected_samples
+        ):
+            assert specimen_description.SpecimenIdentifier == sample.identifier
 
     def test_deserialize_slide(self, slide: Slide):
         # Arrange
@@ -602,6 +611,44 @@ class TestDicomSchema:
             serialized.OpticalPathSequence[0], optical_path
         )
         assert_dicom_patient_equals_patient(serialized, patient)
+
+    def test_serialize_wsi_metadata_with_empty_lists(
+        self,
+        equipment: Equipment,
+        image: Image,
+        label: Label,
+        study: Study,
+        series: Series,
+        patient: Patient,
+        image_type: ImageType,
+    ):
+        # Arrange
+        slide = Slide(stainings=[], samples=[])
+        wsi_metadata = WsiMetadata(
+            study=study,
+            series=series,
+            patient=patient,
+            equipment=equipment,
+            optical_paths=[],
+            slide=slide,
+            label=label,
+            image=image,
+        )
+        schema = WsiMetadataDicomSchema(context={"image_type": image_type})
+
+        # Act
+        serialized = schema.dump(wsi_metadata)
+
+        # Assert
+        assert_dicom_optical_path_equals_optical_path(
+            serialized.OpticalPathSequence[0], OpticalPath()
+        )
+        assert "DimensionOrganizationSequence" in serialized
+        assert len(serialized.DimensionOrganizationSequence) == 1
+        assert (
+            serialized.DimensionOrganizationSequence[0].DimensionOrganizationUID
+            == wsi_metadata.default_dimension_organization_uids[0]
+        )
 
     def test_deserialize_wsi_metadata(
         self,
