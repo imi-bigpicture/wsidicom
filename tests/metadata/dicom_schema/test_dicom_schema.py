@@ -1,17 +1,23 @@
+#    Copyright 2023 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
 from datetime import datetime
 
 import pytest
 from pydicom import Dataset
-from pydicom.sr.coding import Code
-from wsidicom.conceptcode import (
-    IlluminationColorCode,
-    ImagePathFilterCode,
-    LightPathFilterCode,
-    LenseCode,
-)
 from pydicom.sequence import Sequence as DicomSequence
-from wsidicom.geometry import PointMm
-from wsidicom.instance import ImageType
+from pydicom.sr.coding import Code
 
 from tests.metadata.helpers import (
     assert_dicom_bool_equals_bool,
@@ -19,25 +25,32 @@ from tests.metadata.helpers import (
     assert_dicom_code_sequence_equals_codes,
     bool_to_dicom_literal,
 )
+from wsidicom.conceptcode import (
+    IlluminationColorCode,
+    ImagePathFilterCode,
+    LenseCode,
+    LightPathFilterCode,
+)
+from wsidicom.geometry import PointMm
+from wsidicom.instance import ImageType
 from wsidicom.metadata import (
     Equipment,
     ExtendedDepthOfField,
     FocusMethod,
     Image,
     ImageCoordinateSystem,
+    ImagePathFilter,
     Label,
+    LightPathFilter,
+    Objectives,
     OpticalPath,
     Patient,
     Series,
+    Slide,
     Study,
     WsiMetadata,
-    Slide,
-    ImagePathFilter,
-    LightPathFilter,
-    Objectives,
 )
 from wsidicom.metadata.defaults import Defaults
-
 from wsidicom.metadata.dicom_schema.equipment import EquipmentDicomSchema
 from wsidicom.metadata.dicom_schema.image import ImageDicomSchema
 from wsidicom.metadata.dicom_schema.label import LabelDicomSchema
