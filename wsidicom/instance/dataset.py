@@ -639,7 +639,6 @@ class WsiDataset(Dataset):
             Copy of dataset set as tiled full.
 
         """
-
         dataset = deepcopy(self)
         dataset.DimensionOrganizationType = "TILED_FULL"
         # Make a new Shared functional group sequence and Pixel measure

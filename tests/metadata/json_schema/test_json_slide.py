@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from typing import Any, Dict
-from tests.metadata.helpers import assert_dict_equals_code
+from tests.metadata.json_schema.helpers import assert_dict_equals_code
 from wsidicom.metadata.sample import SlideSamplePosition
 from wsidicom.metadata.json_schema.slide import SlideJsonSchema
 from wsidicom.metadata.slide import Slide

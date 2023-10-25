@@ -13,9 +13,14 @@
 #    limitations under the License.
 
 from typing import Dict, Union
+
 import pytest
-from tests.metadata.helpers import assert_dict_equals_code
-from wsidicom.metadata.sample import SlideSamplePosition, SpecimenIdentifier
+from pydicom.sr.coding import Code
+from pydicom.uid import UID
+
+from tests.metadata.json_schema.helpers import assert_dict_equals_code
+from wsidicom.conceptcode import IlluminationColorCode
+from wsidicom.geometry import PointMm
 from wsidicom.metadata.json_schema.fields import (
     CodeJsonField,
     JsonFieldFactory,
@@ -25,10 +30,7 @@ from wsidicom.metadata.json_schema.fields import (
     StringOrCodeJsonField,
     UidJsonField,
 )
-from wsidicom.geometry import PointMm
-from pydicom.uid import UID
-from pydicom.sr.coding import Code
-from wsidicom.conceptcode import IlluminationColorCode
+from wsidicom.metadata.sample import SlideSamplePosition, SpecimenIdentifier
 
 
 class TestFields:

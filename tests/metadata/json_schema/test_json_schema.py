@@ -19,7 +19,10 @@ from typing import Dict, Optional, Sequence, Union
 import pytest
 from pydicom.uid import UID
 
-from tests.metadata.helpers import assert_dict_equals_code, assert_lut_is_equal
+from tests.metadata.json_schema.helpers import (
+    assert_dict_equals_code,
+    assert_lut_is_equal,
+)
 from wsidicom.conceptcode import Code, IlluminationColorCode
 from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.metadata import (

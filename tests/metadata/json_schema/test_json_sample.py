@@ -22,7 +22,7 @@ from wsidicom.conceptcode import (
     SpecimenPreparationStepsCode,
     SpecimenSamplingProcedureCode,
 )
-from tests.metadata.helpers import assert_dict_equals_code
+from tests.metadata.json_schema.helpers import assert_dict_equals_code
 
 from wsidicom.metadata.sample import (
     Collection,
