@@ -17,11 +17,14 @@ import pytest
 from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DT
+from tests.metadata.dicom_schema.helpers import (
+    bool_to_dicom_literal,
+    code_to_code_dataset,
+)
 from wsidicom.conceptcode import IlluminationColorCode
 from wsidicom.instance import ImageType
 from wsidicom.geometry import PointMm
 
-from tests.metadata.helpers import bool_to_dicom_literal, code_to_code_dataset
 from wsidicom.metadata import (
     Equipment,
     Image,
