@@ -28,7 +28,7 @@ from highdicom import (
 from highdicom.sr import CodedConcept
 from pydicom import Dataset
 from pydicom.sr.coding import Code
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     SpecimenCollectionProcedureCode,
@@ -518,7 +518,10 @@ class SlideSampleDicom(SampledSpecimenDicom):
         """Create a formatted specimen description for the specimen."""
         if stains is None:
             stains = []
-        sample_uid = generate_uid() if slide_sample.uid is None else slide_sample.uid
+        if slide_sample.uid is None:
+            sample_uid = slide_sample.default_uid
+        else:
+            sample_uid = slide_sample.uid
         sample_preparation_steps: List[SpecimenPreparationStep] = []
         sample_preparation_steps.extend(cls.to_datasets(slide_sample))
         identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
@@ -540,7 +543,9 @@ class SlideSampleDicom(SampledSpecimenDicom):
             specimen_location=position,
             primary_anatomic_structures=[
                 anatomical_site for anatomical_site in slide_sample.anatomical_sites
-            ],
+            ]
+            if slide_sample.anatomical_sites is not None
+            else None,
             issuer_of_specimen_id=issuer,
         )
 

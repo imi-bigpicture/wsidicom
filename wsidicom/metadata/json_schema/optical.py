@@ -119,7 +119,6 @@ class LutSegmentJsonSchema(Schema):
         except StopIteration:
             raise NotImplementedError()
         loaded = schema().load(segment, many=False)
-        print(loaded, type(loaded))
         assert isinstance(loaded, LutSegment)
         return loaded
 

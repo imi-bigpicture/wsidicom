@@ -299,7 +299,7 @@ class SampleJsonSchema(BaseSpecimenJsonSchema):
 class SlideSampleJsonSchema(BaseSpecimenJsonSchema):
     """Schema for sampled specimen on a slide."""
 
-    anatomical_sites = fields.List(CodeJsonField())
+    anatomical_sites = fields.List(CodeJsonField(), allow_none=True)
     sampled_from = fields.Nested(SamplingConstraintJsonSchema)
     uid = UidJsonField(allow_none=True)
     position = SlideSamplePositionJsonField(allow_none=True)

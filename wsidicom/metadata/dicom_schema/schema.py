@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from abc import abstractmethod
+from copy import deepcopy
 from typing import Any, Dict, Generic, Type, TypeVar
 from marshmallow import Schema, post_dump, pre_load, post_load
 from pydicom import Dataset
@@ -30,7 +31,7 @@ class DicomSchema(Schema, Generic[LoadType]):
         """Dump object to pydicom Dataset."""
         dataset = super().dump(obj, **kwargs)
         assert isinstance(dataset, Dataset)
-        return dataset
+        return deepcopy(dataset)
 
     def load(self, dataset: Dataset, **kwargs) -> LoadType:
         """Load object from pydicom Dataset."""
