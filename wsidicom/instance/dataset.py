@@ -239,6 +239,18 @@ class WsiDataset(Dataset):
             )
 
     @cached_property
+    def tile_frame_count(self) -> int:
+        """Return number of frames corresponding to tiles in instance."""
+        frame_count = self.frame_count
+
+        if self.image_type == ImageType.VOLUME:
+            # We need to take into account the number of optical paths and focal planes
+            frame_count //= self.number_of_focal_planes
+            frame_count //= self.number_of_optical_paths
+
+        return cast(int, frame_count)
+
+    @cached_property
     def frame_count(self) -> int:
         """Return number of frames in instance."""
         frame_count = self._get_dicom_attribute("NumberOfFrames")
@@ -259,7 +271,7 @@ class WsiDataset(Dataset):
             return TileType.FULL
         elif "PerFrameFunctionalGroupsSequence" in self:
             return TileType.SPARSE
-        elif self.frame_count == 1:
+        elif self.tile_frame_count == 1:
             return TileType.FULL
         raise WsiDicomError("Undetermined tile type.")
 
@@ -324,6 +336,14 @@ class WsiDataset(Dataset):
         return cast(int, number_of_focal_planes)
 
     @cached_property
+    def number_of_optical_paths(self) -> int:
+        """Return number of optical paths."""
+        number_of_optical_paths = self._get_dicom_attribute(
+            "NumberOfOpticalPaths"
+        )
+        return cast(int, number_of_optical_paths)
+
+    @cached_property
     def frame_sequence(self) -> DicomSequence:
         """Return per frame functional group sequene if present, otherwise
         shared functional group sequence.
@@ -378,13 +398,13 @@ class WsiDataset(Dataset):
             raise WsiDicomError("Image size is zero")
         if self.tile_type == TileType.FULL:
             expected_tiled_size = image_size.ceil_div(self.tile_size)
-            if expected_tiled_size.area != self.frame_count:
+            if expected_tiled_size.area != self.tile_frame_count:
                 error = (
                     f"Image size {image_size} does not match tile size "
-                    f"{self.tile_size} and number of frames {self.frame_count} "
+                    f"{self.tile_size} and number of frames {self.tile_frame_count} "
                     f"for tile type {TileType.FULL}."
                 )
-                if self.image_type == ImageType.VOLUME or self.frame_count != 1:
+                if self.image_type == ImageType.VOLUME or self.tile_frame_count != 1:
                     # Be strict on volume images.
                     raise WsiDicomError(error)
                 # Labels and overviews are likely to have only one tile.
