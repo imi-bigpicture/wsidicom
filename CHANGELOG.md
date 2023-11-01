@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Allow a `requests.Session` object to be passed to `WsiDicomWebClient`.
+
+### Changed
+
+- Make some arguments optional for `WsiDicomWebClient`.
+
 ## [0.12.0] - 2023-10-04
 
 ### Changed

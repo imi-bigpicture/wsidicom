@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Any, Dict, Iterator, Tuple
+from typing import Any, Dict, Iterator, Optional, Tuple, Union
 from dicomweb_client import DICOMfileClient
 
 from dicomweb_client.api import DICOMwebClient
@@ -26,6 +26,7 @@ from pydicom.uid import (
     JPEG2000,
     JPEG2000Lossless,
 )
+from requests import Session
 from requests.auth import AuthBase
 
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
@@ -36,13 +37,37 @@ SOP_INSTANCE_UID = "00080018"
 
 class WsiDicomWebClient:
     def __init__(
-        self, hostname: str, qido_prefix: str, wado_prefix: str, auth: AuthBase
+        self, hostname: str,
+        qido_prefix: Optional[str] = None,
+        wado_prefix: Optional[str] = None,
+        auth: Optional[Union[AuthBase, Session]] = None,
     ):
+        """Create a WsiDicomWebClient.
+
+        Parameters
+        ----------
+        hostname: str
+            The URL of the DICOMweb server
+        qido_prefix: Optional[str]
+            If needed by the server, provide the prefix for QIDO services
+        wado_prefix: Optional[str]
+            If needed by the server, provide the prefix for WADO services
+        auth: Optional[Union[AuthBase, Session]]
+            If needed by the server, provide authentication credentials.
+            This may be provided by either passing an object that
+            inherits from requests.auth.AuthBase, or by passing a
+            requests.Session object.
+        """
+        if isinstance(auth, Session) or auth is None:
+            session = auth
+        else:
+            session = create_session_from_auth(auth)
+
         self._client = DICOMwebClient(
             hostname,
             qido_url_prefix=qido_prefix,
             wado_url_prefix=wado_prefix,
-            session=create_session_from_auth(auth),
+            session=session,
         )
 
     def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
