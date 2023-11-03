@@ -36,8 +36,19 @@ SOP_INSTANCE_UID = "00080018"
 
 
 class WsiDicomWebClient:
-    def __init__(
-        self, hostname: str,
+    def __init__(self, client: DICOMwebClient):
+        """Create a WsiDicomWebClient.
+
+        Parameters
+        ----------
+        client: DICOMwebClient
+            The DICOMwebClient to use
+        """
+        self._client = client
+
+    @classmethod
+    def create_client(
+        cls, hostname: str,
         qido_prefix: Optional[str] = None,
         wado_prefix: Optional[str] = None,
         auth: Optional[Union[AuthBase, Session]] = None,
@@ -63,12 +74,14 @@ class WsiDicomWebClient:
         else:
             session = create_session_from_auth(auth)
 
-        self._client = DICOMwebClient(
+        client = DICOMwebClient(
             hostname,
             qido_url_prefix=qido_prefix,
             wado_url_prefix=wado_prefix,
             session=session,
         )
+
+        return cls(client)
 
     def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
         return self._get_instances_of_class(study_uid, series_uid, WSI_SOP_CLASS_UID)
