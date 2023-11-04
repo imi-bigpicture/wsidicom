@@ -12,13 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import io
 from abc import ABCMeta, abstractmethod
 from functools import cached_property
 from typing import List, Optional, Sequence
 
-from PIL import Image
 from PIL.Image import Image as PILImage
+from wsidicom.decoder import Decoder
 
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
@@ -31,8 +30,9 @@ from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
-    def __init__(self, datasets: Sequence[WsiDataset]):
+    def __init__(self, datasets: Sequence[WsiDataset], decoder: Decoder):
         self._datasets = datasets
+        self._decoder = decoder
 
     @abstractmethod
     def _get_tile_frame(self, frame_index: int) -> bytes:
@@ -112,7 +112,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         if frame_index == -1:
             return self.blank_tile
         frame = self._get_tile_frame(frame_index)
-        return Image.open(io.BytesIO(frame))
+        return self._decoder.decode(frame)
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """Return frame index for tile. Raises WsiDicomOutOfBoundsError if
