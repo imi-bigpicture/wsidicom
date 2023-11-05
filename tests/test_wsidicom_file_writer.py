@@ -93,12 +93,20 @@ class WsiDicomTestImageData(ImageData):
         return 3
 
     @property
+    def bits(self) -> int:
+        return 8
+
+    @property
     def photometric_interpretation(self) -> str:
         return "YBR"
 
     @property
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         return None
+
+    @property
+    def lossy_compressed(self) -> bool:
+        return False
 
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
         raise NotImplementedError()

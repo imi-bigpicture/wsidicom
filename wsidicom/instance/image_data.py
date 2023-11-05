@@ -78,6 +78,18 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     @abstractmethod
+    def bits(self) -> int:
+        """Should return the number of bits stored for each sample."""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def lossy_compressed(self) -> bool:
+        """Should return True if the image has been lossy compressed."""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         """Should return the image origin of the image data."""
         raise NotImplementedError()

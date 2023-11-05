@@ -20,12 +20,19 @@ from functools import cached_property
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
 from pydicom.dataset import Dataset
-from pydicom.pixel_data_handlers import pillow_handler
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit, generate_uid
+from pydicom.uid import (
+    JPEG2000,
+    UID,
+    JPEGBaseline8Bit,
+    JPEGExtended12Bit,
+    JPEGLSNearLossless,
+    generate_uid,
+)
 from pydicom.valuerep import DSfloat
 
 from wsidicom.config import settings
+from wsidicom.decoder import Decoder
 from wsidicom.errors import (
     WsiDicomError,
     WsiDicomFileError,
@@ -432,6 +439,16 @@ class WsiDataset(Dataset):
         return self.SamplesPerPixel
 
     @property
+    def bits(self) -> int:
+        """Return the number of bits stored for each sample."""
+        return self.BitsAllocated
+
+    @property
+    def lossy_compressed(self) -> bool:
+        """Return true if image has been lossy compressed."""
+        return self._get_dicom_attribute("LossyImageCompression") == "01"
+
+    @property
     def photometric_interpretation(self) -> str:
         """Return photometric interpretation."""
         return self.PhotometricInterpretation
@@ -743,34 +760,24 @@ class WsiDataset(Dataset):
         dataset.NumberOfFrames = (
             image_data.tiled_size.width * image_data.tiled_size.height
         )
-
-        if image_data.transfer_syntax == JPEGBaseline8Bit:
-            dataset.BitsAllocated = 8
-            dataset.BitsStored = 8
-            dataset.HighBit = 7
-            dataset.PixelRepresentation = 0
+        dataset.BitsAllocated = image_data.bits
+        dataset.BitsStored = image_data.bits
+        dataset.HighBit = image_data.bits - 1
+        dataset.PixelRepresentation = 0
+        if image_data.lossy_compressed:
             dataset.LossyImageCompression = "01"
             dataset.LossyImageCompressionRatio = 1
-            dataset.LossyImageCompressionMethod = "ISO_10918_1"
-            dataset.LossyImageCompression = "01"
-        elif image_data.transfer_syntax == JPEG2000:
-            # TODO JPEG2000 can have higher bitcount
-            dataset.BitsAllocated = 8
-            dataset.BitsStored = 8
-            dataset.HighBit = 7
-            dataset.PixelRepresentation = 0
-            dataset.LossyImageCompressionRatio = 1
-            dataset.LossyImageCompressionMethod = "ISO_15444_1"
-            dataset.LossyImageCompression = "01"
-        elif image_data.transfer_syntax == JPEG2000Lossless:
-            # TODO JPEG2000 can have higher bitcount
-            dataset.BitsAllocated = 8
-            dataset.BitsStored = 8
-            dataset.HighBit = 7
-            dataset.PixelRepresentation = 0
-            dataset.LossyImageCompression = "00"
-        else:
-            raise ValueError("Non-supported transfer syntax.")
+            if image_data.transfer_syntax in [JPEGBaseline8Bit, JPEGExtended12Bit]:
+                dataset.LossyImageCompressionMethod = "ISO_10918_1"
+            elif image_data.transfer_syntax == JPEG2000:
+                dataset.LossyImageCompressionMethod = "ISO_15444_1"
+            elif image_data.transfer_syntax == JPEGLSNearLossless:
+                dataset.LossyImageCompressionMethod = "ISO_14495_1"
+            else:
+                raise NotImplementedError(
+                    f"Lossy compression not implemented for "
+                    f"{image_data.transfer_syntax}."
+                )
 
         dataset.PhotometricInterpretation = image_data.photometric_interpretation
         dataset.SamplesPerPixel = image_data.samples_per_pixel

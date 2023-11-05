@@ -88,9 +88,18 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return self._datasets[0].photometric_interpretation
 
     @property
+    def bits(self) -> int:
+        """Return the number of bits stored for each sample."""
+        return self._datasets[0].bits
+
+    @property
     def samples_per_pixel(self) -> int:
         """Return samples per pixel (1 or 3)."""
         return self._datasets[0].samples_per_pixel
+
+    @property
+    def lossy_compressed(self) -> bool:
+        return self._datasets[0].lossy_compressed
 
     @cached_property
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
