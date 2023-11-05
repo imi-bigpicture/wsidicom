@@ -506,7 +506,7 @@ class WsiDataset(Dataset):
                 logging.debug(f"Missing required attribute {name}")
                 return None
 
-        syntax_supported = pillow_handler.supports_transfer_syntax(transfer_syntax)
+        syntax_supported = Decoder.is_supported(transfer_syntax)
         if not syntax_supported:
             logging.debug(f"Non-supported transfer syntax {transfer_syntax}")
             return None
