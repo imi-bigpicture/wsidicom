@@ -53,12 +53,8 @@ class Decoder(metaclass=ABCMeta):
         """Create a decoder that supports the transfer syntax."""
         if PillowDecoder.is_supported(transfer_syntax):
             return PillowDecoder()
-        elif ImageCodecsJpegDecoder.is_supported(transfer_syntax):
-            return ImageCodecsJpegDecoder()
-        elif ImageCodecsJpegLsDecoder.is_supported(transfer_syntax):
-            return ImageCodecsJpegLsDecoder()
-        elif ImageCodecsJpeg2000Decoder.is_supported(transfer_syntax):
-            return ImageCodecsJpeg2000Decoder()
+        elif ImageCodecsDecoder.is_supported(transfer_syntax):
+            return ImageCodecsDecoder(transfer_syntax)
         elif PydicomDecoder.is_supported(transfer_syntax):
             return PydicomDecoder(
                 transfer_syntax=transfer_syntax,
@@ -142,52 +138,39 @@ class PydicomDecoder(Decoder):
 
 
 class ImageCodecsDecoder(Decoder):
-    _supported_transfer_syntaxes: list[UID]
-
-    @property
-    @abstractmethod
-    def decoder(self):
-        raise NotImplementedError()
-
-    def decode(self, frame: bytes) -> PILImage:
-        decoded = self.decoder(frame)
-        return Image.fromarray(decoded)
-
-    @classmethod
-    def is_supported(cls, transfer_syntax: UID) -> bool:
-        return transfer_syntax in cls._supported_transfer_syntaxes
-
-
-class ImageCodecsJpegDecoder(ImageCodecsDecoder):
     _supported_transfer_syntaxes = [
         JPEGBaseline8Bit,
         JPEGExtended12Bit,
         JPEGLosslessP14,
         JPEGLosslessSV1,
-    ]
-
-    @property
-    def decoder(self):
-        return jpeg_decode
-
-
-class ImageCodecsJpegLsDecoder(ImageCodecsDecoder):
-    _supported_transfer_syntaxes = [
         JPEGLSLossless,
         JPEGLSNearLossless,
-    ]
-
-    @property
-    def decoder(self):
-        return jpegls_decode
-
-
-class ImageCodecsJpeg2000Decoder(ImageCodecsDecoder):
-    _supported_transfer_syntaxes = [
         JPEG2000Lossless,
         JPEG2000,
     ]
+    _jpeg_transfer_syntaxes = [
+        JPEGBaseline8Bit,
+        JPEGExtended12Bit,
+        JPEGLosslessP14,
+        JPEGLosslessSV1,
+    ]
+    _jpeg_ls_transfer_syntaxes = [JPEGLSLossless, JPEGLSNearLossless]
+    _jpeg2000_transfer_syntaxes = [JPEG2000Lossless, JPEG2000]
 
-    @property
-    def decoder(self):
-        return jpeg2k_decode
+    def __init__(self, transfer_syntax: UID) -> None:
+        if transfer_syntax in self._jpeg_transfer_syntaxes:
+            self._decoder = jpeg_decode
+        elif transfer_syntax in self._jpeg_ls_transfer_syntaxes:
+            self._decoder = jpegls_decode
+        elif transfer_syntax in self._jpeg2000_transfer_syntaxes:
+            self._decoder = jpeg2k_decode
+        else:
+            raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
+
+    def decode(self, frame: bytes) -> PILImage:
+        decoded = self._decoder(frame)
+        return Image.fromarray(decoded)
+
+    @classmethod
+    def is_supported(cls, transfer_syntax: UID) -> bool:
+        return transfer_syntax in cls._supported_transfer_syntaxes
