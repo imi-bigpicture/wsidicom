@@ -1,9 +1,12 @@
 import io
 from abc import ABCMeta, abstractmethod
+from typing import List, Type
 
 from highdicom.frame import decode_frame
+from imagecodecs.imagecodecs import jpeg2k_decode, jpeg_decode, jpegls_decode
 from PIL import Image
 from PIL.Image import Image as PILImage
+from pydicom import Dataset
 from pydicom.pixel_data_handlers import (
     gdcm_handler,
     jpeg_ls_handler,
@@ -30,6 +33,29 @@ class Decoder(metaclass=ABCMeta):
         """Return true if decode supports transfer syntax."""
         raise NotImplementedError()
 
+    @classmethod
+    def create(cls, transfer_syntax: UID, dataset: Dataset) -> "Decoder":
+        """Create a decoder that supports the transfer syntax."""
+        if PillowDecoder.is_supported(transfer_syntax):
+            return PillowDecoder()
+        elif ImageCodecsJpegDecoder.is_supported(transfer_syntax):
+            return ImageCodecsJpegDecoder()
+        elif ImageCodecsJpegLsDecoder.is_supported(transfer_syntax):
+            return ImageCodecsJpegLsDecoder()
+        elif ImageCodecsJpeg2000Decoder.is_supported(transfer_syntax):
+            return ImageCodecsJpeg2000Decoder()
+        elif PydicomDecoder.is_supported(transfer_syntax):
+            return PydicomDecoder(
+                transfer_syntax=transfer_syntax,
+                size=Size(dataset.Rows, dataset.Columns),
+                samples_per_pixel=dataset.SamplesPerPixel,
+                bits_allocated=dataset.BitsAllocated,
+                bits_stored=dataset.BitsStored,
+                photometric_interpretation=dataset.PhotometricInterpretation,
+            )
+        else:
+            raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
+
 
 class PillowDecoder(Decoder):
     def decode(self, frame: bytes) -> PILImage:
@@ -37,7 +63,7 @@ class PillowDecoder(Decoder):
 
     @classmethod
     def is_supported(cls, transfer_syntax: UID) -> bool:
-        return transfer_syntax in [JPEG2000, JPEG2000Lossless, JPEGBaseline8Bit]
+        return transfer_syntax in cls._supported_transfer_syntaxes
 
 
 class PydicomDecoder(Decoder):
@@ -90,20 +116,53 @@ class PydicomDecoder(Decoder):
         )
 
 
-class DecoderFactory:
+class ImageCodecsDecoder(Decoder):
+    _supported_transfer_syntaxes: list[UID]
+
+    @property
+    @abstractmethod
+    def decoder(self):
+        raise NotImplementedError()
+
+    def decode(self, frame: bytes) -> PILImage:
+        decoded = self.decoder(frame)
+        return Image.fromarray(decoded)
+
     @classmethod
-    def create(cls, transfer_syntax: UID, dataset: WsiDataset) -> Decoder:
-        """Create a decoder that supports the transfer syntax."""
-        if PillowDecoder.is_supported(transfer_syntax):
-            return PillowDecoder()
-        elif PydicomDecoder.is_supported(transfer_syntax):
-            return PydicomDecoder(
-                transfer_syntax=transfer_syntax,
-                size=dataset.tile_size,
-                samples_per_pixel=dataset.samples_per_pixel,
-                bits_allocated=dataset.BitsAllocated,
-                bits_stored=dataset.BitsStored,
-                photometric_interpretation=dataset.photometric_interpretation,
-            )
-        else:
-            raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
+    def is_supported(cls, transfer_syntax: UID) -> bool:
+        return transfer_syntax in cls._supported_transfer_syntaxes
+
+
+class ImageCodecsJpegDecoder(ImageCodecsDecoder):
+    _supported_transfer_syntaxes = [
+        JPEGBaseline8Bit,
+        JPEGExtended12Bit,
+        JPEGLosslessP14,
+        JPEGLosslessSV1,
+    ]
+
+    @property
+    def decoder(self):
+        return jpeg_decode
+
+
+class ImageCodecsJpegLsDecoder(ImageCodecsDecoder):
+    _supported_transfer_syntaxes = [
+        JPEGLSLossless,
+        JPEGLSNearLossless,
+    ]
+
+    @property
+    def decoder(self):
+        return jpegls_decode
+
+
+class ImageCodecsJpeg2000Decoder(ImageCodecsDecoder):
+    _supported_transfer_syntaxes = [
+        JPEG2000Lossless,
+        JPEG2000,
+    ]
+
+    @property
+    def decoder(self):
+        return jpeg2k_decode
