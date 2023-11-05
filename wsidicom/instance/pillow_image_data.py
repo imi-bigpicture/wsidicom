@@ -57,6 +57,14 @@ class PillowImageData(ImageData):
         return 3
 
     @property
+    def bits(self) -> int:
+        return 8
+
+    @property
+    def lossy_compressed(self) -> bool:
+        return True
+
+    @property
     def photometric_interpretation(self) -> str:
         return "YBR_FULL_422"
 
