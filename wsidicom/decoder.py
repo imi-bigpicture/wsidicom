@@ -2,11 +2,20 @@ import io
 from abc import ABCMeta, abstractmethod
 from typing import Callable, Dict, Optional, Type
 
+import numpy as np
 from highdicom.frame import decode_frame
-from imagecodecs import jpeg2k_decode, jpeg_decode, jpegls_decode, JPEG2K, JPEG8, JPEGLS
+from imagecodecs import (
+    JPEG2K,
+    JPEG8,
+    JPEGLS,
+    LJPEG,
+    jpeg2k_decode,
+    jpeg8_decode,
+    jpegls_decode,
+    ljpeg_decode,
+)
 from PIL import Image
 from PIL.Image import Image as PILImage
-import numpy as np
 from pydicom import Dataset
 from pydicom import config as pydicom_config
 from pydicom.uid import (
@@ -148,20 +157,16 @@ class PydicomDecoder(Decoder):
 
 class ImageCodecsDecoder(Decoder):
     _supported_transfer_syntaxes = {
-        "jpeg8": [
-            JPEGBaseline8Bit,
-            JPEGExtended12Bit,
-            JPEGLosslessP14,
-            JPEGLosslessSV1,
-        ],
-        "jpegls": [
-            JPEGLSLossless,
-            JPEGLSNearLossless,
-        ],
-        "jpeg2k": [
-            JPEG2000Lossless,
-            JPEG2000,
-        ],
+        "jpeg8": [JPEGBaseline8Bit],
+        "ljpeg": [JPEGExtended12Bit, JPEGLosslessP14, JPEGLosslessSV1],
+        "jpegls": [JPEGLSLossless, JPEGLSNearLossless],
+        "jpeg2k": [JPEG2000Lossless, JPEG2000],
+    }
+    _codecs = {
+        "jpeg8": (jpeg8_decode, JPEG8),
+        "ljpeg": (ljpeg_decode, LJPEG),
+        "jpegls": (jpegls_decode, JPEGLS),
+        "jpeg2k": (jpeg2k_decode, JPEG2K),
     }
 
     def __init__(self, transfer_syntax: UID) -> None:
@@ -185,15 +190,15 @@ class ImageCodecsDecoder(Decoder):
     ) -> Optional[Callable[[bytes], np.ndarray]]:
         decoder_name = next(
             (
-                decoder_name
-                for decoder_name, transfer_syntaxes in cls._supported_transfer_syntaxes.items()
+                name
+                for name, transfer_syntaxes in cls._supported_transfer_syntaxes.items()
                 if transfer_syntax in transfer_syntaxes
             ),
             None,
         )
-        if decoder_name == "jpeg8" and JPEG8.available:
-            return jpeg_decode
-        if decoder_name == "jpegls" and JPEGLS.available:
-            return jpegls_decode
-        if decoder_name == "jpeg2k" and JPEG2K.available:
-            return jpeg2k_decode
+        if decoder_name is None:
+            return None
+        decoder, codec = cls._codecs[decoder_name]
+        assert decoder is not None and codec is not None
+        if codec.available:
+            return decoder
