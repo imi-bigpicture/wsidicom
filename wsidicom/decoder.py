@@ -7,14 +7,7 @@ from imagecodecs.imagecodecs import jpeg2k_decode, jpeg_decode, jpegls_decode
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom import Dataset
-from pydicom.pixel_data_handlers import (
-    gdcm_handler,
-    jpeg_ls_handler,
-    numpy_handler,
-    pillow_handler,
-    pylibjpeg_handler,
-    rle_handler,
-)
+from pydicom import config as pydicom_config
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -26,8 +19,8 @@ from pydicom.uid import (
     JPEGLSLossless,
     JPEGLSNearLossless,
 )
-from wsidicom import config
 
+from wsidicom import config
 from wsidicom.geometry import Size
 
 
@@ -143,14 +136,7 @@ class PydicomDecoder(Decoder):
     def is_supported(cls, transfer_syntax: UID) -> bool:
         available_handlers = (
             handler
-            for handler in [
-                pillow_handler,
-                numpy_handler,
-                gdcm_handler,
-                jpeg_ls_handler,
-                pylibjpeg_handler,
-                rle_handler,
-            ]
+            for handler in pydicom_config.pixel_data_handlers
             if handler.is_available()
         )
         return any(
