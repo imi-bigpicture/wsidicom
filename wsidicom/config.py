@@ -13,6 +13,10 @@
 #    limitations under the License.
 
 
+from typing import Optional
+from wsidicom.decoder import Decoder
+
+
 class Settings:
     """Class containing settings. Settings are to be accessed through the
     global variable settings."""
@@ -21,6 +25,7 @@ class Settings:
         self._strict_uid_check = False
         self._strict_attribute_check = False
         self._focal_plane_distance_threshold = 0.000001
+        self._prefered_decoder: Optional[str] = None
 
     @property
     def strict_uid_check(self) -> bool:
@@ -51,6 +56,14 @@ class Settings:
     @focal_plane_distance_threshold.setter
     def focal_plane_distance_threshold(self, value: float) -> None:
         self._focal_plane_distance_threshold = value
+
+    @property
+    def prefered_decoder(self) -> Optional[str]:
+        return self._prefered_decoder
+
+    @prefered_decoder.setter
+    def prefered_decoder(self, value: Optional[str]) -> None:
+        self._prefered_decoder = value
 
 
 settings = Settings()

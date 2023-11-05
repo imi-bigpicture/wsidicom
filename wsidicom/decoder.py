@@ -1,6 +1,6 @@
 import io
 from abc import ABCMeta, abstractmethod
-from typing import List, Type
+from typing import Dict, Optional, Type
 
 from highdicom.frame import decode_frame
 from imagecodecs.imagecodecs import jpeg2k_decode, jpeg_decode, jpegls_decode
@@ -26,6 +26,7 @@ from pydicom.uid import (
     JPEGLSLossless,
     JPEGLSNearLossless,
 )
+from wsidicom import config
 
 from wsidicom.geometry import Size
 
@@ -39,23 +40,19 @@ class Decoder(metaclass=ABCMeta):
     @classmethod
     def is_supported(cls, transfer_syntax: UID) -> bool:
         """Return true if decoder supports transfer syntax."""
-        decoders: List[Type[Decoder]] = [
-            PillowDecoder,
-            ImageCodecsDecoder,
-            ImageCodecsJpegLsDecoder,
-            ImageCodecsJpeg2000Decoder,
-            PydicomDecoder,
-        ]
-        return any(decoder.is_supported(transfer_syntax) for decoder in decoders)
+        return cls._select_decoder(transfer_syntax) is not None
 
     @classmethod
     def create(cls, transfer_syntax: UID, dataset: Dataset) -> "Decoder":
         """Create a decoder that supports the transfer syntax."""
-        if PillowDecoder.is_supported(transfer_syntax):
+        decoder = cls._select_decoder(transfer_syntax)
+        if decoder is None:
+            raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
+        if decoder == PillowDecoder:
             return PillowDecoder()
-        elif ImageCodecsDecoder.is_supported(transfer_syntax):
+        elif decoder == ImageCodecsDecoder:
             return ImageCodecsDecoder(transfer_syntax)
-        elif PydicomDecoder.is_supported(transfer_syntax):
+        elif decoder == PydicomDecoder:
             return PydicomDecoder(
                 transfer_syntax=transfer_syntax,
                 size=Size(dataset.Rows, dataset.Columns),
@@ -68,6 +65,31 @@ class Decoder(metaclass=ABCMeta):
             )
         else:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
+
+    @classmethod
+    def _select_decoder(cls, transfer_syntax: UID) -> Optional[Type["Decoder"]]:
+        decoders: Dict[str, Type[Decoder]] = {
+            "pillow": PillowDecoder,
+            "image_codecs": ImageCodecsDecoder,
+            "pydicom": PydicomDecoder,
+        }
+        if config.settings.prefered_decoder is not None:
+            if config.settings.prefered_decoder not in decoders:
+                raise ValueError(
+                    f"Unknown prefered decoder: {config.settings.prefered_decoder}"
+                )
+            decoder = decoders[config.settings.prefered_decoder]
+            if not decoder.is_supported(transfer_syntax):
+                return None
+            return decoder
+        return next(
+            (
+                decoder
+                for decoder in decoders.values()
+                if decoder.is_supported(transfer_syntax)
+            ),
+            None,
+        )
 
 
 class PillowDecoder(Decoder):
