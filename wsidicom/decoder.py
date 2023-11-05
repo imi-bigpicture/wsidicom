@@ -15,10 +15,19 @@ from pydicom.pixel_data_handlers import (
     pylibjpeg_handler,
     rle_handler,
 )
-from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
+from pydicom.uid import (
+    JPEG2000,
+    UID,
+    JPEG2000Lossless,
+    JPEGBaseline8Bit,
+    JPEGExtended12Bit,
+    JPEGLosslessP14,
+    JPEGLosslessSV1,
+    JPEGLSLossless,
+    JPEGLSNearLossless,
+)
 
 from wsidicom.geometry import Size
-from wsidicom.instance.dataset import WsiDataset
 
 
 class Decoder(metaclass=ABCMeta):
@@ -28,10 +37,16 @@ class Decoder(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @classmethod
-    @abstractmethod
     def is_supported(cls, transfer_syntax: UID) -> bool:
-        """Return true if decode supports transfer syntax."""
-        raise NotImplementedError()
+        """Return true if decoder supports transfer syntax."""
+        decoders: List[Type[Decoder]] = [
+            PillowDecoder,
+            ImageCodecsDecoder,
+            ImageCodecsJpegLsDecoder,
+            ImageCodecsJpeg2000Decoder,
+            PydicomDecoder,
+        ]
+        return any(decoder.is_supported(transfer_syntax) for decoder in decoders)
 
     @classmethod
     def create(cls, transfer_syntax: UID, dataset: Dataset) -> "Decoder":
@@ -58,6 +73,8 @@ class Decoder(metaclass=ABCMeta):
 
 
 class PillowDecoder(Decoder):
+    _supported_transfer_syntaxes = [JPEGBaseline8Bit, JPEG2000, JPEG2000Lossless]
+
     def decode(self, frame: bytes) -> PILImage:
         return Image.open(io.BytesIO(frame))
 
