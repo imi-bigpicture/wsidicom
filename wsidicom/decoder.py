@@ -67,6 +67,8 @@ class Decoder(metaclass=ABCMeta):
                 bits_allocated=dataset.BitsAllocated,
                 bits_stored=dataset.BitsStored,
                 photometric_interpretation=dataset.PhotometricInterpretation,
+                pixel_representation=dataset.PixelRepresentation,
+                planar_configuration=dataset.PlanarConfiguration,
             )
         else:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
@@ -92,6 +94,8 @@ class PydicomDecoder(Decoder):
         bits_allocated: int,
         bits_stored: int,
         photometric_interpretation: str,
+        pixel_representation: int,
+        planar_configuration: int,
     ):
         self._transfer_syntax = transfer_syntax
         self._size = size
@@ -99,6 +103,8 @@ class PydicomDecoder(Decoder):
         self._bits_allocated = bits_allocated
         self._bits_stored = bits_stored
         self._photometric_interpretation = photometric_interpretation
+        self._pixel_representation = pixel_representation
+        self._planar_configuration = planar_configuration
 
     def decode(self, frame: bytes) -> PILImage:
         array = decode_frame(
@@ -110,6 +116,8 @@ class PydicomDecoder(Decoder):
             bits_allocated=self._bits_allocated,
             bits_stored=self._bits_stored,
             photometric_interpretation=self._photometric_interpretation,
+            pixel_representation=self._pixel_representation,
+            planar_configuration=self._planar_configuration,
         )
         return Image.fromarray(array)
 
