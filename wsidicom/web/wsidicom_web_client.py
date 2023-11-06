@@ -12,9 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from pathlib import Path
 from typing import Any, Dict, Iterator, Optional, Tuple, Union
-from dicomweb_client import DICOMfileClient
 
 from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
@@ -145,10 +143,3 @@ class WsiDicomWebClient:
                 transfer_syntax,
             )
         raise NotImplementedError()
-
-
-class WsiDicomFileClient(WsiDicomWebClient):
-    def __init__(self, path: Path):
-        self._client = DICOMfileClient(
-            f"file://{path.absolute().as_posix()}", in_memory=True
-        )
