@@ -23,8 +23,9 @@ from typing import Any, Dict, Iterable, List, Tuple
 import pytest
 
 from tests.data_gen import create_layer_file
+from dicomweb_client import DICOMfileClient
 from wsidicom import WsiDicom
-from wsidicom.web.wsidicom_web_client import WsiDicomFileClient
+from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
@@ -138,7 +139,9 @@ def wsi_factory():
         if input_type == WsiInputType.FILE:
             wsi = WsiDicom.open(folder)
         elif input_type == WsiInputType.WEB:
-            client = WsiDicomFileClient(folder)
+            client = WsiDicomWebClient(
+                DICOMfileClient(f"file://{folder.absolute().as_posix()}")
+            )
             wsi = WsiDicom.open_web(
                 client,
                 test_definition["study_instance_uid"],

@@ -60,7 +60,7 @@ from wsidicom import WsiDicom, WsiDicomWebClient
 from requests.auth import HTTPBasicAuth
 
 auth = HTTPBasicAuth('username', 'password')
-client = WsiDicomWebClient(
+client = WsiDicomWebClient.create_client(
     'dicom_web_hostname',
     '/qido',
     '/wado,
@@ -72,6 +72,17 @@ slide = WsiDicom.open_web(
     "series uid top open"
 )
 ```
+
+Alternatively, if you have already created an instance of
+`dicomweb_client.DICOMwebClient`, that may be used to create the
+`WsiDicomWebClient` like so:
+
+```python
+dw_client = DICOMwebClient(url)
+client = WsiDicomWebClient(dw_client)
+```
+
+Then proceed to call `WsiDicom.open_web()` with this as in the first example.
 
 ***Use as a context manager.***
 
