@@ -70,10 +70,7 @@ class SlideUids:
         if settings.strict_uid_check:
             return self == other
 
-        return (
-            self.study_instance == other.study_instance
-            and self.series_instance == other.series_instance
-        )
+        return self.frame_of_reference == other.frame_of_reference
 
 
 @dataclass

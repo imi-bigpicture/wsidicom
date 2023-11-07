@@ -121,7 +121,7 @@ class WsiDicom:
         cls,
         client: WsiDicomWebClient,
         study_uid: Union[str, UID],
-        series_uid: Union[str, UID],
+        series_uids: Union[str, UID, Iterable[Union[str, UID]]],
         requested_transfer_syntax: UID = JPEGBaseline8Bit,
         label: Optional[Union[PILImage, str, Path]] = None,
     ) -> "WsiDicom":
@@ -133,8 +133,8 @@ class WsiDicom:
             Configured DICOM web client.
         study_uid: Union[str, UID]
             Study uid of wsi to open.
-        series_uid: Union[str, UID]
-            Series uid of wsi to open
+        series_uids: Union[str, UID, Iterable[Union[str, UID]]]
+            Series uids of wsi to open
         transfer_syntax: UID
             Transfer syntax to request for image data, for example
             UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
@@ -147,7 +147,7 @@ class WsiDicom:
             WsiDicom created from WSI DICOM instances in study-series.
         """
         source = WsiDicomWebSource(
-            client, study_uid, series_uid, requested_transfer_syntax
+            client, study_uid, series_uids, requested_transfer_syntax
         )
         return cls(source, label, True)
 
