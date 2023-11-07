@@ -157,16 +157,14 @@ class PydicomDecoder(Decoder):
 
 class ImageCodecsDecoder(Decoder):
     _supported_transfer_syntaxes = {
-        "jpeg8": [JPEGBaseline8Bit],
-        "ljpeg": [JPEGExtended12Bit, JPEGLosslessP14, JPEGLosslessSV1],
-        "jpegls": [JPEGLSLossless, JPEGLSNearLossless],
-        "jpeg2k": [JPEG2000Lossless, JPEG2000],
-    }
-    _codecs = {
-        "jpeg8": (jpeg8_decode, JPEG8),
-        "ljpeg": (ljpeg_decode, LJPEG),
-        "jpegls": (jpegls_decode, JPEGLS),
-        "jpeg2k": (jpeg2k_decode, JPEG2K),
+        JPEGBaseline8Bit: (jpeg8_decode, JPEG8),
+        JPEGExtended12Bit: (ljpeg_decode, LJPEG),
+        JPEGLosslessP14: (ljpeg_decode, LJPEG),
+        JPEGLosslessSV1: (ljpeg_decode, LJPEG),
+        JPEGLSLossless: (jpegls_decode, JPEGLS),
+        JPEGLSNearLossless: (jpegls_decode, JPEGLS),
+        JPEG2000Lossless: (jpeg2k_decode, JPEG2K),
+        JPEG2000: (jpeg2k_decode, JPEG2K),
     }
 
     def __init__(self, transfer_syntax: UID) -> None:
@@ -188,17 +186,10 @@ class ImageCodecsDecoder(Decoder):
     def _get_decoder(
         cls, transfer_syntax: UID
     ) -> Optional[Callable[[bytes], np.ndarray]]:
-        decoder_name = next(
-            (
-                name
-                for name, transfer_syntaxes in cls._supported_transfer_syntaxes.items()
-                if transfer_syntax in transfer_syntaxes
-            ),
-            None,
-        )
-        if decoder_name is None:
+        if transfer_syntax not in cls._supported_transfer_syntaxes:
             return None
-        decoder, codec = cls._codecs[decoder_name]
+        decoder, codec = cls._supported_transfer_syntaxes[transfer_syntax]
         assert decoder is not None and codec is not None
-        if codec.available:
-            return decoder
+        if not codec.available:
+            return None
+        return decoder
