@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Iterator, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, Optional, Sequence, Tuple, Union
 
 from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
