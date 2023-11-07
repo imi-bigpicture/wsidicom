@@ -310,7 +310,7 @@ class ImageData(metaclass=ABCMeta):
         tile_region = Region(scaled_tile_point * scale, Size(1, 1) * scale)
         tile_region = tile_region.crop(self.tiled_size)
 
-        def paste(tile_point: Point, tile: PILImage):
+        def paste(image: PILImage, tile_point: Point, tile: PILImage):
             image_coordinate = (tile_point - tile_region.start) * self.tile_size
             image.paste(tile, image_coordinate.to_tuple())
 
@@ -509,7 +509,7 @@ class ImageData(metaclass=ABCMeta):
         # in the first row or column.
         offset = (tile_region.start * self.tile_size) - region.start
 
-        def paste(tile_point: Point, tile: PILImage):
+        def paste(image: PILImage, tile_point: Point, tile: PILImage):
             image_coordinate = Point(
                 offset.x * (tile_point.x != tile_region.start.x),
                 offset.y * (tile_point.y != tile_region.start.y),
@@ -536,7 +536,7 @@ class ImageData(metaclass=ABCMeta):
         tile_region: Region,
         z: float,
         path: str,
-        paste_method: Callable[[Point, PILImage], None],
+        paste_method: Callable[[PILImage, Point, PILImage], None],
         threads: int,
     ):
         """
@@ -547,27 +547,31 @@ class ImageData(metaclass=ABCMeta):
 
         Parameters
         ----------
+        image: PILImage
+            Image to paste into.
         tile_region: Region
             Tile region of tiles to paste.
-        paste_method: Callable[[Point, PILImage], None]
-            Method that accepts a tile point and tile to paste and returns None.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        paste_method: Callable[[PILImage, Point, PILImage], None]
+            Method that accepts a image, a tile point and tile to paste and returns None.
         threads: int
             Number of workers to use.
         """
 
+        def thread_paste(tile_points: Iterable[Point]) -> None:
+            tile_points = list(tile_points)
+            for tile_point, tile in zip(
+                tile_points, self.get_decoded_tiles(tile_points, z, path)
+            ):
+                paste_method(image, tile_point, tile)
+
         if threads == 1:
-            for tile_point in tile_region.iterate_all():
-                tile = self._get_decoded_tile(tile_point, z, path)
-                paste_method(tile_point, tile)
+            thread_paste(tile_region.iterate_all())
 
         else:
-
-            def thread_paste(tile_points: Iterable[Point]) -> None:
-                for tile_point, tile in zip(
-                    tile_points, self.get_decoded_tiles(tile_points, z, path)
-                ):
-                    paste_method(tile_point, tile)
-
             with ThreadPoolExecutor(max_workers=threads) as pool:
                 pool.map(thread_paste, tile_region.chunked_iterate_all(threads))
 
