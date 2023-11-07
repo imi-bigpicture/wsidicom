@@ -12,17 +12,17 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Iterator, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, Optional, Sequence, Tuple, Union
 
 from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
 from pydicom import Dataset
 from pydicom.uid import (
+    JPEG2000,
     UID,
+    JPEG2000Lossless,
     JPEGBaseline8Bit,
     JPEGExtended12Bit,
-    JPEG2000,
-    JPEG2000Lossless,
 )
 from requests import Session
 from requests.auth import AuthBase
@@ -46,7 +46,8 @@ class WsiDicomWebClient:
 
     @classmethod
     def create_client(
-        cls, hostname: str,
+        cls,
+        hostname: str,
         qido_prefix: Optional[str] = None,
         wado_prefix: Optional[str] = None,
         auth: Optional[Union[AuthBase, Session]] = None,
@@ -96,22 +97,21 @@ class WsiDicomWebClient:
         )
         return Dataset.from_json(instance)
 
-    def get_frame(
+    def get_frames(
         self,
         study_uid: UID,
         series_uid: UID,
         instance_uid: UID,
-        frame_index: int,
+        frame_indices: Sequence[int],
         transfer_syntax: UID,
-    ) -> bytes:
-        frames = self._client.retrieve_instance_frames(
+    ) -> Iterator[bytes]:
+        return self._client.iter_instance_frames(
             study_uid,
             series_uid,
             instance_uid,
-            frame_numbers=[frame_index],
+            frame_numbers=frame_indices,
             media_types=(self._transfer_syntax_to_media_type(transfer_syntax),),
         )
-        return frames[0]
 
     def _get_instances_of_class(
         self, study_uid: UID, series_uid: UID, sop_class_uid: UID
