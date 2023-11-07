@@ -18,11 +18,11 @@ from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
 from pydicom import Dataset
 from pydicom.uid import (
+    JPEG2000,
     UID,
+    JPEG2000Lossless,
     JPEGBaseline8Bit,
     JPEGExtended12Bit,
-    JPEG2000,
-    JPEG2000Lossless,
 )
 from requests import Session
 from requests.auth import AuthBase
@@ -46,7 +46,8 @@ class WsiDicomWebClient:
 
     @classmethod
     def create_client(
-        cls, hostname: str,
+        cls,
+        hostname: str,
         qido_prefix: Optional[str] = None,
         wado_prefix: Optional[str] = None,
         auth: Optional[Union[AuthBase, Session]] = None,

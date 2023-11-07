@@ -17,13 +17,12 @@ import os
 from enum import Enum
 from io import BufferedReader
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Dict, Iterable, List, Tuple
 
 import pytest
+from dicomweb_client import DICOMfileClient
 
 from tests.data_gen import create_layer_file
-from dicomweb_client import DICOMfileClient
 from wsidicom import WsiDicom
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 

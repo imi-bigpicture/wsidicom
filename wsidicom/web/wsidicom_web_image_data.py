@@ -12,15 +12,16 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Iterable, Iterator, Sequence
-from pydicom.uid import UID
-from wsidicom.geometry import Point
+import io
+from typing import Iterable, Iterator
 
+from PIL import Image
+from PIL.Image import Image as PILImage
+from pydicom.uid import UID
+
+from wsidicom.geometry import Point
 from wsidicom.instance import WsiDataset, WsiDicomImageData
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
-from PIL.Image import Image as PILImage
-from PIL import Image
-import io
 
 
 class WsiDicomWebImageData(WsiDicomImageData):
