@@ -12,9 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from pathlib import Path
-from typing import Any, Dict, Iterator, Tuple
-from dicomweb_client import DICOMfileClient
+from typing import Any, Dict, Iterator, Optional, Tuple, Union
 
 from dicomweb_client.api import DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
@@ -26,6 +24,7 @@ from pydicom.uid import (
     JPEG2000,
     JPEG2000Lossless,
 )
+from requests import Session
 from requests.auth import AuthBase
 
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
@@ -35,15 +34,52 @@ SOP_INSTANCE_UID = "00080018"
 
 
 class WsiDicomWebClient:
-    def __init__(
-        self, hostname: str, qido_prefix: str, wado_prefix: str, auth: AuthBase
+    def __init__(self, client: DICOMwebClient):
+        """Create a WsiDicomWebClient.
+
+        Parameters
+        ----------
+        client: DICOMwebClient
+            The DICOMwebClient to use
+        """
+        self._client = client
+
+    @classmethod
+    def create_client(
+        cls, hostname: str,
+        qido_prefix: Optional[str] = None,
+        wado_prefix: Optional[str] = None,
+        auth: Optional[Union[AuthBase, Session]] = None,
     ):
-        self._client = DICOMwebClient(
+        """Create a WsiDicomWebClient.
+
+        Parameters
+        ----------
+        hostname: str
+            The URL of the DICOMweb server
+        qido_prefix: Optional[str]
+            If needed by the server, provide the prefix for QIDO services
+        wado_prefix: Optional[str]
+            If needed by the server, provide the prefix for WADO services
+        auth: Optional[Union[AuthBase, Session]]
+            If needed by the server, provide authentication credentials.
+            This may be provided by either passing an object that
+            inherits from requests.auth.AuthBase, or by passing a
+            requests.Session object.
+        """
+        if isinstance(auth, Session) or auth is None:
+            session = auth
+        else:
+            session = create_session_from_auth(auth)
+
+        client = DICOMwebClient(
             hostname,
             qido_url_prefix=qido_prefix,
             wado_url_prefix=wado_prefix,
-            session=create_session_from_auth(auth),
+            session=session,
         )
+
+        return cls(client)
 
     def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
         return self._get_instances_of_class(study_uid, series_uid, WSI_SOP_CLASS_UID)
@@ -107,10 +143,3 @@ class WsiDicomWebClient:
                 transfer_syntax,
             )
         raise NotImplementedError()
-
-
-class WsiDicomFileClient(WsiDicomWebClient):
-    def __init__(self, path: Path):
-        self._client = DICOMfileClient(
-            f"file://{path.absolute().as_posix()}", in_memory=True
-        )
