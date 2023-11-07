@@ -374,6 +374,15 @@ class Region:
             for x in range(self.start.x, self.end.x)
         )
 
+    def chunked_iterate_all(self, chunks: int) -> Iterator[Iterator[Point]]:
+        points = list(self.iterate_all())
+        points_count = len(points)
+        chunk_size = math.ceil(points_count / chunks)
+        for chunk_index in range(chunks):
+            chunk_start = chunk_index * chunk_size
+            chunk_end = min((chunk_index + 1) * chunk_size, points_count)
+            yield (point for point in points[chunk_start:chunk_end])
+
     @classmethod
     def from_points(cls, point_1: "Point", point_2: "Point") -> "Region":
         return cls(

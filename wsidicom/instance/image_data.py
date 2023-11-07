@@ -12,10 +12,21 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module implementing generic ImageData for accessing image data."""
+
 import io
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+)
 
 from PIL import Image
 from PIL.Image import Image as PILImage
@@ -27,12 +38,17 @@ from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 
 
 class ImageData(metaclass=ABCMeta):
-    """Generic class for image data that can be inherited to implement support
-    for other image/file formats. Subclasses should implement properties to get
-    transfer_syntax, image_size, tile_size, pixel_spacing,  samples_per_pixel,
-    and photometric_interpretation and methods get_tile() and close().
+    """
+    Generic class for image data.
+
+    Can be inherited to implement support for other image/file formats. Subclasses
+    should implement properties to get transfer_syntax, image_size, tile_size,
+    pixel_spacing,  samples_per_pixel, and photometric_interpretation and methods
+    get_tile() and close().
+
     Additionally properties focal_planes and/or optical_paths should be
-    overridden if multiple focal planes or optical paths are implemented."""
+    overridden if multiple focal planes or optical paths are implemented.
+    """
 
     _default_z: Optional[float] = None
     _blank_tile: Optional[PILImage] = None
@@ -41,39 +57,37 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def transfer_syntax(self) -> UID:
-        """Should return the uid of the transfer syntax of the image."""
+        """Return the uid of the transfer syntax of the image."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def image_size(self) -> Size:
-        """Should return the pixel size of the image."""
+        """Retur the pixel size of the image."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def tile_size(self) -> Size:
-        """Should return the pixel tile size of the image, or pixel size of
-        the image if not tiled."""
+        """Return the pixel size of a tile in the image, or image size if not tiled."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def pixel_spacing(self) -> Optional[SizeMm]:
-        """Should return the size of the pixels in mm/pixel."""
+        """Return the size of the pixels in mm/pixel."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def samples_per_pixel(self) -> int:
-        """Should return number of samples per pixel (e.g. 3 for RGB)."""
+        """Return number of samples per pixel (e.g. 3 for RGB)."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def photometric_interpretation(self) -> str:
-        """Should return the photophotometric interpretation of the image
-        data."""
+        """Return the photophotometric interpretation of the image data."""
         raise NotImplementedError()
 
     @property
@@ -96,24 +110,58 @@ class ImageData(metaclass=ABCMeta):
 
     @abstractmethod
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
-        """Should return Image for tile defined by tile (x, y), z,
-        and optical path."""
+        """
+        Return Pillow image for tile.
+
+        Parameters
+        ----------
+        tile: Point
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        PILImage
+            Tile as Pillow Image.
+        """
         raise NotImplementedError()
 
     @abstractmethod
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
-        """Should return image bytes for tile defined by tile (x, y), z,
-        and optical path."""
+        """
+        Return bytes for tile.
+
+        Parameters
+        ----------
+        tile: Point
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        bytes
+            Tile as bytes.
+        """
         raise NotImplementedError()
 
     @property
     def tiled_size(self) -> Size:
-        """The size of the image when divided into tiles, e.g. number of
-        columns and rows of tiles. Equals (1, 1) if image is not tiled."""
+        """
+        The size (columns and rows of tiles) of the image when divided into tiles.
+
+        Equals (1, 1) if image is not tiled.
+        """
         return self.image_size.ceil_div(self.tile_size)
 
     @property
     def image_region(self) -> Region:
+        """The pixel region the image covers."""
         return Region(Point(0, 0), self.image_size)
 
     @property
@@ -128,7 +176,7 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     def image_mode(self) -> str:
-        """Return Pillow image mode (e.g. RGB) for image data"""
+        """Return Pillow image mode (e.g. RGB) for image data."""
         if self.samples_per_pixel == 1:
             return "L"
         elif self.samples_per_pixel == 3:
@@ -141,13 +189,17 @@ class ImageData(metaclass=ABCMeta):
         return self._get_blank_color(self.photometric_interpretation)
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+        """Return pretty string of object."""
         return str(self)
 
     @property
     def default_z(self) -> float:
-        """Return single defined focal plane (in um) if only one focal plane
-        defined. Return the middle focal plane if several focal planes are
-        defined."""
+        """
+        The focal plane to use as default.
+
+        Return single defined focal plane (in um) if only one focal plane defined.
+        Return the middle focal plane if several focal planes are defined.
+        """
         if self._default_z is None:
             default = 0
             if len(self.focal_planes) > 1:
@@ -165,8 +217,7 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     def default_path(self) -> str:
-        """Return the first defined optical path as default optical path
-        identifier."""
+        """Return the first defined optical path as default optical path identifier."""
         return self.optical_paths[0]
 
     @property
@@ -189,9 +240,9 @@ class ImageData(metaclass=ABCMeta):
 
     def get_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
-    ) -> List[PILImage]:
-        """Return tiles for tile defined by tile (x, y), z, and optical
-        path.
+    ) -> Iterator[PILImage]:
+        """
+        Return Pillow images for tiles.
 
         Parameters
         ----------
@@ -204,16 +255,16 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        List[PILImage]
+        Iterator[PILImage]
             Tiles as Images.
         """
-        return [self._get_decoded_tile(tile, z, path) for tile in tiles]
+        return (self._get_decoded_tile(tile, z, path) for tile in tiles)
 
     def get_encoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
-    ) -> List[bytes]:
-        """Return tiles for tile defined by tile (x, y), z, and optical
-        path.
+    ) -> Iterator[bytes]:
+        """
+        Return bytes for tiles.
 
         Parameters
         ----------
@@ -226,10 +277,10 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        List[bytes]
-            Tiles in bytes.
+        Iterator[PILImage]
+            Tiles as Images.
         """
-        return [self._get_encoded_tile(tile, z, path) for tile in tiles]
+        return (self._get_encoded_tile(tile, z, path) for tile in tiles)
 
     def get_scaled_tile(
         self,
@@ -239,8 +290,8 @@ class ImageData(metaclass=ABCMeta):
         scale: int,
         workers: int = 1,
     ) -> PILImage:
-        """Return scaled tile defined by tile (x, y), z, optical
-        path and scale.
+        """
+        Return scaled tile as Pillow image.
 
         Parameters
         ----------
@@ -259,7 +310,7 @@ class ImageData(metaclass=ABCMeta):
         Returns
         ----------
         PILImage
-            Scaled tiled as Image.
+            Scaled tiled as Pillow image.
         """
         image = Image.new(
             mode=self.image_mode,
@@ -268,17 +319,21 @@ class ImageData(metaclass=ABCMeta):
         )
         # Get decoded tiles for the region covering the scaled tile
         # in the image data
-        tile_points = Region(scaled_tile_point * scale, Size(1, 1) * scale)
+        tile_region = Region(scaled_tile_point * scale, Size(1, 1) * scale)
+        tile_region = tile_region.crop(self.tiled_size)
 
-        def tile_paste(tile_point: Point) -> None:
-            if (tile_point.x < self.tiled_size.width) and (
-                tile_point.y < self.tiled_size.height
-            ):
-                tile = self._get_decoded_tile(tile_point, z, path)
-                image_coordinate = (tile_point - tile_points.start) * self.tile_size
-                image.paste(tile, image_coordinate.to_tuple())
+        def paste(image: PILImage, tile_point: Point, tile: PILImage):
+            image_coordinate = (tile_point - tile_region.start) * self.tile_size
+            image.paste(tile, image_coordinate.to_tuple())
 
-        self._paste_tiles(tile_points, tile_paste, workers)
+        self._paste_tiles(
+            image,
+            tile_region,
+            z,
+            path,
+            paste,
+            workers,
+        )
 
         return image.resize(
             self.tile_size.to_tuple(), resample=Image.Resampling.BILINEAR
@@ -293,8 +348,8 @@ class ImageData(metaclass=ABCMeta):
         image_format: str,
         image_options: Dict[str, Any],
     ) -> bytes:
-        """Return scaled encoded tile defined by tile (x, y), z, optical
-        path and scale.
+        """
+        Return scaled tile as bytes.
 
         Parameters
         ----------
@@ -329,9 +384,9 @@ class ImageData(metaclass=ABCMeta):
         scale: int,
         image_format: str,
         image_options: Dict[str, Any],
-    ) -> List[bytes]:
-        """Return scaled encoded tiles defined by tile (x, y) positions, z,
-        optical path and scale.
+    ) -> Iterator[bytes]:
+        """
+        Return scaled tiles as bytes.
 
         Parameters
         ----------
@@ -353,21 +408,23 @@ class ImageData(metaclass=ABCMeta):
         List[bytes]
             Scaled tiles as bytes.
         """
-        return [
+        return (
             self.get_scaled_encoded_tile(
                 scaled_tile_point, z, path, scale, image_format, image_options
             )
             for scaled_tile_point in scaled_tile_points
-        ]
+        )
 
-    def get_tile(self, tile: Point, z: float, path: str) -> PILImage:
-        """Get tile image at tile coordinate x, y. If frame is inside tile
-        geometry but no tile exists in frame data (sparse) returns blank image. Crops
-        tile to be inside image boundary.
+    def get_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
+        """
+        Get tile as Pillow image.
+
+        If frame is inside tile geometry but no tile exists in frame data (sparse)
+        returns blank image. Crops tile to be inside image boundary.
 
         Parameters
         ----------
-        tile: Point
+        tile_point: Point
             Tile x, y coordinate.
         z: float
             Z coordinate.
@@ -380,17 +437,30 @@ class ImageData(metaclass=ABCMeta):
         PILImage
             Tile image.
         """
-        image = self._get_decoded_tile(tile, z, path)
-        tile_crop = self.image_region.inside_crop(tile, self.tile_size)
+        tile = self._get_decoded_tile(tile_point, z, path)
+        return self._crop_tile(tile_point, tile)
+
+    def get_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[PILImage]:
+        return (
+            self._crop_tile(tile_point, tile)
+            for tile_point, tile in zip(tiles, self.get_decoded_tiles(tiles, z, path))
+        )
+
+    def _crop_tile(self, tile_point: Point, tile: PILImage) -> PILImage:
+        tile_crop = self.image_region.inside_crop(tile_point, self.tile_size)
         # Check if tile is an edge tile that should be cropped
         if tile_crop.size != self.tile_size:
-            return image.crop(box=tile_crop.box)
-        return image
+            return tile.crop(box=tile_crop.box)
+        return tile
 
     def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
-        """Get tile bytes at tile coordinate x, y. If frame is inside tile geometry
-        but no tile exists in frame data (sparse) returns encoded blank image. Crops
-        tile to be inside image boundary.
+        """
+        Get tile as bytes.
+
+        If frame is inside tile geometry but no tile exists in frame data (sparse)
+        returns encoded blank image. Crops tile to be inside image boundary.
 
         Parameters
         ----------
@@ -438,62 +508,88 @@ class ImageData(metaclass=ABCMeta):
             Stitched image
         """
 
-        def get_and_crop_tile(tile_point: Point) -> PILImage:
-            tile = self._get_decoded_tile(tile_point, z, path)
-            tile_crop = region.inside_crop(tile_point, self.tile_size)
+        tile_region = self._get_tile_range(region, z, path)
+        if tile_region.size.area == 1:
+            tile = self._get_decoded_tile(tile_region.start, z, path)
+            tile_crop = region.inside_crop(tile_region.start, self.tile_size)
             if tile_crop.size != self.tile_size:
                 tile = tile.crop(box=tile_crop.box)
             return tile
-
-        tile_points = self._get_tile_range(region, z, path)
-        if tile_points.size.area == 1:
-            return get_and_crop_tile(tile_points.start)
         image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
         # The tiles are cropped prior to pasting. This offset is the equal to the first
         # (upper left) tiles size, and is added to the image coordinate for tiles not
         # in the first row or column.
-        offset = (tile_points.start * self.tile_size) - region.start
+        offset = (tile_region.start * self.tile_size) - region.start
 
-        # Method that pastes tile at point into image.
-        def tile_paste(tile_point: Point) -> None:
-            tile = get_and_crop_tile(tile_point)
+        def paste(image: PILImage, tile_point: Point, tile: PILImage):
             image_coordinate = Point(
-                offset.x * (tile_point.x != tile_points.start.x),
-                offset.y * (tile_point.y != tile_points.start.y),
+                offset.x * (tile_point.x != tile_region.start.x),
+                offset.y * (tile_point.y != tile_region.start.y),
             )
-            image_coordinate += (tile_point - tile_points.start) * self.tile_size
+            image_coordinate += (tile_point - tile_region.start) * self.tile_size
+            tile_crop = region.inside_crop(tile_point, self.tile_size)
+            if tile_crop.size != self.tile_size:
+                tile = tile.crop(box=tile_crop.box)
             image.paste(tile, image_coordinate.to_tuple())
 
-        self._paste_tiles(tile_points, tile_paste, threads)
+        self._paste_tiles(
+            image,
+            tile_region,
+            z,
+            path,
+            paste,
+            threads,
+        )
         return image
 
-    @staticmethod
     def _paste_tiles(
-        tile_region: Region, paste_method: Callable[[Point], None], threads: int
+        self,
+        image: PILImage,
+        tile_region: Region,
+        z: float,
+        path: str,
+        paste_method: Callable[[PILImage, Point, PILImage], None],
+        threads: int,
     ):
-        """Paste tiles in region using method. Use threading if number of tiles to paste
+        """
+        Paste tiles in region using method.
+
+        Use threading if number of tiles to paste
         is larger than one and requested worker count is more than one.
 
         Parameters
         ----------
+        image: PILImage
+            Image to paste into.
         tile_region: Region
             Tile region of tiles to paste.
-        paste_method: Callable[[Point], None]
-            Method that accepts a tile point to paste and returns None.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        paste_method: Callable[[PILImage, Point, PILImage], None]
+            Method that accepts a image, a tile point and tile to paste and returns None.
         threads: int
             Number of workers to use.
         """
 
+        def thread_paste(tile_points: Iterable[Point]) -> None:
+            tile_points = list(tile_points)
+            for tile_point, tile in zip(
+                tile_points, self.get_decoded_tiles(tile_points, z, path)
+            ):
+                paste_method(image, tile_point, tile)
+
         if threads == 1:
-            for tile_point in tile_region.iterate_all():
-                paste_method(tile_point)
+            thread_paste(tile_region.iterate_all())
+
         else:
             with ThreadPoolExecutor(max_workers=threads) as pool:
-                pool.map(paste_method, tile_region.iterate_all())
+                pool.map(thread_paste, tile_region.chunked_iterate_all(threads))
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
-        """Check if tile region is inside tile geometry and z coordinate and
-        optical path exists.
+        """
+        Check if tile region is inside image and z coordinate and optical path exists.
 
         Parameters
         ----------
@@ -531,8 +627,8 @@ class ImageData(metaclass=ABCMeta):
 
     @staticmethod
     def _image_settings(transfer_syntax: UID) -> Tuple[str, Dict[str, Any]]:
-        """Return image format and options for creating encoded tiles as in the
-        used transfer syntax.
+        """
+        Return Pillow settings for encoding tiles according to transfer syntax.
 
         Parameters
         ----------

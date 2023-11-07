@@ -408,7 +408,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         if scale == 1:
 
-            def get_tiles_thread(tile_points: Iterable[Point]) -> List[bytes]:
+            def get_tiles_thread(tile_points: Iterable[Point]) -> Iterator[bytes]:
                 """Thread function to get tiles as bytes."""
                 return image_data.get_encoded_tiles(tile_points, z, path)
 
@@ -417,7 +417,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
             def get_scaled_tiles_thread(
                 scaled_tile_points: Iterable[Point],
-            ) -> List[bytes]:
+            ) -> Iterator[bytes]:
                 """Thread function to get scaled tiles as bytes."""
                 return image_data.get_scaled_encoded_tiles(
                     scaled_tile_points, z, path, scale, image_format, image_options

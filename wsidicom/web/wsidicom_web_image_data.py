@@ -12,15 +12,25 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import io
+from typing import Iterable, Iterator
+
+from PIL import Image
+from PIL.Image import Image as PILImage
 from pydicom.uid import UID
 from wsidicom.decoder import Decoder
 
+from wsidicom.geometry import Point
 from wsidicom.instance import WsiDataset, WsiDicomImageData
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 
 class WsiDicomWebImageData(WsiDicomImageData):
-    """ImageData for WSI DICOM instances read from DICOMWeb."""
+    """
+    ImageData for WSI DICOM instances read from DICOMWeb.
+
+    Overrides get_decoded_tiles() and get_encoded_tiles() to fetch multiple frames.
+    """
 
     def __init__(
         self,
@@ -28,8 +38,8 @@ class WsiDicomWebImageData(WsiDicomImageData):
         dataset: WsiDataset,
         transfer_syntax: UID,
     ):
-        """Create WsiDicomWebImageData from provided dataset and read image data using
-        provided client.
+        """
+        Create WsiDicomWebImageData from  dataset and provided client.
 
         Parameters
         ----------
@@ -54,12 +64,85 @@ class WsiDicomWebImageData(WsiDicomImageData):
         """The uid of the transfer syntax of the image."""
         return self._transfer_syntax
 
+    def get_decoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[PILImage]:
+        """
+        Return Pillow images for tiles.
+
+        Parameters
+        ----------
+        tiles: Iterable[Point]
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        Iterator[PILImage]
+            Tiles as Images.
+        """
+        frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
+
+        frames = self._get_tile_frames(
+            frame_index for frame_index in frame_indices if frame_index != -1
+        )
+        for frame_index in frame_indices:
+            if frame_index == -1:
+                yield self.blank_tile
+            frame = next(frames)
+            yield Image.open(io.BytesIO(frame))
+
+    def get_encoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[bytes]:
+        """
+        Return bytes for tiles.
+
+        Parameters
+        ----------
+        tiles: Iterable[Point]
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        Iterator[PILImage]
+            Tiles as Images.
+        """
+        frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
+
+        frames = self._get_tile_frames(
+            frame_index for frame_index in frame_indices if frame_index != -1
+        )
+        for frame_index in frame_indices:
+            if frame_index == -1:
+                yield self.blank_encoded_tile
+            return next(frames)
+
     def _get_tile_frame(self, frame_index: int) -> bytes:
         # First frame for DICOM web is 1.
-        return self._client.get_frame(
+        return next(
+            self._client.get_frames(
+                self._study_uid,
+                self._series_uid,
+                self._instance_uid,
+                [frame_index + 1],
+                self._transfer_syntax,
+            )
+        )
+
+    def _get_tile_frames(self, frame_indices: Iterable[int]) -> Iterator[bytes]:
+        # First frame for DICOM web is 1.
+        return self._client.get_frames(
             self._study_uid,
             self._series_uid,
             self._instance_uid,
-            frame_index + 1,
+            [frame_index + 1 for frame_index in frame_indices],
             self._transfer_syntax,
         )

@@ -14,7 +14,7 @@
 
 from abc import ABCMeta, abstractmethod
 from functools import cached_property
-from typing import List, Optional, Sequence
+from typing import Iterator, List, Optional, Sequence
 
 from PIL.Image import Image as PILImage
 from wsidicom.decoder import Decoder
@@ -50,8 +50,12 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
+    def _get_tile_frames(self, frame_indices: Sequence[int]) -> Iterator[bytes]:
+        return (self._get_tile_frame(frame_index) for frame_index in frame_indices)
+
     @cached_property
     def tiles(self) -> TileIndex:
+        """Return tile index for image."""
         if self._datasets[0].tile_type == TileType.FULL:
             return FullTileIndex(self._datasets)
         else:
@@ -107,25 +111,57 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return ImageCoordinateSystem.from_dataset(self._datasets[0])
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
-        """Return image bytes for tile defined by tile (x, y), z,
-        and optical path."""
+        """
+        Return bytes for tile.
+
+        Parameters
+        ----------
+        tile: Point
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        bytes
+            Tile as bytes.
+        """
         frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:
             return self.blank_encoded_tile
         return self._get_tile_frame(frame_index)
 
-    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
-        """Return Pillow image for tile defined by tile (x, y), z,
-        and optical path."""
-        frame_index = self._get_frame_index(tile_point, z, path)
+    def _get_decoded_tile(self, tile: Point, z: float, path: str) -> PILImage:
+        """
+        Return Pillow image for tile.
+
+        Parameters
+        ----------
+        tile: Point
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        PILImage
+            Tile as Pillow Image.
+        """
+        frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:
             return self.blank_tile
         frame = self._get_tile_frame(frame_index)
         return self._decoder.decode(frame)
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Return frame index for tile. Raises WsiDicomOutOfBoundsError if
-        tile, z, or path is not valid.
+        """
+        Return frame index for tile.
+
+        Raises WsiDicomOutOfBoundsError if tile, z, or path is not valid.
 
         Parameters
         ----------
