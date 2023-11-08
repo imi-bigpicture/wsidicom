@@ -239,18 +239,6 @@ class WsiDataset(Dataset):
             )
 
     @cached_property
-    def tile_frame_count(self) -> int:
-        """Return number of frames corresponding to tiles in instance."""
-        frame_count = self.frame_count
-
-        if self.image_type == ImageType.VOLUME:
-            # We need to take into account the number of optical paths and focal planes
-            frame_count //= self.number_of_focal_planes
-            frame_count //= self.number_of_optical_paths
-
-        return cast(int, frame_count)
-
-    @cached_property
     def frame_count(self) -> int:
         """Return number of frames in instance."""
         frame_count = self._get_dicom_attribute("NumberOfFrames")
@@ -268,10 +256,18 @@ class WsiDataset(Dataset):
         """
         tile_type = self._get_dicom_attribute("DimensionOrganizationType")
         if tile_type == "TILED_FULL":
+            # By the standard it should be tiled full.
             return TileType.FULL
-        elif "PerFrameFunctionalGroupsSequence" in self:
+        if "PerFrameFunctionalGroupsSequence" in self:
+            # If no per frame functional sequence we cant make a sparse tile index.
             return TileType.SPARSE
-        elif self.tile_frame_count == 1:
+        if self.image_type == ImageType.LABEL:
+            # Labels are expected to only have one frame and can be treated as tiled full.
+            return TileType.FULL
+        number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
+        number_of_optical_paths = getattr(self, "NumberOfOpticalPaths", 1)
+        if self.frame_count == number_of_focal_planes * number_of_optical_paths:
+            # One frame per focal plane and optical path, treat as tiled full.
             return TileType.FULL
         raise WsiDicomError("Undetermined tile type.")
 
@@ -328,22 +324,6 @@ class WsiDataset(Dataset):
         return getattr(self.pixel_measure, "SpacingBetweenSlices", None)
 
     @cached_property
-    def number_of_focal_planes(self) -> int:
-        """Return number of focal planes."""
-        number_of_focal_planes = self._get_dicom_attribute(
-            "TotalPixelMatrixFocalPlanes"
-        )
-        return cast(int, number_of_focal_planes)
-
-    @cached_property
-    def number_of_optical_paths(self) -> int:
-        """Return number of optical paths."""
-        number_of_optical_paths = self._get_dicom_attribute(
-            "NumberOfOpticalPaths"
-        )
-        return cast(int, number_of_optical_paths)
-
-    @cached_property
     def frame_sequence(self) -> DicomSequence:
         """Return per frame functional group sequene if present, otherwise
         shared functional group sequence.
@@ -398,14 +378,26 @@ class WsiDataset(Dataset):
             raise WsiDicomError("Image size is zero")
         if self.tile_type == TileType.FULL:
             expected_tiled_size = image_size.ceil_div(self.tile_size)
-            if expected_tiled_size.area != self.tile_frame_count:
+            number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
+            number_of_optical_paths = getattr(self, "NumberOfOpticalPaths", 1)
+            expected_frame_count = (
+                expected_tiled_size.area
+                * number_of_focal_planes
+                * number_of_optical_paths
+            )
+            if expected_frame_count != self.frame_count:
                 error = (
                     f"Image size {image_size} does not match tile size "
-                    f"{self.tile_size} and number of frames {self.tile_frame_count} "
+                    f"{self.tile_size} and number of frames {self.frame_count} "
                     f"for tile type {TileType.FULL}."
                 )
-                if self.image_type == ImageType.VOLUME or self.tile_frame_count != 1:
-                    # Be strict on volume images.
+                if (
+                    self.image_type == ImageType.VOLUME
+                    or self.frame_count
+                    != number_of_focal_planes * number_of_optical_paths
+                ):
+                    # Be strict on volume images if more than one frame per focal plane
+                    # and optical path.
                     raise WsiDicomError(error)
                 # Labels and overviews are likely to have only one tile.
                 error += " Overriding image size to tile size."
@@ -474,7 +466,8 @@ class WsiDataset(Dataset):
             return self._get_dicom_attribute("SliceThickness", self.pixel_measure)
         except AttributeError:
             if self.mm_depth is not None:
-                return self.mm_depth / self.number_of_focal_planes
+                number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
+                return self.mm_depth / number_of_focal_planes
         return None
 
     @cached_property
@@ -576,8 +569,10 @@ class WsiDataset(Dataset):
             and self.image_size == other_dataset.image_size
             and self.tile_size == other_dataset.tile_size
             and self.tile_type == other_dataset.tile_type
-            and (getattr(self, 'TotalPixelMatrixOriginSequence', None) ==
-                 getattr(other_dataset, 'TotalPixelMatrixOriginSequence', None))
+            and (
+                getattr(self, "TotalPixelMatrixOriginSequence", None)
+                == getattr(other_dataset, "TotalPixelMatrixOriginSequence", None)
+            )
         )
 
     def matches_series(self, uids: SlideUids, tile_size: Optional[Size] = None) -> bool:
