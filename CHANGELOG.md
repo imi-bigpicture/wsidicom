@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed `WsiDicomFileClient` since it is no longer needed.
 - Fetching multiple frames in one request instead of one request per frame when using DICOM Web.
 - Allow multiple series UIDs to be passed to `WsiDicom.open_web()`.
-- Loosen UID matching to just `frame_of_reference`.
+- Loosen UID matching to just `study_instance`.
 - Require equality of 'TotalPixelMatrixOriginSequence' when matching datasets.
 
 ## [0.12.0] - 2023-10-04

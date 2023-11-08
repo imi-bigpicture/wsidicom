@@ -68,9 +68,12 @@ class SlideUids:
 
     def matches(self, other: "SlideUids") -> bool:
         if settings.strict_uid_check:
-            return self == other
+            return (
+                self.study_instance == other.study_instance
+                and self.frame_of_reference == other.frame_of_reference
+            )
 
-        return self.frame_of_reference == other.frame_of_reference
+        return self.study_instance == other.study_instance
 
 
 @dataclass
