@@ -393,7 +393,7 @@ class WsiDataset(Dataset):
                 )
                 if (
                     self.image_type == ImageType.VOLUME
-                    or self.frame_count
+                    and self.frame_count
                     != number_of_focal_planes * number_of_optical_paths
                 ):
                     # Be strict on volume images if more than one frame per focal plane
