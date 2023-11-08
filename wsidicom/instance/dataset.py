@@ -570,11 +570,14 @@ class WsiDataset(Dataset):
         bool
             True if same instance.
         """
+
         return (
             self.uids == other_dataset.uids
             and self.image_size == other_dataset.image_size
             and self.tile_size == other_dataset.tile_size
             and self.tile_type == other_dataset.tile_type
+            and (getattr(self, 'TotalPixelMatrixOriginSequence', None) ==
+                 getattr(other_dataset, 'TotalPixelMatrixOriginSequence', None))
         )
 
     def matches_series(self, uids: SlideUids, tile_size: Optional[Size] = None) -> bool:
