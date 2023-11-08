@@ -55,7 +55,7 @@ class WsiDicomWebSource(Source):
         if not isinstance(study_uid, UID):
             study_uid = UID(study_uid)
 
-        if not isinstance(series_uids, abc.Iterable):
+        if isinstance(series_uids, (str, UID)):
             series_uids = [series_uids]
 
         self._level_instances: List[WsiInstance] = []

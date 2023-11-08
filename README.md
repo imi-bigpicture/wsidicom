@@ -69,7 +69,7 @@ client = WsiDicomWebClient.create_client(
 slide = WsiDicom.open_web(
     client,
     "study uid to open",
-    "series uids top open"
+    "series uid to open" or ["series uid 1 to open", "series uid 2 to open"]
 )
 ```
 
