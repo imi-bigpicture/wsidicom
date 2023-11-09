@@ -101,7 +101,7 @@ class FullTileIndex(TileIndex):
         focal_planes: Set[float] = set()
         for dataset in self._datasets:
             slice_spacing = dataset.spacing_between_slices
-            number_of_focal_planes = dataset.number_of_focal_planes
+            number_of_focal_planes = getattr(dataset, "TotalPixelMatrixFocalPlanes", 1)
             if slice_spacing is None:
                 if number_of_focal_planes == 1:
                     slice_spacing = 0.0
