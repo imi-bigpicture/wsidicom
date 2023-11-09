@@ -17,6 +17,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
+from re import U
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
 from pydicom.dataset import Dataset
@@ -376,7 +377,9 @@ class WsiDataset(Dataset):
         image_size = Size(self.TotalPixelMatrixColumns, self.TotalPixelMatrixRows)
         if image_size.width <= 0 or image_size.height <= 0:
             raise WsiDicomError("Image size is zero")
-        if self.tile_type == TileType.FULL:
+        if self.tile_type == TileType.FULL and self.uids.concatenation is None:
+            # Check that the number of frames match the image size and tile size.
+            # Dont check concantenated instances as the frame count is ambiguous.
             expected_tiled_size = image_size.ceil_div(self.tile_size)
             number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
             number_of_optical_paths = getattr(self, "NumberOfOpticalPaths", 1)
