@@ -15,6 +15,7 @@ from pydicom.uid import (
     JPEGLSNearLossless,
     ExplicitVRLittleEndian,
     ExplicitVRBigEndian,
+    ImplicitVRLittleEndian,
     RLELossless,
 )
 
@@ -139,6 +140,7 @@ class Settings(metaclass=ABCMeta):
                 dataset.is_little_endian
                 if dataset.is_little_endian is not None
                 else True,
+                dataset.is_implicit_VR if dataset.is_implicit_VR is not None else True,
             )
         raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
 
@@ -164,7 +166,7 @@ class JpegSettings(Settings):
 
     @property
     def extension(self) -> str:
-        return "jpg"
+        return ".jpg"
 
 
 @dataclass
@@ -187,7 +189,7 @@ class JpegLosslessSettings(Settings):
 
     @property
     def extension(self) -> str:
-        return "jpg"
+        return ".jpg"
 
 
 @dataclass
@@ -205,7 +207,7 @@ class JpegLsNearLosslessSettings(Settings):
 
     @property
     def extension(self) -> str:
-        return "jls"
+        return ".jls"
 
 
 @dataclass
@@ -220,7 +222,7 @@ class JpegLsLosslessSettings(Settings):
 
     @property
     def extension(self) -> str:
-        return "jls"
+        return ".jls"
 
 
 @dataclass
@@ -241,7 +243,7 @@ class Jpeg2kSettings(Settings):
 
     @property
     def extension(self) -> str:
-        return "jp2"
+        return ".jp2"
 
 
 @dataclass
@@ -260,19 +262,22 @@ class Jpeg2kLosslessSettings(Settings):
 
     @property
     def extension(self) -> str:
-        return "jp2"
+        return ".jp2"
 
 
 @dataclass
 class NumpySettings(Settings):
     channels: Union[Literal[Channels.GRAYSCALE], Literal[Channels.RGB]] = Channels.RGB
-    pixel_representation: int = 0
     little_endian: bool = True
+    is_explicit_vr: bool = True
+    pixel_representation: int = 0
 
     @property
     def transfer_syntax(self) -> UID:
         if self.little_endian:
-            return ExplicitVRLittleEndian
+            if self.is_explicit_vr:
+                return ExplicitVRLittleEndian
+            return ImplicitVRLittleEndian
         return ExplicitVRBigEndian
 
     @property
@@ -283,7 +288,7 @@ class NumpySettings(Settings):
 
     @property
     def extension(self) -> str:
-        return "raw"
+        return ".raw"
 
 
 @dataclass
@@ -302,4 +307,4 @@ class RleSettings(Settings):
 
     @property
     def extension(self) -> str:
-        return "rle"
+        return ".rle"

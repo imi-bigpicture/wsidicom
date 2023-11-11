@@ -1,5 +1,6 @@
 import pytest
 from PIL import Image, ImageChops, ImageStat
+from PIL.Image import Image as PILImage
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -16,10 +17,10 @@ from pydicom.uid import (
     JPEGLSNearLossless,
     RLELossless,
 )
+from tests.codec import get_encoded_test_file
 
 from wsidicom.codec import (
     Channels,
-    Encoder,
     Jpeg2kLosslessSettings,
     Jpeg2kSettings,
     JpegLosslessSettings,
@@ -31,7 +32,18 @@ from wsidicom.codec import (
 )
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.codec.decoder import ImageCodecsDecoder, PillowDecoder, PydicomDecoder
+from wsidicom.codec.settings import NumpySettings
 from wsidicom.geometry import Size
+
+
+@pytest.fixture
+def image():
+    yield Image.open("tests/testdata/test_tile.png")
+
+
+@pytest.fixture
+def encoded(encoder_settings: EncoderSettings):
+    yield get_encoded_test_file(encoder_settings)
 
 
 @pytest.mark.unittest
@@ -97,15 +109,25 @@ class TestPydicomDecoder:
         "encoder_settings",
         [
             RleSettings(8, Channels.GRAYSCALE),
+            NumpySettings(8, Channels.GRAYSCALE, True, True),
+            NumpySettings(8, Channels.GRAYSCALE, True, False),
+            NumpySettings(8, Channels.GRAYSCALE, False, True),
+            NumpySettings(16, Channels.GRAYSCALE, True, True),
+            NumpySettings(16, Channels.GRAYSCALE, True, False),
+            NumpySettings(16, Channels.GRAYSCALE, False, True),
+            NumpySettings(8, Channels.RGB, True, True),
+            NumpySettings(8, Channels.RGB, True, False),
+            NumpySettings(8, Channels.RGB, False, True),
         ],
     )
-    def test_decode(self, encoder_settings: EncoderSettings):
+    def test_decode(
+        self, image: PILImage, encoded: bytes, encoder_settings: EncoderSettings
+    ):
         # Arrange
-        image = Image.open("tests/testdata/test_tile.png")
-        if encoder_settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-        encoder = Encoder.create(encoder_settings)
-        encoded = encoder.encode(image)
+        if isinstance(encoder_settings, NumpySettings):
+            pixel_representation = encoder_settings.pixel_representation
+        else:
+            pixel_representation = 0
         decoder = PydicomDecoder(
             encoder_settings.transfer_syntax,
             Size(image.width, image.height),
@@ -113,7 +135,7 @@ class TestPydicomDecoder:
             encoder_settings.bits,
             encoder_settings.bits,
             encoder_settings.photometric_interpretation,
-            1,
+            pixel_representation,
             0,
         )
 
@@ -121,12 +143,13 @@ class TestPydicomDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-
         if encoder_settings.channels == Channels.GRAYSCALE:
+            image = image.convert("L")
             decoded = decoded.convert("L")
+        # assert image == decoded
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms < 2
+            assert band_rms == 0
 
 
 @pytest.mark.unittest
@@ -159,57 +182,57 @@ class TestImageCodecsDecoder:
         assert is_supported == expected_result
 
     @pytest.mark.parametrize(
-        "encoder_settings",
+        ["encoder_settings", "allowed_rms"],
         [
-            JpegSettings(8, Channels.GRAYSCALE, quality=95),
-            JpegSettings(8, Channels.YBR, subsampling=Subsampling.R444, quality=95),
-            JpegSettings(8, Channels.RGB, subsampling=Subsampling.R444, quality=95),
-            JpegSettings(12, Channels.GRAYSCALE, quality=95),
-            JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=7),
-            JpegLosslessSettings(8, Channels.YBR, predictor=7),
-            JpegLosslessSettings(8, Channels.RGB, predictor=7),
-            JpegLosslessSettings(16, Channels.GRAYSCALE, predictor=7),
-            JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=None),
-            JpegLosslessSettings(8, Channels.YBR, predictor=None),
-            JpegLosslessSettings(8, Channels.RGB, predictor=None),
-            JpegLosslessSettings(16, Channels.GRAYSCALE, predictor=None),
-            JpegLsLosslessSettings(8),
-            JpegLsLosslessSettings(16),
-            JpegLsNearLosslessSettings(8),
-            JpegLsNearLosslessSettings(16),
-            Jpeg2kSettings(8, Channels.GRAYSCALE),
-            Jpeg2kSettings(8, Channels.YBR),
-            Jpeg2kSettings(8, Channels.RGB),
-            Jpeg2kSettings(16, Channels.GRAYSCALE),
-            Jpeg2kLosslessSettings(8, Channels.GRAYSCALE),
-            Jpeg2kLosslessSettings(8, Channels.YBR),
-            Jpeg2kLosslessSettings(8, Channels.RGB),
-            Jpeg2kLosslessSettings(16, Channels.GRAYSCALE),
+            (JpegSettings(8, Channels.GRAYSCALE, quality=95), 2),
+            (
+                JpegSettings(8, Channels.YBR, subsampling=Subsampling.R444, quality=95),
+                2,
+            ),
+            (
+                JpegSettings(8, Channels.RGB, subsampling=Subsampling.R444, quality=95),
+                2,
+            ),
+            (JpegSettings(12, Channels.GRAYSCALE, quality=95), 2),
+            (JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=7), 0),
+            (JpegLosslessSettings(8, Channels.YBR, predictor=7), 0),
+            (JpegLosslessSettings(8, Channels.RGB, predictor=7), 0),
+            (JpegLosslessSettings(16, Channels.GRAYSCALE, predictor=7), 0),
+            (JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=None), 0),
+            (JpegLosslessSettings(8, Channels.YBR, predictor=None), 0),
+            (JpegLosslessSettings(8, Channels.RGB, predictor=None), 0),
+            (JpegLosslessSettings(16, Channels.GRAYSCALE, predictor=None), 0),
+            (JpegLsLosslessSettings(8), 0),
+            (JpegLsLosslessSettings(16), 0),
+            (JpegLsNearLosslessSettings(8), 1),
+            (JpegLsNearLosslessSettings(16), 1),
+            (Jpeg2kSettings(8, Channels.GRAYSCALE), 1),
+            (Jpeg2kSettings(8, Channels.YBR), 1),
+            (Jpeg2kSettings(8, Channels.RGB), 1),
+            (Jpeg2kSettings(16, Channels.GRAYSCALE), 1),
+            (Jpeg2kLosslessSettings(8, Channels.GRAYSCALE), 0),
+            (Jpeg2kLosslessSettings(8, Channels.YBR), 0),
+            (Jpeg2kLosslessSettings(8, Channels.RGB), 0),
+            (Jpeg2kLosslessSettings(16, Channels.GRAYSCALE), 0),
         ],
     )
-    def test_decode(self, encoder_settings: EncoderSettings):
+    def test_decode(
+        self,
+        image: PILImage,
+        encoded: bytes,
+        encoder_settings: EncoderSettings,
+        allowed_rms: float,
+    ):
         # Arrange
-        image = Image.open("tests/testdata/test_tile.png")
-        if encoder_settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-        encoder = Encoder.create(encoder_settings)
-        encoded = encoder.encode(image)
-        # with open(
-        #     rf"c:\temp\{encoder_settings.transfer_syntax.name}-{encoder_settings.channels.name}-{encoder_settings.bits}.{encoder_settings.extension}",
-        #     "wb",
-        # ) as f:
-        #     f.write(encoded)
         decoder = ImageCodecsDecoder(encoder_settings.transfer_syntax)
 
         # Act
         decoded = decoder.decode(encoded)
 
         # Assert
-        # decoded.save(
-        #     rf"c:\temp\{encoder_settings.transfer_syntax.name}-{encoder_settings.channels.name}-{encoder_settings.bits}.png"
-        # )
         if encoder_settings.channels == Channels.GRAYSCALE:
+            image = image.convert("L")
             decoded = decoded.convert("L")
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms < 2
+            assert band_rms <= allowed_rms
