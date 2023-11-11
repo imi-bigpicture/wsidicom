@@ -88,6 +88,11 @@ class Settings(metaclass=ABCMeta):
         """Return high bit."""
         return self.bits - 1
 
+    @property
+    def samples_per_pixel(self) -> int:
+        """Return samples per pixel."""
+        return 1 if self.channels == Channels.GRAYSCALE else 3
+
     @classmethod
     def create(cls, dataset: Dataset, transfer_syntax: UID) -> "Settings":
         jpeg_transfer_syntaxes = [
@@ -212,6 +217,8 @@ class JpegLsNearLosslessSettings(Settings):
 
 @dataclass
 class JpegLsLosslessSettings(Settings):
+    channels: Literal[Channels.GRAYSCALE] = Channels.GRAYSCALE
+
     @property
     def transfer_syntax(self) -> UID:
         return JPEGLSLossless

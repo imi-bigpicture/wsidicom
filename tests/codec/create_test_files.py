@@ -1,8 +1,8 @@
-from cgi import test
 from pathlib import Path
 from typing import List
 
 from PIL import Image
+from tests.codec.conftest import get_filepath_for_encoder_settings, get_test_tile_path
 
 from wsidicom.codec import (
     Channels,
@@ -57,16 +57,6 @@ encoder_settings: List[EncoderSettings] = [
 ]
 
 
-def get_test_tile_path(test_data_path: Path):
-    return test_data_path.joinpath("test_tile.png")
-
-
-def get_filepath_for_encoder_settings(test_data_path: Path, settings: EncoderSettings):
-    return test_data_path.joinpath(
-        f"{settings.transfer_syntax.name}-{settings.channels.name}-{settings.bits}"
-    ).with_suffix(settings.extension)
-
-
 def create_encoded_test_files():
     for settings in encoder_settings:
         print("Creating test file for settings: ", settings)
@@ -82,14 +72,6 @@ def create_encoded_test_files():
 
         with open(output_path, "wb") as file:
             file.write(encoded)
-
-
-def get_encoded_test_file(settings: EncoderSettings):
-    file_path = get_filepath_for_encoder_settings(
-        Path("tests/testdata/encoded"), settings
-    )
-    with open(file_path, "rb") as file:
-        return file.read()
 
 
 create_encoded_test_files()
