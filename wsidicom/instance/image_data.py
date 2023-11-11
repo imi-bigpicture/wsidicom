@@ -31,7 +31,7 @@ from typing import (
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID
-from wsidicom.encoder import Encoder
+from wsidicom.codec import Encoder
 
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
@@ -239,8 +239,12 @@ class ImageData(metaclass=ABCMeta):
     def blank_encoded_tile(self) -> bytes:
         """Return encoded background tile."""
         if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self._encoder.encode(self.blank_tile)
+            self._encoded_blank_tile = self.encoder.encode(self.blank_tile)
         return self._encoded_blank_tile
+
+    @property
+    def encoder(self) -> Encoder:
+        return self._encoder
 
     def get_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
@@ -376,7 +380,7 @@ class ImageData(metaclass=ABCMeta):
             Scaled tile as bytes.
         """
         image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
-        return self._encoder.encode(image)
+        return self.encoder.encode(image)
         # with io.BytesIO() as buffer:
         #     image.save(buffer, format=image_format, **image_options)
         #     return buffer.getvalue()
@@ -488,7 +492,7 @@ class ImageData(metaclass=ABCMeta):
         if cropped_tile_region.size != self.tile_size:
             image = Image.open(io.BytesIO(tile_frame))
             image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self._encoder.encode(image)
+            tile_frame = self.encoder.encode(image)
         return tile_frame
 
     def stitch_tiles(

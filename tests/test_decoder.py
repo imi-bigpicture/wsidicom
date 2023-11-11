@@ -1,9 +1,5 @@
-from ast import Sub
-import numpy as np
 import pytest
-from imagecodecs import jpeg2k_encode, jpeg8_encode, jpegls_encode
 from PIL import Image, ImageChops, ImageStat
-from pydicom.pixel_data_handlers.rle_handler import rle_encode_frame
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -21,8 +17,7 @@ from pydicom.uid import (
     RLELossless,
 )
 
-from wsidicom.decoder import ImageCodecsDecoder, PillowDecoder, PydicomDecoder
-from wsidicom.encoder import (
+from wsidicom.codec import (
     Channels,
     Encoder,
     Jpeg2kLosslessSettings,
@@ -34,7 +29,8 @@ from wsidicom.encoder import (
     RleSettings,
     Subsampling,
 )
-from wsidicom.encoder import Settings as EncoderSettings
+from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.codec.decoder import ImageCodecsDecoder, PillowDecoder, PydicomDecoder
 from wsidicom.geometry import Size
 
 
@@ -217,65 +213,3 @@ class TestImageCodecsDecoder:
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:
             assert band_rms < 2
-
-
-def transform_image(image: Image.Image, samples_per_pixel: int, bits: int):
-    if samples_per_pixel == 1:
-        image = image.convert("L")
-    if bits == 8:
-        return np.array(image).astype(np.uint8)
-    else:
-        return rescale(np.array(image), 8, bits, np.uint16)
-
-
-def rescale(data: np.ndarray, from_bits: int, to_bits: int, to_type: np.dtype):
-    return ((2**to_bits - 1) * (data / (2**from_bits - 1))).astype(to_type)
-
-
-def create_compressed_image(
-    data: np.ndarray,
-    transfer_syntax: UID,
-    samples_per_pixel: int,
-    bits: int,
-):
-    lossless_syntaxes = [
-        JPEGLosslessP14,
-        JPEGLosslessSV1,
-        JPEGLSLossless,
-        JPEG2000Lossless,
-    ]
-    jpeg_transfer_syntaxes = [
-        JPEGBaseline8Bit,
-        JPEGExtended12Bit,
-        JPEGLosslessP14,
-        JPEGLosslessSV1,
-    ]
-    jpeg_ls_transfer_syntaxes = [
-        JPEGLSLossless,
-        JPEGLSNearLossless,
-    ]
-    jpeg_2000_transfer_syntaxes = [
-        JPEG2000Lossless,
-        JPEG2000,
-    ]
-
-    lossless = transfer_syntax in lossless_syntaxes
-    if transfer_syntax in jpeg_transfer_syntaxes:
-        return jpeg8_encode(
-            data, lossless=lossless, bitspersample=bits, level=95, subsampling="444"
-        )
-    elif transfer_syntax in jpeg_ls_transfer_syntaxes:
-        if samples_per_pixel != 1:
-            raise ValueError("JPEG-LS encoder only supports grayscale images.")
-        if lossless:
-            level = 0
-        else:
-            level = 1
-        return jpegls_encode(data, level=level)
-    elif transfer_syntax in jpeg_2000_transfer_syntaxes:
-        return jpeg2k_encode(data, bitspersample=bits, reversible=lossless)
-
-    elif transfer_syntax == RLELossless:
-        return rle_encode_frame(data)
-
-    raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")

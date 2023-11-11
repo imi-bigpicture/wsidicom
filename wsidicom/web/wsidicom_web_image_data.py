@@ -19,9 +19,7 @@ from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID
 
-from wsidicom.decoder import Decoder
-from wsidicom.encoder import Encoder
-from wsidicom.encoder import Settings as EncoderSettings
+from wsidicom.codec import Decoder, Encoder, Settings as EncoderSettings
 from wsidicom.geometry import Point
 from wsidicom.instance import WsiDataset, WsiDicomImageData
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient

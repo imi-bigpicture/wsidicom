@@ -14,7 +14,6 @@
 
 
 from typing import Optional
-from wsidicom.decoder import Decoder
 
 
 class Settings:

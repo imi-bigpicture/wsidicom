@@ -32,8 +32,8 @@ from pydicom.uid import (
 )
 from pydicom.valuerep import DSfloat
 
+from wsidicom.codec import Decoder
 from wsidicom.config import settings
-from wsidicom.decoder import Decoder
 from wsidicom.errors import (
     WsiDicomError,
     WsiDicomFileError,

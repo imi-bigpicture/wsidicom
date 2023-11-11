@@ -57,7 +57,8 @@ class Decoder(metaclass=ABCMeta):
         if bits != 8 and samples_per_pixel != 1:
             # Pillow only supports 8 bit color images
             raise ValueError(
-                f"Non-supported combination of bits {bits} and samples per pixel {samples_per_pixel}. "
+                f"Non-supported combination of bits {bits} and  "
+                f"samples per pixel {samples_per_pixel}. "
                 "Non-8 bit images are only supported for grayscale images."
             )
         decoder = cls._select_decoder(transfer_syntax, samples_per_pixel, bits)
@@ -116,8 +117,14 @@ class PillowDecoder(Decoder):
 
     @classmethod
     def is_supported(
-        cls, transfer_syntax: UID, samples_per_ixel: int, bits: int
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
     ) -> bool:
+        if bits not in [8, 16]:
+            # Pillow only supports 8 and 16 bit images
+            return False
+        if bits != 8 and samples_per_pixel != 1:
+            # Pillow only supports 8 bit color images
+            return False
         return transfer_syntax in cls._supported_transfer_syntaxes
 
 
@@ -159,7 +166,7 @@ class PydicomDecoder(Decoder):
 
     @classmethod
     def is_supported(
-        cls, transfer_syntax: UID, samples_per_ixel: int, bits: int
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
     ) -> bool:
         available_handlers = (
             handler
@@ -196,7 +203,7 @@ class ImageCodecsDecoder(Decoder):
 
     @classmethod
     def is_supported(
-        cls, transfer_syntax: UID, samples_per_ixel: int, bits: int
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
     ) -> bool:
         decoder = cls._get_decoder(transfer_syntax)
         return decoder is not None

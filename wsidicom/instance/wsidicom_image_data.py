@@ -17,14 +17,13 @@ from functools import cached_property
 from typing import Iterator, List, Optional, Sequence
 
 from PIL.Image import Image as PILImage
-from wsidicom.decoder import Decoder
-from wsidicom.encoder import Encoder, Settings as EncoderSettings
 
+from wsidicom.codec import Decoder, Encoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
-from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
+from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex

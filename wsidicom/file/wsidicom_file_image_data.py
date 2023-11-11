@@ -17,9 +17,7 @@ from typing import List, OrderedDict, Sequence, Union
 
 from pydicom.uid import UID
 
-from wsidicom.decoder import Decoder
-from wsidicom.encoder import Encoder
-from wsidicom.encoder import Settings as EncoderSettings
+from wsidicom.codec import Decoder, Encoder, Settings as EncoderSettings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.instance import WsiDicomImageData
