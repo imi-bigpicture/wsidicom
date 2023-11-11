@@ -75,6 +75,55 @@ class TestPillowDecoder:
         # Assert
         assert is_supported == expected_result
 
+    @pytest.mark.parametrize(
+        ["encoder_settings", "allowed_rms"],
+        [
+            (JpegSettings(8, Channels.GRAYSCALE, quality=95), 2),
+            (
+                JpegSettings(8, Channels.YBR, subsampling=Subsampling.R444, quality=95),
+                2,
+            ),
+            (
+                JpegSettings(8, Channels.RGB, subsampling=Subsampling.R444, quality=95),
+                2,
+            ),
+            (JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=7), 0),
+            (JpegLosslessSettings(8, Channels.YBR, predictor=7), 0),
+            (JpegLosslessSettings(8, Channels.RGB, predictor=7), 0),
+            (JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=None), 0),
+            (JpegLosslessSettings(8, Channels.YBR, predictor=None), 0),
+            (JpegLosslessSettings(8, Channels.RGB, predictor=None), 0),
+            (Jpeg2kSettings(8, Channels.GRAYSCALE), 1),
+            (Jpeg2kSettings(8, Channels.YBR), 1),
+            (Jpeg2kSettings(8, Channels.RGB), 1),
+            (Jpeg2kSettings(16, Channels.GRAYSCALE), 1),
+            (Jpeg2kLosslessSettings(8, Channels.GRAYSCALE), 0),
+            (Jpeg2kLosslessSettings(8, Channels.YBR), 0),
+            (Jpeg2kLosslessSettings(8, Channels.RGB), 0),
+            (Jpeg2kLosslessSettings(16, Channels.GRAYSCALE), 0),
+        ],
+    )
+    def test_decode(
+        self,
+        image: PILImage,
+        encoded: bytes,
+        encoder_settings: EncoderSettings,
+        allowed_rms: float,
+    ):
+        # Arrange
+        decoder = PillowDecoder()
+
+        # Act
+        decoded = decoder.decode(encoded)
+
+        # Assert
+        if encoder_settings.channels == Channels.GRAYSCALE:
+            image = image.convert("L")
+            decoded = decoded.convert("L")
+        diff = ImageChops.difference(decoded, image)
+        for band_rms in ImageStat.Stat(diff).rms:
+            assert band_rms <= allowed_rms
+
 
 @pytest.mark.unittest
 class TestPydicomDecoder:
