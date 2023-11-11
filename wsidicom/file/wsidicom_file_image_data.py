@@ -16,8 +16,10 @@ from pathlib import Path
 from typing import List, OrderedDict, Sequence, Union
 
 from pydicom.uid import UID
-from wsidicom.decoder import Decoder
 
+from wsidicom.decoder import Decoder
+from wsidicom.encoder import Encoder
+from wsidicom.encoder import Settings as EncoderSettings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.instance import WsiDicomImageData
@@ -48,8 +50,19 @@ class WsiDicomFileImageData(WsiDicomImageData):
             for file in sorted(files, key=lambda file: file.frame_offset)
         )
         self._transfer_syntax = files[0].transfer_syntax
-        decoder = Decoder.create(self.transfer_syntax, files[0].dataset)
-        super().__init__([file.dataset for file in self._files.values()], decoder)
+        decoder = Decoder.create(
+            self.transfer_syntax,
+            files[0].dataset.samples_per_pixel,
+            files[0].dataset.bits,
+            files[0].dataset,
+        )
+        encoder_settings = EncoderSettings.create(
+            files[0].dataset, self.transfer_syntax
+        )
+        encoder = Encoder.create(encoder_settings)
+        super().__init__(
+            [file.dataset for file in self._files.values()], decoder, encoder
+        )
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._files.values()})"

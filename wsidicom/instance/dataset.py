@@ -538,8 +538,12 @@ class WsiDataset(Dataset):
             if name not in dataset and attribute.evaluate(image_type):
                 logging.debug(f"Missing required attribute {name}")
                 return None
+        samples_per_pixel = dataset.SamplesPerPixel
+        bits = dataset.BitsStored
 
-        syntax_supported = Decoder.is_supported(transfer_syntax)
+        syntax_supported = Decoder.is_supported(
+            transfer_syntax, samples_per_pixel, bits
+        )
         if not syntax_supported:
             logging.debug(f"Non-supported transfer syntax {transfer_syntax}")
             return None

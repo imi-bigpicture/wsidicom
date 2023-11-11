@@ -8,11 +8,9 @@ from imagecodecs import (
     JPEG2K,
     JPEG8,
     JPEGLS,
-    LJPEG,
     jpeg2k_decode,
     jpeg8_decode,
     jpegls_decode,
-    ljpeg_decode,
 )
 from PIL import Image
 from PIL.Image import Image as PILImage
@@ -41,14 +39,28 @@ class Decoder(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @classmethod
-    def is_supported(cls, transfer_syntax: UID) -> bool:
+    def is_supported(
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
+    ) -> bool:
         """Return true if decoder supports transfer syntax."""
-        return cls._select_decoder(transfer_syntax) is not None
+        if bits != 8 and samples_per_pixel != 1:
+            # Pillow only supports 8 bit color images
+            return False
+
+        return cls._select_decoder(transfer_syntax, samples_per_pixel, bits) is not None
 
     @classmethod
-    def create(cls, transfer_syntax: UID, dataset: Dataset) -> "Decoder":
+    def create(
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int, dataset: Dataset
+    ) -> "Decoder":
         """Create a decoder that supports the transfer syntax."""
-        decoder = cls._select_decoder(transfer_syntax)
+        if bits != 8 and samples_per_pixel != 1:
+            # Pillow only supports 8 bit color images
+            raise ValueError(
+                f"Non-supported combination of bits {bits} and samples per pixel {samples_per_pixel}. "
+                "Non-8 bit images are only supported for grayscale images."
+            )
+        decoder = cls._select_decoder(transfer_syntax, samples_per_pixel, bits)
         if decoder is None:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
         if decoder == PillowDecoder:
@@ -59,18 +71,19 @@ class Decoder(metaclass=ABCMeta):
             return PydicomDecoder(
                 transfer_syntax=transfer_syntax,
                 size=Size(dataset.Rows, dataset.Columns),
-                samples_per_pixel=dataset.SamplesPerPixel,
-                bits_allocated=dataset.BitsAllocated,
+                samples_per_pixel=samples_per_pixel,
+                bits_allocated=bits,
                 bits_stored=dataset.BitsStored,
                 photometric_interpretation=dataset.PhotometricInterpretation,
                 pixel_representation=dataset.PixelRepresentation,
                 planar_configuration=dataset.PlanarConfiguration,
             )
-        else:
-            raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
+        raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
 
     @classmethod
-    def _select_decoder(cls, transfer_syntax: UID) -> Optional[Type["Decoder"]]:
+    def _select_decoder(
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
+    ) -> Optional[Type["Decoder"]]:
         decoders: Dict[str, Type[Decoder]] = {
             "pillow": PillowDecoder,
             "image_codecs": ImageCodecsDecoder,
@@ -82,14 +95,14 @@ class Decoder(metaclass=ABCMeta):
                     f"Unknown prefered decoder: {config.settings.prefered_decoder}."
                 )
             decoder = decoders[config.settings.prefered_decoder]
-            if not decoder.is_supported(transfer_syntax):
+            if not decoder.is_supported(transfer_syntax, samples_per_pixel, bits):
                 return None
             return decoder
         return next(
             (
                 decoder
                 for decoder in decoders.values()
-                if decoder.is_supported(transfer_syntax)
+                if decoder.is_supported(transfer_syntax, samples_per_pixel, bits)
             ),
             None,
         )
@@ -102,7 +115,9 @@ class PillowDecoder(Decoder):
         return Image.open(io.BytesIO(frame))
 
     @classmethod
-    def is_supported(cls, transfer_syntax: UID) -> bool:
+    def is_supported(
+        cls, transfer_syntax: UID, samples_per_ixel: int, bits: int
+    ) -> bool:
         return transfer_syntax in cls._supported_transfer_syntaxes
 
 
@@ -143,7 +158,9 @@ class PydicomDecoder(Decoder):
         return Image.fromarray(array)
 
     @classmethod
-    def is_supported(cls, transfer_syntax: UID) -> bool:
+    def is_supported(
+        cls, transfer_syntax: UID, samples_per_ixel: int, bits: int
+    ) -> bool:
         available_handlers = (
             handler
             for handler in pydicom_config.pixel_data_handlers
@@ -158,9 +175,9 @@ class PydicomDecoder(Decoder):
 class ImageCodecsDecoder(Decoder):
     _supported_transfer_syntaxes = {
         JPEGBaseline8Bit: (jpeg8_decode, JPEG8),
-        JPEGExtended12Bit: (ljpeg_decode, LJPEG),
-        JPEGLosslessP14: (ljpeg_decode, LJPEG),
-        JPEGLosslessSV1: (ljpeg_decode, LJPEG),
+        JPEGExtended12Bit: (jpeg8_decode, JPEG8),
+        JPEGLosslessP14: (jpeg8_decode, JPEG8),
+        JPEGLosslessSV1: (jpeg8_decode, JPEG8),
         JPEGLSLossless: (jpegls_decode, JPEGLS),
         JPEGLSNearLossless: (jpegls_decode, JPEGLS),
         JPEG2000Lossless: (jpeg2k_decode, JPEG2K),
@@ -178,7 +195,9 @@ class ImageCodecsDecoder(Decoder):
         return Image.fromarray(decoded)
 
     @classmethod
-    def is_supported(cls, transfer_syntax: UID) -> bool:
+    def is_supported(
+        cls, transfer_syntax: UID, samples_per_ixel: int, bits: int
+    ) -> bool:
         decoder = cls._get_decoder(transfer_syntax)
         return decoder is not None
 

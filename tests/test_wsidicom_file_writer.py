@@ -164,6 +164,7 @@ def test_dataset(image_data: ImageData, frame_count: int):
     dataset.Rows = image_data.tile_size.width
     dataset.Columns = image_data.tile_size.height
     dataset.SamplesPerPixel = image_data.samples_per_pixel
+    dataset.BitsStored = image_data.bits
     dataset.PhotometricInterpretation = image_data.photometric_interpretation
     dataset.TotalPixelMatrixColumns = image_data.image_size.width
     dataset.TotalPixelMatrixRows = image_data.image_size.height

@@ -100,7 +100,7 @@ class WsiDicomWebSource(Source):
             )
         except StopIteration:
             WsiDicomNotFoundError(
-                "No level instances found", f"{study_uid}, {series_uid}"
+                "No level instances found", f"{study_uid}, {series_uids}"
             )
 
     @property

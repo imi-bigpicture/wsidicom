@@ -30,7 +30,8 @@ from typing import (
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
+from pydicom.uid import UID
+from wsidicom.encoder import Encoder
 
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
@@ -53,6 +54,9 @@ class ImageData(metaclass=ABCMeta):
     _default_z: Optional[float] = None
     _blank_tile: Optional[PILImage] = None
     _encoded_blank_tile: Optional[bytes] = None
+
+    def __init__(self, encoder: Encoder):
+        self._encoder = encoder
 
     @property
     @abstractmethod
@@ -235,7 +239,7 @@ class ImageData(metaclass=ABCMeta):
     def blank_encoded_tile(self) -> bytes:
         """Return encoded background tile."""
         if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self.encode(self.blank_tile)
+            self._encoded_blank_tile = self._encoder.encode(self.blank_tile)
         return self._encoded_blank_tile
 
     def get_decoded_tiles(
@@ -372,9 +376,10 @@ class ImageData(metaclass=ABCMeta):
             Scaled tile as bytes.
         """
         image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
-        with io.BytesIO() as buffer:
-            image.save(buffer, format=image_format, **image_options)
-            return buffer.getvalue()
+        return self._encoder.encode(image)
+        # with io.BytesIO() as buffer:
+        #     image.save(buffer, format=image_format, **image_options)
+        #     return buffer.getvalue()
 
     def get_scaled_encoded_tiles(
         self,
@@ -483,7 +488,7 @@ class ImageData(metaclass=ABCMeta):
         if cropped_tile_region.size != self.tile_size:
             image = Image.open(io.BytesIO(tile_frame))
             image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.encode(image)
+            tile_frame = self._encoder.encode(image)
         return tile_frame
 
     def stitch_tiles(
@@ -606,53 +611,53 @@ class ImageData(metaclass=ABCMeta):
             and (path in self.optical_paths)
         )
 
-    def encode(self, image: PILImage) -> bytes:
-        """Encode image using transfer syntax.
+    # def encode(self, image: PILImage) -> bytes:
+    #     """Encode image using transfer syntax.
 
-        Parameters
-        ----------
-        image: PILImage
-            Image to encode
+    #     Parameters
+    #     ----------
+    #     image: PILImage
+    #         Image to encode
 
-        Returns
-        ----------
-        bytes
-            Encoded image as bytes
+    #     Returns
+    #     ----------
+    #     bytes
+    #         Encoded image as bytes
 
-        """
-        image_format, image_options = self._image_settings(self.transfer_syntax)
-        with io.BytesIO() as buffer:
-            image.save(buffer, format=image_format, **image_options)
-            return buffer.getvalue()
+    #     """
+    #     image_format, image_options = self._image_settings(self.transfer_syntax)
+    #     with io.BytesIO() as buffer:
+    #         image.save(buffer, format=image_format, **image_options)
+    #         return buffer.getvalue()
 
-    @staticmethod
-    def _image_settings(transfer_syntax: UID) -> Tuple[str, Dict[str, Any]]:
-        """
-        Return Pillow settings for encoding tiles according to transfer syntax.
+    # @staticmethod
+    # def _image_settings(transfer_syntax: UID) -> Tuple[str, Dict[str, Any]]:
+    #     """
+    #     Return Pillow settings for encoding tiles according to transfer syntax.
 
-        Parameters
-        ----------
-        transfer_syntax: pydicom.uid
-            Transfer syntax to match image format and options to
+    #     Parameters
+    #     ----------
+    #     transfer_syntax: pydicom.uid
+    #         Transfer syntax to match image format and options to
 
-        Returns
-        ----------
-        tuple[str, dict[str, int]]
-            image format and image options
+    #     Returns
+    #     ----------
+    #     tuple[str, dict[str, int]]
+    #         image format and image options
 
-        """
-        if transfer_syntax == JPEGBaseline8Bit:
-            image_format = "jpeg"
-            image_options = {"quality": 95}
-        elif transfer_syntax == JPEG2000:
-            image_format = "jpeg2000"
-            image_options = {"irreversible": True}
-        elif transfer_syntax == JPEG2000Lossless:
-            image_format = "jpeg2000"
-            image_options = {"irreversible": False}
-        else:
-            raise NotImplementedError("Only supports jpeg and jpeg2000")
-        return (image_format, image_options)
+    #     """
+    #     if transfer_syntax == JPEGBaseline8Bit:
+    #         image_format = "jpeg"
+    #         image_options = {"quality": 95}
+    #     elif transfer_syntax == JPEG2000:
+    #         image_format = "jpeg2000"
+    #         image_options = {"irreversible": True}
+    #     elif transfer_syntax == JPEG2000Lossless:
+    #         image_format = "jpeg2000"
+    #         image_options = {"irreversible": False}
+    #     else:
+    #         raise NotImplementedError("Only supports jpeg and jpeg2000")
+    #     return (image_format, image_options)
 
     @staticmethod
     def _get_blank_color(photometric_interpretation: str) -> Tuple[int, int, int]:
