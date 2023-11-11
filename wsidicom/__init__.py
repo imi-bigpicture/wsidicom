@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from wsidicom.wsidicom import WsiDicom
 from wsidicom.config import settings
 from wsidicom.graphical_annotations import (
     Annotation,
@@ -29,5 +28,6 @@ from wsidicom.graphical_annotations import (
 from wsidicom.instance import ImageData, WsiDataset, WsiInstance
 from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.web import WsiDicomWebClient
+from wsidicom.wsidicom import WsiDicom
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"

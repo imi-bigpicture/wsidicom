@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2023-11-11
+
 ### Added
 
 - Allow a `requests.Session` object to be passed to `WsiDicomWebClient.create_client()`.
