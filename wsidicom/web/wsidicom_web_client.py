@@ -12,9 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Iterator, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
-from dicomweb_client.api import DICOMwebClient
+from dicomweb_client.api import DICOMwebClient, DICOMfileClient
 from dicomweb_client.session_utils import create_session_from_auth
 from pydicom import Dataset
 from pydicom.uid import (
@@ -34,13 +34,13 @@ SOP_INSTANCE_UID = "00080018"
 
 
 class WsiDicomWebClient:
-    def __init__(self, client: DICOMwebClient):
+    def __init__(self, client: Union[DICOMwebClient, DICOMfileClient]):
         """Create a WsiDicomWebClient.
 
         Parameters
         ----------
-        client: DICOMwebClient
-            The DICOMwebClient to use
+        client: Union[DICOMwebClient, DICOMfileClient]
+            The client to use
         """
         self._client = client
 
@@ -68,10 +68,10 @@ class WsiDicomWebClient:
             inherits from requests.auth.AuthBase, or by passing a
             requests.Session object.
         """
-        if isinstance(auth, Session) or auth is None:
-            session = auth
-        else:
+        if isinstance(auth, AuthBase):
             session = create_session_from_auth(auth)
+        else:
+            session = auth
 
         client = DICOMwebClient(
             hostname,
@@ -102,7 +102,7 @@ class WsiDicomWebClient:
         study_uid: UID,
         series_uid: UID,
         instance_uid: UID,
-        frame_indices: Sequence[int],
+        frame_indices: List[int],
         transfer_syntax: UID,
     ) -> Iterator[bytes]:
         return self._client.iter_instance_frames(
