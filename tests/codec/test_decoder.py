@@ -1,5 +1,5 @@
 import pytest
-from PIL import Image, ImageChops, ImageStat
+from PIL import ImageChops, ImageStat
 from PIL.Image import Image as PILImage
 from pydicom.uid import (
     JPEG2000,
@@ -17,7 +17,6 @@ from pydicom.uid import (
     JPEGLSNearLossless,
     RLELossless,
 )
-from tests.codec import get_encoded_test_file
 
 from wsidicom.codec import (
     Channels,
@@ -34,16 +33,6 @@ from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.codec.decoder import ImageCodecsDecoder, PillowDecoder, PydicomDecoder
 from wsidicom.codec.settings import NumpySettings
 from wsidicom.geometry import Size
-
-
-@pytest.fixture
-def image():
-    yield Image.open("tests/testdata/test_tile.png")
-
-
-@pytest.fixture
-def encoded(encoder_settings: EncoderSettings):
-    yield get_encoded_test_file(encoder_settings)
 
 
 @pytest.mark.unittest
@@ -195,7 +184,6 @@ class TestPydicomDecoder:
         if encoder_settings.channels == Channels.GRAYSCALE:
             image = image.convert("L")
             decoded = decoded.convert("L")
-        # assert image == decoded
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:
             assert band_rms == 0
