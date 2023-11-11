@@ -785,7 +785,7 @@ class WsiDataset(Dataset):
         dataset.NumberOfFrames = (
             image_data.tiled_size.width * image_data.tiled_size.height
         )
-        dataset.BitsAllocated = image_data.bits
+        dataset.BitsAllocated = image_data.bits // 8 * 8
         dataset.BitsStored = image_data.bits
         dataset.HighBit = image_data.bits - 1
         dataset.PixelRepresentation = 0

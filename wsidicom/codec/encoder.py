@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from typing import Union
+import PIL
 
 import numpy as np
 from imagecodecs import (
@@ -12,6 +13,7 @@ from PIL.Image import Image as PILImage
 from pydicom import Dataset
 from pydicom.pixel_data_handlers.util import pixel_dtype
 from pydicom.uid import (
+    UID,
     JPEG2000,
     JPEG2000Lossless,
     JPEGBaseline8Bit,
@@ -25,11 +27,9 @@ from rle.utils import encode_frame as rle_encode_frame
 
 from wsidicom.codec.settings import (
     Channels,
-    Jpeg2kLosslessSettings,
     Jpeg2kSettings,
     JpegLosslessSettings,
     JpegLsLosslessSettings,
-    JpegLsNearLosslessSettings,
     JpegSettings,
     NumpySettings,
     RleSettings,
@@ -38,21 +38,65 @@ from wsidicom.codec.settings import (
 
 
 class Encoder(metaclass=ABCMeta):
+    def __init__(self, settings: Settings):
+        self._settings = settings
+
     @abstractmethod
-    def encode(self, image: PILImage) -> bytes:
+    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         """Encode image into bytes."""
         raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def lossy(self) -> bool:
+        """Return True if encoder is lossy."""
+        raise NotImplementedError()
+
+    @property
+    def transfer_syntax(self) -> UID:
+        """Return the transfer syntax UID."""
+        return self._settings.transfer_syntax
+
+    @property
+    def bits(self) -> int:
+        """Return the number of bits per sample."""
+        return self._settings.bits
+
+    @property
+    def allocated_bits(self) -> int:
+        """Return the number of allocated bits."""
+        return self._settings.allocated_bits
+
+    @property
+    def high_bit(self) -> int:
+        """Return the high bit."""
+        return self._settings.high_bit
+
+    @property
+    def channels(self) -> Channels:
+        """Return the number of channels."""
+        return self._settings.channels
+
+    @property
+    def samples_per_pixel(self) -> int:
+        """Return the number of samples per pixel."""
+        return self._settings.samples_per_pixel
+
+    @property
+    def photometric_interpretation(self) -> str:
+        """Return the photometric interpretation."""
+        return self._settings.photometric_interpretation
 
     @classmethod
     def create(cls, settings: Settings) -> "Encoder":
         """Create an encoder that supports the transfer syntax."""
         if isinstance(settings, (JpegSettings, JpegLosslessSettings)):
             return JpegEncoder(settings)
-        if isinstance(settings, (JpegLsNearLosslessSettings, JpegLsLosslessSettings)):
+        if isinstance(settings, JpegLsLosslessSettings):
             return JpegLsEncoder(settings)
         if isinstance(settings, JpegLsLosslessSettings):
             return JpegLsEncoder(settings)
-        if isinstance(settings, (Jpeg2kSettings, Jpeg2kLosslessSettings)):
+        if isinstance(settings, Jpeg2kSettings):
             return Jpeg2kEncoder(settings)
         if isinstance(settings, NumpySettings):
             return NumpyEncoder(settings)
@@ -101,8 +145,9 @@ class JpegEncoder(Encoder):
             self._subsampling = None
         else:
             raise ValueError(f"Unsupported encoder settings: {type(settings)}.")
+        super().__init__(settings)
 
-    def encode(self, image: PILImage) -> bytes:
+    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         return jpeg8_encode(
             np.array(image).astype(self._dtype),
             level=self._level,
@@ -111,6 +156,10 @@ class JpegEncoder(Encoder):
             subsampling=self._subsampling,
             outcolorspace=self._output_colorspace,
         )
+
+    @property
+    def lossy(self) -> bool:
+        return not self._lossless
 
 
 class JpegLsEncoder(Encoder):
@@ -123,19 +172,22 @@ class JpegLsEncoder(Encoder):
 
     def __init__(
         self,
-        settings: Union[JpegLsLosslessSettings, JpegLsNearLosslessSettings],
+        settings: JpegLsLosslessSettings,
     ) -> None:
         self._bits = settings.bits
-        if isinstance(settings, JpegLsLosslessSettings):
+        if settings.level is None or settings.level == 0:
             self._level = 0
-        elif isinstance(settings, JpegLsNearLosslessSettings):
-            self._level = settings.level
         else:
-            raise ValueError(f"Unsupported encoder settings: {type(settings)}.")
+            self._level = settings.level
+        super().__init__(settings)
 
-    def encode(self, image: PILImage) -> bytes:
+    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         """Encode image into bytes."""
         return jpegls_encode(np.array(image), level=self._level)
+
+    @property
+    def lossy(self) -> bool:
+        return self._level != 0
 
 
 class Jpeg2kEncoder(Encoder):
@@ -146,22 +198,21 @@ class Jpeg2kEncoder(Encoder):
         JPEG2000,
     ]
 
-    def __init__(self, settings: Union[Jpeg2kSettings, Jpeg2kLosslessSettings]) -> None:
+    def __init__(self, settings: Jpeg2kSettings) -> None:
         self._bits = settings.bits
         if settings.channels == Channels.YBR:
             self._multiple_component_transform = True
         else:
             self._multiple_component_transform = False
-        if isinstance(settings, Jpeg2kSettings):
-            self._level = settings.level
-            self._reversible = False
-        elif isinstance(settings, Jpeg2kLosslessSettings):
+        if settings.level is None or settings.level == 0:
             self._level = 0
             self._reversible = True
         else:
-            raise ValueError(f"Unsupported encoder settings: {type(settings)}.")
+            self._level = settings.level
+            self._reversible = False
+        super().__init__(settings)
 
-    def encode(self, image: PILImage) -> bytes:
+    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         """Encode image into bytes."""
         return jpeg2k_encode(
             np.array(image),
@@ -171,6 +222,10 @@ class Jpeg2kEncoder(Encoder):
             codecformat="J2K",
             mct=self._multiple_component_transform,
         )
+
+    @property
+    def lossy(self) -> bool:
+        return not self._reversible
 
 
 class NumpyEncoder(Encoder):
@@ -182,10 +237,15 @@ class NumpyEncoder(Encoder):
         dataset.PixelRepresentation = settings.pixel_representation
         dataset.is_little_endian = settings.little_endian
         self._dtype = pixel_dtype(dataset)
+        super().__init__(settings)
 
-    def encode(self, image: PILImage) -> bytes:
+    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         """Encode image into bytes."""
         return np.array(image).astype(self._dtype).tobytes()
+
+    @property
+    def lossy(self) -> bool:
+        return False
 
 
 class RleEncoder(Encoder):
@@ -201,14 +261,23 @@ class RleEncoder(Encoder):
             self._samples_per_pixel = 1
         else:
             self._samples_per_pixel = 3
+        super().__init__(settings)
 
-    def encode(self, image: PILImage) -> bytes:
+    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         """Encode image into bytes."""
+        if isinstance(image, PILImage):
+            rows, cols = image.size
+        else:
+            rows, cols = image.shape[0:2]
         return rle_encode_frame(
             np.array(image).astype(self._dtype).tobytes(),
-            rows=image.height,
-            cols=image.width,
+            rows=rows,
+            cols=cols,
             bpp=self._bits,
             spp=self._samples_per_pixel,
             byteorder="<",
         )
+
+    @property
+    def lossy(self) -> bool:
+        return False
