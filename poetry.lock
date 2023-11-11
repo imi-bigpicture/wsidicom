@@ -625,6 +625,47 @@ files = [
 ]
 
 [[package]]
+name = "pylibjpeg-rle"
+version = "1.3.0"
+description = "Python bindings for a fast RLE decoder/encoder, with a focus on use as a plugin for pylibjpeg"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "pylibjpeg-rle-1.3.0.tar.gz", hash = "sha256:a819cd0afd839c5ff3bb829fcb862a8b633d9547c7a2e23ef207d763fd4d9db9"},
+    {file = "pylibjpeg_rle-1.3.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:54b8f2380a262154463d8726edf86085520022650fddcb70c00a34881d9c76a5"},
+    {file = "pylibjpeg_rle-1.3.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:7695786604c3803fbeb172a82700412e4e8f3fe2595e1434169c6a564afb7e70"},
+    {file = "pylibjpeg_rle-1.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a11a25b7685ef5c72353180a46acb7f885aa66d880719a6f01e9dd8b63ec9314"},
+    {file = "pylibjpeg_rle-1.3.0-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:5dc4aba0e4bb79bd2b3f326b9370d685a71f925fc2ece9a7b252bba4cc4e53fb"},
+    {file = "pylibjpeg_rle-1.3.0-cp310-cp310-win32.whl", hash = "sha256:9a5f020e565fde8e9340c625c620d88be7468bfaa53d0b469e965409f1728cfe"},
+    {file = "pylibjpeg_rle-1.3.0-cp310-cp310-win_amd64.whl", hash = "sha256:b2e238722d63c567a0bfadc67251300d3b0c60cb27533cc2b7e198146a7f9c45"},
+    {file = "pylibjpeg_rle-1.3.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:83736cf4ba987543d02815ab7c44dc62297dca423d2120b273c9e9442451f560"},
+    {file = "pylibjpeg_rle-1.3.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e7bd1edcc7ff7ca9fa45735bed12cc503f38fad111812ef5147bb8f5904883b4"},
+    {file = "pylibjpeg_rle-1.3.0-cp37-cp37m-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:c5f240cbf68d32b95f3d27633c4815608f1343acfec608653deaaf52e68a4ca5"},
+    {file = "pylibjpeg_rle-1.3.0-cp37-cp37m-win32.whl", hash = "sha256:1527fdc363ff647b2211e248e1f469e19a869db25046fec11b0c6388eb6a25ac"},
+    {file = "pylibjpeg_rle-1.3.0-cp37-cp37m-win_amd64.whl", hash = "sha256:7fadbbc711ebc797dbdfa57ca659af56d606f0bf22d3f8b253631fcb812354f9"},
+    {file = "pylibjpeg_rle-1.3.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:f58d3d88dfe11727b12cf7c86229870b550c05b4b18beaacfd01e156abe2d436"},
+    {file = "pylibjpeg_rle-1.3.0-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:5267b4a9095cd2c8962ac6ff6c10902e35f9057ed1e4e61dc88fb2dfdbfeacfd"},
+    {file = "pylibjpeg_rle-1.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3712ca118da9f73b2929197bf13c508358d83384df26fdbbca28a0a5cbce94c9"},
+    {file = "pylibjpeg_rle-1.3.0-cp38-cp38-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:2fbc292bf6f4ec7cb55b9aa24aae4dda8a00d474e819172c8aa34413ec7ccc26"},
+    {file = "pylibjpeg_rle-1.3.0-cp38-cp38-win32.whl", hash = "sha256:f0e0641e975f1d91b8b31644f74a4aabe6ba53536aac7e71b2ec7bd7dee80216"},
+    {file = "pylibjpeg_rle-1.3.0-cp38-cp38-win_amd64.whl", hash = "sha256:6fe00c72974ff3e071cf735cf020b379d67ddc51e7d841fe7397b43a43d2d68f"},
+    {file = "pylibjpeg_rle-1.3.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:db4d9b111e0b1410fd5ecea30e85c10a505437cd2bb40763dd41d6365df98d90"},
+    {file = "pylibjpeg_rle-1.3.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:9896fdd3883affb2e83c71ef3814d6ac494dc698da80582ba93ca32236b769ba"},
+    {file = "pylibjpeg_rle-1.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:995da4b556bc029415729fa9b20e4207a7a55ac2343c6ae16d7743b3b606f8b8"},
+    {file = "pylibjpeg_rle-1.3.0-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:2983cafd097455d226172f8286fadea626631d79be9e58f69c1d3586fb8f242e"},
+    {file = "pylibjpeg_rle-1.3.0-cp39-cp39-win32.whl", hash = "sha256:32104916e315887e9a76925ae777be42cc491a88b6f2b1f3b09ce13b7b0e7063"},
+    {file = "pylibjpeg_rle-1.3.0-cp39-cp39-win_amd64.whl", hash = "sha256:9c9158c3ffd80e68b12d5ce665498eabfe608cea8f2fd0664ec82d33a7ebcb7a"},
+]
+
+[package.dependencies]
+numpy = ">=1.20"
+
+[package.extras]
+benchmarks = ["asv", "numpy", "pydicom"]
+tests = ["numpy", "pydicom", "pytest"]
+
+[[package]]
 name = "pytest"
 version = "7.4.3"
 description = "pytest: simple powerful testing with Python"
@@ -867,4 +908,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "a55c18b3adaf11df3ec9f169bf59b0ebd97e57792a76e4b7ed8c0f0c99df7989"
+content-hash = "d3263cc60e9f8d9574101dfa108f2db05944390e21de308a0159d82c68a1695f"

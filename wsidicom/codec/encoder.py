@@ -1,7 +1,16 @@
 from abc import ABCMeta, abstractmethod
 from typing import Union
+
+import numpy as np
+from imagecodecs import (
+    JPEG8,
+    jpeg2k_encode,
+    jpeg8_encode,
+    jpegls_encode,
+)
 from PIL.Image import Image as PILImage
 from pydicom import Dataset
+from pydicom.pixel_data_handlers.util import pixel_dtype
 from pydicom.uid import (
     JPEG2000,
     JPEG2000Lossless,
@@ -12,23 +21,16 @@ from pydicom.uid import (
     JPEGLSLossless,
     JPEGLSNearLossless,
 )
-from imagecodecs import (
-    JPEG8,
-    jpeg2k_encode,
-    jpeg8_encode,
-    jpegls_encode,
-)
-from pydicom.pixel_data_handlers.util import pixel_dtype
-import numpy as np
-from pydicom.pixel_data_handlers.rle_handler import rle_encode_frame
+from rle.utils import encode_frame as rle_encode_frame
+
 from wsidicom.codec.settings import (
     Channels,
-    JpegSettings,
-    JpegLsNearLosslessSettings,
-    JpegLosslessSettings,
     Jpeg2kLosslessSettings,
     Jpeg2kSettings,
+    JpegLosslessSettings,
     JpegLsLosslessSettings,
+    JpegLsNearLosslessSettings,
+    JpegSettings,
     NumpySettings,
     RleSettings,
     Settings,
@@ -48,14 +50,15 @@ class Encoder(metaclass=ABCMeta):
             return JpegEncoder(settings)
         if isinstance(settings, (JpegLsNearLosslessSettings, JpegLsLosslessSettings)):
             return JpegLsEncoder(settings)
+        if isinstance(settings, JpegLsLosslessSettings):
+            return JpegLsEncoder(settings)
         if isinstance(settings, (Jpeg2kSettings, Jpeg2kLosslessSettings)):
             return Jpeg2kEncoder(settings)
         if isinstance(settings, NumpySettings):
             return NumpyEncoder(settings)
         if isinstance(settings, RleSettings):
-            return RleEncoder()
-        if isinstance(settings, JpegLsLosslessSettings):
-            return JpegLsEncoder(settings)
+            return RleEncoder(settings)
+
         raise ValueError(f"Unsupported encoder settings: {settings}")
 
 
@@ -188,6 +191,24 @@ class NumpyEncoder(Encoder):
 class RleEncoder(Encoder):
     """Encoder that uses rle encoder to encode image."""
 
+    def __init__(self, settings: RleSettings) -> None:
+        self._bits = settings.bits
+        if settings.bits == 8:
+            self._dtype = np.uint8
+        else:
+            self._dtype = np.uint16
+        if settings.channels == Channels.GRAYSCALE:
+            self._samples_per_pixel = 1
+        else:
+            self._samples_per_pixel = 3
+
     def encode(self, image: PILImage) -> bytes:
         """Encode image into bytes."""
-        return rle_encode_frame(np.array(image))
+        return rle_encode_frame(
+            np.array(image).astype(self._dtype).tobytes(),
+            rows=image.height,
+            cols=image.width,
+            bpp=self._bits,
+            spp=self._samples_per_pixel,
+            byteorder="<",
+        )

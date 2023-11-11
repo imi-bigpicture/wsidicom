@@ -80,6 +80,8 @@ class TestEncoder:
             (Jpeg2kLosslessSettings(8, Channels.RGB), 0),
             (Jpeg2kLosslessSettings(16, Channels.GRAYSCALE), 0),
             (RleSettings(8, Channels.GRAYSCALE), 0),
+            (RleSettings(8, Channels.RGB), 0),
+            (RleSettings(16, Channels.GRAYSCALE), 0),
             (NumpySettings(8, Channels.GRAYSCALE, True, True), 0),
             (NumpySettings(8, Channels.GRAYSCALE, True, False), 0),
             (NumpySettings(8, Channels.GRAYSCALE, False, True), 0),
