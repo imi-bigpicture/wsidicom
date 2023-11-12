@@ -18,7 +18,6 @@ from datetime import datetime
 from pathlib import Path
 from struct import pack
 from typing import (
-    Any,
     BinaryIO,
     Dict,
     Iterable,
@@ -33,7 +32,7 @@ from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
 from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
-from pydicom.uid import UID
+from pydicom.uid import UID, UncompressedTransferSyntaxes
 
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
@@ -45,7 +44,12 @@ class WsiDicomFileWriter(WsiDicomFileBase):
     """Writer for DICOM WSI files."""
 
     def __init__(
-        self, stream: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
+        self,
+        stream: BinaryIO,
+        little_endian: bool = True,
+        implicit_vr: bool = False,
+        filepath: Optional[Path] = None,
+        owned: bool = False,
     ) -> None:
         """
         Create a writer for DICOM WSI data.
@@ -54,23 +58,46 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         ----------
         stream: BinaryIO
             Stream to open.
+        little_endian: bool = True
+            If the file should be written in little endian.
+        implicit_vr: bool = False
+            If the file should be written with implicit VR.
         filepath: Optional[Path] = None
             Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
         """
         super().__init__(stream, filepath, owned)
-        self._file.is_little_endian = True
-        self._file.is_implicit_VR = False
+        self._file.is_little_endian = little_endian
+        self._file.is_implicit_VR = implicit_vr
 
     @classmethod
-    def open(cls, file: Path) -> "WsiDicomFileWriter":
-        """Open file in path as WsiDicomFileWriter."""
+    def open(cls, file: Path, transfer_syntax: UID) -> "WsiDicomFileWriter":
+        """Open file in path as WsiDicomFileWriter.
+
+        Parameters
+        ----------
+        file: Path
+            Path to file.
+        transfer_syntax: UID
+            Transfer syntax to use for file.
+
+        Returns
+        ----------
+        WsiDicomFileWriter
+            WsiDicomFileWriter for file.
+        """
         stream = open(
             file,
             "w+b",
         )
-        return cls(stream, file, True)
+        return cls(
+            stream,
+            transfer_syntax.is_little_endian,
+            transfer_syntax.is_implicit_VR,
+            file,
+            True,
+        )
 
     def write(
         self,
@@ -110,30 +137,110 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Scale factor.
 
         """
+        if transfer_syntax in UncompressedTransferSyntaxes:
+            offset_table = OffsetTableType.NONE
+        elif offset_table is OffsetTableType.NONE:
+            offset_table = OffsetTableType.EMPTY
         self._write_preamble()
         self._write_file_meta(uid, transfer_syntax)
         dataset.SOPInstanceUID = uid
         dataset.InstanceNumber = instance_number
         self._write_base(dataset)
+        if offset_table is OffsetTableType.NONE:
+            self._write_unencapsulated_pixel_data(
+                dataset, data, workers, chunk_size, scale
+            )
+        else:
+            self._write_encapsulated_pixel_data(
+                data, dataset.NumberOfFrames, workers, chunk_size, offset_table, scale
+            )
+
+    def _write_encapsulated_pixel_data(
+        self,
+        data: Dict[Tuple[str, float], ImageData],
+        number_of_frames: int,
+        workers: int,
+        chunk_size: int,
+        offset_table: OffsetTableType,
+        scale: int = 1,
+    ) -> List[int]:
+        """Write encapsulated pixel data to file.
+
+        Parameters
+        ----------
+        data: Dict[Tuple[str, float], ImageData]
+            Pixel data to write.
+        number_of_frames: int
+            Number of frames to write.
+        workers: int
+            Number of workers to use for writing pixel data.
+        chunk_size: int
+            Number of frames to give each worker.
+        offset_table: OffsetTableType
+            Offset table to use.
+        scale: int = 1
+            Scale factor.
+
+        Returns
+        ----------
+        List[int]
+            List of frame position relative to start of file.
+        """
         table_start, pixels_start = self._write_pixel_data_start(
-            dataset.NumberOfFrames, offset_table
+            number_of_frames, offset_table
         )
         frame_positions: List[int] = []
         for (path, z), image_data in sorted(data.items()):
             frame_positions += self._write_pixel_data(
-                image_data, z, path, workers, chunk_size, scale
+                image_data, True, z, path, workers, chunk_size, scale
             )
         pixels_end = self._file.tell()
         self._write_pixel_data_end()
-
-        if offset_table is not OffsetTableType.NONE:
+        if offset_table is not OffsetTableType.EMPTY:
             if table_start is None:
                 raise ValueError("Table start should not be None")
             elif offset_table == OffsetTableType.EXTENDED:
                 self._write_eot(table_start, pixels_start, frame_positions, pixels_end)
             elif offset_table == OffsetTableType.BASIC:
                 self._write_bot(table_start, pixels_start, frame_positions)
-        self.close()
+        return frame_positions
+
+    def _write_unencapsulated_pixel_data(
+        self,
+        dataset: Dataset,
+        data: Dict[Tuple[str, float], ImageData],
+        workers: int,
+        chunk_size: int,
+        scale: int = 1,
+    ) -> None:
+        """Write unencapsulated pixel data to file.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset with parameters for image to write.
+        data: Dict[Tuple[str, float], ImageData]
+            Pixel data to write.
+        workers: int
+            Number of workers to use for writing pixel data.
+        chunk_size: int
+            Number of frames to give each worker.
+        scale: int = 1
+            Scale factor.
+        """
+        length = (
+            dataset.NumberOfFrames
+            * dataset.Rows
+            * dataset.Columns
+            * dataset.SamplesPerPixel
+            * dataset.BitsAllocated
+            // 8
+        )
+        self._write_tag("PixelData", "OB", length)
+        for (path, z), image_data in sorted(data.items()):
+            self._write_pixel_data(
+                image_data, False, z, path, workers, chunk_size, scale
+            )
 
     def _write_preamble(self) -> None:
         """Write file preamble to file."""
@@ -186,13 +293,20 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
 
         """
-        self._file.write_tag(Tag(tag))
-        self._file.write(bytes(value_representation, "iso8859"))
-        self._file.write_leUS(0)
-        if length is not None:
-            self._file.write_leUL(length)
+        if self._file.is_implicit_VR:
+            write_ul = self._file.write_leUL
+            write_us = self._file.write_leUS
         else:
-            self._file.write_leUL(0xFFFFFFFF)
+            write_ul = self._file.write_beUL
+            write_us = self._file.write_beUS
+        self._file.write_tag(Tag(tag))
+        if not self._file.is_implicit_VR:
+            self._file.write(bytes(value_representation, "iso8859"))
+            write_us(0)
+        if length is not None:
+            write_ul(length)
+        else:
+            write_ul(0xFFFFFFFF)
 
     def _reserve_eot(self, number_of_frames: int) -> int:
         """Reserve space in file for extended offset table.
@@ -259,8 +373,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         if offset_table == OffsetTableType.BASIC:
             table_start = self._reserve_bot(number_of_frames)
-        else:
-            self._file.write_tag(ItemTag)  # Empty BOT
+        elif offset_table == OffsetTableType.EMPTY:
+            self._file.write_tag(ItemTag)
             self._file.write_leUL(0)
 
         pixel_data_start = self._file.tell()
@@ -336,11 +450,11 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         last_entry = frame_positions[-1] - pixel_data_start
         if last_entry > 2**64 - 1:
             raise ValueError(
-                "Image data exceeds 2^64 - 1 bytes, likely something is wrong"
+                "Image data exceeds 2^64 - 1 bytes, likely something is wrong."
             )
         self._file.seek(eot_start)  # Go to EOT table
         self._check_tag_and_length(
-            Tag("ExtendedOffsetTable"), BYTES_PER_ITEM * len(frame_positions)
+            Tag("ExtendedOffsetTable"), BYTES_PER_ITEM * len(frame_positions), True
         )
         for frame_position in frame_positions:  # Write EOT
             relative_position = frame_position - pixel_data_start
@@ -348,7 +462,9 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         # EOT LENGTHS
         self._check_tag_and_length(
-            Tag("ExtendedOffsetTableLengths"), BYTES_PER_ITEM * len(frame_positions)
+            Tag("ExtendedOffsetTableLengths"),
+            BYTES_PER_ITEM * len(frame_positions),
+            True,
         )
         frame_start = frame_positions[0]
         for frame_end in frame_positions[1:]:  # Write EOT lengths
@@ -366,13 +482,12 @@ class WsiDicomFileWriter(WsiDicomFileBase):
     def _write_pixel_data(
         self,
         image_data: ImageData,
+        encapsulate: bool,
         z: float,
         path: str,
         workers: int,
         chunk_size: int,
         scale: int = 1,
-        image_format: str = "jpeg",
-        image_options: Optional[Dict[str, Any]] = None,
     ) -> List[int]:
         """Write pixel data to file.
 
@@ -380,6 +495,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         ----------
         image_data: ImageData
             Image data to read pixel tiles from.
+        encapsulate: bool
+            If pixel data should be encapsulated.
         z: float
             Focal plane to write.
         path: str
@@ -391,10 +508,6 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             size also depends on minimun_chunk_size from image_data.
         scale: int
             Scale factor (1 = No scaling).
-        image_format: str = 'jpeg'
-            Image format if scaling.
-        image_options: Optional[Dict[str, Any]] = None
-            Image options if scaling.
 
         Returns
         ----------
@@ -402,8 +515,6 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             List of frame position (position of ItemTag), relative to start of
             file.
         """
-        if image_options is None:
-            image_options = {"quality": 95}
         chunked_tile_points = self._chunk_tile_points(image_data, chunk_size, scale)
 
         if scale == 1:
@@ -420,7 +531,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             ) -> Iterator[bytes]:
                 """Thread function to get scaled tiles as bytes."""
                 return image_data.get_scaled_encoded_tiles(
-                    scaled_tile_points, z, path, scale, image_format, image_options
+                    scaled_tile_points, z, path, scale
                 )
 
             get_tiles = get_scaled_tiles_thread
@@ -431,12 +542,22 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             self._file.write(frame)
             return position
 
+        if encapsulate:
+
+            def encapsulate_tile(tile: bytes) -> Iterable[bytes]:
+                return itemize_frame(tile, 1)
+
+        else:
+
+            def encapsulate_tile(tile: bytes) -> Iterable[bytes]:
+                return [tile]
+
         if workers == 1:
             return [
                 write_frame(frame)
                 for chunk in chunked_tile_points
                 for tile in get_tiles(chunk)
-                for frame in itemize_frame(tile, 1)
+                for frame in encapsulate_tile(tile)
             ]
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -444,7 +565,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
                 write_frame(frame)
                 for thread_result in pool.map(get_tiles, chunked_tile_points)
                 for tile in thread_result
-                for frame in itemize_frame(tile, 1)
+                for frame in encapsulate_tile(tile)
             ]
 
     def _chunk_tile_points(

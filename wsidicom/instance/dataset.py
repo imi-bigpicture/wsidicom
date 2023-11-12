@@ -456,7 +456,7 @@ class WsiDataset(Dataset):
     @property
     def bits(self) -> int:
         """Return the number of bits stored for each sample."""
-        return self.BitsAllocated
+        return self.BitsStored
 
     @property
     def lossy_compressed(self) -> bool:
@@ -541,7 +541,7 @@ class WsiDataset(Dataset):
         samples_per_pixel = dataset.SamplesPerPixel
         bits = dataset.BitsStored
 
-        syntax_supported = Decoder.is_supported(
+        syntax_supported = Decoder.has_decoder(
             transfer_syntax, samples_per_pixel, bits
         )
         if not syntax_supported:

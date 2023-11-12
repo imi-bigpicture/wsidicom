@@ -1,3 +1,19 @@
+#    Copyright 2023 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+"""Module with decoders for image data."""
+
 import io
 from abc import ABCMeta, abstractmethod
 from typing import Callable, Dict, Optional, Type
@@ -35,14 +51,65 @@ from wsidicom.geometry import Size
 class Decoder(metaclass=ABCMeta):
     @abstractmethod
     def decode(self, frame: bytes) -> PILImage:
-        """Decode frame into Pillow Image."""
+        """Decode frame into Pillow Image.
+
+        Parameters
+        ----------
+        frame : bytes
+            Encoded frame.
+
+        Returns
+        -------
+        PIL.Image
+            Pillow Image.
+        """
         raise NotImplementedError()
 
     @classmethod
+    @abstractmethod
     def is_supported(
         cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
     ) -> bool:
-        """Return true if decoder supports transfer syntax."""
+        """Return true if decoder supports transfer syntax.
+
+        Parameters
+        ----------
+        transfer_syntax : pydicom.uid.UID
+            Transfer syntax.
+        samples_per_pixel : int
+            Number of samples per pixel.
+        bits : int
+            Number of bits per sample.
+
+        Returns
+        -------
+        bool
+            True if decoder supports transfer syntax.
+
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    def has_decoder(
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
+    ) -> bool:
+        """Return true if decoder supports transfer syntax.
+
+        Parameters
+        ----------
+        transfer_syntax : pydicom.uid.UID
+            Transfer syntax.
+        samples_per_pixel : int
+            Number of samples per pixel.
+        bits : int
+            Number of bits per sample.
+
+        Returns
+        -------
+        bool
+            True there is a decoder that supports transfer syntax.
+
+        """
         if bits != 8 and samples_per_pixel != 1:
             # Pillow only supports 8 bit color images
             return False
@@ -53,7 +120,25 @@ class Decoder(metaclass=ABCMeta):
     def create(
         cls, transfer_syntax: UID, samples_per_pixel: int, bits: int, dataset: Dataset
     ) -> "Decoder":
-        """Create a decoder that supports the transfer syntax."""
+        """Create a decoder that supports the transfer syntax.
+
+        Parameters
+        ----------
+        transfer_syntax : UID
+            Transfer syntax.
+        samples_per_pixel : int
+            Number of samples per pixel.
+        bits : int
+            Number of bits per sample.
+        dataset : Dataset
+            DICOM dataset.
+
+        Returns
+        -------
+        Decoder
+            Decoder for transfer syntax.
+
+        """
         if bits != 8 and samples_per_pixel != 1:
             # Pillow only supports 8 bit color images
             raise ValueError(
@@ -85,6 +170,23 @@ class Decoder(metaclass=ABCMeta):
     def _select_decoder(
         cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
     ) -> Optional[Type["Decoder"]]:
+        """Select decoder based on transfer syntax.
+
+        Parameters
+        ----------
+        transfer_syntax : UID
+            Transfer syntax.
+        samples_per_pixel : int
+            Number of samples per pixel.
+        bits : int
+            Number of bits per sample.
+
+        Returns
+        -------
+        Optional[Type[Decoder]]
+            Decoder class. None if no decoder supports transfer syntax.
+
+        """
         decoders: Dict[str, Type[Decoder]] = {
             "pillow": PillowDecoder,
             "image_codecs": ImageCodecsDecoder,
@@ -110,6 +212,8 @@ class Decoder(metaclass=ABCMeta):
 
 
 class PillowDecoder(Decoder):
+    """Decoder that uses Pillow to decode images."""
+
     _supported_transfer_syntaxes = [JPEGBaseline8Bit, JPEG2000, JPEG2000Lossless]
 
     def decode(self, frame: bytes) -> PILImage:
@@ -129,6 +233,8 @@ class PillowDecoder(Decoder):
 
 
 class PydicomDecoder(Decoder):
+    """Decoder that uses pydicom to decode images."""
+
     def __init__(
         self,
         transfer_syntax: UID,
@@ -140,6 +246,27 @@ class PydicomDecoder(Decoder):
         pixel_representation: int,
         planar_configuration: int,
     ):
+        """Initialize decoder.
+
+        Parameters
+        ----------
+        transfer_syntax : UID
+            Transfer syntax.
+        size : Size
+            Size of image.
+        samples_per_pixel : int
+            Number of samples per pixel.
+        bits_allocated : int
+            Number of bits allocated.
+        bits_stored : int
+            Number of bits stored.
+        photometric_interpretation : str
+            Photometric interpretation.
+        pixel_representation : int
+            Pixel representation.
+        planar_configuration : int
+            Planar configuration.
+        """
         self._transfer_syntax = transfer_syntax
         self._size = size
         self._samples_per_pixel = samples_per_pixel
@@ -180,6 +307,8 @@ class PydicomDecoder(Decoder):
 
 
 class ImageCodecsDecoder(Decoder):
+    """Decoder that uses imagecodecs to decode images."""
+
     _supported_transfer_syntaxes = {
         JPEGBaseline8Bit: (jpeg8_decode, JPEG8),
         JPEGExtended12Bit: (jpeg8_decode, JPEG8),
@@ -192,6 +321,13 @@ class ImageCodecsDecoder(Decoder):
     }
 
     def __init__(self, transfer_syntax: UID) -> None:
+        """Initialize decoder.
+
+        Parameters
+        ----------
+        transfer_syntax : UID
+            Transfer syntax.
+        """
         decoder = self._get_decoder(transfer_syntax)
         if decoder is None:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
@@ -212,6 +348,18 @@ class ImageCodecsDecoder(Decoder):
     def _get_decoder(
         cls, transfer_syntax: UID
     ) -> Optional[Callable[[bytes], np.ndarray]]:
+        """Get imagecodes decoder for transfer syntax.
+
+        Parameters
+        ----------
+        transfer_syntax : UID
+            Transfer syntax.
+
+        Returns
+        -------
+        Optional[Callable[[bytes], np.ndarray]]
+            Decoder. None if no decoder supports transfer syntax.
+        """
         if transfer_syntax not in cls._supported_transfer_syntaxes:
             return None
         decoder, codec = cls._supported_transfer_syntaxes[transfer_syntax]

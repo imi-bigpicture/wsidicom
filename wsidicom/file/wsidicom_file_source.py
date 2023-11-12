@@ -82,9 +82,9 @@ class WsiDicomFileSource(Source):
                     )
                     # File was opened but not supported SOP class.
                     stream.close()
-            except Exception as exception:
+            except Exception:
                 logging.error(
-                    f"Failed to open file {file.name} due to exception: {exception}"
+                    f"Failed to open file {file.name} due to exception", exc_info=True
                 )
         if len(self._level_files) == 0:
             raise WsiDicomNotFoundError("Level files", str(files))

@@ -18,9 +18,7 @@ import io
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from typing import (
-    Any,
     Callable,
-    Dict,
     Iterable,
     Iterator,
     List,
@@ -348,13 +346,7 @@ class ImageData(metaclass=ABCMeta):
         )
 
     def get_scaled_encoded_tile(
-        self,
-        scaled_tile_point: Point,
-        z: float,
-        path: str,
-        scale: int,
-        image_format: str,
-        image_options: Dict[str, Any],
+        self, scaled_tile_point: Point, z: float, path: str, scale: int
     ) -> bytes:
         """
         Return scaled tile as bytes.
@@ -369,10 +361,6 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
         Scale: int
             Scale to use for downscaling.
-        image_format: str
-            Image format, e.g. 'JPEG', for encoding.
-        image_options: Dict[str, Any].
-            Dictionary of options for encoding.
 
         Returns
         ----------
@@ -391,8 +379,6 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str,
         scale: int,
-        image_format: str,
-        image_options: Dict[str, Any],
     ) -> Iterator[bytes]:
         """
         Return scaled tiles as bytes.
@@ -407,10 +393,6 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
         Scale: int
             Scale to use for downscaling.
-        image_format: str
-            Image format, e.g. 'JPEG', for encoding.
-        image_options: Dict[str, Any].
-            Dictionary of options for encoding.
 
         Returns
         ----------
@@ -418,9 +400,7 @@ class ImageData(metaclass=ABCMeta):
             Scaled tiles as bytes.
         """
         return (
-            self.get_scaled_encoded_tile(
-                scaled_tile_point, z, path, scale, image_format, image_options
-            )
+            self.get_scaled_encoded_tile(scaled_tile_point, z, path, scale)
             for scaled_tile_point in scaled_tile_points
         )
 

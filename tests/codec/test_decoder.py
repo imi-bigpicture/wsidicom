@@ -1,3 +1,17 @@
+#    Copyright 2023 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
 import pytest
 from PIL import ImageChops, ImageStat
 from PIL.Image import Image as PILImage
@@ -65,29 +79,23 @@ class TestPillowDecoder:
     @pytest.mark.parametrize(
         ["encoder_settings", "allowed_rms"],
         [
-            (JpegSettings(8, Channels.GRAYSCALE, quality=95), 2),
-            (
-                JpegSettings(8, Channels.YBR, subsampling=Subsampling.R444, quality=95),
-                2,
-            ),
-            (
-                JpegSettings(8, Channels.RGB, subsampling=Subsampling.R444, quality=95),
-                2,
-            ),
-            (JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=7), 0),
-            (JpegLosslessSettings(8, Channels.YBR, predictor=7), 0),
-            (JpegLosslessSettings(8, Channels.RGB, predictor=7), 0),
-            (JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=None), 0),
-            (JpegLosslessSettings(8, Channels.YBR, predictor=None), 0),
-            (JpegLosslessSettings(8, Channels.RGB, predictor=None), 0),
-            (Jpeg2kSettings(8, Channels.GRAYSCALE), 1),
-            (Jpeg2kSettings(8, Channels.YBR), 1),
-            (Jpeg2kSettings(8, Channels.RGB), 1),
-            (Jpeg2kSettings(16, Channels.GRAYSCALE), 1),
-            (Jpeg2kSettings(8, Channels.GRAYSCALE, level=None), 0),
-            (Jpeg2kSettings(8, Channels.YBR, level=None), 0),
-            (Jpeg2kSettings(8, Channels.RGB, level=None), 0),
-            (Jpeg2kSettings(16, Channels.GRAYSCALE, level=None), 0),
+            (JpegSettings(95, 8, Channels.GRAYSCALE), 2),
+            (JpegSettings(95, 8, Channels.YBR, Subsampling.R444), 2),
+            (JpegSettings(95, 8, Channels.RGB, Subsampling.R444), 2),
+            (JpegLosslessSettings(7, 8, Channels.GRAYSCALE), 0),
+            (JpegLosslessSettings(7, 8, Channels.YBR), 0),
+            (JpegLosslessSettings(7, 8, Channels.RGB), 0),
+            (JpegLosslessSettings(1, 8, Channels.GRAYSCALE), 0),
+            (JpegLosslessSettings(1, 8, Channels.YBR), 0),
+            (JpegLosslessSettings(1, 8, Channels.RGB), 0),
+            (Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
+            (Jpeg2kSettings(80, 8, Channels.YBR), 1),
+            (Jpeg2kSettings(80, 8, Channels.RGB), 1),
+            (Jpeg2kSettings(80, 16, Channels.GRAYSCALE), 1),
+            (Jpeg2kSettings(0, 8, Channels.GRAYSCALE), 0),
+            (Jpeg2kSettings(0, 8, Channels.YBR), 0),
+            (Jpeg2kSettings(0, 8, Channels.RGB), 0),
+            (Jpeg2kSettings(0, 16, Channels.GRAYSCALE), 0),
         ],
     )
     def test_decode(
@@ -219,36 +227,30 @@ class TestImageCodecsDecoder:
     @pytest.mark.parametrize(
         ["encoder_settings", "allowed_rms"],
         [
-            (JpegSettings(8, Channels.GRAYSCALE, quality=95), 2),
-            (
-                JpegSettings(8, Channels.YBR, subsampling=Subsampling.R444, quality=95),
-                2,
-            ),
-            (
-                JpegSettings(8, Channels.RGB, subsampling=Subsampling.R444, quality=95),
-                2,
-            ),
-            (JpegSettings(12, Channels.GRAYSCALE, quality=95), 2),
-            (JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=7), 0),
-            (JpegLosslessSettings(8, Channels.YBR, predictor=7), 0),
-            (JpegLosslessSettings(8, Channels.RGB, predictor=7), 0),
-            (JpegLosslessSettings(16, Channels.GRAYSCALE, predictor=7), 0),
-            (JpegLosslessSettings(8, Channels.GRAYSCALE, predictor=None), 0),
-            (JpegLosslessSettings(8, Channels.YBR, predictor=None), 0),
-            (JpegLosslessSettings(8, Channels.RGB, predictor=None), 0),
-            (JpegLosslessSettings(16, Channels.GRAYSCALE, predictor=None), 0),
-            (JpegLsLosslessSettings(8), 0),
-            (JpegLsLosslessSettings(16), 0),
-            (JpegLsLosslessSettings(8, level=1), 1),
-            (JpegLsLosslessSettings(16, level=1), 1),
-            (Jpeg2kSettings(8, Channels.GRAYSCALE), 1),
-            (Jpeg2kSettings(8, Channels.YBR), 1),
-            (Jpeg2kSettings(8, Channels.RGB), 1),
-            (Jpeg2kSettings(16, Channels.GRAYSCALE), 1),
-            (Jpeg2kSettings(8, Channels.GRAYSCALE, level=None), 0),
-            (Jpeg2kSettings(8, Channels.YBR, level=None), 0),
-            (Jpeg2kSettings(8, Channels.RGB, level=None), 0),
-            (Jpeg2kSettings(16, Channels.GRAYSCALE, level=None), 0),
+            (JpegSettings(95, 8, Channels.GRAYSCALE), 2),
+            (JpegSettings(95, 8, Channels.YBR, Subsampling.R444), 2),
+            (JpegSettings(95, 8, Channels.RGB, Subsampling.R444), 2),
+            (JpegSettings(95, 12, Channels.GRAYSCALE), 2),
+            (JpegLosslessSettings(7, 8, Channels.GRAYSCALE), 0),
+            (JpegLosslessSettings(7, 8, Channels.YBR), 0),
+            (JpegLosslessSettings(7, 8, Channels.RGB), 0),
+            (JpegLosslessSettings(7, 16, Channels.GRAYSCALE), 0),
+            (JpegLosslessSettings(1, 8, Channels.GRAYSCALE), 0),
+            (JpegLosslessSettings(1, 8, Channels.YBR), 0),
+            (JpegLosslessSettings(1, 8, Channels.RGB), 0),
+            (JpegLosslessSettings(1, 16, Channels.GRAYSCALE), 0),
+            (JpegLsLosslessSettings(0, 8), 0),
+            (JpegLsLosslessSettings(0, 16), 0),
+            (JpegLsLosslessSettings(1, 8), 1),
+            (JpegLsLosslessSettings(1, 16), 1),
+            (Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
+            (Jpeg2kSettings(80, 8, Channels.YBR), 1),
+            (Jpeg2kSettings(80, 8, Channels.RGB), 1),
+            (Jpeg2kSettings(80, 16, Channels.GRAYSCALE), 1),
+            (Jpeg2kSettings(0, 8, Channels.GRAYSCALE), 0),
+            (Jpeg2kSettings(0, 8, Channels.YBR), 0),
+            (Jpeg2kSettings(0, 8, Channels.RGB), 0),
+            (Jpeg2kSettings(0, 16, Channels.GRAYSCALE), 0),
         ],
     )
     def test_decode(

@@ -1,6 +1,21 @@
+#    Copyright 2023 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+"""Module with encoders for image data."""
+
 from abc import ABCMeta, abstractmethod
 from typing import Union
-import PIL
 
 import numpy as np
 from imagecodecs import (
@@ -38,12 +53,32 @@ from wsidicom.codec.settings import (
 
 
 class Encoder(metaclass=ABCMeta):
+    """Abstract base class for encoders."""
+
     def __init__(self, settings: Settings):
+        """Initialize encoder.
+
+        Parameters
+        ----------
+        settings: Settings
+            Settings for the encoder.
+        """
         self._settings = settings
 
     @abstractmethod
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
-        """Encode image into bytes."""
+        """Encode image into bytes.
+
+        Parameters
+        ----------
+        image: Union[PILImage, np.ndarray]
+            Image to encode.
+
+        Returns
+        -------
+        bytes
+            Encoded image.
+        """
         raise NotImplementedError()
 
     @property
@@ -89,7 +124,18 @@ class Encoder(metaclass=ABCMeta):
 
     @classmethod
     def create(cls, settings: Settings) -> "Encoder":
-        """Create an encoder that supports the transfer syntax."""
+        """Create an encoder using settings.
+
+        Parameters
+        ----------
+        settings: Settings
+            Settings for the encoder.
+
+        Returns
+        -------
+        Encoder
+            Encoder for settings.
+        """
         if isinstance(settings, (JpegSettings, JpegLosslessSettings)):
             return JpegEncoder(settings)
         if isinstance(settings, JpegLsLosslessSettings):
@@ -107,6 +153,8 @@ class Encoder(metaclass=ABCMeta):
 
 
 class JpegEncoder(Encoder):
+    """JPEG encoder."""
+
     _supported_transfer_syntaxes = [
         JPEGBaseline8Bit,
         JPEGExtended12Bit,
@@ -118,6 +166,14 @@ class JpegEncoder(Encoder):
         self,
         settings: Union[JpegSettings, JpegLosslessSettings],
     ) -> None:
+        """Initialize JPEG encoder.
+
+        Parameters
+        ----------
+        settings: Union[JpegSettings, JpegLosslessSettings]
+            Settings for the encoder.
+
+        """
         self._bits = settings.bits
         if self._bits == 8:
             self._dtype = np.uint8
@@ -135,8 +191,9 @@ class JpegEncoder(Encoder):
             self._lossless = False
             self._predictor = None
             self._level = settings.quality
+
             self._subsampling = (
-                settings.subsampling.value if settings.subsampling else None
+                settings.subsampling.name.lstrip("R") if settings.subsampling else None
             )
         elif isinstance(settings, JpegLosslessSettings):
             self._lossless = True
@@ -155,6 +212,7 @@ class JpegEncoder(Encoder):
             bitspersample=self._bits,
             subsampling=self._subsampling,
             outcolorspace=self._output_colorspace,
+            predictor=self._predictor,
         )
 
     @property
@@ -174,6 +232,13 @@ class JpegLsEncoder(Encoder):
         self,
         settings: JpegLsLosslessSettings,
     ) -> None:
+        """Initialize JPEG-LS encoder.
+
+        Parameters
+        ----------
+        settings: JpegLsLosslessSettings
+            Settings for the encoder.
+        """
         self._bits = settings.bits
         if settings.level is None or settings.level == 0:
             self._level = 0
@@ -199,12 +264,19 @@ class Jpeg2kEncoder(Encoder):
     ]
 
     def __init__(self, settings: Jpeg2kSettings) -> None:
+        """Initialize JPEG 2000 encoder.
+
+        Parameters
+        ----------
+        settings: Jpeg2kSettings
+            Settings for the encoder.
+        """
         self._bits = settings.bits
         if settings.channels == Channels.YBR:
             self._multiple_component_transform = True
         else:
             self._multiple_component_transform = False
-        if settings.level is None or settings.level == 0:
+        if settings.level < 1 or settings.level > 1000:
             self._level = 0
             self._reversible = True
         else:
@@ -213,7 +285,6 @@ class Jpeg2kEncoder(Encoder):
         super().__init__(settings)
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
-        """Encode image into bytes."""
         return jpeg2k_encode(
             np.array(image),
             level=self._level,
@@ -232,6 +303,13 @@ class NumpyEncoder(Encoder):
     """Encoder that uses numpy to encode image."""
 
     def __init__(self, settings: NumpySettings) -> None:
+        """Initialize numpy encoder.
+
+        Parameters
+        ----------
+        settings: NumpySettings
+            Settings for the encoder.
+        """
         dataset = Dataset()
         dataset.BitsAllocated = settings.allocated_bits
         dataset.PixelRepresentation = settings.pixel_representation
@@ -240,7 +318,6 @@ class NumpyEncoder(Encoder):
         super().__init__(settings)
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
-        """Encode image into bytes."""
         return np.array(image).astype(self._dtype).tobytes()
 
     @property
@@ -252,6 +329,13 @@ class RleEncoder(Encoder):
     """Encoder that uses rle encoder to encode image."""
 
     def __init__(self, settings: RleSettings) -> None:
+        """Initialize rle encoder.
+
+        Parameters
+        ----------
+        settings: RleSettings
+            Settings for the encoder.
+        """
         self._bits = settings.bits
         if settings.bits == 8:
             self._dtype = np.uint8
@@ -264,7 +348,6 @@ class RleEncoder(Encoder):
         super().__init__(settings)
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
-        """Encode image into bytes."""
         if isinstance(image, PILImage):
             rows, cols = image.size
         else:
