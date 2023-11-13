@@ -262,6 +262,8 @@ class TestImageCodecsDecoder:
     ):
         # Arrange
         decoder = ImageCodecsDecoder(encoder_settings.transfer_syntax)
+        if not decoder.is_available():
+            pytest.skip("ImageCodecs is not available")
 
         # Act
         decoded = decoder.decode(encoded)

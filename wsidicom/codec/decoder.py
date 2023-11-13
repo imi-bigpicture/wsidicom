@@ -20,14 +20,7 @@ from typing import Callable, Dict, Optional, Type
 
 import numpy as np
 from highdicom.frame import decode_frame
-from imagecodecs import (
-    JPEG2K,
-    JPEG8,
-    JPEGLS,
-    jpeg2k_decode,
-    jpeg8_decode,
-    jpegls_decode,
-)
+
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom import Dataset
@@ -47,6 +40,27 @@ from pydicom.uid import (
 from wsidicom import config
 from wsidicom.geometry import Size
 
+try:
+    from imagecodecs import (
+        JPEG2K,
+        JPEG8,
+        JPEGLS,
+        jpeg2k_decode,
+        jpeg8_decode,
+        jpegls_decode,
+    )
+
+    IMAGE_CODECS_AVAILABLE = True
+
+except ImportError:
+    IMAGE_CODECS_AVAILABLE = False
+    JPEG2K = None
+    JPEG8 = None
+    JPEGLS = None
+    jpeg2k_decode = None
+    jpeg8_decode = None
+    jpegls_decode = None
+
 
 class Decoder(metaclass=ABCMeta):
     @abstractmethod
@@ -62,6 +76,18 @@ class Decoder(metaclass=ABCMeta):
         -------
         PIL.Image
             Pillow Image.
+        """
+        raise NotImplementedError()
+
+    @classmethod
+    @abstractmethod
+    def is_available(cls) -> bool:
+        """Return true if decoder is available.
+
+        Returns
+        -------
+        bool
+            True if decoder is available.
         """
         raise NotImplementedError()
 
@@ -198,14 +224,17 @@ class Decoder(metaclass=ABCMeta):
                     f"Unknown prefered decoder: {config.settings.prefered_decoder}."
                 )
             decoder = decoders[config.settings.prefered_decoder]
-            if not decoder.is_supported(transfer_syntax, samples_per_pixel, bits):
+            if not decoder.is_available() or not decoder.is_supported(
+                transfer_syntax, samples_per_pixel, bits
+            ):
                 return None
             return decoder
         return next(
             (
                 decoder
                 for decoder in decoders.values()
-                if decoder.is_supported(transfer_syntax, samples_per_pixel, bits)
+                if decoder.is_available()
+                and decoder.is_supported(transfer_syntax, samples_per_pixel, bits)
             ),
             None,
         )
@@ -230,6 +259,10 @@ class PillowDecoder(Decoder):
             # Pillow only supports 8 bit color images
             return False
         return transfer_syntax in cls._supported_transfer_syntaxes
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
 
 
 class PydicomDecoder(Decoder):
@@ -305,6 +338,10 @@ class PydicomDecoder(Decoder):
             for available_handler in available_handlers
         )
 
+    @classmethod
+    def is_available(cls) -> bool:
+        return True
+
 
 class ImageCodecsDecoder(Decoder):
     """Decoder that uses imagecodecs to decode images."""
@@ -343,6 +380,10 @@ class ImageCodecsDecoder(Decoder):
     ) -> bool:
         decoder = cls._get_decoder(transfer_syntax)
         return decoder is not None
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return IMAGE_CODECS_AVAILABLE
 
     @classmethod
     def _get_decoder(

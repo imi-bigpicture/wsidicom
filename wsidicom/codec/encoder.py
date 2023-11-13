@@ -19,6 +19,11 @@ import io
 from typing import Union
 
 import numpy as np
+from PIL import Image
+from PIL.Image import Image as PILImage
+from pydicom import Dataset
+from pydicom.pixel_data_handlers.util import pixel_dtype
+from pydicom.uid import UID
 
 try:
     from imagecodecs import (
@@ -29,14 +34,8 @@ try:
     )
 
     IMAGE_CODECS_AVAILABLE = True
-
 except ImportError:
     IMAGE_CODECS_AVAILABLE = False
-from PIL import Image
-from PIL.Image import Image as PILImage
-from pydicom import Dataset
-from pydicom.pixel_data_handlers.util import pixel_dtype
-from pydicom.uid import UID
 
 try:
     from rle.utils import encode_frame as rle_encode_frame
