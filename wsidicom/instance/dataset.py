@@ -17,7 +17,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
-from re import U
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
 from pydicom.dataset import Dataset
@@ -32,7 +31,7 @@ from pydicom.uid import (
 )
 from pydicom.valuerep import DSfloat
 
-from wsidicom.codec import Decoder
+from wsidicom.codec import Codec
 from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomError,
@@ -468,6 +467,16 @@ class WsiDataset(Dataset):
         """Return photometric interpretation."""
         return self.PhotometricInterpretation
 
+    @property
+    def pixel_representation(self) -> int:
+        """Return pixel representation."""
+        return self.PixelRepresentation
+
+    @property
+    def planar_configuration(self) -> int:
+        """Return planar configuration."""
+        return self.PlanarConfiguration
+
     @cached_property
     def optical_path_sequence(self) -> Optional[DicomSequence]:
         """Return optical path sequence from dataset."""
@@ -540,10 +549,17 @@ class WsiDataset(Dataset):
                 return None
         samples_per_pixel = dataset.SamplesPerPixel
         bits = dataset.BitsStored
+        photometric_interpretation = dataset.PhotometricInterpretation
+        pixel_representation = dataset.PixelRepresentation
 
-        syntax_supported = Decoder.has_decoder(
-            transfer_syntax, samples_per_pixel, bits
+        syntax_supported = Codec.is_supported(
+            transfer_syntax,
+            samples_per_pixel,
+            bits,
+            photometric_interpretation,
+            pixel_representation,
         )
+        print("supported", syntax_supported)
         if not syntax_supported:
             logging.debug(f"Non-supported transfer syntax {transfer_syntax}")
             return None

@@ -26,3 +26,4 @@ from wsidicom.codec.settings import (
     Subsampling,
 )
 from wsidicom.codec.decoder import Decoder
+from wsidicom.codec.codec import Codec

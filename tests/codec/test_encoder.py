@@ -39,6 +39,7 @@ from wsidicom.codec.encoder import (
     RleEncoder,
     NumpyEncoder,
 )
+from wsidicom.instance.dataset import WsiDataset
 
 
 @pytest.fixture
@@ -52,16 +53,19 @@ def dataset(image: PILImage, settings: Settings):
     dataset.SamplesPerPixel = settings.samples_per_pixel
     dataset.PixelRepresentation = 0
     dataset.PlanarConfiguration = 0
-    yield dataset
+    yield WsiDataset(dataset)
 
 
 @pytest.fixture
-def decoder(settings: Settings, dataset: Dataset):
+def decoder(settings: Settings, dataset: WsiDataset):
     yield Decoder.create(
         settings.transfer_syntax,
-        settings.samples_per_pixel,
-        settings.bits,
-        dataset,
+        dataset.samples_per_pixel,
+        dataset.bits,
+        dataset.tile_size,
+        dataset.photometric_interpretation,
+        dataset.pixel_representation,
+        dataset.planar_configuration,
     )
 
 

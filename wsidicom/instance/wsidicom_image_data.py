@@ -18,7 +18,7 @@ from typing import Iterator, List, Optional, Sequence
 
 from PIL.Image import Image as PILImage
 
-from wsidicom.codec import Decoder, Encoder
+from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
@@ -30,12 +30,10 @@ from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
-    def __init__(
-        self, datasets: Sequence[WsiDataset], decoder: Decoder, encoder: Encoder
-    ):
+    def __init__(self, datasets: Sequence[WsiDataset], codec: Codec):
         self._datasets = datasets
-        self._decoder = decoder
-        super().__init__(encoder)
+        self._decoder = codec.decoder
+        super().__init__(codec.encoder)
 
     @abstractmethod
     def _get_tile_frame(self, frame_index: int) -> bytes:

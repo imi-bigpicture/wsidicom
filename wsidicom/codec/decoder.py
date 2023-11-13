@@ -23,7 +23,6 @@ from highdicom.frame import decode_frame
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom import Dataset
 from pydicom import config as pydicom_config
 from pydicom.uid import (
     JPEG2000,
@@ -116,35 +115,15 @@ class Decoder(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @classmethod
-    def has_decoder(
-        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
-    ) -> bool:
-        """Return true if decoder supports transfer syntax.
-
-        Parameters
-        ----------
-        transfer_syntax : pydicom.uid.UID
-            Transfer syntax.
-        samples_per_pixel : int
-            Number of samples per pixel.
-        bits : int
-            Number of bits per sample.
-
-        Returns
-        -------
-        bool
-            True there is a decoder that supports transfer syntax.
-
-        """
-        if bits != 8 and samples_per_pixel != 1:
-            # Pillow only supports 8 bit color images
-            return False
-
-        return cls._select_decoder(transfer_syntax, samples_per_pixel, bits) is not None
-
-    @classmethod
     def create(
-        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int, dataset: Dataset
+        cls,
+        transfer_syntax: UID,
+        samples_per_pixel: int,
+        bits: int,
+        size: Size,
+        photometric_interpretation: str,
+        pixel_representation: int,
+        planar_configuration: int,
     ) -> "Decoder":
         """Create a decoder that supports the transfer syntax.
 
@@ -156,8 +135,14 @@ class Decoder(metaclass=ABCMeta):
             Number of samples per pixel.
         bits : int
             Number of bits per sample.
-        dataset : Dataset
-            DICOM dataset.
+        size : Size
+            Size of image.
+        photometric_interpretation : str
+            Photometric interpretation.
+        pixel_representation : int
+            Pixel representation.
+        planar_configuration : int
+            Planar configuration.
 
         Returns
         -------
@@ -172,7 +157,7 @@ class Decoder(metaclass=ABCMeta):
                 f"samples per pixel {samples_per_pixel}. "
                 "Non-8 bit images are only supported for grayscale images."
             )
-        decoder = cls._select_decoder(transfer_syntax, samples_per_pixel, bits)
+        decoder = cls.select_decoder(transfer_syntax, samples_per_pixel, bits)
         if decoder is None:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
         if decoder == PillowDecoder:
@@ -182,18 +167,18 @@ class Decoder(metaclass=ABCMeta):
         elif decoder == PydicomDecoder:
             return PydicomDecoder(
                 transfer_syntax=transfer_syntax,
-                size=Size(dataset.Rows, dataset.Columns),
+                size=size,
                 samples_per_pixel=samples_per_pixel,
-                bits_allocated=bits,
-                bits_stored=dataset.BitsStored,
-                photometric_interpretation=dataset.PhotometricInterpretation,
-                pixel_representation=dataset.PixelRepresentation,
-                planar_configuration=dataset.PlanarConfiguration,
+                bits_allocated=(bits // 8) * 8,
+                bits_stored=bits,
+                photometric_interpretation=photometric_interpretation,
+                pixel_representation=pixel_representation,
+                planar_configuration=planar_configuration,
             )
         raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
 
     @classmethod
-    def _select_decoder(
+    def select_decoder(
         cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
     ) -> Optional[Type["Decoder"]]:
         """Select decoder based on transfer syntax.
@@ -213,6 +198,9 @@ class Decoder(metaclass=ABCMeta):
             Decoder class. None if no decoder supports transfer syntax.
 
         """
+        if bits != 8 and samples_per_pixel != 1:
+            # Pillow only supports 8 bit color images
+            return None
         decoders: Dict[str, Type[Decoder]] = {
             "pillow": PillowDecoder,
             "image_codecs": ImageCodecsDecoder,

@@ -133,7 +133,7 @@ class WsiDicomTestImageData(ImageData):
 
     @property
     def photometric_interpretation(self) -> str:
-        return "YBR"
+        return "RGB"
 
     @property
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
@@ -228,6 +228,8 @@ def dataset(image_data: ImageData, frame_count: int):
     dataset.BitsStored = image_data.bits
     dataset.BitsAllocated = image_data.bits // 8 * 8
     dataset.PhotometricInterpretation = image_data.photometric_interpretation
+    dataset.PixelRepresentation = 0
+    dataset.PlanarConfiguration = 0
     dataset.TotalPixelMatrixColumns = image_data.image_size.width
     dataset.TotalPixelMatrixRows = image_data.image_size.height
     dataset.OpticalPathSequence = DicomSequence([])

@@ -19,7 +19,7 @@ from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID
 
-from wsidicom.codec import Decoder, Encoder, Settings as EncoderSettings
+from wsidicom.codec import Codec
 from wsidicom.geometry import Point
 from wsidicom.instance import WsiDataset, WsiDicomImageData
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
@@ -56,12 +56,16 @@ class WsiDicomWebImageData(WsiDicomImageData):
         self._series_uid = dataset.uids.slide.series_instance
         self._instance_uid = dataset.uids.instance
         self._transfer_syntax = transfer_syntax
-        decoder = Decoder.create(
-            self.transfer_syntax, dataset.samples_per_pixel, dataset.bits, dataset
+        codec = Codec.create(
+            self.transfer_syntax,
+            dataset.samples_per_pixel,
+            dataset.bits,
+            dataset.tile_size,
+            dataset.photometric_interpretation,
+            dataset.pixel_representation,
+            dataset.planar_configuration,
         )
-        encoder_settings = EncoderSettings.create(dataset, self.transfer_syntax)
-        encoder = Encoder.create(encoder_settings)
-        super().__init__([dataset], decoder, encoder)
+        super().__init__([dataset], codec)
 
     @property
     def transfer_syntax(self) -> UID:

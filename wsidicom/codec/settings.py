@@ -18,7 +18,6 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal, Union
-from pydicom import Dataset
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -54,6 +53,7 @@ class Channels(Enum):
             "YBR_PARTIAL_422",
             "YBR_ICT",
             "YBR_RCT",
+            "YBR",
         ]
         if photometric_interpretation == "MONOCHROME2":
             return cls.GRAYSCALE
@@ -125,15 +125,25 @@ class Settings(metaclass=ABCMeta):
         return 1 if self.channels == Channels.GRAYSCALE else 3
 
     @classmethod
-    def create(cls, dataset: Dataset, transfer_syntax: UID) -> "Settings":
+    def create(
+        cls,
+        transfer_syntax: UID,
+        bits: int,
+        photometric_interpretation: str,
+        pixel_representation: int,
+    ) -> "Settings":
         """Create settings based on properties dataset and transfer syntax.
 
         Parameters:
         ----------
-            dataset: Dataset
-                Dataset to create settings from.
             transfer_syntax: UID
                 Transfer syntax to create settings for.
+            bits: int
+                Number of bits per pixel.
+            photometric_interpretation: str
+                Photometric interpretation of image.
+            pixel_representation: int
+                Pixel representation of image.
 
         Returns:
         ----------
@@ -161,10 +171,7 @@ class Settings(metaclass=ABCMeta):
             ExplicitVRLittleEndian,
             ExplicitVRBigEndian,
         ]
-        channels = Channels.from_photometric_interpretation(
-            dataset.PhotometricInterpretation
-        )
-        bits = dataset.BitsStored
+        channels = Channels.from_photometric_interpretation(photometric_interpretation)
         if transfer_syntax in jpeg_transfer_syntaxes:
             return JpegSettings(bits=bits, channels=channels)
         if transfer_syntax in jpeg_lossless_transfer_syntaxes:
@@ -187,13 +194,9 @@ class Settings(metaclass=ABCMeta):
             return NumpySettings(
                 bits=bits,
                 channels=channels,
-                little_endian=dataset.is_little_endian
-                if dataset.is_little_endian is not None
-                else True,
-                implicit_vr=dataset.is_implicit_VR
-                if dataset.is_implicit_VR is not None
-                else True,
-                pixel_representation=dataset.PixelRepresentation,
+                little_endian=transfer_syntax.is_little_endian,
+                implicit_vr=transfer_syntax.is_implicit_VR,
+                pixel_representation=pixel_representation,
             )
         raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
 
