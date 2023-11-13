@@ -347,8 +347,8 @@ class TestWsiDicomFileWriter:
         # Act
         with WsiDicomFileWriter.open(filepath, transfer_syntax) as write_file:
             writen_frame_positions = write_file._write_encapsulated_pixel_data(
-                dataset,
                 {(image_data.default_path, image_data.default_z): image_data},
+                dataset.NumberOfFrames,
                 1,
                 100,
                 writen_table_type,
