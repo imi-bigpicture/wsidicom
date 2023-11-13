@@ -486,6 +486,7 @@ class WsiDicomFile(WsiDicomFileBase):
             table = self._read_bot()
         elif table_type == OffsetTableType.EMPTY:
             self._read_bot_length()
+
         if table_type == OffsetTableType.NONE:
             frame_positions = self._create_frame_positions_for_uncapsulated_data(
                 self._file.tell()

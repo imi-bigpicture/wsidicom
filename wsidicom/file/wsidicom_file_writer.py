@@ -37,6 +37,7 @@ from pydicom.uid import UID, UncompressedTransferSyntaxes
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
+from wsidicom.instance.dataset import WsiDataset
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
@@ -103,7 +104,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         self,
         uid: UID,
         transfer_syntax: UID,
-        dataset: Dataset,
+        dataset: WsiDataset,
         data: Dict[Tuple[str, float], ImageData],
         workers: int,
         chunk_size: int,
@@ -120,7 +121,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Instance UID for file.
         transfer_syntax: UID.
             Transfer syntax for file
-        dataset: Dataset
+        dataset: WsiDataset
             Dataset to write (excluding pixel data).
         data: Dict[Tuple[str, float], ImageData]
             Pixel data to write.
@@ -207,7 +208,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
     def _write_unencapsulated_pixel_data(
         self,
-        dataset: Dataset,
+        dataset: WsiDataset,
         data: Dict[Tuple[str, float], ImageData],
         workers: int,
         chunk_size: int,
@@ -217,7 +218,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         Parameters
         ----------
-        dataset: Dataset
+        dataset: WsiDataset
             Dataset with parameters for image to write.
         data: Dict[Tuple[str, float], ImageData]
             Pixel data to write.
@@ -229,12 +230,10 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Scale factor.
         """
         length = (
-            dataset.NumberOfFrames
-            * dataset.Rows
-            * dataset.Columns
-            * dataset.SamplesPerPixel
-            * dataset.BitsAllocated
-            // 8
+            dataset.tile_size.area
+            * dataset.samples_per_pixel
+            * (dataset.bits // 8)
+            * dataset.frame_count
         )
         self._write_tag("PixelData", "OB", length)
         for (path, z), image_data in sorted(data.items()):
@@ -293,7 +292,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
 
         """
-        if self._file.is_implicit_VR:
+        if self._file.is_little_endian:
             write_ul = self._file.write_leUL
             write_us = self._file.write_leUS
         else:
