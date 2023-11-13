@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from typing import Type
 import pytest
 from PIL import ImageChops, ImageStat
 from PIL.Image import Image as PILImage
@@ -29,6 +30,14 @@ from wsidicom.codec import (
     RleSettings,
     Settings,
     Subsampling,
+)
+from wsidicom.codec.encoder import (
+    Jpeg2kEncoder,
+    JpegEncoder,
+    JpegLsEncoder,
+    PillowEncoder,
+    RleEncoder,
+    NumpyEncoder,
 )
 
 
@@ -59,53 +68,70 @@ def decoder(settings: Settings, dataset: Dataset):
 @pytest.mark.unittest
 class TestEncoder:
     @pytest.mark.parametrize(
-        ["settings", "allowed_rms"],
+        ["encoder_type", "settings", "allowed_rms"],
         [
-            (JpegSettings(95, 8, Channels.GRAYSCALE), 2),
-            (JpegSettings(95, 8, Channels.YBR, Subsampling.R444), 2),
-            (JpegSettings(95, 8, Channels.RGB, Subsampling.R444), 2),
-            (JpegSettings(95, 12, Channels.GRAYSCALE), 2),
-            (JpegLosslessSettings(7, 8, Channels.GRAYSCALE), 0),
-            (JpegLosslessSettings(7, 8, Channels.YBR), 0),
-            (JpegLosslessSettings(7, 8, Channels.RGB), 0),
-            (JpegLosslessSettings(7, 16, Channels.GRAYSCALE), 0),
-            (JpegLosslessSettings(1, 8, Channels.GRAYSCALE), 0),
-            (JpegLosslessSettings(1, 8, Channels.YBR), 0),
-            (JpegLosslessSettings(1, 8, Channels.RGB), 0),
-            (JpegLosslessSettings(1, 16, Channels.GRAYSCALE), 0),
-            (JpegLsLosslessSettings(0, 8), 0),
-            (JpegLsLosslessSettings(0, 16), 0),
-            (JpegLsLosslessSettings(1, 8), 1),
-            (JpegLsLosslessSettings(1, 16), 1),
-            (Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
-            (Jpeg2kSettings(80, 8, Channels.YBR), 1),
-            (Jpeg2kSettings(80, 8, Channels.RGB), 1),
-            (Jpeg2kSettings(80, 16, Channels.GRAYSCALE), 1),
-            (Jpeg2kSettings(0, 8, Channels.GRAYSCALE), 0),
-            (Jpeg2kSettings(0, 8, Channels.YBR), 0),
-            (Jpeg2kSettings(0, 8, Channels.RGB), 0),
-            (Jpeg2kSettings(0, 16, Channels.GRAYSCALE), 0),
-            (RleSettings(8, Channels.GRAYSCALE), 0),
-            (RleSettings(8, Channels.RGB), 0),
-            (RleSettings(16, Channels.GRAYSCALE), 0),
-            (NumpySettings(8, Channels.GRAYSCALE, True, True), 0),
-            (NumpySettings(8, Channels.GRAYSCALE, True, False), 0),
-            (NumpySettings(8, Channels.GRAYSCALE, False, True), 0),
-            (NumpySettings(16, Channels.GRAYSCALE, True, True), 0),
-            (NumpySettings(16, Channels.GRAYSCALE, True, False), 0),
-            (NumpySettings(16, Channels.GRAYSCALE, False, True), 0),
-            (NumpySettings(8, Channels.RGB, True, True), 0),
-            (NumpySettings(8, Channels.RGB, True, False), 0),
-            (NumpySettings(8, Channels.RGB, False, True), 0),
+            (JpegEncoder, JpegSettings(95, 8, Channels.GRAYSCALE), 2),
+            (JpegEncoder, JpegSettings(95, 8, Channels.YBR, Subsampling.R444), 2),
+            (JpegEncoder, JpegSettings(95, 8, Channels.RGB, Subsampling.R444), 2),
+            (JpegEncoder, JpegSettings(95, 12, Channels.GRAYSCALE), 2),
+            (PillowEncoder, JpegSettings(95, 8, Channels.GRAYSCALE), 2),
+            (PillowEncoder, JpegSettings(95, 8, Channels.YBR, Subsampling.R444), 2),
+            (JpegEncoder, JpegLosslessSettings(7, 8, Channels.GRAYSCALE), 0),
+            (JpegEncoder, JpegLosslessSettings(7, 8, Channels.YBR), 0),
+            (JpegEncoder, JpegLosslessSettings(7, 8, Channels.RGB), 0),
+            (JpegEncoder, JpegLosslessSettings(7, 16, Channels.GRAYSCALE), 0),
+            (JpegEncoder, JpegLosslessSettings(1, 8, Channels.GRAYSCALE), 0),
+            (JpegEncoder, JpegLosslessSettings(1, 8, Channels.YBR), 0),
+            (JpegEncoder, JpegLosslessSettings(1, 8, Channels.RGB), 0),
+            (JpegEncoder, JpegLosslessSettings(1, 16, Channels.GRAYSCALE), 0),
+            (JpegLsEncoder, JpegLsLosslessSettings(0, 8), 0),
+            (JpegLsEncoder, JpegLsLosslessSettings(0, 16), 0),
+            (JpegLsEncoder, JpegLsLosslessSettings(1, 8), 1),
+            (JpegLsEncoder, JpegLsLosslessSettings(1, 16), 1),
+            (Jpeg2kEncoder, Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
+            (Jpeg2kEncoder, Jpeg2kSettings(80, 8, Channels.YBR), 1),
+            (Jpeg2kEncoder, Jpeg2kSettings(80, 8, Channels.RGB), 1),
+            (Jpeg2kEncoder, Jpeg2kSettings(80, 16, Channels.GRAYSCALE), 1),
+            (Jpeg2kEncoder, Jpeg2kSettings(0, 8, Channels.GRAYSCALE), 0),
+            (Jpeg2kEncoder, Jpeg2kSettings(0, 8, Channels.YBR), 0),
+            (Jpeg2kEncoder, Jpeg2kSettings(0, 8, Channels.RGB), 0),
+            (Jpeg2kEncoder, Jpeg2kSettings(0, 16, Channels.GRAYSCALE), 0),
+            (PillowEncoder, Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
+            (PillowEncoder, Jpeg2kSettings(80, 8, Channels.YBR), 1),
+            (PillowEncoder, Jpeg2kSettings(80, 8, Channels.RGB), 1),
+            (PillowEncoder, Jpeg2kSettings(80, 16, Channels.GRAYSCALE), 1),
+            (PillowEncoder, Jpeg2kSettings(0, 8, Channels.GRAYSCALE), 0),
+            (PillowEncoder, Jpeg2kSettings(0, 8, Channels.YBR), 0),
+            (PillowEncoder, Jpeg2kSettings(0, 8, Channels.RGB), 0),
+            (PillowEncoder, Jpeg2kSettings(0, 16, Channels.GRAYSCALE), 0),
+            (RleEncoder, RleSettings(8, Channels.GRAYSCALE), 0),
+            (RleEncoder, RleSettings(8, Channels.RGB), 0),
+            (RleEncoder, RleSettings(16, Channels.GRAYSCALE), 0),
+            (NumpyEncoder, NumpySettings(8, Channels.GRAYSCALE, True, True), 0),
+            (NumpyEncoder, NumpySettings(8, Channels.GRAYSCALE, True, False), 0),
+            (NumpyEncoder, NumpySettings(8, Channels.GRAYSCALE, False, True), 0),
+            (NumpyEncoder, NumpySettings(16, Channels.GRAYSCALE, True, True), 0),
+            (NumpyEncoder, NumpySettings(16, Channels.GRAYSCALE, True, False), 0),
+            (NumpyEncoder, NumpySettings(16, Channels.GRAYSCALE, False, True), 0),
+            (NumpyEncoder, NumpySettings(8, Channels.RGB, True, True), 0),
+            (NumpyEncoder, NumpySettings(8, Channels.RGB, True, False), 0),
+            (NumpyEncoder, NumpySettings(8, Channels.RGB, False, True), 0),
         ],
     )
     def test_encode(
-        self, image: PILImage, decoder: Decoder, settings: Settings, allowed_rms: float
+        self,
+        image: PILImage,
+        decoder: Decoder,
+        encoder_type: Type[Encoder],
+        settings: Settings,
+        allowed_rms: float,
     ):
         # Arrange
+        if not encoder_type.is_avaiable():
+            pytest.skip("Encoder not available")
         if settings.channels == Channels.GRAYSCALE:
             image = image.convert("L")
-        encoder = Encoder.create(settings)
+        encoder = encoder_type(settings)
 
         # Act
         encoded = encoder.encode(image)
