@@ -415,6 +415,9 @@ class NumpySettings(Settings):
 
 
 class RleSettings(Settings):
+    def __init__(self, bits: int = 8, channels: Channels = Channels.RGB):
+        super().__init__(bits, channels)
+
     @property
     def transfer_syntax(self) -> UID:
         return RLELossless
