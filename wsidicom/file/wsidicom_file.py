@@ -23,6 +23,7 @@ from pydicom.filebase import DicomFileLike
 from pydicom.filereader import _read_file_meta_info, read_partial, read_preamble
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, UncompressedTransferSyntaxes
+from wsidicom.codec import Codec
 
 from wsidicom.errors import WsiDicomFileError, WsiDicomNotSupportedError
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
@@ -62,7 +63,7 @@ class WsiDicomFile(WsiDicomFileBase):
         self._file.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
         extended_offset_table_tag = Tag("ExtendedOffsetTable")
 
-        def _stop_at(tag: BaseTag, VR: Optional[str], length: int) -> bool:
+        def _stop_at(tag: BaseTag, vr: Optional[str], length: int) -> bool:
             return tag >= extended_offset_table_tag
 
         self._file.seek(0)
@@ -75,13 +76,22 @@ class WsiDicomFile(WsiDicomFileBase):
         )
         self._pixel_data_position = self._file.tell()
 
-        self._image_type = WsiDataset.is_supported_wsi_dicom(
-            dataset, self.transfer_syntax
-        )
+        self._image_type = WsiDataset.is_supported_wsi_dicom(dataset)
         if self._image_type is not None:
             self._dataset = WsiDataset(dataset)
         else:
             raise WsiDicomNotSupportedError(f"Non-supported file {self._file}.")
+        syntax_supported = Codec.is_supported(
+            self.transfer_syntax,
+            self._dataset.samples_per_pixel,
+            self._dataset.bits,
+            self._dataset.photometric_interpretation,
+            self._dataset.pixel_representation,
+        )
+        if not syntax_supported:
+            raise WsiDicomNotSupportedError(
+                f"Non-supported transfer syntax {self.transfer_syntax}"
+            )
 
     def __str__(self) -> str:
         return self.pretty_str()

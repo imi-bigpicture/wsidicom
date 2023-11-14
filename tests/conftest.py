@@ -21,6 +21,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 import pytest
 from dicomweb_client import DICOMfileClient
+from pydicom.uid import JPEGBaseline8Bit
 
 from tests.data_gen import create_layer_file
 from wsidicom import WsiDicom
@@ -145,6 +146,7 @@ def wsi_factory():
                 client,
                 test_definition["study_instance_uid"],
                 test_definition["series_instance_uid"],
+                JPEGBaseline8Bit,
             )
         elif input_type == WsiInputType.STREAM:
             streams = [open(file, "rb") for file in folder.iterdir() if file.is_file()]

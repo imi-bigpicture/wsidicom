@@ -31,7 +31,6 @@ from pydicom.uid import (
 )
 from pydicom.valuerep import DSfloat
 
-from wsidicom.codec import Codec
 from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomError,
@@ -511,9 +510,7 @@ class WsiDataset(Dataset):
         return self._get_image_type(self.ImageType)
 
     @classmethod
-    def is_supported_wsi_dicom(
-        cls, dataset: Dataset, transfer_syntax: UID
-    ) -> Optional[ImageType]:
+    def is_supported_wsi_dicom(cls, dataset: Dataset) -> Optional[ImageType]:
         """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
         Warn if attribute listed as required in the library or required in the
@@ -523,8 +520,6 @@ class WsiDataset(Dataset):
         ----------
         dataset: Dataset
             Pydicom dataset to check if is a WSI dataset.
-        transfer_syntax: UID
-            Transfer syntax of dataset.
 
         Returns
         ----------
@@ -547,23 +542,6 @@ class WsiDataset(Dataset):
             if name not in dataset and attribute.evaluate(image_type):
                 logging.debug(f"Missing required attribute {name}")
                 return None
-        samples_per_pixel = dataset.SamplesPerPixel
-        bits = dataset.BitsStored
-        photometric_interpretation = dataset.PhotometricInterpretation
-        pixel_representation = dataset.PixelRepresentation
-
-        syntax_supported = Codec.is_supported(
-            transfer_syntax,
-            samples_per_pixel,
-            bits,
-            photometric_interpretation,
-            pixel_representation,
-        )
-        print("supported", syntax_supported)
-        if not syntax_supported:
-            logging.debug(f"Non-supported transfer syntax {transfer_syntax}")
-            return None
-
         return image_type
 
     @staticmethod

@@ -1685,8 +1685,6 @@ class AnnotationInstance:
         groups: List[AnnotationGroup] = []
         slide_uids: Optional[SlideUids] = None
 
-        if dataset.file_meta.MediaStorageSOPClassUID != ANN_SOP_CLASS_UID:
-            raise ValueError("SOP Class UID of file is wrong")
         frame_of_reference_uid = getattr(dataset, "FrameOfReferenceUID", None)
         if dataset.AnnotationCoordinateType == "2D":
             coordinate_type = "image"

@@ -27,3 +27,4 @@ from wsidicom.codec.settings import (
 )
 from wsidicom.codec.decoder import Decoder
 from wsidicom.codec.codec import Codec
+from wsidicom.codec.media_types import determine_media_type

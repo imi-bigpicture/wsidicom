@@ -27,7 +27,7 @@ from typing import (
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
+from pydicom.uid import UID, generate_uid, JPEGBaseline8Bit
 
 from wsidicom.errors import (
     WsiDicomMatchError,
@@ -122,7 +122,7 @@ class WsiDicom:
         client: WsiDicomWebClient,
         study_uid: Union[str, UID],
         series_uids: Union[str, UID, Iterable[Union[str, UID]]],
-        requested_transfer_syntax: UID = JPEGBaseline8Bit,
+        requested_transfer_syntax: Optional[Union[str, UID]] = JPEGBaseline8Bit,
         label: Optional[Union[PILImage, str, Path]] = None,
     ) -> "WsiDicom":
         """Open WSI DICOM instances using DICOM web client.
@@ -135,9 +135,10 @@ class WsiDicom:
             Study uid of wsi to open.
         series_uids: Union[str, UID, Iterable[Union[str, UID]]]
             Series uids of wsi to open
-        transfer_syntax: UID
+        transfer_syntax: Optional[Union[str, UID]]
             Transfer syntax to request for image data, for example
-            UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
+            "1.2.840.10008.1.2.4.50" for JPEGBaseline8Bit. Set to None to determine
+            avaiable transfer syntax from server if possible.
         label: Optional[Union[PILImage, str, Path]] = None
             Optional label image to use instead of label found in source.
 
@@ -146,6 +147,8 @@ class WsiDicom:
         WsiDicom
             WsiDicom created from WSI DICOM instances in study-series.
         """
+        if isinstance(requested_transfer_syntax, str):
+            requested_transfer_syntax = UID(requested_transfer_syntax)
         source = WsiDicomWebSource(
             client, study_uid, series_uids, requested_transfer_syntax
         )
