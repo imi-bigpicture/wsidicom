@@ -40,5 +40,7 @@ def encoded(encoder_settings: EncoderSettings):
     file_path = get_filepath_for_encoder_settings(
         Path("tests/testdata/encoded"), encoder_settings
     )
+    if not file_path.exists():
+        pytest.skip(f"Test file {file_path} does not exist")
     with open(file_path, "rb") as file:
         return file.read()
