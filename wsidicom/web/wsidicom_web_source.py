@@ -12,10 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from http import HTTPStatus
 import logging
 from typing import Iterable, List, Optional, Union
 
 from pydicom.uid import UID
+from requests import HTTPError
 from wsidicom.codec import Codec
 
 from wsidicom.errors import WsiDicomNotFoundError
@@ -76,9 +78,10 @@ class WsiDicomWebSource(Source):
                     continue
                 dataset = WsiDataset(dataset)
                 transfer_syntax = self._determine_transfer_syntax(
+                    client,
+                    dataset,
                     requested_transfer_syntax,
                     transfer_syntaxes,
-                    dataset,
                 )
                 if transfer_syntax is None:
                     logging.info(
@@ -142,11 +145,13 @@ class WsiDicomWebSource(Source):
     def close(self) -> None:
         pass
 
-    @staticmethod
+    @classmethod
     def _determine_transfer_syntax(
+        cls,
+        client,
+        dataset: WsiDataset,
         requested_transfer_syntax: Optional[UID],
         avaiable_transfer_syntaxes: Optional[Iterable[UID]],
-        dataset: WsiDataset,
     ) -> Optional[UID]:
         if (
             avaiable_transfer_syntaxes is not None
@@ -163,19 +168,55 @@ class WsiDicomWebSource(Source):
                 dataset.pixel_representation,
             ):
                 return requested_transfer_syntax
-        if avaiable_transfer_syntaxes is None:
-            return None
+        if avaiable_transfer_syntaxes is not None:
+            selected_transfer_syntax = next(
+                (
+                    transfer_syntax
+                    for transfer_syntax in avaiable_transfer_syntaxes
+                    if Codec.is_supported(
+                        transfer_syntax,
+                        dataset.samples_per_pixel,
+                        dataset.bits,
+                        dataset.photometric_interpretation,
+                        dataset.pixel_representation,
+                    )
+                ),
+                None,
+            )
+            if selected_transfer_syntax is not None:
+                return selected_transfer_syntax
         return next(
             (
                 transfer_syntax
-                for transfer_syntax in avaiable_transfer_syntaxes
-                if Codec.is_supported(
-                    transfer_syntax,
+                for transfer_syntax in Codec.supported_transfer_syntaxes(
                     dataset.samples_per_pixel,
                     dataset.bits,
                     dataset.photometric_interpretation,
                     dataset.pixel_representation,
                 )
+                if cls._check_if_transfer_syntax_avaiable(
+                    client,
+                    dataset.uids.slide.study_instance,
+                    dataset.uids.slide.series_instance,
+                    dataset.uids.instance,
+                    transfer_syntax,
+                )
             ),
             None,
         )
+
+    @staticmethod
+    def _check_if_transfer_syntax_avaiable(
+        client: WsiDicomWebClient,
+        study_uid: UID,
+        series_uid: UID,
+        instance_uid: UID,
+        transfer_syntax: UID,
+    ) -> bool:
+        try:
+            client.get_frames(study_uid, series_uid, instance_uid, [1], transfer_syntax)
+        except HTTPError as exception:
+            if exception.response.status_code == HTTPStatus.NOT_ACCEPTABLE:
+                return False
+            raise exception
+        return True

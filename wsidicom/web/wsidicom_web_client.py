@@ -168,7 +168,7 @@ class WsiDicomWebClient:
         instance_uid: UID
             Instance UID of the instance.
         frame_indices: List[int]
-            List of frame indices to get.
+            List of frame indices to get. Note frames are indexed starting from 1.
         transfer_syntax: UID
             Transfer syntax of the to get frames.
 

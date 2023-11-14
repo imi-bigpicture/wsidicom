@@ -1,9 +1,9 @@
-from typing import Union
+from typing import Iterable, Union
 
 import numpy as np
 from wsidicom.codec.decoder import Decoder
 from wsidicom.codec.encoder import Encoder
-from pydicom.uid import UID
+from pydicom.uid import UID, AllTransferSyntaxes
 from PIL.Image import Image as PILImage
 
 from wsidicom.codec.settings import Settings
@@ -23,6 +23,26 @@ class Codec:
     @property
     def decoder(self) -> Decoder:
         return self._decoder
+
+    @classmethod
+    def supported_transfer_syntaxes(
+        cls,
+        samples_per_pixel: int,
+        bits: int,
+        photometric_interpretation: str,
+        pixel_representation: int,
+    ) -> Iterable[UID]:
+        return (
+            transfer_syntax
+            for transfer_syntax in AllTransferSyntaxes
+            if cls.is_supported(
+                transfer_syntax,
+                samples_per_pixel,
+                bits,
+                photometric_interpretation,
+                pixel_representation,
+            )
+        )
 
     def decode(self, data: bytes) -> PILImage:
         return self.decoder.decode(data)
