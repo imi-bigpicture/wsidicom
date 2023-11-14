@@ -76,7 +76,6 @@ class Subsampling(Enum):
     R440 = "Full horizontal, half vertical (4:4:0)"
 
 
-@dataclass
 class Settings(metaclass=ABCMeta):
     def __init__(self, bits: int, channels: Channels):
         """
@@ -88,8 +87,18 @@ class Settings(metaclass=ABCMeta):
                 Number of bits per pixel.
             channels: Channels
                 Color channels in encoded image."""
-        self.bits = bits
-        self.channels = channels
+        self._bits = bits
+        self._channels = channels
+
+    @property
+    def bits(self) -> int:
+        """Return bits."""
+        return self._bits
+
+    @property
+    def channels(self) -> Channels:
+        """Return channels."""
+        return self._channels
 
     @property
     @abstractmethod
@@ -225,9 +234,25 @@ class JpegSettings(Settings):
             subsampling: Subsampling = Subsampling.R420
                 Chroma subsampling settings.
         """
-        self.quality = quality
-        self.subsampling = subsampling
+        self._quality = quality
+        self._subsampling = subsampling
         super().__init__(bits, channels)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(quality={self.quality}, bits={self.bits}, "
+            f"channels={self.channels}, subsampling={self.subsampling})"
+        )
+
+    @property
+    def quality(self) -> int:
+        """Return quality."""
+        return self._quality
+
+    @property
+    def subsampling(self) -> Subsampling:
+        """Return subsampling."""
+        return self._subsampling
 
     @property
     def transfer_syntax(self) -> UID:
@@ -267,8 +292,19 @@ class JpegLosslessSettings(Settings):
             channels: Channels = Channels.YBR
                 Color channels in encoded image.
         """
-        self.predictor = predictor
+        self._predictor = predictor
         super().__init__(bits, channels)
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(predictor={self.predictor}, bits={self.bits}, "
+            f"channels={self.channels})"
+        )
+
+    @property
+    def predictor(self) -> int:
+        """Return predictor."""
+        return self._predictor
 
     @property
     def transfer_syntax(self) -> UID:
@@ -306,8 +342,16 @@ class JpegLsLosslessSettings(Settings):
             bits: int = 8
                 Number of bits per pixel.
         """
-        self.level = level
+        self._level = level
         super().__init__(bits, Channels.GRAYSCALE)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(level={self.level}, bits={self.bits})"
+
+    @property
+    def level(self) -> int:
+        """Return level."""
+        return self._level
 
     @property
     def transfer_syntax(self) -> UID:
@@ -340,8 +384,19 @@ class Jpeg2kSettings(Settings):
             channels: Channels = Channels.YBR
                 Color channels in encoded image.
         """
-        self.level = level
+        self._level = level
         super().__init__(bits, channels)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(level={self.level}, bits={self.bits}, "
+            f"channels={self.channels})"
+        )
+
+    @property
+    def level(self) -> int:
+        """Return level."""
+        return self._level
 
     @property
     def transfer_syntax(self) -> UID:
@@ -393,10 +448,32 @@ class NumpySettings(Settings):
             pixel_representation: int = 0
                 Pixel representation. 0 for unsigned, 1 for signed.
         """
-        self.little_endian = little_endian
-        self.implicit_vr = implicit_vr
-        self.pixel_representation = pixel_representation
+        self._little_endian = little_endian
+        self._implicit_vr = implicit_vr
+        self._pixel_representation = pixel_representation
         super().__init__(bits, channels)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(bits={self.bits}, channels={self.channels}, "
+            f"little_endian={self.little_endian}, implicit_vr={self.implicit_vr}, "
+            f"pixel_representation={self.pixel_representation})"
+        )
+
+    @property
+    def little_endian(self) -> bool:
+        """Return little endian."""
+        return self._little_endian
+
+    @property
+    def implicit_vr(self) -> bool:
+        """Return implicit vr."""
+        return self._implicit_vr
+
+    @property
+    def pixel_representation(self) -> int:
+        """Return pixel representation."""
+        return self._pixel_representation
 
     @property
     def transfer_syntax(self) -> UID:
@@ -420,6 +497,9 @@ class NumpySettings(Settings):
 class RleSettings(Settings):
     def __init__(self, bits: int = 8, channels: Channels = Channels.RGB):
         super().__init__(bits, channels)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(bits={self.bits}, channels={self.channels})"
 
     @property
     def transfer_syntax(self) -> UID:
