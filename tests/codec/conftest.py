@@ -32,6 +32,8 @@ def get_filepath_for_encoder_settings(test_data_path: Path, settings: EncoderSet
 @pytest.fixture
 def image():
     path = get_test_tile_path(Path("tests/testdata"))
+    if not path.exists():
+        pytest.skip(f"Test file {path} does not exist")
     yield Image.open(path)
 
 
