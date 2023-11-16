@@ -58,6 +58,13 @@ def dataset(image: PILImage, settings: Settings):
 
 @pytest.fixture
 def decoder(settings: Settings, dataset: WsiDataset):
+    if (
+        Decoder.select_decoder(
+            settings.transfer_syntax, dataset.samples_per_pixel, dataset.bits
+        )
+        is None
+    ):
+        pytest.skip("Decoder not available")
     yield Decoder.create(
         settings.transfer_syntax,
         dataset.samples_per_pixel,
@@ -131,7 +138,7 @@ class TestEncoder:
         allowed_rms: float,
     ):
         # Arrange
-        if not encoder_type.is_avaiable():
+        if not encoder_type.is_available():
             pytest.skip("Encoder not available")
         if settings.channels == Channels.GRAYSCALE:
             image = image.convert("L")

@@ -42,8 +42,12 @@ from wsidicom.codec import (
     Subsampling,
 )
 from wsidicom.codec import Settings as EncoderSettings
-from wsidicom.codec.decoder import ImageCodecsDecoder, PillowDecoder, PydicomDecoder
-from wsidicom.codec.settings import NumpySettings
+from wsidicom.codec.decoder import (
+    ImageCodecsDecoder,
+    PillowDecoder,
+    PydicomDecoder,
+)
+from wsidicom.codec import NumpySettings
 from wsidicom.geometry import Size
 
 
@@ -205,14 +209,14 @@ class TestImageCodecsDecoder:
             (ExplicitVRLittleEndian, False),
             (DeflatedExplicitVRLittleEndian, False),
             (RLELossless, False),
-            (JPEGBaseline8Bit, True),
-            (JPEGExtended12Bit, True),
-            (JPEGLosslessP14, True),
-            (JPEGLosslessSV1, True),
-            (JPEGLSLossless, True),
-            (JPEGLSNearLossless, True),
-            (JPEG2000Lossless, True),
-            (JPEG2000, True),
+            (JPEGBaseline8Bit, ImageCodecsDecoder.is_available()),
+            (JPEGExtended12Bit, ImageCodecsDecoder.is_available()),
+            (JPEGLosslessP14, ImageCodecsDecoder.is_available()),
+            (JPEGLosslessSV1, ImageCodecsDecoder.is_available()),
+            (JPEGLSLossless, ImageCodecsDecoder.is_available()),
+            (JPEGLSNearLossless, ImageCodecsDecoder.is_available()),
+            (JPEG2000Lossless, ImageCodecsDecoder.is_available()),
+            (JPEG2000, ImageCodecsDecoder.is_available()),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -224,6 +228,9 @@ class TestImageCodecsDecoder:
         # Assert
         assert is_supported == expected_result
 
+    @pytest.mark.skipif(
+        not ImageCodecsDecoder.is_available(), reason="Image codecs not available"
+    )
     @pytest.mark.parametrize(
         ["encoder_settings", "allowed_rms"],
         [
