@@ -139,7 +139,6 @@ class Settings(metaclass=ABCMeta):
         transfer_syntax: UID,
         bits: int,
         photometric_interpretation: str,
-        pixel_representation: int,
     ) -> "Settings":
         """Create settings based on properties dataset and transfer syntax.
 
@@ -151,8 +150,6 @@ class Settings(metaclass=ABCMeta):
                 Number of bits per pixel.
             photometric_interpretation: str
                 Photometric interpretation of image.
-            pixel_representation: int
-                Pixel representation of image.
 
         Returns:
         ----------
@@ -205,7 +202,6 @@ class Settings(metaclass=ABCMeta):
                 channels=channels,
                 little_endian=transfer_syntax.is_little_endian,
                 implicit_vr=transfer_syntax.is_implicit_VR,
-                pixel_representation=pixel_representation,
             )
         raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
 
@@ -428,7 +424,6 @@ class NumpySettings(Settings):
         ] = Channels.RGB,
         little_endian: bool = True,
         implicit_vr: bool = False,
-        pixel_representation: int = 0,
     ):
         """
         Initialize numpy encoding settings.
@@ -445,19 +440,15 @@ class NumpySettings(Settings):
                 Endianness of encoded image.
             implicit_vr: bool = False
                 VR encoding of transfer syntax.
-            pixel_representation: int = 0
-                Pixel representation. 0 for unsigned, 1 for signed.
         """
         self._little_endian = little_endian
         self._implicit_vr = implicit_vr
-        self._pixel_representation = pixel_representation
         super().__init__(bits, channels)
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(bits={self.bits}, channels={self.channels}, "
-            f"little_endian={self.little_endian}, implicit_vr={self.implicit_vr}, "
-            f"pixel_representation={self.pixel_representation})"
+            f"little_endian={self.little_endian}, implicit_vr={self.implicit_vr})"
         )
 
     @property
@@ -469,11 +460,6 @@ class NumpySettings(Settings):
     def implicit_vr(self) -> bool:
         """Return implicit vr."""
         return self._implicit_vr
-
-    @property
-    def pixel_representation(self) -> int:
-        """Return pixel representation."""
-        return self._pixel_representation
 
     @property
     def transfer_syntax(self) -> UID:

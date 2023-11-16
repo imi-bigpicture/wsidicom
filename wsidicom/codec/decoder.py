@@ -122,8 +122,6 @@ class Decoder(metaclass=ABCMeta):
         bits: int,
         size: Size,
         photometric_interpretation: str,
-        pixel_representation: int,
-        planar_configuration: int,
     ) -> "Decoder":
         """Create a decoder that supports the transfer syntax.
 
@@ -139,10 +137,6 @@ class Decoder(metaclass=ABCMeta):
             Size of image.
         photometric_interpretation : str
             Photometric interpretation.
-        pixel_representation : int
-            Pixel representation.
-        planar_configuration : int
-            Planar configuration.
 
         Returns
         -------
@@ -172,8 +166,6 @@ class Decoder(metaclass=ABCMeta):
                 bits_allocated=(bits // 8) * 8,
                 bits_stored=bits,
                 photometric_interpretation=photometric_interpretation,
-                pixel_representation=pixel_representation,
-                planar_configuration=planar_configuration,
             )
         raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
 
@@ -264,8 +256,6 @@ class PydicomDecoder(Decoder):
         bits_allocated: int,
         bits_stored: int,
         photometric_interpretation: str,
-        pixel_representation: int,
-        planar_configuration: int,
     ):
         """Initialize decoder.
 
@@ -283,10 +273,7 @@ class PydicomDecoder(Decoder):
             Number of bits stored.
         photometric_interpretation : str
             Photometric interpretation.
-        pixel_representation : int
-            Pixel representation.
-        planar_configuration : int
-            Planar configuration.
+
         """
         self._transfer_syntax = transfer_syntax
         self._size = size
@@ -294,8 +281,8 @@ class PydicomDecoder(Decoder):
         self._bits_allocated = bits_allocated
         self._bits_stored = bits_stored
         self._photometric_interpretation = photometric_interpretation
-        self._pixel_representation = pixel_representation
-        self._planar_configuration = planar_configuration
+        self._pixel_representation = 0
+        self._planar_configuration = 0 if samples_per_pixel == 3 else None
 
     def decode(self, frame: bytes) -> PILImage:
         array = decode_frame(

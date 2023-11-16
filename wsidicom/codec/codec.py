@@ -33,7 +33,6 @@ class Codec:
         samples_per_pixel: int,
         bits: int,
         photometric_interpretation: str,
-        pixel_representation: int,
         possible_transfer_syntaxes: Optional[Iterable[UID]] = None,
     ) -> Iterable[UID]:
         """Return supported transfer syntaxes for the given parameters.
@@ -46,8 +45,6 @@ class Codec:
             Bits per sample of the image.
         photometric_interpretation: str
             Photometric interpretation of the image.
-        pixel_representation: int
-            Pixel representation of the image.
         possible_transfer_syntaxes: Optional[Iterable[UID]]
             Possible transfer syntaxes to check for support.
 
@@ -56,6 +53,7 @@ class Codec:
         Iterable[UID]
             Supported transfer syntaxes for the given parameters.
         """
+
         if possible_transfer_syntaxes is None:
             possible_transfer_syntaxes = AllTransferSyntaxes
         return (
@@ -66,7 +64,6 @@ class Codec:
                 samples_per_pixel,
                 bits,
                 photometric_interpretation,
-                pixel_representation,
             )
         )
 
@@ -84,8 +81,6 @@ class Codec:
         bits: int,
         size: Size,
         photometric_interpretation: str,
-        pixel_representation: int,
-        planar_configuration: int,
     ) -> "Codec":
         """Create codec for the given parameters.
 
@@ -101,10 +96,6 @@ class Codec:
             Size of the image.
         photometric_interpretation: str
             Photometric interpretation of the image.
-        pixel_representation: int
-            Pixel representation of the image.
-        planar_configuration: int
-            Planar configuration of the image.
 
         Returns
         ----------
@@ -117,15 +108,11 @@ class Codec:
             bits,
             size,
             photometric_interpretation,
-            pixel_representation,
-            planar_configuration,
         )
         encoder = cls._create_encoder(
             transfer_syntax,
-            samples_per_pixel,
             bits,
             photometric_interpretation,
-            pixel_representation,
         )
         return cls(decoder, encoder)
 
@@ -136,7 +123,6 @@ class Codec:
         samples_per_pixel: int,
         bits: int,
         photometric_interpretation: str,
-        pixel_representation: int,
     ) -> bool:
         """Return True if codec supports the given parameters.
 
@@ -150,8 +136,6 @@ class Codec:
             Bits per sample of the image.
         photometric_interpretation: str
             Photometric interpretation of the image.
-        pixel_representation: int
-            Pixel representation of the image.
 
         Returns
         ----------
@@ -164,10 +148,8 @@ class Codec:
         try:
             cls._create_encoder(
                 transfer_syntax,
-                samples_per_pixel,
                 bits,
                 photometric_interpretation,
-                pixel_representation,
             )
         except Exception:
             return False
@@ -177,15 +159,12 @@ class Codec:
     def _create_encoder(
         cls,
         transfer_syntax: UID,
-        samples_per_pixel: int,
         bits: int,
         photometric_interpretation: str,
-        pixel_representation: int,
     ) -> Encoder:
         encoder_settings = Settings.create(
             transfer_syntax,
             bits,
             photometric_interpretation,
-            pixel_representation,
         )
         return Encoder.create(encoder_settings)

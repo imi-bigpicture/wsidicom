@@ -466,16 +466,6 @@ class WsiDataset(Dataset):
         """Return photometric interpretation."""
         return self.PhotometricInterpretation
 
-    @property
-    def pixel_representation(self) -> int:
-        """Return pixel representation."""
-        return self.PixelRepresentation
-
-    @property
-    def planar_configuration(self) -> int:
-        """Return planar configuration."""
-        return self.PlanarConfiguration
-
     @cached_property
     def optical_path_sequence(self) -> Optional[DicomSequence]:
         """Return optical path sequence from dataset."""
@@ -529,19 +519,27 @@ class WsiDataset(Dataset):
 
         sop_class_uid: UID = getattr(dataset, "SOPClassUID")
         if sop_class_uid != WSI_SOP_CLASS_UID:
-            logging.debug(f"Non-wsi image, SOP class {sop_class_uid.name}")
+            logging.debug(f"Non-wsi image, SOP class {sop_class_uid.name}.")
             return None
 
         try:
             image_type = cls._get_image_type(dataset.ImageType)
         except ValueError:
-            logging.debug(f"Non-supported image type {dataset.ImageType}")
+            logging.debug(f"Non-supported image type {dataset.ImageType}.")
             return None
 
         for name, attribute in WSI_ATTRIBUTES.items():
             if name not in dataset and attribute.evaluate(image_type):
-                logging.debug(f"Missing required attribute {name}")
+                logging.debug(f"Missing required attribute {name}.")
                 return None
+        pixel_represention = int(getattr(dataset, "PixelRepresentation", 0))
+        if pixel_represention != 0:
+            logging.debug(f"Unsupported pixel representation {pixel_represention}.")
+            return None
+        planar_configuration = int(getattr(dataset, "PlanarConfiguration", 0))
+        if planar_configuration != 0:
+            logging.debug(f"Unsupported planar configuration {planar_configuration}.")
+            return None
         return image_type
 
     @staticmethod
@@ -801,7 +799,8 @@ class WsiDataset(Dataset):
         dataset.PhotometricInterpretation = image_data.photometric_interpretation
         dataset.SamplesPerPixel = image_data.samples_per_pixel
 
-        dataset.PlanarConfiguration = 0
+        if image_data.samples_per_pixel == 3:
+            dataset.PlanarConfiguration = 0
 
         dataset.FocusMethod = "AUTO"
         dataset.ExtendedDepthOfField = "NO"

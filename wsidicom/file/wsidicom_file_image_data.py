@@ -55,8 +55,6 @@ class WsiDicomFileImageData(WsiDicomImageData):
             dataset.bits,
             dataset.tile_size,
             dataset.photometric_interpretation,
-            dataset.pixel_representation,
-            dataset.planar_configuration,
         )
         super().__init__([file.dataset for file in self._files.values()], codec)
 

@@ -86,7 +86,6 @@ class WsiDicomFile(WsiDicomFileBase):
             self._dataset.samples_per_pixel,
             self._dataset.bits,
             self._dataset.photometric_interpretation,
-            self._dataset.pixel_representation,
         )
         if not syntax_supported:
             raise WsiDicomNotSupportedError(

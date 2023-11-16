@@ -62,8 +62,6 @@ class WsiDicomWebImageData(WsiDicomImageData):
             dataset.bits,
             dataset.tile_size,
             dataset.photometric_interpretation,
-            dataset.pixel_representation,
-            dataset.planar_configuration,
         )
         super().__init__([dataset], codec)
 

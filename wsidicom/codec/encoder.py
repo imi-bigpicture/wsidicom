@@ -391,7 +391,7 @@ class NumpyEncoder(Encoder):
         """
         dataset = Dataset()
         dataset.BitsAllocated = settings.allocated_bits
-        dataset.PixelRepresentation = settings.pixel_representation
+        dataset.PixelRepresentation = 0
         dataset.is_little_endian = settings.little_endian
         self._dtype = pixel_dtype(dataset)
         super().__init__(settings)

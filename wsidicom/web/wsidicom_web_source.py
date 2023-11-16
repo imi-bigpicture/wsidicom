@@ -197,7 +197,6 @@ class WsiDicomWebSource(Source):
                 dataset.samples_per_pixel,
                 dataset.bits,
                 dataset.photometric_interpretation,
-                dataset.pixel_representation,
             )
         )
 

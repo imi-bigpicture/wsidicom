@@ -172,10 +172,6 @@ class TestPydicomDecoder:
         self, image: PILImage, encoded: bytes, encoder_settings: EncoderSettings
     ):
         # Arrange
-        if isinstance(encoder_settings, NumpySettings):
-            pixel_representation = encoder_settings.pixel_representation
-        else:
-            pixel_representation = 0
         decoder = PydicomDecoder(
             encoder_settings.transfer_syntax,
             Size(image.width, image.height),
@@ -183,8 +179,6 @@ class TestPydicomDecoder:
             encoder_settings.bits,
             encoder_settings.bits,
             encoder_settings.photometric_interpretation,
-            pixel_representation,
-            0,
         )
 
         # Act

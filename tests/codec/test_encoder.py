@@ -71,8 +71,6 @@ def decoder(settings: Settings, dataset: WsiDataset):
         dataset.bits,
         dataset.tile_size,
         dataset.photometric_interpretation,
-        dataset.pixel_representation,
-        dataset.planar_configuration,
     )
 
 
