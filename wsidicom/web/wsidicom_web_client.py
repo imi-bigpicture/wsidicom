@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from http import HTTPStatus
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 from dicomweb_client.api import DICOMfileClient, DICOMwebClient
@@ -20,7 +21,7 @@ from pydicom import Dataset
 from pydicom.uid import (
     UID,
 )
-from requests import Session
+from requests import HTTPError, Session
 from requests.auth import AuthBase
 
 from wsidicom.codec import determine_media_type
@@ -28,7 +29,6 @@ from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
 
 SOP_CLASS_UID = "00080016"
 SOP_INSTANCE_UID = "00080018"
-AVAILABLE_TRANSFER_SYNTAX_UID = "00083002"
 
 
 class WsiDicomWebClient:
@@ -80,11 +80,9 @@ class WsiDicomWebClient:
 
         return cls(client)
 
-    def get_wsi_instances(
-        self, study_uid: UID, series_uid: UID
-    ) -> Iterator[Tuple[UID, Optional[List[UID]]]]:
+    def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
         """
-        Get instance uids and avaiable transfer syntaxes for WSI instances in a series.
+        Get instance uids for WSI instances in a series.
 
         Parameters
         ----------
@@ -95,12 +93,9 @@ class WsiDicomWebClient:
 
         Returns
         ----------
-        Iterator[Tuple[UID, Optional[List[UID]]]]
-            Iterator of instance uids and list of avaiable transfer syntaxes, if
-            avaiable from the server, for WSI instances in the series."""
-        return self._get_intances_with_transfer_syntaxes(
-            study_uid, series_uid, WSI_SOP_CLASS_UID
-        )
+        Iterator[UID]
+            Iterator of instance uids for WSI instances in the series."""
+        return self._get_intances(study_uid, series_uid, WSI_SOP_CLASS_UID)
 
     def get_annotation_instances(
         self, study_uid: UID, series_uid: UID
@@ -185,6 +180,35 @@ class WsiDicomWebClient:
             media_types=(self._transfer_syntax_to_media_type(transfer_syntax),),
         )
 
+    def is_transfer_syntax_supported(
+        self, study_uid: UID, series_uid: UID, instance_uid: UID, transfer_syntax: UID
+    ) -> bool:
+        """Check if transfer syntax is supported for retrieving frames.
+
+        Parameters
+        ----------
+        study_uid: UID
+            Study UID of the instance.
+        series_uid: UID
+            Series UID of the instance.
+        instance_uid: UID
+            Instance UID of the instance.
+        transfer_syntax: UID
+            Transfer syntax to check.
+
+        Returns
+        ----------
+        bool
+            True if transfer syntax is supported, False otherwise.
+        """
+        try:
+            self.get_frames(study_uid, series_uid, instance_uid, [1], transfer_syntax)
+        except HTTPError as exception:
+            if exception.response.status_code == HTTPStatus.NOT_ACCEPTABLE:
+                return False
+            raise exception
+        return True
+
     def _get_intances(
         self, study_uid: UID, series_uid: UID, sop_class_uid
     ) -> Iterator[UID]:
@@ -206,40 +230,6 @@ class WsiDicomWebClient:
         """
         return (
             self._get_sop_instance_uid_from_response(instance)
-            for instance in self._client.search_for_instances(
-                study_uid,
-                series_uid,
-                fields=["AvailableTransferSyntaxUID"],
-                search_filters={SOP_CLASS_UID: sop_class_uid},
-            )
-        )
-
-    def _get_intances_with_transfer_syntaxes(
-        self, study_uid: UID, series_uid: UID, sop_class_uid
-    ) -> Iterator[Tuple[UID, Optional[List[UID]]]]:
-        """
-        Get instance uids and avaiable transfer syntaxes for instances of SOP class.
-
-        Parameters
-        ----------
-        study_uid: UID
-            Study UID of the series.
-        series_uid: UID
-            series UID of the series.
-        sop_class_uid: UID
-            SOP Class UID of the instances.
-
-        Returns
-        ----------
-        Iterator[Tuple[UID, Optional[List[UID]]]]
-            Iterator of instance uids and list of avaiable transfer syntaxes, if
-            avaiable from the server, for instances of SOP class in the series.
-        """
-        return (
-            (
-                self._get_sop_instance_uid_from_response(instance),
-                self._get_avaiable_transfer_syntaxes_from_response(instance),
-            )
             for instance in self._client.search_for_instances(
                 study_uid,
                 series_uid,
@@ -279,28 +269,6 @@ class WsiDicomWebClient:
             SOP Class UID from response.
         """
         return UID(response[SOP_CLASS_UID]["Value"][0])
-
-    @staticmethod
-    def _get_avaiable_transfer_syntaxes_from_response(
-        response: Dict[str, Dict[Any, Any]]
-    ) -> Optional[List[UID]]:
-        """Get avaiable transfer syntaxes from response if avaiable.
-
-        Parameters
-        ----------
-        response: Dict[str, Dict[Any, Any]]
-            Response from server.
-
-        Returns
-        ----------
-        Optional[List[UID]]
-            List of avaiable transfer syntaxes if avaiable, otherwise None.
-        """
-        if not AVAILABLE_TRANSFER_SYNTAX_UID in response:
-            return None
-        return [
-            UID(value) for value in response[AVAILABLE_TRANSFER_SYNTAX_UID]["Value"]
-        ]
 
     @staticmethod
     def _transfer_syntax_to_media_type(transfer_syntax: UID) -> Tuple[str, str]:

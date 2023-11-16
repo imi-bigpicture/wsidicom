@@ -100,7 +100,7 @@ class Encoder(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def is_avaiable(cls) -> bool:
+    def is_available(cls) -> bool:
         """Return True if encoder is available."""
         raise NotImplementedError()
 
@@ -153,21 +153,23 @@ class Encoder(metaclass=ABCMeta):
         Encoder
             Encoder for settings.
         """
-        if JpegEncoder.is_avaiable() and isinstance(
+        if JpegEncoder.is_available() and isinstance(
             settings, (JpegSettings, JpegLosslessSettings)
         ):
             return JpegEncoder(settings)
-        if JpegLsEncoder.is_avaiable() and isinstance(settings, JpegLsLosslessSettings):
+        if JpegLsEncoder.is_available() and isinstance(
+            settings, JpegLsLosslessSettings
+        ):
             return JpegLsEncoder(settings)
-        if Jpeg2kEncoder.is_avaiable() and isinstance(settings, Jpeg2kSettings):
+        if Jpeg2kEncoder.is_available() and isinstance(settings, Jpeg2kSettings):
             return Jpeg2kEncoder(settings)
-        if PillowEncoder.is_avaiable() and isinstance(
+        if PillowEncoder.is_available() and isinstance(
             settings, (JpegSettings, Jpeg2kSettings)
         ):
             return PillowEncoder(settings)
-        if RleEncoder.is_avaiable() and isinstance(settings, RleSettings):
+        if RleEncoder.is_available() and isinstance(settings, RleSettings):
             return RleEncoder(settings)
-        if NumpyEncoder.is_avaiable() and isinstance(settings, NumpySettings):
+        if NumpyEncoder.is_available() and isinstance(settings, NumpySettings):
             return NumpyEncoder(settings)
 
         raise ValueError(f"Unsupported encoder settings: {settings}")
@@ -209,7 +211,7 @@ class PillowEncoder(Encoder):
             return buffer.getvalue()
 
     @classmethod
-    def is_avaiable(cls) -> bool:
+    def is_available(cls) -> bool:
         return True
 
     @classmethod
@@ -283,7 +285,7 @@ class JpegEncoder(Encoder):
         )
 
     @classmethod
-    def is_avaiable(cls) -> bool:
+    def is_available(cls) -> bool:
         return IMAGE_CODECS_AVAILABLE
 
     @classmethod
@@ -321,7 +323,7 @@ class JpegLsEncoder(Encoder):
         return jpegls_encode(np.array(image), level=self._level)
 
     @classmethod
-    def is_avaiable(cls) -> bool:
+    def is_available(cls) -> bool:
         return IMAGE_CODECS_AVAILABLE
 
     @classmethod
@@ -368,7 +370,7 @@ class Jpeg2kEncoder(Encoder):
         )
 
     @classmethod
-    def is_avaiable(cls) -> bool:
+    def is_available(cls) -> bool:
         return IMAGE_CODECS_AVAILABLE
 
     @classmethod
@@ -402,7 +404,7 @@ class NumpyEncoder(Encoder):
         return np.array(image).astype(self._dtype).tobytes()
 
     @classmethod
-    def is_avaiable(cls) -> bool:
+    def is_available(cls) -> bool:
         return True
 
     @classmethod
@@ -451,7 +453,7 @@ class RleEncoder(Encoder):
         )
 
     @classmethod
-    def is_avaiable(cls) -> bool:
+    def is_available(cls) -> bool:
         return RLE_AVAILABLE
 
     @classmethod

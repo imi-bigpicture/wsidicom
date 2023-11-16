@@ -12,12 +12,21 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from http import HTTPStatus
 import logging
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Sequence, Union
 
-from pydicom.uid import UID
-from requests import HTTPError
+from pydicom.uid import (
+    UID,
+    JPEGBaseline8Bit,
+    JPEG2000,
+    JPEG2000Lossless,
+    JPEGLSLossless,
+    JPEGLSNearLossless,
+    JPEGLosslessSV1,
+    JPEGLosslessP14,
+    RLELossless,
+    ExplicitVRLittleEndian,
+)
 from wsidicom.codec import Codec
 
 from wsidicom.errors import WsiDicomNotFoundError
@@ -29,6 +38,18 @@ from wsidicom.web.wsidicom_web_image_data import WsiDicomWebImageData
 
 """A source for reading WSI DICOM files from DICOMWeb."""
 
+PREFERED_WEB_TRANSFER_SYNTAXES = [
+    JPEGBaseline8Bit,
+    JPEG2000,
+    JPEG2000Lossless,
+    JPEGLSNearLossless,
+    JPEGLSLossless,
+    JPEGLosslessSV1,
+    JPEGLosslessP14,
+    RLELossless,
+    ExplicitVRLittleEndian,
+]
+
 
 class WsiDicomWebSource(Source):
     """Source reading WSI DICOM instances from DICOMWeb."""
@@ -38,7 +59,7 @@ class WsiDicomWebSource(Source):
         client: WsiDicomWebClient,
         study_uid: Union[str, UID],
         series_uids: Union[str, UID, Iterable[Union[str, UID]]],
-        requested_transfer_syntax: Optional[UID] = None,
+        requested_transfer_syntaxes: Optional[Sequence[UID]] = None,
     ):
         """Create a WsiDicomWebSource.
 
@@ -50,7 +71,7 @@ class WsiDicomWebSource(Source):
             Study UID of DICOM WSI to open.
         series_uids: Union[str, UID, Iterable[Union[str, UID]]]
             Series UIDs of DICOM WSI top open.
-        requested_transfer_syntax: Optional[UID] = None
+        requested_transfer_syntaxes: Optional[Sequence[UID]] = None
             Transfer syntax to request for image data, for example
             UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
 
@@ -69,9 +90,7 @@ class WsiDicomWebSource(Source):
         for series_uid in series_uids:
             if not isinstance(series_uid, UID):
                 series_uid = UID(series_uid)
-            for instance_uid, transfer_syntaxes in client.get_wsi_instances(
-                study_uid, series_uid
-            ):
+            for instance_uid in client.get_wsi_instances(study_uid, series_uid):
                 dataset = client.get_instance(study_uid, series_uid, instance_uid)
                 if not WsiDataset.is_supported_wsi_dicom(dataset):
                     logging.info(f"Non-supported instance {instance_uid}.")
@@ -80,8 +99,7 @@ class WsiDicomWebSource(Source):
                 transfer_syntax = self._determine_transfer_syntax(
                     client,
                     dataset,
-                    requested_transfer_syntax,
-                    transfer_syntaxes,
+                    requested_transfer_syntaxes,
                 )
                 if transfer_syntax is None:
                     logging.info(
@@ -148,54 +166,46 @@ class WsiDicomWebSource(Source):
     @classmethod
     def _determine_transfer_syntax(
         cls,
-        client,
+        client: WsiDicomWebClient,
         dataset: WsiDataset,
-        requested_transfer_syntax: Optional[UID],
-        avaiable_transfer_syntaxes: Optional[Iterable[UID]],
+        requested_transfer_syntaxes: Optional[Iterable[UID]] = None,
     ) -> Optional[UID]:
-        if (
-            avaiable_transfer_syntaxes is not None
-            and requested_transfer_syntax is not None
-            and requested_transfer_syntax not in avaiable_transfer_syntaxes
-        ):
-            return None
-        if requested_transfer_syntax is not None:
+        """Determine transfer syntax to use for image data.
+
+        Parameters
+        ----------
+        client: WsiDicomWebClient
+            Client used for DICOMWeb communication.
+        dataset: WsiDataset
+            Dataset to determine transfer syntax for.
+        requested_transfer_syntaxes: Optional[Iterable[UID]] = None
+            Transfer syntaxes to try in order of preference.
+
+        Returns
+        ----------
+        Optional[UID]
+            Transfer syntax to use for image data, or None if no supported transfer
+            syntax was found.
+        """
+        if requested_transfer_syntaxes is None:
+            requested_transfer_syntaxes = PREFERED_WEB_TRANSFER_SYNTAXES
+        requested_transfer_syntaxes = (
+            transfer_syntax
+            for transfer_syntax in requested_transfer_syntaxes
             if Codec.is_supported(
-                requested_transfer_syntax,
+                transfer_syntax,
                 dataset.samples_per_pixel,
                 dataset.bits,
                 dataset.photometric_interpretation,
                 dataset.pixel_representation,
-            ):
-                return requested_transfer_syntax
-        if avaiable_transfer_syntaxes is not None:
-            selected_transfer_syntax = next(
-                (
-                    transfer_syntax
-                    for transfer_syntax in avaiable_transfer_syntaxes
-                    if Codec.is_supported(
-                        transfer_syntax,
-                        dataset.samples_per_pixel,
-                        dataset.bits,
-                        dataset.photometric_interpretation,
-                        dataset.pixel_representation,
-                    )
-                ),
-                None,
             )
-            if selected_transfer_syntax is not None:
-                return selected_transfer_syntax
+        )
+
         return next(
             (
                 transfer_syntax
-                for transfer_syntax in Codec.supported_transfer_syntaxes(
-                    dataset.samples_per_pixel,
-                    dataset.bits,
-                    dataset.photometric_interpretation,
-                    dataset.pixel_representation,
-                )
-                if cls._check_if_transfer_syntax_avaiable(
-                    client,
+                for transfer_syntax in requested_transfer_syntaxes
+                if client.is_transfer_syntax_supported(
                     dataset.uids.slide.study_instance,
                     dataset.uids.slide.series_instance,
                     dataset.uids.instance,
@@ -204,19 +214,3 @@ class WsiDicomWebSource(Source):
             ),
             None,
         )
-
-    @staticmethod
-    def _check_if_transfer_syntax_avaiable(
-        client: WsiDicomWebClient,
-        study_uid: UID,
-        series_uid: UID,
-        instance_uid: UID,
-        transfer_syntax: UID,
-    ) -> bool:
-        try:
-            client.get_frames(study_uid, series_uid, instance_uid, [1], transfer_syntax)
-        except HTTPError as exception:
-            if exception.response.status_code == HTTPStatus.NOT_ACCEPTABLE:
-                return False
-            raise exception
-        return True

@@ -1,9 +1,12 @@
-from typing import Iterable, Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
 from wsidicom.codec.decoder import Decoder
 from wsidicom.codec.encoder import Encoder
-from pydicom.uid import UID, AllTransferSyntaxes
+from pydicom.uid import (
+    UID,
+    AllTransferSyntaxes,
+)
 from PIL.Image import Image as PILImage
 
 from wsidicom.codec.settings import Settings
@@ -31,7 +34,30 @@ class Codec:
         bits: int,
         photometric_interpretation: str,
         pixel_representation: int,
+        possible_transfer_syntaxes: Optional[Iterable[UID]] = None,
     ) -> Iterable[UID]:
+        """Return supported transfer syntaxes for the given parameters.
+
+        Parameters
+        ----------
+        samples_per_pixel: int
+            Samples per pixel of the image.
+        bits: int
+            Bits per sample of the image.
+        photometric_interpretation: str
+            Photometric interpretation of the image.
+        pixel_representation: int
+            Pixel representation of the image.
+        possible_transfer_syntaxes: Optional[Iterable[UID]]
+            Possible transfer syntaxes to check for support.
+
+        Returns
+        ----------
+        Iterable[UID]
+            Supported transfer syntaxes for the given parameters.
+        """
+        if possible_transfer_syntaxes is None:
+            possible_transfer_syntaxes = AllTransferSyntaxes
         return (
             transfer_syntax
             for transfer_syntax in AllTransferSyntaxes

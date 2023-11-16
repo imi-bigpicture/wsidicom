@@ -366,6 +366,8 @@ class ImageCodecsDecoder(Decoder):
     def is_supported(
         cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
     ) -> bool:
+        if not cls.is_available():
+            return False
         decoder = cls._get_decoder(transfer_syntax)
         return decoder is not None
 
