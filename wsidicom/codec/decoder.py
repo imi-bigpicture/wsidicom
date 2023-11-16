@@ -19,11 +19,11 @@ from abc import ABCMeta, abstractmethod
 from typing import Callable, Dict, Optional, Type
 
 import numpy as np
-from highdicom.frame import decode_frame
-
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom import config as pydicom_config
+from pydicom.dataset import Dataset, FileMetaDataset
+from pydicom.encaps import encapsulate
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -275,42 +275,66 @@ class PydicomDecoder(Decoder):
             Photometric interpretation.
 
         """
+        handler = self._get_handler(transfer_syntax)
+        if handler is None:
+            raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
+        self._handler = handler
         self._transfer_syntax = transfer_syntax
-        self._size = size
-        self._samples_per_pixel = samples_per_pixel
-        self._bits_allocated = bits_allocated
-        self._bits_stored = bits_stored
-        self._photometric_interpretation = photometric_interpretation
-        self._pixel_representation = 0
-        self._planar_configuration = 0 if samples_per_pixel == 3 else None
+        dataset = Dataset()
+        dataset.file_meta = FileMetaDataset()
+        dataset.file_meta.TransferSyntaxUID = transfer_syntax
+        dataset.Rows = size.height
+        dataset.Columns = size.width
+        dataset.SamplesPerPixel = samples_per_pixel
+        dataset.BitsAllocated = bits_allocated
+        dataset.BitsStored = bits_stored
+        dataset.HighBit = bits_stored - 1
+        dataset.PhotometricInterpretation = photometric_interpretation
+        dataset.PixelRepresentation = 0
+        if samples_per_pixel == 3:
+            self._reshape_size = (size.width, size.height, samples_per_pixel)
+            dataset.PlanarConfiguration = 0
+        else:
+            self._reshape_size = size.to_tuple()
+        self._dataset = dataset
 
     def decode(self, frame: bytes) -> PILImage:
-        array = decode_frame(
-            value=frame,
-            transfer_syntax_uid=self._transfer_syntax,
-            rows=self._size.height,
-            columns=self._size.width,
-            samples_per_pixel=self._samples_per_pixel,
-            bits_allocated=self._bits_allocated,
-            bits_stored=self._bits_stored,
-            photometric_interpretation=self._photometric_interpretation,
-            pixel_representation=self._pixel_representation,
-            planar_configuration=self._planar_configuration,
-        )
+        if self._transfer_syntax.is_encapsulated:
+            self._dataset.PixelData = encapsulate(frames=[frame])
+        else:
+            self._dataset.PixelData = frame
+        array = self._handler(self._dataset).reshape(self._reshape_size)
         return Image.fromarray(array)
 
     @classmethod
     def is_supported(
         cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
     ) -> bool:
+        handler = cls._get_handler(transfer_syntax)
+        return handler is not None
+
+    @classmethod
+    def _get_handler(
+        cls, transfer_syntax: UID
+    ) -> Optional[Callable[[Dataset], np.ndarray]]:
+        """Return pydicom pixel data handler that supports transfer syntax.
+
+        A pydicom pixel data handler should implement methods `Is_available()`,
+        `supports_transfer_syntax()` that takes a transfer syntax and `get_pixeldata()`
+        that takes a dataset.
+        """
         available_handlers = (
             handler
             for handler in pydicom_config.pixel_data_handlers
             if handler.is_available()
         )
-        return any(
-            available_handler.supports_transfer_syntax(transfer_syntax)
-            for available_handler in available_handlers
+        return next(
+            (
+                handler.get_pixeldata
+                for handler in available_handlers
+                if handler.supports_transfer_syntax(transfer_syntax)
+            ),
+            None,
         )
 
     @classmethod
