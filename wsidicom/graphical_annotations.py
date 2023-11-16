@@ -90,13 +90,9 @@ def dcm_to_list(item: bytes, format: str) -> List[Any]:
 
 @dataclass
 class Measurement:
-    """Represents a measurement."""
+    """Represents a measurement.
 
-    def __init__(self, code: MeasurementCode, value: float, unit: UnitCode):
-        """
-        Create a measurement.
-
-        Parameters
+    Parameters
         ----------
         code: MeasurementCode
             Type of measurement.
@@ -104,13 +100,11 @@ class Measurement:
             Value of measurement.
         unit: UnitCode
             Unit of measurement.
-        """
-        self.code = code
-        self.value = value
-        self.unit = unit
+    """
 
-    def __repr__(self) -> str:
-        return f"Measurement({self.code}, {self.value},  {self.unit})"
+    code: MeasurementCode
+    value: float
+    unit: UnitCode
 
     def same_type(self, other_code: MeasurementCode, other_unit: UnitCode):
         """Return true if measurement base is same.
@@ -245,7 +239,7 @@ class Measurement:
             sequence, annotation_count
         ):
             measurements[annotation_index].append(measurement)
-        return dict(measurements)
+        return measurements
 
 
 class Geometry(metaclass=ABCMeta):
@@ -278,14 +272,6 @@ class Geometry(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def from_coords(
-        cls, coords: Union[Tuple[float, float], Sequence[Tuple[float, float]]]
-    ) -> "Geometry":
-        """Return geometry object created from list of coordinates"""
-        raise NotImplementedError()
-
-    @classmethod
-    @abstractmethod
     def from_list(cls, list: Sequence[float]) -> "Geometry":
         """Return geometry object created from list of floats"""
         raise NotImplementedError()
@@ -306,10 +292,7 @@ class Geometry(metaclass=ABCMeta):
         """
         x_indices = range(0, len(data), 2)
         y_indices = range(1, len(data), 2)
-        coords: List[Tuple[float, float]] = [
-            (float(data[x]), float(data[y])) for x, y in zip(x_indices, y_indices)
-        ]
-        return coords
+        return [(float(data[x]), float(data[y])) for x, y in zip(x_indices, y_indices)]
 
     @staticmethod
     def _coordinates_from_dict(
@@ -339,10 +322,12 @@ class Geometry(metaclass=ABCMeta):
             List of coordinates (Tuple of floats).
         """
         if not isinstance(dictionary, Sequence):
-            coords = [dictionary]
+            coordinates = [dictionary]
         else:
-            coords = dictionary
-        return [(float(coordinate[x]), float(coordinate[y])) for coordinate in coords]
+            coordinates = dictionary
+        return [
+            (float(coordinate[x]), float(coordinate[y])) for coordinate in coordinates
+        ]
 
     @classmethod
     @abstractmethod
@@ -357,13 +342,13 @@ class Geometry(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @classmethod
-    def from_shapely_like(cls, object: Any) -> "Geometry":
+    def from_shapely_like(cls, item: Any) -> "Geometry":
         """Return Geometry from shapely-like object. Object needs to have
         shapely-like attributes.
 
         Parameters
         ----------
-        object
+        item
             Object with shapely-like attributes.
 
         Returns
@@ -371,18 +356,23 @@ class Geometry(metaclass=ABCMeta):
         Geometry
             Geometry created from object.
         """
-        geometry_type = object.geom_type
         try:
+            geometry_type = getattr(item, "geom_type")
             if geometry_type == "Point":
-                return Point(*object.coords[0])
+                coordinates = getattr(item, "coords")
+                return Point(*coordinates[0])
             elif geometry_type == "Polygon":
-                if list(object.interiors) == []:
-                    return Polygon(list(object.exterior.coords))
+                interiors = getattr(item, "interiors")
+                exterior = getattr(item, "exterior")
+                exterior_coords = getattr(exterior, "coords")
+                if len(interiors) == 0:
+                    return Polygon(exterior_coords)
             elif geometry_type == "LineString":
-                return Polyline(object.coords)
+                coordinates = getattr(item, "coords")
+                return Polyline(coordinates)
             raise NotImplementedError("Not a supported shapely like object")
-        except AttributeError:
-            raise ValueError("Not a shapely like object")
+        except AttributeError as exception:
+            raise ValueError("Not a shapely like object") from exception
 
     @classmethod
     def from_geojson(cls, dictionary: Dict[str, Any]) -> List["Geometry"]:
@@ -400,22 +390,20 @@ class Geometry(metaclass=ABCMeta):
             Geometry created from Geojson dictionary.
         """
         try:
-            coordinates: List[Any] = dictionary["coordinates"]
-            annotation_type: str = dictionary["type"]
+            coordinates = dictionary["coordinates"]
+            annotation_type = dictionary["type"]
         except KeyError:
             raise ValueError("Not a geojson object")
+        if not isinstance(coordinates, list) or not isinstance(annotation_type, str):
+            raise ValueError("Not a geojson object")
         if annotation_type == "Point":
-            points: List[float] = coordinates
-            return [Point.from_list(points)]
+            return [Point.from_list(coordinates)]
         elif annotation_type == "MultiPoint":
-            multipoints: List[List[float]] = coordinates
-            return [Point.from_list(point) for point in multipoints]
+            return [Point.from_list(point) for point in coordinates]
         elif annotation_type == "Polygon":
-            polylines: List[List[Tuple[float, float]]] = coordinates
-            return [Polygon.from_coords(polylines[0])]
+            return [Polygon(coordinates[0])]
         elif annotation_type == "LineString":
-            polyline: List[Tuple[float, float]] = coordinates
-            return [Polyline.from_coords(polyline)]
+            return [Polyline(coordinates)]
         raise NotImplementedError("Not supported geojson geometry")
 
 
@@ -459,19 +447,9 @@ class Point(Geometry):
         return 1
 
     @classmethod
-    def from_coords(
-        cls, coords: Union[Tuple[float, float], List[Tuple[float, float]]]
-    ) -> "Point":
-        if not isinstance(coords, tuple):
-            if len(coords) != 1:
-                raise ValueError("Input has more than two points")
-            coords = coords[0]
-        return cls(*coords)
-
-    @classmethod
     def from_list(cls, list: List[float]) -> "Point":
         coordinates = cls.list_to_coords(list)
-        return cls.from_coords(coordinates)
+        return cls(*coordinates[0])
 
     @classmethod
     def multiple_from_dict(
@@ -482,8 +460,8 @@ class Point(Geometry):
         x: str,
         y: str,
     ) -> List["Point"]:
-        coords = cls._coordinates_from_dict(dictionary, x, y)
-        return [cls.from_coords(point) for point in coords]
+        coordinates = cls._coordinates_from_dict(dictionary, x, y)
+        return [cls(*point) for point in coordinates]
 
     @classmethod
     def from_dict(
@@ -494,8 +472,8 @@ class Point(Geometry):
         x: str,
         y: str,
     ) -> "Point":
-        coords = cls._coordinates_from_dict(dictionary, x, y)
-        return cls.from_coords(coords)
+        coordinates = cls._coordinates_from_dict(dictionary, x, y)
+        return cls(*coordinates[0])
 
 
 @dataclass
@@ -541,14 +519,6 @@ class Polyline(Geometry):
         return RegionMm(PointMm(left, bottom), SizeMm(right - left, top - bottom))
 
     @classmethod
-    def from_coords(
-        cls, coords: Union[Tuple[float, float], Sequence[Tuple[float, float]]]
-    ) -> "Polyline":
-        if isinstance(coords, tuple):
-            coords = [coords]
-        return cls(coords)
-
-    @classmethod
     def from_dict(
         cls,
         dictionary: Union[
@@ -557,13 +527,13 @@ class Polyline(Geometry):
         x: str,
         y: str,
     ) -> "Polyline":
-        coords = cls._coordinates_from_dict(dictionary, x, y)
-        return cls.from_coords(coords)
+        coordinates = cls._coordinates_from_dict(dictionary, x, y)
+        return cls(coordinates)
 
     @classmethod
     def from_list(cls, list: Sequence[float]) -> "Polyline":
         coordinates = cls.list_to_coords(list)
-        return cls.from_coords(coordinates)
+        return cls(coordinates)
 
 
 @dataclass
@@ -576,17 +546,9 @@ class Polygon(Polyline):
         super().__init__(points)
 
     @classmethod
-    def from_coords(
-        cls, coords: Union[Tuple[float, float], Sequence[Tuple[float, float]]]
-    ) -> "Polygon":
-        if isinstance(coords, tuple):
-            coords = [coords]
-        return cls(coords)
-
-    @classmethod
     def from_list(cls, list: Sequence[float]) -> "Polygon":
         coordinates = cls.list_to_coords(list)
-        return cls.from_coords(coordinates)
+        return cls(coordinates)
 
     @classmethod
     def from_dict(
@@ -597,8 +559,8 @@ class Polygon(Polyline):
         x: str,
         y: str,
     ) -> "Polygon":
-        coords = cls._coordinates_from_dict(dictionary, x, y)
-        return cls.from_coords(coords)
+        coordinates = cls._coordinates_from_dict(dictionary, x, y)
+        return cls(coordinates)
 
     def __repr__(self) -> str:
         return f"Polygon({self.to_coords()})"
@@ -620,9 +582,9 @@ class Annotation:
         """
 
         self._geometry = geometry
-        self._measurements: Sequence[Measurement] = []
-        if measurements is not None:
-            self._measurements = measurements
+        if measurements is None:
+            measurements = []
+        self._measurements = measurements
 
     def __repr__(self) -> str:
         return f"Annotation({self.geometry}, {self.measurements})"
@@ -1431,12 +1393,14 @@ class PointAnnotationGroup(AnnotationGroup[Point]):
             Point geometries in the annotation group.
         """
         coordinate_list = cls._get_coordinates_from_ds(ds)
-        points = [Point.from_coords(coordinates) for coordinates in coordinate_list]
+        points = [Point(*coordinates) for coordinates in coordinate_list]
         return points
 
 
 class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
     """Meta class for line annotation group"""
+
+    geometry_type: Type[Geometry]
 
     @property
     def point_index_list(self) -> np.ndarray:
@@ -1511,7 +1475,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
     @staticmethod
     @abstractmethod
     def _get_line_geometry_from_coords(
-        coords: Sequence[Tuple[float, float]]
+        coordinates: Sequence[Tuple[float, float]]
     ) -> GeometryType:
         raise NotImplementedError()
 
@@ -1537,16 +1501,16 @@ class PolylineAnnotationGroup(PolylineAnnotationGroupMeta[Polyline]):
     _geometry_type = Polyline
 
     @staticmethod
-    def _get_line_geometry_from_coords(coords: Sequence[Tuple[float, float]]):
-        return Polyline.from_coords(coords)
+    def _get_line_geometry_from_coords(coordinates: Sequence[Tuple[float, float]]):
+        return Polyline(coordinates)
 
 
 class PolygonAnnotationGroup(PolylineAnnotationGroupMeta[Polygon]):
     _geometry_type = Polygon
 
     @staticmethod
-    def _get_line_geometry_from_coords(coords: Sequence[Tuple[float, float]]):
-        return Polygon.from_coords(coords)
+    def _get_line_geometry_from_coords(coordinates: Sequence[Tuple[float, float]]):
+        return Polygon(coordinates)
 
 
 class AnnotationInstance:

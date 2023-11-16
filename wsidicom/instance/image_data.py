@@ -321,7 +321,7 @@ class ImageData(metaclass=ABCMeta):
         image = Image.new(
             mode=self.image_mode,
             size=(self.tile_size * scale).to_tuple(),
-            color=self.blank_color[: self.samples_per_pixel],
+            color=self.blank_color,
         )
         # Get decoded tiles for the region covering the scaled tile
         # in the image data
@@ -625,7 +625,7 @@ class ImageData(metaclass=ABCMeta):
         return Image.new(
             mode=self.image_mode,  # type: ignore
             size=self.tile_size.to_tuple(),
-            color=self.blank_color[: self.samples_per_pixel],
+            color=self.blank_color,
         )
 
     def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:
