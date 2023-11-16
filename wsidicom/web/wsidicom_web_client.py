@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from http import HTTPStatus
+import logging
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 from dicomweb_client.api import DICOMfileClient, DICOMwebClient
@@ -205,8 +206,15 @@ class WsiDicomWebClient:
             self.get_frames(study_uid, series_uid, instance_uid, [1], transfer_syntax)
         except HTTPError as exception:
             if exception.response.status_code == HTTPStatus.NOT_ACCEPTABLE:
+                logging.debug(
+                    f"Transfer syntax {transfer_syntax} not supported "
+                    f"for {instance_uid}."
+                )
                 return False
             raise exception
+        logging.debug(
+            f"Transfer syntax {transfer_syntax} supported for {instance_uid}."
+        )
         return True
 
     def _get_intances(

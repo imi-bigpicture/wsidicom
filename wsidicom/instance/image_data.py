@@ -16,7 +16,6 @@
 
 import io
 from abc import ABCMeta, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
 from typing import (
     Callable,
     Iterable,
@@ -29,11 +28,12 @@ from typing import (
 from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID
-from wsidicom.codec import Encoder
 
+from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
+from wsidicom.thread import ConditionalThreadPoolExecutor
 
 
 class ImageData(metaclass=ABCMeta):
@@ -569,12 +569,10 @@ class ImageData(metaclass=ABCMeta):
             ):
                 paste_method(image, tile_point, tile)
 
-        if threads == 1:
-            thread_paste(tile_region.iterate_all())
-
-        else:
-            with ThreadPoolExecutor(max_workers=threads) as pool:
-                pool.map(thread_paste, tile_region.chunked_iterate_all(threads))
+        with ConditionalThreadPoolExecutor(
+            max_workers=threads, force_iteration=True
+        ) as pool:
+            pool.map(thread_paste, tile_region.chunked_iterate_all(threads))
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
         """
@@ -594,54 +592,6 @@ class ImageData(metaclass=ABCMeta):
             and (z in self.focal_planes)
             and (path in self.optical_paths)
         )
-
-    # def encode(self, image: PILImage) -> bytes:
-    #     """Encode image using transfer syntax.
-
-    #     Parameters
-    #     ----------
-    #     image: PILImage
-    #         Image to encode
-
-    #     Returns
-    #     ----------
-    #     bytes
-    #         Encoded image as bytes
-
-    #     """
-    #     image_format, image_options = self._image_settings(self.transfer_syntax)
-    #     with io.BytesIO() as buffer:
-    #         image.save(buffer, format=image_format, **image_options)
-    #         return buffer.getvalue()
-
-    # @staticmethod
-    # def _image_settings(transfer_syntax: UID) -> Tuple[str, Dict[str, Any]]:
-    #     """
-    #     Return Pillow settings for encoding tiles according to transfer syntax.
-
-    #     Parameters
-    #     ----------
-    #     transfer_syntax: pydicom.uid
-    #         Transfer syntax to match image format and options to
-
-    #     Returns
-    #     ----------
-    #     tuple[str, dict[str, int]]
-    #         image format and image options
-
-    #     """
-    #     if transfer_syntax == JPEGBaseline8Bit:
-    #         image_format = "jpeg"
-    #         image_options = {"quality": 95}
-    #     elif transfer_syntax == JPEG2000:
-    #         image_format = "jpeg2000"
-    #         image_options = {"irreversible": True}
-    #     elif transfer_syntax == JPEG2000Lossless:
-    #         image_format = "jpeg2000"
-    #         image_options = {"irreversible": False}
-    #     else:
-    #         raise NotImplementedError("Only supports jpeg and jpeg2000")
-    #     return (image_format, image_options)
 
     @staticmethod
     def _get_blank_color(photometric_interpretation: str) -> Tuple[int, int, int]:

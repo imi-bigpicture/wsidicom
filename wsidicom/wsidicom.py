@@ -152,12 +152,18 @@ class WsiDicom:
         WsiDicom
             WsiDicom created from WSI DICOM instances in study-series.
         """
+        study_uid = UID(study_uid)
+        if isinstance(series_uids, (str, UID)):
+            series_uids = [UID(series_uids)]
+        else:
+            series_uids = [UID(series_uid) for series_uid in series_uids]
         if isinstance(requested_transfer_syntax, (str, UID)):
             requested_transfer_syntax = [UID(requested_transfer_syntax)]
         elif requested_transfer_syntax is not None:
             requested_transfer_syntax = [
                 UID(transfer_syntax) for transfer_syntax in requested_transfer_syntax
             ]
+
         source = WsiDicomWebSource(
             client, study_uid, series_uids, requested_transfer_syntax
         )

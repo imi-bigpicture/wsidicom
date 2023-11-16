@@ -13,26 +13,28 @@
 #    limitations under the License.
 
 import logging
-from typing import Iterable, List, Optional, Sequence, Union
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 from pydicom.uid import (
-    UID,
-    JPEGBaseline8Bit,
     JPEG2000,
+    UID,
+    ExplicitVRLittleEndian,
     JPEG2000Lossless,
+    JPEGBaseline8Bit,
+    JPEGLosslessP14,
+    JPEGLosslessSV1,
     JPEGLSLossless,
     JPEGLSNearLossless,
-    JPEGLosslessSV1,
-    JPEGLosslessP14,
     RLELossless,
-    ExplicitVRLittleEndian,
 )
-from wsidicom.codec import Codec
 
+from wsidicom.codec import Codec
+from wsidicom.config import settings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import ImageType, WsiDataset, WsiInstance
 from wsidicom.source import Source
+from wsidicom.thread import ConditionalThreadPoolExecutor
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 from wsidicom.web.wsidicom_web_image_data import WsiDicomWebImageData
 
@@ -57,8 +59,8 @@ class WsiDicomWebSource(Source):
     def __init__(
         self,
         client: WsiDicomWebClient,
-        study_uid: Union[str, UID],
-        series_uids: Union[str, UID, Iterable[Union[str, UID]]],
+        study_uid: UID,
+        series_uids: Iterable[UID],
         requested_transfer_syntaxes: Optional[Sequence[UID]] = None,
     ):
         """Create a WsiDicomWebSource.
@@ -67,7 +69,7 @@ class WsiDicomWebSource(Source):
         ----------
         client: WsiDicomWebClient
             Client use for DICOMWeb communication.
-        study_uid: Union[str, UID]
+        study_uid: UID
             Study UID of DICOM WSI to open.
         series_uids: Union[str, UID, Iterable[Union[str, UID]]]
             Series UIDs of DICOM WSI top open.
@@ -76,50 +78,59 @@ class WsiDicomWebSource(Source):
             UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
 
         """
-        if not isinstance(study_uid, UID):
-            study_uid = UID(study_uid)
-
-        if isinstance(series_uids, (str, UID)):
-            series_uids = [series_uids]
 
         self._level_instances: List[WsiInstance] = []
         self._label_instances: List[WsiInstance] = []
         self._overview_instances: List[WsiInstance] = []
         self._annotation_instances: List[AnnotationInstance] = []
 
-        for series_uid in series_uids:
-            if not isinstance(series_uid, UID):
-                series_uid = UID(series_uid)
-            for instance_uid in client.get_wsi_instances(study_uid, series_uid):
-                dataset = client.get_instance(study_uid, series_uid, instance_uid)
-                if not WsiDataset.is_supported_wsi_dicom(dataset):
-                    logging.info(f"Non-supported instance {instance_uid}.")
-                    continue
-                dataset = WsiDataset(dataset)
-                transfer_syntax = self._determine_transfer_syntax(
-                    client,
-                    dataset,
-                    requested_transfer_syntaxes,
-                )
-                if transfer_syntax is None:
-                    logging.info(
-                        f"No supported transfer syntax found for instance {instance_uid}."
-                    )
-                    continue
+        def _create_instance(uids: Tuple[UID, UID, UID]) -> Optional[WsiInstance]:
+            dataset = client.get_instance(uids[0], uids[1], uids[2])
+            if not WsiDataset.is_supported_wsi_dicom(dataset):
+                logging.info(f"Non-supported instance {uids[2]}.")
+                return
+            dataset = WsiDataset(dataset)
 
-                image_data = WsiDicomWebImageData(client, dataset, transfer_syntax)
-                instance = WsiInstance(dataset, image_data)
+            transfer_syntax = self._determine_transfer_syntax(
+                client,
+                dataset,
+                requested_transfer_syntaxes,
+            )
+            if transfer_syntax is None:
+                logging.info(
+                    f"No supported transfer syntax found for instance {uids[2]}."
+                )
+                return
+
+            image_data = WsiDicomWebImageData(client, dataset, transfer_syntax)
+            return WsiInstance(dataset, image_data)
+
+        instance_uids = (
+            (study_uid, series_uid, instance_uid)
+            for series_uid in series_uids
+            for instance_uid in client.get_wsi_instances(study_uid, series_uid)
+        )
+        annotation_instances = (
+            client.get_instance(study_uid, series_uid, instance_uid)
+            for series_uid in series_uids
+            for instance_uid in client.get_annotation_instances(study_uid, series_uid)
+        )
+
+        with ConditionalThreadPoolExecutor(settings.open_web_theads) as pool:
+            instances = pool.map(_create_instance, instance_uids)
+            for instance in instances:
+                if instance is None:
+                    continue
                 if instance.image_type == ImageType.VOLUME:
                     self._level_instances.append(instance)
                 elif instance.image_type == ImageType.LABEL:
                     self._label_instances.append(instance)
                 elif instance.image_type == ImageType.OVERVIEW:
                     self._overview_instances.append(instance)
-
-            for instance_uid in client.get_annotation_instances(study_uid, series_uid):
-                instance = client.get_instance(study_uid, series_uid, instance_uid)
-                annotation_instance = AnnotationInstance.open_dataset(instance)
-                self._annotation_instances.append(annotation_instance)
+            for annotation_instance in annotation_instances:
+                self._annotation_instances.append(
+                    AnnotationInstance.open_dataset(annotation_instance)
+                )
 
         try:
             self._base_dataset = next(
@@ -163,9 +174,8 @@ class WsiDicomWebSource(Source):
     def close(self) -> None:
         pass
 
-    @classmethod
     def _determine_transfer_syntax(
-        cls,
+        self,
         client: WsiDicomWebClient,
         dataset: WsiDataset,
         requested_transfer_syntaxes: Optional[Iterable[UID]] = None,
@@ -200,7 +210,7 @@ class WsiDicomWebSource(Source):
             )
         )
 
-        return next(
+        transfer_syntax = next(
             (
                 transfer_syntax
                 for transfer_syntax in requested_transfer_syntaxes
@@ -213,3 +223,5 @@ class WsiDicomWebSource(Source):
             ),
             None,
         )
+
+        return transfer_syntax

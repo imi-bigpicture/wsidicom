@@ -25,6 +25,7 @@ class Settings:
         self._strict_attribute_check = False
         self._focal_plane_distance_threshold = 0.000001
         self._prefered_decoder: Optional[str] = None
+        self._open_web_theads: Optional[int] = None
 
     @property
     def strict_uid_check(self) -> bool:
@@ -58,11 +59,21 @@ class Settings:
 
     @property
     def prefered_decoder(self) -> Optional[str]:
+        """Name of prefered decoder to use."""
         return self._prefered_decoder
 
     @prefered_decoder.setter
     def prefered_decoder(self, value: Optional[str]) -> None:
         self._prefered_decoder = value
+
+    @property
+    def open_web_theads(self) -> Optional[int]:
+        """Number of threads to use when opening web instances."""
+        return self._open_web_theads
+
+    @open_web_theads.setter
+    def open_web_theads(self, value: Optional[int]) -> None:
+        self._open_web_theads = value
 
 
 settings = Settings()

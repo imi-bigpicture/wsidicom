@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from struct import pack
@@ -38,6 +37,7 @@ from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
+from wsidicom.thread import ConditionalThreadPoolExecutor
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
@@ -551,15 +551,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             def encapsulate_tile(tile: bytes) -> Iterable[bytes]:
                 return [tile]
 
-        if workers == 1:
-            return [
-                write_frame(frame)
-                for chunk in chunked_tile_points
-                for tile in get_tiles(chunk)
-                for frame in encapsulate_tile(tile)
-            ]
-
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        with ConditionalThreadPoolExecutor(max_workers=workers) as pool:
             return [
                 write_frame(frame)
                 for thread_result in pool.map(get_tiles, chunked_tile_points)
