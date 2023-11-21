@@ -12,26 +12,16 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from pathlib import Path
 import pytest
 from PIL import Image
 
 from wsidicom.codec import Settings as EncoderSettings
-
-
-def get_test_tile_path(test_data_path: Path):
-    return test_data_path.joinpath("test_tile.png")
-
-
-def get_filepath_for_encoder_settings(test_data_path: Path, settings: EncoderSettings):
-    return test_data_path.joinpath(
-        f"{settings.transfer_syntax.name}-{settings.channels.name}-{settings.bits}"
-    ).with_suffix(settings.extension)
+from wsidicom_data import TestData, EncodedTestData
 
 
 @pytest.fixture
 def image():
-    path = get_test_tile_path(Path("tests/testdata"))
+    path = TestData.get_test_tile_path()
     if not path.exists():
         pytest.skip(f"Test file {path} does not exist")
     yield Image.open(path)
@@ -39,9 +29,7 @@ def image():
 
 @pytest.fixture
 def encoded(encoder_settings: EncoderSettings):
-    file_path = get_filepath_for_encoder_settings(
-        Path("tests/testdata/encoded"), encoder_settings
-    )
+    file_path = EncodedTestData.get_filepath_for_encoder_settings(encoder_settings)
     if not file_path.exists():
         pytest.skip(f"Test file {file_path} does not exist")
     with open(file_path, "rb") as file:
