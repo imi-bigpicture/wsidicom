@@ -223,7 +223,7 @@ point_annotation_with_measurment = Annotation(Point(10.0, 20.0), [measurement])
 
 ```python
 from wsidicom import PointAnnotationGroup
-# The 222 suplement requires groups to have a label, a category and a type
+# The 222 supplement requires groups to have a label, a category and a type
 group = PointAnnotationGroup(
     annotations=[point_annotation, point_annotation_with_measurment],
     label='group label',
