@@ -72,7 +72,6 @@ class Decoder(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @classmethod
-    @abstractmethod
     def is_available(cls) -> bool:
         """Return true if decoder is available.
 
@@ -369,6 +368,8 @@ class ImageCodecsDecoder(Decoder):
         self._decoder = decoder
 
     def decode(self, frame: bytes) -> PILImage:
+        if not self.is_available():
+            raise RuntimeError("Image codecs not available.")
         decoded = self._decoder(frame)
         return Image.fromarray(decoded)
 
@@ -457,6 +458,8 @@ class ImageCodecsRleDecoder(RleDecoder):
         return IMAGE_CODECS_AVAILABLE
 
     def _decode(self, frame: bytes) -> np.ndarray:
+        if not self.is_available():
+            raise RuntimeError("Image codecs not available.")
         return RleCodec.decode(frame, self._size.height, self._size.width, self._bits)
 
 
@@ -468,8 +471,12 @@ class PylibjpegRleDecoder(RleDecoder):
         return PYLIBJPEGRLE_AVAILABLE
 
     def _decode(self, frame: bytes) -> np.ndarray:
+        if not self.is_available():
+            raise RuntimeError("Pylibjpeg-rle not available.")
         decoded_data: bytes = rle_decode_frame(frame, self._size.area, self._bits, "<")
-        decoded = np.frombuffer(decoded_data, dtype=self._dtype).reshape(self._reshape_size)
+        decoded = np.frombuffer(decoded_data, dtype=self._dtype).reshape(
+            self._reshape_size
+        )
         if self._samples_per_pixel == 3:
             decoded = decoded.transpose((1, 2, 0))
         return decoded

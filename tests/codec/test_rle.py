@@ -5,6 +5,7 @@ import pytest
 from wsidicom.codec.rle import RleCodec
 
 
+@pytest.mark.skipif(not RleCodec.is_available(), reason="Image codecs not available")
 class TestRle:
     @pytest.mark.parametrize(
         ["data", "expected_segment_count"],

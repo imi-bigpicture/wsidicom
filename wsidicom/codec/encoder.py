@@ -268,6 +268,8 @@ class JpegEncoder(Encoder):
         return not self._lossless
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+        if not self.is_available():
+            raise RuntimeError("Image codecs not available.")
         return jpeg8_encode(
             np.array(image).astype(self._dtype),
             level=self._level,
@@ -314,6 +316,8 @@ class JpegLsEncoder(Encoder):
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         """Encode image into bytes."""
+        if not self.is_available():
+            raise RuntimeError("Image codecs not available.")
         return jpegls_encode(np.array(image), level=self._level)
 
     @classmethod
@@ -354,6 +358,8 @@ class Jpeg2kEncoder(Encoder):
         return not self._reversible
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+        if not self.is_available():
+            raise RuntimeError("Image codecs not available.")
         return jpeg2k_encode(
             np.array(image),
             level=self._level,
@@ -446,6 +452,8 @@ class ImageCodecsRleEncoder(RleEncoder):
     """Encoder that uses image codecs PackBits to encode image."""
 
     def _encode(self, image: np.ndarray):
+        if not self.is_available():
+            raise RuntimeError("Image codecs not available.")
         return RleCodec.encode(image)
 
     @classmethod
@@ -463,6 +471,8 @@ class PylibjpegRleEncoder(RleEncoder):
     """Encoder that uses pylibjpeg-rle to encode image."""
 
     def _encode(self, image: np.ndarray) -> bytes:
+        if not self.is_available():
+            raise RuntimeError("Pylibjpeg-rle not available.")
         rows, cols = image.shape[0:2]
         return rle_encode_frame(
             np.array(image).astype(self._dtype).tobytes(),

@@ -22,6 +22,7 @@ import numpy as np
 from wsidicom.codec.optionals import (
     packbits_decode,
     packbits_encode,
+    IMAGE_CODECS_AVAILABLE,
 )
 
 
@@ -38,6 +39,17 @@ class RleCodec:
     }
 
     @classmethod
+    def is_available(cls) -> bool:
+        """Return true if codec is available.
+
+        Returns
+        -------
+        bool
+            True if codec is available.
+        """
+        return IMAGE_CODECS_AVAILABLE
+
+    @classmethod
     def encode(cls, data: np.ndarray) -> bytes:
         """Encode data to DICOM RLE.
 
@@ -50,6 +62,8 @@ class RleCodec:
         -------
         bytes
             Encoded data. First 64 bytes is the RLE header, followed by RLE segments."""
+        if not cls.is_available():
+            raise RuntimeError("Image codecs not available.")
         components_per_channel = cls._data_type_to_components_per_channel[data.dtype]
         rows = data.shape[0]
         cols = data.shape[1]
@@ -97,6 +111,8 @@ class RleCodec:
         bits : int
             Number of bits per pixel. Must be 8 or 16.
         """
+        if not cls.is_available():
+            raise RuntimeError("Image codecs not available.")
         components_per_channel = cls._bits_to_compnents_per_channel[bits]
         segments = cls._parse_header(data)
         channels = len(segments) // components_per_channel

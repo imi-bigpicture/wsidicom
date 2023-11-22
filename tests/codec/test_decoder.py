@@ -50,6 +50,7 @@ from wsidicom.codec.decoder import (
     PydicomDecoder,
     PylibjpegRleDecoder,
 )
+from wsidicom.codec.optionals import IMAGE_CODECS_AVAILABLE
 from wsidicom.geometry import Size
 
 
@@ -309,6 +310,9 @@ class TestPylibjpegRleDecoder:
         # Assert
         assert is_supported == expected_result
 
+    @pytest.mark.skipif(
+        not PylibjpegRleDecoder.is_available(), reason="Pylibjpeg-rle not available"
+    )
     @pytest.mark.parametrize(
         "encoder_settings",
         [
