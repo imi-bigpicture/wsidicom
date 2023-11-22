@@ -12,6 +12,27 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+__all__ = [
+    "settings",
+    "Annotation",
+    "AnnotationGroup",
+    "AnnotationInstance",
+    "Measurement",
+    "Point",
+    "PointAnnotationGroup",
+    "Polygon",
+    "PolygonAnnotationGroup",
+    "Polyline",
+    "PolylineAnnotationGroup",
+    "ImageData",
+    "WsiDataset",
+    "WsiInstance",
+    "Labels",
+    "Levels",
+    "Overviews",
+    "WsiDicomWebClient",
+    "WsiDicom",
+]
 from wsidicom.config import settings
 from wsidicom.graphical_annotations import (
     Annotation,
