@@ -50,7 +50,7 @@ except ImportError:
     jpeg8_decode = None
     jpegls_decode = None
     packbits_decode = None
-    jpeg2k_decode = None
+    jpeg2k_encode = None
     jpeg8_encode = None
     jpegls_encode = None
     packbits_encode = None
