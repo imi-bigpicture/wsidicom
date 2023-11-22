@@ -24,25 +24,16 @@ from PIL.Image import Image as PILImage
 from pydicom import Dataset
 from pydicom.pixel_data_handlers.util import pixel_dtype
 from pydicom.uid import UID
-
-try:
-    from imagecodecs import (
-        JPEG8,
-        jpeg2k_encode,
-        jpeg8_encode,
-        jpegls_encode,
-    )
-
-    IMAGE_CODECS_AVAILABLE = True
-except ImportError:
-    IMAGE_CODECS_AVAILABLE = False
-
-try:
-    from rle.utils import encode_frame as rle_encode_frame
-
-    RLE_AVAILABLE = True
-except ImportError:
-    RLE_AVAILABLE = False
+from wsidicom.codec.optionals import (
+    IMAGE_CODECS_AVAILABLE,
+    PYLIBJPEGRLE_AVAILABLE,
+    rle_encode_frame,
+    JPEG8,
+    jpeg2k_encode,
+    jpeg8_encode,
+    jpegls_encode,
+)
+from wsidicom.codec.rle import RleCodec
 
 from wsidicom.codec.settings import (
     Channels,
@@ -167,8 +158,11 @@ class Encoder(metaclass=ABCMeta):
             settings, (JpegSettings, Jpeg2kSettings)
         ):
             return PillowEncoder(settings)
-        if RleEncoder.is_available() and isinstance(settings, RleSettings):
-            return RleEncoder(settings)
+        if isinstance(settings, RleSettings):
+            if PylibjpegRleEncoder.is_available():
+                return PylibjpegRleEncoder(settings)
+            if ImageCodecsRleEncoder.is_available():
+                return ImageCodecsRleEncoder(settings)
         if NumpyEncoder.is_available() and isinstance(settings, NumpySettings):
             return NumpyEncoder(settings)
 
@@ -413,10 +407,8 @@ class NumpyEncoder(Encoder):
 
 
 class RleEncoder(Encoder):
-    """Encoder that uses rle encoder to encode image."""
-
     def __init__(self, settings: RleSettings) -> None:
-        """Initialize rle encoder.
+        """Initialize RLE encoder.
 
         Parameters
         ----------
@@ -434,15 +426,44 @@ class RleEncoder(Encoder):
             self._samples_per_pixel = 3
         super().__init__(settings)
 
+    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+        return self._encode(np.array(image).astype(self._dtype))
+
     @property
     def lossy(self) -> bool:
         return False
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
-        if isinstance(image, PILImage):
-            rows, cols = image.size
-        else:
-            rows, cols = image.shape[0:2]
+    @classmethod
+    def supports_settings(cls, settings: Settings) -> bool:
+        return isinstance(settings, RleSettings)
+
+    @abstractmethod
+    def _encode(self, image: np.ndarray) -> bytes:
+        raise NotImplementedError()
+
+
+class ImageCodecsRleEncoder(RleEncoder):
+    """Encoder that uses image codecs PackBits to encode image."""
+
+    def _encode(self, image: np.ndarray):
+        return RleCodec.encode(image)
+
+    @classmethod
+    def supports_settings(cls, settings: Settings) -> bool:
+        if settings.bits != 8:
+            return False
+        return isinstance(settings, RleSettings)
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return IMAGE_CODECS_AVAILABLE
+
+
+class PylibjpegRleEncoder(RleEncoder):
+    """Encoder that uses pylibjpeg-rle to encode image."""
+
+    def _encode(self, image: np.ndarray) -> bytes:
+        rows, cols = image.shape[0:2]
         return rle_encode_frame(
             np.array(image).astype(self._dtype).tobytes(),
             rows=rows,
@@ -454,8 +475,4 @@ class RleEncoder(Encoder):
 
     @classmethod
     def is_available(cls) -> bool:
-        return RLE_AVAILABLE
-
-    @classmethod
-    def supports_settings(cls, settings: Settings) -> bool:
-        return isinstance(settings, RleSettings)
+        return PYLIBJPEGRLE_AVAILABLE

@@ -844,6 +844,10 @@ develop = true
 [package.dependencies]
 wsidicom = {path = "../wsidicom", develop = true}
 
+[package.extras]
+imagecodecs = ["imagecodecs (>=2023.9.18,<2024.0.0)"]
+rle = ["pylibjpeg-rle (>=1.3.0,<2.0.0)"]
+
 [package.source]
 type = "directory"
 url = "../wsidicom-data"

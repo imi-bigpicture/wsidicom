@@ -34,31 +34,24 @@ from pydicom.uid import (
     JPEGLosslessSV1,
     JPEGLSLossless,
     JPEGLSNearLossless,
+    RLELossless,
 )
 
 from wsidicom import config
+from wsidicom.codec.rle import RleCodec
 from wsidicom.geometry import Size
 
-try:
-    from imagecodecs import (
-        JPEG2K,
-        JPEG8,
-        JPEGLS,
-        jpeg2k_decode,
-        jpeg8_decode,
-        jpegls_decode,
-    )
-
-    IMAGE_CODECS_AVAILABLE = True
-
-except ImportError:
-    IMAGE_CODECS_AVAILABLE = False
-    JPEG2K = None
-    JPEG8 = None
-    JPEGLS = None
-    jpeg2k_decode = None
-    jpeg8_decode = None
-    jpegls_decode = None
+from wsidicom.codec.optionals import (
+    JPEG2K,
+    JPEG8,
+    JPEGLS,
+    jpeg2k_decode,
+    jpeg8_decode,
+    jpegls_decode,
+    IMAGE_CODECS_AVAILABLE,
+    PYLIBJPEGRLE_AVAILABLE,
+    rle_decode_frame,
+)
 
 
 class Decoder(metaclass=ABCMeta):
@@ -158,6 +151,10 @@ class Decoder(metaclass=ABCMeta):
             return PillowDecoder()
         elif decoder == ImageCodecsDecoder:
             return ImageCodecsDecoder(transfer_syntax)
+        elif decoder == PylibjpegRleDecoder:
+            return PylibjpegRleDecoder(size, samples_per_pixel, bits)
+        elif decoder == ImageCodecsRleDecoder:
+            return ImageCodecsRleDecoder(size, samples_per_pixel, bits)
         elif decoder == PydicomDecoder:
             return PydicomDecoder(
                 transfer_syntax=transfer_syntax,
@@ -195,7 +192,9 @@ class Decoder(metaclass=ABCMeta):
             return None
         decoders: Dict[str, Type[Decoder]] = {
             "pillow": PillowDecoder,
-            "image_codecs": ImageCodecsDecoder,
+            "imagecodecs": ImageCodecsDecoder,
+            "pylibjpeg_rle": PylibjpegRleDecoder,
+            # "imagecodecs_rle": ImageCodecsRleDecoder,
             "pydicom": PydicomDecoder,
         }
         if config.settings.prefered_decoder is not None:
@@ -409,3 +408,68 @@ class ImageCodecsDecoder(Decoder):
         if not codec.available:
             return None
         return decoder
+
+
+class RleDecoder(Decoder):
+    def __init__(self, size: Size, samples_per_pixel: int, bits: int):
+        if not self.is_supported(RLELossless, samples_per_pixel, bits):
+            raise ValueError(
+                f"Unsupported combination of samples per pixel {samples_per_pixel} "
+                f"and bits {bits}."
+            )
+        if bits == 8:
+            self._dtype = np.uint8
+        else:
+            self._dtype = np.uint16
+        self._size = size
+        self._bits = bits
+        self._samples_per_pixel = samples_per_pixel
+        if samples_per_pixel == 3:
+            self._reshape_size = (samples_per_pixel, size.width, size.height)
+        else:
+            self._reshape_size = size.to_tuple()
+
+    def decode(self, frame: bytes) -> PILImage:
+        decoded = self._decode(frame)
+
+        return Image.fromarray(decoded)
+
+    @classmethod
+    def is_supported(
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
+    ) -> bool:
+        if transfer_syntax != RLELossless:
+            return False
+        if samples_per_pixel == 3:
+            return bits == 8
+        if samples_per_pixel == 1:
+            return bits in [8, 16]
+        return False
+
+    @abstractmethod
+    def _decode(self, frame: bytes) -> np.ndarray:
+        raise NotImplementedError()
+
+
+class ImageCodecsRleDecoder(RleDecoder):
+    @classmethod
+    def is_available(cls):
+        return IMAGE_CODECS_AVAILABLE
+
+    def _decode(self, frame: bytes) -> np.ndarray:
+        return RleCodec.decode(frame, self._size.height, self._size.width, self._bits)
+
+
+class PylibjpegRleDecoder(RleDecoder):
+    """Decoder that uses pylibjpeg-rle to decode images."""
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return PYLIBJPEGRLE_AVAILABLE
+
+    def _decode(self, frame: bytes) -> np.ndarray:
+        decoded_data: bytes = rle_decode_frame(frame, self._size.area, self._bits, "<")
+        decoded = np.frombuffer(decoded_data, dtype=self._dtype).reshape(self._reshape_size)
+        if self._samples_per_pixel == 3:
+            decoded = decoded.transpose((1, 2, 0))
+        return decoded

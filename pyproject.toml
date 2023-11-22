@@ -6,6 +6,7 @@ authors = ["Erik O Gabrielsson <erik.o.gabrielsson@sectra.com>"]
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/imi-bigpicture/wsidicom"
+packages = [{include = "wsidicom"}]
 keywords = ["whole slide image", "digital pathology", "annotations", "dicom"]
 classifiers = [
     "Development Status :: 4 - Beta",

@@ -32,11 +32,12 @@ from wsidicom.codec import (
     Subsampling,
 )
 from wsidicom.codec.encoder import (
+    ImageCodecsRleEncoder,
     Jpeg2kEncoder,
     JpegEncoder,
     JpegLsEncoder,
     PillowEncoder,
-    RleEncoder,
+    PylibjpegRleEncoder,
     NumpyEncoder,
 )
 from wsidicom.instance.dataset import WsiDataset
@@ -113,9 +114,12 @@ class TestEncoder:
             (PillowEncoder, Jpeg2kSettings(0, 8, Channels.YBR), 0),
             (PillowEncoder, Jpeg2kSettings(0, 8, Channels.RGB), 0),
             (PillowEncoder, Jpeg2kSettings(0, 16, Channels.GRAYSCALE), 0),
-            (RleEncoder, RleSettings(8, Channels.GRAYSCALE), 0),
-            (RleEncoder, RleSettings(8, Channels.RGB), 0),
-            (RleEncoder, RleSettings(16, Channels.GRAYSCALE), 0),
+            (PylibjpegRleEncoder, RleSettings(8, Channels.GRAYSCALE), 0),
+            (PylibjpegRleEncoder, RleSettings(8, Channels.RGB), 0),
+            (PylibjpegRleEncoder, RleSettings(16, Channels.GRAYSCALE), 0),
+            (ImageCodecsRleEncoder, RleSettings(8, Channels.GRAYSCALE), 0),
+            (ImageCodecsRleEncoder, RleSettings(8, Channels.RGB), 0),
+            (ImageCodecsRleEncoder, RleSettings(16, Channels.GRAYSCALE), 0),
             (NumpyEncoder, NumpySettings(8, Channels.GRAYSCALE, True, True), 0),
             (NumpyEncoder, NumpySettings(8, Channels.GRAYSCALE, True, False), 0),
             (NumpyEncoder, NumpySettings(8, Channels.GRAYSCALE, False, True), 0),
