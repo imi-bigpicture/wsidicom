@@ -13,7 +13,8 @@
 #    limitations under the License.
 
 import logging
-from typing import Iterable, List, Optional, Sequence, Tuple
+from collections import defaultdict
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from pydicom.uid import (
     JPEG2000,
@@ -83,6 +84,9 @@ class WsiDicomWebSource(Source):
         self._label_instances: List[WsiInstance] = []
         self._overview_instances: List[WsiInstance] = []
         self._annotation_instances: List[AnnotationInstance] = []
+        detected_transfer_syntaxes_by_image_type: Dict[
+            ImageType, Set[UID]
+        ] = defaultdict(set)
 
         def _create_instance(uids: Tuple[UID, UID, UID]) -> Optional[WsiInstance]:
             dataset = client.get_instance(uids[0], uids[1], uids[2])
@@ -94,6 +98,7 @@ class WsiDicomWebSource(Source):
             transfer_syntax = self._determine_transfer_syntax(
                 client,
                 dataset,
+                detected_transfer_syntaxes_by_image_type[dataset.image_type],
                 requested_transfer_syntaxes,
             )
             if transfer_syntax is None:
@@ -178,6 +183,7 @@ class WsiDicomWebSource(Source):
         self,
         client: WsiDicomWebClient,
         dataset: WsiDataset,
+        detected_transfer_syntaxes: Set[UID],
         requested_transfer_syntaxes: Optional[Iterable[UID]] = None,
     ) -> Optional[UID]:
         """Determine transfer syntax to use for image data.
@@ -188,6 +194,8 @@ class WsiDicomWebSource(Source):
             Client used for DICOMWeb communication.
         dataset: WsiDataset
             Dataset to determine transfer syntax for.
+        detected_transfer_syntaxes: Set[UID]
+            Transfer syntaxes that have already been detected.
         requested_transfer_syntaxes: Optional[Iterable[UID]] = None
             Transfer syntaxes to try in order of preference.
 
@@ -199,7 +207,7 @@ class WsiDicomWebSource(Source):
         """
         if requested_transfer_syntaxes is None:
             requested_transfer_syntaxes = PREFERED_WEB_TRANSFER_SYNTAXES
-        requested_transfer_syntaxes = (
+        supported_transfer_syntaxes = (
             transfer_syntax
             for transfer_syntax in requested_transfer_syntaxes
             if Codec.is_supported(
@@ -209,11 +217,15 @@ class WsiDicomWebSource(Source):
                 dataset.photometric_interpretation,
             )
         )
+        sorted_transfer_syntaxes = sorted(
+            supported_transfer_syntaxes,
+            key=lambda transfer_syntax: transfer_syntax in detected_transfer_syntaxes,
+        )
 
         transfer_syntax = next(
             (
                 transfer_syntax
-                for transfer_syntax in requested_transfer_syntaxes
+                for transfer_syntax in sorted_transfer_syntaxes
                 if client.is_transfer_syntax_supported(
                     dataset.uids.slide.study_instance,
                     dataset.uids.slide.series_instance,
@@ -223,5 +235,6 @@ class WsiDicomWebSource(Source):
             ),
             None,
         )
-
+        if transfer_syntax is not None:
+            detected_transfer_syntaxes.add(transfer_syntax)
         return transfer_syntax
