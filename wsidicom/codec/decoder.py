@@ -201,7 +201,7 @@ class Decoder(metaclass=ABCMeta):
         if config.settings.prefered_decoder is not None:
             if config.settings.prefered_decoder not in decoders:
                 raise ValueError(
-                    f"Unknown prefered decoder: {config.settings.prefered_decoder}."
+                    f"Unknown preferred decoder: {config.settings.prefered_decoder}."
                 )
             decoder = decoders[config.settings.prefered_decoder]
             if not decoder.is_available() or not decoder.is_supported(

@@ -265,7 +265,7 @@ class WsiDataset(Dataset):
             # By the standard it should be tiled full.
             return TileType.FULL
         if "PerFrameFunctionalGroupsSequence" in self:
-            # If no per frame functional sequence we cant make a sparse tile index.
+            # If no per frame functional sequence we can't make a sparse tile index.
             return TileType.SPARSE
         if self.image_type == ImageType.LABEL:
             # Labels are expected to only have one frame and can be treated as tiled full.
@@ -331,7 +331,7 @@ class WsiDataset(Dataset):
 
     @cached_property
     def frame_sequence(self) -> DicomSequence:
-        """Return per frame functional group sequene if present, otherwise
+        """Return per frame functional group sequence if present, otherwise
         shared functional group sequence.
 
         Returns
@@ -384,7 +384,7 @@ class WsiDataset(Dataset):
             raise WsiDicomError("Image size is zero")
         if self.tile_type == TileType.FULL and self.uids.concatenation is None:
             # Check that the number of frames match the image size and tile size.
-            # Dont check concantenated instances as the frame count is ambiguous.
+            # Dont check concatenated instances as the frame count is ambiguous.
             expected_tiled_size = image_size.ceil_div(self.tile_size)
             number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
             number_of_optical_paths = getattr(self, "NumberOfOpticalPaths", 1)

@@ -366,7 +366,7 @@ class TestWsiDicomFileWriter:
         frame_offsets = [
             position + TAG_BYTES + LENGTH_BYTES for position in writen_frame_positions
         ]
-        frame_lengths = [  # Lengths are divisable with 2
+        frame_lengths = [  # Lengths are divisible with 2
             2 * math.ceil(len(frame) / 2) for frame in frames
         ]
         expected_frame_positons = [

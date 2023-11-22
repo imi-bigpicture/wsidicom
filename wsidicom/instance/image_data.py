@@ -65,7 +65,7 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def image_size(self) -> Size:
-        """Retur the pixel size of the image."""
+        """Return the pixel size of the image."""
         raise NotImplementedError()
 
     @property

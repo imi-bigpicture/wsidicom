@@ -59,7 +59,7 @@ class Settings:
 
     @property
     def prefered_decoder(self) -> Optional[str]:
-        """Name of prefered decoder to use."""
+        """Name of preferred decoder to use."""
         return self._prefered_decoder
 
     @prefered_decoder.setter

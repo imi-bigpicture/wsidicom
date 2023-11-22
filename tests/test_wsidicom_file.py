@@ -126,7 +126,7 @@ class TestWsiDicomFile:
         self,
         test_file: WsiDicomFile,
     ):
-        # Arrage
+        # Arrange
 
         # Act
         image_type = test_file.image_type
