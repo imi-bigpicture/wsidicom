@@ -23,6 +23,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Union,
 )
 
 from PIL import Image
@@ -186,8 +187,8 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @property
-    def blank_color(self) -> Tuple[int, int, int]:
-        """Return RGB background color."""
+    def blank_color(self) -> Union[int, Tuple[int, int, int]]:
+        """Return grey level or RGB background color."""
         return self._get_blank_color(self.photometric_interpretation)
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
@@ -594,7 +595,9 @@ class ImageData(metaclass=ABCMeta):
         )
 
     @staticmethod
-    def _get_blank_color(photometric_interpretation: str) -> Tuple[int, int, int]:
+    def _get_blank_color(
+        photometric_interpretation: str,
+    ) -> Union[int, Tuple[int, int, int]]:
         """Return color to use blank tiles.
 
         Parameters
@@ -604,14 +607,14 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        Tuple[int, int, int]
-            RGB color,
+        Union[int, Tuple[int, int, int]]
+            Grey level or RGB color,
 
         """
         BLACK = 0
         WHITE = 255
         if photometric_interpretation == "MONOCHROME2":
-            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
+            return BLACK
         return (WHITE, WHITE, WHITE)
 
     def _create_blank_tile(self) -> PILImage:
