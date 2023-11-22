@@ -30,4 +30,4 @@ from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.web import WsiDicomWebClient
 from wsidicom.wsidicom import WsiDicom
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
