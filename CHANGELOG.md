@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Opening DICOM web instances in parallel. Configurable with `open_web_theads`-setting.
 - `open_web()` now takes a list of requested transfer syntaxes to test if available from the server.
+- When fetching multiple frames from DICOM web, fetch multiple frames per request instead of making several requests.
 - Renamed `OffsetTableType` option `NONE` to `EMPTY`, and added type `NONE` for use with unencapsulated data.
 
 ### Removed
