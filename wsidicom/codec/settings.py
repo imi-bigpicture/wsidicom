@@ -214,7 +214,7 @@ class JpegSettings(Settings):
         quality: int = 80,
         bits: int = 8,
         channels: Channels = Channels.YBR,
-        subsampling: Subsampling = Subsampling.R420,
+        subsampling: Subsampling = Subsampling.R422,
     ):
         """
         Initialize JPEG encoding settings.
