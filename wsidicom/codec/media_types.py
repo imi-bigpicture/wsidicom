@@ -42,7 +42,7 @@ def determine_media_type(transfer_syntax: UID) -> str:
     if transfer_syntax in JPEG2000TransferSyntaxes:
         return "image/jp2"
     if transfer_syntax == RLELossless:
-        return "image/dicom-rle"
+        return "image/x-dicom-rle"
     if transfer_syntax == ExplicitVRLittleEndian:
         return "application/octet-stream"
     raise NotImplementedError(f"Unsupported transfer syntax: {transfer_syntax}")
