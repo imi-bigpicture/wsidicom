@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import logging
 import struct
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
@@ -101,7 +102,11 @@ class Lut:
     @classmethod
     def from_ds(cls, ds: Dataset) -> Optional["Lut"]:
         if "PaletteColorLookupTableSequence" in ds:
-            return cls(ds.PaletteColorLookupTableSequence)
+            try:
+                return cls(ds.PaletteColorLookupTableSequence)
+            except Exception:
+                logging.error("Failed to parse LUT", exc_info=True)
+                return None
         return None
 
     def get(self) -> np.ndarray:
