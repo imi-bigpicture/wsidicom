@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wsidicom"
-version = "0.13.0"
+version = "0.14.0"
 description = "Tools for handling DICOM based whole scan images"
 authors = ["Erik O Gabrielsson <erik.o.gabrielsson@sectra.com>"]
 license = "Apache-2.0"
@@ -39,7 +39,7 @@ pycodestyle = "^2.8.0"
 black = "^23.1.0"
 flake8 = "^4.0.1"
 codespell = "^2.2.5"
-wsidicom-data =  {path = "../wsidicom-data", develop = true}
+wsidicom-data =  "^0.1.0"
 
 
 [build-system]
