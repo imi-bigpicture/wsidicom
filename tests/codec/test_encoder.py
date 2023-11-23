@@ -109,11 +109,9 @@ class TestEncoder:
             (PillowEncoder, Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
             (PillowEncoder, Jpeg2kSettings(80, 8, Channels.YBR), 1),
             (PillowEncoder, Jpeg2kSettings(80, 8, Channels.RGB), 1),
-            (PillowEncoder, Jpeg2kSettings(80, 16, Channels.GRAYSCALE), 1),
             (PillowEncoder, Jpeg2kSettings(0, 8, Channels.GRAYSCALE), 0),
             (PillowEncoder, Jpeg2kSettings(0, 8, Channels.YBR), 0),
             (PillowEncoder, Jpeg2kSettings(0, 8, Channels.RGB), 0),
-            (PillowEncoder, Jpeg2kSettings(0, 16, Channels.GRAYSCALE), 0),
             (PylibjpegRleEncoder, RleSettings(8, Channels.GRAYSCALE), 0),
             (PylibjpegRleEncoder, RleSettings(8, Channels.RGB), 0),
             (PylibjpegRleEncoder, RleSettings(16, Channels.GRAYSCALE), 0),
@@ -142,8 +140,6 @@ class TestEncoder:
         # Arrange
         if not encoder_type.is_available():
             pytest.skip("Encoder not available")
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
         encoder = encoder_type(settings)
 
         # Act
@@ -152,6 +148,7 @@ class TestEncoder:
         # Assert
         decoded = decoder.decode(encoded)
         if settings.channels == Channels.GRAYSCALE:
+            image = image.convert("L")
             decoded = decoded.convert("L")
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:

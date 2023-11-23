@@ -13,24 +13,18 @@
 #    limitations under the License.
 
 import pytest
-from PIL import Image
+from wsidicom_data import EncodedTestData, TestData
 
-from wsidicom.codec import Settings as EncoderSettings
-from wsidicom_data import TestData, EncodedTestData
-
-
-@pytest.fixture
-def image():
-    path = TestData.get_test_tile_path()
-    if not path.exists():
-        pytest.skip(f"Test file {path} does not exist")
-    yield Image.open(path)
+from wsidicom.codec import Settings
 
 
 @pytest.fixture
-def encoded(encoder_settings: EncoderSettings):
-    file_path = EncodedTestData.get_filepath_for_encoder_settings(encoder_settings)
-    if not file_path.exists():
-        pytest.skip(f"Test file {file_path} does not exist")
+def image(settings: Settings):
+    return TestData.image(settings.bits, settings.samples_per_pixel)
+
+
+@pytest.fixture
+def encoded(settings: Settings):
+    file_path = EncodedTestData.get_filepath_for_encoder_settings(settings)
     with open(file_path, "rb") as file:
         return file.read()

@@ -215,7 +215,7 @@ class PillowEncoder(Encoder):
                 settings.bits == 8
                 and settings.subsampling in cls._supported_subsamplings
             )
-        return isinstance(settings, Jpeg2kSettings)
+        return isinstance(settings, Jpeg2kSettings) and settings.bits == 8
 
 
 class JpegEncoder(Encoder):

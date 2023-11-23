@@ -42,7 +42,7 @@ from wsidicom.codec import (
     RleSettings,
     Subsampling,
 )
-from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.codec import Settings
 from wsidicom.codec.decoder import (
     ImageCodecsDecoder,
     ImageCodecsRleDecoder,
@@ -84,7 +84,7 @@ class TestPillowDecoder:
         assert is_supported == expected_result
 
     @pytest.mark.parametrize(
-        ["encoder_settings", "allowed_rms"],
+        ["settings", "allowed_rms"],
         [
             (JpegSettings(95, 8, Channels.GRAYSCALE), 2),
             (JpegSettings(95, 8, Channels.YBR, Subsampling.R444), 2),
@@ -109,7 +109,7 @@ class TestPillowDecoder:
         self,
         image: PILImage,
         encoded: bytes,
-        encoder_settings: EncoderSettings,
+        settings: Settings,
         allowed_rms: float,
     ):
         # Arrange
@@ -119,7 +119,7 @@ class TestPillowDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if encoder_settings.channels == Channels.GRAYSCALE:
+        if settings.channels == Channels.GRAYSCALE:
             image = image.convert("L")
             decoded = decoded.convert("L")
         diff = ImageChops.difference(decoded, image)
@@ -157,7 +157,7 @@ class TestPydicomDecoder:
         assert is_supported == expected_result
 
     @pytest.mark.parametrize(
-        "encoder_settings",
+        "settings",
         [
             RleSettings(8, Channels.GRAYSCALE),
             NumpySettings(8, Channels.GRAYSCALE, True, True),
@@ -171,24 +171,22 @@ class TestPydicomDecoder:
             NumpySettings(8, Channels.RGB, False, True),
         ],
     )
-    def test_decode(
-        self, image: PILImage, encoded: bytes, encoder_settings: EncoderSettings
-    ):
+    def test_decode(self, image: PILImage, encoded: bytes, settings: Settings):
         # Arrange
         decoder = PydicomDecoder(
-            encoder_settings.transfer_syntax,
+            settings.transfer_syntax,
             Size(image.width, image.height),
-            1 if encoder_settings.channels == Channels.GRAYSCALE else 3,
-            encoder_settings.bits,
-            encoder_settings.bits,
-            encoder_settings.photometric_interpretation,
+            1 if settings.channels == Channels.GRAYSCALE else 3,
+            settings.bits,
+            settings.bits,
+            settings.photometric_interpretation,
         )
 
         # Act
         decoded = decoder.decode(encoded)
 
         # Assert
-        if encoder_settings.channels == Channels.GRAYSCALE:
+        if settings.channels == Channels.GRAYSCALE:
             image = image.convert("L")
             decoded = decoded.convert("L")
         diff = ImageChops.difference(decoded, image)
@@ -229,7 +227,7 @@ class TestImageCodecsDecoder:
         not ImageCodecsDecoder.is_available(), reason="Image codecs not available"
     )
     @pytest.mark.parametrize(
-        ["encoder_settings", "allowed_rms"],
+        ["settings", "allowed_rms"],
         [
             (JpegSettings(95, 8, Channels.GRAYSCALE), 2),
             (JpegSettings(95, 8, Channels.YBR, Subsampling.R444), 2),
@@ -261,11 +259,11 @@ class TestImageCodecsDecoder:
         self,
         image: PILImage,
         encoded: bytes,
-        encoder_settings: EncoderSettings,
+        settings: Settings,
         allowed_rms: float,
     ):
         # Arrange
-        decoder = ImageCodecsDecoder(encoder_settings.transfer_syntax)
+        decoder = ImageCodecsDecoder(settings.transfer_syntax)
         if not decoder.is_available():
             pytest.skip("ImageCodecs is not available")
 
@@ -273,7 +271,7 @@ class TestImageCodecsDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if encoder_settings.channels == Channels.GRAYSCALE:
+        if settings.channels == Channels.GRAYSCALE:
             image = image.convert("L")
             decoded = decoded.convert("L")
         diff = ImageChops.difference(decoded, image)
@@ -314,28 +312,26 @@ class TestPylibjpegRleDecoder:
         not PylibjpegRleDecoder.is_available(), reason="Pylibjpeg-rle not available"
     )
     @pytest.mark.parametrize(
-        "encoder_settings",
+        "settings",
         [
             RleSettings(8, Channels.GRAYSCALE),
             RleSettings(8, Channels.RGB),
             RleSettings(16, Channels.GRAYSCALE),
         ],
     )
-    def test_decode(
-        self, image: PILImage, encoded: bytes, encoder_settings: EncoderSettings
-    ):
+    def test_decode(self, image: PILImage, encoded: bytes, settings: Settings):
         # Arrange
         decoder = PylibjpegRleDecoder(
             Size(image.width, image.height),
-            1 if encoder_settings.channels == Channels.GRAYSCALE else 3,
-            encoder_settings.bits,
+            1 if settings.channels == Channels.GRAYSCALE else 3,
+            settings.bits,
         )
 
         # Act
         decoded = decoder.decode(encoded)
 
         # Assert
-        if encoder_settings.channels == Channels.GRAYSCALE:
+        if settings.channels == Channels.GRAYSCALE:
             image = image.convert("L")
             decoded = decoded.convert("L")
         diff = ImageChops.difference(decoded, image)
@@ -373,7 +369,7 @@ class TestPylibjpegRleDecoder:
 #         assert is_supported == expected_result
 
 #     @pytest.mark.parametrize(
-#         "encoder_settings",
+#         "settings",
 #         [
 #             RleSettings(8, Channels.GRAYSCALE),
 #             RleSettings(8, Channels.RGB),
@@ -381,20 +377,20 @@ class TestPylibjpegRleDecoder:
 #         ],
 #     )
 #     def test_decode(
-#         self, image: PILImage, encoded: bytes, encoder_settings: EncoderSettings
+#         self, image: PILImage, encoded: bytes, settings: Settings
 #     ):
 #         # Arrange
 #         decoder = ImageCodecsRleDecoder(
 #             Size(image.width, image.height),
-#             1 if encoder_settings.channels == Channels.GRAYSCALE else 3,
-#             encoder_settings.bits
+#             1 if settings.channels == Channels.GRAYSCALE else 3,
+#             settings.bits
 #         )
 
 #         # Act
 #         decoded = decoder.decode(encoded)
 
 #         # Assert
-#         if encoder_settings.channels == Channels.GRAYSCALE:
+#         if settings.channels == Channels.GRAYSCALE:
 #             image = image.convert("L")
 #             decoded = decoded.convert("L")
 #         diff = ImageChops.difference(decoded, image)

@@ -39,8 +39,8 @@ pycodestyle = "^2.8.0"
 black = "^23.1.0"
 flake8 = "^4.0.1"
 codespell = "^2.2.5"
-wsidicom-data =  "^0.1.0"
-
+# wsidicom-data =  "^0.1.0"
+wsidicom-data = {path = "../wsidicom-data", develop = true}
 
 [build-system]
 requires = ["poetry-core>=1.2.0"]
