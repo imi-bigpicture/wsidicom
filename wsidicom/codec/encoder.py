@@ -16,7 +16,7 @@
 
 from abc import ABCMeta, abstractmethod
 import io
-from typing import Union
+from typing import Dict, Generic, Optional, Tuple, Type, TypeVar, Union
 
 import numpy as np
 from PIL import Image
@@ -47,11 +47,13 @@ from wsidicom.codec.settings import (
     Subsampling,
 )
 
+SettingsType = TypeVar("SettingsType", bound=Settings)
 
-class Encoder(metaclass=ABCMeta):
+
+class Encoder(Generic[SettingsType], metaclass=ABCMeta):
     """Abstract base class for encoders."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: SettingsType):
         """Initialize encoder.
 
         Parameters
@@ -71,7 +73,7 @@ class Encoder(metaclass=ABCMeta):
             Image to encode.
 
         Returns
-        -------
+        ----------
         bytes
             Encoded image.
         """
@@ -94,6 +96,11 @@ class Encoder(metaclass=ABCMeta):
     def is_available(cls) -> bool:
         """Return True if encoder is available."""
         raise NotImplementedError()
+
+    @property
+    def settings(self) -> SettingsType:
+        """Return the settings."""
+        return self._settings
 
     @property
     def transfer_syntax(self) -> UID:
@@ -131,45 +138,60 @@ class Encoder(metaclass=ABCMeta):
         return self._settings.photometric_interpretation
 
     @classmethod
-    def create(cls, settings: Settings) -> "Encoder":
+    def create(cls, settings: SettingsType) -> "Encoder[SettingsType]":
         """Create an encoder using settings.
 
         Parameters
         ----------
-        settings: Settings
+        settings: SettingsType
             Settings for the encoder.
 
         Returns
-        -------
-        Encoder
+        ----------
+        Encoder[SettingsType]
             Encoder for settings.
         """
-        if JpegEncoder.is_available() and isinstance(
-            settings, (JpegSettings, JpegLosslessSettings)
-        ):
-            return JpegEncoder(settings)
-        if JpegLsEncoder.is_available() and isinstance(
-            settings, JpegLsLosslessSettings
-        ):
-            return JpegLsEncoder(settings)
-        if Jpeg2kEncoder.is_available() and isinstance(settings, Jpeg2kSettings):
-            return Jpeg2kEncoder(settings)
-        if PillowEncoder.is_available() and isinstance(
-            settings, (JpegSettings, Jpeg2kSettings)
-        ):
-            return PillowEncoder(settings)
-        if isinstance(settings, RleSettings):
-            if PylibjpegRleEncoder.is_available():
-                return PylibjpegRleEncoder(settings)
-            if ImageCodecsRleEncoder.is_available():
-                return ImageCodecsRleEncoder(settings)
-        if NumpyEncoder.is_available() and isinstance(settings, NumpySettings):
-            return NumpyEncoder(settings)
+        encoder = cls._select_encoder(settings)
+        if encoder is None:
+            raise ValueError(f"Unsupported encoder settings: {settings}")
+        return encoder(settings)
 
-        raise ValueError(f"Unsupported encoder settings: {settings}")
+    @staticmethod
+    def _select_encoder(
+        settings: SettingsType,
+    ) -> Optional["Type[Encoder[SettingsType]]"]:
+        """Select encoder for settings.
+
+        Parameters
+        ----------
+        settings: SettingsType
+            Settings for the encoder.
+
+        Returns
+        ----------
+        Optional[Type[Encoder[SettingsType]]]
+            Encoder for settings, or None if no encoder is available.
+        """
+        # Sort encoders by preference
+        encoders_by_settings: Dict[Type[Settings], Tuple[Type[Encoder], ...]] = {
+            JpegSettings: (JpegEncoder, PillowEncoder),
+            JpegLosslessSettings: (JpegEncoder,),
+            JpegLsLosslessSettings: (JpegLsEncoder,),
+            Jpeg2kSettings: (Jpeg2kEncoder, PillowEncoder),
+            NumpySettings: (NumpyEncoder,),
+            RleSettings: (PylibjpegRleEncoder, ImageCodecsRleEncoder),
+        }
+        return next(
+            (
+                encoder
+                for encoder in encoders_by_settings[type(settings)]
+                if encoder.is_available() and encoder.supports_settings(settings)
+            ),
+            None,
+        )
 
 
-class PillowEncoder(Encoder):
+class PillowEncoder(Encoder[Union[JpegSettings, Jpeg2kSettings]]):
     """Encoder that uses pillow to encode image."""
 
     _supported_subsamplings = {
@@ -218,7 +240,7 @@ class PillowEncoder(Encoder):
         return isinstance(settings, Jpeg2kSettings) and settings.bits == 8
 
 
-class JpegEncoder(Encoder):
+class JpegEncoder(Encoder[Union[JpegSettings, JpegLosslessSettings]]):
     """JPEG encoder using image codecs."""
 
     def __init__(
@@ -289,7 +311,7 @@ class JpegEncoder(Encoder):
         return isinstance(settings, (JpegSettings, JpegLosslessSettings))
 
 
-class JpegLsEncoder(Encoder):
+class JpegLsEncoder(Encoder[JpegLsLosslessSettings]):
     """Encoder that uses jpegls to encode image."""
 
     def __init__(
@@ -329,7 +351,7 @@ class JpegLsEncoder(Encoder):
         return isinstance(settings, JpegLsLosslessSettings)
 
 
-class Jpeg2kEncoder(Encoder):
+class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
     """Encoder that uses jpeg2k to encode image."""
 
     def __init__(self, settings: Jpeg2kSettings) -> None:
@@ -375,10 +397,18 @@ class Jpeg2kEncoder(Encoder):
 
     @classmethod
     def supports_settings(cls, settings: Settings) -> bool:
-        return isinstance(settings, Jpeg2kSettings)
+        if not isinstance(settings, Jpeg2kSettings):
+            return False
+        if (
+            settings.level < 1 or settings.level > 1000
+        ) and settings.channels == Channels.YBR:
+            # jpeg2k_encode does not enable mct for lossless compression.
+            # Remove this when https://github.com/cgohlke/imagecodecs/issues/88 is fixed.
+            return False
+        return True
 
 
-class NumpyEncoder(Encoder):
+class NumpyEncoder(Encoder[NumpySettings]):
     """Encoder that uses numpy to encode image."""
 
     def __init__(self, settings: NumpySettings) -> None:
@@ -412,7 +442,7 @@ class NumpyEncoder(Encoder):
         return isinstance(settings, NumpySettings)
 
 
-class RleEncoder(Encoder):
+class RleEncoder(Encoder[RleSettings]):
     def __init__(self, settings: RleSettings) -> None:
         """Initialize RLE encoder.
 

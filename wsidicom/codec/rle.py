@@ -43,7 +43,7 @@ class RleCodec:
         """Return true if codec is available.
 
         Returns
-        -------
+        ----------
         bool
             True if codec is available.
         """
@@ -59,7 +59,7 @@ class RleCodec:
             Data to encode. Must be 2D or 3D array with uint8 or uint16 dtype.
 
         Returns
-        -------
+        ----------
         bytes
             Encoded data. First 64 bytes is the RLE header, followed by RLE segments."""
         if not cls.is_available():

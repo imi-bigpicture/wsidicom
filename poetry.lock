@@ -267,14 +267,14 @@ pyflakes = ">=2.4.0,<2.5.0"
 
 [[package]]
 name = "idna"
-version = "3.4"
+version = "3.6"
 description = "Internationalized Domain Names in Applications (IDNA)"
 category = "main"
 optional = false
 python-versions = ">=3.5"
 files = [
-    {file = "idna-3.4-py3-none-any.whl", hash = "sha256:90b77e79eaa3eba6de819a0c442c0b4ceefc341a7a2ab77d7562bf49f425c5c2"},
-    {file = "idna-3.4.tar.gz", hash = "sha256:814f528e8dead7d329833b91c5faa87d60bf71824cd12a7530b5526063d02cb4"},
+    {file = "idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f"},
+    {file = "idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca"},
 ]
 
 [[package]]
@@ -833,13 +833,15 @@ watchmedo = ["PyYAML (>=3.10)"]
 
 [[package]]
 name = "wsidicom-data"
-version = "0.1.0"
+version = "0.2.0"
 description = "Test data for wsidicom"
 category = "dev"
 optional = false
-python-versions = "^3.9"
-files = []
-develop = true
+python-versions = ">=3.9,<4.0"
+files = [
+    {file = "wsidicom_data-0.2.0-py3-none-any.whl", hash = "sha256:2c2cae749e25410ec65d2387a1168e8248d58b927c3b2a9f88d4d5205cffd06b"},
+    {file = "wsidicom_data-0.2.0.tar.gz", hash = "sha256:5a10d77243c4418a931ee4eb40dad26a61d649db74cf7c52f361f57915a0f175"},
+]
 
 [package.dependencies]
 wsidicom = ">=0.14.0"
@@ -847,10 +849,6 @@ wsidicom = ">=0.14.0"
 [package.extras]
 imagecodecs = ["imagecodecs (>=2023.9.18,<2024.0.0)"]
 rle = ["pylibjpeg-rle (>=1.3.0,<2.0.0)"]
-
-[package.source]
-type = "directory"
-url = "../wsidicom-data"
 
 [[package]]
 name = "xmltodict"
@@ -871,4 +869,4 @@ rle = ["pylibjpeg-rle"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "7b730365ddfa2dc9135ac3df37221161676d55c97356c88d5b889f0f0f847d2d"
+content-hash = "6db9a62f88d6bbc1d8ff694ac790d3d668b46c54c59d8c0663812af717e30a56"
