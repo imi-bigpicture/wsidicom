@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2023-11-29
+
 ### Added
 
 - Support for additional transfer syntaxes both for reading and writing, using pydicom pixel handlers, (optional) image codecs, and (optional) pylibjpeg-rle.
