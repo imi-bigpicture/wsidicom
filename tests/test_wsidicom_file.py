@@ -36,7 +36,7 @@ FILE_SETTINGS = {
     "sparse_no_bot": {
         "name": "sparse_no_bot.dcm",
         "tile_type": TileType.SPARSE,
-        "bot_type": OffsetTableType.NONE,
+        "bot_type": OffsetTableType.EMPTY,
     },
     "sparse_with_bot": {
         "name": "sparse_with_bot.dcm",
@@ -46,7 +46,7 @@ FILE_SETTINGS = {
     "full_no_bot_": {
         "name": "full_no_bot.dcm",
         "tile_type": TileType.FULL,
-        "bot_type": OffsetTableType.NONE,
+        "bot_type": OffsetTableType.EMPTY,
     },
     "full_with_bot": {
         "name": "full_with_bot.dcm",
@@ -126,7 +126,7 @@ class TestWsiDicomFile:
         self,
         test_file: WsiDicomFile,
     ):
-        # Arrage
+        # Arrange
 
         # Act
         image_type = test_file.image_type
@@ -203,14 +203,14 @@ class TestWsiDicomFile:
         tag = test_file._file.read_tag()
 
         # Assert
-        test_file._validate_pixel_data_start(tag)
+        test_file._validate_pixel_data_start(tag, False)
 
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_read_bot_length(self, test_file: WsiDicomFile, settings: Dict[str, Any]):
         # Arrange
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
-        test_file._validate_pixel_data_start(tag)
+        test_file._validate_pixel_data_start(tag, False)
         if settings["bot_type"] == OffsetTableType.BASIC:
             expected_bot_length = 4
         else:
@@ -227,7 +227,7 @@ class TestWsiDicomFile:
         # Arrange
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
-        test_file._validate_pixel_data_start(tag)
+        test_file._validate_pixel_data_start(tag, False)
         if settings["bot_type"] == OffsetTableType.BASIC:
             first_bot_entry = b"\x00\x00\x00\x00"
         else:
@@ -246,7 +246,7 @@ class TestWsiDicomFile:
         LENGTH_BYTES = 4
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
-        test_file._validate_pixel_data_start(tag)
+        test_file._validate_pixel_data_start(tag, False)
         bot = test_file._read_bot()
         first_frame_item_position = test_file._file.tell()
 
@@ -273,7 +273,7 @@ class TestWsiDicomFile:
         LENGTH_BYTES = 4
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
-        test_file._validate_pixel_data_start(tag)
+        test_file._validate_pixel_data_start(tag, False)
         bot = test_file._read_bot()
         first_frame_item = test_file._file.tell()
 

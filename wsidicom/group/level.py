@@ -236,7 +236,7 @@ class Level(Group):
         """
         image = self.get_scaled_tile(tile, scale, z, path)
         instance = self.get_instance(z, path)
-        return instance.image_data.encode(image)
+        return instance.image_data.encoder.encode(image)
 
     def calculate_scale(self, level_to: int) -> int:
         """Return scaling factor to given level.

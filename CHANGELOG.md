@@ -7,9 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2023-11-29
+
 ### Added
 
+- Support for additional transfer syntaxes both for reading and writing, using pydicom pixel handlers, (optional) image codecs, and (optional) pylibjpeg-rle.
+- Additional decoders and encoders to Pillow. Decoder and encoder is selected automatically. Decoder to use can be overridden with the `prefered_decoder`-setting.
+- Detection of suitable available transfer syntax when opening slide with DICOM web.
 - Support for opening DICOMDIR files using `open_dicomdir()`.
+
+### Changed
+
+- Opening DICOM web instances in parallel. Configurable with `open_web_theads`-setting.
+- `open_web()` now takes a list of requested transfer syntaxes to test if available from the server.
+- When fetching multiple frames from DICOM web, fetch multiple frames per request instead of making several requests.
+- Renamed `OffsetTableType` option `NONE` to `EMPTY`, and added type `NONE` for use with unencapsulated data.
+
+### Removed
+
+- Support for Python 3.8.
+
+### Fixed
+
+- Loading annotation instances using DICOM web.
 
 ## [0.13.0] - 2023-11-11
 

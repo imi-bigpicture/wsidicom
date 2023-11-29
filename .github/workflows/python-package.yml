@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
       - name: Prevent cache-miss on windows
         run: |
@@ -67,7 +67,7 @@ jobs:
           python -m pip install flake8 pytest
           python -m pip install poetry
       - name: Install Application
-        run: python -m poetry install
+        run: python -m poetry install --all-extras
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names

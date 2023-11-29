@@ -16,25 +16,25 @@
 
 import io
 from abc import ABCMeta, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
 from typing import (
-    Any,
     Callable,
-    Dict,
     Iterable,
     Iterator,
     List,
     Optional,
     Tuple,
+    Union,
 )
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit
+from pydicom.uid import UID
 
+from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
+from wsidicom.thread import ConditionalThreadPoolExecutor
 
 
 class ImageData(metaclass=ABCMeta):
@@ -54,6 +54,9 @@ class ImageData(metaclass=ABCMeta):
     _blank_tile: Optional[PILImage] = None
     _encoded_blank_tile: Optional[bytes] = None
 
+    def __init__(self, encoder: Encoder):
+        self._encoder = encoder
+
     @property
     @abstractmethod
     def transfer_syntax(self) -> UID:
@@ -63,7 +66,7 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def image_size(self) -> Size:
-        """Retur the pixel size of the image."""
+        """Return the pixel size of the image."""
         raise NotImplementedError()
 
     @property
@@ -88,6 +91,18 @@ class ImageData(metaclass=ABCMeta):
     @abstractmethod
     def photometric_interpretation(self) -> str:
         """Return the photophotometric interpretation of the image data."""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def bits(self) -> int:
+        """Should return the number of bits stored for each sample."""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def lossy_compressed(self) -> bool:
+        """Should return True if the image has been lossy compressed."""
         raise NotImplementedError()
 
     @property
@@ -172,8 +187,8 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @property
-    def blank_color(self) -> Tuple[int, int, int]:
-        """Return RGB background color."""
+    def blank_color(self) -> Union[int, Tuple[int, int, int]]:
+        """Return grey level or RGB background color."""
         return self._get_blank_color(self.photometric_interpretation)
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
@@ -223,8 +238,12 @@ class ImageData(metaclass=ABCMeta):
     def blank_encoded_tile(self) -> bytes:
         """Return encoded background tile."""
         if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self.encode(self.blank_tile)
+            self._encoded_blank_tile = self.encoder.encode(self.blank_tile)
         return self._encoded_blank_tile
+
+    @property
+    def encoder(self) -> Encoder:
+        return self._encoder
 
     def get_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
@@ -303,7 +322,7 @@ class ImageData(metaclass=ABCMeta):
         image = Image.new(
             mode=self.image_mode,
             size=(self.tile_size * scale).to_tuple(),
-            color=self.blank_color[: self.samples_per_pixel],
+            color=self.blank_color,
         )
         # Get decoded tiles for the region covering the scaled tile
         # in the image data
@@ -328,13 +347,7 @@ class ImageData(metaclass=ABCMeta):
         )
 
     def get_scaled_encoded_tile(
-        self,
-        scaled_tile_point: Point,
-        z: float,
-        path: str,
-        scale: int,
-        image_format: str,
-        image_options: Dict[str, Any],
+        self, scaled_tile_point: Point, z: float, path: str, scale: int
     ) -> bytes:
         """
         Return scaled tile as bytes.
@@ -349,10 +362,6 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
         Scale: int
             Scale to use for downscaling.
-        image_format: str
-            Image format, e.g. 'JPEG', for encoding.
-        image_options: Dict[str, Any].
-            Dictionary of options for encoding.
 
         Returns
         ----------
@@ -360,9 +369,10 @@ class ImageData(metaclass=ABCMeta):
             Scaled tile as bytes.
         """
         image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
-        with io.BytesIO() as buffer:
-            image.save(buffer, format=image_format, **image_options)
-            return buffer.getvalue()
+        return self.encoder.encode(image)
+        # with io.BytesIO() as buffer:
+        #     image.save(buffer, format=image_format, **image_options)
+        #     return buffer.getvalue()
 
     def get_scaled_encoded_tiles(
         self,
@@ -370,8 +380,6 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str,
         scale: int,
-        image_format: str,
-        image_options: Dict[str, Any],
     ) -> Iterator[bytes]:
         """
         Return scaled tiles as bytes.
@@ -386,10 +394,6 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
         Scale: int
             Scale to use for downscaling.
-        image_format: str
-            Image format, e.g. 'JPEG', for encoding.
-        image_options: Dict[str, Any].
-            Dictionary of options for encoding.
 
         Returns
         ----------
@@ -397,9 +401,7 @@ class ImageData(metaclass=ABCMeta):
             Scaled tiles as bytes.
         """
         return (
-            self.get_scaled_encoded_tile(
-                scaled_tile_point, z, path, scale, image_format, image_options
-            )
+            self.get_scaled_encoded_tile(scaled_tile_point, z, path, scale)
             for scaled_tile_point in scaled_tile_points
         )
 
@@ -471,7 +473,7 @@ class ImageData(metaclass=ABCMeta):
         if cropped_tile_region.size != self.tile_size:
             image = Image.open(io.BytesIO(tile_frame))
             image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.encode(image)
+            tile_frame = self.encoder.encode(image)
         return tile_frame
 
     def stitch_tiles(
@@ -568,12 +570,10 @@ class ImageData(metaclass=ABCMeta):
             ):
                 paste_method(image, tile_point, tile)
 
-        if threads == 1:
-            thread_paste(tile_region.iterate_all())
-
-        else:
-            with ThreadPoolExecutor(max_workers=threads) as pool:
-                pool.map(thread_paste, tile_region.chunked_iterate_all(threads))
+        with ConditionalThreadPoolExecutor(
+            max_workers=threads, force_iteration=True
+        ) as pool:
+            pool.map(thread_paste, tile_region.chunked_iterate_all(threads))
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
         """
@@ -594,56 +594,10 @@ class ImageData(metaclass=ABCMeta):
             and (path in self.optical_paths)
         )
 
-    def encode(self, image: PILImage) -> bytes:
-        """Encode image using transfer syntax.
-
-        Parameters
-        ----------
-        image: PILImage
-            Image to encode
-
-        Returns
-        ----------
-        bytes
-            Encoded image as bytes
-
-        """
-        image_format, image_options = self._image_settings(self.transfer_syntax)
-        with io.BytesIO() as buffer:
-            image.save(buffer, format=image_format, **image_options)
-            return buffer.getvalue()
-
     @staticmethod
-    def _image_settings(transfer_syntax: UID) -> Tuple[str, Dict[str, Any]]:
-        """
-        Return Pillow settings for encoding tiles according to transfer syntax.
-
-        Parameters
-        ----------
-        transfer_syntax: pydicom.uid
-            Transfer syntax to match image format and options to
-
-        Returns
-        ----------
-        tuple[str, dict[str, int]]
-            image format and image options
-
-        """
-        if transfer_syntax == JPEGBaseline8Bit:
-            image_format = "jpeg"
-            image_options = {"quality": 95}
-        elif transfer_syntax == JPEG2000:
-            image_format = "jpeg2000"
-            image_options = {"irreversible": True}
-        elif transfer_syntax == JPEG2000Lossless:
-            image_format = "jpeg2000"
-            image_options = {"irreversible": False}
-        else:
-            raise NotImplementedError("Only supports jpeg and jpeg2000")
-        return (image_format, image_options)
-
-    @staticmethod
-    def _get_blank_color(photometric_interpretation: str) -> Tuple[int, int, int]:
+    def _get_blank_color(
+        photometric_interpretation: str,
+    ) -> Union[int, Tuple[int, int, int]]:
         """Return color to use blank tiles.
 
         Parameters
@@ -653,14 +607,14 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        Tuple[int, int, int]
-            RGB color,
+        Union[int, Tuple[int, int, int]]
+            Grey level or RGB color,
 
         """
         BLACK = 0
         WHITE = 255
         if photometric_interpretation == "MONOCHROME2":
-            return (BLACK, BLACK, BLACK)  # Monocrhome2 is black
+            return BLACK
         return (WHITE, WHITE, WHITE)
 
     def _create_blank_tile(self) -> PILImage:
@@ -674,7 +628,7 @@ class ImageData(metaclass=ABCMeta):
         return Image.new(
             mode=self.image_mode,  # type: ignore
             size=self.tile_size.to_tuple(),
-            color=self.blank_color[: self.samples_per_pixel],
+            color=self.blank_color,
         )
 
     def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:

@@ -17,6 +17,7 @@ from typing import List, OrderedDict, Sequence, Union
 
 from pydicom.uid import UID
 
+from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.instance import WsiDicomImageData
@@ -47,7 +48,15 @@ class WsiDicomFileImageData(WsiDicomImageData):
             for file in sorted(files, key=lambda file: file.frame_offset)
         )
         self._transfer_syntax = files[0].transfer_syntax
-        super().__init__([file.dataset for file in self._files.values()])
+        dataset = files[0].dataset
+        codec = Codec.create(
+            self.transfer_syntax,
+            dataset.samples_per_pixel,
+            dataset.bits,
+            dataset.tile_size,
+            dataset.photometric_interpretation,
+        )
+        super().__init__([file.dataset for file in self._files.values()], codec)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._files.values()})"

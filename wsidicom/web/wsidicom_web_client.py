@@ -12,21 +12,20 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from http import HTTPStatus
+import logging
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
-from dicomweb_client.api import DICOMwebClient, DICOMfileClient
+from dicomweb_client.api import DICOMfileClient, DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
 from pydicom import Dataset
 from pydicom.uid import (
-    JPEG2000,
     UID,
-    JPEG2000Lossless,
-    JPEGBaseline8Bit,
-    JPEGExtended12Bit,
 )
-from requests import Session
+from requests import HTTPError, Session
 from requests.auth import AuthBase
 
+from wsidicom.codec import determine_media_type
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
 
 SOP_CLASS_UID = "00080016"
@@ -83,14 +82,62 @@ class WsiDicomWebClient:
         return cls(client)
 
     def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
-        return self._get_instances_of_class(study_uid, series_uid, WSI_SOP_CLASS_UID)
+        """
+        Get instance uids for WSI instances in a series.
 
-    def get_ann_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
-        return self._get_instances_of_class(study_uid, series_uid, ANN_SOP_CLASS_UID)
+        Parameters
+        ----------
+        study_uid: UID
+            Study UID of the series.
+        series_uid: UID
+            Series UID of the series.
+
+        Returns
+        ----------
+        Iterator[UID]
+            Iterator of instance uids for WSI instances in the series."""
+        return self._get_intances(study_uid, series_uid, WSI_SOP_CLASS_UID)
+
+    def get_annotation_instances(
+        self, study_uid: UID, series_uid: UID
+    ) -> Iterator[UID]:
+        """
+        Get instance uids of Annotation instancesii in a series.
+
+        Parameters
+        ----------
+        study_uid: UID
+            Study UID of the series.
+        series_uid: UID
+            Series UID of the series.
+
+        Returns
+        ----------
+        Iterator[UID]
+            Iterator of instance uids for Annotation instances in the series.
+        """
+        return self._get_intances(study_uid, series_uid, ANN_SOP_CLASS_UID)
 
     def get_instance(
         self, study_uid: UID, series_uid: UID, instance_uid: UID
     ) -> Dataset:
+        """
+        Get instance metadata.
+
+        Parameters
+        ----------
+        study_uid: UID
+            Study UID of the instance.
+        series_uid: UID
+            Series UID of the instance.
+        instance_uid: UID
+            Instance UID of the instance.
+
+        Returns
+        ----------
+        Dataset
+            Instance metadata.
+        """
         self._client.retrieve_instance
         instance = self._client.retrieve_instance_metadata(
             study_uid, series_uid, instance_uid
@@ -105,6 +152,27 @@ class WsiDicomWebClient:
         frame_indices: List[int],
         transfer_syntax: UID,
     ) -> Iterator[bytes]:
+        """
+        Get frames from an instance.
+
+        Parameters
+        ----------
+        study_uid: UID
+            Study UID of the instance.
+        series_uid: UID
+            Series UID of the instance.
+        instance_uid: UID
+            Instance UID of the instance.
+        frame_indices: List[int]
+            List of frame indices to get. Note frames are indexed starting from 1.
+        transfer_syntax: UID
+            Transfer syntax of the to get frames.
+
+        Returns
+        ----------
+        Iterator[bytes]
+            Iterator of frames.
+        """
         return self._client.iter_instance_frames(
             study_uid,
             series_uid,
@@ -113,33 +181,120 @@ class WsiDicomWebClient:
             media_types=(self._transfer_syntax_to_media_type(transfer_syntax),),
         )
 
-    def _get_instances_of_class(
-        self, study_uid: UID, series_uid: UID, sop_class_uid: UID
+    def is_transfer_syntax_supported(
+        self, study_uid: UID, series_uid: UID, instance_uid: UID, transfer_syntax: UID
+    ) -> bool:
+        """Check if transfer syntax is supported for retrieving frames.
+
+        Parameters
+        ----------
+        study_uid: UID
+            Study UID of the instance.
+        series_uid: UID
+            Series UID of the instance.
+        instance_uid: UID
+            Instance UID of the instance.
+        transfer_syntax: UID
+            Transfer syntax to check.
+
+        Returns
+        ----------
+        bool
+            True if transfer syntax is supported, False otherwise.
+        """
+        try:
+            self.get_frames(study_uid, series_uid, instance_uid, [1], transfer_syntax)
+        except HTTPError as exception:
+            if exception.response.status_code == HTTPStatus.NOT_ACCEPTABLE:
+                logging.debug(
+                    f"Transfer syntax {transfer_syntax} not supported "
+                    f"for {instance_uid}."
+                )
+                return False
+            raise exception
+        logging.debug(
+            f"Transfer syntax {transfer_syntax} supported for {instance_uid}."
+        )
+        return True
+
+    def _get_intances(
+        self, study_uid: UID, series_uid: UID, sop_class_uid
     ) -> Iterator[UID]:
+        """Get instance uids for instances of SOP class.
+
+        Parameters
+        ----------
+        study_uid: UID
+            Study UID of the series.
+        series_uid: UID
+            Series UID of the series.
+        sop_class_uid: UID
+            SOP Class UID of the instances.
+
+        Returns
+        ----------
+        Iterator[UID]
+            Iterator of instance uids for instances of SOP class in the series.
+        """
         return (
             self._get_sop_instance_uid_from_response(instance)
-            for instance in self._client.search_for_instances(study_uid, series_uid)
-            if self._get_sop_class_uid_from_response(instance) == sop_class_uid
+            for instance in self._client.search_for_instances(
+                study_uid,
+                series_uid,
+                fields=["AvailableTransferSyntaxUID"],
+                search_filters={SOP_CLASS_UID: sop_class_uid},
+            )
         )
 
     @staticmethod
     def _get_sop_instance_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:
+        """Get SOP Instance UID from response.
+
+        Parameters
+        ----------
+        response: Dict[str, Dict[Any, Any]]
+            Response from server.
+
+        Returns
+        ----------
+        UID
+            SOP Instance UID from response.
+        """
         return UID(response[SOP_INSTANCE_UID]["Value"][0])
 
     @staticmethod
     def _get_sop_class_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:
+        """Get SOP Class UID from response.
+
+        Parameters
+        ----------
+        response: Dict[str, Dict[Any, Any]]
+            Response from server.
+
+        Returns
+        ----------
+        UID
+            SOP Class UID from response.
+        """
         return UID(response[SOP_CLASS_UID]["Value"][0])
 
     @staticmethod
     def _transfer_syntax_to_media_type(transfer_syntax: UID) -> Tuple[str, str]:
-        if transfer_syntax == JPEGBaseline8Bit or transfer_syntax == JPEGExtended12Bit:
-            return (
-                "image/jpeg",
-                transfer_syntax,
-            )
-        elif transfer_syntax == JPEG2000 or transfer_syntax == JPEG2000Lossless:
-            return (
-                "image/jp2",
-                transfer_syntax,
-            )
-        raise NotImplementedError()
+        """Convert transfer syntax to media type.
+
+        Parameters
+        ----------
+        transfer_syntax: UID
+            Transfer syntax to convert.
+
+        Returns
+        ----------
+        Tuple[str, str]
+            Media type and transfer syntax.
+        """
+        try:
+            return determine_media_type(transfer_syntax), transfer_syntax
+        except NotImplementedError as exception:
+            raise ValueError(
+                f"Could not determine media type for transfer syntax {transfer_syntax}"
+            ) from exception

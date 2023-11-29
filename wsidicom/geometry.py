@@ -514,13 +514,12 @@ class RegionMm:
 
 
 class Orientation:
-    def __init__(self, orientation: Sequence[float]):
+    def __init__(self, orientation: Tuple[float, float, float, float, float, float]):
         if orientation[0] != -orientation[4] or orientation[1] != orientation[3]:
             logging.warn(
                 f"Orientation {orientation} is not "
                 "orthogonal with equal lengths with column rotated 90 deg from row"
             )
-        orientation = tuple(orientation)
         self._orientation = orientation
         self._transform = self._create_transform(orientation)
         self._reverse = self._create_reverse(self._transform)
