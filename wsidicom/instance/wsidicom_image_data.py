@@ -12,27 +12,28 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import io
 from abc import ABCMeta, abstractmethod
 from functools import cached_property
 from typing import Iterator, List, Optional, Sequence
 
-from PIL import Image
 from PIL.Image import Image as PILImage
 
+from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
-from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
+from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
-    def __init__(self, datasets: Sequence[WsiDataset]):
+    def __init__(self, datasets: Sequence[WsiDataset], codec: Codec):
         self._datasets = datasets
+        self._decoder = codec.decoder
+        super().__init__(codec.encoder)
 
     @abstractmethod
     def _get_tile_frame(self, frame_index: int) -> bytes:
@@ -92,9 +93,18 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return self._datasets[0].photometric_interpretation
 
     @property
+    def bits(self) -> int:
+        """Return the number of bits stored for each sample."""
+        return self._datasets[0].bits
+
+    @property
     def samples_per_pixel(self) -> int:
         """Return samples per pixel (1 or 3)."""
         return self._datasets[0].samples_per_pixel
+
+    @property
+    def lossy_compressed(self) -> bool:
+        return self._datasets[0].lossy_compressed
 
     @cached_property
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
@@ -146,7 +156,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         if frame_index == -1:
             return self.blank_tile
         frame = self._get_tile_frame(frame_index)
-        return Image.open(io.BytesIO(frame))
+        return self._decoder.decode(frame)
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """

@@ -21,17 +21,25 @@ from pydicom.tag import BaseTag
 
 
 class OffsetTableType(Enum):
+    """Offset table type."""
+
     NONE = "none"
+    EMPTY = "empty"
     BASIC = "BOT"
     EXTENDED = "EOT"
 
     @classmethod
     def from_string(cls, offset_table: Optional[str]) -> "OffsetTableType":
+        """Return OffsetTableType parsed from string."""
         if offset_table is None:
             return OffsetTableType.NONE
+        if offset_table.strip().lower() == "empty":
+            return OffsetTableType.EMPTY
         if offset_table.strip().lower() == "eot":
             return OffsetTableType.EXTENDED
-        return OffsetTableType.BASIC
+        if offset_table.strip().lower() == "bot":
+            return OffsetTableType.BASIC
+        raise ValueError(f"Unknown offset table type: {offset_table}")
 
 
 class WsiDicomFileBase:
@@ -74,15 +82,16 @@ class WsiDicomFileBase:
         """Return filepath."""
         return self._filepath
 
-    def _read_tag_length(self, with_vr: bool = True) -> int:
-        if (not self._file.is_implicit_VR) and with_vr:
-            # Read VR
-            self._file.read_UL()
+    def _read_tag_length(self) -> int:
+        """Read tag length."""
         return self._file.read_UL()
 
-    def _check_tag_and_length(
-        self, tag: BaseTag, length: int, with_vr: bool = True
-    ) -> None:
+    def _read_tag_vr(self) -> None:
+        """Read tag VR if implicit VRi."""
+        if not self._file.is_implicit_VR:
+            self._file.read(4, need_exact_length=True)
+
+    def _check_tag_and_length(self, tag: BaseTag, length: int, with_vr: bool) -> None:
         """Check if tag at position is expected tag with expected length.
 
         Parameters
@@ -91,12 +100,16 @@ class WsiDicomFileBase:
             Expected tag.
         length: int
             Expected length.
+        with_vr: bool
+            If tag is expected to have VR.
 
         """
         read_tag = self._file.read_tag()
         if tag != read_tag:
             raise ValueError(f"Found tag {read_tag} expected {tag}.")
-        read_length = self._read_tag_length(with_vr)
+        if with_vr:
+            self._read_tag_vr()
+        read_length = self._read_tag_length()
         if length != read_length:
             raise ValueError(f"Found length {read_length} expected {length}.")
 

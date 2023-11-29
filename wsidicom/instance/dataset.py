@@ -17,13 +17,18 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
-from re import U
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
 from pydicom.dataset import Dataset
-from pydicom.pixel_data_handlers import pillow_handler
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.uid import JPEG2000, UID, JPEG2000Lossless, JPEGBaseline8Bit, generate_uid
+from pydicom.uid import (
+    JPEG2000,
+    UID,
+    JPEGBaseline8Bit,
+    JPEGExtended12Bit,
+    JPEGLSNearLossless,
+    generate_uid,
+)
 from pydicom.valuerep import DSfloat
 
 from wsidicom.config import settings
@@ -260,7 +265,7 @@ class WsiDataset(Dataset):
             # By the standard it should be tiled full.
             return TileType.FULL
         if "PerFrameFunctionalGroupsSequence" in self:
-            # If no per frame functional sequence we cant make a sparse tile index.
+            # If no per frame functional sequence we can't make a sparse tile index.
             return TileType.SPARSE
         if self.image_type == ImageType.LABEL:
             # Labels are expected to only have one frame and can be treated as tiled full.
@@ -326,7 +331,7 @@ class WsiDataset(Dataset):
 
     @cached_property
     def frame_sequence(self) -> DicomSequence:
-        """Return per frame functional group sequene if present, otherwise
+        """Return per frame functional group sequence if present, otherwise
         shared functional group sequence.
 
         Returns
@@ -379,7 +384,7 @@ class WsiDataset(Dataset):
             raise WsiDicomError("Image size is zero")
         if self.tile_type == TileType.FULL and self.uids.concatenation is None:
             # Check that the number of frames match the image size and tile size.
-            # Dont check concantenated instances as the frame count is ambiguous.
+            # Dont check concatenated instances as the frame count is ambiguous.
             expected_tiled_size = image_size.ceil_div(self.tile_size)
             number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
             number_of_optical_paths = getattr(self, "NumberOfOpticalPaths", 1)
@@ -447,6 +452,16 @@ class WsiDataset(Dataset):
         return self.SamplesPerPixel
 
     @property
+    def bits(self) -> int:
+        """Return the number of bits stored for each sample."""
+        return self.BitsStored
+
+    @property
+    def lossy_compressed(self) -> bool:
+        """Return true if image has been lossy compressed."""
+        return self._get_dicom_attribute("LossyImageCompression") == "01"
+
+    @property
     def photometric_interpretation(self) -> str:
         """Return photometric interpretation."""
         return self.PhotometricInterpretation
@@ -485,9 +500,7 @@ class WsiDataset(Dataset):
         return self._get_image_type(self.ImageType)
 
     @classmethod
-    def is_supported_wsi_dicom(
-        cls, dataset: Dataset, transfer_syntax: UID
-    ) -> Optional[ImageType]:
+    def is_supported_wsi_dicom(cls, dataset: Dataset) -> Optional[ImageType]:
         """Check if dataset is dicom wsi type and that required attributes
         (for the function of the library) is available.
         Warn if attribute listed as required in the library or required in the
@@ -497,8 +510,6 @@ class WsiDataset(Dataset):
         ----------
         dataset: Dataset
             Pydicom dataset to check if is a WSI dataset.
-        transfer_syntax: UID
-            Transfer syntax of dataset.
 
         Returns
         ----------
@@ -508,25 +519,27 @@ class WsiDataset(Dataset):
 
         sop_class_uid: UID = getattr(dataset, "SOPClassUID")
         if sop_class_uid != WSI_SOP_CLASS_UID:
-            logging.debug(f"Non-wsi image, SOP class {sop_class_uid.name}")
+            logging.debug(f"Non-wsi image, SOP class {sop_class_uid.name}.")
             return None
 
         try:
             image_type = cls._get_image_type(dataset.ImageType)
         except ValueError:
-            logging.debug(f"Non-supported image type {dataset.ImageType}")
+            logging.debug(f"Non-supported image type {dataset.ImageType}.")
             return None
 
         for name, attribute in WSI_ATTRIBUTES.items():
             if name not in dataset and attribute.evaluate(image_type):
-                logging.debug(f"Missing required attribute {name}")
+                logging.debug(f"Missing required attribute {name}.")
                 return None
-
-        syntax_supported = pillow_handler.supports_transfer_syntax(transfer_syntax)
-        if not syntax_supported:
-            logging.debug(f"Non-supported transfer syntax {transfer_syntax}")
+        pixel_represention = int(getattr(dataset, "PixelRepresentation", 0))
+        if pixel_represention != 0:
+            logging.debug(f"Unsupported pixel representation {pixel_represention}.")
             return None
-
+        planar_configuration = int(getattr(dataset, "PlanarConfiguration", 0))
+        if planar_configuration != 0:
+            logging.debug(f"Unsupported planar configuration {planar_configuration}.")
+            return None
         return image_type
 
     @staticmethod
@@ -765,39 +778,30 @@ class WsiDataset(Dataset):
         dataset.NumberOfFrames = (
             image_data.tiled_size.width * image_data.tiled_size.height
         )
-
-        if image_data.transfer_syntax == JPEGBaseline8Bit:
-            dataset.BitsAllocated = 8
-            dataset.BitsStored = 8
-            dataset.HighBit = 7
-            dataset.PixelRepresentation = 0
+        dataset.BitsAllocated = image_data.bits // 8 * 8
+        dataset.BitsStored = image_data.bits
+        dataset.HighBit = image_data.bits - 1
+        dataset.PixelRepresentation = 0
+        if image_data.lossy_compressed:
             dataset.LossyImageCompression = "01"
             dataset.LossyImageCompressionRatio = 1
-            dataset.LossyImageCompressionMethod = "ISO_10918_1"
-            dataset.LossyImageCompression = "01"
-        elif image_data.transfer_syntax == JPEG2000:
-            # TODO JPEG2000 can have higher bitcount
-            dataset.BitsAllocated = 8
-            dataset.BitsStored = 8
-            dataset.HighBit = 7
-            dataset.PixelRepresentation = 0
-            dataset.LossyImageCompressionRatio = 1
-            dataset.LossyImageCompressionMethod = "ISO_15444_1"
-            dataset.LossyImageCompression = "01"
-        elif image_data.transfer_syntax == JPEG2000Lossless:
-            # TODO JPEG2000 can have higher bitcount
-            dataset.BitsAllocated = 8
-            dataset.BitsStored = 8
-            dataset.HighBit = 7
-            dataset.PixelRepresentation = 0
-            dataset.LossyImageCompression = "00"
-        else:
-            raise ValueError("Non-supported transfer syntax.")
+            if image_data.transfer_syntax in [JPEGBaseline8Bit, JPEGExtended12Bit]:
+                dataset.LossyImageCompressionMethod = "ISO_10918_1"
+            elif image_data.transfer_syntax == JPEG2000:
+                dataset.LossyImageCompressionMethod = "ISO_15444_1"
+            elif image_data.transfer_syntax == JPEGLSNearLossless:
+                dataset.LossyImageCompressionMethod = "ISO_14495_1"
+            else:
+                raise NotImplementedError(
+                    f"Lossy compression not implemented for "
+                    f"{image_data.transfer_syntax}."
+                )
 
         dataset.PhotometricInterpretation = image_data.photometric_interpretation
         dataset.SamplesPerPixel = image_data.samples_per_pixel
 
-        dataset.PlanarConfiguration = 0
+        if image_data.samples_per_pixel == 3:
+            dataset.PlanarConfiguration = 0
 
         dataset.FocusMethod = "AUTO"
         dataset.ExtendedDepthOfField = "NO"

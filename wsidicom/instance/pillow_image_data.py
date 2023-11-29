@@ -57,6 +57,14 @@ class PillowImageData(ImageData):
         return 3
 
     @property
+    def bits(self) -> int:
+        return 8
+
+    @property
+    def lossy_compressed(self) -> bool:
+        return True
+
+    @property
     def photometric_interpretation(self) -> str:
         return "YBR_FULL_422"
 
@@ -72,4 +80,4 @@ class PillowImageData(ImageData):
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         if tile != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
-        return self.encode(self._image)
+        return self._encoder.encode(self._image)

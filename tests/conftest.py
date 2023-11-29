@@ -21,10 +21,12 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 import pytest
 from dicomweb_client import DICOMfileClient
+from pydicom.uid import JPEGBaseline8Bit
 
 from tests.data_gen import create_layer_file
 from wsidicom import WsiDicom
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
+from wsidicom.config import settings
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
@@ -138,6 +140,7 @@ def wsi_factory():
         if input_type == WsiInputType.FILE:
             wsi = WsiDicom.open(folder)
         elif input_type == WsiInputType.WEB:
+            settings.open_web_theads = 1
             client = WsiDicomWebClient(
                 DICOMfileClient(f"file://{folder.absolute().as_posix()}")
             )
@@ -145,6 +148,7 @@ def wsi_factory():
                 client,
                 test_definition["study_instance_uid"],
                 test_definition["series_instance_uid"],
+                JPEGBaseline8Bit,
             )
         elif input_type == WsiInputType.STREAM:
             streams = [open(file, "rb") for file in folder.iterdir() if file.is_file()]

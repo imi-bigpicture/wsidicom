@@ -88,7 +88,7 @@ class FullTileIndex(TileIndex):
         self,
     ) -> List[float]:
         """Return list of focal planes in datasets. Values in Pixel Measures
-        Sequene are in mm.
+        Sequence are in mm.
 
         Returns
         ----------

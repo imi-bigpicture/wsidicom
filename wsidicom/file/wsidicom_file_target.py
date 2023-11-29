@@ -144,7 +144,7 @@ class WsiDicomFileTarget(Target):
             dataset = instances[0].dataset.as_tiled_full(
                 focal_planes, optical_paths, tiled_size, scale
             )
-            with WsiDicomFileWriter.open(filepath) as wsi_file:
+            with WsiDicomFileWriter.open(filepath, transfer_syntax) as wsi_file:
                 wsi_file.write(
                     uid,
                     transfer_syntax,

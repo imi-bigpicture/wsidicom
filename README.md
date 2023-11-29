@@ -26,15 +26,36 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 ## Requirements
 
-*wsidicom* uses pydicom, numpy, Pillow (with jpeg and jpeg2000 plugins), and dicomweb-client.
+*wsidicom* uses pydicom, numpy, Pillow, and dicomweb-client. Imagecodecs and pylibjpeg-rle can be installed as optionals to support additional transfer syntaxes.
 
 ## Limitations
 
-Levels are required to have (close to) 2 factor scale and same tile size.
+- Levels are required to have (close to) 2 factor scale and same tile size.
 
-Only JPEGBaseline8Bit, JPEG2000 and JPEG2000Lossless transfer syntax is supported.
+- Only 8 bits per sample is supported for color images, and 8 and 16 bits for grayscale images.
 
-Optical path identifiers needs to be unique across file set.
+- Without optional dependencies, the following transfer syntaxes are supported:
+
+  - JPEGBaseline8Bit
+  - JPEG2000
+  - JPEG2000Lossless
+  - ImplicitVRLittleEndian
+  - ExplicitVRLittleEndian
+  - ExplicitVRBigEndian
+
+- With imagecodecs, the following transfer syntaxes are additionally supported:
+
+  - JPEGExtended12Bit
+  - JPEGLosslessP14
+  - JPEGLosslessSV1
+  - JPEGLSLossless
+  - JPEGLSNearLossless
+
+- With pylibjpeg-rle RLELossless is additionally supported.
+
+- Optical path identifiers needs to be unique across instances.
+
+- Only one pyramid (i.e. offset from slide corner) per frame of reference is supported.
 
 ## Basic usage
 
@@ -231,7 +252,7 @@ point_annotation_with_measurment = Annotation(Point(10.0, 20.0), [measurement])
 
 ```python
 from wsidicom import PointAnnotationGroup
-# The 222 suplement requires groups to have a label, a category and a type
+# The 222 supplement requires groups to have a label, a category and a type
 group = PointAnnotationGroup(
     annotations=[point_annotation, point_annotation_with_measurment],
     label='group label',

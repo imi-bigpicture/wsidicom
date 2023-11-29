@@ -72,7 +72,7 @@ class WsiDicomFileSource(Source):
                         elif wsi_file.image_type == ImageType.OVERVIEW:
                             self._overview_files.append(wsi_file)
                     except WsiDicomNotSupportedError:
-                        logging.debug(f"Non-supported file {stream.name}.")
+                        logging.info(f"Non-supported file {stream.name}.")
                         if filepath is not None:
                             stream.close()
                 elif sop_class_uid == ANN_SOP_CLASS_UID:
@@ -84,9 +84,9 @@ class WsiDicomFileSource(Source):
                     )
                     # File was opened but not supported SOP class.
                     stream.close()
-            except Exception as exception:
+            except Exception:
                 logging.error(
-                    f"Failed to open file {file.name} due to exception: {exception}"
+                    f"Failed to open file {file.name} due to exception", exc_info=True
                 )
         if len(self._level_files) == 0:
             raise WsiDicomNotFoundError("Level files", str(files))

@@ -21,13 +21,14 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Sequence,
     Tuple,
     Union,
 )
 
 from PIL import Image
 from PIL.Image import Image as PILImage
-from pydicom.uid import UID, JPEGBaseline8Bit, generate_uid
+from pydicom.uid import UID, generate_uid
 
 from wsidicom.errors import (
     WsiDicomMatchError,
@@ -122,7 +123,9 @@ class WsiDicom:
         client: WsiDicomWebClient,
         study_uid: Union[str, UID],
         series_uids: Union[str, UID, Iterable[Union[str, UID]]],
-        requested_transfer_syntax: UID = JPEGBaseline8Bit,
+        requested_transfer_syntax: Optional[
+            Union[str, UID, Sequence[Union[str, UID]]]
+        ] = None,
         label: Optional[Union[PILImage, str, Path]] = None,
     ) -> "WsiDicom":
         """Open WSI DICOM instances using DICOM web client.
@@ -135,9 +138,12 @@ class WsiDicom:
             Study uid of wsi to open.
         series_uids: Union[str, UID, Iterable[Union[str, UID]]]
             Series uids of wsi to open
-        transfer_syntax: UID
+        requested_transfer_syntax: Optional[
+            Union[str, UID, Sequence[Union[str, UID]]]
+        ] = JPEGBaseline8Bit
             Transfer syntax to request for image data, for example
-            UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
+            "1.2.840.10008.1.2.4.50" for JPEGBaseline8Bit. By default the first
+            supported transfer syntax is requested.
         label: Optional[Union[PILImage, str, Path]] = None
             Optional label image to use instead of label found in source.
 
@@ -146,6 +152,18 @@ class WsiDicom:
         WsiDicom
             WsiDicom created from WSI DICOM instances in study-series.
         """
+        study_uid = UID(study_uid)
+        if isinstance(series_uids, (str, UID)):
+            series_uids = [UID(series_uids)]
+        else:
+            series_uids = [UID(series_uid) for series_uid in series_uids]
+        if isinstance(requested_transfer_syntax, (str, UID)):
+            requested_transfer_syntax = [UID(requested_transfer_syntax)]
+        elif requested_transfer_syntax is not None:
+            requested_transfer_syntax = [
+                UID(transfer_syntax) for transfer_syntax in requested_transfer_syntax
+            ]
+
         source = WsiDicomWebSource(
             client, study_uid, series_uids, requested_transfer_syntax
         )

@@ -176,9 +176,12 @@ class TestWsiDicomAnnotation:
                     type_code=output_group.type_code,
                 )
                 input_group = grouped_annotations[key]
-                output = enumerate(output_group.annotations)
-                for i, output_annotation in output:
+                for i, output_annotation in enumerate(output_group.annotations):
                     input_annotation = input_group.geometries[i]
+                    print(len(output_annotation.geometry))
+                    print(len(input_annotation))
+                    print(type(output_annotation.geometry))
+                    print(type(input_annotation))
                     assert output_annotation.geometry == input_annotation
 
     @pytest.mark.parametrize("file_path", test_files["asap"])
