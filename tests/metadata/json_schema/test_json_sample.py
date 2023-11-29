@@ -416,6 +416,7 @@ class TestSampleJsonSchema:
     def test_slide_sample_serialize(self, slide_sample: SlideSample):
         # Arrange
         assert slide_sample.sampled_from is not None
+        assert slide_sample.anatomical_sites is not None
 
         # Act
         dumped = SlideSampleJsonSchema().dump(slide_sample)

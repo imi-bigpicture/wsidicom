@@ -319,8 +319,6 @@ class ImageData(metaclass=ABCMeta):
         PILImage
             Scaled tiled as Pillow image.
         """
-        color = self.blank_color[: self.samples_per_pixel]
-        assert len(color) == 1 or len(color) == 3
         image = Image.new(
             mode=self.image_mode,
             size=(self.tile_size * scale).to_tuple(),
@@ -627,8 +625,6 @@ class ImageData(metaclass=ABCMeta):
         PILImage
             Blank tile image
         """
-        color = self.blank_color[: self.samples_per_pixel]
-        assert len(color) == 1 or len(color) == 3
         return Image.new(
             mode=self.image_mode,
             size=self.tile_size.to_tuple(),

@@ -42,7 +42,7 @@ class ImageCoordinateSystem:
     def orientation(self) -> Orientation:
         x = round(math.sin(self.rotation * math.pi / 180), 8)
         y = round(math.cos(self.rotation * math.pi / 180), 8)
-        return Orientation([-x, y, 0, y, x, 0])
+        return Orientation((-x, y, 0, y, x, 0))
 
 
 @dataclass

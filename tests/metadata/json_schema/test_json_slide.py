@@ -44,6 +44,7 @@ class TestSlideJsonSchema:
         assert isinstance(sample.position, SlideSamplePosition)
         dumped_sample = dumped["samples"][0]
         assert dumped_sample["identifier"] == sample.identifier
+        assert sample.anatomical_sites is not None
         assert_dict_equals_code(
             dumped_sample["anatomical_sites"][0], sample.anatomical_sites[0]
         )
