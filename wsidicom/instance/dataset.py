@@ -751,7 +751,8 @@ class WsiDataset(Dataset):
             dataset.ImagedVolumeHeight = (
                 image_data.image_size.height * image_data.pixel_spacing.height
             )
-            dataset.ImagedVolumeDepth = pixel_measure_sequence.SliceThickness
+            # SliceThickness is in mm, ImagedVolumeDepth in um
+            dataset.ImagedVolumeDepth = pixel_measure_sequence.SliceThickness * 1000
             # DICOM 2022a part 3 IODs - C.8.12.9 Whole Slide Microscopy Image
             # Frame Type Macro. Analogous to ImageType and shared by all
             # frames so clone

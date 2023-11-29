@@ -14,13 +14,17 @@
 
 """A source for reading WSI DICOM files."""
 
-from collections import defaultdict
 import io
 import logging
+from collections import defaultdict
 from pathlib import Path
 from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union
 
-from pydicom.uid import UID
+from pydicom import dcmread
+from pydicom.errors import InvalidDicomError
+from pydicom.filereader import _read_file_meta_info, read_preamble
+from pydicom.fileset import FileSet
+from pydicom.uid import UID, MediaStorageDirectoryStorage
 
 from wsidicom.errors import (
     WsiDicomNotFoundError,
@@ -33,8 +37,6 @@ from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import ImageType, TileType, WsiDataset, WsiInstance
 from wsidicom.source import Source
 from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
-from pydicom.filereader import read_preamble, _read_file_meta_info
-from pydicom.errors import InvalidDicomError
 
 
 class WsiDicomFileSource(Source):
@@ -159,6 +161,27 @@ class WsiDicomFileSource(Source):
     def contains_levels(self) -> bool:
         """Returns true source has one level that can be read with WsiDicom."""
         return len(self.image_files) > 0
+
+    @classmethod
+    def open_dicomdir(cls, path: Union[str, Path]):
+        """Open a DICOMDIR file and return a WsiDicomFileSource for contained files.
+
+        Parameters
+        ----------
+        path: Union[str, Path]
+            Path to DICOMDIR file.
+
+        Returns
+        ----------
+        WsiDicomFileSource
+            Source for files in DICOMDIR.
+        """
+        dicomdir = dcmread(path)
+        if dicomdir.file_meta.MediaStorageSOPClassUID != MediaStorageDirectoryStorage:
+            raise ValueError()
+        fileset = FileSet(dicomdir)
+        files = [file.path for file in fileset]
+        return cls(files)
 
     @staticmethod
     def _open_file(file: Union[Path, BinaryIO]) -> Tuple[BinaryIO, Optional[Path]]:

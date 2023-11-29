@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for additional transfer syntaxes both for reading and writing, using pydicom pixel handlers, (optional) image codecs, and (optional) pylibjpeg-rle.
 - Additional decoders and encoders to Pillow. Decoder and encoder is selected automatically. Decoder to use can be overridden with the `prefered_decoder`-setting.
 - Detection of suitable available transfer syntax when opening slide with DICOM web.
+- Support for opening DICOMDIR files using `open_dicomdir()`.
 
 ### Changed
 
