@@ -17,7 +17,7 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal, Union
+from typing import Literal, Optional, Union
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -74,6 +74,21 @@ class Subsampling(Enum):
     R420 = "Half horisontal, half vertical (4:2:0)"
     R411 = "Quarter horisontal, full vertical (4:1:1)"
     R440 = "Full horizontal, half vertical (4:4:0)"
+
+    @classmethod
+    def from_string(cls, string: Optional[str]) -> "Subsampling":
+        """Return subsampling matching string."""
+        if string is None or string == "444":
+            return Subsampling.R444
+        if string == "422":
+            return Subsampling.R422
+        if string == "420":
+            return Subsampling.R420
+        if string == "411":
+            return Subsampling.R411
+        if string == "440":
+            return Subsampling.R440
+        raise ValueError(f"Unsupported subsampling: {string}.")
 
 
 class Settings(metaclass=ABCMeta):
