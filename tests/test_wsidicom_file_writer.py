@@ -239,8 +239,8 @@ def dataset(image_data: ImageData, frame_count: int):
     dataset.InstanceNumber = 0
     pixel_measure = Dataset()
     pixel_measure.PixelSpacing = [
-        image_data.pixel_spacing.width,
         image_data.pixel_spacing.height,
+        image_data.pixel_spacing.width,
     ]
     pixel_measure.SpacingBetweenSlices = 1.0
     pixel_measure.SliceThickness = 1.0
