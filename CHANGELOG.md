@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2023-11-30
+
+### Fixed
+
+- Correct order of pixel spacing.
+- Correct `photometric_interpretation` for `Jpeg2kSettings`
+- `PillowEncoder` encoding Jpeg2000 as `Jpeg2kEncoder`.
+
 ## [0.15.0] - 2023-11-30
 
 ### Added
@@ -229,7 +237,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.15.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.15.1..HEAD
+[0.15.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.0..v0.15.1
 [0.15.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.14.0..v0.15.0
 [0.14.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.13.0..v0.14.0
 [0.13.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.12.0..v0.13.0
