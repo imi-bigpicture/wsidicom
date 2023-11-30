@@ -96,3 +96,7 @@ class WsiDicomNoResolutionError(Exception):
 
 class WsiDicomNotSupportedError(Exception):
     """Raised if opened instance is not supported."""
+
+
+class WsiDicomBotOverflow(Exception):
+    """Raised if image data is to large to fit into basic table offset."""
