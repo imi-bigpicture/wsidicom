@@ -41,6 +41,7 @@ from wsidicom.web.wsidicom_web_image_data import WsiDicomWebImageData
 
 """A source for reading WSI DICOM files from DICOMWeb."""
 
+# Transfer syntaxes to try in order of preference.
 PREFERED_WEB_TRANSFER_SYNTAXES = [
     JPEGBaseline8Bit,
     JPEG2000,
@@ -88,16 +89,20 @@ class WsiDicomWebSource(Source):
             ImageType, Set[UID]
         ] = defaultdict(set)
 
-        def _create_instance(uids: Tuple[UID, UID, UID]) -> Optional[WsiInstance]:
-            dataset = client.get_instance(uids[0], uids[1], uids[2])
+        def create_instance(
+            uids: Tuple[UID, UID, UID, Optional[Set[UID]]]
+        ) -> Optional[WsiInstance]:
+            study_uid, series_uid, instance_uid, available_transfer_syntaxes = uids
+            dataset = client.get_instance(study_uid, series_uid, instance_uid)
             if not WsiDataset.is_supported_wsi_dicom(dataset):
-                logging.info(f"Non-supported instance {uids[2]}.")
+                logging.info(f"Non-supported instance {instance_uid}.")
                 return
             dataset = WsiDataset(dataset)
 
             transfer_syntax = self._determine_transfer_syntax(
                 client,
                 dataset,
+                available_transfer_syntaxes,
                 detected_transfer_syntaxes_by_image_type[dataset.image_type],
                 requested_transfer_syntaxes,
             )
@@ -106,23 +111,27 @@ class WsiDicomWebSource(Source):
                     f"No supported transfer syntax found for instance {uids[2]}."
                 )
                 return
-
+            detected_transfer_syntaxes_by_image_type[dataset.image_type].add(
+                transfer_syntax
+            )
             image_data = WsiDicomWebImageData(client, dataset, transfer_syntax)
             return WsiInstance(dataset, image_data)
 
         instance_uids = (
-            (study_uid, series_uid, instance_uid)
-            for series_uid in series_uids
-            for instance_uid in client.get_wsi_instances(study_uid, series_uid)
+            (study_uid, series_uid, instance_uid, available_transfer_syntaxes)
+            for series_uid, instance_uid, available_transfer_syntaxes in client.get_wsi_instances(
+                study_uid, series_uids
+            )
         )
         annotation_instances = (
             client.get_instance(study_uid, series_uid, instance_uid)
-            for series_uid in series_uids
-            for instance_uid in client.get_annotation_instances(study_uid, series_uid)
+            for series_uid, instance_uid, _ in client.get_annotation_instances(
+                study_uid, series_uids
+            )
         )
 
         with ConditionalThreadPoolExecutor(settings.open_web_theads) as pool:
-            instances = pool.map(_create_instance, instance_uids)
+            instances = pool.map(create_instance, instance_uids)
             for instance in instances:
                 if instance is None:
                     continue
@@ -183,8 +192,9 @@ class WsiDicomWebSource(Source):
         self,
         client: WsiDicomWebClient,
         dataset: WsiDataset,
+        available_transfer_syntaxes: Optional[Set[UID]],
         detected_transfer_syntaxes: Set[UID],
-        requested_transfer_syntaxes: Optional[Iterable[UID]] = None,
+        requested_transfer_syntaxes: Optional[Iterable[UID]],
     ) -> Optional[UID]:
         """Determine transfer syntax to use for image data.
 
@@ -194,9 +204,11 @@ class WsiDicomWebSource(Source):
             Client used for DICOMWeb communication.
         dataset: WsiDataset
             Dataset to determine transfer syntax for.
+        available_transfer_syntaxes: Optional[Set[UID]]
+            Transfer syntaxes available on the server, or None if not known.
         detected_transfer_syntaxes: Set[UID]
             Transfer syntaxes that have already been detected.
-        requested_transfer_syntaxes: Optional[Iterable[UID]] = None
+        requested_transfer_syntaxes: Optional[Iterable[UID]]
             Transfer syntaxes to try in order of preference.
 
         Returns
@@ -207,6 +219,7 @@ class WsiDicomWebSource(Source):
         """
         if requested_transfer_syntaxes is None:
             requested_transfer_syntaxes = PREFERED_WEB_TRANSFER_SYNTAXES
+
         supported_transfer_syntaxes = (
             transfer_syntax
             for transfer_syntax in requested_transfer_syntaxes
@@ -217,12 +230,29 @@ class WsiDicomWebSource(Source):
                 dataset.photometric_interpretation,
             )
         )
+        if available_transfer_syntaxes is not None:
+            # Server provided list of available transfer syntaxes.
+            # Select first one that is supported in order by user or default preference.
+            transfer_syntax = next(
+                (
+                    transfer_syntax
+                    for transfer_syntax in supported_transfer_syntaxes
+                    if transfer_syntax in available_transfer_syntaxes
+                ),
+                None,
+            )
+            if transfer_syntax is not None:
+                return transfer_syntax
+
+        # No server provided list of available transfer syntaxes.
+        # Detect if any of the supported transfer syntaxes are supported by the server.
+        # Start with the ones that have already been detected.
         sorted_transfer_syntaxes = sorted(
             supported_transfer_syntaxes,
             key=lambda transfer_syntax: transfer_syntax in detected_transfer_syntaxes,
         )
 
-        transfer_syntax = next(
+        return next(
             (
                 transfer_syntax
                 for transfer_syntax in sorted_transfer_syntaxes
@@ -235,6 +265,3 @@ class WsiDicomWebSource(Source):
             ),
             None,
         )
-        if transfer_syntax is not None:
-            detected_transfer_syntaxes.add(transfer_syntax)
-        return transfer_syntax
