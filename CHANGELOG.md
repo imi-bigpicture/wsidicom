@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Correct order of pixel spacing.
 - Correct `photometric_interpretation` for `Jpeg2kSettings`
 - `PillowEncoder` encoding Jpeg2000 as `Jpeg2kEncoder`.
 
