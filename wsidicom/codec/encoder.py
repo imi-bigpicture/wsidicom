@@ -212,7 +212,9 @@ class PillowEncoder(Encoder[Union[JpegSettings, Jpeg2kSettings]]):
             self._format = "jpeg"
         elif isinstance(settings, Jpeg2kSettings):
             self._pillow_settings = {
-                "irreversible": (settings.level > 1 and settings.level < 1000),
+                "quality_mode": "dB",
+                "quality_layers": [settings.level],
+                "irreversible": not settings.lossless,
                 "mct": settings.channels == Channels.YBR,
                 "no_jp2": True,
             }
@@ -373,7 +375,7 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
             self._multiple_component_transform = True
         else:
             self._multiple_component_transform = False
-        if settings.level < 1 or settings.level > 1000:
+        if settings.lossless:
             self._level = 0
             self._reversible = True
         else:

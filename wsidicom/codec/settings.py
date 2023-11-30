@@ -389,7 +389,7 @@ class Jpeg2kSettings(Settings):
         Parameters:
         ----------
             level: int = 80
-                JPEG 2000 compression level. Set to < 1 or > 1000 for lossless.
+                JPEG 2000 compression level in dB. Set to < 1 or > 1000 for lossless.
             bits: int = 8
                 Number of bits per pixel.
             channels: Channels = Channels.YBR
@@ -410,6 +410,11 @@ class Jpeg2kSettings(Settings):
         return self._level
 
     @property
+    def lossless(self) -> bool:
+        """Return True if lossless, else False."""
+        return self.level < 1 or self.level > 1000
+
+    @property
     def transfer_syntax(self) -> UID:
         if self.level < 1 or self.level > 1000:
             return JPEG2000Lossless
@@ -420,7 +425,7 @@ class Jpeg2kSettings(Settings):
         if self.channels == Channels.GRAYSCALE:
             return "MONOCHROME2"
         if self.channels == Channels.YBR:
-            if self.level is None:
+            if self.lossless:
                 return "YBR_RCT"
             return "YBR_ICT"
         return "RGB"

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2023-11-30
+
+### Fixed
+
+- Correct `photometric_interpretation` for `Jpeg2kSettings`
+- `PillowEncoder` encoding Jpeg2000 as `Jpeg2kEncoder`.
+
 ## [0.15.0] - 2023-11-30
 
 ### Added
