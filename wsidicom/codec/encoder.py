@@ -225,7 +225,9 @@ class PillowEncoder(Encoder[Union[JpegSettings, Jpeg2kSettings]]):
 
     @property
     def lossy(self) -> bool:
-        return self._format == "jpeg" or self._pillow_settings["irreversible"] is True
+        return isinstance(self.settings, JpegSettings) or (
+            isinstance(self.settings, Jpeg2kSettings) and not self.settings.lossless
+        )
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         if not isinstance(image, PILImage):
@@ -385,7 +387,7 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
 
     @property
     def lossy(self) -> bool:
-        return not self._reversible
+        return not self.settings.lossless
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         if not self.is_available():
