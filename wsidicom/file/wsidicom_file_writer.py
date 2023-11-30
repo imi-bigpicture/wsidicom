@@ -13,7 +13,9 @@
 #    limitations under the License.
 
 
+import os
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from struct import pack
 from typing import (
@@ -25,14 +27,17 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    Union,
 )
 
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
+from pydicom.filebase import DicomFileLike
 from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, UncompressedTransferSyntaxes
 
+from wsidicom.errors import WsiDicomBotOverflow
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
@@ -88,10 +93,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         WsiDicomFileWriter
             WsiDicomFileWriter for file.
         """
-        stream = open(
-            file,
-            "w+b",
-        )
+        stream = open(file, "w+b")
         return cls(
             stream,
             transfer_syntax.is_little_endian,
@@ -156,6 +158,65 @@ class WsiDicomFileWriter(WsiDicomFileBase):
                 data, dataset.NumberOfFrames, workers, chunk_size, offset_table, scale
             )
 
+    def copy_with_table(
+        self,
+        copy_from: Union[BytesIO, BinaryIO],
+        offset_table: OffsetTableType,
+        dataset_end: int,
+        pixels_end: int,
+        frame_positions: List[int],
+    ) -> List[int]:
+        """Copy dataset and pixel data from other file to this.
+
+        Parameters
+        ----------
+        copy_from: DicomFileLike
+            File to copy from.
+        offset_table: OffsetTableType
+            Offset table to use in new file.
+        dataset_end: int
+            Position of EOT or PixelData tag in copy_from.
+        pixels_end: int
+            End of PixelData in copy_from.
+        frame_positions: List[int]
+            List of frame positions in copy_from, relative to start of file.
+
+        Returns
+        ----------
+        List[int]
+            List of frame position relative to start of new file.
+        """
+        # Copy dataset until EOT or PixelData tag
+        copy_from.seek(0)
+        self._file.write(copy_from.read(dataset_end))
+        # Write new pixel data start
+        (
+            new_dataset_end,
+            new_table_start,
+            new_pixels_start,
+        ) = self._write_encapsulated_pixel_data_start(
+            offset_table, len(frame_positions)
+        )
+        # Copy pixel data
+        first_frame_position = frame_positions[0]
+        copy_from.seek(first_frame_position)
+        self._file.write(copy_from.read(pixels_end - first_frame_position))
+
+        # Adjust frame positions
+        frame_position_change = new_pixels_start - first_frame_position
+        new_frame_positions = [
+            position + frame_position_change for position in frame_positions
+        ]
+
+        # Write pixel data end and EOT or BOT if used.
+        return self._write_encapsulated_pixel_data_end(
+            offset_table,
+            new_table_start,
+            new_pixels_start,
+            new_dataset_end,
+            new_frame_positions,
+        )
+
     def _write_encapsulated_pixel_data(
         self,
         data: Dict[Tuple[str, float], ImageData],
@@ -187,23 +248,51 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         List[int]
             List of frame position relative to start of file.
         """
-        table_start, pixels_start = self._write_pixel_data_start(
-            number_of_frames, offset_table
-        )
-        frame_positions: List[int] = []
-        for (path, z), image_data in sorted(data.items()):
-            frame_positions += self._write_pixel_data(
+        (
+            dataset_end,
+            table_start,
+            pixels_start,
+        ) = self._write_encapsulated_pixel_data_start(offset_table, number_of_frames)
+        frame_positions = [
+            position
+            for (path, z), image_data in sorted(data.items())
+            for position in self._write_pixel_data(
                 image_data, True, z, path, workers, chunk_size, scale
             )
-        pixels_end = self._file.tell()
-        self._write_pixel_data_end()
+        ]
+        return self._write_encapsulated_pixel_data_end(
+            offset_table, table_start, pixels_start, dataset_end, frame_positions
+        )
+
+    def _write_encapsulated_pixel_data_end(
+        self,
+        offset_table: OffsetTableType,
+        table_start: Optional[int],
+        pixels_start: int,
+        dataset_end: int,
+        frame_positions: List[int],
+    ):
+        last_frame_end = self._write_pixel_data_end_tag()
         if offset_table is not OffsetTableType.EMPTY:
             if table_start is None:
                 raise ValueError("Table start should not be None")
             elif offset_table == OffsetTableType.EXTENDED:
-                self._write_eot(table_start, pixels_start, frame_positions, pixels_end)
+                self._write_eot(
+                    table_start, pixels_start, frame_positions, last_frame_end
+                )
             elif offset_table == OffsetTableType.BASIC:
-                self._write_bot(table_start, pixels_start, frame_positions)
+                try:
+                    self._write_bot(table_start, pixels_start, frame_positions)
+                except WsiDicomBotOverflow as exception:
+                    if self._owned:
+                        frame_positions = self._rewrite_as_table(
+                            OffsetTableType.EXTENDED,
+                            dataset_end,
+                            last_frame_end,
+                            frame_positions,
+                        )
+                    else:
+                        raise exception
         return frame_positions
 
     def _write_unencapsulated_pixel_data(
@@ -345,24 +434,27 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             self._file.write_leUL(0)
         return table_start
 
-    def _write_pixel_data_start(
-        self, number_of_frames: int, offset_table: OffsetTableType
-    ) -> Tuple[Optional[int], int]:
+    def _write_encapsulated_pixel_data_start(
+        self,
+        offset_table: OffsetTableType,
+        number_of_frames: int,
+    ) -> Tuple[int, Optional[int], int]:
         """Write tags starting pixel data and reserves space for BOT or EOT.
 
         Parameters
         ----------
+        offset_table: OffsetTableType
+            Offset table to use.
         number_of_frames: int
             Number of frames to reserve space for in BOT or EOT.
-        offset_table: Optional[str] = 'bot'
-            Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, None - no offset table.
 
         Returns
         ----------
         Tuple[Optional[int], int]
-            Start of table (BOT or EOT) and start of pixel data (after BOT).
+            End of dataset (EOT or PixelData tag), start of table (BOT or EOT) and
+            start of pixel data (after BOT).
         """
+        dataset_end = self._file.tell()
         table_start: Optional[int] = None
         if offset_table == OffsetTableType.EXTENDED:
             table_start = self._reserve_eot(number_of_frames)
@@ -372,13 +464,16 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         if offset_table == OffsetTableType.BASIC:
             table_start = self._reserve_bot(number_of_frames)
-        elif offset_table == OffsetTableType.EMPTY:
+        elif (
+            offset_table == OffsetTableType.EMPTY
+            or offset_table == OffsetTableType.EXTENDED
+        ):
             self._file.write_tag(ItemTag)
             self._file.write_leUL(0)
 
         pixel_data_start = self._file.tell()
 
-        return table_start, pixel_data_start
+        return dataset_end, table_start, pixel_data_start
 
     def _write_bot(
         self, bot_start: int, pixel_data_start: int, frame_positions: Sequence[int]
@@ -399,7 +494,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         # Check that last BOT entry is not over 2^32 - 1
         last_entry = frame_positions[-1] - pixel_data_start
         if last_entry > 2**32 - 1:
-            raise NotImplementedError(
+            raise WsiDicomBotOverflow(
                 "Image data exceeds 2^32 - 1 bytes "
                 "An extended offset table should be used"
             )
@@ -596,7 +691,55 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         )
         return chunked_tile_points
 
-    def _write_pixel_data_end(self) -> None:
+    def _write_pixel_data_end_tag(self) -> int:
         """Writes tags ending pixel data."""
+        last_frame_end = self._file.tell()
         self._file.write_tag(SequenceDelimiterTag)
         self._file.write_leUL(0)
+        return last_frame_end
+
+    def _rewrite_as_table(
+        self,
+        offset_table: OffsetTableType,
+        dataset_end: int,
+        pixels_end: int,
+        frame_positions: List[int],
+    ) -> List[int]:
+        """Rewrite file as encapsulated with EOT. Closes current file and replaces
+        it with the new a new file.
+
+        Parameters
+        ----------
+        offset_table: OffsetTableType
+            Offset table to use in new file.
+        dataset_end: int
+            Position of EOT or PixelData tag in current file.
+        pixels_end: int
+            End of PixelData in current file.
+        frame_positions: List[int]
+            List of frame positions in current file, relative to start of file.
+
+        Returns
+        ----------
+        List[int]
+            List of frame position relative to start of new file.
+        """
+        if self._filepath is not None:
+            temp_file_path = self._filepath.with_suffix(".tmp")
+            buffer = open(temp_file_path, "w+b")
+        else:
+            temp_file_path = None
+            buffer = BytesIO()
+        with WsiDicomFileWriter(buffer, True, False, None, True) as writer:
+            frame_positions = writer.copy_with_table(
+                self._stream,
+                offset_table,
+                dataset_end,
+                pixels_end,
+                frame_positions,
+            )
+        self._file.close()
+        if temp_file_path is not None and self._filepath is not None:
+            os.replace(temp_file_path, self._filepath)
+        self._file = DicomFileLike(buffer)
+        return frame_positions

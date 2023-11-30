@@ -493,7 +493,10 @@ class WsiDicomFile(WsiDicomFileBase):
         )
         if table_type == OffsetTableType.BASIC:
             table = self._read_bot()
-        elif table_type == OffsetTableType.EMPTY:
+        elif (
+            table_type == OffsetTableType.EMPTY
+            or table_type == OffsetTableType.EXTENDED
+        ):
             self._read_bot_length()
 
         if table_type == OffsetTableType.NONE:

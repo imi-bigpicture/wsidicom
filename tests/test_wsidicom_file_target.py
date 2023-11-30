@@ -19,6 +19,7 @@ import pytest
 from pydicom.uid import generate_uid
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
+from wsidicom.file.wsidicom_file_base import OffsetTableType
 from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
 from wsidicom.series.levels import Levels
 
@@ -34,7 +35,9 @@ class TestWsiDicomFileTargetIntegration:
         expected_levels_count = len(wsi.levels)
 
         # Act
-        with WsiDicomFileTarget(tmp_path, generate_uid, 1, 16, "bot") as target:
+        with WsiDicomFileTarget(
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, False
+        ) as target:
             target.save_levels(wsi.levels)
 
         # Assert
@@ -57,7 +60,9 @@ class TestWsiDicomFileTargetIntegration:
         levels_missing_smallest_levels = Levels(levels_larger_than_tile_size)
 
         # Act
-        with WsiDicomFileTarget(tmp_path, generate_uid, 1, 16, "bot", True) as target:
+        with WsiDicomFileTarget(
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, True
+        ) as target:
             target.save_levels(levels_missing_smallest_levels)
 
         # Assert
