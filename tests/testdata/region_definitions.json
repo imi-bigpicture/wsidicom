@@ -55,7 +55,7 @@
                     "width": 0.05,
                     "height": 0.05
                 },
-                "md5": "8f0328d1f3ae3f0733bc0d00ebab13e8"
+                "md5": "12073aa25f2b25af0efdd358134f9512"
             },
             {
                 "location": {
@@ -67,7 +67,7 @@
                     "width": 0.1,
                     "height": 0.1
                 },
-                "md5": "2a3b5cba4a697574e2a923ce1ef5ca7b"
+                "md5": "ec8d85fd02b04e9390b1a9027ea19235"
             },
             {
                 "location": {
@@ -79,7 +79,7 @@
                     "width": 0.2,
                     "height": 0.2
                 },
-                "md5": "8ddc4e8e8ba564b61b5826739497b132"
+                "md5": "2abba722f24c556af2ddc2d75c3c283c"
             }
         ],
         "read_region_mpp": [
@@ -93,7 +93,7 @@
                     "width": 0.05,
                     "height": 0.05
                 },
-                "md5": "a71295efe7f325ea63d48d3529eaf056"
+                "md5": "93e3262ef920de005a7f6538456d1a62"
             },
             {
                 "location": {
@@ -105,7 +105,7 @@
                     "width": 0.5,
                     "height": 0.5
                 },
-                "md5": "28c31d120e0cf06b72da4e20fc2af6b6"
+                "md5": "40f703eb10d34feb4add36f8d542e32e"
             },
             {
                 "location": {
@@ -117,7 +117,7 @@
                     "width": 2.5,
                     "height": 2.5
                 },
-                "md5": "d0ad70710eb358a8e6fce0df81f98efe"
+                "md5": "9ebfdbe2815c704fde0167f65023ef8a"
             }
         ],
         "read_tile": [

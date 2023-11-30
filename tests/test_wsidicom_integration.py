@@ -52,7 +52,8 @@ class TestWsiDicomIntegration:
         )
 
         # Assert
-        assert md5(im.tobytes()).hexdigest() == region["md5"], region
+        checksum = md5(im.tobytes()).hexdigest()
+        assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(
         ["wsi_name", "region"], WsiTestDefinitions.read_region_mm()
@@ -75,7 +76,8 @@ class TestWsiDicomIntegration:
         )
 
         # Assert
-        assert md5(im.tobytes()).hexdigest() == region["md5"], region
+        checksum = md5(im.tobytes()).hexdigest()
+        assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(
         ["wsi_name", "region"], WsiTestDefinitions.read_region_mpp()
@@ -98,7 +100,8 @@ class TestWsiDicomIntegration:
         )
 
         # Assert
-        assert md5(im.tobytes()).hexdigest() == region["md5"], region
+        checksum = md5(im.tobytes()).hexdigest()
+        assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(["wsi_name", "region"], WsiTestDefinitions.read_tile())
     def test_read_tile(
@@ -118,7 +121,8 @@ class TestWsiDicomIntegration:
         )
 
         # Assert
-        assert md5(im.tobytes()).hexdigest() == region["md5"], region
+        checksum = md5(im.tobytes()).hexdigest()
+        assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(
         ["wsi_name", "region"], WsiTestDefinitions.read_encoded_tile()
@@ -140,7 +144,8 @@ class TestWsiDicomIntegration:
         )
 
         # Assert
-        assert md5(im).hexdigest() == region["md5"], region
+        checksum = md5(im).hexdigest()
+        assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(
         ["wsi_name", "region"], WsiTestDefinitions.read_thumbnail()
@@ -159,7 +164,8 @@ class TestWsiDicomIntegration:
         im = wsi.read_thumbnail((region["size"]["width"], region["size"]["height"]))
 
         # Assert
-        assert md5(im.tobytes()).hexdigest() == region["md5"], region
+        checksum = md5(im.tobytes()).hexdigest()
+        assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize("wsi_path", WsiTestDefinitions.folders())
     def test_replace_label(self, wsi_path: Path, input_type: WsiInputType):
