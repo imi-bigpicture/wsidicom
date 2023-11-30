@@ -244,6 +244,18 @@ class WsiDicomWebClient:
             Iterator of series and instance uid and optionally available transfer syntax
             uids for instances in the study and series.
         """
+        if isinstance(self._client, DICOMfileClient):
+            # DICOMfileClient does not support searching for instances by
+            # series instance uid as search filter
+            return (
+                self._get_uids_from_response(instance, series_uid)
+                for series_uid in series_uids
+                for instance in self._client.search_for_instances(
+                    study_uid,
+                    series_uid,
+                    search_filters={SOP_CLASS_UID: sop_class_uid},
+                )
+            )
         return (
             self._get_uids_from_response(instance)
             for instance in self._client.search_for_instances(
@@ -258,7 +270,7 @@ class WsiDicomWebClient:
 
     @staticmethod
     def _get_uids_from_response(
-        response: Dict[str, Dict[Any, Any]]
+        response: Dict[str, Dict[Any, Any]], series_uid: Optional[UID] = None
     ) -> Tuple[UID, UID, Optional[Set[UID]]]:
         """Get series, instance, and optionally transfer syntax uids from response.
 
@@ -277,7 +289,9 @@ class WsiDicomWebClient:
             AVAILABLE_SOP_TRANSFER_SYNTAX_UID, None
         )
         return (
-            UID(response[SERIES_INSTANCE_UID]["Value"][0]),
+            series_uid
+            if series_uid is not None
+            else UID(response[SERIES_INSTANCE_UID]["Value"][0]),
             UID(response[SOP_INSTANCE_UID]["Value"][0]),
             set(available_transfer_syntaxes["Value"])
             if available_transfer_syntaxes
