@@ -40,8 +40,8 @@ class WsiDicomFileTarget(Target):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[str],
-        add_missing_levels: bool = False,
+        offset_table: OffsetTableType,
+        add_missing_levels: bool,
     ):
         """
         Create a WsiDicomFileTarget.
@@ -57,14 +57,13 @@ class WsiDicomFileTarget(Target):
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-        offset_table: Optional[str]
-            Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, None - no offset table.
-        add_missing_levels: bool = False
+        offset_table: OffsetTableType
+            Offset table to use.
+        add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
         """
         self._output_path = output_path
-        self._offset_table = OffsetTableType.from_string(offset_table)
+        self._offset_table = offset_table
         self._filepaths: List[Path] = []
         self._opened_files: List[WsiDicomFile] = []
         super().__init__(uid_generator, workers, chunk_size, add_missing_levels)
@@ -135,7 +134,7 @@ class WsiDicomFileTarget(Target):
         filepaths: List[Path] = []
         for instances in self._group_instances_to_file(group):
             uid = self._uid_generator()
-            filepath = Path(self._output_path).joinpath(uid + ".dcm")
+            filepath = self._output_path.joinpath(uid + ".dcm")
             transfer_syntax = instances[0].image_data.transfer_syntax
             image_data_list = self._list_image_data(instances)
             focal_planes, optical_paths, tiled_size = self._get_frame_information(
