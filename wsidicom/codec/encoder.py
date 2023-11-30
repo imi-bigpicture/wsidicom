@@ -205,25 +205,31 @@ class PillowEncoder(Encoder[Union[JpegSettings, Jpeg2kSettings]]):
             if settings.subsampling not in self._supported_subsamplings:
                 raise ValueError(f"Unsupported subsampling: {settings.subsampling}.")
             subsampling = self._supported_subsamplings[settings.subsampling]
-            self._settings = {"quality": settings.quality, "subsampling": subsampling}
+            self._pillow_settings = {
+                "quality": settings.quality,
+                "subsampling": subsampling,
+            }
             self._format = "jpeg"
         elif isinstance(settings, Jpeg2kSettings):
-            self._settings = {
+            self._pillow_settings = {
                 "irreversible": (settings.level > 1 and settings.level < 1000),
                 "mct": settings.channels == Channels.YBR,
                 "no_jp2": True,
             }
             self._format = "jpeg2000"
+        else:
+            raise ValueError(f"Unsupported encoder settings: {type(settings)}.")
+        super().__init__(settings)
 
     @property
     def lossy(self) -> bool:
-        return self._format == "jpeg" or self._settings["irreversible"] is True
+        return self._format == "jpeg" or self._pillow_settings["irreversible"] is True
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         if not isinstance(image, PILImage):
             image = Image.fromarray(image)
         with io.BytesIO() as buffer:
-            image.save(buffer, format=self._format, **self._settings)  # type: ignore
+            image.save(buffer, format=self._format, **self._pillow_settings)  # type: ignore
             return buffer.getvalue()
 
     @classmethod
