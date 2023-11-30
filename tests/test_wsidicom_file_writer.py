@@ -503,7 +503,7 @@ class TestWsiDicomFileWriter:
 
         # Act
         with WsiDicomFileWriter.open(filepath, JPEGBaseline8Bit) as write_file:
-            write_file._write_pixel_data_end()
+            write_file._write_pixel_data_end_tag()
 
         # Assert
         with WsiDicomTestFile(
@@ -659,7 +659,8 @@ class TestWsiDicomFileWriter:
             generate_uid,
             1,
             100,
-            "bot",
+            OffsetTableType.BASIC,
+            False,
         ) as target:
             target._save_and_open_level(source_level, wsi.pixel_spacing, 2)
 

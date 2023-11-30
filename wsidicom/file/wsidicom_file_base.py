@@ -29,9 +29,9 @@ class OffsetTableType(Enum):
     EXTENDED = "EOT"
 
     @classmethod
-    def from_string(cls, offset_table: Optional[str]) -> "OffsetTableType":
+    def from_string(cls, offset_table: str) -> "OffsetTableType":
         """Return OffsetTableType parsed from string."""
-        if offset_table is None:
+        if offset_table == "none":
             return OffsetTableType.NONE
         if offset_table.strip().lower() == "empty":
             return OffsetTableType.EMPTY
@@ -60,7 +60,8 @@ class WsiDicomFileBase:
         owned: bool = False
             If the stream should be closed by this instance.
         """
-        self._file = DicomFileLike(stream)
+        self._stream = stream
+        self._file = DicomFileLike(self._stream)
         self._filepath = filepath
         self._owned = owned
         self.__enter__()
