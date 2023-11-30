@@ -416,7 +416,7 @@ class Jpeg2kSettings(Settings):
 
     @property
     def transfer_syntax(self) -> UID:
-        if self.level < 1 or self.level > 1000:
+        if self.lossless:
             return JPEG2000Lossless
         return JPEG2000
 
