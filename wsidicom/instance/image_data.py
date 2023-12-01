@@ -298,7 +298,7 @@ class ImageData(metaclass=ABCMeta):
         path: str,
         scale: int,
         workers: int = 1,
-    ) -> PILImage:
+    ) -> Image:
         """
         Return scaled tile as Pillow image.
 
@@ -318,10 +318,10 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        PILImage
+        Image
             Scaled tiled as Pillow image.
         """
-        image = Image.new(
+        image = Pillow.new(
             mode=self.image_mode,
             size=(self.tile_size * scale).to_tuple(),
             color=self.blank_color,
@@ -331,7 +331,7 @@ class ImageData(metaclass=ABCMeta):
         tile_region = Region(scaled_tile_point * scale, Size(1, 1) * scale)
         tile_region = tile_region.crop(self.tiled_size)
 
-        def paste(image: PILImage, tile_point: Point, tile: PILImage):
+        def paste(image: Image, tile_point: Point, tile: Image):
             image_coordinate = (tile_point - tile_region.start) * self.tile_size
             image.paste(tile, image_coordinate.to_tuple())
 
@@ -423,7 +423,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        PILImage
+        Image
             Tile image.
         """
         tile = self._get_decoded_tile(tile_point, z, path)
@@ -437,7 +437,7 @@ class ImageData(metaclass=ABCMeta):
             for tile_point, tile in zip(tiles, self.get_decoded_tiles(tiles, z, path))
         )
 
-    def _crop_tile(self, tile_point: Point, tile: PILImage) -> PILImage:
+    def _crop_tile(self, tile_point: Point, tile: Image) -> Image:
         tile_crop = self.image_region.inside_crop(tile_point, self.tile_size)
         # Check if tile is an edge tile that should be cropped
         if tile_crop.size != self.tile_size:
@@ -475,9 +475,7 @@ class ImageData(metaclass=ABCMeta):
             tile_frame = self.codec.encode(image)
         return tile_frame
 
-    def stitch_tiles(
-        self, region: Region, path: str, z: float, threads: int
-    ) -> PILImage:
+    def stitch_tiles(self, region: Region, path: str, z: float, threads: int) -> Image:
         """Stitches tiles together to form requested image.
 
         Parameters
@@ -493,7 +491,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        PILImage
+        Image
             Stitched image
         """
 
@@ -504,13 +502,13 @@ class ImageData(metaclass=ABCMeta):
             if tile_crop.size != self.tile_size:
                 tile = tile.crop(box=tile_crop.box)
             return tile
-        image = Image.new(mode=self.image_mode, size=region.size.to_tuple())
+        image = Pillow.new(mode=self.image_mode, size=region.size.to_tuple())
         # The tiles are cropped prior to pasting. This offset is the equal to the first
         # (upper left) tiles size, and is added to the image coordinate for tiles not
         # in the first row or column.
         offset = (tile_region.start * self.tile_size) - region.start
 
-        def paste(image: PILImage, tile_point: Point, tile: PILImage):
+        def paste(image: Image, tile_point: Point, tile: Image):
             image_coordinate = Point(
                 offset.x * (tile_point.x != tile_region.start.x),
                 offset.y * (tile_point.y != tile_region.start.y),
@@ -533,11 +531,11 @@ class ImageData(metaclass=ABCMeta):
 
     def _paste_tiles(
         self,
-        image: PILImage,
+        image: Image,
         tile_region: Region,
         z: float,
         path: str,
-        paste_method: Callable[[PILImage, Point, PILImage], None],
+        paste_method: Callable[[Image, Point, Image], None],
         threads: int,
     ):
         """
@@ -548,7 +546,7 @@ class ImageData(metaclass=ABCMeta):
 
         Parameters
         ----------
-        image: PILImage
+        image: Image
             Image to paste into.
         tile_region: Region
             Tile region of tiles to paste.
@@ -556,7 +554,7 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
-        paste_method: Callable[[PILImage, Point, PILImage], None]
+        paste_method: Callable[[Image, Point, Image], None]
             Method that accepts a image, a tile point and tile to paste and returns None.
         threads: int
             Number of workers to use.
@@ -616,16 +614,16 @@ class ImageData(metaclass=ABCMeta):
             return BLACK
         return (WHITE, WHITE, WHITE)
 
-    def _create_blank_tile(self) -> PILImage:
+    def _create_blank_tile(self) -> Image:
         """Create blank tile for instance.
 
         Returns
         ----------
-        PILImage
+        Image
             Blank tile image
         """
-        return Image.new(
-            mode=self.image_mode,  # type: ignore
+        return Pillow.new(
+            mode=self.image_mode,
             size=self.tile_size.to_tuple(),
             color=self.blank_color,
         )

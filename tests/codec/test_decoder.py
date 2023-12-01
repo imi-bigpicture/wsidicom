@@ -14,7 +14,7 @@
 
 import pytest
 from PIL import ImageChops, ImageStat
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -106,7 +106,7 @@ class TestPillowDecoder:
     )
     def test_decode(
         self,
-        image: PILImage,
+        image: Image,
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
@@ -170,7 +170,7 @@ class TestPydicomDecoder:
             NumpySettings(8, Channels.RGB, False, True),
         ],
     )
-    def test_decode(self, image: PILImage, encoded: bytes, settings: Settings):
+    def test_decode(self, image: Image, encoded: bytes, settings: Settings):
         # Arrange
         decoder = PydicomDecoder(
             settings.transfer_syntax,
@@ -256,7 +256,7 @@ class TestImageCodecsDecoder:
     )
     def test_decode(
         self,
-        image: PILImage,
+        image: Image,
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
@@ -318,7 +318,7 @@ class TestPylibjpegRleDecoder:
             RleSettings(16, Channels.GRAYSCALE),
         ],
     )
-    def test_decode(self, image: PILImage, encoded: bytes, settings: Settings):
+    def test_decode(self, image: Image, encoded: bytes, settings: Settings):
         # Arrange
         decoder = PylibjpegRleDecoder(
             Size(image.width, image.height),
@@ -376,7 +376,7 @@ class TestPylibjpegRleDecoder:
 #         ],
 #     )
 #     def test_decode(
-#         self, image: PILImage, encoded: bytes, settings: Settings
+#         self, image: Image, encoded: bytes, settings: Settings
 #     ):
 #         # Arrange
 #         decoder = ImageCodecsRleDecoder(

@@ -22,7 +22,7 @@ from typing import Callable, List, Optional, OrderedDict, Sequence, cast
 
 import pytest
 from PIL import ImageChops, ImageFilter, ImageStat
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom import Sequence as DicomSequence
 from pydicom.dataset import Dataset
 from pydicom.filebase import DicomFile
@@ -143,7 +143,7 @@ class WsiDicomTestImageData(ImageData):
     def lossy_compressed(self) -> bool:
         return False
 
-    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
+    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         raise NotImplementedError()
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:

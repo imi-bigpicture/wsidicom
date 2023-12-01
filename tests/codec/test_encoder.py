@@ -15,7 +15,7 @@
 from typing import Type
 import pytest
 from PIL import ImageChops, ImageStat
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom import Dataset
 
 from wsidicom.codec import (
@@ -44,7 +44,7 @@ from wsidicom.instance.dataset import WsiDataset
 
 
 @pytest.fixture
-def dataset(image: PILImage, settings: Settings):
+def dataset(image: Image, settings: Settings):
     dataset = Dataset()
     dataset.PhotometricInterpretation = settings.photometric_interpretation
     dataset.BitsStored = settings.bits
@@ -131,7 +131,7 @@ class TestEncoder:
     )
     def test_encode(
         self,
-        image: PILImage,
+        image: Image,
         decoder: Decoder,
         encoder_type: Type[Encoder],
         settings: Settings,

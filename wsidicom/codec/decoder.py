@@ -19,8 +19,8 @@ from abc import ABCMeta, abstractmethod
 from typing import Callable, Dict, Optional, Type
 
 import numpy as np
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL import Image as Pillow
+from PIL.Image import Image
 from pydicom import config as pydicom_config
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.encaps import encapsulate
@@ -56,7 +56,7 @@ from wsidicom.codec.optionals import (
 
 class Decoder(metaclass=ABCMeta):
     @abstractmethod
-    def decode(self, frame: bytes) -> PILImage:
+    def decode(self, frame: bytes) -> Image:
         """Decode frame into Pillow Image.
 
         Parameters
@@ -226,8 +226,9 @@ class PillowDecoder(Decoder):
 
     _supported_transfer_syntaxes = [JPEGBaseline8Bit, JPEG2000, JPEG2000Lossless]
 
-    def decode(self, frame: bytes) -> PILImage:
-        return Image.open(io.BytesIO(frame))
+    def decode(self, frame: bytes) -> Image:
+        image = Pillow.open(io.BytesIO(frame))
+        return self._set_mode(image)
 
     @classmethod
     def is_supported(

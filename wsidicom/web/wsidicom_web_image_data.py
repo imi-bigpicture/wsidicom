@@ -14,7 +14,7 @@
 
 from typing import Iterable, Iterator
 
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom.uid import UID
 
 from wsidicom.codec import Codec
@@ -70,7 +70,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
 
     def get_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[PILImage]:
+    ) -> Iterator[Image]:
         """
         Return Pillow images for tiles.
 
@@ -85,7 +85,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
 
         Returns
         ----------
-        Iterator[PILImage]
+        Iterator[Image]
             Tiles as Images.
         """
         frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
@@ -116,7 +116,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
 
         Returns
         ----------
-        Iterator[PILImage]
+        Iterator[Image]
             Tiles as Images.
         """
         frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]

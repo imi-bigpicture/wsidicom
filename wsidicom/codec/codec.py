@@ -23,7 +23,7 @@ from pydicom.uid import (
     UID,
     AllTransferSyntaxes,
 )
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 
 from wsidicom.codec.settings import Settings
 from wsidicom.geometry import Size
@@ -83,10 +83,10 @@ class Codec:
             )
         )
 
-    def decode(self, data: bytes) -> PILImage:
+    def decode(self, data: bytes) -> Image:
         return self.decoder.decode(data)
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         return self.encoder.encode(image)
 
     @classmethod

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict
 
 import pytest
-from PIL import Image
+from PIL import Image as Pillow
 
 from tests.conftest import WsiInputType, WsiTestDefinitions
 from wsidicom import WsiDicom
@@ -172,7 +172,7 @@ class TestWsiDicomIntegration:
         # Arrange
         if not wsi_path.exists():
             pytest.skip(f"Folder {wsi_path} for wsi does not exist.")
-        image = Image.new("RGB", (256, 256), (128, 128, 128))
+        image = Pillow.new("RGB", (256, 256), (128, 128, 128))
 
         # Act
         with WsiDicom.open(wsi_path, label=image) as wsi:

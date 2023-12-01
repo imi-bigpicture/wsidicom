@@ -15,7 +15,7 @@
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Union
 
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom import Dataset
 from pydicom.uid import UID
 
@@ -184,13 +184,13 @@ class WsiInstance:
 
     @classmethod
     def create_label(
-        cls, image: Union[PILImage, str, Path], base_dataset: Dataset
+        cls, image: Union[Image, str, Path], base_dataset: Dataset
     ) -> "WsiInstance":
         """Create a label WsiInstance.
 
         Parameters
         ----------
-        image: Union[PILImage, str, Path]
+        image: Union[Image, str, Path]
             Image or path to image.
         base_dataset: Dataset
             Base dataset to include.
@@ -200,7 +200,7 @@ class WsiInstance:
         WsiInstance
             Created label WsiInstance.
         """
-        if isinstance(image, PILImage):
+        if isinstance(image, Image):
             image_data = PillowImageData(image)
         else:
             image_data = PillowImageData.from_file(image)

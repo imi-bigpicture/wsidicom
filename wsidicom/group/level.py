@@ -15,8 +15,7 @@
 import math
 from typing import Iterable, List, Optional, Sequence, cast
 
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 
 from wsidicom.errors import WsiDicomNoResolutionError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
@@ -175,7 +174,7 @@ class Level(Group):
         level: int,
         z: Optional[float] = None,
         path: Optional[str] = None,
-    ) -> PILImage:
+    ) -> Image:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
         to remove part outside of the image (as defined by level size).
@@ -193,7 +192,7 @@ class Level(Group):
 
         Returns
         ----------
-        PILImage
+        Image
             A tile image
         """
         scale = self.calculate_scale(level)

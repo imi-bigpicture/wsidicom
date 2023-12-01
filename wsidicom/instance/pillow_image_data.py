@@ -15,8 +15,8 @@
 from pathlib import Path
 from typing import Optional, Union
 
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL import Image as Pillow
+from PIL.Image import Image
 from pydicom.uid import UID, JPEGBaseline8Bit
 
 from wsidicom.codec import Codec
@@ -30,7 +30,7 @@ from wsidicom.instance.image_data import ImageData
 
 
 class PillowImageData(ImageData):
-    def __init__(self, image: PILImage):
+    def __init__(self, image: Image):
         self._image = image.convert("RGB")
         codec = Codec.create(
             self.transfer_syntax,
@@ -43,7 +43,7 @@ class PillowImageData(ImageData):
 
     @classmethod
     def from_file(cls, file: Union[str, Path]) -> "PillowImageData":
-        image = Image.open(file)
+        image = Pillow.open(file)
         return cls(image)
 
     @property
@@ -82,7 +82,7 @@ class PillowImageData(ImageData):
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         return None
 
-    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
+    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         if tile_point != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
         return self._image

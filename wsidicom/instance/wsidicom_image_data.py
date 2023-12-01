@@ -16,7 +16,7 @@ from abc import ABCMeta, abstractmethod
 from functools import cached_property
 from typing import Iterator, List, Optional, Sequence
 
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomOutOfBoundsError
@@ -133,7 +133,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             return self.blank_encoded_tile
         return self._get_tile_frame(frame_index)
 
-    def _get_decoded_tile(self, tile: Point, z: float, path: str) -> PILImage:
+    def _get_decoded_tile(self, tile: Point, z: float, path: str) -> Image:
         """
         Return Pillow image for tile.
 
@@ -148,7 +148,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
 
         Returns
         ----------
-        PILImage
+        Image
             Tile as Pillow Image.
         """
         frame_index = self._get_frame_index(tile, z, path)

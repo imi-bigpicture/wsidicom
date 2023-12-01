@@ -19,8 +19,8 @@ import io
 from typing import Dict, Generic, Optional, Tuple, Type, TypeVar, Union
 
 import numpy as np
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL import Image as Pillow
+from PIL.Image import Image
 from pydicom import Dataset
 from pydicom.pixel_data_handlers.util import pixel_dtype
 from pydicom.uid import UID
@@ -64,12 +64,12 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         self._settings = settings
 
     @abstractmethod
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         """Encode image into bytes.
 
         Parameters
         ----------
-        image: Union[PILImage, np.ndarray]
+        image: Union[Image, np.ndarray]
             Image to encode.
 
         Returns
@@ -229,9 +229,9 @@ class PillowEncoder(Encoder[Union[JpegSettings, Jpeg2kSettings]]):
             isinstance(self.settings, Jpeg2kSettings) and not self.settings.lossless
         )
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
-        if not isinstance(image, PILImage):
-            image = Image.fromarray(image)
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
+        if not isinstance(image, Image):
+            image = Pillow.fromarray(image)
         with io.BytesIO() as buffer:
             image.save(buffer, format=self._format, **self._pillow_settings)  # type: ignore
             return buffer.getvalue()
@@ -299,7 +299,7 @@ class JpegEncoder(Encoder[Union[JpegSettings, JpegLosslessSettings]]):
     def lossy(self) -> bool:
         return not self._lossless
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
         return jpeg8_encode(
@@ -390,6 +390,7 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
         return not self.settings.lossless
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
         return jpeg2k_encode(
@@ -441,6 +442,7 @@ class NumpyEncoder(Encoder[NumpySettings]):
         return False
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         return np.array(image).astype(self._dtype).tobytes()
 
     @classmethod
@@ -473,6 +475,7 @@ class RleEncoder(Encoder[RleSettings]):
         super().__init__(settings)
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         return self._encode(np.array(image).astype(self._dtype))
 
     @property
