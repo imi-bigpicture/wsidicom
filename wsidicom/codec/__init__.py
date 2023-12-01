@@ -19,7 +19,7 @@ from wsidicom.codec.settings import (
     JpegSettings,
     JpegLosslessSettings,
     Jpeg2kSettings,
-    JpegLsLosslessSettings,
+    JpegLsSettings,
     NumpySettings,
     RleSettings,
     Settings,

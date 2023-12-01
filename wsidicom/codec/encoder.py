@@ -321,18 +321,18 @@ class JpegEncoder(Encoder[Union[JpegSettings, JpegLosslessSettings]]):
         return isinstance(settings, (JpegSettings, JpegLosslessSettings))
 
 
-class JpegLsEncoder(Encoder[JpegLsLosslessSettings]):
+class JpegLsEncoder(Encoder[JpegLsSettings]):
     """Encoder that uses jpegls to encode image."""
 
     def __init__(
         self,
-        settings: JpegLsLosslessSettings,
+        settings: JpegLsSettings,
     ) -> None:
         """Initialize JPEG-LS encoder.
 
         Parameters
         ----------
-        settings: JpegLsLosslessSettings
+        settings: JpegLsSettings
             Settings for the encoder.
         """
         self._bits = settings.bits
