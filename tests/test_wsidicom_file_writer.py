@@ -354,6 +354,8 @@ class TestWsiDicomFileWriter:
                 1,
                 100,
                 writen_table_type,
+                1,
+                None,
             )
 
         # Assert
@@ -405,6 +407,8 @@ class TestWsiDicomFileWriter:
                 {(image_data.default_path, image_data.default_z): image_data},
                 1,
                 100,
+                1,
+                None,
             )
 
         # Assert

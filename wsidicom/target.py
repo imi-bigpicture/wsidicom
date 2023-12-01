@@ -13,10 +13,11 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from typing import Callable
+from typing import Callable, Optional
 
 from pydicom.uid import UID
 
+from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.series import Labels, Levels, Overviews
 
 """A Target enables creating new instances."""
@@ -32,6 +33,7 @@ class Target(metaclass=ABCMeta):
         workers: int,
         chunk_size: int,
         add_missing_levels: bool = False,
+        transcode_settings: Optional[EncoderSettings] = None,
     ) -> None:
         """Initiate a target.
 
@@ -52,6 +54,7 @@ class Target(metaclass=ABCMeta):
         self._chunk_size = chunk_size
         self._add_missing_levels = add_missing_levels
         self._instance_number = 0
+        self._transcode_settings = transcode_settings
         self.__enter__()
 
     @abstractmethod

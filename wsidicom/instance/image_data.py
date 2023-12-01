@@ -272,7 +272,12 @@ class ImageData(metaclass=ABCMeta):
         return (self._get_decoded_tile(tile, z, path) for tile in tiles)
 
     def get_encoded_tiles(
-        self, tiles: Iterable[Point], z: float, path: str
+        self,
+        tiles: Iterable[Point],
+        z: float,
+        path: str,
+        scale: int = 1,
+        encoder: Optional[Encoder] = None,
     ) -> Iterator[bytes]:
         """
         Return bytes for tiles.
@@ -288,10 +293,18 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        Iterator[PILImage]
+        Iterator[Image]
             Tiles as Images.
         """
-        return (self._get_encoded_tile(tile, z, path) for tile in tiles)
+        if scale == 1:
+            encoded_tiles = (self._get_encoded_tile(tile, z, path) for tile in tiles)
+        else:
+            encoded_tiles = (
+                self.get_scaled_encoded_tile(tile, z, path, scale) for tile in tiles
+            )
+        if encoder is None:
+            return encoded_tiles
+        return (encoder.encode(self.codec.decode(tile)) for tile in encoded_tiles)
 
     def get_scaled_tile(
         self,
@@ -375,38 +388,7 @@ class ImageData(metaclass=ABCMeta):
         image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
         return self.codec.encode(image)
 
-    def get_scaled_encoded_tiles(
-        self,
-        scaled_tile_points: Iterable[Point],
-        z: float,
-        path: str,
-        scale: int,
-    ) -> Iterator[bytes]:
-        """
-        Return scaled tiles as bytes.
-
-        Parameters
-        ----------
-        scaled_tile_points: Iterable[Point],
-            Scaled position of tiles to get.
-        z: float
-            Z coordinate.
-        path: str
-            Optical path.
-        Scale: int
-            Scale to use for downscaling.
-
-        Returns
-        ----------
-        List[bytes]
-            Scaled tiles as bytes.
-        """
-        return (
-            self.get_scaled_encoded_tile(scaled_tile_point, z, path, scale)
-            for scaled_tile_point in scaled_tile_points
-        )
-
-    def get_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
+    def get_tile(self, tile_point: Point, z: float, path: str) -> Image:
         """
         Get tile as Pillow image.
 

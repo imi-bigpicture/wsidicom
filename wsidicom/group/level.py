@@ -22,6 +22,7 @@ from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Group
 from wsidicom.instance import WsiInstance
 from wsidicom.stringprinting import dict_pretty_str
+from wsidicom import settings
 
 
 class Level(Group):
@@ -205,7 +206,9 @@ class Level(Group):
             )
         image = self.get_region(cropped_region, z, path)
         tile_size = cropped_region.size.ceil_div(scale)
-        image = image.resize(tile_size.to_tuple(), resample=Image.Resampling.BILINEAR)
+        image = image.resize(
+            tile_size.to_tuple(), resample=settings.pillow_resampling_filter
+        )
         return image
 
     def get_scaled_encoded_tile(

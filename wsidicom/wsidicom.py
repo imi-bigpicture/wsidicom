@@ -45,8 +45,8 @@ from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import SlideUids
 from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
-
 from wsidicom.config import settings
+from wsidicom.codec import Settings as EncoderSettings
 
 class WsiDicom:
     """A WSI containing pyramidal levels and optionally labels and/or overviews."""
@@ -596,6 +596,7 @@ class WsiDicom:
         chunk_size: Optional[int] = None,
         offset_table: Union["str", OffsetTableType] = OffsetTableType.BASIC,
         add_missing_levels: bool = False,
+        transcode_settings: Optional[EncoderSettings] = None,
     ) -> List[Path]:
         """
         Save wsi as DICOM-files in path. Instances for the same pyramid
@@ -648,6 +649,7 @@ class WsiDicom:
             chunk_size,
             offset_table,
             add_missing_levels,
+            transcode_settings,
         ) as target:
             target.save_levels(self.levels)
             if self.overviews is not None:

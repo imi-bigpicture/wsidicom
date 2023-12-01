@@ -20,6 +20,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from pydicom.uid import UID
 
+from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.file.wsidicom_file import WsiDicomFile
 from wsidicom.file.wsidicom_file_base import OffsetTableType
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
@@ -29,6 +30,7 @@ from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.target import Target
+from wsidicom.codec import Encoder
 
 
 class WsiDicomFileTarget(Target):
@@ -42,6 +44,7 @@ class WsiDicomFileTarget(Target):
         chunk_size: int,
         offset_table: OffsetTableType,
         add_missing_levels: bool,
+        transcode_settings: Optional[EncoderSettings] = None,
     ):
         """
         Create a WsiDicomFileTarget.
@@ -66,7 +69,9 @@ class WsiDicomFileTarget(Target):
         self._offset_table = offset_table
         self._filepaths: List[Path] = []
         self._opened_files: List[WsiDicomFile] = []
-        super().__init__(uid_generator, workers, chunk_size, add_missing_levels)
+        super().__init__(
+            uid_generator, workers, chunk_size, add_missing_levels, transcode_settings
+        )
 
     @property
     def filepaths(self) -> List[Path]:
@@ -100,19 +105,21 @@ class WsiDicomFileTarget(Target):
                     closest_level = closest_new_level
                 scale = int(2 ** (pyramid_level - closest_level.level))
                 new_level = self._save_and_open_level(
-                    closest_level, levels.pixel_spacing, scale
+                    closest_level,
+                    levels.pixel_spacing,
+                    scale,
                 )
                 new_levels.append(new_level)
 
     def save_labels(self, labels: Labels):
         """Save labels to target."""
         for label in labels.groups:
-            self._save_group(label)
+            self._save_group(label, 1)
 
     def save_overviews(self, overviews: Overviews):
         """Save overviews to target."""
         for overview in overviews.groups:
-            self._save_group(overview)
+            self._save_group(overview, 1)
 
     def close(self) -> None:
         """Close any opened level files."""
@@ -120,14 +127,21 @@ class WsiDicomFileTarget(Target):
             file.close()
 
     def _save_and_open_level(
-        self, level: Level, base_pixel_spacing: SizeMm, scale: int = 1
+        self,
+        level: Level,
+        base_pixel_spacing: SizeMm,
+        scale: int,
     ) -> Level:
         """Save level and return a new level from the created files."""
         filepaths = self._save_group(level, scale)
         instances = self._open_files(filepaths)
         return Level(instances, base_pixel_spacing)
 
-    def _save_group(self, group: Group, scale: int = 1) -> List[Path]:
+    def _save_group(
+        self,
+        group: Group,
+        scale: int,
+    ) -> List[Path]:
         """Save group to target."""
         if not isinstance(scale, int) or scale < 1:
             raise ValueError(f"Scale must be positive integer, got {scale}.")
@@ -135,7 +149,7 @@ class WsiDicomFileTarget(Target):
         for instances in self._group_instances_to_file(group):
             uid = self._uid_generator()
             filepath = self._output_path.joinpath(uid + ".dcm")
-            transfer_syntax = instances[0].image_data.transfer_syntax
+
             image_data_list = self._list_image_data(instances)
             focal_planes, optical_paths, tiled_size = self._get_frame_information(
                 image_data_list
@@ -143,6 +157,23 @@ class WsiDicomFileTarget(Target):
             dataset = instances[0].dataset.as_tiled_full(
                 focal_planes, optical_paths, tiled_size, scale
             )
+            if self._transcode_settings is not None:
+                if (
+                    self._transcode_settings.bits != instances[0].image_data.bits
+                    or self._transcode_settings.samples_per_pixel
+                    != instances[0].image_data.samples_per_pixel
+                ):
+                    raise ValueError(
+                        "Transcode settings must match image data bits and photometric interpretation."
+                    )
+                transcoder = Encoder.create(self._transcode_settings)
+                transfer_syntax = transcoder.transfer_syntax
+                dataset.PhotometricInterpretation = (
+                    transcoder.photometric_interpretation
+                )
+            else:
+                transfer_syntax = instances[0].image_data.transfer_syntax
+                transcoder = None
             with WsiDicomFileWriter.open(filepath, transfer_syntax) as wsi_file:
                 wsi_file.write(
                     uid,
@@ -154,6 +185,7 @@ class WsiDicomFileTarget(Target):
                     self._offset_table,
                     self._instance_number,
                     scale,
+                    transcoder,
                 )
             filepaths.append(filepath)
             self._instance_number += 1

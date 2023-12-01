@@ -37,6 +37,7 @@ from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, UncompressedTransferSyntaxes
 
+from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomBotOverflow
 from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
 from wsidicom.geometry import Point, Region, Size
@@ -113,6 +114,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         offset_table: OffsetTableType,
         instance_number: int,
         scale: int = 1,
+        transcoder: Optional[Encoder] = None,
     ) -> None:
         """
         Write data to file.
@@ -151,11 +153,17 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         self._write_base(dataset)
         if offset_table is OffsetTableType.NONE:
             self._write_unencapsulated_pixel_data(
-                dataset, data, workers, chunk_size, scale
+                dataset, data, workers, chunk_size, scale, transcoder
             )
         else:
             self._write_encapsulated_pixel_data(
-                data, dataset.NumberOfFrames, workers, chunk_size, offset_table, scale
+                data,
+                dataset.NumberOfFrames,
+                workers,
+                chunk_size,
+                offset_table,
+                scale,
+                transcoder,
             )
 
     def copy_with_table(
@@ -224,7 +232,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         workers: int,
         chunk_size: int,
         offset_table: OffsetTableType,
-        scale: int = 1,
+        scale: int,
+        transcoder: Optional[Encoder],
     ) -> List[int]:
         """Write encapsulated pixel data to file.
 
@@ -257,7 +266,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             position
             for (path, z), image_data in sorted(data.items())
             for position in self._write_pixel_data(
-                image_data, True, z, path, workers, chunk_size, scale
+                image_data, True, z, path, workers, chunk_size, scale, transcoder
             )
         ]
         return self._write_encapsulated_pixel_data_end(
@@ -301,7 +310,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         data: Dict[Tuple[str, float], ImageData],
         workers: int,
         chunk_size: int,
-        scale: int = 1,
+        scale: int,
+        transcoder: Optional[Encoder],
     ) -> None:
         """Write unencapsulated pixel data to file.
 
@@ -315,7 +325,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
             Number of workers to use for writing pixel data.
         chunk_size: int
             Number of frames to give each worker.
-        scale: int = 1
+        scale: int
             Scale factor.
         """
         length = (
@@ -327,7 +337,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         self._write_tag("PixelData", "OB", length)
         for (path, z), image_data in sorted(data.items()):
             self._write_pixel_data(
-                image_data, False, z, path, workers, chunk_size, scale
+                image_data, False, z, path, workers, chunk_size, scale, transcoder
             )
 
     def _write_preamble(self) -> None:
@@ -582,6 +592,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         workers: int,
         chunk_size: int,
         scale: int = 1,
+        transcoder: Optional[Encoder] = None,
     ) -> List[int]:
         """Write pixel data to file.
 
@@ -611,24 +622,9 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         """
         chunked_tile_points = self._chunk_tile_points(image_data, chunk_size, scale)
 
-        if scale == 1:
-
-            def get_tiles_thread(tile_points: Iterable[Point]) -> Iterator[bytes]:
-                """Thread function to get tiles as bytes."""
-                return image_data.get_encoded_tiles(tile_points, z, path)
-
-            get_tiles = get_tiles_thread
-        else:
-
-            def get_scaled_tiles_thread(
-                scaled_tile_points: Iterable[Point],
-            ) -> Iterator[bytes]:
-                """Thread function to get scaled tiles as bytes."""
-                return image_data.get_scaled_encoded_tiles(
-                    scaled_tile_points, z, path, scale
-                )
-
-            get_tiles = get_scaled_tiles_thread
+        def get_tiles(tile_points: Iterable[Point]) -> Iterator[bytes]:
+            """Function to get tiles as bytes."""
+            return image_data.get_encoded_tiles(tile_points, z, path, scale, transcoder)
 
         def write_frame(frame: bytes) -> int:
             """Itemize and write frame to file. Return frame position."""

@@ -32,10 +32,10 @@ from wsidicom.instance import (
     ImageType,
     WsiDataset,
     WsiInstance,
-    image_coordinate_system,
 )
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
+from wsidicom.config import settings
 
 
 class Group:
@@ -358,7 +358,7 @@ class Group:
         if to_coordinate_system:
             image = image.rotate(
                 to_coordinate_system.rotation,
-                resample=Image.Resampling.BILINEAR,
+                resample=settings.pillow_resampling_filter,
                 expand=True,
             )
         return image
