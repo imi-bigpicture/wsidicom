@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.2] - 2023-12-01
+
+### Fixed
+
+- Using Pillow instead of Codec to decode frames from DICOM web, resulting in `PIL.UnidentifiedImageError` for transfer syntaxes not supported by Pillow.
+- Fix decoding of non-square images with `PydicomDecoder` and `PylibjpegRleDecoder`.
+
 ## [0.15.1] - 2023-11-30
 
 ### Fixed
@@ -237,7 +244,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.15.1..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.15.2..HEAD
+[0.15.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.1..v0.15.2
 [0.15.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.0..v0.15.1
 [0.15.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.14.0..v0.15.0
 [0.14.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.13.0..v0.14.0
