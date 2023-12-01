@@ -84,7 +84,8 @@ class LutDicomParser:
         length, red_start, bits = dataset.RedPaletteColorLookupTableDescriptor
         _, green_start, _ = dataset.GreenPaletteColorLookupTableDescriptor
         _, blue_start, _ = dataset.BluePaletteColorLookupTableDescriptor
-
+        if length == 0:
+            length = 2**16
         bits = bits
         if bits == 8:
             data_type = np.uint8
