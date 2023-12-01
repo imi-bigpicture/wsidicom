@@ -14,7 +14,7 @@
 
 from http import HTTPStatus
 import logging
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
 
 from dicomweb_client.api import DICOMfileClient, DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
@@ -30,6 +30,8 @@ from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
 
 SOP_CLASS_UID = "00080016"
 SOP_INSTANCE_UID = "00080018"
+SERIES_INSTANCE_UID = "0020000E"
+AVAILABLE_SOP_TRANSFER_SYNTAX_UID = "00083002"
 
 
 class WsiDicomWebClient:
@@ -81,42 +83,47 @@ class WsiDicomWebClient:
 
         return cls(client)
 
-    def get_wsi_instances(self, study_uid: UID, series_uid: UID) -> Iterator[UID]:
+    def get_wsi_instances(
+        self, study_uid: UID, series_uids: Iterable[UID]
+    ) -> Iterator[Tuple[UID, UID, Optional[Set[UID]]]]:
         """
-        Get instance uids for WSI instances in a series.
+        Get instance uids for WSI instances in a study.
 
         Parameters
         ----------
         study_uid: UID
-            Study UID of the series.
-        series_uid: UID
-            Series UID of the series.
+            Study UID of the study.
+        series_uids: Iterable[UID]
+            Series UIDs in the study.
 
         Returns
         ----------
-        Iterator[UID]
-            Iterator of instance uids for WSI instances in the series."""
-        return self._get_intances(study_uid, series_uid, WSI_SOP_CLASS_UID)
+        Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
+            Iterator of series and instance uid and optionally available transfer syntax
+             uids for WSI instances in the study and series.
+        """
+        return self._get_intances(study_uid, series_uids, WSI_SOP_CLASS_UID)
 
     def get_annotation_instances(
-        self, study_uid: UID, series_uid: UID
-    ) -> Iterator[UID]:
+        self, study_uid: UID, series_uids: Iterable[UID]
+    ) -> Iterator[Tuple[UID, UID, Optional[Set[UID]]]]:
         """
-        Get instance uids of Annotation instancesii in a series.
+        Get instance uids of Annotation instances in a study.
 
         Parameters
         ----------
         study_uid: UID
-            Study UID of the series.
-        series_uid: UID
-            Series UID of the series.
+            Study UID of the study.
+        series_uids: Iterable[UID]
+            Series UIDs in the study.
 
         Returns
         ----------
-        Iterator[UID]
-            Iterator of instance uids for Annotation instances in the series.
+        Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
+            Iterator of series and instance uid and optionally available transfer syntax
+            uids for Annotation instances in the study and series.
         """
-        return self._get_intances(study_uid, series_uid, ANN_SOP_CLASS_UID)
+        return self._get_intances(study_uid, series_uids, ANN_SOP_CLASS_UID)
 
     def get_instance(
         self, study_uid: UID, series_uid: UID, instance_uid: UID
@@ -138,7 +145,6 @@ class WsiDicomWebClient:
         Dataset
             Instance metadata.
         """
-        self._client.retrieve_instance
         instance = self._client.retrieve_instance_metadata(
             study_uid, series_uid, instance_uid
         )
@@ -218,49 +224,79 @@ class WsiDicomWebClient:
         return True
 
     def _get_intances(
-        self, study_uid: UID, series_uid: UID, sop_class_uid
-    ) -> Iterator[UID]:
-        """Get instance uids for instances of SOP class.
+        self, study_uid: UID, series_uids: Iterable[UID], sop_class_uid
+    ) -> Iterator[Tuple[UID, UID, Optional[Set[UID]]]]:
+        """Get series, instance, and optionally available transfer syntax uids for
+        instances of SOP class in study.
 
         Parameters
         ----------
         study_uid: UID
-            Study UID of the series.
-        series_uid: UID
-            Series UID of the series.
+            Study UID of the study.
+        series_uids: Iterable[UID]
+            Series UIDs in the study.
         sop_class_uid: UID
             SOP Class UID of the instances.
 
         Returns
         ----------
-        Iterator[UID]
-            Iterator of instance uids for instances of SOP class in the series.
+        Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
+            Iterator of series and instance uid and optionally available transfer syntax
+            uids for instances in the study and series.
         """
+        if isinstance(self._client, DICOMfileClient):
+            # DICOMfileClient does not support searching for instances by
+            # series instance uid as search filter
+            return (
+                self._get_uids_from_response(instance, series_uid)
+                for series_uid in series_uids
+                for instance in self._client.search_for_instances(
+                    study_uid,
+                    series_uid,
+                    search_filters={SOP_CLASS_UID: sop_class_uid},
+                )
+            )
         return (
-            self._get_sop_instance_uid_from_response(instance)
+            self._get_uids_from_response(instance)
             for instance in self._client.search_for_instances(
                 study_uid,
-                series_uid,
                 fields=["AvailableTransferSyntaxUID"],
-                search_filters={SOP_CLASS_UID: sop_class_uid},
+                search_filters={
+                    SOP_CLASS_UID: sop_class_uid,
+                    SERIES_INSTANCE_UID: series_uids,
+                },
             )
         )
 
     @staticmethod
-    def _get_sop_instance_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:
-        """Get SOP Instance UID from response.
+    def _get_uids_from_response(
+        response: Dict[str, Dict[Any, Any]], series_uid: Optional[UID] = None
+    ) -> Tuple[UID, UID, Optional[Set[UID]]]:
+        """Get series, instance, and optionally transfer syntax uids from response.
 
         Parameters
         ----------
         response: Dict[str, Dict[Any, Any]]
-            Response from server.
+            Response from server for an instance.
 
         Returns
         ----------
-        UID
-            SOP Instance UID from response.
+        Tuple[UID, UID, Optional[Set[UID]]]
+            Series and instance uid and optionally available transfer syntax
+            uids for instances in response.
         """
-        return UID(response[SOP_INSTANCE_UID]["Value"][0])
+        available_transfer_syntaxes = response.get(
+            AVAILABLE_SOP_TRANSFER_SYNTAX_UID, None
+        )
+        return (
+            series_uid
+            if series_uid is not None
+            else UID(response[SERIES_INSTANCE_UID]["Value"][0]),
+            UID(response[SOP_INSTANCE_UID]["Value"][0]),
+            set(available_transfer_syntaxes["Value"])
+            if available_transfer_syntaxes
+            else None,
+        )
 
     @staticmethod
     def _get_sop_class_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:

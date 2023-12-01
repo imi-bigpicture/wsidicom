@@ -14,7 +14,6 @@
 
 """Module implementing generic ImageData for accessing image data."""
 
-import io
 from abc import ABCMeta, abstractmethod
 from typing import (
     Callable,
@@ -30,7 +29,7 @@ from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID
 
-from wsidicom.codec import Encoder
+from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
@@ -54,8 +53,8 @@ class ImageData(metaclass=ABCMeta):
     _blank_tile: Optional[PILImage] = None
     _encoded_blank_tile: Optional[bytes] = None
 
-    def __init__(self, encoder: Encoder):
-        self._encoder = encoder
+    def __init__(self, codec: Codec):
+        self._codec = codec
 
     @property
     @abstractmethod
@@ -238,12 +237,12 @@ class ImageData(metaclass=ABCMeta):
     def blank_encoded_tile(self) -> bytes:
         """Return encoded background tile."""
         if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self.encoder.encode(self.blank_tile)
+            self._encoded_blank_tile = self.codec.encode(self.blank_tile)
         return self._encoded_blank_tile
 
     @property
-    def encoder(self) -> Encoder:
-        return self._encoder
+    def codec(self) -> Codec:
+        return self._codec
 
     def get_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
@@ -369,10 +368,7 @@ class ImageData(metaclass=ABCMeta):
             Scaled tile as bytes.
         """
         image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
-        return self.encoder.encode(image)
-        # with io.BytesIO() as buffer:
-        #     image.save(buffer, format=image_format, **image_options)
-        #     return buffer.getvalue()
+        return self.codec.encode(image)
 
     def get_scaled_encoded_tiles(
         self,
@@ -471,9 +467,9 @@ class ImageData(metaclass=ABCMeta):
         # Check if tile is an edge tile that should be cropped
         cropped_tile_region = self.image_region.inside_crop(tile, self.tile_size)
         if cropped_tile_region.size != self.tile_size:
-            image = Image.open(io.BytesIO(tile_frame))
+            image = self.codec.decode(tile_frame)
             image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.encoder.encode(image)
+            tile_frame = self.codec.encode(image)
         return tile_frame
 
     def stitch_tiles(

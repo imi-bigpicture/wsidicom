@@ -36,6 +36,7 @@ from wsidicom.errors import (
     WsiDicomOutOfBoundsError,
 )
 from wsidicom.file import WsiDicomFileSource, WsiDicomFileTarget
+from wsidicom.file.wsidicom_file_base import OffsetTableType
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -601,29 +602,32 @@ class WsiDicom:
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None,
-        offset_table: Optional[str] = "bot",
+        offset_table: Union["str", OffsetTableType] = OffsetTableType.BASIC,
         add_missing_levels: bool = False,
     ) -> List[Path]:
         """
         Save wsi as DICOM-files in path. Instances for the same pyramid
         level will be combined when possible to one file (e.g. not split
         for optical paths or focal planes). If instances are sparse tiled they
-        will be converted to full tiled by inserting blank tiles. The PixelData
-        will contain a basic offset table. All instance uids will be changed.
+        will be converted to full tiled by inserting blank tiles. All instance uids will
+        be changed.
 
         Parameters
         ----------
         output_path: Union[str, Path]
+            Output folder to write files to. Should preferably be an dedicated folder
+            for the wsi.
         uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
-             Function that can generate unique identifiers.
+            Function that can generate unique identifiers.
         workers: Optional[int] = None
             Maximum number of thread workers to use.
         chunk_size: Optional[int] = None
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-        offset_table: Optional[str] = 'bot'
+        offset_table: Union['str', OffsetTableType] = OffsetTableType.BASIC,
             Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, None - no offset table.
+            offset table, 'empty' - no offset table. Only use 'none' for
+            non-encapsulated transfer syntaxes.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
 
@@ -642,6 +646,9 @@ class WsiDicom:
             chunk_size = 16
         if isinstance(output_path, str):
             output_path = Path(output_path)
+        os.makedirs(output_path, exist_ok=True)
+        if not isinstance(offset_table, OffsetTableType):
+            offset_table = OffsetTableType.from_string(offset_table)
         with WsiDicomFileTarget(
             output_path,
             uid_generator,

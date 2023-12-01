@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.2] - 2023-12-01
+
+### Fixed
+
+- Using Pillow instead of Codec to decode frames from DICOM web, resulting in `PIL.UnidentifiedImageError` for transfer syntaxes not supported by Pillow.
+- Fix decoding of non-square images with `PydicomDecoder` and `PylibjpegRleDecoder`.
+
+## [0.15.1] - 2023-11-30
+
+### Fixed
+
+- Correct order of pixel spacing.
+- Correct `photometric_interpretation` for `Jpeg2kSettings`
+- `PillowEncoder` encoding Jpeg2000 as `Jpeg2kEncoder`.
+
+## [0.15.0] - 2023-11-30
+
+### Added
+
+- Fallback to EOT when overflowing BOT.
+- Use AvailableTransferSyntaxUID if provided to determine transfer syntax to use when opening DICOM Web instances.
+
+### Fixed
+
+- Missing empty BOT when writing EOT.
+- Fixed accessing settings for PillowEncoder.
+
 ## [0.14.0] - 2023-11-29
 
 ### Added
@@ -217,7 +244,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.12.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.15.2..HEAD
+[0.15.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.1..v0.15.2
+[0.15.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.0..v0.15.1
+[0.15.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.14.0..v0.15.0
+[0.14.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.13.0..v0.14.0
+[0.13.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.12.0..v0.13.0
 [0.12.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.11.0..v0.12.0
 [0.11.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.10.0..v0.11.0
 [0.10.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.9.0..v0.10.0

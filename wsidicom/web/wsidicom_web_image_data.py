@@ -12,10 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import io
 from typing import Iterable, Iterator
 
-from PIL import Image
 from PIL.Image import Image as PILImage
 from pydicom.uid import UID
 
@@ -99,7 +97,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
             if frame_index == -1:
                 yield self.blank_tile
             frame = next(frames)
-            yield Image.open(io.BytesIO(frame))
+            yield self._codec.decode(frame)
 
     def get_encoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str

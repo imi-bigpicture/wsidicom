@@ -32,8 +32,7 @@ from wsidicom.instance.tile_index.tile_index import TileIndex
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     def __init__(self, datasets: Sequence[WsiDataset], codec: Codec):
         self._datasets = datasets
-        self._decoder = codec.decoder
-        super().__init__(codec.encoder)
+        super().__init__(codec)
 
     @abstractmethod
     def _get_tile_frame(self, frame_index: int) -> bytes:
@@ -156,7 +155,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         if frame_index == -1:
             return self.blank_tile
         frame = self._get_tile_frame(frame_index)
-        return self._decoder.decode(frame)
+        return self.codec.decode(frame)
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """

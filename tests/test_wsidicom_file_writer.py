@@ -239,8 +239,8 @@ def dataset(image_data: ImageData, frame_count: int):
     dataset.InstanceNumber = 0
     pixel_measure = Dataset()
     pixel_measure.PixelSpacing = [
-        image_data.pixel_spacing.width,
         image_data.pixel_spacing.height,
+        image_data.pixel_spacing.width,
     ]
     pixel_measure.SpacingBetweenSlices = 1.0
     pixel_measure.SliceThickness = 1.0
@@ -503,7 +503,7 @@ class TestWsiDicomFileWriter:
 
         # Act
         with WsiDicomFileWriter.open(filepath, JPEGBaseline8Bit) as write_file:
-            write_file._write_pixel_data_end()
+            write_file._write_pixel_data_end_tag()
 
         # Assert
         with WsiDicomTestFile(
@@ -659,7 +659,8 @@ class TestWsiDicomFileWriter:
             generate_uid,
             1,
             100,
-            "bot",
+            OffsetTableType.BASIC,
+            False,
         ) as target:
             target._save_and_open_level(source_level, wsi.pixel_spacing, 2)
 

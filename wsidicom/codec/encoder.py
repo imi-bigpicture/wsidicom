@@ -205,25 +205,35 @@ class PillowEncoder(Encoder[Union[JpegSettings, Jpeg2kSettings]]):
             if settings.subsampling not in self._supported_subsamplings:
                 raise ValueError(f"Unsupported subsampling: {settings.subsampling}.")
             subsampling = self._supported_subsamplings[settings.subsampling]
-            self._settings = {"quality": settings.quality, "subsampling": subsampling}
+            self._pillow_settings = {
+                "quality": settings.quality,
+                "subsampling": subsampling,
+            }
             self._format = "jpeg"
         elif isinstance(settings, Jpeg2kSettings):
-            self._settings = {
-                "irreversible": (settings.level > 1 and settings.level < 1000),
+            self._pillow_settings = {
+                "quality_mode": "dB",
+                "quality_layers": [settings.level],
+                "irreversible": not settings.lossless,
                 "mct": settings.channels == Channels.YBR,
                 "no_jp2": True,
             }
             self._format = "jpeg2000"
+        else:
+            raise ValueError(f"Unsupported encoder settings: {type(settings)}.")
+        super().__init__(settings)
 
     @property
     def lossy(self) -> bool:
-        return self._format == "jpeg" or self._settings["irreversible"] is True
+        return isinstance(self.settings, JpegSettings) or (
+            isinstance(self.settings, Jpeg2kSettings) and not self.settings.lossless
+        )
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         if not isinstance(image, PILImage):
             image = Image.fromarray(image)
         with io.BytesIO() as buffer:
-            image.save(buffer, format=self._format, **self._settings)  # type: ignore
+            image.save(buffer, format=self._format, **self._pillow_settings)  # type: ignore
             return buffer.getvalue()
 
     @classmethod
@@ -367,7 +377,7 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
             self._multiple_component_transform = True
         else:
             self._multiple_component_transform = False
-        if settings.level < 1 or settings.level > 1000:
+        if settings.lossless:
             self._level = 0
             self._reversible = True
         else:
@@ -377,7 +387,7 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
 
     @property
     def lossy(self) -> bool:
-        return not self._reversible
+        return not self.settings.lossless
 
     def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
         if not self.is_available():

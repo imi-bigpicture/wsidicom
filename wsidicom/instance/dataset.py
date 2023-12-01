@@ -319,7 +319,7 @@ class WsiDataset(Dataset):
             if any([spacing == 0 for spacing in pixel_spacing_values]):
                 logging.warning(f"Pixel spacing is zero, {pixel_spacing_values}")
                 return None
-            return SizeMm.from_tuple(pixel_spacing_values)
+            return SizeMm(pixel_spacing_values[1], pixel_spacing_values[0])
         return None
 
     @cached_property
@@ -662,8 +662,8 @@ class WsiDataset(Dataset):
         )
         if dataset.pixel_spacing is not None:
             pixel_measure[0].PixelSpacing = [
-                DSfloat(dataset.pixel_spacing.width * scale, True),
                 DSfloat(dataset.pixel_spacing.height * scale, True),
+                DSfloat(dataset.pixel_spacing.width * scale, True),
             ]
         pixel_measure[0].SpacingBetweenSlices = DSfloat(
             self._get_spacing_between_slices_for_focal_planes(focal_planes), True
@@ -731,8 +731,8 @@ class WsiDataset(Dataset):
         else:
             pixel_measure_sequence = Dataset()
             pixel_measure_sequence.PixelSpacing = [
-                DSfloat(image_data.pixel_spacing.width, True),
                 DSfloat(image_data.pixel_spacing.height, True),
+                DSfloat(image_data.pixel_spacing.width, True),
             ]
             pixel_measure_sequence.SpacingBetweenSlices = DSfloat(0.0, True)
             # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
