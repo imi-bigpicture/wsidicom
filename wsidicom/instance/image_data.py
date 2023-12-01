@@ -180,7 +180,10 @@ class ImageData(metaclass=ABCMeta):
     def image_mode(self) -> str:
         """Return Pillow image mode (e.g. RGB) for image data."""
         if self.samples_per_pixel == 1:
-            return "L"
+            if self.bits == 8:
+                return "L"
+            elif self.bits == 16:
+                return "I"
         elif self.samples_per_pixel == 3:
             return "RGB"
         raise NotImplementedError()
