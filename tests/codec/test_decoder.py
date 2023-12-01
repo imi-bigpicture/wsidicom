@@ -50,7 +50,6 @@ from wsidicom.codec.decoder import (
     PydicomDecoder,
     PylibjpegRleDecoder,
 )
-from wsidicom.codec.optionals import IMAGE_CODECS_AVAILABLE
 from wsidicom.geometry import Size
 
 
