@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Pillow handling of 16 bit grayscale images as 32 bit instead of 8 bit.
 - Using Pillow instead of Codec to decode frames from DICOM web, resulting in `PIL.UnidentifiedImageError` for transfer syntaxes not supported by Pillow.
 - Fix decoding of non-square images with `PydicomDecoder` and `PylibjpegRleDecoder`.
 
