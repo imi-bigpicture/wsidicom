@@ -39,7 +39,7 @@ from wsidicom.codec.settings import (
     Channels,
     Jpeg2kSettings,
     JpegLosslessSettings,
-    JpegLsLosslessSettings,
+    JpegLsSettings,
     JpegSettings,
     NumpySettings,
     RleSettings,
@@ -176,7 +176,7 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         encoders_by_settings: Dict[Type[Settings], Tuple[Type[Encoder], ...]] = {
             JpegSettings: (JpegEncoder, PillowEncoder),
             JpegLosslessSettings: (JpegEncoder,),
-            JpegLsLosslessSettings: (JpegLsEncoder,),
+            JpegLsSettings: (JpegLsEncoder,),
             Jpeg2kSettings: (Jpeg2kEncoder, PillowEncoder),
             NumpySettings: (NumpyEncoder,),
             RleSettings: (PylibjpegRleEncoder, ImageCodecsRleEncoder),
@@ -346,10 +346,12 @@ class JpegLsEncoder(Encoder[JpegLsSettings]):
     def lossy(self) -> bool:
         return self._level != 0
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         """Encode image into bytes."""
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
         return jpegls_encode(np.array(image), level=self._level)
 
     @classmethod
@@ -358,7 +360,7 @@ class JpegLsEncoder(Encoder[JpegLsSettings]):
 
     @classmethod
     def supports_settings(cls, settings: Settings) -> bool:
-        return isinstance(settings, JpegLsLosslessSettings)
+        return isinstance(settings, JpegLsSettings)
 
 
 class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
@@ -389,10 +391,11 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
     def lossy(self) -> bool:
         return not self.settings.lossless
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
     def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
         return jpeg2k_encode(
             np.array(image),
             level=self._level,
@@ -441,8 +444,9 @@ class NumpyEncoder(Encoder[NumpySettings]):
     def lossy(self) -> bool:
         return False
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
     def encode(self, image: Union[Image, np.ndarray]) -> bytes:
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
         return np.array(image).astype(self._dtype).tobytes()
 
     @classmethod
@@ -474,8 +478,9 @@ class RleEncoder(Encoder[RleSettings]):
             self._samples_per_pixel = 3
         super().__init__(settings)
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
     def encode(self, image: Union[Image, np.ndarray]) -> bytes:
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
         return self._encode(np.array(image).astype(self._dtype))
 
     @property
