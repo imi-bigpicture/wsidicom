@@ -25,15 +25,17 @@ from typing import (
     Union,
 )
 
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL import Image as Pillow
+from PIL.Image import Image
 from pydicom.uid import UID
 
 from wsidicom.codec import Codec
+from wsidicom.codec.encoder import Encoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 from wsidicom.thread import ConditionalThreadPoolExecutor
+from wsidicom.config import settings
 
 
 class ImageData(metaclass=ABCMeta):
@@ -50,7 +52,7 @@ class ImageData(metaclass=ABCMeta):
     """
 
     _default_z: Optional[float] = None
-    _blank_tile: Optional[PILImage] = None
+    _blank_tile: Optional[Image] = None
     _encoded_blank_tile: Optional[bytes] = None
 
     def __init__(self, codec: Codec):
@@ -111,7 +113,7 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> PILImage:
+    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         """
         Return Pillow image for tile.
 
@@ -126,7 +128,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        PILImage
+        Image
             Tile as Pillow Image.
         """
         raise NotImplementedError()
@@ -230,7 +232,7 @@ class ImageData(metaclass=ABCMeta):
         return Region(position=Point(0, 0), size=self.tiled_size)
 
     @property
-    def blank_tile(self) -> PILImage:
+    def blank_tile(self) -> Image:
         """Return background tile."""
         if self._blank_tile is None:
             self._blank_tile = self._create_blank_tile()
@@ -249,7 +251,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[PILImage]:
+    ) -> Iterator[Image]:
         """
         Return Pillow images for tiles.
 
@@ -264,7 +266,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        Iterator[PILImage]
+        Iterator[Image]
             Tiles as Images.
         """
         return (self._get_decoded_tile(tile, z, path) for tile in tiles)
@@ -345,7 +347,7 @@ class ImageData(metaclass=ABCMeta):
         )
 
         return image.resize(
-            self.tile_size.to_tuple(), resample=Image.Resampling.BILINEAR
+            self.tile_size.to_tuple(), resample=settings.pillow_resampling_filter
         )
 
     def get_scaled_encoded_tile(
@@ -429,9 +431,7 @@ class ImageData(metaclass=ABCMeta):
         tile = self._get_decoded_tile(tile_point, z, path)
         return self._crop_tile(tile_point, tile)
 
-    def get_tiles(
-        self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[PILImage]:
+    def get_tiles(self, tiles: Iterable[Point], z: float, path: str) -> Iterator[Image]:
         return (
             self._crop_tile(tile_point, tile)
             for tile_point, tile in zip(tiles, self.get_decoded_tiles(tiles, z, path))

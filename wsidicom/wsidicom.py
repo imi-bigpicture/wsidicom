@@ -46,6 +46,7 @@ from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import SlideUids
 from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
 
+from wsidicom.config import settings
 
 class WsiDicom:
     """A WSI containing pyramidal levels and optionally labels and/or overviews."""
@@ -351,7 +352,7 @@ class WsiDicom:
         level = self.levels.get_closest_by_size(thumbnail_size)
         region = Region(position=Point(0, 0), size=level.size)
         image = level.get_region(region, z, path)
-        image.thumbnail((size), resample=Image.Resampling.BILINEAR)
+        image.thumbnail((size), resample=settings.pillow_resampling_filter)
         return image
 
     def read_region(
@@ -398,7 +399,7 @@ class WsiDicom:
             )
         image = wsi_level.get_region(scaled_region, z, path, threads)
         if scale_factor != 1:
-            image = image.resize((size), resample=Image.Resampling.BILINEAR)
+            image = image.resize((size), resample=settings.pillow_resampling_filter)
         return image
 
     def read_region_mm(
@@ -441,7 +442,9 @@ class WsiDicom:
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
         image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
         image_size = Size(width=image.size[0], height=image.size[1]) // scale_factor
-        return image.resize(image_size.to_tuple(), resample=Image.Resampling.BILINEAR)
+        return image.resize(
+            image_size.to_tuple(), resample=settings.pillow_resampling_filter
+        )
 
     def read_region_mpp(
         self,
@@ -485,7 +488,9 @@ class WsiDicom:
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
         image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
         image_size = SizeMm.from_tuple(size) // pixel_spacing
-        return image.resize(image_size.to_tuple(), resample=Image.Resampling.BILINEAR)
+        return image.resize(
+            image_size.to_tuple(), resample=settings.pillow_resampling_filter
+        )
 
     def read_tile(
         self,
