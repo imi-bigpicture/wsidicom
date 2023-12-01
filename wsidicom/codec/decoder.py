@@ -293,10 +293,10 @@ class PydicomDecoder(Decoder):
         dataset.PhotometricInterpretation = photometric_interpretation
         dataset.PixelRepresentation = 0
         if samples_per_pixel == 3:
-            self._reshape_size = (size.width, size.height, samples_per_pixel)
+            self._reshape_size = (size.height, size.width, samples_per_pixel)
             dataset.PlanarConfiguration = 0
         else:
-            self._reshape_size = size.to_tuple()
+            self._reshape_size = (size.height, size.width)
         self._dataset = dataset
 
     def decode(self, frame: bytes) -> PILImage:
@@ -429,9 +429,9 @@ class RleDecoder(Decoder):
         self._bits = bits
         self._samples_per_pixel = samples_per_pixel
         if samples_per_pixel == 3:
-            self._reshape_size = (samples_per_pixel, size.width, size.height)
+            self._reshape_size = (samples_per_pixel, size.height, size.width)
         else:
-            self._reshape_size = size.to_tuple()
+            self._reshape_size = (size.height, size.width)
 
     def decode(self, frame: bytes) -> PILImage:
         decoded = self._decode(frame)
