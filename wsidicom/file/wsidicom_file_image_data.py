@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from functools import lru_cache
 from pathlib import Path
 from typing import List, OrderedDict, Sequence, Union
 
@@ -75,6 +76,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         """The uid of the transfer syntax of the image."""
         return self._transfer_syntax
 
+    @lru_cache
     def _get_file(self, frame_index: int) -> WsiDicomFile:
         """
         Return file containing frame index.
