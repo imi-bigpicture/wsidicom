@@ -622,33 +622,28 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         """
         chunked_tile_points = self._chunk_tile_points(image_data, chunk_size, scale)
 
-        def get_tiles(tile_points: Iterable[Point]) -> Iterator[bytes]:
+        def get_tiles(tile_points: Iterable[Point]) -> List[bytes]:
             """Function to get tiles as bytes."""
-            return image_data.get_encoded_tiles(tile_points, z, path, scale, transcoder)
-
-        def write_frame(frame: bytes) -> int:
-            """Itemize and write frame to file. Return frame position."""
-            position = self._file.tell()
-            self._file.write(frame)
-            return position
-
-        if encapsulate:
-
-            def encapsulate_tile(tile: bytes) -> Iterable[bytes]:
-                return itemize_frame(tile, 1)
-
-        else:
-
-            def encapsulate_tile(tile: bytes) -> Iterable[bytes]:
-                return [tile]
+            return list(
+                image_data.get_encoded_tiles(tile_points, z, path, scale, transcoder)
+            )
 
         with ConditionalThreadPoolExecutor(max_workers=workers) as pool:
             return [
-                write_frame(frame)
+                self._write_tile(tile, encapsulate)
                 for thread_result in pool.map(get_tiles, chunked_tile_points)
                 for tile in thread_result
-                for frame in encapsulate_tile(tile)
             ]
+
+    def _write_tile(self, tile: bytes, encapslute: bool) -> int:
+        if encapslute:
+            frames = itemize_frame(tile, 1)
+        else:
+            frames = [tile]
+        position = self._file.tell()
+        for frame in frames:
+            self._file.write(frame)
+        return position
 
     def _chunk_tile_points(
         self, image_data: ImageData, chunk_size: int, scale: int = 1
