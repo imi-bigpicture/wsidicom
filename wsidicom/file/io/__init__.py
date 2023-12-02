@@ -1,4 +1,4 @@
-#    Copyright 2023 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,8 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module for handling DICOM WSI instances read from file."""
+"""Module for reading and writing DICOM WSI files."""
 
-from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
-from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
-from wsidicom.file.io.wsidicom_io import OffsetTableType
+from wsidicom.file.io.wsidicom_io import OffsetTableType, WsiDicomIO
+from wsidicom.file.io.wsidicom_reader import (
+    WsiDicomFileReader,
+    WsiDicomReader,
+    WsiDicomStreamReader,
+)
+from wsidicom.file.io.wsidicom_writer import WsiDicomWriter

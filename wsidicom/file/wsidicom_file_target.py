@@ -20,17 +20,20 @@ from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from pydicom.uid import UID
 
+from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
-from wsidicom.file.wsidicom_file import WsiDicomFile
-from wsidicom.file.wsidicom_file_base import OffsetTableType
+from wsidicom.file.io import (
+    OffsetTableType,
+    WsiDicomFileReader,
+    WsiDicomReader,
+    WsiDicomWriter,
+)
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
-from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.series import Labels, Levels, Overviews
 from wsidicom.target import Target
-from wsidicom.codec import Encoder
 
 
 class WsiDicomFileTarget(Target):
@@ -68,7 +71,7 @@ class WsiDicomFileTarget(Target):
         self._output_path = output_path
         self._offset_table = offset_table
         self._filepaths: List[Path] = []
-        self._opened_files: List[WsiDicomFile] = []
+        self._opened_files: List[WsiDicomReader] = []
         super().__init__(
             uid_generator, workers, chunk_size, add_missing_levels, transcode_settings
         )
@@ -174,7 +177,7 @@ class WsiDicomFileTarget(Target):
             else:
                 transfer_syntax = instances[0].image_data.transfer_syntax
                 transcoder = None
-            with WsiDicomFileWriter.open(filepath, transfer_syntax) as wsi_file:
+            with WsiDicomWriter.open(filepath, transfer_syntax) as wsi_file:
                 wsi_file.write(
                     uid,
                     transfer_syntax,
@@ -193,7 +196,7 @@ class WsiDicomFileTarget(Target):
         return filepaths
 
     def _open_files(self, filepaths: Iterable[Path]) -> List[WsiInstance]:
-        files = [WsiDicomFile.open(filepath) for filepath in filepaths]
+        files = [WsiDicomFileReader.open(filepath) for filepath in filepaths]
         self._opened_files.extend(files)
         return [
             WsiInstance([file.dataset for file in files], WsiDicomFileImageData(files))

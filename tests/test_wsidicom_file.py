@@ -13,17 +13,13 @@
 #    limitations under the License.
 
 import math
-from typing import Any, Dict
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any, Dict
 
 import pytest
 from pydicom import Dataset, dcmread
 from pydicom.dataset import FileMetaDataset
-
-from wsidicom.file.wsidicom_file import WsiDicomFile
-from wsidicom.file.wsidicom_file_base import OffsetTableType
-from wsidicom.instance import ImageType, TileType, WsiDataset
 
 from tests.data_gen import (
     TESTFRAME,
@@ -31,6 +27,8 @@ from tests.data_gen import (
     create_main_dataset,
     create_meta_dataset,
 )
+from wsidicom.file.io import OffsetTableType, WsiDicomFileReader
+from wsidicom.instance import ImageType, TileType, WsiDataset
 
 FILE_SETTINGS = {
     "sparse_no_bot": {
@@ -79,7 +77,7 @@ def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath(file_setting["name"])
         create_layer_file(path, dataset, meta_dataset)
-        with WsiDicomFile.open(path) as test_file:
+        with WsiDicomFileReader.open(path) as test_file:
             yield test_file
 
 
@@ -87,7 +85,7 @@ def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
 class TestWsiDicomFile:
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_offset_table_type_property(
-        self, test_file: WsiDicomFile, settings: Dict[str, Any]
+        self, test_file: WsiDicomFileReader, settings: Dict[str, Any]
     ):
         # Arrange
 
@@ -99,7 +97,7 @@ class TestWsiDicomFile:
 
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_tile_type_property(
-        self, test_file: WsiDicomFile, settings: Dict[str, Any]
+        self, test_file: WsiDicomFileReader, settings: Dict[str, Any]
     ):
         # Arrange
 
@@ -110,7 +108,7 @@ class TestWsiDicomFile:
         assert tile_type == settings["tile_type"]
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_dataset_property(self, test_file: WsiDicomFile):
+    def test_dataset_property(self, test_file: WsiDicomFileReader):
         # Arrange
         path = test_file.filepath
         assert path is not None
@@ -124,7 +122,7 @@ class TestWsiDicomFile:
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
     def test_image_type_property(
         self,
-        test_file: WsiDicomFile,
+        test_file: WsiDicomFileReader,
     ):
         # Arrange
 
@@ -135,7 +133,7 @@ class TestWsiDicomFile:
         assert image_type == ImageType.VOLUME
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_uids_property(self, test_file: WsiDicomFile, dataset: Dataset):
+    def test_uids_property(self, test_file: WsiDicomFileReader, dataset: Dataset):
         # Arrange
 
         # Act
@@ -152,7 +150,7 @@ class TestWsiDicomFile:
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
     def test_transfer_syntax_property(
-        self, test_file: WsiDicomFile, meta_dataset: FileMetaDataset
+        self, test_file: WsiDicomFileReader, meta_dataset: FileMetaDataset
     ):
         # Arrange
 
@@ -163,7 +161,7 @@ class TestWsiDicomFile:
         assert transfer_syntax == meta_dataset.TransferSyntaxUID
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_frame_offset_property(self, test_file: WsiDicomFile):
+    def test_frame_offset_property(self, test_file: WsiDicomFileReader):
         # Arrange
 
         # Act
@@ -173,7 +171,7 @@ class TestWsiDicomFile:
         assert frame_offset == 0
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_frame_count_property(self, test_file: WsiDicomFile):
+    def test_frame_count_property(self, test_file: WsiDicomFileReader):
         # Arrange
 
         # Act
@@ -184,7 +182,7 @@ class TestWsiDicomFile:
 
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_get_offset_table_type(
-        self, test_file: WsiDicomFile, settings: Dict[str, Any]
+        self, test_file: WsiDicomFileReader, settings: Dict[str, Any]
     ):
         # Arrange
 
@@ -195,7 +193,7 @@ class TestWsiDicomFile:
         assert offset_type == settings["bot_type"]
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_validate_pixel_data_start(self, test_file: WsiDicomFile):
+    def test_validate_pixel_data_start(self, test_file: WsiDicomFileReader):
         # Arrange
         test_file._file.seek(test_file._pixel_data_position)
 
@@ -206,7 +204,9 @@ class TestWsiDicomFile:
         test_file._validate_pixel_data_start(tag, False)
 
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
-    def test_read_bot_length(self, test_file: WsiDicomFile, settings: Dict[str, Any]):
+    def test_read_bot_length(
+        self, test_file: WsiDicomFileReader, settings: Dict[str, Any]
+    ):
         # Arrange
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
@@ -223,7 +223,7 @@ class TestWsiDicomFile:
         assert length == expected_bot_length
 
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
-    def test_read_bot(self, test_file: WsiDicomFile, settings: Dict[str, Any]):
+    def test_read_bot(self, test_file: WsiDicomFileReader, settings: Dict[str, Any]):
         # Arrange
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
@@ -240,7 +240,7 @@ class TestWsiDicomFile:
         assert bot == first_bot_entry
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_parse_bot_table(self, test_file: WsiDicomFile):
+    def test_parse_bot_table(self, test_file: WsiDicomFileReader):
         # Arrange
         TAG_BYTES = 4
         LENGTH_BYTES = 4
@@ -266,7 +266,7 @@ class TestWsiDicomFile:
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
     def test_read_positions_from_pixeldata(
-        self, test_file: WsiDicomFile, padded_test_frame: bytes
+        self, test_file: WsiDicomFileReader, padded_test_frame: bytes
     ):
         # Arrange
         TAG_BYTES = 4
@@ -274,7 +274,7 @@ class TestWsiDicomFile:
         test_file._file.seek(test_file._pixel_data_position)
         tag = test_file._file.read_tag()
         test_file._validate_pixel_data_start(tag, False)
-        bot = test_file._read_bot()
+        _ = test_file._read_bot()
         first_frame_item = test_file._file.tell()
 
         # Act
@@ -289,7 +289,7 @@ class TestWsiDicomFile:
         ]
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_read_sequence_delimiter(self, test_file: WsiDicomFile):
+    def test_read_sequence_delimiter(self, test_file: WsiDicomFileReader):
         # Arrange
         (last_item_position, last_item_length) = test_file.frame_positions[-1]
         last_item_end = last_item_position + last_item_length
@@ -299,11 +299,11 @@ class TestWsiDicomFile:
         # Act & Assert
         try:
             test_file._read_sequence_delimiter()
-        except:
+        except Exception:
             pytest.fail()
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_read_frame(self, test_file: WsiDicomFile, padded_test_frame: bytes):
+    def test_read_frame(self, test_file: WsiDicomFileReader, padded_test_frame: bytes):
         # Arrange
 
         # Act

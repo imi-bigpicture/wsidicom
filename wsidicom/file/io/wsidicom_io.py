@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module with base IO class for handling DICOM WSI files."""
+
 from enum import Enum
 from pathlib import Path
 from typing import BinaryIO, Optional
@@ -42,14 +44,14 @@ class OffsetTableType(Enum):
         raise ValueError(f"Unknown offset table type: {offset_table}")
 
 
-class WsiDicomFileBase:
+class WsiDicomIO:
     """Base class for reading or writing DICOM WSI file."""
 
     def __init__(
         self, stream: BinaryIO, filepath: Optional[Path] = None, owned: bool = False
     ):
         """
-        Create a WsiDicomFileBase.
+        Create a WsiDicomIO.
 
         Parameters
         ----------

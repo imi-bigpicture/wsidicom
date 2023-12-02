@@ -39,7 +39,7 @@ from pydicom.uid import UID, UncompressedTransferSyntaxes
 
 from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomBotOverflow
-from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
+from wsidicom.file.io.wsidicom_io import OffsetTableType, WsiDicomIO
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
@@ -47,7 +47,7 @@ from wsidicom.thread import ConditionalThreadPoolExecutor
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
-class WsiDicomFileWriter(WsiDicomFileBase):
+class WsiDicomWriter(WsiDicomIO):
     """Writer for DICOM WSI files."""
 
     def __init__(
@@ -79,8 +79,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         self._file.is_implicit_VR = implicit_vr
 
     @classmethod
-    def open(cls, file: Path, transfer_syntax: UID) -> "WsiDicomFileWriter":
-        """Open file in path as WsiDicomFileWriter.
+    def open(cls, file: Path, transfer_syntax: UID) -> "WsiDicomWriter":
+        """Open file in path as WsiDicomWriter.
 
         Parameters
         ----------
@@ -91,8 +91,8 @@ class WsiDicomFileWriter(WsiDicomFileBase):
 
         Returns
         ----------
-        WsiDicomFileWriter
-            WsiDicomFileWriter for file.
+        WsiDicomWriter
+            WsiDicomWriter for file.
         """
         stream = open(file, "w+b")
         return cls(
@@ -721,7 +721,7 @@ class WsiDicomFileWriter(WsiDicomFileBase):
         else:
             temp_file_path = None
             buffer = BytesIO()
-        with WsiDicomFileWriter(buffer, True, False, None, True) as writer:
+        with WsiDicomWriter(buffer, True, False, None, True) as writer:
             frame_positions = writer.copy_with_table(
                 self._stream,
                 offset_table,

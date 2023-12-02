@@ -20,7 +20,7 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotFoundError
-from wsidicom.file.wsidicom_file import WsiDicomFile
+from wsidicom.file.io import WsiDicomReader
 from wsidicom.instance import WsiDicomImageData
 
 
@@ -31,7 +31,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
     Image data can be sparsly or fully tiled and/or concatenated.
     """
 
-    def __init__(self, files: Union[WsiDicomFile, Sequence[WsiDicomFile]]) -> None:
+    def __init__(self, files: Union[WsiDicomReader, Sequence[WsiDicomReader]]) -> None:
         """
         Create WsiDicomFileImageData from frame data in files.
 
@@ -77,7 +77,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         return self._transfer_syntax
 
     @lru_cache
-    def _get_file(self, frame_index: int) -> WsiDicomFile:
+    def _get_file(self, frame_index: int) -> WsiDicomReader:
         """
         Return file containing frame index.
 

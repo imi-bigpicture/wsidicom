@@ -12,26 +12,42 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module for reading DICOM WSI files."""
+
 import threading
+from abc import abstractmethod
 from functools import cached_property
+from io import BufferedReader
 from pathlib import Path
 from struct import unpack
 from typing import BinaryIO, List, Optional, Tuple, Union, cast
 
 from pydicom.errors import InvalidDicomError
-from pydicom.filebase import DicomFileLike
 from pydicom.filereader import _read_file_meta_info, read_partial, read_preamble
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID, UncompressedTransferSyntaxes
-from wsidicom.codec import Codec
 
+from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomFileError, WsiDicomNotSupportedError
-from wsidicom.file.wsidicom_file_base import OffsetTableType, WsiDicomFileBase
+from wsidicom.file.io.wsidicom_io import OffsetTableType, WsiDicomIO
 from wsidicom.instance import ImageType, WsiDataset
+from wsidicom.resource_pool import ResourcePool
 from wsidicom.uid import FileUids
 
 
-class WsiDicomFile(WsiDicomFileBase):
+class FileReaderPool(ResourcePool[BufferedReader]):
+    def __init__(self, filepath: Path, max_pool_size: Optional[int] = None):
+        super().__init__(max_pool_size)
+        self._filepath = filepath
+
+    def _create_new_resource(self) -> BufferedReader:
+        return open(self._filepath, "rb")
+
+    def _close_resource(self, resource: BufferedReader) -> None:
+        resource.close()
+
+
+class WsiDicomReader(WsiDicomIO):
     """Represents a DICOM file (potentially) containing WSI image and metadata."""
 
     def __init__(
@@ -50,7 +66,6 @@ class WsiDicomFile(WsiDicomFileBase):
         owned: bool = False
             If the stream should be closed by this instance.
         """
-        self._lock = threading.Lock()
         try:
             stream.seek(0)
             read_preamble(stream, False)
@@ -95,14 +110,6 @@ class WsiDicomFile(WsiDicomFileBase):
     def __str__(self) -> str:
         return self.pretty_str()
 
-    @classmethod
-    def open(cls, file: Path) -> "WsiDicomFile":
-        """
-        Open file in path as WsiDicomFile.
-        """
-        stream = open(file, "rb")
-        return cls(stream, file, True)
-
     @cached_property
     def offset_table_type(self) -> OffsetTableType:
         """Return type of the offset table, or None if not present."""
@@ -144,9 +151,8 @@ class WsiDicomFile(WsiDicomFileBase):
         """Return number of frames"""
         return self.dataset.frame_count
 
-    def get_filepointer(self, frame_index: int) -> Tuple[DicomFileLike, int, int]:
-        """Return file pointer, frame position, and frame length for frame
-        number.
+    def read_frame(self, frame_index: int) -> bytes:
+        """Return frame data from pixel data by frame index.
 
         Parameters
         ----------
@@ -155,12 +161,31 @@ class WsiDicomFile(WsiDicomFileBase):
 
         Returns
         ----------
-        Tuple[WsiDicomFileLike, int, int]:
-            File pointer, frame offset and frame length in number of bytes
+        bytes
+            The frame as bytes
         """
         frame_index -= self.frame_offset
         frame_position, frame_length = self.frame_positions[frame_index]
-        return self._file, frame_position, frame_length
+        return self._read_frame(frame_position, frame_length)
+
+    @abstractmethod
+    def _read_frame(self, frame_position: int, frame_length: int) -> bytes:
+        """Return frame data from pixel data by position and length.
+        Implementations should be thread safe.
+
+        Parameters
+        ----------
+        frame_position: int
+            Position of frame in pixel data.
+        frame_length: int
+            Length of frame in pixel data.
+
+        Returns
+        ----------
+        bytes
+            The frame as bytes
+        """
+        raise NotImplementedError()
 
     def _get_offset_table_type(self) -> OffsetTableType:
         """
@@ -407,25 +432,6 @@ class WsiDicomFile(WsiDicomFileBase):
         if self._file.read_le_tag() != SequenceDelimiterTag:
             raise WsiDicomFileError(self._file, "No sequence delimiter tag")
 
-    def read_frame(self, frame_index: int) -> bytes:
-        """Return frame data from pixel data by frame index.
-
-        Parameters
-        ----------
-        frame_index: int
-            Frame, including concatenation offset, to get.
-
-        Returns
-        ----------
-        bytes
-            The frame as bytes
-        """
-        fp, frame_position, frame_length = self.get_filepointer(frame_index)
-        with self._lock:
-            fp.seek(frame_position, 0)
-            frame: bytes = fp.read(frame_length)
-        return frame
-
     def _validate_pixel_data_start(
         self, tag: Union[BaseTag, Tuple[int, int]], defined_length: bool
     ):
@@ -527,3 +533,59 @@ class WsiDicomFile(WsiDicomFileBase):
             )
 
         return frame_positions, table_type
+
+
+class WsiDicomFileReader(WsiDicomReader):
+    def __init__(self, stream: BinaryIO, filepath: Path, owned: bool = False):
+        """
+        Parse DICOM file in stream. If valid WSI type read required
+        parameters. Parses frames in pixel data but does not read the frames.
+
+        Parameters
+        ----------
+        stream: BinaryIO
+            Stream to open.
+        filepath: Optional[Path] = None
+            Optional filepath of stream.
+        owned: bool = False
+            If the stream should be closed by this instance.
+        """
+        super().__init__(stream, filepath, owned)
+        self._reader_pool = FileReaderPool(filepath)
+
+    @classmethod
+    def open(cls, file: Path) -> "WsiDicomFileReader":
+        """
+        Open file in path as WsiDicomFile.
+        """
+        stream = open(file, "rb")
+        return cls(stream, file)
+
+    def _read_frame(self, frame_position: int, frame_length: int) -> bytes:
+        with self._reader_pool.get_resource() as fp:
+            fp.seek(frame_position, 0)
+            return fp.read(frame_length)
+
+    def close(self, force: Optional[bool] = False) -> None:
+        self._reader_pool.close()
+        return super().close(force)
+
+
+class WsiDicomStreamReader(WsiDicomReader):
+    def __init__(self, stream: BinaryIO):
+        """
+        Parse DICOM file in stream. If valid WSI type read required
+        parameters. Parses frames in pixel data but does not read the frames.
+
+        Parameters
+        ----------
+        stream: BinaryIO
+            Stream to open.
+        """
+        super().__init__(stream, None, False)
+        self._lock = threading.Lock()
+
+    def _read_frame(self, frame_position: int, frame_length: int) -> bytes:
+        with self._lock:
+            self._stream.seek(frame_position, 0)
+            return self._stream.read(frame_length)

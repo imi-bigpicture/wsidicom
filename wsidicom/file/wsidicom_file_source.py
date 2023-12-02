@@ -30,7 +30,11 @@ from wsidicom.errors import (
     WsiDicomNotFoundError,
     WsiDicomNotSupportedError,
 )
-from wsidicom.file.wsidicom_file import WsiDicomFile
+from wsidicom.file.io import (
+    WsiDicomFileReader,
+    WsiDicomReader,
+    WsiDicomStreamReader,
+)
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Size
 from wsidicom.graphical_annotations import AnnotationInstance
@@ -54,9 +58,9 @@ class WsiDicomFileSource(Source):
             Files to open. Can be a path or stream for a single file, a list of paths or
             streams for multiple files, or a path to a folder containing files.
         """
-        self._level_files: List[WsiDicomFile] = []
-        self._label_files: List[WsiDicomFile] = []
-        self._overview_files: List[WsiDicomFile] = []
+        self._level_files: List[WsiDicomReader] = []
+        self._label_files: List[WsiDicomReader] = []
+        self._overview_files: List[WsiDicomReader] = []
         self._annotation_files: List[BinaryIO] = []
         for file in self._list_input_files(files):
             try:
@@ -64,7 +68,10 @@ class WsiDicomFileSource(Source):
                 sop_class_uid = self._get_sop_class_uid(stream)
                 if sop_class_uid == WSI_SOP_CLASS_UID:
                     try:
-                        wsi_file = WsiDicomFile(stream, filepath, filepath is not None)
+                        if filepath is not None:
+                            wsi_file = WsiDicomFileReader(stream, filepath, True)
+                        else:
+                            wsi_file = WsiDicomStreamReader(stream)
                         if wsi_file.image_type == ImageType.VOLUME:
                             self._level_files.append(wsi_file)
                         elif wsi_file.image_type == ImageType.LABEL:
@@ -127,9 +134,9 @@ class WsiDicomFileSource(Source):
             image_file.close()
 
     @property
-    def image_files(self) -> List[WsiDicomFile]:
+    def image_files(self) -> List[WsiDicomReader]:
         """Return the image files in the source."""
-        file_lists: List[List[WsiDicomFile]] = [
+        file_lists: List[List[WsiDicomReader]] = [
             self._level_files,
             self._label_files,
             self._overview_files,
@@ -229,12 +236,12 @@ class WsiDicomFileSource(Source):
         )
 
     @staticmethod
-    def _get_base_dataset(files: Iterable[WsiDicomFile]) -> WsiDataset:
+    def _get_base_dataset(files: Iterable[WsiDicomReader]) -> WsiDataset:
         """Return file with largest image (width) from list of files.
 
         Parameters
         ----------
-        files: Iterable[WsiDicomFile]
+        files: Iterable[WsiDicomReader]
            List of files.
 
         Returns
@@ -268,7 +275,7 @@ class WsiDicomFileSource(Source):
     @classmethod
     def _create_instances(
         cls,
-        files: Iterable[WsiDicomFile],
+        files: Iterable[WsiDicomReader],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None,
     ) -> Iterable["WsiInstance"]:
@@ -280,7 +287,7 @@ class WsiDicomFileSource(Source):
 
         Parameters
         ----------
-        files: Sequence[WsiDicomFile]
+        files: Sequence[WsiDicomReader]
             Files to create instances from.
         series_uids: SlideUids
             Uid to match against.
@@ -304,16 +311,16 @@ class WsiDicomFileSource(Source):
 
     @staticmethod
     def _filter_files(
-        files: Iterable[WsiDicomFile],
+        files: Iterable[WsiDicomReader],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None,
-    ) -> Iterable[WsiDicomFile]:
+    ) -> Iterable[WsiDicomReader]:
         """
         Filter list of wsi dicom files on uids and tile size if defined.
 
         Parameters
         ----------
-        files: Iterable['WsiDicomFile']
+        files: Iterable[WsiDicomReader]
             Wsi files to filter.
         series_uids: Uids
             Uids to check against.
@@ -322,7 +329,7 @@ class WsiDicomFileSource(Source):
 
         Returns
         ----------
-        List['WsiDicomFile']
+        List[WsiDicomReader]
             List of matching wsi dicom files.
         """
         for file in files:
@@ -338,22 +345,22 @@ class WsiDicomFileSource(Source):
 
     @staticmethod
     def _group_files(
-        files: Iterable["WsiDicomFile"],
-    ) -> Dict[str, List["WsiDicomFile"]]:
+        files: Iterable[WsiDicomReader],
+    ) -> Dict[str, List[WsiDicomReader]]:
         """
         Return files grouped by instance identifier (instances).
 
         Parameters
         ----------
-        files: Iterable[WsiDicomFile]
+        files: Iterable[WsiDicomReader]
             Files to group into instances
 
         Returns
         ----------
-        Dict[str, List[WsiDicomFile]]
+        Dict[str, List[WsiDicomReader]]
             Files grouped by instance, with instance identifier as key.
         """
-        grouped_files: Dict[str, List[WsiDicomFile]] = defaultdict(list)
+        grouped_files: Dict[str, List[WsiDicomReader]] = defaultdict(list)
         for file in files:
             grouped_files[file.uids.identifier].append(file)
         return grouped_files

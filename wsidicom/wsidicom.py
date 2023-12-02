@@ -35,7 +35,7 @@ from wsidicom.errors import (
     WsiDicomOutOfBoundsError,
 )
 from wsidicom.file import WsiDicomFileSource, WsiDicomFileTarget
-from wsidicom.file.wsidicom_file_base import OffsetTableType
+from wsidicom.file import OffsetTableType
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -47,6 +47,7 @@ from wsidicom.uid import SlideUids
 from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
 from wsidicom.config import settings
 from wsidicom.codec import Settings as EncoderSettings
+
 
 class WsiDicom:
     """A WSI containing pyramidal levels and optionally labels and/or overviews."""

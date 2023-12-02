@@ -19,8 +19,8 @@ import pytest
 from pydicom.uid import generate_uid
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
-from wsidicom.file.wsidicom_file_base import OffsetTableType
-from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
+from wsidicom.file import OffsetTableType
+from wsidicom.file import WsiDicomFileTarget
 from wsidicom.series.levels import Levels
 
 

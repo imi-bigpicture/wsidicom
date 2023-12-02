@@ -44,16 +44,14 @@ from pydicom.uid import (
     JPEGLSLossless,
     JPEGLSNearLossless,
     RLELossless,
-    generate_uid,
     UncompressedTransferSyntaxes,
+    generate_uid,
 )
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
-from wsidicom.file.wsidicom_file import WsiDicomFile
-from wsidicom.file.wsidicom_file_base import OffsetTableType
-from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
-from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter
+from wsidicom.file import OffsetTableType, WsiDicomFileTarget
+from wsidicom.file.io import WsiDicomFileReader, WsiDicomStreamReader, WsiDicomWriter
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.group.level import Level
 from wsidicom.instance import ImageCoordinateSystem, ImageData
@@ -63,7 +61,7 @@ from wsidicom.uid import WSI_SOP_CLASS_UID
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 
 
-class WsiDicomTestFile(WsiDicomFile):
+class WsiDicomTestFile(WsiDicomStreamReader):
     """Test version of WsiDicomFile that overrides __init__."""
 
     def __init__(
@@ -79,6 +77,7 @@ class WsiDicomTestFile(WsiDicomFile):
         self._file = DicomFile(filepath, mode="rb")
         self._file.is_little_endian = transfer_syntax.is_little_endian
         self._file.is_implicit_VR = transfer_syntax.is_implicit_VR
+        self._stream = self._file.parent
         self._frame_count = frame_count
         self._pixel_data_position = 0
         self._owned = True
@@ -255,7 +254,7 @@ def dataset(image_data: ImageData, frame_count: int):
 
 
 @pytest.mark.save
-class TestWsiDicomFileWriter:
+class TestWsiDicomWriter:
     @staticmethod
     def assertEndOfFile(file: WsiDicomTestFile):
         with pytest.raises(EOFError):
@@ -275,7 +274,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomFileWriter.open(filepath, transfer_syntax) as write_file:
+        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
             write_file._write_preamble()
 
         # Assert
@@ -306,7 +305,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomFileWriter.open(filepath, JPEGBaseline8Bit) as write_file:
+        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
             write_file._write_preamble()
             write_file._write_file_meta(instance_uid, transfer_syntax)
         file_meta = read_file_meta_info(filepath)
@@ -347,7 +346,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath(str(writen_table_type))
 
         # Act
-        with WsiDicomFileWriter.open(filepath, transfer_syntax) as write_file:
+        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
             writen_frame_positions = write_file._write_encapsulated_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
                 WsiDataset(dataset).frame_count,
@@ -401,7 +400,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath(str(transfer_syntax))
 
         # Act
-        with WsiDicomFileWriter.open(filepath, transfer_syntax) as write_file:
+        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
             write_file._write_unencapsulated_pixel_data(
                 WsiDataset(dataset),
                 {(image_data.default_path, image_data.default_z): image_data},
@@ -440,7 +439,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomFileWriter.open(filepath, JPEGBaseline8Bit) as write_file:
+        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
             write_file._reserve_bot(frame_count)
 
         # Assert
@@ -468,7 +467,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomFileWriter.open(filepath, JPEGBaseline8Bit) as write_file:
+        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
             write_file._reserve_eot(frame_count)
 
         # Assert
@@ -506,7 +505,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomFileWriter.open(filepath, JPEGBaseline8Bit) as write_file:
+        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
             write_file._write_pixel_data_end_tag()
 
         # Assert
@@ -532,7 +531,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomFileWriter.open(filepath, JPEGBaseline8Bit) as write_file:
+        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
             positions = write_file._write_pixel_data(
                 image_data=image_data,
                 encapsulate=True,
@@ -576,7 +575,7 @@ class TestWsiDicomFileWriter:
 
         # Act
         filepath = tmp_path.joinpath("1.dcm")
-        with WsiDicomFileWriter.open(filepath, transfer_syntax) as write_file:
+        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
             for value in values:
                 write_file._write_unsigned_long_long(value)
 
@@ -618,7 +617,7 @@ class TestWsiDicomFileWriter:
         filepath = tmp_path.joinpath(str(table_type))
 
         # Act
-        with WsiDicomFileWriter.open(filepath, transfer_syntax) as write_file:
+        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
             write_file.write(
                 generate_uid(),
                 transfer_syntax,
@@ -638,7 +637,7 @@ class TestWsiDicomFileWriter:
             )
 
         # Assert
-        with WsiDicomFile.open(filepath) as read_file:
+        with WsiDicomFileReader.open(filepath) as read_file:
             for index, frame in enumerate(frames):
                 read_frame = read_file.read_frame(index)
                 # Stored frame can be up to one byte longer
