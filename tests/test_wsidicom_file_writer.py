@@ -17,50 +17,31 @@ import os
 import random
 import sys
 from pathlib import Path
-from struct import unpack
-from typing import Callable, List, Optional, OrderedDict, Sequence, cast
+from typing import List, Optional, OrderedDict, Sequence
 
 import pytest
-from PIL import ImageChops, ImageFilter, ImageStat
 from PIL.Image import Image
 from pydicom import Sequence as DicomSequence
 from pydicom.dataset import Dataset
-from pydicom.filereader import read_file_meta_info
-from pydicom.misc import is_dicom
 from pydicom.tag import ItemTag, SequenceDelimiterTag
 from pydicom.uid import (
-    JPEG2000,
     UID,
-    DeflatedExplicitVRLittleEndian,
     ExplicitVRBigEndian,
     ExplicitVRLittleEndian,
     ImplicitVRLittleEndian,
-    JPEG2000Lossless,
     JPEGBaseline8Bit,
-    JPEGExtended12Bit,
-    JPEGLosslessP14,
-    JPEGLosslessSV1,
-    JPEGLSLossless,
-    JPEGLSNearLossless,
-    RLELossless,
     generate_uid,
 )
 
-from tests.conftest import WsiTestDefinitions
-from wsidicom import WsiDicom
-from wsidicom.file import OffsetTableType, WsiDicomFileTarget
 from wsidicom.file.io import (
     WsiDicomFileReader,
     WsiDicomIO,
     WsiDicomStreamReader,
     WsiDicomWriter,
+    OffsetTableType,
 )
-from wsidicom.file.io.tags import (
-    ExtendedOffsetTableLengthsTag,
-    ExtendedOffsetTableTag,
-)
+from wsidicom.file.io.wsidicom_writer import WsiDicomEncapsulatedWriter
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.group.level import Level
 from wsidicom.instance import ImageCoordinateSystem, ImageData
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.uid import WSI_SOP_CLASS_UID
@@ -281,63 +262,6 @@ def dataset(image_data: ImageData, frame_count: int):
 @pytest.mark.save
 class TestWsiDicomWriter:
     @pytest.mark.parametrize(
-        "transfer_syntax",
-        [
-            JPEGBaseline8Bit,
-            ExplicitVRBigEndian,
-            ExplicitVRLittleEndian,
-            ImplicitVRLittleEndian,
-        ],
-    )
-    def test_write_preamble(self, tmp_path: Path, transfer_syntax: UID):
-        # Arrange
-        filepath = tmp_path.joinpath("1.dcm")
-
-        # Act
-        with WsiDicomWriter.open(filepath) as writer:
-            writer._write_preamble()
-
-        # Assert
-        assert is_dicom(filepath)
-
-    @pytest.mark.parametrize(
-        "transfer_syntax",
-        [
-            DeflatedExplicitVRLittleEndian,
-            ExplicitVRBigEndian,
-            ExplicitVRLittleEndian,
-            ImplicitVRLittleEndian,
-            JPEG2000,
-            JPEG2000Lossless,
-            JPEGBaseline8Bit,
-            JPEGExtended12Bit,
-            JPEGLosslessP14,
-            JPEGLosslessSV1,
-            JPEGLSLossless,
-            JPEGLSNearLossless,
-            RLELossless,
-        ],
-    )
-    def test_write_meta(self, tmp_path: Path, transfer_syntax: UID):
-        # Arrange
-        instance_uid = generate_uid()
-        class_uid = WSI_SOP_CLASS_UID
-        filepath = tmp_path.joinpath("1.dcm")
-
-        # Act
-        with WsiDicomWriter.open(filepath) as writer:
-            writer._file.is_implicit_VR = transfer_syntax.is_implicit_VR
-            writer._file.is_little_endian = transfer_syntax.is_little_endian
-            writer._write_preamble()
-            writer._write_file_meta(instance_uid, transfer_syntax)
-        file_meta = read_file_meta_info(filepath)
-
-        # Assert
-        assert file_meta.TransferSyntaxUID == transfer_syntax
-        assert file_meta.MediaStorageSOPInstanceUID == instance_uid
-        assert file_meta.MediaStorageSOPClassUID == class_uid
-
-    @pytest.mark.parametrize(
         "writen_table_type",
         [
             OffsetTableType.EMPTY,
@@ -368,14 +292,14 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(writen_table_type))
 
         # Act
-        with WsiDicomWriter.open(filepath) as writer:
-            writen_frame_positions = writer._write_encapsulated_pixel_data(
+        with WsiDicomEncapsulatedWriter.open(
+            filepath, transfer_syntax, writen_table_type
+        ) as writer:
+            writen_frame_positions = writer._write_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
-                WsiDataset(dataset).frame_count,
+                WsiDataset(dataset),
                 1,
                 100,
-                writen_table_type,
-                transfer_syntax,
                 1,
                 None,
             )
@@ -424,12 +348,14 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(transfer_syntax))
 
         # Act
-        with WsiDicomWriter.open(filepath) as writer:
+        with WsiDicomWriter.open(
+            filepath, transfer_syntax, OffsetTableType.NONE
+        ) as writer:
             writer._file.is_implicit_VR = transfer_syntax.is_implicit_VR
             writer._file.is_little_endian = transfer_syntax.is_little_endian
-            writer._write_unencapsulated_pixel_data(
-                WsiDataset(dataset),
+            writer._write_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
+                WsiDataset(dataset),
                 1,
                 100,
                 1,
@@ -459,7 +385,10 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath) as writer:
+        with WsiDicomWriter.open(
+            filepath, JPEGBaseline8Bit, OffsetTableType.BASIC
+        ) as writer:
+            assert isinstance(writer, WsiDicomEncapsulatedWriter)
             writer._write_pixel_data_end_tag()
 
         # Assert
@@ -475,15 +404,18 @@ class TestWsiDicomWriter:
             assert length == 0
 
     @pytest.mark.parametrize("transfer_syntax", [JPEGBaseline8Bit])
-    def test_write_pixel_data(self, image_data: ImageData, tmp_path: Path):
+    def test_write_pixel_data(
+        self, image_data: ImageData, tmp_path: Path, transfer_syntax: UID
+    ):
         # Arrange
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath) as writer:
-            positions = writer._write_pixel_data(
+        with WsiDicomWriter.open(
+            filepath, transfer_syntax, OffsetTableType.EMPTY
+        ) as writer:
+            positions = writer._write_tiles(
                 image_data=image_data,
-                encapsulate=True,
                 z=image_data.default_z,
                 path=image_data.default_path,
                 workers=1,
@@ -525,12 +457,11 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(table_type))
 
         # Act
-        with WsiDicomWriter.open(filepath) as writer:
+        with WsiDicomWriter.open(filepath, transfer_syntax, table_type) as writer:
             writer._file.is_implicit_VR = transfer_syntax.is_implicit_VR
             writer._file.is_little_endian = transfer_syntax.is_little_endian
             writer.write(
                 generate_uid(),
-                transfer_syntax,
                 WsiDataset(dataset),
                 OrderedDict(
                     {
@@ -542,7 +473,6 @@ class TestWsiDicomWriter:
                 ),
                 1,
                 100,
-                table_type,
                 0,
             )
 
@@ -553,39 +483,3 @@ class TestWsiDicomWriter:
                 # Stored frame can be up to one byte longer
                 assert 0 <= len(read_frame) - len(frame) <= 1
                 assert read_frame[: len(frame)] == frame
-
-    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
-    def test_create_child(
-        self,
-        wsi_name: str,
-        wsi_factory: Callable[[str], WsiDicom],
-        tmp_path: Path,
-    ):
-        # Arrange
-        wsi = wsi_factory(wsi_name)
-        target_level = cast(Level, wsi.levels[-2])
-        source_level = cast(Level, wsi.levels[-3])
-
-        # Act
-        with WsiDicomFileTarget(
-            tmp_path,
-            generate_uid,
-            1,
-            100,
-            OffsetTableType.BASIC,
-            False,
-        ) as target:
-            target._save_and_open_level(source_level, wsi.pixel_spacing, 2)
-
-        # Assert
-        with WsiDicom.open(tmp_path) as created_wsi:
-            created_size = created_wsi.levels[0].size.to_tuple()
-            target_size = target_level.size.to_tuple()
-            assert created_size == target_size
-
-            created = created_wsi.read_region((0, 0), 0, created_size)
-            original = wsi.read_region((0, 0), target_level.level, target_size)
-            blur = ImageFilter.GaussianBlur(2)
-            diff = ImageChops.difference(created.filter(blur), original.filter(blur))
-            for band_rms in ImageStat.Stat(diff).rms:
-                assert band_rms < 2

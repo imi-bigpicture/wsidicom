@@ -13,14 +13,16 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Callable
+from typing import Callable, cast
 
 import pytest
+from PIL import ImageChops, ImageFilter, ImageStat
 from pydicom.uid import generate_uid
+
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
-from wsidicom.file import OffsetTableType
-from wsidicom.file import WsiDicomFileTarget
+from wsidicom.file import OffsetTableType, WsiDicomFileTarget
+from wsidicom.group.level import Level
 from wsidicom.series.levels import Levels
 
 
@@ -70,3 +72,39 @@ class TestWsiDicomFileTargetIntegration:
             assert expected_levels_count == len(saved_wsi.levels)
             assert saved_wsi.levels[-1].size.all_less_than_or_equal(saved_wsi.tile_size)
             assert saved_wsi.levels[-2].size.any_greater_than(saved_wsi.tile_size)
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_create_child(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+        target_level = cast(Level, wsi.levels[-2])
+        source_level = cast(Level, wsi.levels[-3])
+
+        # Act
+        with WsiDicomFileTarget(
+            tmp_path,
+            generate_uid,
+            1,
+            100,
+            OffsetTableType.BASIC,
+            False,
+        ) as target:
+            target._save_and_open_level(source_level, wsi.pixel_spacing, 2)
+
+        # Assert
+        with WsiDicom.open(tmp_path) as created_wsi:
+            created_size = created_wsi.levels[0].size.to_tuple()
+            target_size = target_level.size.to_tuple()
+            assert created_size == target_size
+
+            created = created_wsi.read_region((0, 0), 0, created_size)
+            original = wsi.read_region((0, 0), target_level.level, target_size)
+            blur = ImageFilter.GaussianBlur(2)
+            diff = ImageChops.difference(created.filter(blur), original.filter(blur))
+            for band_rms in ImageStat.Stat(diff).rms:
+                assert band_rms < 2

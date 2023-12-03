@@ -80,7 +80,7 @@ class Settings:
 
     @property
     def pillow_resampling_filter(self) -> Pillow.Resampling:
-        """The resampling fitler to use when rescaling images."""
+        """The resampling filter to use when rescaling images."""
         return self._pillow_resampling_filter
 
     @pillow_resampling_filter.setter

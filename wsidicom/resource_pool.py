@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Generic pool for accessing a resouce."""
+"""Generic pool for accessing a resource."""
 
 from abc import abstractmethod
 from contextlib import contextmanager
@@ -39,7 +39,7 @@ class ResourcePool(Generic[ResourceType]):
             if cpu_count is not None:
                 max_pool_size = cpu_count
             else:
-                max_pool_size = 10
+                max_pool_size = 1
         self._max_pool_size = max_pool_size
         self._current_count = 0
         self._queue: SimpleQueue[ResourceType] = SimpleQueue()
@@ -48,7 +48,7 @@ class ResourcePool(Generic[ResourceType]):
     @contextmanager
     def get_resource(self) -> Generator[ResourceType, None, None]:
         """Return a resource. Should be used as a context manager. Will block
-        if no resource is avaiable."""
+        if no resource is available."""
         resource = self._get_resource()
         try:
             yield resource
@@ -95,9 +95,9 @@ class ResourcePool(Generic[ResourceType]):
         raise ValueError()
 
     def _get_resource(self) -> ResourceType:
-        """Return a resource with no wait if one is avaiable. Else if current
+        """Return a resource with no wait if one is available. Else if current
         resource count is less than maximum resource count return a new resource.
-        Otherwise wait for an avaiable resourcen."""
+        Otherwise wait for an available resourcen."""
         try:
             return self._queue.get_nowait()
         except Empty:

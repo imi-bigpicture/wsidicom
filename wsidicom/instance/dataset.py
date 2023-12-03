@@ -244,7 +244,7 @@ class WsiDataset(Dataset):
                 "Concatenated file missing concatenation frame offset" "number"
             )
 
-    @cached_property
+    @property
     def frame_count(self) -> int:
         """Return number of frames in instance."""
         frame_count = self._get_dicom_attribute("NumberOfFrames")

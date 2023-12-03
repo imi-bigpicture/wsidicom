@@ -15,14 +15,15 @@
 """Module with base IO class for handling DICOM WSI files."""
 
 import struct
+from datetime import datetime
 from pathlib import Path
 from struct import pack
 from typing import BinaryIO, Callable, Literal, Optional, Union
 
-from pydicom import Dataset
-from pydicom.dataset import FileMetaDataset
+from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.filebase import DicomIO
 from pydicom.filereader import _read_file_meta_info, read_partial, read_preamble
+from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.tag import BaseTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 
@@ -145,7 +146,7 @@ class WsiDicomIO(DicomIO):
         return _read_file_meta_info(self._stream)
 
     def read_dataset(self) -> Dataset:
-        """Read dataset, exluding EOT and PixelData from stream."""
+        """Read dataset, excluding EOT and PixelData from stream."""
         extended_offset_table_tag = ExtendedOffsetTableTag
 
         def _stop_at(tag: BaseTag, vr: Optional[str], length: int) -> bool:
@@ -253,6 +254,46 @@ class WsiDicomIO(DicomIO):
             write_ul(length)
         else:
             write_ul(0xFFFFFFFF)
+
+    def write_preamble(self):
+        """Write DICOM preamble."""
+        self.seek(0)
+        preamble = b"\x00" * 128
+        self.write(preamble)
+        self.write(b"DICM")
+
+    def write_file_meta_info(
+        self, instance_uid: UID, sop_class_uid: UID, transfer_syntax: UID
+    ):
+        """Write file meta info.
+
+        Parameters
+        ----------
+        instance_uid: UID
+            SOP Instance UID.
+        sop_class_uid: UID
+            SOP Class UID.
+
+        """
+        meta = FileMetaDataset()
+        meta.TransferSyntaxUID = transfer_syntax
+        meta.MediaStorageSOPInstanceUID = instance_uid
+        meta.MediaStorageSOPClassUID = sop_class_uid
+        validate_file_meta(meta)
+        write_file_meta_info(self, meta)
+
+    def write_dataset(self, dataset: Dataset, content_datetime: datetime):
+        """Write dataset to stream.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to write.
+
+        """
+        dataset.ContentDate = datetime.date(content_datetime).strftime("%Y%m%d")
+        dataset.ContentTime = datetime.time(content_datetime).strftime("%H%M%S.%f")
+        write_dataset(self, dataset)
 
     def close(self, force: Optional[bool] = False) -> None:
         """Close the file if owned by instance or forced."""

@@ -67,6 +67,9 @@ class WsiDicomFileTarget(Target):
             Offset table to use.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
+        transcode_settings: Optional[EncoderSettings] = None
+            If to transcode image data to another format. If None, image data
+            will be copied as is.
         """
         self._output_path = output_path
         self._offset_table = offset_table
@@ -84,7 +87,6 @@ class WsiDicomFileTarget(Target):
     def save_levels(self, levels: Levels):
         """Save levels to target."""
         # Collection of new pyramid levels.
-
         new_levels: List[Level] = []
         highest_level_in_file = levels.levels[-1]
         lowest_single_tile_level = levels.lowest_single_tile_level
@@ -179,15 +181,15 @@ class WsiDicomFileTarget(Target):
             else:
                 transfer_syntax = instances[0].image_data.transfer_syntax
                 transcoder = None
-            with WsiDicomWriter.open(filepath) as writer:
+            with WsiDicomWriter.open(
+                filepath, transfer_syntax, self._offset_table
+            ) as writer:
                 writer.write(
                     uid,
-                    transfer_syntax,
                     dataset,
                     image_data_list,
                     self._workers,
                     self._chunk_size,
-                    self._offset_table,
                     self._instance_number,
                     scale,
                     transcoder,

@@ -1,3 +1,17 @@
+#    Copyright 2023 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
 import struct
 from io import BytesIO
 from pathlib import Path
@@ -7,14 +21,24 @@ import pytest
 from pydicom import Dataset
 from pydicom.dataset import FileMetaDataset
 from pydicom.filebase import DicomFileLike
+from pydicom.filereader import read_preamble, _read_file_meta_info
 from pydicom.filewriter import write_file_meta_info
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag
 from pydicom.uid import (
+    JPEG2000,
     UID,
+    DeflatedExplicitVRLittleEndian,
     ExplicitVRBigEndian,
     ExplicitVRLittleEndian,
     ImplicitVRLittleEndian,
+    JPEG2000Lossless,
     JPEGBaseline8Bit,
+    JPEGExtended12Bit,
+    JPEGLosslessP14,
+    JPEGLosslessSV1,
+    JPEGLSLossless,
+    JPEGLSNearLossless,
+    RLELossless,
     generate_uid,
 )
 
@@ -237,6 +261,7 @@ class TestWsiDicomIO:
         post_position = io.tell()
         assert read_length == length
         assert post_position == pre_position + 4
+        io.close()
 
     @pytest.mark.parametrize("is_implicit_VR", [True, False])
     def test_read_tag_vr(self, buffer: BinaryIO, is_implicit_VR: bool):
@@ -259,6 +284,7 @@ class TestWsiDicomIO:
             assert read_vr is not None
             assert read_vr[0:2] == vr
             assert post_position == pre_position + 4
+        io.close()
 
     @pytest.mark.parametrize(
         "transfer_syntax",
@@ -297,6 +323,7 @@ class TestWsiDicomIO:
 
         # Act & Assert
         io.check_tag_and_length(tag, length, vr is not None)
+        io.close()
 
     @pytest.mark.parametrize(
         "transfer_syntax",
@@ -349,6 +376,7 @@ class TestWsiDicomIO:
             io.check_tag_and_length(
                 expected_tag, expected_length, expected_vr is not None
             )
+        io.close()
 
     def test_read_sequence_delimiter(self, buffer: BinaryIO):
         # Arrange
@@ -368,6 +396,7 @@ class TestWsiDicomIO:
         # Act & Assert
         with pytest.raises(WsiDicomFileError):
             io.read_sequence_delimiter()
+        io.close()
 
     @pytest.mark.parametrize("little_endian", [True, False])
     @pytest.mark.parametrize("value", [0, 1, 2**64 - 1])
@@ -389,6 +418,7 @@ class TestWsiDicomIO:
         buffer.seek(0)
         read_value = struct.unpack(format, buffer.read(8))[0]
         assert read_value == value
+        io.close()
 
     @pytest.mark.parametrize(
         "transfer_syntax",
@@ -432,3 +462,64 @@ class TestWsiDicomIO:
             assert read_vr == vr
         read_length = struct.unpack(format + "L", buffer.read(4))[0]
         assert read_length == length
+        io.close()
+
+    @pytest.mark.parametrize(
+        "transfer_syntax",
+        [
+            JPEGBaseline8Bit,
+            ExplicitVRBigEndian,
+            ExplicitVRLittleEndian,
+            ImplicitVRLittleEndian,
+        ],
+    )
+    def test_write_preamble(self, buffer: BinaryIO, transfer_syntax: UID):
+        # Arrange
+        io = WsiDicomIO(
+            buffer, transfer_syntax.is_little_endian, transfer_syntax.is_implicit_VR
+        )
+
+        # Act
+        io.write_preamble()
+
+        # Assert
+        buffer.seek(0)
+        read_preamble(buffer, False)
+        io.close()
+
+    @pytest.mark.parametrize(
+        "transfer_syntax",
+        [
+            DeflatedExplicitVRLittleEndian,
+            ExplicitVRBigEndian,
+            ExplicitVRLittleEndian,
+            ImplicitVRLittleEndian,
+            JPEG2000,
+            JPEG2000Lossless,
+            JPEGBaseline8Bit,
+            JPEGExtended12Bit,
+            JPEGLosslessP14,
+            JPEGLosslessSV1,
+            JPEGLSLossless,
+            JPEGLSNearLossless,
+            RLELossless,
+        ],
+    )
+    def test_write_meta(self, buffer: BinaryIO, transfer_syntax: UID):
+        # Arrange
+        instance_uid = generate_uid()
+        class_uid = WSI_SOP_CLASS_UID
+        io = WsiDicomIO(
+            buffer, transfer_syntax.is_little_endian, transfer_syntax.is_implicit_VR
+        )
+
+        # Act
+        io.write_file_meta_info(instance_uid, class_uid, transfer_syntax)
+
+        # Assert
+        buffer.seek(0)
+        file_meta = _read_file_meta_info(buffer)
+        assert file_meta.TransferSyntaxUID == transfer_syntax
+        assert file_meta.MediaStorageSOPInstanceUID == instance_uid
+        assert file_meta.MediaStorageSOPClassUID == class_uid
+        io.close()
