@@ -347,9 +347,7 @@ class WsiDicomWriter:
             * (dataset.bits // 8)
             * dataset.frame_count
         )
-        print("writing pixel data tag", self._file.tell())
         self._file.write_tag_of_vr_and_length(PixelDataTag, "OB", length)
-        print("wrote pixel data tag", self._file.tell())
         for (path, z), image_data in sorted(data.items()):
             self._write_pixel_data(
                 image_data, False, z, path, workers, chunk_size, scale, transcoder

@@ -299,7 +299,7 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath, transfer_syntax) as writer:
+        with WsiDicomWriter.open(filepath) as writer:
             writer._write_preamble()
 
         # Assert
@@ -330,7 +330,9 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath, transfer_syntax) as writer:
+        with WsiDicomWriter.open(filepath) as writer:
+            writer._file.is_implicit_VR = transfer_syntax.is_implicit_VR
+            writer._file.is_little_endian = transfer_syntax.is_little_endian
             writer._write_preamble()
             writer._write_file_meta(instance_uid, transfer_syntax)
         file_meta = read_file_meta_info(filepath)
@@ -371,13 +373,14 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(writen_table_type))
 
         # Act
-        with WsiDicomWriter.open(filepath, transfer_syntax) as writer:
+        with WsiDicomWriter.open(filepath) as writer:
             writen_frame_positions = writer._write_encapsulated_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
                 WsiDataset(dataset).frame_count,
                 1,
                 100,
                 writen_table_type,
+                transfer_syntax,
                 1,
                 None,
             )
@@ -426,8 +429,10 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(transfer_syntax))
 
         # Act
-        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
-            write_file._write_unencapsulated_pixel_data(
+        with WsiDicomWriter.open(filepath) as writer:
+            writer._file.is_implicit_VR = transfer_syntax.is_implicit_VR
+            writer._file.is_little_endian = transfer_syntax.is_little_endian
+            writer._write_unencapsulated_pixel_data(
                 WsiDataset(dataset),
                 {(image_data.default_path, image_data.default_z): image_data},
                 1,
@@ -459,8 +464,8 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
-            write_file._reserve_bot(frame_count)
+        with WsiDicomWriter.open(filepath) as writer:
+            writer._reserve_bot(frame_count)
 
         # Assert
         with WsiDicomIO.open(
@@ -483,8 +488,8 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
-            write_file._reserve_eot(frame_count)
+        with WsiDicomWriter.open(filepath) as writer:
+            writer._reserve_eot(frame_count)
 
         # Assert
         with WsiDicomIO.open(
@@ -518,8 +523,8 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
-            write_file._write_pixel_data_end_tag()
+        with WsiDicomWriter.open(filepath) as writer:
+            writer._write_pixel_data_end_tag()
 
         # Assert
         with WsiDicomIO.open(
@@ -539,8 +544,8 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
-            positions = write_file._write_pixel_data(
+        with WsiDicomWriter.open(filepath) as writer:
+            positions = writer._write_pixel_data(
                 image_data=image_data,
                 encapsulate=True,
                 z=image_data.default_z,
@@ -584,8 +589,10 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(table_type))
 
         # Act
-        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
-            write_file.write(
+        with WsiDicomWriter.open(filepath) as writer:
+            writer._file.is_implicit_VR = transfer_syntax.is_implicit_VR
+            writer._file.is_little_endian = transfer_syntax.is_little_endian
+            writer.write(
                 generate_uid(),
                 transfer_syntax,
                 WsiDataset(dataset),
