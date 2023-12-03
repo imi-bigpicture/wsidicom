@@ -23,7 +23,6 @@ from typing import (
     Iterator,
     List,
     Optional,
-    Sequence,
     Tuple,
 )
 
@@ -35,10 +34,13 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomBotOverflow
-from wsidicom.file.io.frame_index import OffsetTableType
+from wsidicom.file.io.frame_index import (
+    BotWriter,
+    EotWriter,
+    OffsetTableType,
+    OffsetTableWriter,
+)
 from wsidicom.file.io.tags import (
-    ExtendedOffsetTableLengthsTag,
-    ExtendedOffsetTableTag,
     PixelDataTag,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
@@ -198,8 +200,8 @@ class WsiDicomWriter:
         # Write new pixel data start
         (
             new_dataset_end,
-            new_table_start,
             new_pixels_start,
+            table_writer,
         ) = self._write_encapsulated_pixel_data_start(
             offset_table, len(frame_positions)
         )
@@ -216,9 +218,8 @@ class WsiDicomWriter:
 
         # Write pixel data end and EOT or BOT if used.
         return self._write_encapsulated_pixel_data_end(
-            offset_table,
+            table_writer,
             transfer_syntax,
-            new_table_start,
             new_pixels_start,
             new_dataset_end,
             new_frame_positions,
@@ -264,8 +265,8 @@ class WsiDicomWriter:
         """
         (
             dataset_end,
-            table_start,
             pixels_start,
+            table_writer,
         ) = self._write_encapsulated_pixel_data_start(offset_table, number_of_frames)
         frame_positions = [
             position
@@ -275,9 +276,8 @@ class WsiDicomWriter:
             )
         ]
         frame_positions = self._write_encapsulated_pixel_data_end(
-            offset_table,
+            table_writer,
             transfer_syntax,
-            table_start,
             pixels_start,
             dataset_end,
             frame_positions,
@@ -286,35 +286,27 @@ class WsiDicomWriter:
 
     def _write_encapsulated_pixel_data_end(
         self,
-        offset_table: OffsetTableType,
+        offset_writer: Optional[OffsetTableWriter],
         transfer_syntax: UID,
-        table_start: Optional[int],
         pixels_start: int,
         dataset_end: int,
         frame_positions: List[int],
     ):
         last_frame_end = self._write_pixel_data_end_tag()
-        if offset_table is not OffsetTableType.EMPTY:
-            if table_start is None:
-                raise ValueError("Table start should not be None")
-            elif offset_table == OffsetTableType.EXTENDED:
-                self._write_eot(
-                    table_start, pixels_start, frame_positions, last_frame_end
-                )
-            elif offset_table == OffsetTableType.BASIC:
-                try:
-                    self._write_bot(table_start, pixels_start, frame_positions)
-                except WsiDicomBotOverflow as exception:
-                    if self._file.owned:
-                        frame_positions = self._rewrite_as_table(
-                            OffsetTableType.EXTENDED,
-                            transfer_syntax,
-                            dataset_end,
-                            last_frame_end,
-                            frame_positions,
-                        )
-                    else:
-                        raise exception
+        if offset_writer is not None:
+            try:
+                offset_writer.write(pixels_start, frame_positions, last_frame_end)
+            except WsiDicomBotOverflow as exception:
+                if self._file.owned:
+                    frame_positions = self._rewrite_as_table(
+                        OffsetTableType.EXTENDED,
+                        transfer_syntax,
+                        dataset_end,
+                        last_frame_end,
+                        frame_positions,
+                    )
+                else:
+                    raise exception
         return frame_positions
 
     def _write_unencapsulated_pixel_data(
@@ -389,51 +381,11 @@ class WsiDicomWriter:
         dataset.ContentTime = datetime.time(now).strftime("%H%M%S.%f")
         write_dataset(self._file, dataset)
 
-    def _reserve_eot(self, number_of_frames: int) -> int:
-        """Reserve space in file for extended offset table.
-
-        Parameters
-        ----------
-        number_of_frames: int
-            Number of frames to reserve space for.
-
-        """
-        table_start = self._file.tell()
-        BYTES_PER_ITEM = 8
-        eot_length = BYTES_PER_ITEM * number_of_frames
-        self._file.write_tag_of_vr_and_length(ExtendedOffsetTableTag, "OV", eot_length)
-        for _ in range(number_of_frames):
-            self._file.write_unsigned_long_long(0)
-        self._file.write_tag_of_vr_and_length(
-            ExtendedOffsetTableLengthsTag, "OV", eot_length
-        )
-        for _ in range(number_of_frames):
-            self._file.write_unsigned_long_long(0)
-        return table_start
-
-    def _reserve_bot(self, number_of_frames: int) -> int:
-        """Reserve space in file for basic offset table.
-
-        Parameters
-        ----------
-        number_of_frames: int
-            Number of frames to reserve space for.
-
-        """
-        table_start = self._file.tell()
-        BYTES_PER_ITEM = 4
-        tag_lengths = BYTES_PER_ITEM * number_of_frames
-        self._file.write_tag(ItemTag)
-        self._file.write_leUL(tag_lengths)
-        for _ in range(number_of_frames):
-            self._file.write_leUL(0)
-        return table_start
-
     def _write_encapsulated_pixel_data_start(
         self,
         offset_table: OffsetTableType,
         number_of_frames: int,
-    ) -> Tuple[int, Optional[int], int]:
+    ) -> Tuple[int, int, Optional[OffsetTableWriter]]:
         """Write tags starting pixel data and reserves space for BOT or EOT.
 
         Parameters
@@ -450,15 +402,17 @@ class WsiDicomWriter:
             start of pixel data (after BOT).
         """
         dataset_end = self._file.tell()
-        table_start: Optional[int] = None
+        table_writer = None
         if offset_table == OffsetTableType.EXTENDED:
-            table_start = self._reserve_eot(number_of_frames)
+            table_writer = EotWriter(self._file)
+            table_writer.reserve(number_of_frames)
 
         # Write pixel data tag
         self._file.write_tag_of_vr_and_length(PixelDataTag, "OB")
 
         if offset_table == OffsetTableType.BASIC:
-            table_start = self._reserve_bot(number_of_frames)
+            table_writer = BotWriter(self._file)
+            table_writer.reserve(number_of_frames)
         elif (
             offset_table == OffsetTableType.EMPTY
             or offset_table == OffsetTableType.EXTENDED
@@ -468,94 +422,7 @@ class WsiDicomWriter:
 
         pixel_data_start = self._file.tell()
 
-        return dataset_end, table_start, pixel_data_start
-
-    def _write_bot(
-        self, bot_start: int, pixel_data_start: int, frame_positions: Sequence[int]
-    ) -> None:
-        """Write BOT to file.
-
-        Parameters
-        ----------
-        bot_start: int
-            File position of BOT start
-        bot_end: int
-            File position of BOT end
-        frame_positions: Sequence[int]
-            List of file positions for frames, relative to file start
-
-        """
-        BYTES_PER_ITEM = 4
-        # Check that last BOT entry is not over 2^32 - 1
-        last_entry = frame_positions[-1] - pixel_data_start
-        if last_entry > 2**32 - 1:
-            raise WsiDicomBotOverflow(
-                "Image data exceeds 2^32 - 1 bytes "
-                "An extended offset table should be used"
-            )
-
-        self._file.seek(bot_start)  # Go to first BOT entry
-        self._file.check_tag_and_length(
-            ItemTag, BYTES_PER_ITEM * len(frame_positions), False
-        )
-
-        for frame_position in frame_positions:  # Write BOT
-            self._file.write_leUL(frame_position - pixel_data_start)
-
-    def _write_eot(
-        self,
-        eot_start: int,
-        pixel_data_start: int,
-        frame_positions: Sequence[int],
-        last_frame_end: int,
-    ) -> None:
-        """Write EOT to file.
-
-        Parameters
-        ----------
-        bot_start: int
-            File position of EOT start
-        pixel_data_start: int
-            File position of EOT end
-        frame_positions: Sequence[int]
-            List of file positions for frames, relative to file start
-        last_frame_end: int
-            Position of last frame end.
-
-        """
-        BYTES_PER_ITEM = 8
-        # Check that last BOT entry is not over 2^64 - 1
-        last_entry = frame_positions[-1] - pixel_data_start
-        if last_entry > 2**64 - 1:
-            raise ValueError(
-                "Image data exceeds 2^64 - 1 bytes, likely something is wrong."
-            )
-        self._file.seek(eot_start)  # Go to EOT table
-        self._file.check_tag_and_length(
-            ExtendedOffsetTableTag, BYTES_PER_ITEM * len(frame_positions), True
-        )
-        for frame_position in frame_positions:  # Write EOT
-            relative_position = frame_position - pixel_data_start
-            self._file.write_unsigned_long_long(relative_position)
-
-        # EOT LENGTHS
-        self._file.check_tag_and_length(
-            ExtendedOffsetTableLengthsTag,
-            BYTES_PER_ITEM * len(frame_positions),
-            True,
-        )
-        frame_start = frame_positions[0]
-        for frame_end in frame_positions[1:]:  # Write EOT lengths
-            frame_length = frame_end - frame_start
-            self._file.write_unsigned_long_long(frame_length)
-            frame_start = frame_end
-
-        # Last frame length, end does not include tag and length
-        TAG_BYTES = 4
-        LENGTH_BYTES = 4
-        last_frame_start = frame_start + TAG_BYTES + LENGTH_BYTES
-        last_frame_length = last_frame_end - last_frame_start
-        self._file.write_unsigned_long_long(last_frame_length)
+        return dataset_end, pixel_data_start, table_writer
 
     def _write_pixel_data(
         self,

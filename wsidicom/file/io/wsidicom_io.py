@@ -247,7 +247,6 @@ class WsiDicomIO(DicomIO):
             write_us = self.write_beUS
         self.write_tag(Tag(tag))
         if not self.is_implicit_VR:
-            print("write vr")
             self.write(bytes(value_representation, "iso8859"))
             write_us(0)
         if length is not None:

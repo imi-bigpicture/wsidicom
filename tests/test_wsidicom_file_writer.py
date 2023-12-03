@@ -280,11 +280,6 @@ def dataset(image_data: ImageData, frame_count: int):
 
 @pytest.mark.save
 class TestWsiDicomWriter:
-    @staticmethod
-    def assertEndOfFile(file: WsiDicomIO):
-        with pytest.raises(EOFError):
-            file.read(1, need_exact_length=True)
-
     @pytest.mark.parametrize(
         "transfer_syntax",
         [
@@ -458,65 +453,6 @@ class TestWsiDicomWriter:
                 == offset + index * bits * tile_size.area * samples_per_pixel // 8
             )
             assert frame_position[1] == bits * tile_size.area * samples_per_pixel // 8
-
-    def test_reserve_bot(self, tmp_path: Path, frame_count: int):
-        # Arrange
-        filepath = tmp_path.joinpath("1.dcm")
-
-        # Act
-        with WsiDicomWriter.open(filepath) as writer:
-            writer._reserve_bot(frame_count)
-
-        # Assert
-        with WsiDicomIO.open(
-            filepath,
-            "rb",
-            JPEGBaseline8Bit.is_little_endian,
-            JPEGBaseline8Bit.is_implicit_VR,
-        ) as read_file:
-            tag = read_file.read_tag()
-            assert tag == ItemTag
-            BOT_ITEM_LENGTH = 4
-            length = read_file.read_tag_length()
-            assert length == BOT_ITEM_LENGTH * frame_count
-            for frame in range(frame_count):
-                assert read_file.read_UL() == 0
-            self.assertEndOfFile(read_file)
-
-    def test_reserve_eot(self, tmp_path: Path, frame_count: int):
-        # Arrange
-        filepath = tmp_path.joinpath("1.dcm")
-
-        # Act
-        with WsiDicomWriter.open(filepath) as writer:
-            writer._reserve_eot(frame_count)
-
-        # Assert
-        with WsiDicomIO.open(
-            filepath,
-            "rb",
-            JPEGBaseline8Bit.is_little_endian,
-            JPEGBaseline8Bit.is_implicit_VR,
-        ) as read_file:
-            tag = read_file.read_tag()
-            assert tag == ExtendedOffsetTableTag
-
-            read_file.read_tag_vr()
-            EOT_ITEM_LENGTH = 8
-            length = read_file.read_tag_length()
-            assert length == EOT_ITEM_LENGTH * frame_count
-            for frame in range(frame_count):
-                assert unpack("<Q", read_file.read(EOT_ITEM_LENGTH))[0] == 0
-
-            tag = read_file.read_tag()
-            read_file.read_tag_vr()
-            assert tag == ExtendedOffsetTableLengthsTag
-            length = read_file.read_tag_length()
-            EOT_ITEM_LENGTH = 8
-            assert length == EOT_ITEM_LENGTH * frame_count
-            for frame in range(frame_count):
-                assert unpack("<Q", read_file.read(EOT_ITEM_LENGTH))[0] == 0
-            self.assertEndOfFile(read_file)
 
     def test_write_pixel_end(self, tmp_path: Path):
         # Arrange

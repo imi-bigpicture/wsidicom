@@ -19,3 +19,8 @@ from wsidicom.file.io.frame_index.eot import Eot
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.native_pixel_data_frame import NativePixelData
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
+from wsidicom.file.io.frame_index.offset_table_writer import (
+    BotWriter,
+    EotWriter,
+    OffsetTableWriter,
+)
