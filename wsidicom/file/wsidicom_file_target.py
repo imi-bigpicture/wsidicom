@@ -84,6 +84,7 @@ class WsiDicomFileTarget(Target):
     def save_levels(self, levels: Levels):
         """Save levels to target."""
         # Collection of new pyramid levels.
+
         new_levels: List[Level] = []
         highest_level_in_file = levels.levels[-1]
         lowest_single_tile_level = levels.lowest_single_tile_level
@@ -157,6 +158,7 @@ class WsiDicomFileTarget(Target):
             focal_planes, optical_paths, tiled_size = self._get_frame_information(
                 image_data_list
             )
+
             dataset = instances[0].dataset.as_tiled_full(
                 focal_planes, optical_paths, tiled_size, scale
             )
@@ -177,8 +179,8 @@ class WsiDicomFileTarget(Target):
             else:
                 transfer_syntax = instances[0].image_data.transfer_syntax
                 transcoder = None
-            with WsiDicomWriter.open(filepath, transfer_syntax) as wsi_file:
-                wsi_file.write(
+            with WsiDicomWriter.open(filepath) as writer:
+                writer.write(
                     uid,
                     transfer_syntax,
                     dataset,
@@ -196,10 +198,12 @@ class WsiDicomFileTarget(Target):
         return filepaths
 
     def _open_files(self, filepaths: Iterable[Path]) -> List[WsiInstance]:
-        files = [WsiDicomFileReader.open(filepath) for filepath in filepaths]
-        self._opened_files.extend(files)
+        readers = [WsiDicomFileReader.open(filepath) for filepath in filepaths]
+        self._opened_files.extend(readers)
         return [
-            WsiInstance([file.dataset for file in files], WsiDicomFileImageData(files))
+            WsiInstance(
+                [reader.dataset for reader in readers], WsiDicomFileImageData(readers)
+            )
         ]
 
     @staticmethod

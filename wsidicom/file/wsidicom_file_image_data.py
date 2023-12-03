@@ -31,25 +31,27 @@ class WsiDicomFileImageData(WsiDicomImageData):
     Image data can be sparsly or fully tiled and/or concatenated.
     """
 
-    def __init__(self, files: Union[WsiDicomReader, Sequence[WsiDicomReader]]) -> None:
+    def __init__(
+        self, readers: Union[WsiDicomReader, Sequence[WsiDicomReader]]
+    ) -> None:
         """
-        Create WsiDicomFileImageData from frame data in files.
+        Create WsiDicomFileImageData from frame data from readers.
 
         Parameters
         ----------
-        files: Union[WsiDicomFile, Sequence[WsiDicomFile]]
-            Single or list of WsiDicomFiles containing frame data.
+        readers: Union[WsiDicomReader, Sequence[WsiDicomReader]]
+            Single or list of WsiDicomReader containing frame data.
         """
-        if not isinstance(files, Sequence):
-            files = [files]
+        if not isinstance(readers, Sequence):
+            readers = [readers]
 
         # Key is frame offset
-        self._files = OrderedDict(
+        self._readers = OrderedDict(
             (file.frame_offset, file)
-            for file in sorted(files, key=lambda file: file.frame_offset)
+            for file in sorted(readers, key=lambda file: file.frame_offset)
         )
-        self._transfer_syntax = files[0].transfer_syntax
-        dataset = files[0].dataset
+        self._transfer_syntax = readers[0].transfer_syntax
+        dataset = readers[0].dataset
         codec = Codec.create(
             self.transfer_syntax,
             dataset.samples_per_pixel,
@@ -57,18 +59,20 @@ class WsiDicomFileImageData(WsiDicomImageData):
             dataset.tile_size,
             dataset.photometric_interpretation,
         )
-        super().__init__([file.dataset for file in self._files.values()], codec)
+        super().__init__([file.dataset for file in self._readers.values()], codec)
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({self._files.values()})"
+        return f"{type(self).__name__}({self._readers.values()})"
 
     def __str__(self) -> str:
-        return f"{type(self).__name__} of files {self._files.values()}"
+        return f"{type(self).__name__} of files {self._readers.values()}"
 
     @property
     def files(self) -> List[Path]:
         return [
-            file.filepath for file in self._files.values() if file.filepath is not None
+            reader.filepath
+            for reader in self._readers.values()
+            if reader.filepath is not None
         ]
 
     @property
@@ -77,7 +81,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         return self._transfer_syntax
 
     @lru_cache
-    def _get_file(self, frame_index: int) -> WsiDicomReader:
+    def _get_reader(self, frame_index: int) -> WsiDicomReader:
         """
         Return file containing frame index.
 
@@ -93,7 +97,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         WsiDicomFile
             File containing the frame
         """
-        for frame_offset, file in self._files.items():
+        for frame_offset, file in self._readers.items():
             if (
                 frame_index < frame_offset + file.frame_count
                 and frame_index >= frame_offset
@@ -115,6 +119,6 @@ class WsiDicomFileImageData(WsiDicomImageData):
         bytes
             The frame in bytes
         """
-        file = self._get_file(frame_index)
-        tile_frame = file.read_frame(frame_index)
+        reader = self._get_reader(frame_index)
+        tile_frame = reader.read_frame(frame_index)
         return tile_frame

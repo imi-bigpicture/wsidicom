@@ -12,13 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module for reading and writing DICOM WSI files."""
 
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
-from wsidicom.file.io.wsidicom_reader import (
-    WsiDicomFileReader,
-    WsiDicomReader,
-    WsiDicomStreamReader,
-)
-from wsidicom.file.io.wsidicom_writer import WsiDicomWriter
-from wsidicom.file.io.frame_index import OffsetTableType
+from wsidicom.file.io.frame_index.bot import Bot, EmptyBotException
+from wsidicom.file.io.frame_index.empty_bot import EmptyBot
+from wsidicom.file.io.frame_index.eot import Eot
+from wsidicom.file.io.frame_index.frame_index import FrameIndex
+from wsidicom.file.io.frame_index.native_pixel_data_frame import NativePixelData
+from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType

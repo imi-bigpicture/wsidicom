@@ -17,9 +17,7 @@ import os
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from struct import pack
 from typing import (
-    BinaryIO,
     Dict,
     Iterable,
     Iterator,
@@ -27,19 +25,23 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    Union,
 )
 
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.encaps import itemize_frame
-from pydicom.filebase import DicomFileLike
 from pydicom.filewriter import write_dataset, write_file_meta_info
-from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
-from pydicom.uid import UID, UncompressedTransferSyntaxes
+from pydicom.tag import ItemTag, SequenceDelimiterTag
+from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomBotOverflow
-from wsidicom.file.io.wsidicom_io import OffsetTableType, WsiDicomIO
+from wsidicom.file.io.frame_index import OffsetTableType
+from wsidicom.file.io.tags import (
+    ExtendedOffsetTableLengthsTag,
+    ExtendedOffsetTableTag,
+    PixelDataTag,
+)
+from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
@@ -47,61 +49,46 @@ from wsidicom.thread import ConditionalThreadPoolExecutor
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
-class WsiDicomWriter(WsiDicomIO):
+class WsiDicomWriter:
     """Writer for DICOM WSI files."""
 
-    def __init__(
-        self,
-        stream: BinaryIO,
-        little_endian: bool = True,
-        implicit_vr: bool = False,
-        filepath: Optional[Path] = None,
-        owned: bool = False,
-    ) -> None:
+    def __init__(self, file: WsiDicomIO) -> None:
         """
         Create a writer for DICOM WSI data.
 
         Parameters
         ----------
-        stream: BinaryIO
-            Stream to open.
-        little_endian: bool = True
-            If the file should be written in little endian.
-        implicit_vr: bool = False
-            If the file should be written with implicit VR.
-        filepath: Optional[Path] = None
-            Optional filepath of stream.
-        owned: bool = False
-            If the stream should be closed by this instance.
+        file: WsiDicomIO
+            File to open for writing.
         """
-        super().__init__(stream, filepath, owned)
-        self._file.is_little_endian = little_endian
-        self._file.is_implicit_VR = implicit_vr
+        self._file = file
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     @classmethod
-    def open(cls, file: Path, transfer_syntax: UID) -> "WsiDicomWriter":
+    def open(cls, file: Path) -> "WsiDicomWriter":
         """Open file in path as WsiDicomWriter.
 
         Parameters
         ----------
         file: Path
             Path to file.
-        transfer_syntax: UID
-            Transfer syntax to use for file.
 
         Returns
         ----------
         WsiDicomWriter
             WsiDicomWriter for file.
         """
-        stream = open(file, "w+b")
-        return cls(
-            stream,
-            transfer_syntax.is_little_endian,
-            transfer_syntax.is_implicit_VR,
-            file,
-            True,
+        stream = WsiDicomIO(
+            open(file, "w+b"),
+            filepath=file,
+            owned=True,
         )
+        return cls(stream)
 
     def write(
         self,
@@ -134,15 +121,18 @@ class WsiDicomWriter(WsiDicomIO):
         chunk_size: int
             Number of frames to give each worker.
         offset_table: OffsetTableType
-            Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, None - no offset table.
+            Offset table to use.
         instance_number: int
             Instance number for file.
         scale: int = 1
             Scale factor.
+        transcoder: Optional[Encoder] = None,
+            Encoder to use if transcoding pixel data. Default is None to not transcode.
 
         """
-        if transfer_syntax in UncompressedTransferSyntaxes:
+        if transcoder is not None:
+            transfer_syntax = transcoder.transfer_syntax
+        if not transfer_syntax.is_encapsulated:
             offset_table = OffsetTableType.NONE
         elif offset_table is OffsetTableType.NONE:
             offset_table = OffsetTableType.EMPTY
@@ -162,13 +152,15 @@ class WsiDicomWriter(WsiDicomIO):
                 workers,
                 chunk_size,
                 offset_table,
+                transfer_syntax,
                 scale,
                 transcoder,
             )
 
     def copy_with_table(
         self,
-        copy_from: Union[BytesIO, BinaryIO],
+        copy_from: WsiDicomIO,
+        transfer_syntax: UID,
         offset_table: OffsetTableType,
         dataset_end: int,
         pixels_end: int,
@@ -179,7 +171,9 @@ class WsiDicomWriter(WsiDicomIO):
         Parameters
         ----------
         copy_from: DicomFileLike
-            File to copy from.
+            File to copy from. Must have encapsulated pixel data.
+        transfer_syntax: UID
+            Transfer syntax in file.
         offset_table: OffsetTableType
             Offset table to use in new file.
         dataset_end: int
@@ -194,6 +188,10 @@ class WsiDicomWriter(WsiDicomIO):
         List[int]
             List of frame position relative to start of new file.
         """
+        if not transfer_syntax.is_encapsulated:
+            raise ValueError("Transfer syntax must be encapsulated")
+        if offset_table is OffsetTableType.NONE:
+            raise ValueError("Offset table must be used")
         # Copy dataset until EOT or PixelData tag
         copy_from.seek(0)
         self._file.write(copy_from.read(dataset_end))
@@ -219,11 +217,15 @@ class WsiDicomWriter(WsiDicomIO):
         # Write pixel data end and EOT or BOT if used.
         return self._write_encapsulated_pixel_data_end(
             offset_table,
+            transfer_syntax,
             new_table_start,
             new_pixels_start,
             new_dataset_end,
             new_frame_positions,
         )
+
+    def close(self, force: Optional[bool] = False) -> None:
+        self._file.close(force)
 
     def _write_encapsulated_pixel_data(
         self,
@@ -232,6 +234,7 @@ class WsiDicomWriter(WsiDicomIO):
         workers: int,
         chunk_size: int,
         offset_table: OffsetTableType,
+        transfer_syntax: UID,
         scale: int,
         transcoder: Optional[Encoder],
     ) -> List[int]:
@@ -249,6 +252,8 @@ class WsiDicomWriter(WsiDicomIO):
             Number of frames to give each worker.
         offset_table: OffsetTableType
             Offset table to use.
+        transfer_syntax: UID
+            Transfer syntax to use.
         scale: int = 1
             Scale factor.
 
@@ -269,13 +274,20 @@ class WsiDicomWriter(WsiDicomIO):
                 image_data, True, z, path, workers, chunk_size, scale, transcoder
             )
         ]
-        return self._write_encapsulated_pixel_data_end(
-            offset_table, table_start, pixels_start, dataset_end, frame_positions
+        frame_positions = self._write_encapsulated_pixel_data_end(
+            offset_table,
+            transfer_syntax,
+            table_start,
+            pixels_start,
+            dataset_end,
+            frame_positions,
         )
+        return frame_positions
 
     def _write_encapsulated_pixel_data_end(
         self,
         offset_table: OffsetTableType,
+        transfer_syntax: UID,
         table_start: Optional[int],
         pixels_start: int,
         dataset_end: int,
@@ -293,9 +305,10 @@ class WsiDicomWriter(WsiDicomIO):
                 try:
                     self._write_bot(table_start, pixels_start, frame_positions)
                 except WsiDicomBotOverflow as exception:
-                    if self._owned:
+                    if self._file.owned:
                         frame_positions = self._rewrite_as_table(
                             OffsetTableType.EXTENDED,
+                            transfer_syntax,
                             dataset_end,
                             last_frame_end,
                             frame_positions,
@@ -334,7 +347,9 @@ class WsiDicomWriter(WsiDicomIO):
             * (dataset.bits // 8)
             * dataset.frame_count
         )
-        self._write_tag("PixelData", "OB", length)
+        print("writing pixel data tag", self._file.tell())
+        self._file.write_tag_of_vr_and_length(PixelDataTag, "OB", length)
+        print("wrote pixel data tag", self._file.tell())
         for (path, z), image_data in sorted(data.items()):
             self._write_pixel_data(
                 image_data, False, z, path, workers, chunk_size, scale, transcoder
@@ -376,36 +391,6 @@ class WsiDicomWriter(WsiDicomIO):
         dataset.ContentTime = datetime.time(now).strftime("%H%M%S.%f")
         write_dataset(self._file, dataset)
 
-    def _write_tag(
-        self, tag: str, value_representation: str, length: Optional[int] = None
-    ):
-        """Write tag, tag VR and length.
-
-        Parameters
-        ----------
-        tag: str
-            Name of tag to write.
-        value_representation: str.
-            Value representation (VR) of tag to write.
-        length: Optional[int] = None
-            Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
-
-        """
-        if self._file.is_little_endian:
-            write_ul = self._file.write_leUL
-            write_us = self._file.write_leUS
-        else:
-            write_ul = self._file.write_beUL
-            write_us = self._file.write_beUS
-        self._file.write_tag(Tag(tag))
-        if not self._file.is_implicit_VR:
-            self._file.write(bytes(value_representation, "iso8859"))
-            write_us(0)
-        if length is not None:
-            write_ul(length)
-        else:
-            write_ul(0xFFFFFFFF)
-
     def _reserve_eot(self, number_of_frames: int) -> int:
         """Reserve space in file for extended offset table.
 
@@ -418,12 +403,14 @@ class WsiDicomWriter(WsiDicomIO):
         table_start = self._file.tell()
         BYTES_PER_ITEM = 8
         eot_length = BYTES_PER_ITEM * number_of_frames
-        self._write_tag("ExtendedOffsetTable", "OV", eot_length)
+        self._file.write_tag_of_vr_and_length(ExtendedOffsetTableTag, "OV", eot_length)
         for _ in range(number_of_frames):
-            self._write_unsigned_long_long(0)
-        self._write_tag("ExtendedOffsetTableLengths", "OV", eot_length)
+            self._file.write_unsigned_long_long(0)
+        self._file.write_tag_of_vr_and_length(
+            ExtendedOffsetTableLengthsTag, "OV", eot_length
+        )
         for _ in range(number_of_frames):
-            self._write_unsigned_long_long(0)
+            self._file.write_unsigned_long_long(0)
         return table_start
 
     def _reserve_bot(self, number_of_frames: int) -> int:
@@ -470,7 +457,7 @@ class WsiDicomWriter(WsiDicomIO):
             table_start = self._reserve_eot(number_of_frames)
 
         # Write pixel data tag
-        self._write_tag("PixelData", "OB")
+        self._file.write_tag_of_vr_and_length(PixelDataTag, "OB")
 
         if offset_table == OffsetTableType.BASIC:
             table_start = self._reserve_bot(number_of_frames)
@@ -510,23 +497,12 @@ class WsiDicomWriter(WsiDicomIO):
             )
 
         self._file.seek(bot_start)  # Go to first BOT entry
-        self._check_tag_and_length(
+        self._file.check_tag_and_length(
             ItemTag, BYTES_PER_ITEM * len(frame_positions), False
         )
 
         for frame_position in frame_positions:  # Write BOT
             self._file.write_leUL(frame_position - pixel_data_start)
-
-    def _write_unsigned_long_long(self, value: int):
-        """Write unsigned long long integer (64 bits) as little endian.
-
-        Parameters
-        ----------
-        value: int
-            Value to write.
-
-        """
-        self._file.write(pack("<Q", value))
 
     def _write_eot(
         self,
@@ -557,23 +533,23 @@ class WsiDicomWriter(WsiDicomIO):
                 "Image data exceeds 2^64 - 1 bytes, likely something is wrong."
             )
         self._file.seek(eot_start)  # Go to EOT table
-        self._check_tag_and_length(
-            Tag("ExtendedOffsetTable"), BYTES_PER_ITEM * len(frame_positions), True
+        self._file.check_tag_and_length(
+            ExtendedOffsetTableTag, BYTES_PER_ITEM * len(frame_positions), True
         )
         for frame_position in frame_positions:  # Write EOT
             relative_position = frame_position - pixel_data_start
-            self._write_unsigned_long_long(relative_position)
+            self._file.write_unsigned_long_long(relative_position)
 
         # EOT LENGTHS
-        self._check_tag_and_length(
-            Tag("ExtendedOffsetTableLengths"),
+        self._file.check_tag_and_length(
+            ExtendedOffsetTableLengthsTag,
             BYTES_PER_ITEM * len(frame_positions),
             True,
         )
         frame_start = frame_positions[0]
         for frame_end in frame_positions[1:]:  # Write EOT lengths
             frame_length = frame_end - frame_start
-            self._write_unsigned_long_long(frame_length)
+            self._file.write_unsigned_long_long(frame_length)
             frame_start = frame_end
 
         # Last frame length, end does not include tag and length
@@ -581,7 +557,7 @@ class WsiDicomWriter(WsiDicomIO):
         LENGTH_BYTES = 4
         last_frame_start = frame_start + TAG_BYTES + LENGTH_BYTES
         last_frame_length = last_frame_end - last_frame_start
-        self._write_unsigned_long_long(last_frame_length)
+        self._file.write_unsigned_long_long(last_frame_length)
 
     def _write_pixel_data(
         self,
@@ -692,6 +668,7 @@ class WsiDicomWriter(WsiDicomIO):
     def _rewrite_as_table(
         self,
         offset_table: OffsetTableType,
+        transfer_syntax: UID,
         dataset_end: int,
         pixels_end: int,
         frame_positions: List[int],
@@ -703,6 +680,8 @@ class WsiDicomWriter(WsiDicomIO):
         ----------
         offset_table: OffsetTableType
             Offset table to use in new file.
+        transfer_syntax: UID
+            Transfer syntax to use in new file.
         dataset_end: int
             Position of EOT or PixelData tag in current file.
         pixels_end: int
@@ -715,22 +694,23 @@ class WsiDicomWriter(WsiDicomIO):
         List[int]
             List of frame position relative to start of new file.
         """
-        if self._filepath is not None:
-            temp_file_path = self._filepath.with_suffix(".tmp")
-            buffer = open(temp_file_path, "w+b")
+        if self._file.filepath is not None:
+            temp_file_path = self._file.filepath.with_suffix(".tmp")
+            new_file = WsiDicomIO.open(temp_file_path, "w+b")
         else:
             temp_file_path = None
-            buffer = BytesIO()
-        with WsiDicomWriter(buffer, True, False, None, True) as writer:
-            frame_positions = writer.copy_with_table(
-                self._stream,
-                offset_table,
-                dataset_end,
-                pixels_end,
-                frame_positions,
-            )
+            new_file = WsiDicomIO(BytesIO())
+        writer = WsiDicomWriter(new_file)
+        frame_positions = writer.copy_with_table(
+            self._file,
+            transfer_syntax,
+            offset_table,
+            dataset_end,
+            pixels_end,
+            frame_positions,
+        )
         self._file.close()
-        if temp_file_path is not None and self._filepath is not None:
-            os.replace(temp_file_path, self._filepath)
-        self._file = DicomFileLike(buffer)
+        if temp_file_path is not None and self._file.filepath is not None:
+            os.replace(temp_file_path, self._file.filepath)
+        self._file = new_file
         return frame_positions

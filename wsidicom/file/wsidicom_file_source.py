@@ -18,11 +18,10 @@ import io
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union
+from typing import BinaryIO, Dict, Iterable, List, Optional, Union
 
 from pydicom import dcmread
 from pydicom.errors import InvalidDicomError
-from pydicom.filereader import _read_file_meta_info, read_preamble
 from pydicom.fileset import FileSet
 from pydicom.uid import UID, MediaStorageDirectoryStorage
 
@@ -35,6 +34,7 @@ from wsidicom.file.io import (
     WsiDicomReader,
     WsiDicomStreamReader,
 )
+from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Size
 from wsidicom.graphical_annotations import AnnotationInstance
@@ -61,15 +61,15 @@ class WsiDicomFileSource(Source):
         self._level_files: List[WsiDicomReader] = []
         self._label_files: List[WsiDicomReader] = []
         self._overview_files: List[WsiDicomReader] = []
-        self._annotation_files: List[BinaryIO] = []
+        self._annotation_files: List[WsiDicomIO] = []
         for file in self._list_input_files(files):
             try:
-                stream, filepath = self._open_file(file)
+                stream = self._open_file(file)
                 sop_class_uid = self._get_sop_class_uid(stream)
                 if sop_class_uid == WSI_SOP_CLASS_UID:
                     try:
-                        if filepath is not None:
-                            wsi_file = WsiDicomFileReader(stream, filepath, True)
+                        if stream.filepath is not None:
+                            wsi_file = WsiDicomFileReader(stream, stream.filepath)
                         else:
                             wsi_file = WsiDicomStreamReader(stream)
                         if wsi_file.image_type == ImageType.VOLUME:
@@ -79,15 +79,15 @@ class WsiDicomFileSource(Source):
                         elif wsi_file.image_type == ImageType.OVERVIEW:
                             self._overview_files.append(wsi_file)
                     except WsiDicomNotSupportedError:
-                        logging.info(f"Non-supported file {stream.name}.")
-                        if filepath is not None:
+                        logging.info(f"Non-supported file {stream}.")
+                        if stream.filepath is not None:
                             stream.close()
                 elif sop_class_uid == ANN_SOP_CLASS_UID:
                     self._annotation_files.append(stream)
-                elif filepath is not None:
+                elif stream.filepath is not None:
                     logging.debug(
                         f"Non-supported SOP class {sop_class_uid} "
-                        f"for file {stream.name}."
+                        f"for file {stream}."
                     )
                     # File was opened but not supported SOP class.
                     stream.close()
@@ -126,7 +126,10 @@ class WsiDicomFileSource(Source):
     @property
     def annotation_instances(self) -> Iterable[AnnotationInstance]:
         """The annotation instances parsed from the source."""
-        return AnnotationInstance.open(self._annotation_files)
+        return [
+            AnnotationInstance.open_dataset(file.read_dataset())
+            for file in self._annotation_files
+        ]
 
     def close(self) -> None:
         """Close all opened files in the source. Does not close provided streams."""
@@ -191,11 +194,11 @@ class WsiDicomFileSource(Source):
         return cls(files)
 
     @staticmethod
-    def _open_file(file: Union[Path, BinaryIO]) -> Tuple[BinaryIO, Optional[Path]]:
+    def _open_file(file: Union[Path, BinaryIO]) -> WsiDicomIO:
         """Open stream if file is path. Return stream and optional filepath."""
         if isinstance(file, Path):
-            return open(file, "rb"), file
-        return file, None
+            return WsiDicomIO.open(file, "rb")
+        return WsiDicomIO(file)
 
     @staticmethod
     def _list_input_files(
@@ -257,14 +260,10 @@ class WsiDicomFileSource(Source):
         )
 
     @staticmethod
-    def _get_sop_class_uid(stream: BinaryIO) -> Optional[UID]:
+    def _get_sop_class_uid(stream: WsiDicomIO) -> Optional[UID]:
         """Return the SOP class UID from file metadata or None if invalid DICOM."""
         try:
-            stream.seek(0)
-            read_preamble(stream, False)
-            metadata = _read_file_meta_info(stream)
-            stream.seek(0)
-            return metadata.MediaStorageSOPClassUID
+            return stream.read_media_storage_sop_class_uid()
         except InvalidDicomError as exception:
             logging.debug(
                 f"Failed to parse DICOM file metadata for file {stream}, not DICOM? "

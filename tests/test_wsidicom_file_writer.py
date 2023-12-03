@@ -25,10 +25,9 @@ from PIL import ImageChops, ImageFilter, ImageStat
 from PIL.Image import Image
 from pydicom import Sequence as DicomSequence
 from pydicom.dataset import Dataset
-from pydicom.filebase import DicomFile
 from pydicom.filereader import read_file_meta_info
 from pydicom.misc import is_dicom
-from pydicom.tag import ItemTag, SequenceDelimiterTag, Tag
+from pydicom.tag import ItemTag, SequenceDelimiterTag
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -44,14 +43,22 @@ from pydicom.uid import (
     JPEGLSLossless,
     JPEGLSNearLossless,
     RLELossless,
-    UncompressedTransferSyntaxes,
     generate_uid,
 )
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
-from wsidicom.file.io import WsiDicomFileReader, WsiDicomStreamReader, WsiDicomWriter
+from wsidicom.file.io import (
+    WsiDicomFileReader,
+    WsiDicomIO,
+    WsiDicomStreamReader,
+    WsiDicomWriter,
+)
+from wsidicom.file.io.tags import (
+    ExtendedOffsetTableLengthsTag,
+    ExtendedOffsetTableTag,
+)
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.group.level import Level
 from wsidicom.instance import ImageCoordinateSystem, ImageData
@@ -61,23 +68,21 @@ from wsidicom.uid import WSI_SOP_CLASS_UID
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 
 
-class WsiDicomTestFile(WsiDicomStreamReader):
+class WsiDicomTestReader(WsiDicomStreamReader):
     """Test version of WsiDicomFile that overrides __init__."""
 
     def __init__(
         self,
-        filepath: Path,
+        file: WsiDicomIO,
         transfer_syntax: UID,
         frame_count: int,
         bits: int,
         tile_size: Size,
         samples_per_pixel: int,
     ):
-        self._filepath = filepath
-        self._file = DicomFile(filepath, mode="rb")
+        self._file = file
         self._file.is_little_endian = transfer_syntax.is_little_endian
         self._file.is_implicit_VR = transfer_syntax.is_implicit_VR
-        self._stream = self._file.parent
         self._frame_count = frame_count
         self._pixel_data_position = 0
         self._owned = True
@@ -88,13 +93,33 @@ class WsiDicomTestFile(WsiDicomStreamReader):
         dataset.Columns = tile_size.width
         dataset.Rows = tile_size.height
         dataset.SamplesPerPixel = samples_per_pixel
+        dataset.NumberOfFrames = frame_count
+        dataset.ImageType = ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]
 
         self._dataset = WsiDataset(dataset)
-        self.__enter__()
 
     @property
     def frame_count(self) -> int:
         return self._frame_count
+
+    @classmethod
+    def open(
+        cls,
+        filepath: Path,
+        transfer_syntax: UID,
+        frame_count: int,
+        bits: int,
+        tile_size: Size,
+        samples_per_pixel: int,
+    ) -> "WsiDicomTestReader":
+        stream = WsiDicomIO(
+            open(filepath, "rb"),
+            filepath=filepath,
+            owned=True,
+        )
+        return cls(
+            stream, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
+        )
 
 
 class WsiDicomTestImageData(ImageData):
@@ -189,7 +214,7 @@ def frames(
     samples_per_pixel: int,
     tile_size: Size,
 ):
-    if transfer_syntax in UncompressedTransferSyntaxes:
+    if not transfer_syntax.is_encapsulated:
         min_frame_length = bits * tile_size.area * samples_per_pixel // 8
         max_frame_length = min_frame_length
     else:
@@ -256,9 +281,9 @@ def dataset(image_data: ImageData, frame_count: int):
 @pytest.mark.save
 class TestWsiDicomWriter:
     @staticmethod
-    def assertEndOfFile(file: WsiDicomTestFile):
+    def assertEndOfFile(file: WsiDicomIO):
         with pytest.raises(EOFError):
-            file._file.read(1, need_exact_length=True)
+            file.read(1, need_exact_length=True)
 
     @pytest.mark.parametrize(
         "transfer_syntax",
@@ -274,8 +299,8 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
-            write_file._write_preamble()
+        with WsiDicomWriter.open(filepath, transfer_syntax) as writer:
+            writer._write_preamble()
 
         # Assert
         assert is_dicom(filepath)
@@ -305,9 +330,9 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(filepath, JPEGBaseline8Bit) as write_file:
-            write_file._write_preamble()
-            write_file._write_file_meta(instance_uid, transfer_syntax)
+        with WsiDicomWriter.open(filepath, transfer_syntax) as writer:
+            writer._write_preamble()
+            writer._write_file_meta(instance_uid, transfer_syntax)
         file_meta = read_file_meta_info(filepath)
 
         # Assert
@@ -346,8 +371,8 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(writen_table_type))
 
         # Act
-        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
-            writen_frame_positions = write_file._write_encapsulated_pixel_data(
+        with WsiDicomWriter.open(filepath, transfer_syntax) as writer:
+            writen_frame_positions = writer._write_encapsulated_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
                 WsiDataset(dataset).frame_count,
                 1,
@@ -358,10 +383,11 @@ class TestWsiDicomWriter:
             )
 
         # Assert
-        with WsiDicomTestFile(
+        with WsiDicomTestReader.open(
             filepath, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
-        ) as read_file:
-            read_frame_positions, read_table_type = read_file._parse_pixel_data()
+        ) as reader:
+            read_table_type = reader.offset_table_type
+            read_frame_positions = reader.frame_index.index
         TAG_BYTES = 4
         LENGTH_BYTES = 4
         frame_offsets = [
@@ -411,10 +437,11 @@ class TestWsiDicomWriter:
             )
 
         # Assert
-        with WsiDicomTestFile(
+        with WsiDicomTestReader.open(
             filepath, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
         ) as read_file:
-            read_frame_positions, read_table_type = read_file._parse_pixel_data()
+            read_table_type = read_file.offset_table_type
+            read_frame_positions = read_file.frame_index.index
         assert read_table_type == OffsetTableType.NONE
         if transfer_syntax == ImplicitVRLittleEndian:
             offset = 8
@@ -427,14 +454,7 @@ class TestWsiDicomWriter:
             )
             assert frame_position[1] == bits * tile_size.area * samples_per_pixel // 8
 
-    def test_reserve_bot(
-        self,
-        tmp_path: Path,
-        frame_count: int,
-        bits: int,
-        tile_size: Size,
-        samples_per_pixel: int,
-    ):
+    def test_reserve_bot(self, tmp_path: Path, frame_count: int):
         # Arrange
         filepath = tmp_path.joinpath("1.dcm")
 
@@ -443,26 +463,22 @@ class TestWsiDicomWriter:
             write_file._reserve_bot(frame_count)
 
         # Assert
-        with WsiDicomTestFile(
-            filepath, JPEGBaseline8Bit, frame_count, bits, tile_size, samples_per_pixel
+        with WsiDicomIO.open(
+            filepath,
+            "rb",
+            JPEGBaseline8Bit.is_little_endian,
+            JPEGBaseline8Bit.is_implicit_VR,
         ) as read_file:
-            tag = read_file._file.read_tag()
+            tag = read_file.read_tag()
             assert tag == ItemTag
             BOT_ITEM_LENGTH = 4
-            length = read_file._read_tag_length()
+            length = read_file.read_tag_length()
             assert length == BOT_ITEM_LENGTH * frame_count
             for frame in range(frame_count):
-                assert read_file._file.read_UL() == 0
+                assert read_file.read_UL() == 0
             self.assertEndOfFile(read_file)
 
-    def test_reserve_eot(
-        self,
-        tmp_path: Path,
-        frame_count: int,
-        bits: int,
-        tile_size: Size,
-        samples_per_pixel: int,
-    ):
+    def test_reserve_eot(self, tmp_path: Path, frame_count: int):
         # Arrange
         filepath = tmp_path.joinpath("1.dcm")
 
@@ -471,36 +487,33 @@ class TestWsiDicomWriter:
             write_file._reserve_eot(frame_count)
 
         # Assert
-        with WsiDicomTestFile(
-            filepath, JPEGBaseline8Bit, frame_count, bits, tile_size, samples_per_pixel
+        with WsiDicomIO.open(
+            filepath,
+            "rb",
+            JPEGBaseline8Bit.is_little_endian,
+            JPEGBaseline8Bit.is_implicit_VR,
         ) as read_file:
-            tag = read_file._file.read_tag()
-            assert tag == Tag("ExtendedOffsetTable")
-            read_file._read_tag_vr()
-            EOT_ITEM_LENGTH = 8
-            length = read_file._read_tag_length()
-            assert length == EOT_ITEM_LENGTH * frame_count
-            for frame in range(frame_count):
-                assert unpack("<Q", read_file._file.read(EOT_ITEM_LENGTH))[0] == 0
+            tag = read_file.read_tag()
+            assert tag == ExtendedOffsetTableTag
 
-            tag = read_file._file.read_tag()
-            read_file._read_tag_vr()
-            assert tag == Tag("ExtendedOffsetTableLengths")
-            length = read_file._read_tag_length()
+            read_file.read_tag_vr()
+            EOT_ITEM_LENGTH = 8
+            length = read_file.read_tag_length()
+            assert length == EOT_ITEM_LENGTH * frame_count
+            for frame in range(frame_count):
+                assert unpack("<Q", read_file.read(EOT_ITEM_LENGTH))[0] == 0
+
+            tag = read_file.read_tag()
+            read_file.read_tag_vr()
+            assert tag == ExtendedOffsetTableLengthsTag
+            length = read_file.read_tag_length()
             EOT_ITEM_LENGTH = 8
             assert length == EOT_ITEM_LENGTH * frame_count
             for frame in range(frame_count):
-                assert unpack("<Q", read_file._file.read(EOT_ITEM_LENGTH))[0] == 0
+                assert unpack("<Q", read_file.read(EOT_ITEM_LENGTH))[0] == 0
             self.assertEndOfFile(read_file)
 
-    def test_write_pixel_end(
-        self,
-        tmp_path: Path,
-        frame_count: int,
-        bits: int,
-        tile_size: Size,
-        samples_per_pixel: int,
-    ):
+    def test_write_pixel_end(self, tmp_path: Path):
         # Arrange
         filepath = tmp_path.joinpath("1.dcm")
 
@@ -509,24 +522,19 @@ class TestWsiDicomWriter:
             write_file._write_pixel_data_end_tag()
 
         # Assert
-        with WsiDicomTestFile(
-            filepath, JPEGBaseline8Bit, frame_count, bits, tile_size, samples_per_pixel
+        with WsiDicomIO.open(
+            filepath,
+            "rb",
+            JPEGBaseline8Bit.is_little_endian,
+            JPEGBaseline8Bit.is_implicit_VR,
         ) as read_file:
-            tag = read_file._file.read_le_tag()
+            tag = read_file.read_le_tag()
             assert tag == SequenceDelimiterTag
-            length = read_file._read_tag_length()
+            length = read_file.read_tag_length()
             assert length == 0
 
     @pytest.mark.parametrize("transfer_syntax", [JPEGBaseline8Bit])
-    def test_write_pixel_data(
-        self,
-        image_data: ImageData,
-        tmp_path: Path,
-        frame_count: int,
-        bits: int,
-        tile_size: Size,
-        samples_per_pixel: int,
-    ):
+    def test_write_pixel_data(self, image_data: ImageData, tmp_path: Path):
         # Arrange
         filepath = tmp_path.joinpath("1.dcm")
 
@@ -541,67 +549,26 @@ class TestWsiDicomWriter:
                 chunk_size=10,
             )
 
-        # Assert
-        with WsiDicomTestFile(
-            filepath, JPEGBaseline8Bit, frame_count, bits, tile_size, samples_per_pixel
+        with WsiDicomIO.open(
+            filepath,
+            "rb",
+            JPEGBaseline8Bit.is_little_endian,
+            JPEGBaseline8Bit.is_implicit_VR,
         ) as read_file:
             for position in positions:
-                read_file._file.seek(position)
-                tag = read_file._file.read_le_tag()
+                read_file.seek(position)
+                tag = read_file.read_le_tag()
                 assert tag == ItemTag
 
     @pytest.mark.parametrize(
-        "transfer_syntax",
+        ["transfer_syntax", "table_type"],
         [
-            JPEGBaseline8Bit,
-            ExplicitVRBigEndian,
-            ExplicitVRLittleEndian,
-            ImplicitVRLittleEndian,
-        ],
-    )
-    def test_write_unsigned_long_long(
-        self,
-        tmp_path: Path,
-        frame_count: int,
-        transfer_syntax: UID,
-        bits,
-        tile_size,
-        samples_per_pixel,
-    ):
-        # Arrange
-        values = [0, 4294967295]
-        MODE = "<Q"
-        BYTES_PER_ITEM = 8
-
-        # Act
-        filepath = tmp_path.joinpath("1.dcm")
-        with WsiDicomWriter.open(filepath, transfer_syntax) as write_file:
-            for value in values:
-                write_file._write_unsigned_long_long(value)
-
-        # Assert
-        with WsiDicomTestFile(
-            filepath, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
-        ) as read_file:
-            for value in values:
-                read_value = unpack(MODE, read_file._file.read(BYTES_PER_ITEM))[0]
-                assert read_value == value
-
-    @pytest.mark.parametrize(
-        "table_type",
-        [
-            OffsetTableType.EMPTY,
-            OffsetTableType.BASIC,
-            OffsetTableType.EXTENDED,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "transfer_syntax",
-        [
-            JPEGBaseline8Bit,
-            ExplicitVRBigEndian,
-            ExplicitVRLittleEndian,
-            ImplicitVRLittleEndian,
+            (JPEGBaseline8Bit, OffsetTableType.EMPTY),
+            (JPEGBaseline8Bit, OffsetTableType.BASIC),
+            (JPEGBaseline8Bit, OffsetTableType.EXTENDED),
+            (ExplicitVRBigEndian, OffsetTableType.NONE),
+            (ExplicitVRLittleEndian, OffsetTableType.NONE),
+            (ImplicitVRLittleEndian, OffsetTableType.NONE),
         ],
     )
     def test_write(

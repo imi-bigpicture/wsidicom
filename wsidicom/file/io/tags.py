@@ -12,13 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module for reading and writing DICOM WSI files."""
+from pydicom.tag import Tag
 
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
-from wsidicom.file.io.wsidicom_reader import (
-    WsiDicomFileReader,
-    WsiDicomReader,
-    WsiDicomStreamReader,
-)
-from wsidicom.file.io.wsidicom_writer import WsiDicomWriter
-from wsidicom.file.io.frame_index import OffsetTableType
+PixelDataTag = Tag("PixelData")
+ExtendedOffsetTableTag = Tag("ExtendedOffsetTable")
+ExtendedOffsetTableLengthsTag = Tag("ExtendedOffsetTableLengths")
