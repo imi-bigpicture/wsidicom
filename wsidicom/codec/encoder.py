@@ -138,7 +138,30 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         return self._settings.photometric_interpretation
 
     @classmethod
-    def create(cls, settings: SettingsType) -> "Encoder[SettingsType]":
+    def create(
+        cls, transfer_syntax: UID, bits: int, photometric_interpretation: str
+    ) -> "Encoder":
+        """Create an encoder using settings.
+
+        Parameters
+        ----------
+        settings: SettingsType
+            Settings for the encoder.
+
+        Returns
+        ----------
+        Encoder[SettingsType]
+            Encoder for settings.
+        """
+        settings = Settings.create(
+            transfer_syntax,
+            bits,
+            photometric_interpretation,
+        )
+        return cls.create_for_settings(settings)
+
+    @classmethod
+    def create_for_settings(cls, settings: SettingsType) -> "Encoder[SettingsType]":
         """Create an encoder using settings.
 
         Parameters

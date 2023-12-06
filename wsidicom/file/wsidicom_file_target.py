@@ -173,7 +173,7 @@ class WsiDicomFileTarget(Target):
                     raise ValueError(
                         "Transcode settings must match image data bits and photometric interpretation."
                     )
-                transcoder = Encoder.create(self._transcode_settings)
+                transcoder = Encoder.create_for_settings(self._transcode_settings)
                 transfer_syntax = transcoder.transfer_syntax
                 dataset.PhotometricInterpretation = (
                     transcoder.photometric_interpretation

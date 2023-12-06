@@ -68,7 +68,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
         """The uid of the transfer syntax of the image."""
         return self._transfer_syntax
 
-    def get_decoded_tiles(
+    def _get_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
     ) -> Iterator[Image]:
         """
@@ -97,9 +97,9 @@ class WsiDicomWebImageData(WsiDicomImageData):
             if frame_index == -1:
                 yield self.blank_tile
             frame = next(frames)
-            yield self._codec.decode(frame)
+            yield self.decoder.decode(frame)
 
-    def get_encoded_tiles(
+    def _get_encoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
     ) -> Iterator[bytes]:
         """

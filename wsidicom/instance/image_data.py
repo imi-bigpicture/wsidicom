@@ -29,8 +29,7 @@ from PIL import Image as Pillow
 from PIL.Image import Image
 from pydicom.uid import UID
 
-from wsidicom.codec import Codec
-from wsidicom.codec.encoder import Encoder
+from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
@@ -45,7 +44,9 @@ class ImageData(metaclass=ABCMeta):
     Can be inherited to implement support for other image/file formats. Subclasses
     should implement properties to get transfer_syntax, image_size, tile_size,
     pixel_spacing,  samples_per_pixel, and photometric_interpretation and methods
-    get_tile() and close().
+    _get_decoded_tile(), _get_encoded_tile(), and close(). Optionally the methods
+    _get_decoded_tiles() and _get_encoded_tiles() can be overridden for more efficient
+    fetching of multiple tiles.
 
     Additionally properties focal_planes and/or optical_paths should be
     overridden if multiple focal planes or optical paths are implemented.
@@ -55,8 +56,8 @@ class ImageData(metaclass=ABCMeta):
     _blank_tile: Optional[Image] = None
     _encoded_blank_tile: Optional[bytes] = None
 
-    def __init__(self, codec: Codec):
-        self._codec = codec
+    def __init__(self, encoder: Encoder):
+        self._encoder = encoder
 
     @property
     @abstractmethod
@@ -242,12 +243,12 @@ class ImageData(metaclass=ABCMeta):
     def blank_encoded_tile(self) -> bytes:
         """Return encoded background tile."""
         if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self.codec.encode(self.blank_tile)
+            self._encoded_blank_tile = self.encoder.encode(self.blank_tile)
         return self._encoded_blank_tile
 
     @property
-    def codec(self) -> Codec:
-        return self._codec
+    def encoder(self) -> Encoder:
+        return self._encoder
 
     def get_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
@@ -269,7 +270,7 @@ class ImageData(metaclass=ABCMeta):
         Iterator[Image]
             Tiles as Images.
         """
-        return (self._get_decoded_tile(tile, z, path) for tile in tiles)
+        return self._get_decoded_tiles(tiles, z, path)
 
     def get_encoded_tiles(
         self,
@@ -277,7 +278,7 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str,
         scale: int = 1,
-        encoder: Optional[Encoder] = None,
+        reencoder: Optional[Encoder] = None,
     ) -> Iterator[bytes]:
         """
         Return bytes for tiles.
@@ -290,21 +291,21 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
+        scale: int = 1
+            Scale to use for downscaling.
+        reencoder: Optional[Encoder] = None
+            Encoder to use for re-encoding. If None do not re-encode tiles.
 
         Returns
         ----------
         Iterator[Image]
             Tiles as Images.
         """
+        if reencoder is not None:
+            return self._get_reencoded_tiles(tiles, z, path, scale, reencoder)
         if scale == 1:
-            encoded_tiles = (self._get_encoded_tile(tile, z, path) for tile in tiles)
-        else:
-            encoded_tiles = (
-                self.get_scaled_encoded_tile(tile, z, path, scale) for tile in tiles
-            )
-        if encoder is None:
-            return encoded_tiles
-        return (encoder.encode(self.codec.decode(tile)) for tile in encoded_tiles)
+            return self._get_encoded_tiles(tiles, z, path)
+        return (self.get_scaled_encoded_tile(tile, z, path, scale) for tile in tiles)
 
     def get_scaled_tile(
         self,
@@ -363,31 +364,6 @@ class ImageData(metaclass=ABCMeta):
             self.tile_size.to_tuple(), resample=settings.pillow_resampling_filter
         )
 
-    def get_scaled_encoded_tile(
-        self, scaled_tile_point: Point, z: float, path: str, scale: int
-    ) -> bytes:
-        """
-        Return scaled tile as bytes.
-
-        Parameters
-        ----------
-        scaled_tile_point: Point,
-            Scaled position of tile to get.
-        z: float
-            Z coordinate.
-        path: str
-            Optical path.
-        Scale: int
-            Scale to use for downscaling.
-
-        Returns
-        ----------
-        bytes
-            Scaled tile as bytes.
-        """
-        image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
-        return self.codec.encode(image)
-
     def get_tile(self, tile_point: Point, z: float, path: str) -> Image:
         """
         Get tile as Pillow image.
@@ -419,12 +395,30 @@ class ImageData(metaclass=ABCMeta):
             for tile_point, tile in zip(tiles, self.get_decoded_tiles(tiles, z, path))
         )
 
-    def _crop_tile(self, tile_point: Point, tile: Image) -> Image:
-        tile_crop = self.image_region.inside_crop(tile_point, self.tile_size)
-        # Check if tile is an edge tile that should be cropped
-        if tile_crop.size != self.tile_size:
-            return tile.crop(box=tile_crop.box)
-        return tile
+    def get_scaled_encoded_tile(
+        self, scaled_tile_point: Point, z: float, path: str, scale: int
+    ) -> bytes:
+        """
+        Return scaled tile as bytes.
+
+        Parameters
+        ----------
+        scaled_tile_point: Point,
+            Scaled position of tile to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        Scale: int
+            Scale to use for downscaling.
+
+        Returns
+        ----------
+        bytes
+            Scaled tile as bytes.
+        """
+        image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
+        return self.encoder.encode(image)
 
     def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         """
@@ -447,15 +441,13 @@ class ImageData(metaclass=ABCMeta):
         bytes
             Tile image as bytes.
         """
-        tile_frame = self._get_encoded_tile(tile, z, path)
-
         # Check if tile is an edge tile that should be cropped
         cropped_tile_region = self.image_region.inside_crop(tile, self.tile_size)
-        if cropped_tile_region.size != self.tile_size:
-            image = self.codec.decode(tile_frame)
-            image.crop(box=cropped_tile_region.box_from_origin)
-            tile_frame = self.codec.encode(image)
-        return tile_frame
+        if cropped_tile_region.size == self.tile_size:
+            return self._get_encoded_tile(tile, z, path)
+        image = self._get_decoded_tile(tile, z, path)
+        image.crop(box=cropped_tile_region.box_from_origin)
+        return self.encoder.encode(image)
 
     def stitch_tiles(self, region: Region, path: str, z: float, threads: int) -> Image:
         """Stitches tiles together to form requested image.
@@ -511,6 +503,78 @@ class ImageData(metaclass=ABCMeta):
         )
         return image
 
+    def valid_tiles(self, region: Region, z: float, path: str) -> bool:
+        """
+        Check if tile region is inside image and z coordinate and optical path exists.
+
+        Parameters
+        ----------
+        region: Region
+            Tile region.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        """
+        return (
+            region.is_inside(self.plane_region)
+            and (z in self.focal_planes)
+            and (path in self.optical_paths)
+        )
+
+    def _get_decoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[Image]:
+        """
+        Return Pillow images for tiles. Implementations can override this with a more
+        efficent method for getting multiple tiles.
+
+        Parameters
+        ----------
+        tiles: Iterable[Point]
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        Iterator[Image]
+            Tiles as Images.
+        """
+        return (self._get_decoded_tile(tile, z, path) for tile in tiles)
+
+    def _get_encoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[bytes]:
+        """
+        Return bytes for tiles. Implementations can override this with a more efficent
+        method for getting multiple tiles.
+
+        Parameters
+        ----------
+        tiles: Iterable[Point]
+            Tiles to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        ----------
+        Iterator[Image]
+            Tiles as Images.
+        """
+        return (self._get_encoded_tile(tile, z, path) for tile in tiles)
+
+    def _crop_tile(self, tile_point: Point, tile: Image) -> Image:
+        tile_crop = self.image_region.inside_crop(tile_point, self.tile_size)
+        # Check if tile is an edge tile that should be cropped
+        if tile_crop.size != self.tile_size:
+            return tile.crop(box=tile_crop.box)
+        return tile
+
     def _paste_tiles(
         self,
         image: Image,
@@ -554,24 +618,38 @@ class ImageData(metaclass=ABCMeta):
         ) as pool:
             pool.map(thread_paste, tile_region.chunked_iterate_all(threads))
 
-    def valid_tiles(self, region: Region, z: float, path: str) -> bool:
+    def _get_reencoded_tiles(
+        self,
+        tiles: Iterable[Point],
+        z: float,
+        path: str,
+        scale: int,
+        reencoder: Encoder,
+    ) -> Iterator[bytes]:
         """
-        Check if tile region is inside image and z coordinate and optical path exists.
+        Return re-encoded bytes for tiles.
 
         Parameters
         ----------
-        region: Region
-            Tile region.
+        tiles: Iterable[Point]
+            Tiles to get.
         z: float
             Z coordinate.
         path: str
             Optical path.
+        scale: int
+            Scale to use for downscaling.
+        reencoder: Encoder
+            Encoder to use for re-encoding.
+
         """
-        return (
-            region.is_inside(self.plane_region)
-            and (z in self.focal_planes)
-            and (path in self.optical_paths)
-        )
+        if scale == 1:
+            decoded_tiles = self._get_decoded_tiles(tiles, z, path)
+        else:
+            decoded_tiles = (
+                self.get_scaled_tile(tile, z, path, scale) for tile in tiles
+            )
+        return (reencoder.encode(tile) for tile in decoded_tiles)
 
     @staticmethod
     def _get_blank_color(
