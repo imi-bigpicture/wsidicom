@@ -29,13 +29,15 @@ from typing import (
 from PIL.Image import Image
 from pydicom.uid import UID, generate_uid
 
+from wsidicom.codec import Encoder
+from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
-from wsidicom.file import WsiDicomFileSource, WsiDicomFileTarget
-from wsidicom.file import OffsetTableType
+from wsidicom.file import OffsetTableType, WsiDicomFileSource, WsiDicomFileTarget
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -45,8 +47,6 @@ from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import SlideUids
 from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
-from wsidicom.config import settings
-from wsidicom.codec import Settings as EncoderSettings
 
 
 class WsiDicom:
@@ -598,7 +598,7 @@ class WsiDicom:
         offset_table: Union["str", OffsetTableType] = OffsetTableType.BASIC,
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
-        transcode_settings: Optional[EncoderSettings] = None,
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
     ) -> List[Path]:
         """
         Save wsi as DICOM-files in path. Instances for the same pyramid
@@ -629,6 +629,9 @@ class WsiDicom:
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+            Optional settings or encoder for transcoding image data. If None, image data
+            will be copied as is.
 
         Returns
         ----------
@@ -656,7 +659,7 @@ class WsiDicom:
             offset_table,
             include_levels,
             add_missing_levels,
-            transcode_settings,
+            transcoding,
         ) as target:
             target.save_levels(self.levels)
             if self.overviews is not None:

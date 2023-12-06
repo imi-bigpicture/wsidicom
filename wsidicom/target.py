@@ -13,10 +13,11 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from typing import Callable, Optional, Sequence
+from typing import Callable, Optional, Sequence, Union
 
 from pydicom.uid import UID
 
+from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.series import Labels, Levels, Overviews
 
@@ -34,7 +35,7 @@ class Target(metaclass=ABCMeta):
         chunk_size: int,
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
-        transcode_settings: Optional[EncoderSettings] = None,
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
     ) -> None:
         """Initiate a target.
 
@@ -60,7 +61,10 @@ class Target(metaclass=ABCMeta):
         self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
         self._instance_number = 0
-        self._transcode_settings = transcode_settings
+        if isinstance(transcoding, EncoderSettings):
+            self._transcoder = Encoder.create_for_settings(transcoding)
+        else:
+            self._transcoder = transcoding
         self.__enter__()
 
     @abstractmethod

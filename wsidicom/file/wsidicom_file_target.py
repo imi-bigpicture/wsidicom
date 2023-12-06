@@ -16,7 +16,7 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from pydicom.uid import UID
 
@@ -48,7 +48,7 @@ class WsiDicomFileTarget(Target):
         offset_table: OffsetTableType,
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
-        transcode_settings: Optional[EncoderSettings] = None,
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
     ):
         """
         Create a WsiDicomFileTarget.
@@ -72,8 +72,8 @@ class WsiDicomFileTarget(Target):
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
-        transcode_settings: Optional[EncoderSettings] = None
-            If to transcode image data to another format. If None, image data
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+            Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
         """
         self._output_path = output_path
@@ -86,7 +86,7 @@ class WsiDicomFileTarget(Target):
             chunk_size,
             include_levels,
             add_missing_levels,
-            transcode_settings,
+            transcoding,
         )
 
     @property
@@ -181,23 +181,21 @@ class WsiDicomFileTarget(Target):
             dataset = instances[0].dataset.as_tiled_full(
                 focal_planes, optical_paths, tiled_size, scale
             )
-            if self._transcode_settings is not None:
+            if self._transcoder is not None:
                 if (
-                    self._transcode_settings.bits != instances[0].image_data.bits
-                    or self._transcode_settings.samples_per_pixel
+                    self._transcoder.bits != instances[0].image_data.bits
+                    or self._transcoder.samples_per_pixel
                     != instances[0].image_data.samples_per_pixel
                 ):
                     raise ValueError(
                         "Transcode settings must match image data bits and photometric interpretation."
                     )
-                transcoder = Encoder.create_for_settings(self._transcode_settings)
-                transfer_syntax = transcoder.transfer_syntax
+                transfer_syntax = self._transcoder.transfer_syntax
                 dataset.PhotometricInterpretation = (
-                    transcoder.photometric_interpretation
+                    self._transcoder.photometric_interpretation
                 )
             else:
                 transfer_syntax = instances[0].image_data.transfer_syntax
-                transcoder = None
             with WsiDicomWriter.open(
                 filepath, transfer_syntax, self._offset_table
             ) as writer:
@@ -209,7 +207,7 @@ class WsiDicomFileTarget(Target):
                     self._chunk_size,
                     self._instance_number,
                     scale,
-                    transcoder,
+                    self._transcoder,
                 )
             filepaths.append(filepath)
             self._instance_number += 1
