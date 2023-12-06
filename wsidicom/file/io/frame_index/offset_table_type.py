@@ -26,7 +26,7 @@ class OffsetTableType(Enum):
     @classmethod
     def from_string(cls, offset_table: str) -> "OffsetTableType":
         """Return OffsetTableType parsed from string."""
-        if offset_table == "none":
+        if offset_table.strip().lower() == "none":
             return OffsetTableType.NONE
         if offset_table.strip().lower() == "empty":
             return OffsetTableType.EMPTY
