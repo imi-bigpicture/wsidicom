@@ -38,7 +38,7 @@ class TestWsiDicomFileTargetIntegration:
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, False
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, False
         ) as target:
             target.save_levels(wsi.levels)
 
@@ -63,7 +63,7 @@ class TestWsiDicomFileTargetIntegration:
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, True
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, True
         ) as target:
             target.save_levels(levels_missing_smallest_levels)
 
@@ -92,6 +92,7 @@ class TestWsiDicomFileTargetIntegration:
             1,
             100,
             OffsetTableType.BASIC,
+            None,
             False,
         ) as target:
             target._save_and_open_level(source_level, wsi.pixel_spacing, 2)

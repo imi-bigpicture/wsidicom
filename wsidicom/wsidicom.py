@@ -596,6 +596,7 @@ class WsiDicom:
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None,
         offset_table: Union["str", OffsetTableType] = OffsetTableType.BASIC,
+        include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcode_settings: Optional[EncoderSettings] = None,
     ) -> List[Path]:
@@ -622,6 +623,10 @@ class WsiDicom:
             Offset table to use, 'bot' basic offset table, 'eot' extended
             offset table, 'empty' - no offset table. Only use 'none' for
             non-encapsulated transfer syntaxes.
+        include_levels: Optional[Sequence[int]] = None
+            Optional list indices (in present levels) to include, e.g. [0, 1]
+            includes the two lowest levels. Negative indicies can be used,
+            e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
 
@@ -649,6 +654,7 @@ class WsiDicom:
             workers,
             chunk_size,
             offset_table,
+            include_levels,
             add_missing_levels,
             transcode_settings,
         ) as target:

@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 from pydicom.uid import UID
 
@@ -32,6 +32,7 @@ class Target(metaclass=ABCMeta):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
+        include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcode_settings: Optional[EncoderSettings] = None,
     ) -> None:
@@ -46,12 +47,17 @@ class Target(metaclass=ABCMeta):
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
+        include_levels: Optional[Sequence[int]] = None
+            Optional list indices (in present levels) to include, e.g. [0, 1]
+            includes the two lowest levels. Negative indicies can be used,
+            e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
         """
         self._uid_generator = uid_generator
         self._workers = workers
         self._chunk_size = chunk_size
+        self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
         self._instance_number = 0
         self._transcode_settings = transcode_settings
@@ -82,3 +88,43 @@ class Target(metaclass=ABCMeta):
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
+
+    @staticmethod
+    def _is_included_level(
+        level: int,
+        present_levels: Sequence[int],
+        allow_missing: bool,
+        include_indices: Optional[Sequence[int]] = None,
+    ) -> bool:
+        """Return true if pyramid level is in included levels.
+
+        Parameters
+        ----------
+        level: int
+            Pyramid level to check.
+        present_levels: Sequence[int]
+            List of pyramid levels present.
+        allow_missing: bool
+            If to include missing levels (not in present_levels).
+        include_indices: Optional[Sequence[int]] = None
+            Optional list indices (in present levels) to include, e.g. [0, 1]
+            includes the two lowest levels. Negative indicies can be used,
+            e.g. [-1, -2] includes the two highest levels. Default of None
+            will not limit the selection. An empty sequence will exluded all
+            levels.
+
+        Returns
+        ----------
+        bool
+            True if level should be included.
+        """
+        if level not in present_levels:
+            return allow_missing
+        if include_indices is None:
+            return True
+        absolute_levels = [
+            present_levels[level]
+            for level in include_indices
+            if -len(present_levels) <= level < len(present_levels)
+        ]
+        return level in absolute_levels

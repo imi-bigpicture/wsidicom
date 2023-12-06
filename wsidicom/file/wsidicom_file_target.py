@@ -16,7 +16,7 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from pydicom.uid import UID
 
@@ -46,7 +46,8 @@ class WsiDicomFileTarget(Target):
         workers: int,
         chunk_size: int,
         offset_table: OffsetTableType,
-        add_missing_levels: bool,
+        include_levels: Optional[Sequence[int]] = None,
+        add_missing_levels: bool = False,
         transcode_settings: Optional[EncoderSettings] = None,
     ):
         """
@@ -65,6 +66,10 @@ class WsiDicomFileTarget(Target):
             size also depends on minimun_chunk_size from image_data.
         offset_table: OffsetTableType
             Offset table to use.
+        include_levels: Optional[Sequence[int]] = None
+            Optional list indices (in present levels) to include, e.g. [0, 1]
+            includes the two lowest levels. Negative indicies can be used,
+            e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
         transcode_settings: Optional[EncoderSettings] = None
@@ -76,7 +81,12 @@ class WsiDicomFileTarget(Target):
         self._filepaths: List[Path] = []
         self._opened_files: List[WsiDicomReader] = []
         super().__init__(
-            uid_generator, workers, chunk_size, add_missing_levels, transcode_settings
+            uid_generator,
+            workers,
+            chunk_size,
+            include_levels,
+            add_missing_levels,
+            transcode_settings,
         )
 
     @property
@@ -92,6 +102,13 @@ class WsiDicomFileTarget(Target):
         lowest_single_tile_level = levels.lowest_single_tile_level
         highest_level = max(highest_level_in_file, lowest_single_tile_level)
         for pyramid_level in range(highest_level + 1):
+            if not self._is_included_level(
+                pyramid_level,
+                levels.levels,
+                self._add_missing_levels,
+                self._include_levels,
+            ):
+                continue
             if pyramid_level in levels.levels:
                 level = levels.get_level(pyramid_level)
                 self._save_group(level, 1)
