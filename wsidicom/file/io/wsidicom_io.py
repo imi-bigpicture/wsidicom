@@ -32,7 +32,7 @@ from wsidicom.file.io.tags import ExtendedOffsetTableTag
 
 
 class WsiDicomIO(DicomIO):
-    """Class for reading or writing DICOM WSI file."""
+    """Class for reading or writing DICOM WSI to stream."""
 
     def __init__(
         self,
@@ -48,7 +48,7 @@ class WsiDicomIO(DicomIO):
         Parameters
         ----------
         stream: BinaryIO
-            Stream to open.
+            Stream to use.
         little_endian: bool = True
             If to set the stream to little endian.
         implicit_vr: bool = False
@@ -77,7 +77,7 @@ class WsiDicomIO(DicomIO):
     def open(
         cls,
         filepath: Path,
-        mode: Union[Literal["rb"], Literal["w+b"]],
+        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
         little_endian: bool = True,
         implicit_vr: bool = False,
     ) -> "WsiDicomIO":
@@ -296,6 +296,6 @@ class WsiDicomIO(DicomIO):
         write_dataset(self, dataset)
 
     def close(self, force: Optional[bool] = False) -> None:
-        """Close the file if owned by instance or forced."""
+        """Close stream if owned by instance or forced."""
         if self._owned or force:
             self._stream.close()

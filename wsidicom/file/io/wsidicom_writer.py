@@ -16,7 +16,6 @@
 from abc import abstractmethod
 import os
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 from typing import (
     Dict,
@@ -106,11 +105,7 @@ class WsiDicomWriter:
         WsiDicomWriter
             WsiDicomWriter for file.
         """
-        stream = WsiDicomIO(
-            open(file, "w+b"),
-            filepath=file,
-            owned=True,
-        )
+        stream = WsiDicomIO.open(file, "w+b")
         if transfer_syntax.is_encapsulated:
             writer = WsiDicomEncapsulatedWriter
         else:
@@ -302,6 +297,29 @@ class WsiDicomWriter:
 
 
 class WsiDicomEncapsulatedWriter(WsiDicomWriter):
+    @classmethod
+    def open(
+        cls, file: Path, transfer_syntax: UID, offset_table: OffsetTableType
+    ) -> "WsiDicomEncapsulatedWriter":
+        """Open file in path as WsiDicomEncapsulatedWriter.
+
+        Parameters
+        ----------
+        file: Path
+            Path to file.
+        transfer_syntax: UID
+            Transfer syntax to use.
+        offset_table: OffsetTableType
+            Offset table to use.
+
+        Returns
+        ----------
+        WsiDicomEncapsulatedWriter
+            WsiDicomEncapsulatedWriter for file.
+        """
+        stream = WsiDicomIO.open(file, "w+b")
+        return cls(stream, transfer_syntax, offset_table)
+
     def copy_with_table(
         self,
         copy_from: WsiDicomIO,
@@ -330,16 +348,20 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         # Copy dataset until EOT or PixelData tag
         copy_from.seek(0)
         self._file.write(copy_from.read(dataset_end))
+
         # Write new pixel data start
         (
             new_dataset_end,
             new_pixels_start,
             table_writer,
         ) = self._write_pixel_data_start(len(frame_positions))
+
         # Copy pixel data
         first_frame_position = frame_positions[0]
         copy_from.seek(first_frame_position)
-        self._file.write(copy_from.read(pixels_end - first_frame_position))
+        while copy_from.tell() < pixels_end:
+            chunk_size = min(4096, pixels_end - copy_from.tell())
+            self._file.write(copy_from.read(chunk_size))
 
         # Adjust frame positions
         frame_position_change = new_pixels_start - first_frame_position
@@ -464,7 +486,9 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
             try:
                 offset_writer.write(pixels_start, frame_positions, last_frame_end)
             except WsiDicomBotOverflow as exception:
-                if self._file.owned and isinstance(offset_writer, BotWriter):
+                if self._file.filepath is not None and isinstance(
+                    offset_writer, BotWriter
+                ):
                     frame_positions = self._rewrite_as_table(
                         OffsetTableType.EXTENDED,
                         dataset_end,
@@ -508,29 +532,48 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         List[int]
             List of frame position relative to start of new file.
         """
-        if self._file.filepath is not None:
-            temp_file_path = self._file.filepath.with_suffix(".tmp")
-            new_file = WsiDicomIO.open(temp_file_path, "w+b")
-        else:
-            temp_file_path = None
-            new_file = WsiDicomIO(BytesIO())
-        writer = WsiDicomEncapsulatedWriter(
-            new_file, self._transfer_syntax, offset_table
-        )
-        frame_positions = writer.copy_with_table(
-            self._file,
-            dataset_end,
-            pixels_end,
-            frame_positions,
-        )
+        if self._file.filepath is None:
+            raise ValueError("Cannot rewrite file without filepath.")
+        temp_file_path = self._file.filepath.with_suffix(".tmp")
+        with WsiDicomEncapsulatedWriter.open(
+            temp_file_path, self._transfer_syntax, offset_table
+        ) as writer:
+            frame_positions = writer.copy_with_table(
+                self._file,
+                dataset_end,
+                pixels_end,
+                frame_positions,
+            )
         self._file.close()
-        if temp_file_path is not None and self._file.filepath is not None:
-            os.replace(temp_file_path, self._file.filepath)
-        self._file = new_file
+        os.replace(temp_file_path, self._file.filepath)
+        self._file = WsiDicomIO.open(self._file.filepath, "r+b")
         return frame_positions
 
 
 class WsiDicomNativeWriter(WsiDicomWriter):
+    @classmethod
+    def open(
+        cls, file: Path, transfer_syntax: UID, offset_table: OffsetTableType
+    ) -> "WsiDicomNativeWriter":
+        """Open file in path as WsiDicomNativeWriter.
+
+        Parameters
+        ----------
+        file: Path
+            Path to file.
+        transfer_syntax: UID
+            Transfer syntax to use.
+        offset_table: OffsetTableType
+            Offset table to use.
+
+        Returns
+        ----------
+        WsiDicomNativeWriter
+            WsiDicomNativeWriter for file.
+        """
+        stream = WsiDicomIO.open(file, "w+b")
+        return cls(stream, transfer_syntax, offset_table)
+
     def _write_pixel_data(
         self,
         data: Dict[Tuple[str, float], ImageData],

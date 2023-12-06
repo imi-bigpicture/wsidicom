@@ -240,11 +240,7 @@ class WsiDicomFileReader(WsiDicomReader):
         WsiDicomFileReader
             WsiDicomFileReader for file.
         """
-        stream = WsiDicomIO(
-            open(file, "rb"),
-            filepath=file,
-            owned=True,
-        )
+        stream = WsiDicomIO.open(file, "rb")
         return cls(stream, file)
 
     def _read_frame(self, frame_position: int, frame_length: int) -> bytes:
