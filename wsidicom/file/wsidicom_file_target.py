@@ -44,7 +44,7 @@ class WsiDicomFileTarget(Target):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: OffsetTableType,
+        offset_table: Optional[OffsetTableType] = None,
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
@@ -195,9 +195,13 @@ class WsiDicomFileTarget(Target):
                 )
             else:
                 transfer_syntax = instances[0].image_data.transfer_syntax
-            with WsiDicomWriter.open(
-                filepath, transfer_syntax, self._offset_table
-            ) as writer:
+            if self._offset_table is not None:
+                offset_table = self._offset_table
+            elif transfer_syntax.is_encapsulated:
+                offset_table = OffsetTableType.BASIC
+            else:
+                offset_table = OffsetTableType.NONE
+            with WsiDicomWriter.open(filepath, transfer_syntax, offset_table) as writer:
                 writer.write(
                     uid,
                     dataset,

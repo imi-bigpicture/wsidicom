@@ -595,7 +595,7 @@ class WsiDicom:
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None,
-        offset_table: Union["str", OffsetTableType] = OffsetTableType.BASIC,
+        offset_table: Optional[Union["str", OffsetTableType]] = None,
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
@@ -619,10 +619,11 @@ class WsiDicom:
         chunk_size: Optional[int] = None
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-        offset_table: Union['str', OffsetTableType] = OffsetTableType.BASIC,
-            Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, 'empty' - no offset table. Only use 'none' for
-            non-encapsulated transfer syntaxes.
+        offset_table: Optional[Union["str", OffsetTableType]] = None,
+            Offset table to use, defined either by string (`empty`, `bot`, `eot`, or
+            `none`) or `OffsetTableType` enum. Default to None, which will use
+            `bot` for encapsulated  syntaxes and `none` for non-encapsulated transfer
+            syntaxes.
         include_levels: Optional[Sequence[int]] = None
             Optional list indices (in present levels) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indicies can be used,
@@ -649,7 +650,7 @@ class WsiDicom:
         if isinstance(output_path, str):
             output_path = Path(output_path)
         os.makedirs(output_path, exist_ok=True)
-        if not isinstance(offset_table, OffsetTableType):
+        if isinstance(offset_table, str):
             offset_table = OffsetTableType.from_string(offset_table)
         with WsiDicomFileTarget(
             output_path,
