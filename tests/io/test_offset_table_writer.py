@@ -66,7 +66,7 @@ class TestOffsetTableWriter:
         tag = buffer.read_tag()
         assert tag == ItemTag
         BOT_ITEM_LENGTH = 4
-        length = buffer.read_tag_length()
+        length = buffer.read_tag_length(True)
         assert length == BOT_ITEM_LENGTH * frame_count
         for frame in range(frame_count):
             assert buffer.read_UL() == 0
@@ -88,7 +88,7 @@ class TestOffsetTableWriter:
 
         buffer.read_tag_vr()
         EOT_ITEM_LENGTH = 8
-        length = buffer.read_tag_length()
+        length = buffer.read_tag_length(True)
         assert length == EOT_ITEM_LENGTH * frame_count
         for frame in range(frame_count):
             assert struct.unpack("<Q", buffer.read(EOT_ITEM_LENGTH))[0] == 0
@@ -96,7 +96,7 @@ class TestOffsetTableWriter:
         tag = buffer.read_tag()
         buffer.read_tag_vr()
         assert tag == ExtendedOffsetTableLengthsTag
-        length = buffer.read_tag_length()
+        length = buffer.read_tag_length(True)
         EOT_ITEM_LENGTH = 8
         assert length == EOT_ITEM_LENGTH * frame_count
         for frame in range(frame_count):

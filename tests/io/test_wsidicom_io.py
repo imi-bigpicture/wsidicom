@@ -243,24 +243,44 @@ class TestWsiDicomIO:
         io.close()
 
     @pytest.mark.parametrize("little_endian", [True, False])
-    @pytest.mark.parametrize("length", [0, 142, 4294967295])
-    def test_read_tag_length(self, buffer: BinaryIO, little_endian: bool, length: int):
+    @pytest.mark.parametrize(
+        ["length", "long"],
+        [
+            (0, True),
+            (142, True),
+            (4294967295, True),
+            (0, False),
+            (142, False),
+            (65535, False),
+        ],
+    )
+    def test_read_tag_length(
+        self, buffer: BinaryIO, little_endian: bool, long: bool, length: int
+    ):
         # Arrange
         if little_endian:
-            format = "<L"
+            format = "<"
         else:
-            format = ">L"
+            format = ">"
+        if long:
+            format += "L"
+        else:
+            format += "H"
         buffer.write(struct.pack(format, length))
         io = WsiDicomIO(buffer, little_endian=little_endian)
         pre_position = io.tell()
+        if long:
+            expected_read_length = 4
+        else:
+            expected_read_length = 2
 
         # Act
-        read_length = io.read_tag_length()
+        read_length = io.read_tag_length(long)
 
         # Assert
         post_position = io.tell()
         assert read_length == length
-        assert post_position == pre_position + 4
+        assert post_position == pre_position + expected_read_length
         io.close()
 
     @pytest.mark.parametrize("is_implicit_VR", [True, False])
@@ -282,7 +302,7 @@ class TestWsiDicomIO:
             assert pre_position == post_position
         else:
             assert read_vr is not None
-            assert read_vr[0:2] == vr
+            assert read_vr == vr
             assert post_position == pre_position + 4
         io.close()
 
@@ -322,7 +342,7 @@ class TestWsiDicomIO:
         )
 
         # Act & Assert
-        io.check_tag_and_length(tag, length, vr is not None)
+        io.check_tag_and_length(tag, length, vr is not None, True)
         io.close()
 
     @pytest.mark.parametrize(
@@ -374,7 +394,7 @@ class TestWsiDicomIO:
         # Act & Assert
         with pytest.raises(WsiDicomFileError):
             io.check_tag_and_length(
-                expected_tag, expected_length, expected_vr is not None
+                expected_tag, expected_length, expected_vr is not None, True
             )
         io.close()
 

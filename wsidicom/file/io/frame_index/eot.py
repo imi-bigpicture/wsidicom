@@ -44,7 +44,7 @@ class Eot(OffsetTable):
         if pixel_data_or_eot_tag != ExtendedOffsetTableTag:
             raise WsiDicomFileError(str(self._file), "Expected EOT tag")
         self._file.read_tag_vr()
-        eot_length = self._file.read_tag_length()
+        eot_length = self._file.read_tag_length(True)
         self._file.seek(eot_length, 1)
         self._read_eot_lengths_tag()
         self._validate_pixel_data_start()
@@ -82,7 +82,7 @@ class Eot(OffsetTable):
             EOT length.
         """
         EOT_BYTES = 8
-        eot_length = self._file.read_tag_length()
+        eot_length = self._file.read_tag_length(True)
         if eot_length == 0:
             raise WsiDicomFileError(
                 str(self._file), "Expected Extended offset table present but empty"
@@ -104,6 +104,6 @@ class Eot(OffsetTable):
                 f"Extended offset table, found {eot_lenths_tag}",
             )
         self._file.read_tag_vr()
-        length = self._file.read_tag_length()
+        length = self._file.read_tag_length(True)
         # Jump over EOT lengths for now
         self._file.seek(length, 1)

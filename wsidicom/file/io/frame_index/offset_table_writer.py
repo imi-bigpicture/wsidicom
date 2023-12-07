@@ -99,7 +99,7 @@ class BotWriter(OffsetTableWriter):
 
         self._file.seek(self._table_start)  # Go to first BOT entry
         self._file.check_tag_and_length(
-            ItemTag, BYTES_PER_ITEM * len(frame_positions), False
+            ItemTag, BYTES_PER_ITEM * len(frame_positions), False, True
         )
 
         for frame_position in frame_positions:  # Write BOT
@@ -135,7 +135,7 @@ class EotWriter(OffsetTableWriter):
             )
         self._file.seek(self._table_start)  # Go to EOT table
         self._file.check_tag_and_length(
-            ExtendedOffsetTableTag, BYTES_PER_ITEM * len(frame_positions), True
+            ExtendedOffsetTableTag, BYTES_PER_ITEM * len(frame_positions), True, True
         )
         for frame_position in frame_positions:  # Write EOT
             relative_position = frame_position - pixel_data_start
@@ -145,6 +145,7 @@ class EotWriter(OffsetTableWriter):
         self._file.check_tag_and_length(
             ExtendedOffsetTableLengthsTag,
             BYTES_PER_ITEM * len(frame_positions),
+            True,
             True,
         )
         frame_start = frame_positions[0]

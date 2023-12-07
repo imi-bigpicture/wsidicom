@@ -90,7 +90,7 @@ class FrameIndex:
         if tag != PixelDataTag:
             WsiDicomFileError(str(self._file), "Expected PixelData tag")
         self._file.read_tag_vr()
-        length = self._file.read_tag_length()
+        length = self._file.read_tag_length(True)
         if expected_length is not None and length != expected_length:
             raise WsiDicomFileError(
                 str(self._file),

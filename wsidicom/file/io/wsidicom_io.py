@@ -161,16 +161,21 @@ class WsiDicomIO(DicomIO):
             specific_tags=None,
         )
 
-    def read_tag_length(self) -> int:
+    def read_tag_length(self, long: bool) -> int:
         """Read tag length."""
+        if not long and not self.is_implicit_VR:
+            return self.read_US()
         return self.read_UL()
 
     def read_tag_vr(self) -> Optional[bytes]:
         """Read tag VR if implicit VR."""
         if not self.is_implicit_VR:
-            return self.read(4, need_exact_length=True)
+            vr = self.read(4, need_exact_length=True)
+            return vr[0:2]
 
-    def check_tag_and_length(self, tag: BaseTag, length: int, with_vr: bool) -> None:
+    def check_tag_and_length(
+        self, tag: BaseTag, length: int, with_vr: bool, long: bool
+    ) -> None:
         """Check if tag at position is expected tag with expected length.
 
         Parameters
@@ -181,6 +186,8 @@ class WsiDicomIO(DicomIO):
             Expected length.
         with_vr: bool
             If tag is expected to have VR.
+        long: bool
+            If length is expected to be long.
 
         """
         try:
@@ -193,7 +200,7 @@ class WsiDicomIO(DicomIO):
                 if self.is_implicit_VR:
                     raise WsiDicomFileError(str(self), "Expected VR, but implicit VR.")
                 self.read_tag_vr()
-            read_length = self.read_tag_length()
+            read_length = self.read_tag_length(long)
             if length != read_length:
                 raise WsiDicomFileError(
                     str(self), f"Found length {read_length} expected {length}."

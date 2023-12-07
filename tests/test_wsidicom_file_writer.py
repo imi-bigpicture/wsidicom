@@ -399,7 +399,7 @@ class TestWsiDicomWriter:
         ) as read_file:
             tag = read_file.read_le_tag()
             assert tag == SequenceDelimiterTag
-            length = read_file.read_tag_length()
+            length = read_file.read_tag_length(True)
             assert length == 0
 
     @pytest.mark.parametrize("transfer_syntax", [JPEGBaseline8Bit])
