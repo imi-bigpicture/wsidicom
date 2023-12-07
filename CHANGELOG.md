@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2023-12-07
+
+### Added
+
+- Option to transcode when saving.
+- Option to limit levels to save.
+- Fallback to extended offset table if basic offset table is overflown.
+- Setting for what Pillow filter to use when scaling.
+- RGB support for Jpeg LS.
+
+### Changed
+
+- Refactored frame index reading (basic, extended, and no offset table and native pixel data) and table writing (basic and extended offset table).
+- Refactored methods for getting multiple tiles for `ImageData` to make it easier to implement more efficent methods.
+
 ## [0.15.2] - 2023-12-01
 
 ### Fixed
@@ -245,7 +260,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.15.2..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.16.0..HEAD
+[0.16.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.2..v0.16.0
 [0.15.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.1..v0.15.2
 [0.15.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.0..v0.15.1
 [0.15.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.14.0..v0.15.0

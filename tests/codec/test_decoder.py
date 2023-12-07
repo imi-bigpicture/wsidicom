@@ -14,7 +14,7 @@
 
 import pytest
 from PIL import ImageChops, ImageStat
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -36,7 +36,7 @@ from wsidicom.codec import (
     Channels,
     Jpeg2kSettings,
     JpegLosslessSettings,
-    JpegLsLosslessSettings,
+    JpegLsSettings,
     JpegSettings,
     NumpySettings,
     RleSettings,
@@ -106,7 +106,7 @@ class TestPillowDecoder:
     )
     def test_decode(
         self,
-        image: PILImage,
+        image: Image,
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
@@ -170,7 +170,7 @@ class TestPydicomDecoder:
             NumpySettings(8, Channels.RGB, False, True),
         ],
     )
-    def test_decode(self, image: PILImage, encoded: bytes, settings: Settings):
+    def test_decode(self, image: Image, encoded: bytes, settings: Settings):
         # Arrange
         decoder = PydicomDecoder(
             settings.transfer_syntax,
@@ -240,10 +240,12 @@ class TestImageCodecsDecoder:
             (JpegLosslessSettings(1, 8, Channels.YBR), 0),
             (JpegLosslessSettings(1, 8, Channels.RGB), 0),
             (JpegLosslessSettings(1, 16, Channels.GRAYSCALE), 0),
-            (JpegLsLosslessSettings(0, 8), 0),
-            (JpegLsLosslessSettings(0, 16), 0),
-            (JpegLsLosslessSettings(1, 8), 1),
-            (JpegLsLosslessSettings(1, 16), 1),
+            (JpegLsSettings(0, 8, Channels.GRAYSCALE), 0),
+            (JpegLsSettings(0, 8, Channels.RGB), 0),
+            (JpegLsSettings(0, 16, Channels.GRAYSCALE), 0),
+            (JpegLsSettings(1, 8, Channels.GRAYSCALE), 1),
+            (JpegLsSettings(1, 8, Channels.RGB), 1),
+            (JpegLsSettings(1, 16, Channels.GRAYSCALE), 1),
             (Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
             (Jpeg2kSettings(80, 8, Channels.YBR), 1),
             (Jpeg2kSettings(80, 8, Channels.RGB), 1),
@@ -256,7 +258,7 @@ class TestImageCodecsDecoder:
     )
     def test_decode(
         self,
-        image: PILImage,
+        image: Image,
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
@@ -318,7 +320,7 @@ class TestPylibjpegRleDecoder:
             RleSettings(16, Channels.GRAYSCALE),
         ],
     )
-    def test_decode(self, image: PILImage, encoded: bytes, settings: Settings):
+    def test_decode(self, image: Image, encoded: bytes, settings: Settings):
         # Arrange
         decoder = PylibjpegRleDecoder(
             Size(image.width, image.height),
@@ -376,7 +378,7 @@ class TestPylibjpegRleDecoder:
 #         ],
 #     )
 #     def test_decode(
-#         self, image: PILImage, encoded: bytes, settings: Settings
+#         self, image: Image, encoded: bytes, settings: Settings
 #     ):
 #         # Arrange
 #         decoder = ImageCodecsRleDecoder(

@@ -17,7 +17,7 @@ import os
 from enum import Enum
 from io import BufferedReader
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pytest
 from dicomweb_client import DICOMfileClient
@@ -54,8 +54,12 @@ class WsiTestDefinitions:
         )
 
     @classmethod
-    def wsi_names(cls) -> Iterable[str]:
-        return cls.test_definitions.keys()
+    def wsi_names(cls, tiling: Optional[str] = None) -> Iterable[str]:
+        return (
+            key
+            for key, value in cls.test_definitions.items()
+            if tiling is None or value["tiled"] == tiling
+        )
 
     @classmethod
     def read_region(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:

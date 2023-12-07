@@ -15,6 +15,8 @@
 
 from typing import Optional
 
+from PIL import Image as Pillow
+
 
 class Settings:
     """Class containing settings. Settings are to be accessed through the
@@ -26,6 +28,7 @@ class Settings:
         self._focal_plane_distance_threshold = 0.000001
         self._prefered_decoder: Optional[str] = None
         self._open_web_theads: Optional[int] = None
+        self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
 
     @property
     def strict_uid_check(self) -> bool:
@@ -74,6 +77,15 @@ class Settings:
     @open_web_theads.setter
     def open_web_theads(self, value: Optional[int]) -> None:
         self._open_web_theads = value
+
+    @property
+    def pillow_resampling_filter(self) -> Pillow.Resampling:
+        """The resampling filter to use when rescaling images."""
+        return self._pillow_resampling_filter
+
+    @pillow_resampling_filter.setter
+    def pillow_resampling_filter(self, value: Pillow.Resampling) -> None:
+        self._pillow_resampling_filter = value
 
 
 settings = Settings()

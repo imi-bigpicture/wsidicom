@@ -17,15 +17,14 @@
 from typing import Iterable, Optional, Union
 
 import numpy as np
-from wsidicom.codec.decoder import Decoder
-from wsidicom.codec.encoder import Encoder
+from PIL.Image import Image
 from pydicom.uid import (
     UID,
     AllTransferSyntaxes,
 )
-from PIL.Image import Image as PILImage
 
-from wsidicom.codec.settings import Settings
+from wsidicom.codec.decoder import Decoder
+from wsidicom.codec.encoder import Encoder
 from wsidicom.geometry import Size
 
 
@@ -83,10 +82,10 @@ class Codec:
             )
         )
 
-    def decode(self, data: bytes) -> PILImage:
+    def decode(self, data: bytes) -> Image:
         return self.decoder.decode(data)
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         return self.encoder.encode(image)
 
     @classmethod
@@ -125,7 +124,7 @@ class Codec:
             size,
             photometric_interpretation,
         )
-        encoder = cls._create_encoder(
+        encoder = Encoder.create(
             transfer_syntax,
             bits,
             photometric_interpretation,
@@ -162,7 +161,7 @@ class Codec:
         if decoder is None:
             return False
         try:
-            cls._create_encoder(
+            Encoder.create(
                 transfer_syntax,
                 bits,
                 photometric_interpretation,
@@ -170,17 +169,3 @@ class Codec:
         except Exception:
             return False
         return True
-
-    @classmethod
-    def _create_encoder(
-        cls,
-        transfer_syntax: UID,
-        bits: int,
-        photometric_interpretation: str,
-    ) -> Encoder:
-        encoder_settings = Settings.create(
-            transfer_syntax,
-            bits,
-            photometric_interpretation,
-        )
-        return Encoder.create(encoder_settings)

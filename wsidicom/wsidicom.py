@@ -26,17 +26,18 @@ from typing import (
     Union,
 )
 
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom.uid import UID, generate_uid
 
+from wsidicom.codec import Encoder
+from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
-from wsidicom.file import WsiDicomFileSource, WsiDicomFileTarget
-from wsidicom.file.wsidicom_file_base import OffsetTableType
+from wsidicom.file import OffsetTableType, WsiDicomFileSource, WsiDicomFileTarget
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -54,7 +55,7 @@ class WsiDicom:
     def __init__(
         self,
         source: Source,
-        label: Optional[Union[PILImage, str, Path]] = None,
+        label: Optional[Union[Image, str, Path]] = None,
         source_owned: bool = False,
     ):
         """Hold WSI DICOM levels, labels and overviews.
@@ -65,7 +66,7 @@ class WsiDicom:
         ----------
         source: Source
             A source providing instances for the wsi to open.
-        label: Optional[Union[PILImage, str, Path]] = None
+        label: Optional[Union[Image, str, Path]] = None
             Optional label image to use instead of label found in source.
         source_owned: bool = False
             If source should be closed by this instance if used in a context manager.
@@ -95,7 +96,7 @@ class WsiDicom:
     def open(
         cls,
         files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
-        label: Optional[Union[PILImage, str, Path]] = None,
+        label: Optional[Union[Image, str, Path]] = None,
     ) -> "WsiDicom":
         """Open valid WSI DICOM files in path or stream and return a WsiDicom object.
 
@@ -107,7 +108,7 @@ class WsiDicom:
         files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
             Files to open. Can be a path or stream for a single file, a list of paths or
             streams for multiple files, or a path to a folder containing files.
-        label: Optional[Union[PILImage, str, Path]] = None
+        label: Optional[Union[Image, str, Path]] = None
             Optional label image to use instead of label found in path.
 
         Returns
@@ -127,7 +128,7 @@ class WsiDicom:
         requested_transfer_syntax: Optional[
             Union[str, UID, Sequence[Union[str, UID]]]
         ] = None,
-        label: Optional[Union[PILImage, str, Path]] = None,
+        label: Optional[Union[Image, str, Path]] = None,
     ) -> "WsiDicom":
         """Open WSI DICOM instances using DICOM web client.
 
@@ -145,7 +146,7 @@ class WsiDicom:
             Transfer syntax to request for image data, for example
             "1.2.840.10008.1.2.4.50" for JPEGBaseline8Bit. By default the first
             supported transfer syntax is requested.
-        label: Optional[Union[PILImage, str, Path]] = None
+        label: Optional[Union[Image, str, Path]] = None
             Optional label image to use instead of label found in source.
 
         Returns
@@ -172,7 +173,7 @@ class WsiDicom:
 
     @classmethod
     def open_dicomdir(
-        cls, path: Union[str, Path], label: Optional[Union[PILImage, str, Path]] = None
+        cls, path: Union[str, Path], label: Optional[Union[Image, str, Path]] = None
     ) -> "WsiDicom":
         """Open WSI DICOM files in DICOMDIR and return a WsiDicom object.
 
@@ -180,7 +181,7 @@ class WsiDicom:
         ----------
         path: Union[str, Path]
             Path to DICOMDIR file or directory with a DICOMDIR file.
-        label: Optional[Union[PILImage, str, Path]] = None
+        label: Optional[Union[Image, str, Path]] = None
             Optional label image to use instead of label found in path.
 
         Returns
@@ -281,7 +282,7 @@ class WsiDicom:
             + list_pretty_str(self.levels.groups, indent, depth, 0, 2)
         )
 
-    def read_label(self, index: int = 0) -> PILImage:
+    def read_label(self, index: int = 0) -> Image:
         """Read label image of the whole slide. If several label
         images are present, index can be used to select a specific image.
 
@@ -292,7 +293,7 @@ class WsiDicom:
 
         Returns
         ----------
-        PILImage
+        Image
             label as image.
         """
         if self.labels is None:
@@ -303,7 +304,7 @@ class WsiDicom:
         except IndexError as exception:
             raise WsiDicomNotFoundError("label", "series") from exception
 
-    def read_overview(self, index: int = 0) -> PILImage:
+    def read_overview(self, index: int = 0) -> Image:
         """Read overview image of the whole slide. If several overview
         images are present, index can be used to select a specific image.
 
@@ -314,7 +315,7 @@ class WsiDicom:
 
         Returns
         ----------
-        PILImage
+        Image
             Overview as image.
         """
         if self.overviews is None:
@@ -330,7 +331,7 @@ class WsiDicom:
         size: Tuple[int, int] = (512, 512),
         z: Optional[float] = None,
         path: Optional[str] = None,
-    ) -> PILImage:
+    ) -> Image:
         """Read thumbnail image of the whole slide with dimensions
         no larger than given size.
 
@@ -345,14 +346,14 @@ class WsiDicom:
 
         Returns
         ----------
-        PILImage
+        Image
             Thumbnail as image,
         """
         thumbnail_size = Size.from_tuple(size)
         level = self.levels.get_closest_by_size(thumbnail_size)
         region = Region(position=Point(0, 0), size=level.size)
         image = level.get_region(region, z, path)
-        image.thumbnail((size), resample=Image.Resampling.BILINEAR)
+        image.thumbnail((size), resample=settings.pillow_resampling_filter)
         return image
 
     def read_region(
@@ -363,7 +364,7 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None,
         threads: int = 1,
-    ) -> PILImage:
+    ) -> Image:
         """Read region defined by pixels.
 
         Parameters
@@ -383,7 +384,7 @@ class WsiDicom:
 
         Returns
         ----------
-        PILImage
+        Image
             Region as image
         """
         wsi_level = self.levels.get_closest_by_level(level)
@@ -399,7 +400,7 @@ class WsiDicom:
             )
         image = wsi_level.get_region(scaled_region, z, path, threads)
         if scale_factor != 1:
-            image = image.resize((size), resample=Image.Resampling.BILINEAR)
+            image = image.resize((size), resample=settings.pillow_resampling_filter)
         return image
 
     def read_region_mm(
@@ -411,7 +412,7 @@ class WsiDicom:
         path: Optional[str] = None,
         slide_origin: bool = False,
         threads: int = 1,
-    ) -> PILImage:
+    ) -> Image:
         """Read image from region defined in mm.
 
         Parameters
@@ -434,7 +435,7 @@ class WsiDicom:
 
         Returns
         ----------
-        PILImage
+        Image
             Region as image
         """
         wsi_level = self.levels.get_closest_by_level(level)
@@ -442,7 +443,9 @@ class WsiDicom:
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
         image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
         image_size = Size(width=image.size[0], height=image.size[1]) // scale_factor
-        return image.resize(image_size.to_tuple(), resample=Image.Resampling.BILINEAR)
+        return image.resize(
+            image_size.to_tuple(), resample=settings.pillow_resampling_filter
+        )
 
     def read_region_mpp(
         self,
@@ -453,7 +456,7 @@ class WsiDicom:
         path: Optional[str] = None,
         slide_origin: bool = False,
         threads: int = 1,
-    ) -> PILImage:
+    ) -> Image:
         """Read image from region defined in mm with set pixel spacing.
 
         Parameters
@@ -476,7 +479,7 @@ class WsiDicom:
 
         Returns
         -----------
-        PILImage
+        Image
             Region as image
         """
         pixel_spacing = mpp / 1000.0
@@ -486,7 +489,9 @@ class WsiDicom:
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
         image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
         image_size = SizeMm.from_tuple(size) // pixel_spacing
-        return image.resize(image_size.to_tuple(), resample=Image.Resampling.BILINEAR)
+        return image.resize(
+            image_size.to_tuple(), resample=settings.pillow_resampling_filter
+        )
 
     def read_tile(
         self,
@@ -494,7 +499,7 @@ class WsiDicom:
         tile: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None,
-    ) -> PILImage:
+    ) -> Image:
         """Read tile in pyramid level as image.
 
         Parameters
@@ -510,7 +515,7 @@ class WsiDicom:
 
         Returns
         ----------
-        PILImage
+        Image
             Tile as image
         """
         tile_point = Point.from_tuple(tile)
@@ -590,8 +595,10 @@ class WsiDicom:
         uid_generator: Callable[..., UID] = generate_uid,
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None,
-        offset_table: Union["str", OffsetTableType] = OffsetTableType.BASIC,
+        offset_table: Optional[Union["str", OffsetTableType]] = None,
+        include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
     ) -> List[Path]:
         """
         Save wsi as DICOM-files in path. Instances for the same pyramid
@@ -612,12 +619,20 @@ class WsiDicom:
         chunk_size: Optional[int] = None
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-        offset_table: Union['str', OffsetTableType] = OffsetTableType.BASIC,
-            Offset table to use, 'bot' basic offset table, 'eot' extended
-            offset table, 'empty' - no offset table. Only use 'none' for
-            non-encapsulated transfer syntaxes.
+        offset_table: Optional[Union["str", OffsetTableType]] = None,
+            Offset table to use, defined either by string (`empty`, `bot`, `eot`, or
+            `none`) or `OffsetTableType` enum. Default to None, which will use
+            `bot` for encapsulated  syntaxes and `none` for non-encapsulated transfer
+            syntaxes.
+        include_levels: Optional[Sequence[int]] = None
+            Optional list indices (in present levels) to include, e.g. [0, 1]
+            includes the two lowest levels. Negative indicies can be used,
+            e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+            Optional settings or encoder for transcoding image data. If None, image data
+            will be copied as is.
 
         Returns
         ----------
@@ -635,7 +650,7 @@ class WsiDicom:
         if isinstance(output_path, str):
             output_path = Path(output_path)
         os.makedirs(output_path, exist_ok=True)
-        if not isinstance(offset_table, OffsetTableType):
+        if isinstance(offset_table, str):
             offset_table = OffsetTableType.from_string(offset_table)
         with WsiDicomFileTarget(
             output_path,
@@ -643,7 +658,9 @@ class WsiDicom:
             workers,
             chunk_size,
             offset_table,
+            include_levels,
             add_missing_levels,
+            transcoding,
         ) as target:
             target.save_levels(self.levels)
             if self.overviews is not None:
@@ -689,7 +706,7 @@ class WsiDicom:
         if self.annotations != []:
             for annotation in self.annotations:
                 if annotation.slide_uids != slide_uids:
-                    logging.warn("Annotations uids does not match.")
+                    logging.warning("Annotations uids does not match.")
         return slide_uids
 
     @classmethod

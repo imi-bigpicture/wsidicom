@@ -15,14 +15,14 @@
 import math
 from typing import Iterable, List, Optional, Sequence, cast
 
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 
 from wsidicom.errors import WsiDicomNoResolutionError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Group
 from wsidicom.instance import WsiInstance
 from wsidicom.stringprinting import dict_pretty_str
+from wsidicom import settings
 
 
 class Level(Group):
@@ -175,7 +175,7 @@ class Level(Group):
         level: int,
         z: Optional[float] = None,
         path: Optional[str] = None,
-    ) -> PILImage:
+    ) -> Image:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
         to remove part outside of the image (as defined by level size).
@@ -193,7 +193,7 @@ class Level(Group):
 
         Returns
         ----------
-        PILImage
+        Image
             A tile image
         """
         scale = self.calculate_scale(level)
@@ -206,7 +206,9 @@ class Level(Group):
             )
         image = self.get_region(cropped_region, z, path)
         tile_size = cropped_region.size.ceil_div(scale)
-        image = image.resize(tile_size.to_tuple(), resample=Image.Resampling.BILINEAR)
+        image = image.resize(
+            tile_size.to_tuple(), resample=settings.pillow_resampling_filter
+        )
         return image
 
     def get_scaled_encoded_tile(
@@ -236,7 +238,7 @@ class Level(Group):
         """
         image = self.get_scaled_tile(tile, scale, z, path)
         instance = self.get_instance(z, path)
-        return instance.image_data.codec.encode(image)
+        return instance.image_data.encoder.encode(image)
 
     def calculate_scale(self, level_to: int) -> int:
         """Return scaling factor to given level.

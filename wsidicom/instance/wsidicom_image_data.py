@@ -16,9 +16,9 @@ from abc import ABCMeta, abstractmethod
 from functools import cached_property
 from typing import Iterator, List, Optional, Sequence
 
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 
-from wsidicom.codec import Codec
+from wsidicom.codec import Codec, Decoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
@@ -32,7 +32,8 @@ from wsidicom.instance.tile_index.tile_index import TileIndex
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     def __init__(self, datasets: Sequence[WsiDataset], codec: Codec):
         self._datasets = datasets
-        super().__init__(codec)
+        self._decoder = codec.decoder
+        super().__init__(codec.encoder)
 
     @abstractmethod
     def _get_tile_frame(self, frame_index: int) -> bytes:
@@ -110,6 +111,10 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         """Return the image origin of the image data."""
         return ImageCoordinateSystem.from_dataset(self._datasets[0])
 
+    @property
+    def decoder(self) -> Decoder:
+        return self._decoder
+
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         """
         Return bytes for tile.
@@ -133,7 +138,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             return self.blank_encoded_tile
         return self._get_tile_frame(frame_index)
 
-    def _get_decoded_tile(self, tile: Point, z: float, path: str) -> PILImage:
+    def _get_decoded_tile(self, tile: Point, z: float, path: str) -> Image:
         """
         Return Pillow image for tile.
 
@@ -148,14 +153,14 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
 
         Returns
         ----------
-        PILImage
+        Image
             Tile as Pillow Image.
         """
         frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:
             return self.blank_tile
         frame = self._get_tile_frame(frame_index)
-        return self.codec.decode(frame)
+        return self.decoder.decode(frame)
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """
