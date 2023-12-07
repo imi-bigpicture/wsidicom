@@ -16,7 +16,7 @@ import datetime
 import struct
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import BinaryIO, List, Optional, Union
 
 import pytest
 from pydicom import DataElement, Dataset
@@ -549,13 +549,17 @@ class TestWsiDicomIO:
     @pytest.mark.parametrize(
         ["original_values", "update_values"],
         [
+            ([" " * 16], "2.0"),
             (["1", " " * 16], ["1", "2"]),
             (["1", " " * 16], ["1", "12.34"]),
             (["43.21", " " * 16], ["43.21", "12.34"]),
         ],
     )
     def test_update_dataset(
-        self, buffer: BinaryIO, original_values: list, update_values: list
+        self,
+        buffer: BinaryIO,
+        original_values: List[str],
+        update_values: Union[str, List[str]],
     ):
         # Arrange
         io = WsiDicomIO(buffer)
