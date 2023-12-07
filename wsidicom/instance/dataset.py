@@ -316,7 +316,7 @@ class WsiDataset(Dataset):
         pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
         if pixel_spacing_values is not None:
             if any([spacing <= 0 for spacing in pixel_spacing_values]):
-                logging.warn(f"Pixel spacing not positive, {pixel_spacing_values}")
+                logging.warning(f"Pixel spacing not positive, {pixel_spacing_values}")
                 return None
             return SizeMm(pixel_spacing_values[1], pixel_spacing_values[0])
         return None
@@ -408,7 +408,7 @@ class WsiDataset(Dataset):
                     raise WsiDicomError(error)
                 # Labels and overviews are likely to have only one tile.
                 error += " Overriding image size to tile size."
-                logging.warn(error)
+                logging.warning(error)
                 image_size = self.tile_size
         return image_size
 

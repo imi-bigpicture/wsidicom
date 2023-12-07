@@ -315,6 +315,21 @@ class WsiDicomIO(DicomIO):
             self._stream.close()
 
     def update_dataset(self, dataset_start: int, update: Dict[BaseTag, Any]):
+        """Update dataset in place.
+
+        The element value representation must allow padding,
+        and values to replace should be padded to the same length or longer than the
+        replacement value.
+
+
+        Parameters
+        ----------
+        dataset_start: int
+            Position of dataset start.
+        update: Dict[BaseTag, Any]
+            Dictionary with tags to update and their new values.
+        """
+
         rewind = self.tell()
         self.seek(dataset_start)
         for element in data_element_generator(
@@ -324,7 +339,7 @@ class WsiDicomIO(DicomIO):
             specific_tags=list(update.keys()),
         ):
             if element.tag not in update.keys():
-                # generator can include `Specific Character Set` tag
+                # generator can include `Specific Character Set` element
                 continue
             if not isinstance(element, RawDataElement):
                 raise ValueError("Can only update raw data elements.")
