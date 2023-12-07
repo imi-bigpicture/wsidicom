@@ -18,17 +18,24 @@ import struct
 from datetime import datetime
 from pathlib import Path
 from struct import pack
-from typing import BinaryIO, Callable, Literal, Optional, Union
+from typing import Any, BinaryIO, Callable, Dict, Literal, Optional, Union
 
+from pydicom.dataelem import DataElement_from_raw, RawDataElement
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.filebase import DicomIO
-from pydicom.filereader import _read_file_meta_info, read_partial, read_preamble
-from pydicom.filewriter import write_dataset, write_file_meta_info
+from pydicom.filereader import (
+    _read_file_meta_info,
+    data_element_generator,
+    read_partial,
+    read_preamble,
+)
+from pydicom.filewriter import write_dataset, write_file_meta_info, writers
 from pydicom.tag import BaseTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
+from pydicom.valuerep import VR
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.tags import ExtendedOffsetTableTag
+from wsidicom.tags import ExtendedOffsetTableTag
 
 
 class WsiDicomIO(DicomIO):
@@ -145,7 +152,7 @@ class WsiDicomIO(DicomIO):
         read_preamble(self._stream, False)
         return _read_file_meta_info(self._stream)
 
-    def read_dataset(self) -> Dataset:
+    def read_dataset(self, force: bool = False) -> Dataset:
         """Read dataset, excluding EOT and PixelData from stream."""
         extended_offset_table_tag = ExtendedOffsetTableTag
 
@@ -157,7 +164,7 @@ class WsiDicomIO(DicomIO):
             self._stream,
             _stop_at,
             defer_size=None,
-            force=False,
+            force=force,
             specific_tags=None,
         )
 
@@ -306,3 +313,31 @@ class WsiDicomIO(DicomIO):
         """Close stream if owned by instance or forced."""
         if self._owned or force:
             self._stream.close()
+
+    def update_dataset(self, dataset_start: int, update: Dict[BaseTag, Any]):
+        rewind = self.tell()
+        self.seek(dataset_start)
+        for element in data_element_generator(
+            self._stream,
+            self.is_implicit_VR,
+            self.is_little_endian,
+            specific_tags=list(update.keys()),
+        ):
+            if element.tag not in update.keys():
+                # generator can include `Specific Character Set` tag
+                continue
+            if not isinstance(element, RawDataElement):
+                raise ValueError("Can only update raw data elements.")
+            element_value_position = element.value_tell
+            length = element.length
+            if isinstance(element, RawDataElement):
+                element = DataElement_from_raw(element)
+            element.value = update[BaseTag(element.tag)]
+            self.seek(element_value_position)
+            writer, param = writers[VR(element.VR)]
+            if param is None:
+                param = []
+            writer(self, element, *param)
+            if self.tell() > element_value_position + length:
+                raise ValueError("Updated element is longer than original.")
+        self.seek(rewind)

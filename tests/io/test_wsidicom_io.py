@@ -12,13 +12,14 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import datetime
 import struct
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO, Optional
 
 import pytest
-from pydicom import Dataset
+from pydicom import DataElement, Dataset
 from pydicom.dataset import FileMetaDataset
 from pydicom.filebase import DicomFileLike
 from pydicom.filereader import read_preamble, _read_file_meta_info
@@ -44,6 +45,7 @@ from pydicom.uid import (
 
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.tags import (
+    LossyImageCompressionRatioTag,
     PixelDataTag,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
@@ -543,3 +545,30 @@ class TestWsiDicomIO:
         assert file_meta.MediaStorageSOPInstanceUID == instance_uid
         assert file_meta.MediaStorageSOPClassUID == class_uid
         io.close()
+
+    @pytest.mark.parametrize(
+        ["original_values", "update_values"],
+        [
+            (["1", " " * 16], ["1", "2"]),
+            (["1", " " * 16], ["1", "12.34"]),
+            (["43.21", " " * 16], ["43.21", "12.34"]),
+        ],
+    )
+    def test_update_dataset(
+        self, buffer: BinaryIO, original_values: list, update_values: list
+    ):
+        # Arrange
+        io = WsiDicomIO(buffer)
+        dataset = Dataset()
+        dataset.add(DataElement(LossyImageCompressionRatioTag, "DS", original_values))
+        print(dataset.LossyImageCompressionRatio)
+        io.write_dataset(dataset, datetime.datetime.now())
+
+        # Act
+        io.update_dataset(0, {LossyImageCompressionRatioTag: update_values})
+
+        # Assert
+        io.seek(0)
+        read_dataset = io.read_dataset(True)
+        updated_values = read_dataset.LossyImageCompressionRatio
+        assert updated_values == update_values
