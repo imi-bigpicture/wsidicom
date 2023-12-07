@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from pydicom.uid import UID
-
+from pydicom.valuerep import DSfloat
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.file.io import (
@@ -193,6 +193,15 @@ class WsiDicomFileTarget(Target):
                 dataset.PhotometricInterpretation = (
                     self._transcoder.photometric_interpretation
                 )
+                if self._transcoder.lossy_metod:
+                    dataset.LossyImageCompression = "01"
+                    ratios = dataset.get_multi_value("LossyImageCompressionRatio")
+                    ratios.append(DSfloat(1))
+                    methods = dataset.get_multi_value("LossyImageCompressionMethod")
+                    methods.append(self._transcoder.lossy_metod.value)
+                    dataset.LossyImageCompressionRatio = ratios
+                    dataset.LossyImageCompressionMethod = methods
+
             else:
                 transfer_syntax = instances[0].image_data.transfer_syntax
             if self._offset_table is not None:

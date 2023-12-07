@@ -15,6 +15,7 @@
 """Module with encoders for image data."""
 
 from abc import ABCMeta, abstractmethod
+from enum import Enum
 import io
 from typing import Dict, Generic, Optional, Tuple, Type, TypeVar, Union
 
@@ -23,7 +24,13 @@ from PIL import Image as Pillow
 from PIL.Image import Image
 from pydicom import Dataset
 from pydicom.pixel_data_handlers.util import pixel_dtype
-from pydicom.uid import UID
+from pydicom.uid import (
+    UID,
+    JPEGBaseline8Bit,
+    JPEGExtended12Bit,
+    JPEG2000,
+    JPEGLSNearLossless,
+)
 from wsidicom.codec.optionals import (
     IMAGE_CODECS_AVAILABLE,
     PYLIBJPEGRLE_AVAILABLE,
@@ -48,6 +55,24 @@ from wsidicom.codec.settings import (
 )
 
 SettingsType = TypeVar("SettingsType", bound=Settings)
+
+
+class LossyCompressionIsoStandard(Enum):
+    JPEG_LOSSY = "ISO_10918_1"
+    JPEG_LS_NEAR_LOSSLESS = "ISO_14495_1"
+    JPEG_2000_IRREVERSIBLE = "ISO_15444_1"
+
+    @classmethod
+    def transfer_syntax_to_iso(
+        cls, transfer_syntax: UID
+    ) -> Optional["LossyCompressionIsoStandard"]:
+        if transfer_syntax in [JPEGBaseline8Bit, JPEGExtended12Bit]:
+            return cls.JPEG_LOSSY
+        elif transfer_syntax == JPEGLSNearLossless:
+            return cls.JPEG_LS_NEAR_LOSSLESS
+        elif transfer_syntax == JPEG2000:
+            return cls.JPEG_2000_IRREVERSIBLE
+        return None
 
 
 class Encoder(Generic[SettingsType], metaclass=ABCMeta):
@@ -84,6 +109,11 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
     def lossy(self) -> bool:
         """Return True if encoder is lossy."""
         raise NotImplementedError()
+
+    @property
+    def lossy_metod(self) -> Optional[LossyCompressionIsoStandard]:
+        """Return ISO standard name of compression if encoder is lossy."""
+        return LossyCompressionIsoStandard.transfer_syntax_to_iso(self.transfer_syntax)
 
     @classmethod
     @abstractmethod

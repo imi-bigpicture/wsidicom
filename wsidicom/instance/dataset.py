@@ -22,14 +22,11 @@ from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import (
-    JPEG2000,
     UID,
-    JPEGBaseline8Bit,
-    JPEGExtended12Bit,
-    JPEGLSNearLossless,
     generate_uid,
 )
 from pydicom.valuerep import DSfloat
+from wsidicom.codec.encoder import LossyCompressionIsoStandard
 
 from wsidicom.config import settings
 from wsidicom.errors import (
@@ -611,6 +608,14 @@ class WsiDataset(Dataset):
             return "0"
         return getattr(optical_sequence[0], "OpticalPathIdentifier", "0")
 
+    def get_multi_value(self, tag: str) -> List[Any]:
+        value = self.get(tag)
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
     def as_tiled_full(
         self,
         focal_planes: Sequence[float],
@@ -783,19 +788,17 @@ class WsiDataset(Dataset):
         dataset.HighBit = image_data.bits - 1
         dataset.PixelRepresentation = 0
         if image_data.lossy_compressed:
+            method = LossyCompressionIsoStandard.transfer_syntax_to_iso(
+                image_data.transfer_syntax
+            )
+            if method is None:
+                raise NotImplementedError(
+                    "Creating lossy compressed image with transfer syntax that is not "
+                    "lossy is not implemented."
+                )
             dataset.LossyImageCompression = "01"
             dataset.LossyImageCompressionRatio = 1
-            if image_data.transfer_syntax in [JPEGBaseline8Bit, JPEGExtended12Bit]:
-                dataset.LossyImageCompressionMethod = "ISO_10918_1"
-            elif image_data.transfer_syntax == JPEG2000:
-                dataset.LossyImageCompressionMethod = "ISO_15444_1"
-            elif image_data.transfer_syntax == JPEGLSNearLossless:
-                dataset.LossyImageCompressionMethod = "ISO_14495_1"
-            else:
-                raise NotImplementedError(
-                    f"Lossy compression not implemented for "
-                    f"{image_data.transfer_syntax}."
-                )
+            dataset.LossyImageCompressionMethod = method.value
 
         dataset.PhotometricInterpretation = image_data.photometric_interpretation
         dataset.SamplesPerPixel = image_data.samples_per_pixel
