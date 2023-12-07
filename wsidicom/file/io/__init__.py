@@ -15,10 +15,6 @@
 """Module for reading and writing DICOM WSI files."""
 
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
-from wsidicom.file.io.wsidicom_reader import (
-    WsiDicomFileReader,
-    WsiDicomReader,
-    WsiDicomStreamReader,
-)
+from wsidicom.file.io.wsidicom_reader import WsiDicomReader
 from wsidicom.file.io.wsidicom_writer import WsiDicomWriter
 from wsidicom.file.io.frame_index import OffsetTableType

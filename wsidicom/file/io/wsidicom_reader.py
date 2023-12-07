@@ -15,9 +15,7 @@
 """Module for reading DICOM WSI files."""
 
 import threading
-from abc import abstractmethod
 from functools import cached_property
-from io import BufferedReader
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -39,51 +37,40 @@ from wsidicom.file.io.frame_index import (
 from wsidicom.file.io.tags import ExtendedOffsetTableTag
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import ImageType, WsiDataset
-from wsidicom.resource_pool import ResourcePool
 from wsidicom.uid import FileUids
 
 
-class FileReaderPool(ResourcePool[BufferedReader]):
-    def __init__(self, filepath: Path, max_pool_size: Optional[int] = None):
-        super().__init__(max_pool_size)
-        self._filepath = filepath
-
-    def _create_new_resource(self) -> BufferedReader:
-        return open(self._filepath, "rb")
-
-    def _close_resource(self, resource: BufferedReader) -> None:
-        resource.close()
-
-
 class WsiDicomReader:
-    """Reader for DICOM WSI data in file"""
+    """Reader for DICOM WSI data in stream"""
 
-    def __init__(self, file: WsiDicomIO):
+    def __init__(self, stream: WsiDicomIO):
         """
-        Parse DICOM file. If valid WSI type read required
-        parameters.
+        Parse DICOM stream. If valid WSI type read required parameters.
 
         Parameters
         ----------
-        file: WsiDicomIO
+        stream: WsiDicomIO
             File to open.
         """
-        self._file = file
+        self._lock = threading.Lock()
+        self._stream = stream
         try:
-            file_meta = self._file.read_file_meta_info()
+            file_meta = self._stream.read_file_meta_info()
         except InvalidDicomError:
-            raise WsiDicomFileError(str(file), "is not a DICOM file.")
+            raise WsiDicomFileError(str(stream), "is not a DICOM file or stream.")
         self._transfer_syntax_uid = UID(file_meta.TransferSyntaxUID)
-        self._file.is_little_endian = self._transfer_syntax_uid.is_little_endian
-        self._file.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
-        dataset = self._file.read_dataset()
-        self._pixel_data_position = self._file.tell()
+        self._stream.is_little_endian = self._transfer_syntax_uid.is_little_endian
+        self._stream.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
+        dataset = self._stream.read_dataset()
+        self._pixel_data_position = self._stream.tell()
 
         self._image_type = WsiDataset.is_supported_wsi_dicom(dataset)
         if self._image_type is not None:
             self._dataset = WsiDataset(dataset)
         else:
-            raise WsiDicomNotSupportedError(f"Non-supported file {self._file}.")
+            raise WsiDicomNotSupportedError(
+                f"Non-supported file or stream {self._stream}."
+            )
         syntax_supported = Codec.is_supported(
             self.transfer_syntax,
             self._dataset.samples_per_pixel,
@@ -112,7 +99,7 @@ class WsiDicomReader:
 
     @property
     def dataset(self) -> WsiDataset:
-        """Return pydicom dataset of file."""
+        """Return pydicom dataset of stream."""
         return self._dataset
 
     @property
@@ -121,33 +108,33 @@ class WsiDicomReader:
 
     @property
     def uids(self) -> FileUids:
-        """Return uids"""
+        """Return uids."""
         return self.dataset.uids
 
     @property
     def transfer_syntax(self) -> UID:
-        """Return transfer syntax uid"""
+        """Return transfer syntax uid."""
         return self._transfer_syntax_uid
 
     @property
     def frame_offset(self) -> int:
-        """Return frame offset (for concatenated file, 0 otherwise)"""
+        """Return frame offset (for concatenated stream, 0 otherwise)."""
         return self.dataset.frame_offset
 
     @property
     def frame_positions(self) -> List[Tuple[int, int]]:
-        """Return frame positions and lengths"""
+        """Return frame positions and lengths."""
         return self.frame_index.index
 
     @property
     def frame_count(self) -> int:
-        """Return number of frames"""
+        """Return number of frames."""
         return self.dataset.frame_count
 
     @property
     def filepath(self) -> Optional[Path]:
-        """Return filename"""
-        return self._file.filepath
+        """Return filename if stream is file."""
+        return self._stream.filepath
 
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
@@ -164,70 +151,12 @@ class WsiDicomReader:
         """
         frame_index -= self.frame_offset
         frame_position, frame_length = self.frame_positions[frame_index]
-        return self._read_frame(frame_position, frame_length)
-
-    @abstractmethod
-    def _read_frame(self, frame_position: int, frame_length: int) -> bytes:
-        """Return frame data from pixel data by position and length.
-        Implementations should be thread safe.
-
-        Parameters
-        ----------
-        frame_position: int
-            Position of frame in pixel data.
-        frame_length: int
-            Length of frame in pixel data.
-
-        Returns
-        ----------
-        bytes
-            The frame as bytes
-        """
-        raise NotImplementedError()
-
-    def _get_frame_index(self) -> FrameIndex:
-        """Create frame index for file."""
-        self._file.seek(self._pixel_data_position)
-        if not self.transfer_syntax.is_encapsulated:
-            return NativePixelData(
-                self._file,
-                self._pixel_data_position,
-                self._dataset.frame_count,
-                self._dataset.tile_size,
-                self._dataset.samples_per_pixel,
-                self._dataset.bits,
-            )
-        pixel_data_or_eot_tag = Tag(self._file.read_tag())
-        if pixel_data_or_eot_tag == ExtendedOffsetTableTag:
-            return Eot(self._file, self._pixel_data_position, self.frame_count)
-        try:
-            return Bot(self._file, self._pixel_data_position, self.frame_count)
-        except EmptyBotException:
-            self._file.seek(self._pixel_data_position)
-            return EmptyBot(self._file, self._pixel_data_position, self.frame_count)
-
-    def close(self, force: Optional[bool] = False) -> None:
-        """Close file."""
-        self._file.close(force)
-
-
-class WsiDicomFileReader(WsiDicomReader):
-    def __init__(self, file: WsiDicomIO, filepath: Path):
-        """
-        WsiDicomFileRader for file.
-
-        Parameters
-        ----------
-        file: WsiDicomIO
-            File to open.
-        filepath: Path
-            Filepath of file.
-        """
-        super().__init__(file)
-        self._reader_pool = FileReaderPool(filepath)
+        with self._lock:
+            self._stream.seek(frame_position, 0)
+            return self._stream.read(frame_length)
 
     @classmethod
-    def open(cls, file: Path) -> "WsiDicomFileReader":
+    def open(cls, file: Path) -> "WsiDicomReader":
         """Open file in path as WsiDicomFileReader.
 
         Parameters
@@ -241,32 +170,29 @@ class WsiDicomFileReader(WsiDicomReader):
             WsiDicomFileReader for file.
         """
         stream = WsiDicomIO.open(file, "rb")
-        return cls(stream, file)
+        return cls(stream)
 
-    def _read_frame(self, frame_position: int, frame_length: int) -> bytes:
-        with self._reader_pool.get_resource() as fp:
-            fp.seek(frame_position, 0)
-            return fp.read(frame_length)
+    def _get_frame_index(self) -> FrameIndex:
+        """Create frame index for stream."""
+        self._stream.seek(self._pixel_data_position)
+        if not self.transfer_syntax.is_encapsulated:
+            return NativePixelData(
+                self._stream,
+                self._pixel_data_position,
+                self._dataset.frame_count,
+                self._dataset.tile_size,
+                self._dataset.samples_per_pixel,
+                self._dataset.bits,
+            )
+        pixel_data_or_eot_tag = Tag(self._stream.read_tag())
+        if pixel_data_or_eot_tag == ExtendedOffsetTableTag:
+            return Eot(self._stream, self._pixel_data_position, self.frame_count)
+        try:
+            return Bot(self._stream, self._pixel_data_position, self.frame_count)
+        except EmptyBotException:
+            self._stream.seek(self._pixel_data_position)
+            return EmptyBot(self._stream, self._pixel_data_position, self.frame_count)
 
     def close(self, force: Optional[bool] = False) -> None:
-        self._reader_pool.close()
-        super().close(force)
-
-
-class WsiDicomStreamReader(WsiDicomReader):
-    def __init__(self, stream: WsiDicomIO):
-        """
-        WsiDicomFileRader for stream.
-
-        Parameters
-        ----------
-        stream: WsiDicomIO
-            Stream to open.
-        """
-        super().__init__(stream)
-        self._lock = threading.Lock()
-
-    def _read_frame(self, frame_position: int, frame_length: int) -> bytes:
-        with self._lock:
-            self._file.seek(frame_position, 0)
-            return self._file.read(frame_length)
+        """Close stream."""
+        self._stream.close(force)

@@ -29,11 +29,7 @@ from wsidicom.errors import (
     WsiDicomNotFoundError,
     WsiDicomNotSupportedError,
 )
-from wsidicom.file.io import (
-    WsiDicomFileReader,
-    WsiDicomReader,
-    WsiDicomStreamReader,
-)
+from wsidicom.file.io import WsiDicomReader
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Size
@@ -58,32 +54,29 @@ class WsiDicomFileSource(Source):
             Files to open. Can be a path or stream for a single file, a list of paths or
             streams for multiple files, or a path to a folder containing files.
         """
-        self._level_files: List[WsiDicomReader] = []
-        self._label_files: List[WsiDicomReader] = []
-        self._overview_files: List[WsiDicomReader] = []
-        self._annotation_files: List[WsiDicomIO] = []
+        self._levels: List[WsiDicomReader] = []
+        self._labels: List[WsiDicomReader] = []
+        self._overviews: List[WsiDicomReader] = []
+        self._annotations: List[WsiDicomIO] = []
         for file in self._list_input_files(files):
             try:
                 stream = self._open_file(file)
                 sop_class_uid = self._get_sop_class_uid(stream)
                 if sop_class_uid == WSI_SOP_CLASS_UID:
                     try:
-                        if stream.filepath is not None:
-                            wsi_file = WsiDicomFileReader(stream, stream.filepath)
-                        else:
-                            wsi_file = WsiDicomStreamReader(stream)
-                        if wsi_file.image_type == ImageType.VOLUME:
-                            self._level_files.append(wsi_file)
-                        elif wsi_file.image_type == ImageType.LABEL:
-                            self._label_files.append(wsi_file)
-                        elif wsi_file.image_type == ImageType.OVERVIEW:
-                            self._overview_files.append(wsi_file)
+                        reader = WsiDicomReader(stream)
+                        if reader.image_type == ImageType.VOLUME:
+                            self._levels.append(reader)
+                        elif reader.image_type == ImageType.LABEL:
+                            self._labels.append(reader)
+                        elif reader.image_type == ImageType.OVERVIEW:
+                            self._overviews.append(reader)
                     except WsiDicomNotSupportedError:
                         logging.info(f"Non-supported file {stream}.")
                         if stream.filepath is not None:
                             stream.close()
                 elif sop_class_uid == ANN_SOP_CLASS_UID:
-                    self._annotation_files.append(stream)
+                    self._annotations.append(stream)
                 elif stream.filepath is not None:
                     logging.debug(
                         f"Non-supported SOP class {sop_class_uid} "
@@ -95,9 +88,9 @@ class WsiDicomFileSource(Source):
                 logging.error(
                     f"Failed to open file {file.name} due to exception", exc_info=True
                 )
-        if len(self._level_files) == 0:
+        if len(self._levels) == 0:
             raise WsiDicomNotFoundError("Level files", str(files))
-        self._base_dataset = self._get_base_dataset(self._level_files)
+        self._base_dataset = self._get_base_dataset(self._levels)
         self._slide_uids = self._base_dataset.uids.slide
         self._base_tile_size = self._base_dataset.tile_size
 
@@ -110,41 +103,41 @@ class WsiDicomFileSource(Source):
     def level_instances(self) -> Iterable[WsiInstance]:
         """The level instances parsed from the source."""
         return self._create_instances(
-            self._level_files, self._slide_uids, self._base_tile_size
+            self._levels, self._slide_uids, self._base_tile_size
         )
 
     @property
     def label_instances(self) -> Iterable[WsiInstance]:
         """The label instances parsed from the source."""
-        return self._create_instances(self._label_files, self._slide_uids)
+        return self._create_instances(self._labels, self._slide_uids)
 
     @property
     def overview_instances(self) -> Iterable[WsiInstance]:
         """The overview instances parsed from the source."""
-        return self._create_instances(self._overview_files, self._slide_uids)
+        return self._create_instances(self._overviews, self._slide_uids)
 
     @property
     def annotation_instances(self) -> Iterable[AnnotationInstance]:
         """The annotation instances parsed from the source."""
         return [
             AnnotationInstance.open_dataset(file.read_dataset())
-            for file in self._annotation_files
+            for file in self._annotations
         ]
 
     def close(self) -> None:
-        """Close all opened files in the source. Does not close provided streams."""
-        for image_file in self.image_files:
-            image_file.close()
+        """Close all opened readers in the source. Does not close provided streams."""
+        for reader in self.readers:
+            reader.close()
 
     @property
-    def image_files(self) -> List[WsiDicomReader]:
-        """Return the image files in the source."""
-        file_lists: List[List[WsiDicomReader]] = [
-            self._level_files,
-            self._label_files,
-            self._overview_files,
+    def readers(self) -> List[WsiDicomReader]:
+        """Return the readers in the source."""
+        reader_lists: List[List[WsiDicomReader]] = [
+            self._levels,
+            self._labels,
+            self._overviews,
         ]
-        return [file for file_list in file_lists for file in file_list]
+        return [reader for reader_list in reader_lists for reader in reader_list]
 
     @property
     def is_ready_for_viewing(self) -> Optional[bool]:
@@ -155,7 +148,7 @@ class WsiDicomFileSource(Source):
         """
         if not self.contains_levels:
             return None
-        files = sorted(self.image_files, key=lambda file: file.frame_count)
+        files = sorted(self.readers, key=lambda file: file.frame_count)
         for file in files:
             if file.image_type is None:
                 continue
@@ -170,7 +163,7 @@ class WsiDicomFileSource(Source):
     @property
     def contains_levels(self) -> bool:
         """Returns true source has one level that can be read with WsiDicom."""
-        return len(self.image_files) > 0
+        return len(self._levels) > 0
 
     @classmethod
     def open_dicomdir(cls, path: Union[str, Path]):

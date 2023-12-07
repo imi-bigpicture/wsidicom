@@ -34,9 +34,8 @@ from pydicom.uid import (
 )
 
 from wsidicom.file.io import (
-    WsiDicomFileReader,
+    WsiDicomReader,
     WsiDicomIO,
-    WsiDicomStreamReader,
     WsiDicomWriter,
     OffsetTableType,
 )
@@ -49,21 +48,21 @@ from wsidicom.uid import WSI_SOP_CLASS_UID
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 
 
-class WsiDicomTestReader(WsiDicomStreamReader):
+class WsiDicomTestReader(WsiDicomReader):
     """Test version of WsiDicomFile that overrides __init__."""
 
     def __init__(
         self,
-        file: WsiDicomIO,
+        stream: WsiDicomIO,
         transfer_syntax: UID,
         frame_count: int,
         bits: int,
         tile_size: Size,
         samples_per_pixel: int,
     ):
-        self._file = file
-        self._file.is_little_endian = transfer_syntax.is_little_endian
-        self._file.is_implicit_VR = transfer_syntax.is_implicit_VR
+        self._stream = stream
+        self._stream.is_little_endian = transfer_syntax.is_little_endian
+        self._stream.is_implicit_VR = transfer_syntax.is_implicit_VR
         self._frame_count = frame_count
         self._pixel_data_position = 0
         self._owned = True
@@ -477,7 +476,7 @@ class TestWsiDicomWriter:
             )
 
         # Assert
-        with WsiDicomFileReader.open(filepath) as read_file:
+        with WsiDicomReader.open(filepath) as read_file:
             for index, frame in enumerate(frames):
                 read_frame = read_file.read_frame(index)
                 # Stored frame can be up to one byte longer

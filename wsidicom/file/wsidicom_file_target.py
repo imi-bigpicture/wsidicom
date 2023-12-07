@@ -24,7 +24,6 @@ from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.file.io import (
     OffsetTableType,
-    WsiDicomFileReader,
     WsiDicomReader,
     WsiDicomWriter,
 )
@@ -215,7 +214,7 @@ class WsiDicomFileTarget(Target):
         return filepaths
 
     def _open_files(self, filepaths: Iterable[Path]) -> List[WsiInstance]:
-        readers = [WsiDicomFileReader.open(filepath) for filepath in filepaths]
+        readers = [WsiDicomReader.open(filepath) for filepath in filepaths]
         self._opened_files.extend(readers)
         return [
             WsiInstance(
