@@ -16,8 +16,7 @@
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, OrderedDict, Sequence, Set, Tuple
 
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom.uid import UID
 
 from wsidicom.errors import (
@@ -33,10 +32,10 @@ from wsidicom.instance import (
     ImageType,
     WsiDataset,
     WsiInstance,
-    image_coordinate_system,
 )
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
+from wsidicom.config import settings
 
 
 class Group:
@@ -267,12 +266,12 @@ class Group:
             path = instance.default_path
         return instance
 
-    def get_default_full(self) -> PILImage:
+    def get_default_full(self) -> Image:
         """Read full image using default z coordinate and path.
 
         Returns
         ----------
-        PILImage
+        Image
             Full image of the group.
         """
         instance = self.default_instance
@@ -288,7 +287,7 @@ class Group:
         z: Optional[float] = None,
         path: Optional[str] = None,
         threads: int = 1,
-    ) -> PILImage:
+    ) -> Image:
         """Read region defined by pixels.
 
         Parameters
@@ -306,7 +305,7 @@ class Group:
 
         Returns
         ----------
-        PILImage
+        Image
             Region as image
         """
 
@@ -325,7 +324,7 @@ class Group:
         path: Optional[str] = None,
         slide_origin: bool = False,
         threads: int = 1,
-    ) -> PILImage:
+    ) -> Image:
         """Read region defined by mm.
 
         Parameters
@@ -343,7 +342,7 @@ class Group:
 
         Returns
         ----------
-        PILImage
+        Image
             Region as image
         """
         to_coordinate_system = None
@@ -359,14 +358,14 @@ class Group:
         if to_coordinate_system:
             image = image.rotate(
                 to_coordinate_system.rotation,
-                resample=Image.Resampling.BILINEAR,
+                resample=settings.pillow_resampling_filter,
                 expand=True,
             )
         return image
 
     def get_tile(
         self, tile: Point, z: Optional[float] = None, path: Optional[str] = None
-    ) -> PILImage:
+    ) -> Image:
         """Return tile at tile coordinate x, y as image.
 
         Parameters
@@ -380,7 +379,7 @@ class Group:
 
         Returns
         ----------
-        PILImage
+        Image
             The tile as image
         """
 

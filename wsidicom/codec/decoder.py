@@ -19,8 +19,8 @@ from abc import ABCMeta, abstractmethod
 from typing import Callable, Dict, Optional, Type
 
 import numpy as np
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL import Image as Pillow
+from PIL.Image import Image
 from pydicom import config as pydicom_config
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.encaps import encapsulate
@@ -56,7 +56,7 @@ from wsidicom.codec.optionals import (
 
 class Decoder(metaclass=ABCMeta):
     @abstractmethod
-    def decode(self, frame: bytes) -> PILImage:
+    def decode(self, frame: bytes) -> Image:
         """Decode frame into Pillow Image.
 
         Parameters
@@ -220,14 +220,23 @@ class Decoder(metaclass=ABCMeta):
             None,
         )
 
+    @staticmethod
+    def _set_mode(image: Image) -> Image:
+        """Convert image to mode that is fully supported by Pillow."""
+        if image.mode.startswith("I;16"):
+            # Pillow does not support scaling of 16 bit images
+            return image.convert("I")
+        return image
+
 
 class PillowDecoder(Decoder):
     """Decoder that uses Pillow to decode images."""
 
     _supported_transfer_syntaxes = [JPEGBaseline8Bit, JPEG2000, JPEG2000Lossless]
 
-    def decode(self, frame: bytes) -> PILImage:
-        return Image.open(io.BytesIO(frame))
+    def decode(self, frame: bytes) -> Image:
+        image = Pillow.open(io.BytesIO(frame))
+        return self._set_mode(image)
 
     @classmethod
     def is_supported(
@@ -246,7 +255,31 @@ class PillowDecoder(Decoder):
         return True
 
 
-class PydicomDecoder(Decoder):
+class NumpyBasedDecoder(Decoder):
+    """Base for decoder that returns numpy array."""
+
+    def decode(self, frame: bytes) -> Image:
+        decoded = self._decode(frame)
+        image = Pillow.fromarray(decoded)
+        return self._set_mode(image)
+
+    @abstractmethod
+    def _decode(self, frame: bytes) -> np.ndarray:
+        """Decode frame into numpy array.
+
+        Parameters
+        ----------
+        frame : bytes
+            Encoded frame.
+
+        Returns
+        ----------
+        np.ndarray
+            Numpy array of decoded image."""
+        raise NotImplementedError()
+
+
+class PydicomDecoder(NumpyBasedDecoder):
     """Decoder that uses pydicom to decode images."""
 
     def __init__(
@@ -299,13 +332,12 @@ class PydicomDecoder(Decoder):
             self._reshape_size = (size.height, size.width)
         self._dataset = dataset
 
-    def decode(self, frame: bytes) -> PILImage:
+    def _decode(self, frame: bytes) -> np.ndarray:
         if self._transfer_syntax.is_encapsulated:
             self._dataset.PixelData = encapsulate(frames=[frame])
         else:
             self._dataset.PixelData = frame
-        array = self._handler(self._dataset).reshape(self._reshape_size)
-        return Image.fromarray(array)
+        return self._handler(self._dataset).reshape(self._reshape_size)
 
     @classmethod
     def is_supported(
@@ -343,7 +375,7 @@ class PydicomDecoder(Decoder):
         return True
 
 
-class ImageCodecsDecoder(Decoder):
+class ImageCodecsDecoder(NumpyBasedDecoder):
     """Decoder that uses imagecodecs to decode images."""
 
     _supported_transfer_syntaxes = {
@@ -370,11 +402,10 @@ class ImageCodecsDecoder(Decoder):
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
         self._decoder = decoder
 
-    def decode(self, frame: bytes) -> PILImage:
+    def _decode(self, frame: bytes) -> np.ndarray:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
-        decoded = self._decoder(frame)
-        return Image.fromarray(decoded)
+        return self._decoder(frame)
 
     @classmethod
     def is_supported(
@@ -414,7 +445,7 @@ class ImageCodecsDecoder(Decoder):
         return decoder
 
 
-class RleDecoder(Decoder):
+class RleDecoder(NumpyBasedDecoder):
     def __init__(self, size: Size, samples_per_pixel: int, bits: int):
         if not self.is_supported(RLELossless, samples_per_pixel, bits):
             raise ValueError(
@@ -433,11 +464,6 @@ class RleDecoder(Decoder):
         else:
             self._reshape_size = (size.height, size.width)
 
-    def decode(self, frame: bytes) -> PILImage:
-        decoded = self._decode(frame)
-
-        return Image.fromarray(decoded)
-
     @classmethod
     def is_supported(
         cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
@@ -449,10 +475,6 @@ class RleDecoder(Decoder):
         if samples_per_pixel == 1:
             return bits in [8, 16]
         return False
-
-    @abstractmethod
-    def _decode(self, frame: bytes) -> np.ndarray:
-        raise NotImplementedError()
 
 
 class ImageCodecsRleDecoder(RleDecoder):

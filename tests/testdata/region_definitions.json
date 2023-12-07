@@ -6,6 +6,7 @@
         "levels": 10,
         "label": true,
         "overview": true,
+        "tiled": "full",
         "read_region": [
             {
                 "location": {
@@ -189,6 +190,7 @@
         "levels": 8,
         "label": false,
         "overview": false,
+        "tiled": "sparse",
         "read_region": [
             {
                 "location": {

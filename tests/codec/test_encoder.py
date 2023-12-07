@@ -15,7 +15,7 @@
 from typing import Type
 import pytest
 from PIL import ImageChops, ImageStat
-from PIL.Image import Image as PILImage
+from PIL.Image import Image
 from pydicom import Dataset
 
 from wsidicom.codec import (
@@ -24,7 +24,7 @@ from wsidicom.codec import (
     Encoder,
     Jpeg2kSettings,
     JpegLosslessSettings,
-    JpegLsLosslessSettings,
+    JpegLsSettings,
     JpegSettings,
     NumpySettings,
     RleSettings,
@@ -44,7 +44,7 @@ from wsidicom.instance.dataset import WsiDataset
 
 
 @pytest.fixture
-def dataset(image: PILImage, settings: Settings):
+def dataset(image: Image, settings: Settings):
     dataset = Dataset()
     dataset.PhotometricInterpretation = settings.photometric_interpretation
     dataset.BitsStored = settings.bits
@@ -94,10 +94,12 @@ class TestEncoder:
             (JpegEncoder, JpegLosslessSettings(1, 8, Channels.YBR), 0),
             (JpegEncoder, JpegLosslessSettings(1, 8, Channels.RGB), 0),
             (JpegEncoder, JpegLosslessSettings(1, 16, Channels.GRAYSCALE), 0),
-            (JpegLsEncoder, JpegLsLosslessSettings(0, 8), 0),
-            (JpegLsEncoder, JpegLsLosslessSettings(0, 16), 0),
-            (JpegLsEncoder, JpegLsLosslessSettings(1, 8), 1),
-            (JpegLsEncoder, JpegLsLosslessSettings(1, 16), 1),
+            (JpegLsEncoder, JpegLsSettings(0, 8, Channels.GRAYSCALE), 0),
+            (JpegLsEncoder, JpegLsSettings(0, 8, Channels.RGB), 0),
+            (JpegLsEncoder, JpegLsSettings(0, 16, Channels.GRAYSCALE), 0),
+            (JpegLsEncoder, JpegLsSettings(1, 8, Channels.GRAYSCALE), 1),
+            (JpegLsEncoder, JpegLsSettings(1, 8, Channels.RGB), 1),
+            (JpegLsEncoder, JpegLsSettings(1, 16, Channels.GRAYSCALE), 1),
             (Jpeg2kEncoder, Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
             (Jpeg2kEncoder, Jpeg2kSettings(80, 8, Channels.YBR), 1),
             (Jpeg2kEncoder, Jpeg2kSettings(80, 8, Channels.RGB), 1),
@@ -131,7 +133,7 @@ class TestEncoder:
     )
     def test_encode(
         self,
-        image: PILImage,
+        image: Image,
         decoder: Decoder,
         encoder_type: Type[Encoder],
         settings: Settings,

@@ -16,14 +16,19 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from pydicom.uid import UID
+from pydicom.valuerep import MAX_VALUE_LEN
 
-from wsidicom.file.wsidicom_file import WsiDicomFile
-from wsidicom.file.wsidicom_file_base import OffsetTableType
+from wsidicom.codec import Encoder
+from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.file.io import (
+    OffsetTableType,
+    WsiDicomReader,
+    WsiDicomWriter,
+)
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
-from wsidicom.file.wsidicom_file_writer import WsiDicomFileWriter
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
@@ -40,8 +45,10 @@ class WsiDicomFileTarget(Target):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: OffsetTableType,
-        add_missing_levels: bool,
+        offset_table: Optional[OffsetTableType] = None,
+        include_levels: Optional[Sequence[int]] = None,
+        add_missing_levels: bool = False,
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
     ):
         """
         Create a WsiDicomFileTarget.
@@ -59,14 +66,28 @@ class WsiDicomFileTarget(Target):
             size also depends on minimun_chunk_size from image_data.
         offset_table: OffsetTableType
             Offset table to use.
+        include_levels: Optional[Sequence[int]] = None
+            Optional list indices (in present levels) to include, e.g. [0, 1]
+            includes the two lowest levels. Negative indicies can be used,
+            e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+            Optional settings or encoder for transcoding image data. If None, image data
+            will be copied as is.
         """
         self._output_path = output_path
         self._offset_table = offset_table
         self._filepaths: List[Path] = []
-        self._opened_files: List[WsiDicomFile] = []
-        super().__init__(uid_generator, workers, chunk_size, add_missing_levels)
+        self._opened_files: List[WsiDicomReader] = []
+        super().__init__(
+            uid_generator,
+            workers,
+            chunk_size,
+            include_levels,
+            add_missing_levels,
+            transcoding,
+        )
 
     @property
     def filepaths(self) -> List[Path]:
@@ -81,6 +102,13 @@ class WsiDicomFileTarget(Target):
         lowest_single_tile_level = levels.lowest_single_tile_level
         highest_level = max(highest_level_in_file, lowest_single_tile_level)
         for pyramid_level in range(highest_level + 1):
+            if not self._is_included_level(
+                pyramid_level,
+                levels.levels,
+                self._add_missing_levels,
+                self._include_levels,
+            ):
+                continue
             if pyramid_level in levels.levels:
                 level = levels.get_level(pyramid_level)
                 self._save_group(level, 1)
@@ -100,19 +128,21 @@ class WsiDicomFileTarget(Target):
                     closest_level = closest_new_level
                 scale = int(2 ** (pyramid_level - closest_level.level))
                 new_level = self._save_and_open_level(
-                    closest_level, levels.pixel_spacing, scale
+                    closest_level,
+                    levels.pixel_spacing,
+                    scale,
                 )
                 new_levels.append(new_level)
 
     def save_labels(self, labels: Labels):
         """Save labels to target."""
         for label in labels.groups:
-            self._save_group(label)
+            self._save_group(label, 1)
 
     def save_overviews(self, overviews: Overviews):
         """Save overviews to target."""
         for overview in overviews.groups:
-            self._save_group(overview)
+            self._save_group(overview, 1)
 
     def close(self) -> None:
         """Close any opened level files."""
@@ -120,14 +150,21 @@ class WsiDicomFileTarget(Target):
             file.close()
 
     def _save_and_open_level(
-        self, level: Level, base_pixel_spacing: SizeMm, scale: int = 1
+        self,
+        level: Level,
+        base_pixel_spacing: SizeMm,
+        scale: int,
     ) -> Level:
         """Save level and return a new level from the created files."""
         filepaths = self._save_group(level, scale)
         instances = self._open_files(filepaths)
         return Level(instances, base_pixel_spacing)
 
-    def _save_group(self, group: Group, scale: int = 1) -> List[Path]:
+    def _save_group(
+        self,
+        group: Group,
+        scale: int,
+    ) -> List[Path]:
         """Save group to target."""
         if not isinstance(scale, int) or scale < 1:
             raise ValueError(f"Scale must be positive integer, got {scale}.")
@@ -135,25 +172,56 @@ class WsiDicomFileTarget(Target):
         for instances in self._group_instances_to_file(group):
             uid = self._uid_generator()
             filepath = self._output_path.joinpath(uid + ".dcm")
-            transfer_syntax = instances[0].image_data.transfer_syntax
+
             image_data_list = self._list_image_data(instances)
             focal_planes, optical_paths, tiled_size = self._get_frame_information(
                 image_data_list
             )
+
             dataset = instances[0].dataset.as_tiled_full(
                 focal_planes, optical_paths, tiled_size, scale
             )
-            with WsiDicomFileWriter.open(filepath, transfer_syntax) as wsi_file:
-                wsi_file.write(
+            if self._transcoder is not None:
+                if (
+                    self._transcoder.bits != instances[0].image_data.bits
+                    or self._transcoder.samples_per_pixel
+                    != instances[0].image_data.samples_per_pixel
+                ):
+                    raise ValueError(
+                        "Transcode settings must match image data bits and photometric interpretation."
+                    )
+                transfer_syntax = self._transcoder.transfer_syntax
+                dataset.PhotometricInterpretation = (
+                    self._transcoder.photometric_interpretation
+                )
+                if self._transcoder.lossy_method:
+                    dataset.LossyImageCompression = "01"
+                    ratios = dataset.get_multi_value("LossyImageCompressionRatio")
+                    # Reserve space for new ratio
+                    ratios.append(" " * MAX_VALUE_LEN["DS"])
+                    methods = dataset.get_multi_value("LossyImageCompressionMethod")
+                    methods.append(self._transcoder.lossy_method.value)
+                    dataset.LossyImageCompressionRatio = ratios
+                    dataset.LossyImageCompressionMethod = methods
+
+            else:
+                transfer_syntax = instances[0].image_data.transfer_syntax
+            if self._offset_table is not None:
+                offset_table = self._offset_table
+            elif transfer_syntax.is_encapsulated:
+                offset_table = OffsetTableType.BASIC
+            else:
+                offset_table = OffsetTableType.NONE
+            with WsiDicomWriter.open(filepath, transfer_syntax, offset_table) as writer:
+                writer.write(
                     uid,
-                    transfer_syntax,
                     dataset,
                     image_data_list,
                     self._workers,
                     self._chunk_size,
-                    self._offset_table,
                     self._instance_number,
                     scale,
+                    self._transcoder,
                 )
             filepaths.append(filepath)
             self._instance_number += 1
@@ -161,10 +229,12 @@ class WsiDicomFileTarget(Target):
         return filepaths
 
     def _open_files(self, filepaths: Iterable[Path]) -> List[WsiInstance]:
-        files = [WsiDicomFile.open(filepath) for filepath in filepaths]
-        self._opened_files.extend(files)
+        readers = [WsiDicomReader.open(filepath) for filepath in filepaths]
+        self._opened_files.extend(readers)
         return [
-            WsiInstance([file.dataset for file in files], WsiDicomFileImageData(files))
+            WsiInstance(
+                [reader.dataset for reader in readers], WsiDicomFileImageData(readers)
+            )
         ]
 
     @staticmethod

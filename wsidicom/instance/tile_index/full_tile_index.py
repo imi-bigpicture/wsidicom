@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from functools import cached_property
+from functools import cached_property, lru_cache
 from typing import List, Optional, Sequence, Set
 
 from wsidicom.errors import WsiDicomNotFoundError
@@ -128,6 +128,7 @@ class FullTileIndex(TileIndex):
                 focal_planes.add(z)
         return sorted(list(focal_planes))
 
+    @lru_cache
     def _get_optical_path_index(self, path: str) -> int:
         """Return index of the optical path in instance.
         This assumes that all files in a concatenated set contains all the
@@ -155,6 +156,7 @@ class FullTileIndex(TileIndex):
         except StopIteration:
             raise WsiDicomNotFoundError(f"Optical path {path}", str(self))
 
+    @lru_cache
     def _get_focal_plane_index(self, z: float) -> int:
         """Return index of the focal plane of z.
 

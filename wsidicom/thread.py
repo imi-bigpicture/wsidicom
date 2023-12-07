@@ -38,6 +38,6 @@ class ConditionalThreadPoolExecutor(ThreadPoolExecutor):
         if self._max_workers == 1:
             if self._force_iteration:
                 # Make sure items are iterated through
-                return (item for item in list(map(fn, *iterables)))
+                return iter(list(map(fn, *iterables)))
             return map(fn, *iterables)
         return super().map(fn, *iterables, timeout=timeout, chunksize=chunksize)

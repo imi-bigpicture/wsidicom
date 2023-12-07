@@ -1,4 +1,4 @@
-#    Copyright 2023 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,19 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module containing image codecs."""
-from wsidicom.codec.encoder import Encoder
-from wsidicom.codec.settings import (
-    Channels,
-    JpegSettings,
-    JpegLosslessSettings,
-    Jpeg2kSettings,
-    JpegLsSettings,
-    NumpySettings,
-    RleSettings,
-    Settings,
-    Subsampling,
-)
-from wsidicom.codec.decoder import Decoder
-from wsidicom.codec.codec import Codec
-from wsidicom.codec.media_types import determine_media_type
+from pydicom.tag import Tag
+
+PixelDataTag = Tag("PixelData")
+ExtendedOffsetTableTag = Tag("ExtendedOffsetTable")
+ExtendedOffsetTableLengthsTag = Tag("ExtendedOffsetTableLengths")
+LossyImageCompressionRatioTag = Tag("LossyImageCompressionRatio")

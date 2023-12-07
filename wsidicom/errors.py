@@ -12,9 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import BinaryIO, Union
-from pydicom.filebase import DicomFileLike
-
 
 class WsiDicomError(Exception):
     """Raised for general error."""
@@ -29,7 +26,7 @@ class WsiDicomError(Exception):
 class WsiDicomFileError(Exception):
     """Raised if read file data is incorrect."""
 
-    def __init__(self, file: Union[BinaryIO, DicomFileLike], error: str):
+    def __init__(self, file: str, error: str):
         self.file = file
         self.error = error
 

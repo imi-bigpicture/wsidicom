@@ -19,7 +19,7 @@ from pydicom.encaps import encapsulate
 from pydicom.sequence import Sequence
 from pydicom.uid import generate_uid, UID
 
-from wsidicom.file.wsidicom_file_base import OffsetTableType
+from wsidicom.file import OffsetTableType
 from wsidicom.instance import TileType
 
 # type: ignore

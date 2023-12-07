@@ -1,4 +1,4 @@
-#    Copyright 2023 SECTRA AB
+#    Copyright 2021, 2022, 2023 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,19 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module containing image codecs."""
-from wsidicom.codec.encoder import Encoder
-from wsidicom.codec.settings import (
-    Channels,
-    JpegSettings,
-    JpegLosslessSettings,
-    Jpeg2kSettings,
-    JpegLsSettings,
-    NumpySettings,
-    RleSettings,
-    Settings,
-    Subsampling,
-)
-from wsidicom.codec.decoder import Decoder
-from wsidicom.codec.codec import Codec
-from wsidicom.codec.media_types import determine_media_type
+"""Module for reading and writing DICOM WSI files."""
+
+from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_reader import WsiDicomReader
+from wsidicom.file.io.wsidicom_writer import WsiDicomWriter
+from wsidicom.file.io.frame_index import OffsetTableType

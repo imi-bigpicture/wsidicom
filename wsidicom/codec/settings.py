@@ -198,11 +198,11 @@ class Settings(metaclass=ABCMeta):
         if transfer_syntax in jpeg_lossless_transfer_syntaxes:
             return JpegLosslessSettings(bits=bits, channels=channels)
         if transfer_syntax in jpeg_ls_transfer_syntaxes:
-            if channels != Channels.GRAYSCALE:
-                raise ValueError("JPEG-LS encoder only supports grayscale images.")
+            if channels == Channels.YBR:
+                raise ValueError("JPEG-LS does not support conversion to ybr.")
             if transfer_syntax == JPEGLSNearLossless:
-                return JpegLsLosslessSettings(level=1, bits=bits)
-            return JpegLsLosslessSettings(level=0, bits=bits)
+                return JpegLsSettings(level=1, bits=bits, channels=channels)
+            return JpegLsSettings(level=0, bits=bits, channels=channels)
         if transfer_syntax in jpeg_2000_transfer_syntaxes:
             if transfer_syntax == JPEG2000:
                 return Jpeg2kSettings(bits=bits, channels=channels)
@@ -328,7 +328,7 @@ class JpegLosslessSettings(Settings):
         if self.channels == Channels.GRAYSCALE:
             return "MONOCHROME2"
         if self.channels == Channels.YBR:
-            return "YBR_FULL_422"
+            return "YBR_FULL"
         return "RGB"
 
     @property
@@ -337,11 +337,12 @@ class JpegLosslessSettings(Settings):
 
 
 @dataclass
-class JpegLsLosslessSettings(Settings):
+class JpegLsSettings(Settings):
     def __init__(
         self,
         level: int = 0,
         bits: int = 8,
+        channels: Channels = Channels.RGB,
     ):
         """
         Initialize JPEG-LS lossless encoding settings. Only supports grayscale images.
@@ -354,7 +355,7 @@ class JpegLsLosslessSettings(Settings):
                 Number of bits per pixel.
         """
         self._level = level
-        super().__init__(bits, Channels.GRAYSCALE)
+        super().__init__(bits, channels)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(level={self.level}, bits={self.bits})"
@@ -372,7 +373,9 @@ class JpegLsLosslessSettings(Settings):
 
     @property
     def photometric_interpretation(self) -> str:
-        return "MONOCHROME2"
+        if self.channels == Channels.GRAYSCALE:
+            return "MONOCHROME2"
+        return "RGB"
 
     @property
     def extension(self) -> str:

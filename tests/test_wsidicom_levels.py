@@ -104,10 +104,10 @@ class TestWsiDicomLevels:
         assert isinstance(image_data, WsiDicomFileImageData)
 
         # Act
-        file = image_data._get_file(0)
+        reader = image_data._get_reader(0)
 
         # Assert
-        assert file == (image_data._files[0])
+        assert reader == (image_data._readers[0])
 
     def test_get_file_frame_out_of_range_throws(self, wsi: WsiDicom):
         # Arrange
@@ -118,7 +118,7 @@ class TestWsiDicomLevels:
 
         # Act & Assert
         with pytest.raises(WsiDicomNotFoundError):
-            image_data._get_file(10)
+            image_data._get_reader(10)
 
     @pytest.mark.parametrize(
         ["region", "z", "path", "expected_result"],

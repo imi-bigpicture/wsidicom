@@ -189,7 +189,7 @@ An opened WsiDicom instance can be saved to a new path using the save()-method. 
 - Have a basic offset table (or optionally an extended offset table or no offset table).
 - Not be concatenated.
 
-The frames are copied as-is, i.e. without re-compression.
+By default frames are copied as-is, i.e. without re-compression.
 
 ```python
 with WsiDicom.open(path_to_folder) as slide:
@@ -197,6 +197,15 @@ with WsiDicom.open(path_to_folder) as slide:
 ```
 
 The output folder must already exists. Be careful to specify a unique folder folder to avoid mixing files from different images.
+
+Optionally frames can be transcoded, either by a encoder setting or an encoder:
+
+```python
+from wsidicom.codec import JpegSettings
+
+with WsiDicom.open(path_to_folder) as slide:
+    slide.save(path_to_output, transcoding=JpegSettings())
+```
 
 ## Settings
 
