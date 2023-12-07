@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 from pydicom.uid import UID
-from pydicom.valuerep import DSfloat
+from pydicom.valuerep import MAX_VALUE_LEN
+
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.file.io import (
@@ -196,7 +197,8 @@ class WsiDicomFileTarget(Target):
                 if self._transcoder.lossy_metod:
                     dataset.LossyImageCompression = "01"
                     ratios = dataset.get_multi_value("LossyImageCompressionRatio")
-                    ratios.append(DSfloat(1))
+                    # Reserve space for new ratio
+                    ratios.append(" " * MAX_VALUE_LEN["DS"])
                     methods = dataset.get_multi_value("LossyImageCompressionMethod")
                     methods.append(self._transcoder.lossy_metod.value)
                     dataset.LossyImageCompressionRatio = ratios

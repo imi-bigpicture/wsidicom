@@ -34,7 +34,7 @@ from wsidicom.file.io.frame_index import (
     NativePixelData,
     OffsetTableType,
 )
-from wsidicom.file.io.tags import ExtendedOffsetTableTag
+from wsidicom.tags import ExtendedOffsetTableTag
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import ImageType, WsiDataset
 from wsidicom.uid import FileUids

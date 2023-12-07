@@ -19,7 +19,7 @@ from functools import cached_property
 from typing import List, Optional, Tuple
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.tags import PixelDataTag
+from wsidicom.tags import PixelDataTag
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 

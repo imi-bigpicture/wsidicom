@@ -18,7 +18,7 @@ from pydicom.tag import Tag
 
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.frame_index.offset_table import OffsetTable
-from wsidicom.file.io.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
+from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 
 

@@ -26,7 +26,7 @@ from typing import Sequence
 from wsidicom.file.io.frame_index import BotWriter, EotWriter
 from wsidicom.file.io.frame_index.bot import Bot
 from wsidicom.file.io.frame_index.eot import Eot
-from wsidicom.file.io.tags import (
+from wsidicom.tags import (
     ExtendedOffsetTableLengthsTag,
     ExtendedOffsetTableTag,
     PixelDataTag,

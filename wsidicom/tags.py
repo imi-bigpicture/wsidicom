@@ -17,3 +17,4 @@ from pydicom.tag import Tag
 PixelDataTag = Tag("PixelData")
 ExtendedOffsetTableTag = Tag("ExtendedOffsetTable")
 ExtendedOffsetTableLengthsTag = Tag("ExtendedOffsetTableLengths")
+LossyImageCompressionRatioTag = Tag("LossyImageCompressionRatio")

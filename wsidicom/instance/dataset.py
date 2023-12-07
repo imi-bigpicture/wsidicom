@@ -25,6 +25,7 @@ from pydicom.uid import (
     UID,
     generate_uid,
 )
+from pydicom.tag import BaseTag
 from pydicom.valuerep import DSfloat
 from wsidicom.codec.encoder import LossyCompressionIsoStandard
 
@@ -313,8 +314,8 @@ class WsiDataset(Dataset):
             return None
         pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
         if pixel_spacing_values is not None:
-            if any([spacing == 0 for spacing in pixel_spacing_values]):
-                logging.warn(f"Pixel spacing is zero, {pixel_spacing_values}")
+            if any([spacing <= 0 for spacing in pixel_spacing_values]):
+                logging.warn(f"Pixel spacing not positive, {pixel_spacing_values}")
                 return None
             return SizeMm(pixel_spacing_values[1], pixel_spacing_values[0])
         return None
@@ -608,13 +609,27 @@ class WsiDataset(Dataset):
             return "0"
         return getattr(optical_sequence[0], "OpticalPathIdentifier", "0")
 
-    def get_multi_value(self, tag: str) -> List[Any]:
-        value = self.get(tag)
-        if value is None:
+    def get_multi_value(self, tag: Union[str, BaseTag]) -> List[Any]:
+        """Return values for tag as list of values. If tag is not found, return empty
+        list. If tag is not multi value, return list with one value.
+
+        Parameters
+        ----------
+        tag: Union[str, BaseTag]
+            Tag to get values for.
+
+        Returns
+        ----------
+        List[Any]
+            List of values.
+        """
+        element = self.get(tag)
+        if element is None:
             return []
-        if isinstance(value, list):
-            return value
-        return [value]
+        vm = getattr(element, "VM", 1)
+        if vm > 1:
+            return element.value
+        return [element.value]
 
     def as_tiled_full(
         self,

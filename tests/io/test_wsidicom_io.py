@@ -43,7 +43,7 @@ from pydicom.uid import (
 )
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.tags import (
+from wsidicom.tags import (
     PixelDataTag,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
