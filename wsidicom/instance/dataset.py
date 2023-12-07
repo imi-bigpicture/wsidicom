@@ -27,6 +27,7 @@ from pydicom.uid import (
 )
 from pydicom.tag import BaseTag
 from pydicom.valuerep import DSfloat
+from pydicom.multival import MultiValue
 from wsidicom.codec.encoder import LossyCompressionIsoStandard
 
 from wsidicom.config import settings
@@ -627,8 +628,8 @@ class WsiDataset(Dataset):
         if element is None:
             return []
         vm = getattr(element, "VM", 1)
-        if vm > 1:
-            return element.value
+        if vm > 1 or isinstance(element, MultiValue):
+            return [value for value in element]
         return [element.value]
 
     def as_tiled_full(

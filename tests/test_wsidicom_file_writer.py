@@ -297,6 +297,7 @@ class TestWsiDicomWriter:
             writen_frame_positions = writer._write_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
                 WsiDataset(dataset),
+                (0, 0),
                 1,
                 100,
                 1,
@@ -355,6 +356,7 @@ class TestWsiDicomWriter:
             writer._write_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
                 WsiDataset(dataset),
+                (0, 0),
                 1,
                 100,
                 1,

@@ -111,7 +111,7 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         raise NotImplementedError()
 
     @property
-    def lossy_metod(self) -> Optional[LossyCompressionIsoStandard]:
+    def lossy_method(self) -> Optional[LossyCompressionIsoStandard]:
         """Return ISO standard name of compression if encoder is lossy."""
         return LossyCompressionIsoStandard.transfer_syntax_to_iso(self.transfer_syntax)
 

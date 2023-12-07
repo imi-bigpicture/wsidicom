@@ -194,13 +194,13 @@ class WsiDicomFileTarget(Target):
                 dataset.PhotometricInterpretation = (
                     self._transcoder.photometric_interpretation
                 )
-                if self._transcoder.lossy_metod:
+                if self._transcoder.lossy_method:
                     dataset.LossyImageCompression = "01"
                     ratios = dataset.get_multi_value("LossyImageCompressionRatio")
                     # Reserve space for new ratio
                     ratios.append(" " * MAX_VALUE_LEN["DS"])
                     methods = dataset.get_multi_value("LossyImageCompressionMethod")
-                    methods.append(self._transcoder.lossy_metod.value)
+                    methods.append(self._transcoder.lossy_method.value)
                     dataset.LossyImageCompressionRatio = ratios
                     dataset.LossyImageCompressionMethod = methods
 

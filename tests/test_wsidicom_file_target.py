@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Callable, cast
+from typing import Callable, List, cast
 
 import pytest
 from PIL import ImageChops, ImageFilter, ImageStat
@@ -21,6 +21,8 @@ from pydicom.uid import generate_uid
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
+from wsidicom.codec import Jpeg2kSettings, JpegSettings, Settings
+from wsidicom.codec.encoder import Encoder
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
 from wsidicom.group.level import Level
 from wsidicom.series.levels import Levels
@@ -28,7 +30,7 @@ from wsidicom.series.levels import Levels
 
 @pytest.mark.integration
 class TestWsiDicomFileTargetIntegration:
-    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_save_levels(
         self, wsi_name: str, wsi_factory: Callable[[str], WsiDicom], tmp_path: Path
     ):
@@ -46,7 +48,90 @@ class TestWsiDicomFileTargetIntegration:
         with WsiDicom.open(tmp_path) as saved_wsi:
             assert expected_levels_count == len(saved_wsi.levels)
 
-    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    @pytest.mark.parametrize("include_levels", [[-1], [-1, -2]])
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_save_limited_levels(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+        include_levels: List[int],
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+
+        # Act
+        with WsiDicomFileTarget(
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, include_levels, False
+        ) as target:
+            target.save_levels(wsi.levels)
+
+        # Assert
+        with WsiDicom.open(tmp_path) as saved_wsi:
+            assert len(saved_wsi.levels) == len(include_levels)
+
+    @pytest.mark.parametrize("settings", [Jpeg2kSettings(), JpegSettings()])
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_transcode(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+        settings: Settings,
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+        transcoder = Encoder.create_for_settings(settings)
+        print(wsi.levels.base_level.default_instance.dataset.LossyImageCompressionRatio)
+
+        # Act
+        with WsiDicomFileTarget(
+            tmp_path,
+            generate_uid,
+            1,
+            16,
+            OffsetTableType.BASIC,
+            [-1],
+            False,
+            transcoder,
+        ) as target:
+            target.save_levels(wsi.levels)
+
+        # Assert
+        with WsiDicom.open(tmp_path) as saved_wsi:
+            original_level = wsi.levels[-1]
+            level = saved_wsi.levels.base_level
+            assert (
+                level.default_instance.image_data.transfer_syntax
+                == transcoder.transfer_syntax
+            )
+            assert level.default_instance.dataset.LossyImageCompression == "01"
+            original_methods = (
+                original_level.default_instance.dataset.LossyImageCompressionMethod
+            )
+            original_ratios = (
+                original_level.default_instance.dataset.LossyImageCompressionRatio
+            )
+            methods = level.default_instance.dataset.LossyImageCompressionMethod
+            ratios = level.default_instance.dataset.LossyImageCompressionRatio
+
+            if transcoder.lossy_method is not None:
+                assert level.default_instance.dataset
+                assert transcoder.lossy_method.value == methods[-1]
+                assert len(methods) == len(original_methods) + 1
+                assert len(ratios) == len(original_ratios) + 1
+                assert methods[:-1] == original_methods
+                assert ratios[:-1] == original_ratios
+                assert isinstance(ratios[-1], float)
+            else:
+                assert (
+                    level.default_instance.dataset.lossy_compressed
+                    == original_level.default_instance.dataset.lossy_compressed
+                )
+                assert methods == original_methods
+                assert ratios == original_ratios
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_save_levels_add_missing(
         self,
         wsi_name: str,
@@ -73,7 +158,7 @@ class TestWsiDicomFileTargetIntegration:
             assert saved_wsi.levels[-1].size.all_less_than_or_equal(saved_wsi.tile_size)
             assert saved_wsi.levels[-2].size.any_greater_than(saved_wsi.tile_size)
 
-    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_create_child(
         self,
         wsi_name: str,

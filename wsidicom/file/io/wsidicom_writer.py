@@ -13,8 +13,8 @@
 #    limitations under the License.
 
 
-from abc import abstractmethod
 import os
+from abc import abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import (
@@ -23,12 +23,14 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Sequence,
     Tuple,
 )
 
 from pydicom.encaps import itemize_frame
 from pydicom.tag import ItemTag, SequenceDelimiterTag
 from pydicom.uid import UID
+from pydicom.valuerep import DSfloat
 
 from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomBotOverflow
@@ -38,7 +40,7 @@ from wsidicom.file.io.frame_index import (
     OffsetTableType,
     OffsetTableWriter,
 )
-from wsidicom.file.io.tags import PixelDataTag
+from wsidicom.tags import LossyImageCompressionRatioTag, PixelDataTag
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
@@ -157,18 +159,29 @@ class WsiDicomWriter:
         self._file.write_file_meta_info(uid, WSI_SOP_CLASS_UID, self._transfer_syntax)
         dataset.SOPInstanceUID = uid
         dataset.InstanceNumber = instance_number
+        dataset_start = self._file.tell()
         self._file.write_dataset(dataset, datetime.now())
-        self._write_pixel_data(data, dataset, workers, chunk_size, scale, transcoder)
+        dataset_end = self._file.tell()
+        self._write_pixel_data(
+            data,
+            dataset,
+            (dataset_start, dataset_end),
+            workers,
+            chunk_size,
+            scale,
+            transcoder,
+        )
 
     @abstractmethod
     def _write_pixel_data(
         self,
         data: Dict[Tuple[str, float], ImageData],
         dataset: WsiDataset,
+        dataset_range: Tuple[int, int],
         workers: int,
         chunk_size: int,
-        scale,
-        transcoder,
+        scale: int,
+        transcoder: Optional[Encoder],
     ) -> List[int]:
         """Write pixel data to file.
 
@@ -178,6 +191,8 @@ class WsiDicomWriter:
             Pixel data to write.
         dataset: WsiDataset
             Dataset with parameters for image to write.
+        dataset_start: int
+            Position of dataset in file.
         workers: int
             Number of workers to use for writing pixel data.
         chunk_size: int
@@ -320,7 +335,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         stream = WsiDicomIO.open(file, "w+b")
         return cls(stream, transfer_syntax, offset_table)
 
-    def copy_with_table(
+    def copy(
         self,
         copy_from: WsiDicomIO,
         dataset_end: int,
@@ -351,7 +366,6 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
 
         # Write new pixel data start
         (
-            new_dataset_end,
             new_pixels_start,
             table_writer,
         ) = self._write_pixel_data_start(len(frame_positions))
@@ -368,26 +382,29 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         new_frame_positions = [
             position + frame_position_change for position in frame_positions
         ]
+        last_frame_end = self._file.tell()
 
         # Write pixel data end and EOT or BOT if used.
-        return self._write_pixel_data_end(
+        frame_positions = self._write_pixel_data_end(
             table_writer,
             new_pixels_start,
-            new_dataset_end,
+            last_frame_end,
+            dataset_end,
             new_frame_positions,
         )
+        return frame_positions
 
     def _write_pixel_data(
         self,
         data: Dict[Tuple[str, float], ImageData],
         dataset: WsiDataset,
+        dataset_range: Tuple[int, int],
         workers: int,
         chunk_size: int,
         scale: int,
         transcoder: Optional[Encoder],
     ) -> List[int]:
         (
-            dataset_end,
             pixels_start,
             table_writer,
         ) = self._write_pixel_data_start(dataset.frame_count)
@@ -398,12 +415,19 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
                 image_data, z, path, workers, chunk_size, scale, transcoder
             )
         ]
+        last_frame_end = self._file.tell()
+        if transcoder is not None and transcoder.lossy:
+            compressed_size = self._calculate_size(frame_positions, last_frame_end)
+            self._set_compression_ratio(dataset_range[0], dataset, compressed_size)
+
         frame_positions = self._write_pixel_data_end(
             table_writer,
             pixels_start,
-            dataset_end,
+            last_frame_end,
+            dataset_range[1],
             frame_positions,
         )
+
         return frame_positions
 
     def _write_tile(
@@ -424,7 +448,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
     def _write_pixel_data_start(
         self,
         number_of_frames: int,
-    ) -> Tuple[int, int, Optional[OffsetTableWriter]]:
+    ) -> Tuple[int, Optional[OffsetTableWriter]]:
         """Write tags starting pixel data and reserves space for BOT or EOT.
 
         Parameters
@@ -434,11 +458,9 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
 
         Returns
         ----------
-        Tuple[Optional[int], int]
-            End of dataset (EOT or PixelData tag), start of table (BOT or EOT) and
-            start of pixel data (after BOT).
+        Tuple[int, Optional[OffsetTableWriter]]:
+            Start of pixel data (after BOT) and optional offset table writer.
         """
-        dataset_end = self._file.tell()
         table_writer = None
         if self._offset_table == OffsetTableType.EXTENDED:
             table_writer = EotWriter(self._file)
@@ -459,12 +481,13 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
 
         pixel_data_start = self._file.tell()
 
-        return dataset_end, pixel_data_start, table_writer
+        return pixel_data_start, table_writer
 
     def _write_pixel_data_end(
         self,
         offset_writer: Optional[OffsetTableWriter],
         pixels_start: int,
+        last_frame_end: int,
         dataset_end: int,
         frame_positions: List[int],
     ):
@@ -481,7 +504,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         frame_positions: List[int]
             List of frame positions in file, relative to start of file.
         """
-        last_frame_end = self._write_pixel_data_end_tag()
+        self._write_pixel_data_end_tag()
         if offset_writer is not None:
             try:
                 offset_writer.write(pixels_start, frame_positions, last_frame_end)
@@ -499,12 +522,10 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
                     raise exception
         return frame_positions
 
-    def _write_pixel_data_end_tag(self) -> int:
+    def _write_pixel_data_end_tag(self) -> None:
         """Writes tags ending pixel data."""
-        last_frame_end = self._file.tell()
         self._file.write_tag(SequenceDelimiterTag)
         self._file.write_leUL(0)
-        return last_frame_end
 
     def _rewrite_as_table(
         self,
@@ -538,7 +559,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         with WsiDicomEncapsulatedWriter.open(
             temp_file_path, self._transfer_syntax, offset_table
         ) as writer:
-            frame_positions = writer.copy_with_table(
+            frame_positions = writer.copy(
                 self._file,
                 dataset_end,
                 pixels_end,
@@ -548,6 +569,31 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         os.replace(temp_file_path, self._file.filepath)
         self._file = WsiDicomIO.open(self._file.filepath, "r+b")
         return frame_positions
+
+    @staticmethod
+    def _calculate_size(
+        frame_positions: Sequence[int], last_frame_position: int
+    ) -> int:
+        first_frame_start = frame_positions[0]
+        last_frame_end = last_frame_position
+        return last_frame_end - first_frame_start - len(frame_positions) * 16
+
+    def _set_compression_ratio(
+        self, dataset_start: int, dataset: WsiDataset, compressed_size: int
+    ):
+        uncompressed_size = (
+            dataset.frame_count
+            * dataset.tile_size.area
+            * dataset.samples_per_pixel
+            * (dataset.bits // 8)
+        )
+        ratio = DSfloat(round(uncompressed_size / compressed_size, 2))
+        ratios = dataset.get_multi_value(LossyImageCompressionRatioTag)
+        ratios[-1] = ratio
+        self._file.update_dataset(
+            dataset_start,
+            {LossyImageCompressionRatioTag: ratios},
+        )
 
 
 class WsiDicomNativeWriter(WsiDicomWriter):
@@ -578,6 +624,7 @@ class WsiDicomNativeWriter(WsiDicomWriter):
         self,
         data: Dict[Tuple[str, float], ImageData],
         dataset: WsiDataset,
+        dataset_range: Tuple[int, int],
         workers: int,
         chunk_size: int,
         scale: int,
