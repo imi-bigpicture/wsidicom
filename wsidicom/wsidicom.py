@@ -55,7 +55,6 @@ class WsiDicom:
     def __init__(
         self,
         source: Source,
-        label: Optional[Union[Image, str, Path]] = None,
         source_owned: bool = False,
     ):
         """Hold WSI DICOM levels, labels and overviews.
@@ -73,17 +72,8 @@ class WsiDicom:
         """
         self._source = source
         self._source_owned = source_owned
-        if label is None:
-            label_instances = source.label_instances
-        else:
-            label_instances = [
-                WsiInstance.create_label(
-                    label,
-                    source.base_dataset,
-                )
-            ]
         self._levels = Levels.open(source.level_instances)
-        self._labels = Labels.open(label_instances)
+        self._labels = Labels.open(source.label_instances)
         self._overviews = Overviews.open(source.overview_instances)
         self._annotations = list(source.annotation_instances)
         self._uids = self._validate_collection()
@@ -96,7 +86,6 @@ class WsiDicom:
     def open(
         cls,
         files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
-        label: Optional[Union[Image, str, Path]] = None,
     ) -> "WsiDicom":
         """Open valid WSI DICOM files in path or stream and return a WsiDicom object.
 
@@ -108,8 +97,6 @@ class WsiDicom:
         files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
             Files to open. Can be a path or stream for a single file, a list of paths or
             streams for multiple files, or a path to a folder containing files.
-        label: Optional[Union[Image, str, Path]] = None
-            Optional label image to use instead of label found in path.
 
         Returns
         ----------
@@ -117,7 +104,7 @@ class WsiDicom:
             WsiDicom created from WSI DICOM files in path.
         """
         source = WsiDicomFileSource(files)
-        return cls(source, label, True)
+        return cls(source, True)
 
     @classmethod
     def open_web(
@@ -128,7 +115,6 @@ class WsiDicom:
         requested_transfer_syntax: Optional[
             Union[str, UID, Sequence[Union[str, UID]]]
         ] = None,
-        label: Optional[Union[Image, str, Path]] = None,
     ) -> "WsiDicom":
         """Open WSI DICOM instances using DICOM web client.
 
@@ -146,8 +132,6 @@ class WsiDicom:
             Transfer syntax to request for image data, for example
             "1.2.840.10008.1.2.4.50" for JPEGBaseline8Bit. By default the first
             supported transfer syntax is requested.
-        label: Optional[Union[Image, str, Path]] = None
-            Optional label image to use instead of label found in source.
 
         Returns
         ----------
@@ -169,20 +153,16 @@ class WsiDicom:
         source = WsiDicomWebSource(
             client, study_uid, series_uids, requested_transfer_syntax
         )
-        return cls(source, label, True)
+        return cls(source, True)
 
     @classmethod
-    def open_dicomdir(
-        cls, path: Union[str, Path], label: Optional[Union[Image, str, Path]] = None
-    ) -> "WsiDicom":
+    def open_dicomdir(cls, path: Union[str, Path]) -> "WsiDicom":
         """Open WSI DICOM files in DICOMDIR and return a WsiDicom object.
 
         Parameters
         ----------
         path: Union[str, Path]
             Path to DICOMDIR file or directory with a DICOMDIR file.
-        label: Optional[Union[Image, str, Path]] = None
-            Optional label image to use instead of label found in path.
 
         Returns
         ----------
@@ -196,7 +176,7 @@ class WsiDicom:
         if not path.is_file() or not path.exists():
             raise FileNotFoundError(f"DICOMDIR file {path} not found.")
         source = WsiDicomFileSource.open_dicomdir(path)
-        return cls(source, label, True)
+        return cls(source, True)
 
     def __enter__(self):
         return self
@@ -597,7 +577,10 @@ class WsiDicom:
         chunk_size: Optional[int] = None,
         offset_table: Optional[Union["str", OffsetTableType]] = None,
         include_levels: Optional[Sequence[int]] = None,
+        include_labels: bool = True,
+        include_overviews: bool = True,
         add_missing_levels: bool = False,
+        label: Optional[Union[Image, str, Path]] = None,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
     ) -> List[Path]:
         """
@@ -628,8 +611,14 @@ class WsiDicom:
             Optional list indices (in present levels) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indicies can be used,
             e.g. [-1, -2] includes the two highest levels.
+        include_labels: bool = True
+            If to include label series.
+        include_overviews: bool = True
+            If to include overview series.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
+        label: Optional[Union[Image, str, Path]] = None
+            Optional label image to use instead of present label (if any).
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
@@ -663,10 +652,20 @@ class WsiDicom:
             transcoding,
         ) as target:
             target.save_levels(self.levels)
-            if self.overviews is not None:
+            if include_overviews and self.overviews is not None:
                 target.save_overviews(self.overviews)
-            if self.labels is not None:
-                target.save_labels(self.labels)
+            if include_labels:
+                if label is not None:
+                    label_instances = [
+                        WsiInstance.create_label(
+                            label,
+                            self.source.base_dataset,
+                        )
+                    ]
+                    labels = Labels.open(label_instances)
+                    target.save_labels(labels)
+                elif self.labels is not None:
+                    target.save_labels(self.labels)
             return target.filepaths
 
     def _validate_collection(self) -> SlideUids:
