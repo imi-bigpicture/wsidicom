@@ -15,15 +15,22 @@
 """Module with encoders for image data."""
 
 from abc import ABCMeta, abstractmethod
+from enum import Enum
 import io
 from typing import Dict, Generic, Optional, Tuple, Type, TypeVar, Union
 
 import numpy as np
-from PIL import Image
-from PIL.Image import Image as PILImage
+from PIL import Image as Pillow
+from PIL.Image import Image
 from pydicom import Dataset
 from pydicom.pixel_data_handlers.util import pixel_dtype
-from pydicom.uid import UID
+from pydicom.uid import (
+    UID,
+    JPEGBaseline8Bit,
+    JPEGExtended12Bit,
+    JPEG2000,
+    JPEGLSNearLossless,
+)
 from wsidicom.codec.optionals import (
     IMAGE_CODECS_AVAILABLE,
     PYLIBJPEGRLE_AVAILABLE,
@@ -39,7 +46,7 @@ from wsidicom.codec.settings import (
     Channels,
     Jpeg2kSettings,
     JpegLosslessSettings,
-    JpegLsLosslessSettings,
+    JpegLsSettings,
     JpegSettings,
     NumpySettings,
     RleSettings,
@@ -48,6 +55,24 @@ from wsidicom.codec.settings import (
 )
 
 SettingsType = TypeVar("SettingsType", bound=Settings)
+
+
+class LossyCompressionIsoStandard(Enum):
+    JPEG_LOSSY = "ISO_10918_1"
+    JPEG_LS_NEAR_LOSSLESS = "ISO_14495_1"
+    JPEG_2000_IRREVERSIBLE = "ISO_15444_1"
+
+    @classmethod
+    def transfer_syntax_to_iso(
+        cls, transfer_syntax: UID
+    ) -> Optional["LossyCompressionIsoStandard"]:
+        if transfer_syntax in [JPEGBaseline8Bit, JPEGExtended12Bit]:
+            return cls.JPEG_LOSSY
+        elif transfer_syntax == JPEGLSNearLossless:
+            return cls.JPEG_LS_NEAR_LOSSLESS
+        elif transfer_syntax == JPEG2000:
+            return cls.JPEG_2000_IRREVERSIBLE
+        return None
 
 
 class Encoder(Generic[SettingsType], metaclass=ABCMeta):
@@ -64,12 +89,12 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         self._settings = settings
 
     @abstractmethod
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         """Encode image into bytes.
 
         Parameters
         ----------
-        image: Union[PILImage, np.ndarray]
+        image: Union[Image, np.ndarray]
             Image to encode.
 
         Returns
@@ -84,6 +109,11 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
     def lossy(self) -> bool:
         """Return True if encoder is lossy."""
         raise NotImplementedError()
+
+    @property
+    def lossy_method(self) -> Optional[LossyCompressionIsoStandard]:
+        """Return ISO standard name of compression if encoder is lossy."""
+        return LossyCompressionIsoStandard.transfer_syntax_to_iso(self.transfer_syntax)
 
     @classmethod
     @abstractmethod
@@ -138,7 +168,30 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         return self._settings.photometric_interpretation
 
     @classmethod
-    def create(cls, settings: SettingsType) -> "Encoder[SettingsType]":
+    def create(
+        cls, transfer_syntax: UID, bits: int, photometric_interpretation: str
+    ) -> "Encoder":
+        """Create an encoder using settings.
+
+        Parameters
+        ----------
+        settings: SettingsType
+            Settings for the encoder.
+
+        Returns
+        ----------
+        Encoder[SettingsType]
+            Encoder for settings.
+        """
+        settings = Settings.create(
+            transfer_syntax,
+            bits,
+            photometric_interpretation,
+        )
+        return cls.create_for_settings(settings)
+
+    @classmethod
+    def create_for_settings(cls, settings: SettingsType) -> "Encoder[SettingsType]":
         """Create an encoder using settings.
 
         Parameters
@@ -176,7 +229,7 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         encoders_by_settings: Dict[Type[Settings], Tuple[Type[Encoder], ...]] = {
             JpegSettings: (JpegEncoder, PillowEncoder),
             JpegLosslessSettings: (JpegEncoder,),
-            JpegLsLosslessSettings: (JpegLsEncoder,),
+            JpegLsSettings: (JpegLsEncoder,),
             Jpeg2kSettings: (Jpeg2kEncoder, PillowEncoder),
             NumpySettings: (NumpyEncoder,),
             RleSettings: (PylibjpegRleEncoder, ImageCodecsRleEncoder),
@@ -229,9 +282,9 @@ class PillowEncoder(Encoder[Union[JpegSettings, Jpeg2kSettings]]):
             isinstance(self.settings, Jpeg2kSettings) and not self.settings.lossless
         )
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
-        if not isinstance(image, PILImage):
-            image = Image.fromarray(image)
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
+        if not isinstance(image, Image):
+            image = Pillow.fromarray(image)
         with io.BytesIO() as buffer:
             image.save(buffer, format=self._format, **self._pillow_settings)  # type: ignore
             return buffer.getvalue()
@@ -299,7 +352,7 @@ class JpegEncoder(Encoder[Union[JpegSettings, JpegLosslessSettings]]):
     def lossy(self) -> bool:
         return not self._lossless
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
         return jpeg8_encode(
@@ -321,18 +374,18 @@ class JpegEncoder(Encoder[Union[JpegSettings, JpegLosslessSettings]]):
         return isinstance(settings, (JpegSettings, JpegLosslessSettings))
 
 
-class JpegLsEncoder(Encoder[JpegLsLosslessSettings]):
+class JpegLsEncoder(Encoder[JpegLsSettings]):
     """Encoder that uses jpegls to encode image."""
 
     def __init__(
         self,
-        settings: JpegLsLosslessSettings,
+        settings: JpegLsSettings,
     ) -> None:
         """Initialize JPEG-LS encoder.
 
         Parameters
         ----------
-        settings: JpegLsLosslessSettings
+        settings: JpegLsSettings
             Settings for the encoder.
         """
         self._bits = settings.bits
@@ -346,10 +399,12 @@ class JpegLsEncoder(Encoder[JpegLsLosslessSettings]):
     def lossy(self) -> bool:
         return self._level != 0
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         """Encode image into bytes."""
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
         return jpegls_encode(np.array(image), level=self._level)
 
     @classmethod
@@ -358,7 +413,7 @@ class JpegLsEncoder(Encoder[JpegLsLosslessSettings]):
 
     @classmethod
     def supports_settings(cls, settings: Settings) -> bool:
-        return isinstance(settings, JpegLsLosslessSettings)
+        return isinstance(settings, JpegLsSettings)
 
 
 class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
@@ -389,9 +444,11 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
     def lossy(self) -> bool:
         return not self.settings.lossless
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
         return jpeg2k_encode(
             np.array(image),
             level=self._level,
@@ -440,7 +497,9 @@ class NumpyEncoder(Encoder[NumpySettings]):
     def lossy(self) -> bool:
         return False
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
         return np.array(image).astype(self._dtype).tobytes()
 
     @classmethod
@@ -472,7 +531,9 @@ class RleEncoder(Encoder[RleSettings]):
             self._samples_per_pixel = 3
         super().__init__(settings)
 
-    def encode(self, image: Union[PILImage, np.ndarray]) -> bytes:
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
         return self._encode(np.array(image).astype(self._dtype))
 
     @property

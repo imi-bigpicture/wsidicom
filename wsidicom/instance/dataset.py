@@ -22,14 +22,13 @@ from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import (
-    JPEG2000,
     UID,
-    JPEGBaseline8Bit,
-    JPEGExtended12Bit,
-    JPEGLSNearLossless,
     generate_uid,
 )
+from pydicom.tag import BaseTag
 from pydicom.valuerep import DSfloat
+from pydicom.multival import MultiValue
+from wsidicom.codec.encoder import LossyCompressionIsoStandard
 
 from wsidicom.config import settings
 from wsidicom.errors import (
@@ -244,7 +243,7 @@ class WsiDataset(Dataset):
                 "Concatenated file missing concatenation frame offset" "number"
             )
 
-    @cached_property
+    @property
     def frame_count(self) -> int:
         """Return number of frames in instance."""
         frame_count = self._get_dicom_attribute("NumberOfFrames")
@@ -316,8 +315,8 @@ class WsiDataset(Dataset):
             return None
         pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
         if pixel_spacing_values is not None:
-            if any([spacing == 0 for spacing in pixel_spacing_values]):
-                logging.warning(f"Pixel spacing is zero, {pixel_spacing_values}")
+            if any([spacing <= 0 for spacing in pixel_spacing_values]):
+                logging.warning(f"Pixel spacing not positive, {pixel_spacing_values}")
                 return None
             return SizeMm(pixel_spacing_values[1], pixel_spacing_values[0])
         return None
@@ -611,6 +610,28 @@ class WsiDataset(Dataset):
             return "0"
         return getattr(optical_sequence[0], "OpticalPathIdentifier", "0")
 
+    def get_multi_value(self, tag: Union[str, BaseTag]) -> List[Any]:
+        """Return values for tag as list of values. If tag is not found, return empty
+        list. If tag is not multi value, return list with one value.
+
+        Parameters
+        ----------
+        tag: Union[str, BaseTag]
+            Tag to get values for.
+
+        Returns
+        ----------
+        List[Any]
+            List of values.
+        """
+        element = self.get(tag)
+        if element is None:
+            return []
+        vm = getattr(element, "VM", 1)
+        if vm > 1 or isinstance(element, MultiValue):
+            return [value for value in element]
+        return [element.value]
+
     def as_tiled_full(
         self,
         focal_planes: Sequence[float],
@@ -782,19 +803,17 @@ class WsiDataset(Dataset):
         dataset.HighBit = image_data.bits - 1
         dataset.PixelRepresentation = 0
         if image_data.lossy_compressed:
+            method = LossyCompressionIsoStandard.transfer_syntax_to_iso(
+                image_data.transfer_syntax
+            )
+            if method is None:
+                raise NotImplementedError(
+                    "Creating lossy compressed image with transfer syntax that is not "
+                    "lossy is not implemented."
+                )
             dataset.LossyImageCompression = "01"
             dataset.LossyImageCompressionRatio = 1
-            if image_data.transfer_syntax in [JPEGBaseline8Bit, JPEGExtended12Bit]:
-                dataset.LossyImageCompressionMethod = "ISO_10918_1"
-            elif image_data.transfer_syntax == JPEG2000:
-                dataset.LossyImageCompressionMethod = "ISO_15444_1"
-            elif image_data.transfer_syntax == JPEGLSNearLossless:
-                dataset.LossyImageCompressionMethod = "ISO_14495_1"
-            else:
-                raise NotImplementedError(
-                    f"Lossy compression not implemented for "
-                    f"{image_data.transfer_syntax}."
-                )
+            dataset.LossyImageCompressionMethod = method.value
 
         dataset.PhotometricInterpretation = image_data.photometric_interpretation
         dataset.SamplesPerPixel = image_data.samples_per_pixel

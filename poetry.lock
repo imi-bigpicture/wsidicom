@@ -587,14 +587,14 @@ Pillow = "*"
 
 [[package]]
 name = "platformdirs"
-version = "4.0.0"
+version = "4.1.0"
 description = "A small Python package for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
 category = "dev"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "platformdirs-4.0.0-py3-none-any.whl", hash = "sha256:118c954d7e949b35437270383a3f2531e99dd93cf7ce4dc8340d3356d30f173b"},
-    {file = "platformdirs-4.0.0.tar.gz", hash = "sha256:cb633b2bcf10c51af60beb0ab06d2f1d69064b43abf4c185ca6b28865f3f9731"},
+    {file = "platformdirs-4.1.0-py3-none-any.whl", hash = "sha256:11c8f37bcca40db96d8144522d925583bdb7a31f7b0e37e3ed4318400a8e2380"},
+    {file = "platformdirs-4.1.0.tar.gz", hash = "sha256:906d548203468492d432bcb294d4bc2fff751bf84971fbb2c10918cc206ee420"},
 ]
 
 [package.extras]
@@ -927,18 +927,18 @@ watchmedo = ["PyYAML (>=3.10)"]
 
 [[package]]
 name = "wsidicom-data"
-version = "0.2.0"
+version = "0.3.0"
 description = "Test data for wsidicom"
 category = "dev"
 optional = false
 python-versions = ">=3.9,<4.0"
 files = [
-    {file = "wsidicom_data-0.2.0-py3-none-any.whl", hash = "sha256:2c2cae749e25410ec65d2387a1168e8248d58b927c3b2a9f88d4d5205cffd06b"},
-    {file = "wsidicom_data-0.2.0.tar.gz", hash = "sha256:5a10d77243c4418a931ee4eb40dad26a61d649db74cf7c52f361f57915a0f175"},
+    {file = "wsidicom_data-0.3.0-py3-none-any.whl", hash = "sha256:8edb944c46127203e8837b89fc9a20898f39f48202e15131e961a80d1034cb38"},
+    {file = "wsidicom_data-0.3.0.tar.gz", hash = "sha256:1db5998f79f272751aeb953c155a07d56714c84a8db999597ec2545303cbc058"},
 ]
 
 [package.dependencies]
-wsidicom = ">=0.14.0"
+wsidicom = ">=0.16.0"
 
 [package.extras]
 imagecodecs = ["imagecodecs (>=2023.9.18,<2024.0.0)"]
@@ -963,4 +963,4 @@ rle = ["pylibjpeg-rle"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "1bf257938b24ee18712e190846485547d70e172309d074d9316b9ef76d712242"
+content-hash = "3d19106dc1208c14816fd46fee9558a4f3f246b1676280ed78d025950444fd74"
