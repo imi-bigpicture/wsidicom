@@ -663,9 +663,10 @@ class WsiDicom:
                         )
                     ]
                     labels = Labels.open(label_instances)
+                else:
+                    labels = self.labels
+                if labels is not None:
                     target.save_labels(labels)
-                elif self.labels is not None:
-                    target.save_labels(self.labels)
             return target.filepaths
 
     def _validate_collection(self) -> SlideUids:

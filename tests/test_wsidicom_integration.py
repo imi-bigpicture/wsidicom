@@ -234,7 +234,7 @@ class TestWsiDicomIntegration:
         label = Pillow.new("RGB", (256, 256), (128, 128, 128))
 
         # Act
-        with WsiDicom.open(wsi_path, label=label) as wsi:
+        with WsiDicom.open(wsi_path) as wsi:
             wsi.save(tmp_path, include_levels=[-1], label=label)
 
         # Assert
