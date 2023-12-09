@@ -659,7 +659,7 @@ class WsiDicom:
                     label_instances = [
                         WsiInstance.create_label(
                             label,
-                            self.source.base_dataset,
+                            self._source.base_dataset,
                         )
                     ]
                     labels = Labels.open(label_instances)
