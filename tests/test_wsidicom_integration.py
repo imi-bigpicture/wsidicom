@@ -15,6 +15,7 @@
 from hashlib import md5
 from pathlib import Path
 from typing import Any, Callable, Dict
+import numpy as np
 
 import pytest
 from PIL import Image as Pillow
@@ -240,4 +241,4 @@ class TestWsiDicomIntegration:
         # Assert
         with WsiDicom.open(tmp_path) as wsi:
             read_label = wsi.read_label()
-        assert read_label == label
+        assert np.array_equal(np.array(read_label), np.array(label))
