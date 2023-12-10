@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Option to not include label and overview in `save()`.
+
+### Changed
+
+- Moved option to change label from `open()` to `save()`.
+
 ## [0.16.0] - 2023-12-07
 
 ### Added

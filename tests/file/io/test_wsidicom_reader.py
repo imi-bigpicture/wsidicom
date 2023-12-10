@@ -82,7 +82,7 @@ def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
 
 
 @pytest.mark.unittest
-class TestWsiDicomFile:
+class TestWWsiDicomReader:
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_offset_table_type_property(
         self, test_file: WsiDicomReader, settings: Dict[str, Any]

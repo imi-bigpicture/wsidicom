@@ -515,6 +515,12 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
+
+        Returns
+        ----------
+        bool
+            True if tile region is inside image and z coordinate and optical path
+            exists.
         """
         return (
             region.is_inside(self.plane_region)
@@ -541,7 +547,7 @@ class ImageData(metaclass=ABCMeta):
         Returns
         ----------
         Iterator[Image]
-            Tiles as Images.
+            Iterator of tiles as Images.
         """
         return (self._get_decoded_tile(tile, z, path) for tile in tiles)
 
@@ -563,8 +569,8 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         ----------
-        Iterator[Image]
-            Tiles as Images.
+        Iterator[bytes]
+            Iterator of tiles as bytes.
         """
         return (self._get_encoded_tile(tile, z, path) for tile in tiles)
 
