@@ -15,6 +15,7 @@
 from hashlib import md5
 from pathlib import Path
 from typing import Any, Callable, Dict
+import numpy as np
 
 import pytest
 from PIL import Image as Pillow
@@ -167,20 +168,6 @@ class TestWsiDicomIntegration:
         checksum = md5(im.tobytes()).hexdigest()
         assert checksum == region["md5"], (region, checksum)
 
-    @pytest.mark.parametrize("wsi_path", WsiTestDefinitions.folders())
-    def test_replace_label(self, wsi_path: Path, input_type: WsiInputType):
-        # Arrange
-        if not wsi_path.exists():
-            pytest.skip(f"Folder {wsi_path} for wsi does not exist.")
-        image = Pillow.new("RGB", (256, 256), (128, 128, 128))
-
-        # Act
-        with WsiDicom.open(wsi_path, label=image) as wsi:
-            label = wsi.read_label()
-
-        # Assert
-        assert image == label
-
     @pytest.mark.parametrize(
         ["wsi_name", "expected_level_count"], WsiTestDefinitions.levels()
     )
@@ -237,3 +224,21 @@ class TestWsiDicomIntegration:
 
         # Assert
         assert has_overview == expected_has_overview
+
+    @pytest.mark.parametrize("wsi_path", WsiTestDefinitions.folders())
+    def test_save_replace_label(
+        self, wsi_path: Path, input_type: WsiInputType, tmp_path: Path
+    ):
+        # Arrange
+        if not wsi_path.exists():
+            pytest.skip(f"Folder {wsi_path} for wsi does not exist.")
+        label = Pillow.new("RGB", (256, 256), (128, 128, 128))
+
+        # Act
+        with WsiDicom.open(wsi_path) as wsi:
+            wsi.save(tmp_path, include_levels=[-1], label=label)
+
+        # Assert
+        with WsiDicom.open(tmp_path) as wsi:
+            read_label = wsi.read_label()
+        assert np.array_equal(np.array(read_label), np.array(label))
