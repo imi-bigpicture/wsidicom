@@ -77,7 +77,7 @@ measurement2 = Measurement(area, 15, pixels)
 point = Point(1, 1)
 
 
-@pytest.mark.annotation
+@pytest.mark.unittest
 class TestWsiDicomAnnotation:
     @pytest.mark.parametrize("file_path", test_files["qupath_geojson"])
     def test_qupath_geojson(self, file_path: Path):

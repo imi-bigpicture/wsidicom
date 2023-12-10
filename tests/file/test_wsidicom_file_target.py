@@ -20,7 +20,7 @@ from wsidicom.file import WsiDicomFileTarget
 
 
 @pytest.mark.unittest
-class TestTarget:
+class TestWsiDicomFileTarget:
     @pytest.mark.parametrize(
         ["level", "present_levels", "include_indices"],
         [(0, [0, 1, 2], None), (1, [0, 1, 2], None), (2, [0, 1, 2], None)],
