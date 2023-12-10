@@ -258,7 +258,7 @@ def dataset(image_data: ImageData, frame_count: int):
     yield dataset
 
 
-@pytest.mark.save
+@pytest.mark.unittest
 class TestWsiDicomWriter:
     @pytest.mark.parametrize(
         "writen_table_type",
