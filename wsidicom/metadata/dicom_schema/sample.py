@@ -149,7 +149,7 @@ class SamplingDicom(PreparationStepDicom):
                 parent_specimen_type=sampling.specimen.type.code,
                 issuer_of_parent_specimen_id=parent_issuer,
             ),
-            # processing_datetime=self.date_time,
+            processing_datetime=sampling.date_time,
             issuer_of_specimen_id=issuer,
             processing_description=sampling.description,
         )
@@ -205,7 +205,7 @@ class CollectionDicom(PreparationStepDicom):
         return SpecimenPreparationStep(
             specimen_id=identifier,
             processing_procedure=SpecimenCollection(procedure=collection.method.code),
-            # processing_datetime=self.date_time,
+            processing_datetime=collection.date_time,
             issuer_of_specimen_id=issuer,
             processing_description=collection.description,
         )
@@ -218,7 +218,7 @@ class CollectionDicom(PreparationStepDicom):
             SpecimenCollectionProcedureCode.from_code(
                 dataset.processing_procedure.procedure
             ),
-            # date_time=dataset.processing_datetime,
+            date_time=dataset.processing_datetime,
         )
 
 
@@ -250,7 +250,7 @@ class ProcessingDicom(PreparationStepDicom):
         return SpecimenPreparationStep(
             specimen_id=identifier,
             processing_procedure=SpecimenProcessing(description=processing.method.code),
-            # processing_datetime=self.date_time,
+            processing_datetime=processing.date_time,
             issuer_of_specimen_id=issuer,
         )
 
@@ -262,7 +262,7 @@ class ProcessingDicom(PreparationStepDicom):
             SpecimenPreparationStepsCode.from_code(
                 dataset.processing_procedure.description
             ),
-            # date_time=dataset.processing_datetime,
+            date_time=dataset.processing_datetime,
         )
 
 
@@ -293,7 +293,7 @@ class EmbeddingDicom(PreparationStepDicom):
             specimen_id=identifier,
             processing_procedure=SpecimenProcessing(description="Embedding"),
             embedding_medium=embedding.medium.code,
-            # processing_datetime=self.date_time,
+            processing_datetime=embedding.date_time,
             issuer_of_specimen_id=issuer,
         )
 
@@ -303,7 +303,7 @@ class EmbeddingDicom(PreparationStepDicom):
         assert dataset.embedding_medium is not None
         return Embedding(
             SpecimenEmbeddingMediaCode.from_code(dataset.embedding_medium),
-            # date_time=dataset.processing_datetime,
+            date_time=dataset.processing_datetime,
         )
 
 
@@ -334,7 +334,7 @@ class FixationDicom(PreparationStepDicom):
             specimen_id=identifier,
             processing_procedure=SpecimenProcessing(description="Fixation"),
             fixative=fixation.fixative.code,
-            # processing_datetime=self.date_time,
+            processing_datetime=fixation.date_time,
             issuer_of_specimen_id=issuer,
         )
 
@@ -344,7 +344,7 @@ class FixationDicom(PreparationStepDicom):
         assert dataset.fixative is not None
         return Fixation(
             SpecimenFixativesCode.from_code(dataset.fixative),
-            # date_time=dataset.processing_datetime,
+            date_time=dataset.processing_datetime,
         )
 
 
@@ -378,7 +378,7 @@ class StainingDicom(PreparationStepDicom):
         return SpecimenPreparationStep(
             specimen_id=identifier,
             processing_procedure=SpecimenStaining(substances=substances),
-            # processing_datetime=self.date_time,
+            processing_datetime=staining.date_time,
             issuer_of_specimen_id=issuer,
         )
 
@@ -398,7 +398,7 @@ class StainingDicom(PreparationStepDicom):
                 )
         return Staining(
             substances,
-            # date_time=dataset.processing_datetime,
+            date_time=dataset.processing_datetime,
         )
 
 
