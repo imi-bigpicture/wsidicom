@@ -46,11 +46,9 @@ from wsidicom.metadata.sample import (
     Embedding,
     ExtractedSpecimen,
     Fixation,
-    Processing,
     Sample,
     SlideSample,
     SlideSamplePosition,
-    Staining,
 )
 
 

@@ -69,15 +69,21 @@ class SpecimenIdentifierDicom:
 
     @classmethod
     def from_step(cls, step: SpecimenPreparationStep) -> Union[str, SpecimenIdentifier]:
-        # TODO update this for id issuer
-        return step.specimen_id
+        return SpecimenIdentifier(
+            step.specimen_id,
+            step.issuer_of_specimen_id,
+        )
 
     @classmethod
     def from_description(
         cls, description: SpecimenDescription
     ) -> Union[str, SpecimenIdentifier]:
-        # TODO update this for id issuer
-        return description.specimen_id
+        if description.issuer_of_specimen_id is None:
+            return description.specimen_id
+        return SpecimenIdentifier(
+            description.specimen_id,
+            description.issuer_of_specimen_id.issuer_of_identifier,
+        )
 
 
 class PreparationStepDicom(metaclass=ABCMeta):
