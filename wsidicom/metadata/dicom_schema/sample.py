@@ -14,9 +14,9 @@
 
 from abc import ABCMeta
 from collections import defaultdict
-from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 import logging
-
+from marshmallow import post_dump
 from highdicom import (
     SpecimenCollection,
     SpecimenDescription,
@@ -26,6 +26,7 @@ from highdicom import (
     SpecimenStaining,
 )
 from highdicom.sr import CodedConcept
+import marshmallow
 from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
@@ -38,6 +39,8 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
 )
+from wsidicom.metadata.dicom_schema.fields import CodeDicomField
+from wsidicom.metadata.dicom_schema.schema import DicomSchema
 
 from wsidicom.metadata.sample import (
     Collection,
@@ -69,6 +72,8 @@ class SpecimenIdentifierDicom:
 
     @classmethod
     def from_step(cls, step: SpecimenPreparationStep) -> Union[str, SpecimenIdentifier]:
+        if step.issuer_of_specimen_id is None or step.issuer_of_specimen_id == "":
+            return step.specimen_id
         return SpecimenIdentifier(
             step.specimen_id,
             step.issuer_of_specimen_id,
@@ -78,7 +83,10 @@ class SpecimenIdentifierDicom:
     def from_description(
         cls, description: SpecimenDescription
     ) -> Union[str, SpecimenIdentifier]:
-        if description.issuer_of_specimen_id is None:
+        if (
+            description.issuer_of_specimen_id is None
+            or description.issuer_of_specimen_id == ""
+        ):
             return description.specimen_id
         return SpecimenIdentifier(
             description.specimen_id,
@@ -119,6 +127,22 @@ class PreparationStepDicom(metaclass=ABCMeta):
         if isinstance(step, Staining):
             return StainingDicom.to_dataset(step, specimen_identifier)
         raise NotImplementedError()
+
+
+class SamplingDicomSchema(DicomSchema[Sampling]):
+    specimen = marshmallow.fields.String()
+    method = CodeDicomField(SpecimenSamplingProcedureCode)
+    date_time = marshmallow.fields.DateTime()
+    description = marshmallow.fields.String(allow_none=True)
+
+    @post_dump
+    def post_dump(self, data: Dict[str, Any], many: bool, **kwargs) -> Dataset:
+        specimen_identifier_item = Dataset()
+        specimen_identifier_item.TextValue = data.pop("specimen")
+
+        dataset = Dataset()
+        dataset.SpecimenPreparationStepContentItemSequence = []
+        return dataset
 
 
 class SamplingDicom(PreparationStepDicom):

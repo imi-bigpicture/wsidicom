@@ -14,11 +14,11 @@
 
 from typing import Iterable, List, Optional, OrderedDict
 
-
 from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level
-from wsidicom.instance import ImageCoordinateSystem, ImageType, WsiInstance
+from wsidicom.instance import ImageType, WsiInstance
+from wsidicom.metadata import ImageCoordinateSystem
 from wsidicom.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
 from wsidicom.series.series import Series
 from wsidicom.stringprinting import str_indent

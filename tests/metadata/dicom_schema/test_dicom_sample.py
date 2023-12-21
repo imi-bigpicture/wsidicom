@@ -363,6 +363,7 @@ class TestSampleDicom:
             assert slide_sample.uid == slide_sample_uids[slide_sample_index]
             # assert slide_sample.anatomical_sites == primary_anatomic_structures
             # assert slide_sample.position == position
+            print(slide_sample.sampled_from)
             assert slide_sample.sampled_from is not None
             assert slide_sample.sampled_from.method == block_sampling_method
             block = slide_sample.sampled_from.specimen

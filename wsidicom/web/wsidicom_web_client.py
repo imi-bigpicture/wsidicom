@@ -211,7 +211,10 @@ class WsiDicomWebClient:
         try:
             self.get_frames(study_uid, series_uid, instance_uid, [1], transfer_syntax)
         except HTTPError as exception:
-            if exception.response.status_code == HTTPStatus.NOT_ACCEPTABLE:
+            if (
+                exception.response is not None
+                and exception.response.status_code == HTTPStatus.NOT_ACCEPTABLE
+            ):
                 logging.debug(
                     f"Transfer syntax {transfer_syntax} not supported "
                     f"for {instance_uid}."

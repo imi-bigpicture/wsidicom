@@ -532,6 +532,12 @@ class Orientation:
             % 360
         )
 
+    @classmethod
+    def from_rotation(cls, rotation: float) -> "Orientation":
+        x = round(math.sin(rotation * math.pi / 180), 8)
+        y = round(math.cos(rotation * math.pi / 180), 8)
+        return cls((-x, y, 0, y, x, 0))
+
     @property
     def values(self) -> Tuple[float, float, float, float, float, float]:
         return self._orientation

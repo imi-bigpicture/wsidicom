@@ -758,6 +758,7 @@ class WsiDataset(Dataset):
             pixel_measure_sequence.SpacingBetweenSlices = DSfloat(0.0, True)
             # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
             # Height, Depth. Depth must not be 0. Default to 0.5 microns
+            slice_thickness = 0.0005
             pixel_measure_sequence.SliceThickness = DSfloat(0.0005, True)
             shared_functional_group_sequence.PixelMeasuresSequence = DicomSequence(
                 [pixel_measure_sequence]
@@ -772,7 +773,7 @@ class WsiDataset(Dataset):
                 image_data.image_size.height * image_data.pixel_spacing.height
             )
             # SliceThickness is in mm, ImagedVolumeDepth in um
-            dataset.ImagedVolumeDepth = pixel_measure_sequence.SliceThickness * 1000
+            dataset.ImagedVolumeDepth = DSfloat(slice_thickness * 1000, True)
             # DICOM 2022a part 3 IODs - C.8.12.9 Whole Slide Microscopy Image
             # Frame Type Macro. Analogous to ImageType and shared by all
             # frames so clone
@@ -783,12 +784,18 @@ class WsiDataset(Dataset):
             ) = DicomSequence([wsi_frame_type_item])
 
         if image_data.image_coordinate_system is not None:
-            dataset.ImageOrientationSlide = list(
-                image_data.image_coordinate_system.image_orientation_slide
+            dataset.ImageOrientationSlide = [
+                DSfloat(value, True)
+                for value in image_data.image_coordinate_system.orientation.values
+            ]
+            offset_item = Dataset()
+            offset_item.XOffsetInSlideCoordinateSystem = DSfloat(
+                image_data.image_coordinate_system.origin.x, True
             )
-            dataset.TotalPixelMatrixOriginSequence = (
-                image_data.image_coordinate_system.total_pixel_matrix_origin_sequence
+            offset_item.YOffsetInSlideCoordinateSystem = DSfloat(
+                image_data.image_coordinate_system.origin.y, True
             )
+            dataset.TotalPixelMatrixOriginSequence = DicomSequence([offset_item])
 
         dataset.DimensionOrganizationType = "TILED_FULL"
         dataset.TotalPixelMatrixColumns = image_data.image_size.width

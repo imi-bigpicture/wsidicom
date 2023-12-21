@@ -30,11 +30,11 @@ from PIL.Image import Image
 from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
+from wsidicom.config import settings
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
+from wsidicom.metadata.image import ImageCoordinateSystem
 from wsidicom.thread import ConditionalThreadPoolExecutor
-from wsidicom.config import settings
 
 
 class ImageData(metaclass=ABCMeta):

@@ -19,6 +19,7 @@ from typing import Dict, Iterable, List, Optional, OrderedDict, Sequence, Set, T
 from PIL.Image import Image
 from pydicom.uid import UID
 
+from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNoResolutionError,
@@ -27,15 +28,14 @@ from wsidicom.errors import (
 )
 from wsidicom.geometry import Point, Region, RegionMm, Size, SizeMm
 from wsidicom.instance import (
-    ImageCoordinateSystem,
     ImageData,
     ImageType,
     WsiDataset,
     WsiInstance,
 )
+from wsidicom.metadata import ImageCoordinateSystem
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
-from wsidicom.config import settings
 
 
 class Group:

@@ -14,12 +14,11 @@
 
 """Image model."""
 import datetime
-import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Optional, TypeVar
 
-from wsidicom.geometry import Orientation, PointMm, SizeMm
+from wsidicom.geometry import Orientation, PointMm, RegionMm, SizeMm
 
 
 class FocusMethod(Enum):
@@ -33,6 +32,9 @@ class ExtendedDepthOfField:
     distance_between_focal_planes: float
 
 
+GeometryType = TypeVar("GeometryType", PointMm, RegionMm)
+
+
 @dataclass
 class ImageCoordinateSystem:
     origin: PointMm
@@ -40,9 +42,29 @@ class ImageCoordinateSystem:
 
     @property
     def orientation(self) -> Orientation:
-        x = round(math.sin(self.rotation * math.pi / 180), 8)
-        y = round(math.cos(self.rotation * math.pi / 180), 8)
-        return Orientation((-x, y, 0, y, x, 0))
+        return Orientation.from_rotation(self.rotation)
+
+    def image_to_slide(self, image: GeometryType) -> GeometryType:
+        if isinstance(image, PointMm):
+            offset = self.orientation.apply_transform(image)
+            return self.origin + offset
+        start = self.image_to_slide(image.start)
+        end = self.image_to_slide(image.end)
+        return RegionMm(start, SizeMm(end.x - start.x, end.y - start.y))
+
+    def slide_to_image(self, slide: GeometryType) -> GeometryType:
+        if isinstance(slide, PointMm):
+            offset = slide - self.origin
+            return self.orientation.apply_reverse_transform(offset)
+        start = self.slide_to_image(slide.start)
+        end = self.slide_to_image(slide.end)
+        return RegionMm(start, SizeMm(end.x - start.x, end.y - start.y))
+
+    def to_other_corrdinate_system(
+        self, other: "ImageCoordinateSystem", image: GeometryType
+    ) -> GeometryType:
+        slide = self.image_to_slide(image)
+        return other.slide_to_image(slide)
 
 
 @dataclass
