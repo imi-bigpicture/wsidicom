@@ -15,13 +15,10 @@
 import datetime
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
+from enum import Enum
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
-from highdicom import (
-    IssuerOfIdentifier,
-    UniversalEntityIDTypeValues,
-)
 from pydicom.sr.coding import Code
 from pydicom.uid import UID, generate_uid
 from wsidicom.conceptcode import (
@@ -75,7 +72,7 @@ class SpecimenIdentifier:
 
     value: str
     issuer: Optional[str] = None
-    issuer_type: Optional[Union[str, UniversalEntityIDTypeValues]] = None
+    issuer_type: Optional[str] = None
 
     def __eq__(self, other: Any):
         """Determine if other specimen identifiers is equal to this."""
@@ -85,16 +82,14 @@ class SpecimenIdentifier:
             return self.value == other.value and self.issuer == other.issuer
         return False
 
-    def to_identifier_and_issuer(self) -> Tuple[str, Optional[IssuerOfIdentifier]]:
+    def to_identifier_and_issuer(self) -> Tuple[str, Optional[str]]:
         """Format into string identifier and IssuerOfIdentifier."""
-        if self.issuer is None:
-            return self.value, None
-        return self.value, IssuerOfIdentifier(self.issuer, self.issuer_type)
+        return self.value, self.issuer
 
     @classmethod
     def get_identifier_and_issuer(
         cls, identifier: Union[str, "SpecimenIdentifier"]
-    ) -> Tuple[str, Optional[IssuerOfIdentifier]]:
+    ) -> Tuple[str, Optional[str]]:
         """Return string identifier and optional issuer of identifier object."""
         if isinstance(identifier, str):
             return identifier, None
@@ -153,6 +148,7 @@ class Processing(PreparationStep):
 
     method: SpecimenPreparationStepsCode
     date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
 
 
 @dataclass
@@ -167,6 +163,7 @@ class Embedding(PreparationStep):
 
     medium: SpecimenEmbeddingMediaCode
     date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
 
 
 @dataclass
@@ -181,6 +178,7 @@ class Fixation(PreparationStep):
 
     fixative: SpecimenFixativesCode
     date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
 
 
 @dataclass
@@ -195,6 +193,7 @@ class Staining(PreparationStep):
 
     substances: List[Union[str, SpecimenStainsCode]]
     date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
 
 
 class Specimen(metaclass=ABCMeta):

@@ -13,13 +13,12 @@
 #    limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, List, Dict, Optional, Type, TypeVar, Union
+from typing import Any, ClassVar, List, Dict, Optional, Type, TypeVar
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
-from highdicom.sr.coding import CodedConcept
 
 ConceptCodeType = TypeVar("ConceptCodeType", bound="ConceptCode")
 CidConceptCodeType = TypeVar("CidConceptCodeType", bound="CidConceptCode")
@@ -61,9 +60,7 @@ class ConceptCode:
         )
 
     @classmethod
-    def from_code(
-        cls: Type[ConceptCodeType], code: Union[Code, CodedConcept]
-    ) -> ConceptCodeType:
+    def from_code(cls: Type[ConceptCodeType], code: Code) -> ConceptCodeType:
         return cls(
             value=code.value,
             scheme_designator=code.scheme_designator,

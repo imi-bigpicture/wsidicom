@@ -78,11 +78,11 @@ class TestDicomSchema:
     )
     def test_serialize_eqipment(self, equipment: Equipment):
         # Arrange
-        model = EquipmentDicomSchema()
+        schema = EquipmentDicomSchema()
         assert equipment.software_versions is not None
 
         # Act
-        serialized = model.dump(equipment)
+        serialized = schema.dump(equipment)
 
         # Assert
         assert isinstance(serialized, Dataset)
@@ -91,10 +91,10 @@ class TestDicomSchema:
     def test_serialize_defaualt_eqipment(self):
         # Arrange
         equipment = Equipment()
-        model = EquipmentDicomSchema()
+        schema = EquipmentDicomSchema()
 
         # Act
-        serialized = model.dump(equipment)
+        serialized = schema.dump(equipment)
 
         # Assert
         assert isinstance(serialized, Dataset)
@@ -115,10 +115,10 @@ class TestDicomSchema:
         self, dicom_equipment: Dataset, equipment: Equipment
     ):
         # Arrange
-        model = EquipmentDicomSchema()
+        schema = EquipmentDicomSchema()
 
         # Act
-        deserialized = model.load(dicom_equipment)
+        deserialized = schema.load(dicom_equipment)
 
         # Assert
         assert isinstance(deserialized, Equipment)
@@ -157,10 +157,10 @@ class TestDicomSchema:
     )
     def test_serialize_image(self, image: Image):
         # Arrange
-        model = ImageDicomSchema()
+        schema = ImageDicomSchema()
 
         # Act
-        serialized = model.dump(image)
+        serialized = schema.dump(image)
 
         # Assert
         assert isinstance(serialized, Dataset)
@@ -169,10 +169,10 @@ class TestDicomSchema:
     def test_serialize_default_image(self):
         # Arrange
         image = Image()
-        model = ImageDicomSchema()
+        schema = ImageDicomSchema()
 
         # Act
-        serialized = model.dump(image)
+        serialized = schema.dump(image)
 
         # Assert
         assert isinstance(serialized, Dataset)
@@ -214,10 +214,10 @@ class TestDicomSchema:
     )
     def test_deserialize_image(self, dicom_image: Dataset, image: Image):
         # Arrange
-        model = ImageDicomSchema()
+        schema = ImageDicomSchema()
 
         # Act
-        deserialized = model.load(dicom_image)
+        deserialized = schema.load(dicom_image)
         assert isinstance(deserialized, Image)
         assert deserialized == image
 

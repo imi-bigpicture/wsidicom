@@ -181,6 +181,36 @@ tile_bytes = slide.read_encoded_tile(6, (1, 1))
 slide.close()
 ```
 
+## API differences between WsiDicom and OpenSlide
+
+The WsiDicom API is similar to OpenSlide, but with some important differences:
+
+- In WsiDicom, the `open`-method (i.e. `WsiDicom.open()`) is used to open a folder with DICOM WSI files, while in OpenSlide a file is opened with the `__init__`-method (e.g. `OpenSlide()`).
+
+- In WsiDicom the `location` parameter in `read_region` is relative to the specified `level`, while in OpenSlide it is relative to the base level.
+
+- In WsiDicom the `level` parameter in `read_region` is the pyramid index, i.e. level 2 always the level with quarter the size of the base level. In OpenSlide it is the index in the list of avaiable levels, and if pyramid levels are missing these will not correspond to pyramid indices.
+
+Conversion between OpenSlide `location` and `level` parameters to WsiDicom can be performed:
+
+```python
+with WsiDicom.open(test_wsi) as wsi:
+    level = wsi.levels[openslide_level_index]
+    x = openslide_x // 2**(level.level)
+    y = openslide_y // 2**(level.level)
+
+```
+
+## Metadata
+
+WsiDicom parses the DICOM metadata in the opened image into easy-to-use dataclasses, see `wsidicom\metadata`.
+
+```python
+with WsiDicom.open(test_wsi) as wsi:
+    metadata =
+
+```
+
 ## Saving files
 
 An opened WsiDicom instance can be saved to a new path using the save()-method. The produced files will be:

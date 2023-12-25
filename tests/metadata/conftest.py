@@ -22,6 +22,7 @@ from pydicom.uid import UID
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     Code,
+    ConceptCode,
     IlluminationCode,
     IlluminationColorCode,
     ImagePathFilterCode,
@@ -30,6 +31,7 @@ from wsidicom.conceptcode import (
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
+    SpecimenPreparationProcedureCode,
     SpecimenPreparationStepsCode,
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
@@ -61,10 +63,13 @@ from wsidicom.metadata.sample import (
     Embedding,
     ExtractedSpecimen,
     Fixation,
+    PreparationStep,
     Processing,
     Sample,
+    Sampling,
     SlideSample,
     SlideSamplePosition,
+    SpecimenIdentifier,
     Staining,
 )
 
@@ -217,18 +222,81 @@ def patient(request):
 
 
 @pytest.fixture()
-def collection():
+def date_time():
+    yield datetime.datetime(2023, 8, 5)
+
+
+@pytest.fixture()
+def description():
+    yield "description"
+
+
+@pytest.fixture()
+def fixative():
+    yield None
+
+
+@pytest.fixture()
+def embedding():
+    yield None
+
+
+@pytest.fixture()
+def collection(date_time: datetime.datetime, description: str):
     yield Collection(
         SpecimenCollectionProcedureCode("Excision"),
-        datetime.datetime(2023, 8, 5),
-        "description",
+        date_time,
+        description,
     )
 
 
 @pytest.fixture()
-def extracted_specimen(collection: Collection):
+def sampling(
+    extracted_specimen: ExtractedSpecimen,
+    date_time: datetime.datetime,
+    description: str,
+):
+    yield Sampling(
+        extracted_specimen,
+        SpecimenSamplingProcedureCode("Dissection"),
+        [],
+        date_time=date_time,
+        description=description,
+    )
+
+
+@pytest.fixture()
+def processing(date_time: datetime.datetime, description: str):
+    yield Processing(
+        SpecimenPreparationStepsCode("Specimen clearing"),
+        date_time,
+        description,
+    )
+
+
+@pytest.fixture()
+def staining(date_time: datetime.datetime, description: str):
+    yield Staining(
+        [
+            SpecimenStainsCode("hematoxylin stain"),
+            SpecimenStainsCode("water soluble eosin stain"),
+        ],
+        date_time=date_time,
+        description=description,
+    )
+
+
+@pytest.fixture()
+def identifier():
+    yield "identifier"
+
+
+@pytest.fixture()
+def extracted_specimen(
+    collection: Collection, identifier: Union[str, SpecimenIdentifier]
+):
     yield ExtractedSpecimen(
-        "specimen", AnatomicPathologySpecimenTypesCode("Gross specimen"), collection
+        identifier, AnatomicPathologySpecimenTypesCode("Gross specimen"), collection
     )
 
 

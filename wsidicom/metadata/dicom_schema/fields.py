@@ -14,6 +14,7 @@
 
 import datetime
 import math
+from abc import abstractmethod
 from typing import (
     Any,
     Dict,
@@ -27,13 +28,14 @@ from typing import (
     Union,
 )
 
-from marshmallow.utils import missing
 from marshmallow import Schema, fields
 from marshmallow.fields import Field
+from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
 from pydicom.multival import MultiValue
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DA, DT, TM, DSfloat, PersonName
+
 from wsidicom.conceptcode import ConceptCode
 from wsidicom.geometry import Orientation, PointMm
 
@@ -291,11 +293,33 @@ class UidDicomField(fields.Field):
 
 
 class PatientNameDicomField(fields.String):
-    def _deserialize(self, value: PersonName, attr, data, **kwargs) -> Any:
+    def _deserialize(self, value: PersonName, attr, data, **kwargs) -> str:
         return str(value)
 
     def _serialize(self, value: str, attr, obj, **kwargs) -> PersonName:
         return PersonName(value)
+
+
+class IssuerOfIdentifierField(fields.Field):
+    def _deserialize(
+        self, value: Dataset, attr, data, **kwargs
+    ) -> Tuple[str, Optional[str]]:
+        if value.get("UniversalEntityIDType", None) is not None:
+            return (value.UniversalEntityID, value.UniversalEntityIDType)
+        return (value.LocalNamespaceEntityID, None)
+
+    def _serialize(
+        self, value: Optional[Tuple[str, Optional[str]]], attr, obj, **kwargs
+    ) -> Optional[Dataset]:
+        if value is None:
+            return None
+        dataset = Dataset()
+        if value[1] is not None:
+            dataset.UniversalEntityIDType = value[1]
+            dataset.UniversalEntityID = value[0]
+        else:
+            dataset.LocalNamespaceEntityID = value[0]
+        return dataset
 
 
 ValueType = TypeVar("ValueType")
@@ -378,12 +402,132 @@ class SingleItemSequenceDicomField(fields.Field, Generic[ValueType]):
 
     def _serialize(
         self, value: Optional[ValueType], attr: Optional[str], obj: Any, **kwargs
-    ):
+    ) -> Optional[Dataset]:
         nested_value = self._nested._serialize(value, attr, obj, **kwargs)
+        if nested_value is None:
+            return None
         dataset = Dataset()
         setattr(dataset, self._data_key, nested_value)
         return dataset
 
-    def _deserialize(self, value: Dataset, attr, data, **kwargs):
-        nested_value = getattr(value, self._data_key)
+    def _deserialize(self, value: Dataset, attr, data, **kwargs) -> Optional[ValueType]:
+        nested_value = getattr(value, self._data_key, None)
+        if nested_value is None:
+            return None
         return self._nested._deserialize(nested_value, attr, data, **kwargs)
+
+
+class ContentItemDicomField(fields.Field, Generic[ValueType]):
+    @abstractmethod
+    def _serialize(
+        self, value: Optional[ValueType], attr: Optional[str], obj: Any, **kwargs
+    ) -> Optional[Dataset]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def _deserialize(
+        self, value: Dataset, attr: Optional[str], obj: Any, **kwargs
+    ) -> Optional[ValueType]:
+        raise NotImplementedError()
+
+
+class CodeItemDicomField(ContentItemDicomField[Code]):
+    def _serialize(
+        self, value: Optional[Code], attr: Optional[str], obj: Any, **kwargs
+    ) -> Optional[Dataset]:
+        if value is None:
+            return None
+        code_dataset = Dataset()
+        code_dataset.CodeValue = value.value
+        code_dataset.CodingSchemeDesignator = value.scheme_designator
+        code_dataset.CodeMeaning = value.meaning
+        code_dataset.CodingSchemeVersion = value.scheme_version
+        dataset = Dataset()
+        dataset.ConceptCodeSequence = [code_dataset]
+        return dataset
+
+    def _deserialize(self, dataset: Dataset, attr: Optional[str], obj: Any, **kwargs):
+        return Code(
+            dataset.ConceptCodeSequence[0].CodeValue,
+            dataset.ConceptCodeSequence[0].CodingSchemeDesignator,
+            dataset.ConceptCodeSequence[0].CodeMeaning,
+            dataset.ConceptCodeSequence[0].get("CodingSchemeVersion", None),
+        )
+
+
+class StringItemDicomField(ContentItemDicomField[str]):
+    def _serialize(
+        self, value: Optional[str], attr: Optional[str], obj: Any, **kwargs
+    ) -> Optional[Dataset]:
+        if value is None:
+            return None
+        dataset = Dataset()
+        dataset.TextValue = value
+        return dataset
+
+    def _deserialize(self, dataset: Dataset, attr: Optional[str], obj: Any, **kwargs):
+        return dataset.TextValue
+
+
+class StringOrCodeItemDicomField(ContentItemDicomField[Union[str, Code]]):
+    _string_field = StringItemDicomField()
+    _code_field = CodeItemDicomField()
+
+    def _serialize(
+        self, value: Optional[Union[str, Code]], attr: str, obj: Any, **kwargs
+    ) -> Optional[Dataset]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return self._string_field._serialize(value, attr, obj, **kwargs)
+        return self._code_field._serialize(value, attr, obj, **kwargs)
+
+    def _deserialize(self, dataset: Dataset, attr: str, obj: Any, **kwargs):
+        if hasattr(dataset, "TextValue"):
+            return self._string_field.deserialize(dataset, attr, obj, **kwargs)
+        return self._code_field.deserialize(dataset, attr, obj, **kwargs)
+
+
+class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime]):
+    def _serialize(
+        self,
+        value: Optional[datetime.datetime],
+        attr: Optional[str],
+        obj: Any,
+        **kwargs,
+    ) -> Optional[Dataset]:
+        if value is None:
+            return None
+        dataset = Dataset()
+        dataset.DateTime = DT(value)
+        return dataset
+
+    def _deserialize(self, dataset: Dataset, attr: Optional[str], obj: Any, **kwargs):
+        return DT(dataset.DateTime)
+
+
+class FloatContentItemDicomField(ContentItemDicomField[float]):
+    def __init__(self, unit: Code, **kwargs):
+        self._unit = unit
+        super().__init__(**kwargs)
+
+    def _serialize(
+        self, value: Optional[float], attr: Optional[str], obj: Any, **kwargs
+    ) -> Optional[Dataset]:
+        if value is None:
+            return None
+        dataset = Dataset()
+        dataset.NumericValue = DSfloat(value)
+        dataset.FloatingPointValue = value
+        unit_dataset = Dataset()
+        unit_dataset.CodeValue = self._unit.value
+        unit_dataset.CodingSchemeDesignator = self._unit.scheme_designator
+        unit_dataset.CodeMeaning = self._unit.meaning
+        unit_dataset.CodingSchemeVersion = self._unit.scheme_version
+        dataset.MeasurementUnitsCodeSequence = [unit_dataset]
+        return dataset
+
+    def _deserialize(self, dataset: Dataset, attr: Optional[str], obj: Any, **kwargs):
+        if hasattr(dataset, "FloatingPointValue"):
+            return dataset.FloatingPointValue
+        return DSfloat(dataset.NumericValue)

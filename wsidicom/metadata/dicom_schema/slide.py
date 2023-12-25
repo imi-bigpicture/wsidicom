@@ -12,10 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import logging
 from typing import Any, Dict, Type
 
-from marshmallow import fields, post_dump, pre_dump, pre_load
-from pydicom import Dataset
+from marshmallow import fields, post_dump, pre_dump, post_load
 from wsidicom.conceptcode import ContainerTypeCode
 from wsidicom.metadata.defaults import defaults
 
@@ -26,7 +26,10 @@ from wsidicom.metadata.dicom_schema.fields import (
     SingleCodeDicomField,
     StringDicomField,
 )
-from wsidicom.metadata.dicom_schema.sample import SlideSampleDicom
+from wsidicom.metadata.dicom_schema.sample import (
+    SlideSampleDicomModel,
+    SlideSampleDicomSchema,
+)
 from wsidicom.metadata.sample import SlideSample
 from wsidicom.metadata.slide import Slide
 
@@ -47,7 +50,9 @@ class SlideDicomSchema(DicomSchema[Slide]):
     )
     stainings = fields.List(fields.Field, load_only=True, allow_none=True)
     samples = fields.List(
-        fields.Field, data_key="SpecimenDescriptionSequence", allow_none=True
+        fields.Nested(SlideSampleDicomSchema()),
+        data_key="SpecimenDescriptionSequence",
+        allow_none=True,
     )
     container_type = SingleCodeDicomField(
         ContainerTypeCode,
@@ -67,12 +72,12 @@ class SlideDicomSchema(DicomSchema[Slide]):
             samples = [SlideSample(identifier=defaults.string)]
         else:
             samples = slide.samples
-        serialied_samples = [
-            SlideSampleDicom.to_dataset(slide_sample, slide.stainings)
+        dicom_samples = [
+            SlideSampleDicomModel.to_dicom_model(slide_sample, slide.stainings)
             for slide_sample in samples
         ]
 
-        return {"identifier": slide.identifier, "samples": serialied_samples}
+        return {"identifier": slide.identifier, "samples": dicom_samples}
 
     @post_dump
     def post_dump(self, data: Dict[str, Any], **kwargs):
@@ -80,18 +85,24 @@ class SlideDicomSchema(DicomSchema[Slide]):
         data["ContainerComponentSequence"] = []
         return super().post_dump(data, **kwargs)
 
-    @pre_load
-    def pre_load(self, dataset: Dataset, **kwargs):
-        # move staining steps from SpecimenDescriptionSequence to staining
-        data = super().pre_load(dataset, **kwargs)
-        specimen_description_sequence = data.get("SpecimenDescriptionSequence", None)
-        if specimen_description_sequence is not None:
-            samples, stainings = SlideSampleDicom().from_dataset(
-                specimen_description_sequence
-            )
-            data["SpecimenDescriptionSequence"] = samples
-            data["stainings"] = stainings
+    @post_load
+    def post_load(self, data: Dict[str, Any], **kwargs):
+        dicom_samples = data.get("samples", None)
+        if dicom_samples is not None:
+            try:
+                samples, stainings = SlideSampleDicomModel.from_dicom_model(
+                    dicom_samples
+                )
+
+            except (AttributeError, ValueError):
+                logging.warning(
+                    "Failed to parse SpecimenDescriptionSequence", exc_info=True
+                )
+                samples = None
+                stainings = None
         else:
-            data["SpecimenDescriptionSequence"] = None
-            data["stainings"] = None
-        return data
+            samples = None
+            stainings = None
+        data["samples"] = samples
+        data["stainings"] = stainings
+        return super().post_load(data, **kwargs)

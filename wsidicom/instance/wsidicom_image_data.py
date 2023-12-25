@@ -110,8 +110,8 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     @cached_property
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         """Return the image origin of the image data."""
-        model = ImageCoordinateSystemDicomSchema()
-        return model.load(self._datasets[0])
+        schema = ImageCoordinateSystemDicomSchema()
+        return schema.load(self._datasets[0])
 
     @property
     def decoder(self) -> Decoder:
