@@ -45,7 +45,7 @@ from wsidicom.metadata.dicom_schema.fields import (
     DefaultingDicomField,
     FlatteningNestedField,
     FloatDicomField,
-    SingleCodeDicomField,
+    SingleCodeSequenceField,
     StringDicomField,
 )
 from wsidicom.metadata.optical_path import (
@@ -605,7 +605,7 @@ class OpticalPathDicomSchema(DicomSchema[OpticalPath]):
     illumination_wavelength = fields.Integer(
         data_key="IlluminationWaveLength", load_default=None
     )
-    illumination_color_code = SingleCodeDicomField(
+    illumination_color_code = SingleCodeSequenceField(
         IlluminationColorCode,
         data_key="IlluminationColorCodeSequence",
         load_default=None,

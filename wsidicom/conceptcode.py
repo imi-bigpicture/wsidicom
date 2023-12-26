@@ -221,7 +221,9 @@ class CidConceptCode(ConceptCode):
         try:
             return next(code for code in cls.cid.values() if code.meaning == meaning)
         except StopIteration:
-            raise ValueError(f"Unsupported code with meaning {meaning}.")
+            raise ValueError(
+                f"There is no code with meaning '{meaning}' in {list(cls.cid.keys())}."
+            )
 
     @classmethod
     def list(cls) -> List[str]:

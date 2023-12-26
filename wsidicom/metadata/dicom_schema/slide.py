@@ -23,12 +23,12 @@ from wsidicom.metadata.defaults import Defaults
 from wsidicom.metadata.dicom_schema.schema import DicomSchema
 from wsidicom.metadata.dicom_schema.fields import (
     DefaultingDicomField,
-    SingleCodeDicomField,
+    SingleCodeSequenceField,
     StringDicomField,
 )
 from wsidicom.metadata.dicom_schema.sample import (
-    SlideSampleDicomModel,
-    SlideSampleDicomSchema,
+    SpecimenDescriptionDicomModel,
+    SpecimenDescriptionDicomSchema,
 )
 from wsidicom.metadata.sample import SlideSample
 from wsidicom.metadata.slide import Slide
@@ -48,13 +48,12 @@ class SlideDicomSchema(DicomSchema[Slide]):
         data_key="ContainerIdentifier",
         allow_none=True,
     )
-    stainings = fields.List(fields.Field, load_only=True, allow_none=True)
     samples = fields.List(
-        fields.Nested(SlideSampleDicomSchema()),
+        fields.Nested(SpecimenDescriptionDicomSchema()),
         data_key="SpecimenDescriptionSequence",
         allow_none=True,
     )
-    container_type = SingleCodeDicomField(
+    container_type = SingleCodeSequenceField(
         ContainerTypeCode,
         data_key="ContainerTypeCodeSequence",
         dump_only=True,
@@ -73,7 +72,7 @@ class SlideDicomSchema(DicomSchema[Slide]):
         else:
             samples = slide.samples
         dicom_samples = [
-            SlideSampleDicomModel.to_dicom_model(slide_sample, slide.stainings)
+            SpecimenDescriptionDicomModel.to_dicom_model(slide_sample, slide.stainings)
             for slide_sample in samples
         ]
 
@@ -90,7 +89,7 @@ class SlideDicomSchema(DicomSchema[Slide]):
         dicom_samples = data.get("samples", None)
         if dicom_samples is not None:
             try:
-                samples, stainings = SlideSampleDicomModel.from_dicom_model(
+                samples, stainings = SpecimenDescriptionDicomModel.from_dicom_model(
                     dicom_samples
                 )
 

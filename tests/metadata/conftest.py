@@ -242,6 +242,11 @@ def embedding():
 
 
 @pytest.fixture()
+def processing_method():
+    yield None
+
+
+@pytest.fixture()
 def collection(date_time: datetime.datetime, description: str):
     yield Collection(
         SpecimenCollectionProcedureCode("Excision"),

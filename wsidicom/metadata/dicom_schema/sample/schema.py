@@ -34,12 +34,20 @@ from pydicom.sr.coding import Code
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
+    SpecimenCollectionProcedureCode,
+    SpecimenEmbeddingMediaCode,
+    SpecimenFixativesCode,
+    SpecimenPreparationProcedureCode,
+    SpecimenPreparationStepsCode,
+    SpecimenSamplingProcedureCode,
+    SpecimenStainsCode,
 )
 from wsidicom.metadata.dicom_schema.fields import (
     CodeDicomField,
     CodeItemDicomField,
     DateTimeItemDicomField,
     IssuerOfIdentifierField,
+    SingleCodeSequenceField,
     SingleItemSequenceDicomField,
     StringDicomField,
     StringItemDicomField,
@@ -47,10 +55,10 @@ from wsidicom.metadata.dicom_schema.fields import (
 )
 from wsidicom.metadata.dicom_schema.sample.model import (
     CollectionDicomModel,
-    PreparationStepDicomModel,
+    SpecimenPreparationStepDicomModel,
     ProcessingDicomModel,
     SamplingDicomModel,
-    SlideSampleDicomModel,
+    SpecimenDescriptionDicomModel,
     StainingDicomModel,
 )
 from wsidicom.metadata.dicom_schema.schema import DicomSchema, LoadType
@@ -107,8 +115,15 @@ class BasePreparationStepDicomSchema(DicomSchema[LoadType]):
     issuer_of_identifier = StringItemDicomField(allow_none=True, load_default=None)
     date_time = DateTimeItemDicomField(allow_none=True, load_default=None)
     description = StringItemDicomField(allow_none=True, load_default=None)
-    fixative = CodeItemDicomField(allow_none=True, load_default=None)
-    embedding = CodeItemDicomField(allow_none=True, load_default=None)
+    fixative = CodeItemDicomField(
+        load_type=SpecimenFixativesCode, allow_none=True, load_default=None
+    )
+    embedding = CodeItemDicomField(
+        load_type=SpecimenEmbeddingMediaCode, allow_none=True, load_default=None
+    )
+    processing = CodeItemDicomField(
+        load_type=SpecimenPreparationStepsCode, allow_none=True, load_default=None
+    )
 
     @property
     @abstractmethod
@@ -189,16 +204,17 @@ class BasePreparationStepDicomSchema(DicomSchema[LoadType]):
 
 class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
     processing_type = CodeItemDicomField(
+        load_type=SpecimenPreparationProcedureCode,
         dump_default=SampleCodes.sampling_method,
         dump_only=True,
     )
-    method = CodeItemDicomField()
+    method = CodeItemDicomField(SpecimenSamplingProcedureCode)
     parent_specimen_identifier = StringItemDicomField()
     issuer_of_parent_specimen_identifier = StringItemDicomField(
         allow_none=True,
         load_default=None,
     )
-    parent_specimen_type = CodeItemDicomField()
+    parent_specimen_type = CodeItemDicomField(AnatomicPathologySpecimenTypesCode)
 
     @property
     def load_type(self):
@@ -218,6 +234,7 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
                 False,
             ),
             "description": ItemField(SampleCodes.processing_description, (str,), False),
+            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
             "method": ItemField(SampleCodes.sampling_method, (Code,), False),
             "parent_specimen_identifier": ItemField(
                 SampleCodes.parent_specimen_identifier,
@@ -239,10 +256,11 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
 
 class CollectionDicomSchema(BasePreparationStepDicomSchema[CollectionDicomModel]):
     processing_type = CodeItemDicomField(
+        load_type=SpecimenPreparationProcedureCode,
         dump_default=SampleCodes.specimen_collection,
         dump_only=True,
     )
-    method = CodeItemDicomField()
+    method = CodeItemDicomField(SpecimenCollectionProcedureCode)
 
     @property
     def load_type(self):
@@ -262,6 +280,7 @@ class CollectionDicomSchema(BasePreparationStepDicomSchema[CollectionDicomModel]
                 False,
             ),
             "description": ItemField(SampleCodes.processing_description, (str,), False),
+            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
             "method": ItemField(SampleCodes.specimen_collection, (Code,), False),
             "fixative": ItemField(SampleCodes.fixative, (Code,), False),
             "embedding": ItemField(SampleCodes.embedding, (Code,), False),
@@ -270,10 +289,13 @@ class CollectionDicomSchema(BasePreparationStepDicomSchema[CollectionDicomModel]
 
 class ProcessingDicomSchema(BasePreparationStepDicomSchema[ProcessingDicomModel]):
     processing_type = CodeItemDicomField(
+        load_type=SpecimenPreparationProcedureCode,
         dump_default=SampleCodes.sample_processing,
         dump_only=True,
     )
-    method = CodeItemDicomField(allow_none=True, load_default=None)
+    processing = CodeItemDicomField(
+        load_type=SpecimenPreparationStepsCode, allow_none=True, load_default=None
+    )
 
     @property
     def load_type(self):
@@ -293,7 +315,7 @@ class ProcessingDicomSchema(BasePreparationStepDicomSchema[ProcessingDicomModel]
                 False,
             ),
             "description": ItemField(SampleCodes.processing_description, (str,), False),
-            "method": ItemField(SampleCodes.processing_description, (Code,), False),
+            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
             "fixative": ItemField(SampleCodes.fixative, (Code,), False),
             "embedding": ItemField(SampleCodes.embedding, (Code,), False),
         }
@@ -301,10 +323,11 @@ class ProcessingDicomSchema(BasePreparationStepDicomSchema[ProcessingDicomModel]
 
 class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
     processing_type = CodeItemDicomField(
+        load_type=SpecimenPreparationProcedureCode,
         dump_default=SampleCodes.staining,
         dump_only=True,
     )
-    substances = marshmallow.fields.List(StringOrCodeItemDicomField())
+    substances = marshmallow.fields.List(StringOrCodeItemDicomField(SpecimenStainsCode))
 
     @property
     def load_type(self):
@@ -324,6 +347,7 @@ class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
                 False,
             ),
             "description": ItemField(SampleCodes.processing_description, (str,), False),
+            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
             "substances": ItemField(SampleCodes.using_substance, (str, Code), True),
             "fixative": ItemField(SampleCodes.fixative, (Code,), False),
             "embedding": ItemField(SampleCodes.embedding, (Code,), False),
@@ -334,7 +358,7 @@ class PreparationStepDicomSchema(marshmallow.Schema):
     """Mapping step type to schema."""
 
     _type_to_schema_mapping: Dict[
-        Type[PreparationStepDicomModel], Type[DicomSchema]
+        Type[SpecimenPreparationStepDicomModel], Type[DicomSchema]
     ] = {
         SamplingDicomModel: SamplingDicomSchema,
         CollectionDicomModel: CollectionDicomSchema,
@@ -350,13 +374,13 @@ class PreparationStepDicomSchema(marshmallow.Schema):
         SampleCodes.staining: StainingDicomSchema,
     }
 
-    def dump(self, step: PreparationStepDicomModel, **kwargs) -> Dataset:
+    def dump(self, step: SpecimenPreparationStepDicomModel, **kwargs) -> Dataset:
         return self._subschema_dump(step)
 
     def load(self, dataset: Dataset, **kwargs):
         return self._subschema_load(dataset)
 
-    def _subschema_load(self, dataset: Dataset) -> PreparationStepDicomModel:
+    def _subschema_load(self, dataset: Dataset) -> SpecimenPreparationStepDicomModel:
         """Select a schema and load and return step using the schema."""
         try:
             processing_type: Code = next(
@@ -369,10 +393,10 @@ class PreparationStepDicomSchema(marshmallow.Schema):
         except (StopIteration, KeyError):
             raise NotImplementedError()
         loaded = schema().load(dataset, many=False)
-        assert isinstance(loaded, PreparationStepDicomModel)
+        assert isinstance(loaded, SpecimenPreparationStepDicomModel)
         return loaded
 
-    def _subschema_dump(self, step: PreparationStepDicomModel) -> Dataset:
+    def _subschema_dump(self, step: SpecimenPreparationStepDicomModel) -> Dataset:
         """Select a schema and dump the step using the schema."""
         schema = self._type_to_schema_mapping[type(step)]
         dumped = schema().dump(step, many=False)
@@ -380,40 +404,36 @@ class PreparationStepDicomSchema(marshmallow.Schema):
         return dumped
 
 
-class SlideSampleDicomSchema(DicomSchema[SlideSampleDicomModel]):
+class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel]):
     identifier = StringDicomField(data_key="SpecimenIdentifier")
     uid = StringDicomField(data_key="SpecimenUID")
     # specimen_location:
-    # specimen_preparation_steps = ListDicomField()
-    issuer_of_identifier = SingleItemSequenceDicomField(
-        IssuerOfIdentifierField(),
-        data_key="IssuerOfTheSpecimenIdentifierSequence",
-        allow_none=True,
+    issuer_of_identifier = IssuerOfIdentifierField(
+        data_key="IssuerOfTheSpecimenIdentifierSequence", allow_none=True
     )
     steps = marshmallow.fields.List(
         marshmallow.fields.Nested(PreparationStepDicomSchema()),
         data_key="SpecimenPreparationStepContentItemSequence",
         load_default=[],
     )
-    primary_anatomic_structures = marshmallow.fields.List(
+    anatomical_sites = marshmallow.fields.List(
         CodeDicomField(Code),
         data_key="PrimaryAnatomicStructureSequence",
         load_default=[],
     )
-    specimen_type = CodeDicomField(
-        data_key="SpecimenTypeCodeSequence",
+    specimen_type = SingleCodeSequenceField(
         load_type=AnatomicPathologySpecimenTypesCode,
+        data_key="SpecimenTypeCodeSequence",
+        dump_default=AnatomicPathologySpecimenTypesCode("Slide"),
+        dump_only=True,
     )
-    specimen_short_description = StringDicomField(data_key="SpecimenShortDescription")
-    specimen_detailed_description = StringDicomField(
-        data_key="SpecimenDetailedDescription"
+    short_description = StringDicomField(
+        data_key="SpecimenShortDescription", allow_none=True
+    )
+    detailed_description = StringDicomField(
+        data_key="SpecimenDetailedDescription", allow_none=True
     )
 
     @property
     def load_type(self):
-        return SlideSampleDicomModel
-
-    @pre_load
-    def pre_load(self, dataset: Dataset, **kwargs):
-        print(type(dataset))
-        return super().pre_load(dataset, **kwargs)
+        return SpecimenDescriptionDicomModel

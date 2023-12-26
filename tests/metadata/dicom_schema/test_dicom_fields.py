@@ -18,7 +18,7 @@ class TestDicomFields:
     def test_code_content_item_dicom_field_serialize(self):
         # Arrange
         code = Code("1234", "DCM", "Test Code")
-        field = CodeItemDicomField()
+        field = CodeItemDicomField(Code)
 
         # Act
         serialized = field.serialize("attribute", {"attribute": code})
@@ -41,7 +41,7 @@ class TestDicomFields:
         code_dataset.CodingSchemeDesignator = "DCM"
         code_dataset.CodeMeaning = "Test Code"
         dataset.ConceptCodeSequence = [code_dataset]
-        field = CodeItemDicomField()
+        field = CodeItemDicomField(Code)
 
         # Act
         deserialized = field.deserialize(dataset, "attribute")
@@ -136,7 +136,7 @@ class TestDicomFields:
     @pytest.mark.parametrize("value", ["test", Code("1234", "DCM", "Test Code")])
     def test_string_or_code_item_dicom_field_serialize(self, value: Union[str, Code]):
         # Arrange
-        field = StringOrCodeItemDicomField()
+        field = StringOrCodeItemDicomField(Code)
 
         # Act
         serialized = field.serialize("attribute", {"attribute": value})
@@ -167,7 +167,7 @@ class TestDicomFields:
             code_dataset.CodingSchemeDesignator = value.scheme_designator
             code_dataset.CodeMeaning = value.meaning
             dataset.ConceptCodeSequence = [code_dataset]
-        field = StringOrCodeItemDicomField()
+        field = StringOrCodeItemDicomField(Code)
 
         # Act
         deserialized = field.deserialize(dataset, "attribute")

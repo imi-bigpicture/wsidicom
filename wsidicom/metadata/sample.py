@@ -15,7 +15,6 @@
 import datetime
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -396,6 +395,8 @@ class SlideSample(SampledSpecimen):
     uid: Optional[UID] = None
     position: Optional[Union[str, SlideSamplePosition]] = None
     steps: List[PreparationStep] = field(default_factory=list)
+    short_description: Optional[str] = None
+    detailed_description: Optional[str] = None
 
     def __post_init__(self):
         super().__init__(

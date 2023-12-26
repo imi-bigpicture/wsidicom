@@ -31,9 +31,9 @@ from wsidicom.conceptcode import (
 )
 from wsidicom.metadata.dicom_schema.sample.model import (
     CollectionDicomModel,
-    PreparationStepDicomModel,
+    SpecimenPreparationStepDicomModel,
     ProcessingDicomModel,
-    SlideSampleDicomModel,
+    SpecimenDescriptionDicomModel,
     StainingDicomModel,
     SamplingDicomModel,
 )
@@ -41,7 +41,7 @@ from wsidicom.metadata.dicom_schema.sample.schema import (
     CollectionDicomSchema,
     ProcessingDicomSchema,
     SamplingDicomSchema,
-    SlideSampleDicomSchema,
+    SpecimenDescriptionDicomSchema,
     StainingDicomSchema,
     SampleCodes,
 )
@@ -130,6 +130,7 @@ def collection_dicom(
     identifier: Union[str, SpecimenIdentifier],
     fixative: Optional[SpecimenFixativesCode],
     embedding: Optional[SpecimenEmbeddingMediaCode],
+    processing_method: Optional[SpecimenPreparationStepsCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(identifier)
     yield CollectionDicomModel(
@@ -140,6 +141,7 @@ def collection_dicom(
         fixative=fixative,
         embedding=embedding,
         method=collection.method,
+        processing=processing_method,
     )
 
 
@@ -189,6 +191,7 @@ def sampling_dicom(
     identifier: Union[str, SpecimenIdentifier],
     fixative: Optional[SpecimenFixativesCode],
     embedding: Optional[SpecimenEmbeddingMediaCode],
+    processing_method: Optional[SpecimenPreparationStepsCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(identifier)
     parent_identifier, parent_issuer = SpecimenIdentifier.get_identifier_and_issuer(
@@ -205,6 +208,7 @@ def sampling_dicom(
         parent_specimen_identifier=parent_identifier,
         issuer_of_parent_specimen_identifier=parent_issuer,
         parent_specimen_type=sampling.specimen.type,
+        processing=processing_method,
     )
 
 
@@ -274,7 +278,7 @@ def processing_dicom(
         issuer_of_identifier=issuer,
         date_time=processing.date_time,
         description=processing.description,
-        method=processing.method,
+        processing=processing.method,
         fixative=fixative,
         embedding=embedding,
     )
@@ -299,10 +303,10 @@ def create_processing_dataset(
                 SampleCodes.processing_description, processing_dicom.description
             )
         )
-    if processing_dicom.method is not None:
+    if processing_dicom.processing is not None:
         items.append(
             create_code_item(
-                SampleCodes.processing_description, processing_dicom.method
+                SampleCodes.processing_description, processing_dicom.processing
             )
         )
     if processing_dicom.fixative is not None:
@@ -329,6 +333,7 @@ def staining_dicom(
     identifier: Union[str, SpecimenIdentifier],
     fixative: Optional[SpecimenFixativesCode],
     embedding: Optional[SpecimenEmbeddingMediaCode],
+    processing_method: Optional[SpecimenPreparationStepsCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(identifier)
     yield StainingDicomModel(
@@ -339,6 +344,7 @@ def staining_dicom(
         substances=staining.substances,
         fixative=fixative,
         embedding=embedding,
+        processing=processing_method,
     )
 
 
@@ -405,6 +411,8 @@ def create_description(
     position: SlideSamplePosition,
     primary_anatomic_structures: Sequence[Code],
     stains: Sequence[SpecimenStainsCode],
+    short_description: Optional[str] = None,
+    detailed_description: Optional[str] = None,
 ):
     collection = create_collection_dataset(
         CollectionDicomModel(
@@ -415,6 +423,7 @@ def create_description(
             fixative=None,
             embedding=None,
             method=collection_method,
+            processing=None,
         ),
         identifier=specimen_id,
     )
@@ -426,7 +435,7 @@ def create_description(
             description=None,
             fixative=fixative,
             embedding=None,
-            method=None,
+            processing=None,
         ),
         identifier=specimen_id,
     )
@@ -442,6 +451,7 @@ def create_description(
             parent_specimen_identifier=specimen_id,
             issuer_of_parent_specimen_identifier=None,
             parent_specimen_type=specimen_type,
+            processing=None,
         ),
         identifier=block_id,
     )
@@ -453,7 +463,7 @@ def create_description(
             description=None,
             fixative=None,
             embedding=embedding_medium,
-            method=None,
+            processing=None,
         ),
         identifier=block_id,
     )
@@ -469,6 +479,7 @@ def create_description(
             parent_specimen_identifier=block_id,
             issuer_of_parent_specimen_identifier=None,
             parent_specimen_type=block_type,
+            processing=None,
         ),
         identifier=slide_sample_id,
     )
@@ -481,6 +492,7 @@ def create_description(
             substances=list(stains),
             fixative=None,
             embedding=None,
+            processing=None,
         ),
         identifier=slide_sample_id,
     )
@@ -495,9 +507,14 @@ def create_description(
         sampling_to_slide,
         staining,
     ]
+    description.SpecimenTypeCodeSequence = [
+        create_code_dataset(AnatomicPathologySpecimenTypesCode("Slide"))
+    ]
     description.PrimaryAnatomicStructureSequence = [
         create_code_dataset(item) for item in primary_anatomic_structures
     ]
+    description.SpecimenShortDescription = short_description
+    description.SpecimenDetailedDescription = detailed_description
     return description
 
 
@@ -545,14 +562,14 @@ def create_code_item(name: Code, value: Union[Code, ConceptCode]):
     return dataset
 
 
-def create_processing_type_item(step: PreparationStepDicomModel):
+def create_processing_type_item(step: SpecimenPreparationStepDicomModel):
     dataset = Dataset()
     dataset.ConceptNameCodeSequence = [create_code_dataset(SampleCodes.processing_type)]
     if isinstance(step, CollectionDicomModel):
         processing_type_code = SampleCodes.specimen_collection
     elif isinstance(step, SamplingDicomModel):
         processing_type_code = SampleCodes.sampling_method
-    elif isinstance(step, PreparationStepDicomModel):
+    elif isinstance(step, SpecimenPreparationStepDicomModel):
         processing_type_code = SampleCodes.sample_processing
     elif isinstance(step, StainingDicomModel):
         processing_type_code = SampleCodes.staining
@@ -724,14 +741,16 @@ class TestSampleDicom:
 
             descriptions.append(description)
         dataset.SpecimenDescriptionSequence = descriptions
-        schema = SlideSampleDicomSchema()
+        schema = SpecimenDescriptionDicomSchema()
 
         # Act
         models = [
             schema.load(description)
             for description in dataset.SpecimenDescriptionSequence
         ]
-        slide_samples, stainings = SlideSampleDicomModel.from_dicom_model(models)
+        slide_samples, stainings = SpecimenDescriptionDicomModel.from_dicom_model(
+            models
+        )
 
         # Assert
         assert slide_samples is not None
@@ -914,7 +933,6 @@ class TestPreparationStepDicomSchema:
         assert isinstance(serialized, Dataset)
         # First item should be identifier
         item_iterator = iter(serialized.SpecimenPreparationStepContentItemSequence)
-        # print(serialized.SpecimenPreparationStepContentItemSequence)
         identifier_item = next(item_iterator)
         self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
         self.assert_item_string_equals_value(
@@ -1099,12 +1117,14 @@ class TestPreparationStepDicomSchema:
                 collection_item, processing_dicom.description
             )
         # Next item can be method
-        if processing_dicom.method is not None:
+        if processing_dicom.processing is not None:
             collection_item = next(item_iterator)
             self.assert_item_name_equals_code(
                 collection_item, SampleCodes.processing_description
             )
-            self.assert_item_code_equals_value(collection_item, processing_dicom.method)
+            self.assert_item_code_equals_value(
+                collection_item, processing_dicom.processing
+            )
         # There should be no more items
         assert next(item_iterator, None) is None
 
@@ -1147,7 +1167,7 @@ class TestPreparationStepDicomSchema:
         assert (
             deserialized.issuer_of_identifier == processing_dicom.issuer_of_identifier
         )
-        assert deserialized.method == processing_dicom.method
+        assert deserialized.processing == processing_dicom.processing
         assert deserialized.date_time == processing_dicom.date_time
         assert deserialized.description == processing_dicom.description
         assert deserialized.fixative == processing_dicom.fixative

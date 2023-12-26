@@ -254,7 +254,9 @@ class CodeDicomField(fields.Field, Generic[CodeType]):
         )
 
 
-class SingleCodeDicomField(CodeDicomField):
+class SingleCodeSequenceField(CodeDicomField):
+    """Field for a DICOM `code sequence` that can only contain one code."""
+
     def _serialize(self, value: CodeType, attr: Optional[str], obj: Any, **kwargs):
         return [super()._serialize(value, attr, obj, **kwargs)]
 
@@ -302,15 +304,18 @@ class PatientNameDicomField(fields.String):
 
 class IssuerOfIdentifierField(fields.Field):
     def _deserialize(
-        self, value: Dataset, attr, data, **kwargs
-    ) -> Tuple[str, Optional[str]]:
-        if value.get("UniversalEntityIDType", None) is not None:
-            return (value.UniversalEntityID, value.UniversalEntityIDType)
-        return (value.LocalNamespaceEntityID, None)
+        self, value: Optional[Sequence[Dataset]], attr, data, **kwargs
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        if value is None or len(value) == 0:
+            return None
+        dataset = value[0]
+        if dataset.get("UniversalEntityIDType", None) is not None:
+            return (dataset.UniversalEntityID, dataset.UniversalEntityIDType)
+        return (dataset.LocalNamespaceEntityID, None)
 
     def _serialize(
         self, value: Optional[Tuple[str, Optional[str]]], attr, obj, **kwargs
-    ) -> Optional[Dataset]:
+    ) -> Optional[Sequence[Dataset]]:
         if value is None:
             return None
         dataset = Dataset()
@@ -319,7 +324,7 @@ class IssuerOfIdentifierField(fields.Field):
             dataset.UniversalEntityID = value[0]
         else:
             dataset.LocalNamespaceEntityID = value[0]
-        return dataset
+        return [dataset]
 
 
 ValueType = TypeVar("ValueType")
@@ -432,6 +437,10 @@ class ContentItemDicomField(fields.Field, Generic[ValueType]):
 
 
 class CodeItemDicomField(ContentItemDicomField[Code]):
+    def __init__(self, load_type: Type[CodeType], **kwargs) -> None:
+        self._load_type = load_type
+        super().__init__(**kwargs)
+
     def _serialize(
         self, value: Optional[Code], attr: Optional[str], obj: Any, **kwargs
     ) -> Optional[Dataset]:
@@ -447,11 +456,13 @@ class CodeItemDicomField(ContentItemDicomField[Code]):
         return dataset
 
     def _deserialize(self, dataset: Dataset, attr: Optional[str], obj: Any, **kwargs):
-        return Code(
-            dataset.ConceptCodeSequence[0].CodeValue,
-            dataset.ConceptCodeSequence[0].CodingSchemeDesignator,
-            dataset.ConceptCodeSequence[0].CodeMeaning,
-            dataset.ConceptCodeSequence[0].get("CodingSchemeVersion", None),
+        return self._load_type(
+            value=dataset.ConceptCodeSequence[0].CodeValue,
+            scheme_designator=dataset.ConceptCodeSequence[0].CodingSchemeDesignator,
+            meaning=dataset.ConceptCodeSequence[0].CodeMeaning,
+            scheme_version=dataset.ConceptCodeSequence[0].get(
+                "CodingSchemeVersion", None
+            ),
         )
 
 
@@ -470,8 +481,10 @@ class StringItemDicomField(ContentItemDicomField[str]):
 
 
 class StringOrCodeItemDicomField(ContentItemDicomField[Union[str, Code]]):
-    _string_field = StringItemDicomField()
-    _code_field = CodeItemDicomField()
+    def __init__(self, load_type: Type[CodeType], **kwargs) -> None:
+        self._string_field = StringItemDicomField()
+        self._code_field = CodeItemDicomField(load_type)
+        super().__init__(**kwargs)
 
     def _serialize(
         self, value: Optional[Union[str, Code]], attr: str, obj: Any, **kwargs

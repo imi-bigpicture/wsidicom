@@ -25,11 +25,9 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    Type,
     Union,
 )
 
-from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
 
@@ -61,27 +59,6 @@ from wsidicom.metadata.sample import (
 )
 
 
-def dataset_to_code(dataset: Dataset) -> Code:
-    return Code(
-        dataset.CodeValue,
-        dataset.CodingSchemeDesignator,
-        dataset.CodeMeaning,
-        dataset.get("CodingSchemeVersion", None),
-    )
-
-
-def dataset_to_type(dataset: Dataset) -> Type:
-    if "ConceptCodeSequence" in dataset:
-        return Code
-    if "TextValue" in dataset:
-        return str
-    if "DateTime" in dataset:
-        return datetime.datetime
-    if "NumericValue" in dataset:
-        return float
-    raise NotImplementedError()
-
-
 class SpecimenIdentifierDicomModel:
     """A specimen identifier including an optional issuer."""
 
@@ -101,7 +78,7 @@ class SpecimenIdentifierDicomModel:
 
     @classmethod
     def from_step(
-        cls, step: "PreparationStepDicomModel"
+        cls, step: "SpecimenPreparationStepDicomModel"
     ) -> Union[str, SpecimenIdentifier]:
         if step.issuer_of_identifier is None or step.issuer_of_identifier == "":
             return step.identifier
@@ -112,7 +89,7 @@ class SpecimenIdentifierDicomModel:
 
     @classmethod
     def from_description(
-        cls, description: "SlideSampleDicomModel"
+        cls, description: "SpecimenDescriptionDicomModel"
     ) -> Union[str, SpecimenIdentifier]:
         if description.identifier is None or description.issuer_of_identifier is None:
             return description.identifier
@@ -124,18 +101,19 @@ class SpecimenIdentifierDicomModel:
 
 
 @dataclass
-class PreparationStepDicomModel(metaclass=ABCMeta):
+class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
     identifier: str
     issuer_of_identifier: Optional[str]
     date_time: Optional[datetime.datetime]
     description: Optional[str]
     fixative: Optional[SpecimenFixativesCode]
     embedding: Optional[SpecimenEmbeddingMediaCode]
+    processing: Optional[SpecimenPreparationStepsCode]
 
     @classmethod
     def from_step(
         cls, step: PreparationStep, specimen_identifier: Union[str, SpecimenIdentifier]
-    ) -> "PreparationStepDicomModel":
+    ) -> "SpecimenPreparationStepDicomModel":
         if isinstance(step, Sampling):
             return SamplingDicomModel.from_step(step, specimen_identifier)
         if isinstance(step, Collection):
@@ -148,7 +126,7 @@ class PreparationStepDicomModel(metaclass=ABCMeta):
 
 
 @dataclass
-class SamplingDicomModel(PreparationStepDicomModel):
+class SamplingDicomModel(SpecimenPreparationStepDicomModel):
     method: SpecimenSamplingProcedureCode
     parent_specimen_identifier: str
     issuer_of_parent_specimen_identifier: Optional[str]
@@ -190,33 +168,12 @@ class SamplingDicomModel(PreparationStepDicomModel):
             parent_specimen_type=sampling.specimen.type,
             fixative=None,
             embedding=None,
+            processing=None,
         )
-
-    @classmethod
-    def to_steps(
-        cls, sampling: Sampling, sample_identifier: Union[str, SpecimenIdentifier]
-    ) -> List[PreparationStepDicomModel]:
-        """Return list of Dicom datasets for the sampling.
-
-        Parameters
-        ----------
-        sampling: Sampling
-            Step to convert into dataset.
-        specimen_identifier: Union[str, SpecimenIdentifier]:
-            Identifier for the specimen that was processed.
-
-        Parameters
-        ----------
-        List[SpecimenPreparationStep]:
-            Dicom datasets describing the sampling step.
-        """
-        steps = SpecimenDicomModel.to_steps_for_sampling(sampling.specimen, sampling)
-        steps.append(cls.from_step(sampling, sample_identifier))
-        return steps
 
 
 @dataclass
-class CollectionDicomModel(PreparationStepDicomModel):
+class CollectionDicomModel(SpecimenPreparationStepDicomModel):
     method: SpecimenCollectionProcedureCode
 
     @classmethod
@@ -251,13 +208,12 @@ class CollectionDicomModel(PreparationStepDicomModel):
             method=collection.method,
             fixative=None,
             embedding=None,
+            processing=None,
         )
 
 
 @dataclass
-class ProcessingDicomModel(PreparationStepDicomModel):
-    method: Optional[SpecimenPreparationStepsCode]
-
+class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
     @classmethod
     def from_step(
         cls,
@@ -300,14 +256,14 @@ class ProcessingDicomModel(PreparationStepDicomModel):
             issuer_of_identifier=issuer,
             date_time=processing.date_time,
             description=processing.description,
-            method=method,
             fixative=fixative,
             embedding=embedding,
+            processing=method,
         )
 
 
 @dataclass
-class StainingDicomModel(PreparationStepDicomModel):
+class StainingDicomModel(SpecimenPreparationStepDicomModel):
     substances: List[Union[str, SpecimenStainsCode]]
 
     @classmethod
@@ -338,145 +294,40 @@ class StainingDicomModel(PreparationStepDicomModel):
             substances=staining.substances,
             fixative=None,
             embedding=None,
+            processing=None,
         )
 
 
 @dataclass
-class SpecimenDicomModel(metaclass=ABCMeta):
-    """Metaclass for a specimen."""
-
-    @classmethod
-    def to_steps(cls, specimen: Specimen) -> List[PreparationStepDicomModel]:
-        """Return complete list of formatted steps for this specimen. If specimen
-        is sampled include steps for the sampled specimen."""
-        if isinstance(specimen, SampledSpecimen):
-            return SampledSpecimenDicomModel.to_steps(specimen)
-        if isinstance(specimen, ExtractedSpecimen):
-            return ExtractedSpecimenDicomModel.to_steps(specimen)
-        raise NotImplementedError()
-
-    @classmethod
-    def to_steps_for_sampling(
-        cls, specimen: Specimen, sampling: Sampling
-    ) -> List[PreparationStepDicomModel]:
-        """Return formatted steps in this specimen used for the given sampling."""
-        if isinstance(specimen, SampledSpecimen):
-            return SampledSpecimenDicomModel.to_steps_for_sampling(specimen, sampling)
-        if isinstance(specimen, ExtractedSpecimen):
-            return ExtractedSpecimenDicomModel.to_steps_for_sampling(specimen, sampling)
-        raise NotImplementedError()
-
-    @classmethod
-    def _get_steps_before_sampling(
-        cls, specimen: Specimen, sampling: Sampling
-    ) -> Iterator[PreparationStep]:
-        """Return the steps in this specimen that occurred before the given sampling."""
-        for step in specimen.steps:
-            if isinstance(step, Sampling):
-                # Break if sampling step for this sample, otherwise skip
-                if step == sampling:
-                    break
-                continue
-            yield step
-
-
-class SampledSpecimenDicomModel(SpecimenDicomModel, metaclass=ABCMeta):
-    """Metaclass for a specimen thas has been sampled from one or more specimens."""
-
-    @classmethod
-    def to_steps(cls, specimen: SampledSpecimen) -> List[PreparationStepDicomModel]:
-        """Return complete list of formatted steps for this specimen. If specimen
-        is sampled include steps for the sampled specimen."""
-        steps = cls._get_steps_for_sampling(specimen)
-        steps.extend(
-            PreparationStepDicomModel.from_step(step, specimen.identifier)
-            for step in specimen.steps
-        )
-        return steps
-
-    @classmethod
-    def to_steps_for_sampling(
-        cls, specimen: SampledSpecimen, sampling: Sampling
-    ) -> List[PreparationStepDicomModel]:
-        """Return formatted steps in this specimen used for the given sampling."""
-        steps = cls._get_steps_for_sampling(
-            specimen, sampling.sampling_chain_constraints
-        )
-        steps.extend(
-            PreparationStepDicomModel.from_step(step, specimen.identifier)
-            for step in cls._get_steps_before_sampling(specimen, sampling)
-        )
-        return steps
-
-    @classmethod
-    def _get_steps_for_sampling(
-        cls,
-        specimen: SampledSpecimen,
-        sampling_chain_constraints: Optional[Sequence[Sampling]] = None,
-    ) -> List[PreparationStepDicomModel]:
-        """Return formatted steps for the specimen the sample was sampled from."""
-
-        return [
-            step
-            for sampling in specimen._sampled_from
-            if sampling_chain_constraints is None
-            or sampling in sampling_chain_constraints
-            for step in SamplingDicomModel.to_steps(sampling, specimen.identifier)
-        ]
-
-
-class ExtractedSpecimenDicomModel(SpecimenDicomModel):
-    @classmethod
-    def to_steps(cls, specimen: ExtractedSpecimen) -> List[PreparationStepDicomModel]:
-        """Return complete list of formatted steps for this specimen. If specimen
-        is sampled include steps for the sampled specimen."""
-        return [
-            PreparationStepDicomModel.from_step(step, specimen.identifier)
-            for step in specimen.steps
-        ]
-
-    @classmethod
-    def to_steps_for_sampling(
-        cls, specimen: ExtractedSpecimen, sampling: Sampling
-    ) -> List[PreparationStepDicomModel]:
-        """Return formatted steps in this specimen used for the given sampling."""
-        return [
-            PreparationStepDicomModel.from_step(step, specimen.identifier)
-            for step in cls._get_steps_before_sampling(specimen, sampling)
-        ]
-
-
-@dataclass
-class SlideSampleDicomModel(SampledSpecimenDicomModel):
+class SpecimenDescriptionDicomModel:
     """A sample that has been placed on a slide."""
 
     identifier: str
     uid: UID
-    steps: List[PreparationStepDicomModel]
-    primary_anatomic_structures: List[Code]
+    steps: List[SpecimenPreparationStepDicomModel]
+    # specimen_type: AnatomicPathologySpecimenTypesCode
+    anatomical_sites: List[Code]
     issuer_of_identifier: Optional[Tuple[str, Optional[str]]] = None
+    short_description: Optional[str] = None
+    detailed_description: Optional[str] = None
 
     @classmethod
     def to_dicom_model(
         cls,
         slide_sample: SlideSample,
         stains: Optional[Sequence[Staining]] = None,
-    ) -> "SlideSampleDicomModel":
-        """Create a formatted specimen description for the specimen."""
+    ) -> "SpecimenDescriptionDicomModel":
+        """Create a DICOM specimen description for the specimen."""
         if stains is None:
             stains = []
         if slide_sample.uid is None:
             sample_uid = slide_sample.default_uid
         else:
             sample_uid = slide_sample.uid
-        sample_preparation_steps: List[PreparationStepDicomModel] = []
-        sample_preparation_steps.extend(cls.to_steps(slide_sample))
+        sample_preparation_steps = cls._get_steps(slide_sample, stains)
         identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
             slide_sample.identifier
         )
-        for stain in stains:
-            step = StainingDicomModel.from_step(stain, slide_sample.identifier)
-            sample_preparation_steps.append(step)
         if isinstance(slide_sample.position, str):
             position = slide_sample.position
         elif isinstance(slide_sample.position, SlideSamplePosition):
@@ -488,28 +339,30 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
             issuer_of_identifier=None if issuer is None else (issuer, None),
             uid=sample_uid,
             steps=sample_preparation_steps,
-            primary_anatomic_structures=list(slide_sample.anatomical_sites)
+            anatomical_sites=list(slide_sample.anatomical_sites)
             if slide_sample.anatomical_sites is not None
             else [],
+            # specimen_type=slide_sample.type,
+            short_description=slide_sample.short_description,
+            detailed_description=slide_sample.detailed_description,
         )
 
     @classmethod
     def from_dicom_model(
-        cls, slide_sample_models: Iterable["SlideSampleDicomModel"]
-    ) -> Tuple[Optional[List["SlideSample"]], Optional[List[Staining]]]:
+        cls, specimen_descriptions: Iterable["SpecimenDescriptionDicomModel"]
+    ) -> Tuple[Optional[List[SlideSample]], Optional[List[Staining]]]:
         """
-        Parse Specimen Description Sequence in dataset into SlideSamples and Stainings.
+        Parse specimen descriptions into samples and stainings.
 
         Parameters
         ----------
-        dataset: Dataset
-            Dataset with Specimen Description Sequence to parse.
+        specimen_descriptions: Iterable["SpecimenDescriptionDicomModel"]
+            Specimen descriptions to parse.
 
         Returns
         ----------
         Optional[Tuple[List["SlideSample"], List[Staining]]]
-            SlideSamples and Stainings parsed from dataset, or None if no or invalid
-            Specimen Description Sequence.
+            Samples and stainings parsed from descriptions.
 
         """
 
@@ -518,28 +371,84 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
         ] = {}
         slide_samples: List[SlideSample] = []
         stainings: List[Staining] = []
-        for slide_sample_model in slide_sample_models:
+        for specimen_description in specimen_descriptions:
             slide_sample = cls._create_slide_sample(
-                slide_sample_model, created_specimens, stainings
+                specimen_description, created_specimens, stainings
             )
             slide_samples.append(slide_sample)
 
         return slide_samples, stainings
 
     @classmethod
+    def _get_steps(
+        cls, slide_sample: SlideSample, stainings: Optional[Iterable[Staining]]
+    ) -> List[SpecimenPreparationStepDicomModel]:
+        sample_preparation_steps = [
+            step
+            for sampling in slide_sample._sampled_from
+            for step in cls._get_steps_for_sampling(sampling, slide_sample.identifier)
+        ]
+        if stainings is None:
+            return sample_preparation_steps
+        for staining in stainings:
+            step = StainingDicomModel.from_step(staining, slide_sample.identifier)
+            sample_preparation_steps.append(step)
+        return sample_preparation_steps
+
+    @classmethod
+    def _get_steps_for_sampling(
+        cls, sampling: Sampling, sample_identifier: Union[str, SpecimenIdentifier]
+    ) -> List[SpecimenPreparationStepDicomModel]:
+        """Return DICOM steps for the specimen the sample was sampled from."""
+        if isinstance(sampling.specimen, SampledSpecimen):
+            steps = [
+                step
+                for sampling in sampling.specimen._sampled_from
+                if sampling.sampling_chain_constraints is None
+                or sampling in sampling.sampling_chain_constraints
+                for step in cls._get_steps_for_sampling(
+                    sampling, sampling.specimen.identifier
+                )
+            ]
+        else:
+            steps = []
+        steps.extend(
+            SpecimenPreparationStepDicomModel.from_step(
+                step, sampling.specimen.identifier
+            )
+            for step in cls._get_steps_before_sampling(sampling.specimen, sampling)
+        )
+        steps.append(SamplingDicomModel.from_step(sampling, sample_identifier))
+        return steps
+
+    @classmethod
+    def _get_steps_before_sampling(
+        cls, specimen: Specimen, sampling: Sampling
+    ) -> Iterator[PreparationStep]:
+        """Return the steps in specimen that occurred before the given sampling."""
+        for step in specimen.steps:
+            if isinstance(step, Sampling):
+                # Break if sampling step for this sample, otherwise skip
+                if step == sampling:
+                    break
+                continue
+            yield step
+
+    @classmethod
     def _parse_preparation_steps_for_specimen(
         cls,
         identifier: Union[str, SpecimenIdentifier],
         steps_by_identifier: Dict[
-            Union[str, SpecimenIdentifier], List[Optional[PreparationStepDicomModel]]
+            Union[str, SpecimenIdentifier],
+            List[Optional[SpecimenPreparationStepDicomModel]],
         ],
         existing_specimens: Dict[
             Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
         ],
-        stop_at_step: Optional[PreparationStepDicomModel] = None,
+        stop_at_step: Optional[SpecimenPreparationStepDicomModel] = None,
     ) -> Tuple[List[PreparationStep], List[Sampling]]:
         """
-        Parse PreparationSteps and Samplings for a specimen.
+        Parse preparation steps and samplings for a specimen.
 
         Creates or updates parent specimens.
 
@@ -548,16 +457,17 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
         identifier: Union[str, SpecimenIdentifier]
             The identifier of the specimen to parse.
         steps_by_identifier: Dict[
-            Union[str, SpecimenIdentifier], List[Optional[SpecimenPreparationStep]]
+            Union[str, SpecimenIdentifier],
+            List[Optional[SpecimenPreparationStepDicomModel]],
         ]
-            SpecimenPreparationSteps ordered by specimen identifier.
+            DICOM preparation steps ordered by specimen identifier.
         existing_specimens: Dict[
             Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
         ]
             Existing specimens ordered by specimen identifier.
-        stop_at_step: SpecimenPreparationStep
-            SpecimenSampling step in the list of steps for this identifier at which the
-            list should not be processed further.
+        stop_at_step: Optional[SpecimenPreparationStepDicomModel] = None:
+            Step in the list of steps for this identifier at which the list should not
+            be processed further.
 
         Returns
         ----------
@@ -577,7 +487,6 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
 
         samplings: List[Sampling] = []
         preparation_steps: List[PreparationStep] = []
-        print(steps_by_identifier["block"])
         for index, step in enumerate(steps_by_identifier[identifier]):
             if stop_at_step is not None and stop_at_step == step:
                 # We should not parse the rest of the list
@@ -625,14 +534,8 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
                     )
                 )
             elif isinstance(step, ProcessingDicomModel):
-                if step.method is not None:
-                    preparation_steps.append(
-                        Processing(
-                            step.method,
-                            date_time=step.date_time,
-                            description=step.description,
-                        )
-                    )
+                pass
+
             elif isinstance(step, SamplingDicomModel):
                 parent_identifier = SpecimenIdentifierDicomModel.from_sampling(step)
                 if parent_identifier in existing_specimens:
@@ -660,12 +563,11 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
                         step,
                     )
                     if isinstance(parent, Sample):
-                        sampling_constraints = parent._sampled_from
+                        sampling_constraints = parent.sampled_from
                     else:
                         sampling_constraints = None
                     existing_specimens[parent_identifier] = parent
 
-                # TODO is this assert needed?
                 if isinstance(parent, Sample):
                     # If Sample create sampling with constraint
                     sampling = parent.sample(
@@ -701,6 +603,14 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
                         description=step.description,
                     )
                 )
+            if step.processing is not None:
+                preparation_steps.append(
+                    Processing(
+                        step.processing,
+                        date_time=step.date_time,
+                        description=step.description,
+                    )
+                )
 
             # Clear this step so that it will not be processed again
             steps_by_identifier[identifier][index] = None
@@ -712,12 +622,13 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
         identifier: Union[str, SpecimenIdentifier],
         specimen_type: AnatomicPathologySpecimenTypesCode,
         steps_by_identifier: Dict[
-            Union[str, SpecimenIdentifier], List[Optional[PreparationStepDicomModel]]
+            Union[str, SpecimenIdentifier],
+            List[Optional[SpecimenPreparationStepDicomModel]],
         ],
         existing_specimens: Dict[
             Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
         ],
-        stop_at_step: PreparationStepDicomModel,
+        stop_at_step: SpecimenPreparationStepDicomModel,
     ) -> Union[ExtractedSpecimen, Sample]:
         """
         Create an ExtractedSpecimen or Sample.
@@ -729,14 +640,15 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
         specimen_type: AnatomicPathologySpecimenTypesCode
             The coded type of the specimen to create.
         steps_by_identifier: Dict[
-            Union[str, SpecimenIdentifier], List[Optional[SpecimenPreparationStep]]
+            Union[str, SpecimenIdentifier],
+            List[Optional[SpecimenPreparationStepDicomModel]],
         ]
-            SpecimenPreparationSteps ordered by specimen identifier.
+            DICOM preparation steps ordered by specimen identifier.
         existing_specimens: Dict[
             Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
         ]
             Existing specimens ordered by specimen identifier.
-        stop_at_step: SpecimenPreparationStep
+        stop_at_step: SpecimenPreparationStepDicomModel,
             Stop processing steps for this specimen at this step in the list.
 
         Returns
@@ -766,7 +678,7 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
     @classmethod
     def _create_slide_sample(
         cls,
-        description: "SlideSampleDicomModel",
+        description: "SpecimenDescriptionDicomModel",
         existing_specimens: Dict[
             Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
         ],
@@ -779,8 +691,8 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
 
         Parameters
         ----------
-        description: SpecimenDescription
-            Specimen Description to parse.
+        description: SpecimenDescriptionDicomModel,
+            Specimen description to parse.
         existing_specimens: Dict[
             Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
         ]
@@ -793,13 +705,14 @@ class SlideSampleDicomModel(SampledSpecimenDicomModel):
         Returns
         ----------
         SlideSample
-            Parsed SlideSample.
+            Parsed sample.
 
         """
         # Sort the steps based on specimen identifier.
         # Sampling steps are put into to both sampled and parent bucket.
         steps_by_identifier: Dict[
-            Union[str, SpecimenIdentifier], List[Optional[PreparationStepDicomModel]]
+            Union[str, SpecimenIdentifier],
+            List[Optional[SpecimenPreparationStepDicomModel]],
         ] = defaultdict(list)
         for step in description.steps:
             if isinstance(step, StainingDicomModel):
