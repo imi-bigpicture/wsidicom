@@ -46,6 +46,7 @@ from wsidicom.metadata.sample import (
     Embedding,
     ExtractedSpecimen,
     Fixation,
+    IssuerOfIdentifier,
     PreparationStep,
     Processing,
     Sample,
@@ -57,47 +58,6 @@ from wsidicom.metadata.sample import (
     SpecimenIdentifier,
     Staining,
 )
-
-
-class SpecimenIdentifierDicomModel:
-    """A specimen identifier including an optional issuer."""
-
-    @classmethod
-    def from_sampling(
-        cls, sampling: "SamplingDicomModel"
-    ) -> Union[str, SpecimenIdentifier]:
-        if (
-            sampling.issuer_of_parent_specimen_identifier is not None
-            and sampling.issuer_of_parent_specimen_identifier != ""
-        ):
-            return SpecimenIdentifier(
-                sampling.parent_specimen_identifier,
-                sampling.issuer_of_parent_specimen_identifier,
-            )
-        return sampling.parent_specimen_identifier
-
-    @classmethod
-    def from_step(
-        cls, step: "SpecimenPreparationStepDicomModel"
-    ) -> Union[str, SpecimenIdentifier]:
-        if step.issuer_of_identifier is None or step.issuer_of_identifier == "":
-            return step.identifier
-        return SpecimenIdentifier(
-            step.identifier,
-            step.issuer_of_identifier,
-        )
-
-    @classmethod
-    def from_description(
-        cls, description: "SpecimenDescriptionDicomModel"
-    ) -> Union[str, SpecimenIdentifier]:
-        if description.identifier is None or description.issuer_of_identifier is None:
-            return description.identifier
-        return SpecimenIdentifier(
-            description.identifier,
-            description.issuer_of_identifier[0],
-            description.issuer_of_identifier[1],
-        )
 
 
 @dataclass
@@ -123,6 +83,14 @@ class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
         if isinstance(step, Staining):
             return StainingDicomModel.from_step(step, specimen_identifier)
         raise NotImplementedError()
+
+    def get_identifier(self) -> Union[str, SpecimenIdentifier]:
+        if self.issuer_of_identifier is None:
+            return self.identifier
+        return SpecimenIdentifier(
+            self.identifier,
+            IssuerOfIdentifier.from_hl7v2(self.issuer_of_identifier),
+        )
 
 
 @dataclass
@@ -151,10 +119,13 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             Dicom dataset describing the processing step.
 
         """
-        identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
+        identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
             specimen_identifier
         )
-        parent_identifier, parent_issuer = SpecimenIdentifier.get_identifier_and_issuer(
+        (
+            parent_identifier,
+            parent_issuer,
+        ) = SpecimenIdentifier.get_string_identifier_and_issuer(
             sampling.specimen.identifier
         )
         return cls(
@@ -170,6 +141,19 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             embedding=None,
             processing=None,
         )
+
+    def get_parent_identifier(self) -> Union[str, SpecimenIdentifier]:
+        if (
+            self.issuer_of_parent_specimen_identifier is not None
+            and self.issuer_of_parent_specimen_identifier != ""
+        ):
+            return SpecimenIdentifier(
+                self.parent_specimen_identifier,
+                IssuerOfIdentifier.from_hl7v2(
+                    self.issuer_of_parent_specimen_identifier
+                ),
+            )
+        return self.parent_specimen_identifier
 
 
 @dataclass
@@ -197,7 +181,7 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
             Dicom dataset describing the processing step.
 
         """
-        identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
+        identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
             specimen_identifier
         )
         return cls(
@@ -235,7 +219,7 @@ class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
             Dicom dataset describing the processing step.
 
         """
-        identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
+        identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
             specimen_identifier
         )
         if isinstance(processing, Processing):
@@ -283,7 +267,7 @@ class StainingDicomModel(SpecimenPreparationStepDicomModel):
             Dicom dataset describing the processing step.
 
         """
-        identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
+        identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
             specimen_identifier
         )
         return cls(
@@ -307,7 +291,7 @@ class SpecimenDescriptionDicomModel:
     steps: List[SpecimenPreparationStepDicomModel]
     # specimen_type: AnatomicPathologySpecimenTypesCode
     anatomical_sites: List[Code]
-    issuer_of_identifier: Optional[Tuple[str, Optional[str]]] = None
+    issuer_of_identifier: Optional[IssuerOfIdentifier] = None
     short_description: Optional[str] = None
     detailed_description: Optional[str] = None
 
@@ -336,7 +320,7 @@ class SpecimenDescriptionDicomModel:
             position = None
         return cls(
             identifier=identifier,
-            issuer_of_identifier=None if issuer is None else (issuer, None),
+            issuer_of_identifier=issuer,
             uid=sample_uid,
             steps=sample_preparation_steps,
             anatomical_sites=list(slide_sample.anatomical_sites)
@@ -478,8 +462,7 @@ class SpecimenDescriptionDicomModel:
         if stop_at_step is not None:
             if (
                 not isinstance(stop_at_step, SamplingDicomModel)
-                or SpecimenIdentifierDicomModel.from_sampling(stop_at_step)
-                != identifier
+                or stop_at_step.get_parent_identifier() != identifier
             ):
                 raise ValueError(
                     "Stop at step should be a parent SpecimenSampling step."
@@ -498,7 +481,7 @@ class SpecimenDescriptionDicomModel:
                 # This is OK if SpecimenSampling with matching parent identifier
                 if (
                     not isinstance(step, SamplingDicomModel)
-                    or SpecimenIdentifierDicomModel.from_sampling(step) != identifier
+                    or step.get_parent_identifier() != identifier
                 ):
                     error = (
                         f"Got step of unexpected type {type(step)}"
@@ -537,7 +520,7 @@ class SpecimenDescriptionDicomModel:
                 pass
 
             elif isinstance(step, SamplingDicomModel):
-                parent_identifier = SpecimenIdentifierDicomModel.from_sampling(step)
+                parent_identifier = step.get_parent_identifier()
                 if parent_identifier in existing_specimens:
                     # Parent already exists. Parse any non-parsed steps
                     parent = existing_specimens[parent_identifier]
@@ -726,10 +709,10 @@ class SpecimenDescriptionDicomModel:
             elif isinstance(step, SamplingDicomModel):
                 parent_identifier = step.parent_specimen_identifier
                 steps_by_identifier[parent_identifier].append(step)
-            identifier = SpecimenIdentifierDicomModel.from_step(step)
+            identifier = step.get_identifier()
             steps_by_identifier[identifier].append(step)
 
-        identifier = SpecimenIdentifierDicomModel.from_description(description)
+        identifier = cls._get_identifier_from_description(description)
         preparation_steps, samplings = cls._parse_preparation_steps_for_specimen(
             identifier, steps_by_identifier, existing_specimens
         )
@@ -744,4 +727,14 @@ class SpecimenDescriptionDicomModel:
             uid=description.uid,
             # position=
             steps=preparation_steps,
+        )
+
+    @classmethod
+    def _get_identifier_from_description(
+        cls, description: "SpecimenDescriptionDicomModel"
+    ) -> Union[str, SpecimenIdentifier]:
+        if description.issuer_of_identifier is None:
+            return description.identifier
+        return SpecimenIdentifier(
+            description.identifier, description.issuer_of_identifier
         )

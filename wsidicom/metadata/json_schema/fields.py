@@ -25,9 +25,13 @@ from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.metadata.optical_path import LutDataType
 
 from wsidicom.metadata.sample import (
+    IssuerOfIdentifier,
+    LocalIssuerOfIdentifier,
     SlideSamplePosition,
     Specimen,
     SpecimenIdentifier,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
 )
 
 
@@ -62,24 +66,74 @@ class SlideSamplePositionJsonField(fields.Field):
             ) from error
 
 
+class IssuerOfIdentifierJsonField(fields.Field):
+    def _serialize(
+        self, value: Optional[IssuerOfIdentifier], attr, obj, **kwargs
+    ) -> Optional[Union[str, Dict]]:
+        if value is None:
+            return None
+        if isinstance(value, LocalIssuerOfIdentifier):
+            return {
+                "identifier": value.identifier,
+            }
+        elif isinstance(value, UniversalIssuerOfIdentifier):
+            serialized = {
+                "identifier": value.identifier,
+                "issuer_type": value.issuer_type.name,
+            }
+            if value.local_identifier is not None:
+                serialized["local_identifier"] = value.local_identifier
+            return serialized
+        raise NotImplementedError(f"Serialization of {type(value)} is not implemented.")
+
+    def _deserialize(
+        self,
+        value: Dict[str, Any],
+        attr: Optional[str],
+        data: Optional[Mapping[str, Any]],
+        **kwargs,
+    ) -> IssuerOfIdentifier:
+        try:
+            identifier = value["identifier"]
+            if "issuer_type" in value:
+                print(value["issuer_type"], type(value["issuer_type"]))
+                issuer_type = UniversalIssuerType(value["issuer_type"])
+                local_identifier = value.get("local_identifier", None)
+                return UniversalIssuerOfIdentifier(
+                    identifier, issuer_type, local_identifier
+                )
+            return LocalIssuerOfIdentifier(identifier)
+        except ValueError as error:
+            print(error)
+            raise ValidationError(
+                "Could not deserialize issuer of identifier."
+            ) from error
+
+
 class SpecimenIdentifierJsonField(fields.Field):
+    _issuer_of_identifier_field = IssuerOfIdentifierJsonField()
+
     def _serialize(
         self,
-        value: Optional[Union[Specimen, str, SpecimenIdentifier]],
+        value: Optional[Union[str, SpecimenIdentifier]],
         attr,
         obj,
         **kwargs,
     ) -> Optional[Union[str, Dict]]:
         if value is None:
             return None
-        if isinstance(value, Specimen):
-            return self._serialize(value.identifier, attr, obj, **kwargs)
         if isinstance(value, str):
             return value
+        if value.issuer is None:
+            return {
+                "value": value.value,
+            }
+
         return {
-            field.name: getattr(value, field.name)
-            for field in dataclasses.fields(value)
-            if getattr(value, field.name) is not None
+            "value": value.value,
+            "issuer": self._issuer_of_identifier_field._serialize(
+                value.issuer, attr, obj, **kwargs
+            ),
         }
 
     def _deserialize(
@@ -92,7 +146,13 @@ class SpecimenIdentifierJsonField(fields.Field):
         try:
             if isinstance(value, str):
                 return value
-            return SpecimenIdentifier(**value)
+            if "issuer" not in value:
+                return SpecimenIdentifier(value["value"])
+            issuer = self._issuer_of_identifier_field._deserialize(
+                value["issuer"], attr, data, **kwargs
+            )
+            return SpecimenIdentifier(value["value"], issuer)
+
         except ValueError as error:
             raise ValidationError(
                 "Could not deserialize specimen identifier."

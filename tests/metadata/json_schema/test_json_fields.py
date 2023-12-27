@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Dict, Union
+from typing import Any, Dict, Union
 
 import pytest
 from pydicom.sr.coding import Code
@@ -30,7 +30,13 @@ from wsidicom.metadata.json_schema.fields import (
     StringOrCodeJsonField,
     UidJsonField,
 )
-from wsidicom.metadata.sample import SlideSamplePosition, SpecimenIdentifier
+from wsidicom.metadata.sample import (
+    LocalIssuerOfIdentifier,
+    SlideSamplePosition,
+    SpecimenIdentifier,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
+)
 
 
 class TestFields:
@@ -80,7 +86,16 @@ class TestFields:
 
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer", "issuer type")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+            SpecimenIdentifier(
+                "identifier",
+                UniversalIssuerOfIdentifier(
+                    "issuer", UniversalIssuerType.UUID, "local"
+                ),
+            ),
+        ],
     )
     def test_specimen_identifier_serialize(
         self, identifier: Union[str, SpecimenIdentifier]
@@ -96,18 +111,34 @@ class TestFields:
         else:
             assert isinstance(dumped, dict)
             assert dumped["value"] == identifier.value
-            assert dumped["issuer"] == identifier.issuer
-            assert dumped["issuer_type"] == identifier.issuer_type
+            if isinstance(identifier.issuer, LocalIssuerOfIdentifier):
+                assert dumped["issuer"]["identifier"] == identifier.issuer.identifier
+            elif isinstance(identifier.issuer, UniversalIssuerOfIdentifier):
+                assert dumped["issuer"]["identifier"] == identifier.issuer.identifier
+                assert (
+                    dumped["issuer"]["issuer_type"]
+                    == identifier.issuer.issuer_type.name
+                )
+                assert (
+                    dumped["issuer"]["local_identifier"]
+                    == identifier.issuer.local_identifier
+                )
+            else:
+                assert "issuer" not in dumped
 
     @pytest.mark.parametrize(
         "identifier",
         [
             "identifier",
-            {"value": "identifier", "issuer": "issuer", "issuer_type": "issuer type"},
+            {"value": "identifier", "issuer": {"identifier": "issuer"}},
+            {
+                "value": "identifier",
+                "issuer": {"identifier": "issuer", "issuer_type": "UUID"},
+            },
         ],
     )
     def test_specimen_identifier_deserialize(
-        self, identifier: Union[str, Dict[str, str]]
+        self, identifier: Union[str, Dict[str, Any]]
     ):
         # Arrange
 
@@ -120,8 +151,30 @@ class TestFields:
         else:
             assert isinstance(loaded, SpecimenIdentifier)
             assert loaded.value == identifier["value"]
-            assert loaded.issuer == identifier["issuer"]
-            assert loaded.issuer_type == identifier["issuer_type"]
+            if "issuer" in identifier:
+                if "issuer_type" in identifier["issuer"]:
+                    assert isinstance(loaded.issuer, UniversalIssuerOfIdentifier)
+                    assert (
+                        loaded.issuer.identifier == identifier["issuer"]["identifier"]
+                    )
+                    assert (
+                        loaded.issuer.issuer_type.name
+                        == identifier["issuer"]["issuer_type"]
+                    )
+                    if "local_identifier" in identifier["issuer"]:
+                        assert (
+                            loaded.issuer.local_identifier
+                            == identifier["issuer"]["local_identifier"]
+                        )
+                    else:
+                        assert loaded.issuer.local_identifier is None
+                else:
+                    assert isinstance(loaded.issuer, LocalIssuerOfIdentifier)
+                    assert (
+                        loaded.issuer.identifier == identifier["issuer"]["identifier"]
+                    )
+            else:
+                assert loaded.issuer is None
 
     def test_point_mm_serialize(self):
         # Arrange

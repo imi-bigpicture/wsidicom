@@ -15,6 +15,7 @@
 import datetime
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
+from enum import Enum
 from functools import cached_property
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -65,13 +66,77 @@ consider making a PR.
 """
 
 
+class UniversalIssuerType(Enum):
+    """The type of a universal issuer of an identifier."""
+
+    DNS = "DNS"  # An Internet dotted name. Either in ASCII or as integers
+    EUI64 = "EUI64"  # An IEEE Extended Unique Identifier
+    ISO = "ISO"  # An International Standards Organization Object Identifier
+    URI = "IRI"  # Uniform Resource Identifier
+    UUID = "UUID"  # The DCE Universal Unique Identifier
+    X400 = "X400"  # An X.400 MHS identifier
+    X500 = "X500"  # An X.500 directory name
+
+
+class IssuerOfIdentifier(metaclass=ABCMeta):
+    """Metaclass for an issuer of an identifier."""
+
+    @abstractmethod
+    def to_hl7v2(self) -> str:
+        """Return HL7v2 representation of issuer."""
+        raise NotImplementedError()
+
+    @classmethod
+    def from_hl7v2(cls, value: str) -> "IssuerOfIdentifier":
+        """Return IssuerOfIdentifier from HL7v2 representation."""
+        local_identifier, *universal_identifier = value.split("^")
+        if local_identifier == "":
+            local_identifier = None
+        if len(universal_identifier) == 2:
+            universal_identifier, universal_issuer_type = universal_identifier
+            return UniversalIssuerOfIdentifier(
+                identifier=universal_identifier,
+                issuer_type=UniversalIssuerType(universal_issuer_type),
+                local_identifier=local_identifier,
+            )
+        if local_identifier is not None:
+            return LocalIssuerOfIdentifier(identifier=value)
+        raise ValueError(
+            "Could not parse string to local issuer of identifier or "
+            "universal issuer of identifier."
+        )
+
+
+@dataclass(unsafe_hash=True)
+class LocalIssuerOfIdentifier(IssuerOfIdentifier):
+    """A local issuer of an identifier."""
+
+    identifier: str
+
+    def to_hl7v2(self) -> str:
+        return self.identifier
+
+
+@dataclass(unsafe_hash=True)
+class UniversalIssuerOfIdentifier(IssuerOfIdentifier):
+    """A universal issuer of an identifier. Can optinally also define a local identifer."""
+
+    identifier: str
+    issuer_type: UniversalIssuerType
+    local_identifier: Optional[str] = None
+
+    def to_hl7v2(self) -> str:
+        identifier = self.local_identifier or ""
+        identifier += f"^{self.identifier}^{self.issuer_type.name}"
+        return identifier
+
+
 @dataclass(unsafe_hash=True)
 class SpecimenIdentifier:
     """A specimen identifier including an optional issuer."""
 
     value: str
-    issuer: Optional[str] = None
-    issuer_type: Optional[str] = None
+    issuer: Optional[IssuerOfIdentifier] = None
 
     def __eq__(self, other: Any):
         """Determine if other specimen identifiers is equal to this."""
@@ -81,18 +146,29 @@ class SpecimenIdentifier:
             return self.value == other.value and self.issuer == other.issuer
         return False
 
-    def to_identifier_and_issuer(self) -> Tuple[str, Optional[str]]:
+    def to_string_identifier_and_issuer(self) -> Tuple[str, Optional[str]]:
         """Format into string identifier and IssuerOfIdentifier."""
-        return self.value, self.issuer
+        if self.issuer is None:
+            return self.value, None
+        return self.value, self.issuer.to_hl7v2()
 
     @classmethod
-    def get_identifier_and_issuer(
+    def get_string_identifier_and_issuer(
         cls, identifier: Union[str, "SpecimenIdentifier"]
     ) -> Tuple[str, Optional[str]]:
         """Return string identifier and optional issuer of identifier object."""
         if isinstance(identifier, str):
             return identifier, None
-        return identifier.to_identifier_and_issuer()
+        return identifier.to_string_identifier_and_issuer()
+
+    @classmethod
+    def get_identifier_and_issuer(
+        cls, identifier: Union[str, "SpecimenIdentifier"]
+    ) -> Tuple[str, Optional[IssuerOfIdentifier]]:
+        """Return string identifier and optional issuer of identifier object."""
+        if isinstance(identifier, str):
+            return identifier, None
+        return identifier.value, identifier.issuer
 
 
 class PreparationStep(metaclass=ABCMeta):

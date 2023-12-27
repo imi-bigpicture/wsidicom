@@ -46,9 +46,8 @@ from wsidicom.metadata.dicom_schema.fields import (
     CodeDicomField,
     CodeItemDicomField,
     DateTimeItemDicomField,
-    IssuerOfIdentifierField,
+    IssuerOfIdentifierDicomField,
     SingleCodeSequenceField,
-    SingleItemSequenceDicomField,
     StringDicomField,
     StringItemDicomField,
     StringOrCodeItemDicomField,
@@ -408,7 +407,7 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     identifier = StringDicomField(data_key="SpecimenIdentifier")
     uid = StringDicomField(data_key="SpecimenUID")
     # specimen_location:
-    issuer_of_identifier = IssuerOfIdentifierField(
+    issuer_of_identifier = IssuerOfIdentifierDicomField(
         data_key="IssuerOfTheSpecimenIdentifierSequence", allow_none=True
     )
     steps = marshmallow.fields.List(

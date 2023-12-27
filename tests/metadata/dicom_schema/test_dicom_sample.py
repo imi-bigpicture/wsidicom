@@ -51,6 +51,8 @@ from wsidicom.metadata.sample import (
     Embedding,
     ExtractedSpecimen,
     Fixation,
+    IssuerOfIdentifier,
+    LocalIssuerOfIdentifier,
     Sample,
     SlideSample,
     SlideSamplePosition,
@@ -132,7 +134,7 @@ def collection_dicom(
     embedding: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
 ):
-    identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(identifier)
+    identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield CollectionDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
@@ -193,8 +195,11 @@ def sampling_dicom(
     embedding: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
 ):
-    identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(identifier)
-    parent_identifier, parent_issuer = SpecimenIdentifier.get_identifier_and_issuer(
+    identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
+    (
+        parent_identifier,
+        parent_issuer,
+    ) = SpecimenIdentifier.get_string_identifier_and_issuer(
         sampling.specimen.identifier
     )
     yield SamplingDicomModel(
@@ -272,7 +277,7 @@ def processing_dicom(
     fixative: Optional[SpecimenFixativesCode],
     embedding: Optional[SpecimenEmbeddingMediaCode],
 ):
-    identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(identifier)
+    identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield ProcessingDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
@@ -335,7 +340,7 @@ def staining_dicom(
     embedding: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
 ):
-    identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(identifier)
+    identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield StainingDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
@@ -527,7 +532,7 @@ def create_identifier_items(identifier: Union[str, SpecimenIdentifier]):
         return [identifier_item]
     issuer_item = create_string_item(
         SampleCodes.issuer_of_identifier,
-        identifier.issuer,
+        identifier.issuer.to_hl7v2(),
     )
     return [identifier_item, issuer_item]
 
@@ -798,7 +803,10 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
     )
     def test_serialize_collection_dicom(
         self,
@@ -828,7 +836,7 @@ class TestPreparationStepDicomSchema:
                 issuer_of_identifier_item, SampleCodes.issuer_of_identifier
             )
             self.assert_item_string_equals_value(
-                issuer_of_identifier_item, identifier.issuer
+                issuer_of_identifier_item, identifier.issuer.to_hl7v2()
             )
         # Next item should be processing type
         processing_type_item = next(item_iterator)
@@ -872,7 +880,10 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
     )
     @pytest.mark.parametrize(
         ["fixative", "embedding"],
@@ -916,7 +927,10 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
     )
     def test_serialize_sampling_dicom(
         self,
@@ -946,7 +960,7 @@ class TestPreparationStepDicomSchema:
                 issuer_of_identifier_item, SampleCodes.issuer_of_identifier
             )
             self.assert_item_string_equals_value(
-                issuer_of_identifier_item, identifier.issuer
+                issuer_of_identifier_item, identifier.issuer.to_hl7v2()
             )
         # Next item should be processing type
         processing_type_item = next(item_iterator)
@@ -1018,7 +1032,10 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
     )
     @pytest.mark.parametrize(
         ["fixative", "embedding"],
@@ -1058,7 +1075,10 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
     )
     def test_serialize_processing_dicom(
         self,
@@ -1088,7 +1108,7 @@ class TestPreparationStepDicomSchema:
                 issuer_of_identifier_item, SampleCodes.issuer_of_identifier
             )
             self.assert_item_string_equals_value(
-                issuer_of_identifier_item, identifier.issuer
+                issuer_of_identifier_item, identifier.issuer.to_hl7v2()
             )
         # Next item should be processing type
         processing_type_item = next(item_iterator)
@@ -1137,7 +1157,10 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
     )
     @pytest.mark.parametrize(
         ["fixative", "embedding"],
@@ -1182,7 +1205,10 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
     )
     def test_serialize_staining_dicom(
         self,
@@ -1212,7 +1238,7 @@ class TestPreparationStepDicomSchema:
                 issuer_of_identifier_item, SampleCodes.issuer_of_identifier
             )
             self.assert_item_string_equals_value(
-                issuer_of_identifier_item, identifier.issuer
+                issuer_of_identifier_item, identifier.issuer.to_hl7v2()
             )
         # Next item should be processing type
         processing_type_item = next(item_iterator)
@@ -1262,7 +1288,10 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "identifier",
-        ["identifier", SpecimenIdentifier("identifier", "issuer")],
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
     )
     @pytest.mark.parametrize(
         ["fixative", "embedding"],

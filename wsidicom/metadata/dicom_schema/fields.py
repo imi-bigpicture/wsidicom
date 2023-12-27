@@ -38,6 +38,12 @@ from pydicom.valuerep import DA, DT, TM, DSfloat, PersonName
 
 from wsidicom.conceptcode import ConceptCode
 from wsidicom.geometry import Orientation, PointMm
+from wsidicom.metadata.sample import (
+    IssuerOfIdentifier,
+    LocalIssuerOfIdentifier,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
+)
 
 
 class StringLikeDicomField(fields.Field):
@@ -302,28 +308,38 @@ class PatientNameDicomField(fields.String):
         return PersonName(value)
 
 
-class IssuerOfIdentifierField(fields.Field):
+class IssuerOfIdentifierDicomField(fields.Field):
     def _deserialize(
         self, value: Optional[Sequence[Dataset]], attr, data, **kwargs
-    ) -> Optional[Tuple[str, Optional[str]]]:
+    ) -> Optional[IssuerOfIdentifier]:
         if value is None or len(value) == 0:
             return None
         dataset = value[0]
-        if dataset.get("UniversalEntityIDType", None) is not None:
-            return (dataset.UniversalEntityID, dataset.UniversalEntityIDType)
-        return (dataset.LocalNamespaceEntityID, None)
+        if "UniversalEntityIDType" in dataset:
+            return UniversalIssuerOfIdentifier(
+                dataset.UniversalEntityID,
+                UniversalIssuerType(dataset.UniversalEntityIDType),
+                dataset.get("LocalNamespaceEntityID", None),
+            )
+        if "LocalNamespaceEntityID" in dataset:
+            return LocalIssuerOfIdentifier(dataset.LocalNamespaceEntityID)
+        return None
 
     def _serialize(
-        self, value: Optional[Tuple[str, Optional[str]]], attr, obj, **kwargs
+        self, value: Optional[IssuerOfIdentifier], attr, obj, **kwargs
     ) -> Optional[Sequence[Dataset]]:
         if value is None:
             return None
         dataset = Dataset()
-        if value[1] is not None:
-            dataset.UniversalEntityIDType = value[1]
-            dataset.UniversalEntityID = value[0]
+        if isinstance(value, UniversalIssuerOfIdentifier):
+            dataset.UniversalEntityID = value.identifier
+            dataset.UniversalEntityIDType = value.issuer_type.name
+            if value.local_identifier is not None:
+                dataset.LocalNamespaceEntityID = value.local_identifier
+        elif isinstance(value, LocalIssuerOfIdentifier):
+            dataset.LocalNamespaceEntityID = value.identifier
         else:
-            dataset.LocalNamespaceEntityID = value[0]
+            raise NotImplementedError()
         return [dataset]
 
 

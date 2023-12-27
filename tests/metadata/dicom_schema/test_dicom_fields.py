@@ -1,5 +1,5 @@
 import datetime
-from typing import Union
+from typing import Optional, Union
 from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DSfloat
@@ -9,8 +9,15 @@ from wsidicom.metadata.dicom_schema.fields import (
     CodeItemDicomField,
     DateTimeItemDicomField,
     FloatContentItemDicomField,
+    IssuerOfIdentifierDicomField,
     StringItemDicomField,
     StringOrCodeItemDicomField,
+)
+from wsidicom.metadata.sample import (
+    IssuerOfIdentifier,
+    LocalIssuerOfIdentifier,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
 )
 
 
@@ -178,3 +185,47 @@ class TestDicomFields:
         else:
             assert isinstance(deserialized, Code)
         assert deserialized == value
+
+    @pytest.mark.parametrize(
+        "issuer",
+        [
+            None,
+            LocalIssuerOfIdentifier("issuer"),
+            UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID),
+            UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID, "local"),
+        ],
+    )
+    def test_issuer_of_identifier_field_serialize(
+        self, issuer: Optional[IssuerOfIdentifier]
+    ):
+        # Arrange
+        field = IssuerOfIdentifierDicomField()
+
+        # Act
+        serialized = field.serialize("issuer", {"issuer": issuer})
+
+        # Assert
+        if issuer is None:
+            assert serialized is None
+        else:
+            assert isinstance(serialized, list)
+            assert len(serialized) == 1
+            item = serialized[0]
+            assert isinstance(item, Dataset)
+            if isinstance(issuer, LocalIssuerOfIdentifier):
+                assert "LocalNamespaceEntityID" in item
+                assert item.LocalNamespaceEntityID == issuer.identifier
+                assert "UniversalEntityID" not in item
+                assert "UniversalEntityIDType" not in item
+            elif isinstance(issuer, UniversalIssuerOfIdentifier):
+                assert "UniversalEntityID" in item
+                assert item.UniversalEntityID == issuer.identifier
+                assert "UniversalEntityIDType" in item
+                assert item.UniversalEntityIDType == issuer.issuer_type.name
+                if issuer.local_identifier is not None:
+                    assert "LocalNamespaceEntityID" in item
+                    assert item.LocalNamespaceEntityID == issuer.local_identifier
+                else:
+                    assert "LocalNamespaceEntityID" not in item
+            else:
+                raise ValueError(f"Unexpected issuer type: {issuer}")
