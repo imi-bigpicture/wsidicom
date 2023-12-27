@@ -356,12 +356,81 @@ class SpecimenDescriptionDicomModel:
         slide_samples: List[SlideSample] = []
         stainings: List[Staining] = []
         for specimen_description in specimen_descriptions:
-            slide_sample = cls._create_slide_sample(
-                specimen_description, created_specimens, stainings
+            slide_sample = specimen_description.create_slide_sample(
+                created_specimens, stainings
             )
             slide_samples.append(slide_sample)
 
         return slide_samples, stainings
+
+    def create_slide_sample(
+        self,
+        existing_specimens: Dict[
+            Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
+        ],
+        existing_stainings: List[Staining],
+    ) -> SlideSample:
+        """
+        Create a SlideSample from Specimen Description.
+
+        Contained parent specimens and stainings are created or updated.
+
+        Parameters
+        ----------
+        description: SpecimenDescriptionDicomModel,
+            Specimen description to parse.
+        existing_specimens: Dict[
+            Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
+        ]
+            Dictionary with existing specimens. New/updated specimens this Specimen
+            Description are updated/added.
+        existing_stainings: List[Staining]
+            List of existing stainings. New stainings from this Specimen Description are
+            added.
+
+        Returns
+        ----------
+        SlideSample
+            Parsed sample.
+
+        """
+        # Sort the steps based on specimen identifier.
+        # Sampling steps are put into to both sampled and parent bucket.
+        steps_by_identifier: Dict[
+            Union[str, SpecimenIdentifier],
+            List[Optional[SpecimenPreparationStepDicomModel]],
+        ] = defaultdict(list)
+        for step in self.steps:
+            if isinstance(step, StainingDicomModel):
+                staining = Staining(
+                    step.substances,
+                    date_time=step.date_time,
+                    description=step.description,
+                )
+                if not any(staining == existing for existing in existing_stainings):
+                    existing_stainings.append(staining)
+            elif isinstance(step, SamplingDicomModel):
+                parent_identifier = step.parent_specimen_identifier
+                steps_by_identifier[parent_identifier].append(step)
+            identifier = step.get_identifier()
+            steps_by_identifier[identifier].append(step)
+
+        identifier = self._get_identifier()
+        preparation_steps, samplings = self._parse_preparation_steps_for_specimen(
+            identifier, steps_by_identifier, existing_specimens
+        )
+
+        if len(samplings) > 1:
+            raise ValueError("Should be max one sampling, got.", len(samplings))
+        # TODO add position when highdicom support
+        return SlideSample(
+            identifier=identifier,
+            anatomical_sites=[],
+            sampled_from=next(iter(samplings), None),
+            uid=self.uid,
+            # position=
+            steps=preparation_steps,
+        )
 
     @classmethod
     def _get_steps(
@@ -658,83 +727,7 @@ class SpecimenDescriptionDicomModel:
             steps=preparation_steps,
         )
 
-    @classmethod
-    def _create_slide_sample(
-        cls,
-        description: "SpecimenDescriptionDicomModel",
-        existing_specimens: Dict[
-            Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
-        ],
-        existing_stainings: List[Staining],
-    ) -> SlideSample:
-        """
-        Create a SlideSample from Specimen Description.
-
-        Contained parent specimens and stainings are created or updated.
-
-        Parameters
-        ----------
-        description: SpecimenDescriptionDicomModel,
-            Specimen description to parse.
-        existing_specimens: Dict[
-            Union[str, SpecimenIdentifier], Union[ExtractedSpecimen, Sample]
-        ]
-            Dictionary with existing specimens. New/updated specimens this Specimen
-            Description are updated/added.
-        existing_stainings: List[Staining]
-            List of existing stainings. New stainings from this Specimen Description are
-            added.
-
-        Returns
-        ----------
-        SlideSample
-            Parsed sample.
-
-        """
-        # Sort the steps based on specimen identifier.
-        # Sampling steps are put into to both sampled and parent bucket.
-        steps_by_identifier: Dict[
-            Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
-        ] = defaultdict(list)
-        for step in description.steps:
-            if isinstance(step, StainingDicomModel):
-                staining = Staining(
-                    step.substances,
-                    date_time=step.date_time,
-                    description=step.description,
-                )
-                if not any(staining == existing for existing in existing_stainings):
-                    existing_stainings.append(staining)
-            elif isinstance(step, SamplingDicomModel):
-                parent_identifier = step.parent_specimen_identifier
-                steps_by_identifier[parent_identifier].append(step)
-            identifier = step.get_identifier()
-            steps_by_identifier[identifier].append(step)
-
-        identifier = cls._get_identifier_from_description(description)
-        preparation_steps, samplings = cls._parse_preparation_steps_for_specimen(
-            identifier, steps_by_identifier, existing_specimens
-        )
-
-        if len(samplings) > 1:
-            raise ValueError("Should be max one sampling, got.", len(samplings))
-        # TODO add position when highdicom support
-        return SlideSample(
-            identifier=identifier,
-            anatomical_sites=[],
-            sampled_from=next(iter(samplings), None),
-            uid=description.uid,
-            # position=
-            steps=preparation_steps,
-        )
-
-    @classmethod
-    def _get_identifier_from_description(
-        cls, description: "SpecimenDescriptionDicomModel"
-    ) -> Union[str, SpecimenIdentifier]:
-        if description.issuer_of_identifier is None:
-            return description.identifier
-        return SpecimenIdentifier(
-            description.identifier, description.issuer_of_identifier
-        )
+    def _get_identifier(self) -> Union[str, SpecimenIdentifier]:
+        if self.issuer_of_identifier is None:
+            return self.identifier
+        return SpecimenIdentifier(self.identifier, self.issuer_of_identifier)
