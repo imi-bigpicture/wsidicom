@@ -15,6 +15,7 @@
 import datetime
 from typing import List, Optional, Sequence, Union
 from pydicom import Dataset
+from pydicom.valuerep import DSfloat
 import pytest
 
 from pydicom.uid import UID
@@ -28,6 +29,7 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
     SpecimenSamplingProcedureCode,
     AnatomicPathologySpecimenTypesCode,
+    UnitCode,
 )
 from wsidicom.metadata.dicom_schema.sample.model import (
     CollectionDicomModel,
@@ -42,6 +44,7 @@ from wsidicom.metadata.dicom_schema.sample.schema import (
     ProcessingDicomSchema,
     SamplingDicomSchema,
     SpecimenDescriptionDicomSchema,
+    SpecimenLocalizationDicomSchema,
     StainingDicomSchema,
     SampleCodes,
 )
@@ -51,11 +54,11 @@ from wsidicom.metadata.sample import (
     Embedding,
     ExtractedSpecimen,
     Fixation,
-    IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
+    Measurement,
     Sample,
     SlideSample,
-    SlideSamplePosition,
+    SpecimenLocalization,
     SpecimenIdentifier,
     Sampling,
     Processing,
@@ -110,7 +113,7 @@ def block_type():
 
 @pytest.fixture()
 def position():
-    yield SlideSamplePosition(10, 20, 30)
+    yield SpecimenLocalization(description="left")
 
 
 @pytest.fixture()
@@ -214,6 +217,15 @@ def sampling_dicom(
         issuer_of_parent_specimen_identifier=parent_issuer,
         parent_specimen_type=sampling.specimen.type,
         processing=processing_method,
+        location_reference=sampling.location.reference
+        if sampling.location is not None
+        else None,
+        location_description=sampling.location.description
+        if sampling.location is not None
+        else None,
+        location_x=sampling.location.x if sampling.location is not None else None,
+        location_y=sampling.location.y if sampling.location is not None else None,
+        location_z=sampling.location.z if sampling.location is not None else None,
     )
 
 
@@ -254,6 +266,38 @@ def create_sampling_dataset(
             SampleCodes.parent_specimen_type, sampling_dicom.parent_specimen_type
         )
     )
+    if sampling_dicom.location_reference is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.location_frame_of_reference,
+                sampling_dicom.location_reference,
+            )
+        )
+    if sampling_dicom.location_description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.location_of_sampling_site,
+                sampling_dicom.location_description,
+            )
+        )
+    if sampling_dicom.location_x is not None:
+        items.append(
+            create_measurement_item(
+                SampleCodes.location_of_sampling_site_x, sampling_dicom.location_x
+            )
+        )
+    if sampling_dicom.location_y is not None:
+        items.append(
+            create_measurement_item(
+                SampleCodes.location_of_sampling_site_y, sampling_dicom.location_y
+            )
+        )
+    if sampling_dicom.location_z is not None:
+        items.append(
+            create_measurement_item(
+                SampleCodes.location_of_sampling_site_z, sampling_dicom.location_z
+            )
+        )
     if sampling_dicom.fixative is not None:
         items.append(create_code_item(SampleCodes.fixative, sampling_dicom.fixative))
     if sampling_dicom.embedding is not None:
@@ -413,7 +457,7 @@ def create_description(
     embedding_medium: SpecimenEmbeddingMediaCode,
     block_sampling_method: SpecimenSamplingProcedureCode,
     block_type: AnatomicPathologySpecimenTypesCode,
-    position: SlideSamplePosition,
+    position: SpecimenLocalization,
     primary_anatomic_structures: Sequence[Code],
     stains: Sequence[SpecimenStainsCode],
     short_description: Optional[str] = None,
@@ -457,6 +501,11 @@ def create_description(
             issuer_of_parent_specimen_identifier=None,
             parent_specimen_type=specimen_type,
             processing=None,
+            location_reference=position.reference if position is not None else None,
+            location_description=position.description if position is not None else None,
+            location_x=position.x if position is not None else None,
+            location_y=position.y if position is not None else None,
+            location_z=position.z if position is not None else None,
         ),
         identifier=block_id,
     )
@@ -485,6 +534,11 @@ def create_description(
             issuer_of_parent_specimen_identifier=None,
             parent_specimen_type=block_type,
             processing=None,
+            location_reference=None,
+            location_description=None,
+            location_x=None,
+            location_y=None,
+            location_z=None,
         ),
         identifier=slide_sample_id,
     )
@@ -564,6 +618,15 @@ def create_code_item(name: Code, value: Union[Code, ConceptCode]):
     dataset = Dataset()
     dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
     dataset.ConceptCodeSequence = [create_code_dataset(value)]
+    return dataset
+
+
+def create_measurement_item(name: Code, value: Measurement):
+    dataset = Dataset()
+    dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
+    dataset.NumericValue = DSfloat(value.value)
+    dataset.FloatingPointValue = value.value
+    dataset.MeasurementUnitsCodeSequence = [create_code_dataset(value.unit)]
     return dataset
 
 
@@ -717,7 +780,7 @@ class TestSampleDicom:
         embedding: SpecimenEmbeddingMediaCode,
         block_sampling_method: SpecimenSamplingProcedureCode,
         block_type: AnatomicPathologySpecimenTypesCode,
-        position: SlideSamplePosition,
+        position: SpecimenLocalization,
         primary_anatomic_structures: Sequence[Code],
         stains: Sequence[SpecimenStainsCode],
     ):
@@ -820,9 +883,9 @@ class TestPreparationStepDicomSchema:
         serialized = schema.dump(collection_dicom)
 
         # Assert
-        assert isinstance(serialized, Dataset)
+        assert isinstance(serialized, list)
         # First item should be identifier
-        item_iterator = iter(serialized.SpecimenPreparationStepContentItemSequence)
+        item_iterator = iter(serialized)
         identifier_item = next(item_iterator)
         self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
         self.assert_item_string_equals_value(
@@ -904,7 +967,9 @@ class TestPreparationStepDicomSchema:
         schema = CollectionDicomSchema()
 
         # Act
-        deserialized = schema.load(collection_dataset)
+        deserialized = schema.load(
+            collection_dataset.SpecimenPreparationStepContentItemSequence
+        )
 
         # Assert
         assert isinstance(deserialized, CollectionDicomModel)
@@ -932,6 +997,19 @@ class TestPreparationStepDicomSchema:
             SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
         ],
     )
+    @pytest.mark.parametrize(
+        "location",
+        [
+            None,
+            SpecimenLocalization(
+                "reference",
+                "description",
+                Measurement(1, UnitCode("cm")),
+                Measurement(2, UnitCode("cm")),
+                Measurement(3, UnitCode("cm")),
+            ),
+        ],
+    )
     def test_serialize_sampling_dicom(
         self,
         sampling_dicom: SamplingDicomModel,
@@ -944,9 +1022,9 @@ class TestPreparationStepDicomSchema:
         serialized = schema.dump(sampling_dicom)
 
         # Assert
-        assert isinstance(serialized, Dataset)
+        assert isinstance(serialized, list)
         # First item should be identifier
-        item_iterator = iter(serialized.SpecimenPreparationStepContentItemSequence)
+        item_iterator = iter(serialized)
         identifier_item = next(item_iterator)
         self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
         self.assert_item_string_equals_value(
@@ -1011,7 +1089,7 @@ class TestPreparationStepDicomSchema:
                 parent_specimen_identifier_issuer_item,
                 sampling_dicom.issuer_of_parent_specimen_identifier,
             )
-        # Last item should be parent specimen type
+        # Next item should be parent specimen type
         parent_specimen_type_item = next(item_iterator)
         self.assert_item_name_equals_code(
             parent_specimen_type_item, SampleCodes.parent_specimen_type
@@ -1020,6 +1098,51 @@ class TestPreparationStepDicomSchema:
             parent_specimen_type_item,
             sampling_dicom.parent_specimen_type,
         )
+        # Next item can be location reference
+        if sampling_dicom.location_reference is not None:
+            location_reference_item = next(item_iterator)
+            self.assert_item_name_equals_code(
+                location_reference_item, SampleCodes.location_frame_of_reference
+            )
+            self.assert_item_string_equals_value(
+                location_reference_item, sampling_dicom.location_reference
+            )
+        # Next item can be location description
+        if sampling_dicom.location_description is not None:
+            location_description_item = next(item_iterator)
+            self.assert_item_name_equals_code(
+                location_description_item, SampleCodes.location_of_sampling_site
+            )
+            self.assert_item_string_equals_value(
+                location_description_item, sampling_dicom.location_description
+            )
+        # Next item can be location x
+        if sampling_dicom.location_x is not None:
+            location_x_item = next(item_iterator)
+            self.assert_item_name_equals_code(
+                location_x_item, SampleCodes.location_of_sampling_site_x
+            )
+            self.assert_item_measurement_equals_value(
+                location_x_item, sampling_dicom.location_x
+            )
+        # Next item can be location y
+        if sampling_dicom.location_y is not None:
+            location_y_item = next(item_iterator)
+            self.assert_item_name_equals_code(
+                location_y_item, SampleCodes.location_of_sampling_site_y
+            )
+            self.assert_item_measurement_equals_value(
+                location_y_item, sampling_dicom.location_y
+            )
+        # Next item can be location z
+        if sampling_dicom.location_z is not None:
+            location_z_item = next(item_iterator)
+            self.assert_item_name_equals_code(
+                location_z_item, SampleCodes.location_of_sampling_site_z
+            )
+            self.assert_item_measurement_equals_value(
+                location_z_item, sampling_dicom.location_z
+            )
         # There should be no more items
         assert next(item_iterator, None) is None
 
@@ -1047,6 +1170,19 @@ class TestPreparationStepDicomSchema:
             ],
         ],
     )
+    @pytest.mark.parametrize(
+        "location",
+        [
+            None,
+            SpecimenLocalization(
+                "reference",
+                "description",
+                Measurement(1, UnitCode("cm")),
+                Measurement(2, UnitCode("cm")),
+                Measurement(3, UnitCode("cm")),
+            ),
+        ],
+    )
     def test_deserialize_sampling_dicom(
         self, sampling_dicom: SamplingDicomModel, sampling_dataset: Dataset
     ):
@@ -1054,7 +1190,9 @@ class TestPreparationStepDicomSchema:
         schema = SamplingDicomSchema()
 
         # Act
-        deserialized = schema.load(sampling_dataset)
+        deserialized = schema.load(
+            sampling_dataset.SpecimenPreparationStepContentItemSequence
+        )
 
         # Assert
         assert isinstance(deserialized, SamplingDicomModel)
@@ -1065,6 +1203,11 @@ class TestPreparationStepDicomSchema:
         assert deserialized.description == sampling_dicom.description
         assert deserialized.fixative == sampling_dicom.fixative
         assert deserialized.embedding == sampling_dicom.embedding
+        assert deserialized.location_reference == sampling_dicom.location_reference
+        assert deserialized.location_description == sampling_dicom.location_description
+        assert deserialized.location_x == sampling_dicom.location_x
+        assert deserialized.location_y == sampling_dicom.location_y
+        assert deserialized.location_z == sampling_dicom.location_z
 
     @pytest.mark.parametrize(
         ["date_time", "description"],
@@ -1092,9 +1235,9 @@ class TestPreparationStepDicomSchema:
         serialized = schema.dump(processing_dicom)
 
         # Assert
-        assert isinstance(serialized, Dataset)
+        assert isinstance(serialized, list)
         # First item should be identifier
-        item_iterator = iter(serialized.SpecimenPreparationStepContentItemSequence)
+        item_iterator = iter(serialized)
         identifier_item = next(item_iterator)
         self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
         self.assert_item_string_equals_value(
@@ -1182,7 +1325,9 @@ class TestPreparationStepDicomSchema:
         schema = ProcessingDicomSchema()
 
         # Act
-        deserialized = schema.load(processing_dataset)
+        deserialized = schema.load(
+            processing_dataset.SpecimenPreparationStepContentItemSequence
+        )
 
         # Assert
         assert isinstance(deserialized, ProcessingDicomModel)
@@ -1222,9 +1367,9 @@ class TestPreparationStepDicomSchema:
         serialized = schema.dump(staining_dicom)
 
         # Assert
-        assert isinstance(serialized, Dataset)
+        assert isinstance(serialized, list)
         # First item should be identifier
-        item_iterator = iter(serialized.SpecimenPreparationStepContentItemSequence)
+        item_iterator = iter(serialized)
         identifier_item = next(item_iterator)
         self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
         self.assert_item_string_equals_value(
@@ -1313,7 +1458,9 @@ class TestPreparationStepDicomSchema:
         schema = StainingDicomSchema()
 
         # Act
-        deserialized = schema.load(staining_dataset)
+        deserialized = schema.load(
+            staining_dataset.SpecimenPreparationStepContentItemSequence
+        )
 
         # Assert
         assert isinstance(deserialized, StainingDicomModel)
@@ -1324,6 +1471,63 @@ class TestPreparationStepDicomSchema:
         assert deserialized.description == staining_dicom.description
         assert deserialized.fixative == staining_dicom.fixative
         assert deserialized.embedding == staining_dicom.embedding
+
+    @pytest.mark.parametrize("reference", ["reference", None])
+    @pytest.mark.parametrize("description", ["description", None])
+    @pytest.mark.parametrize("x", [Measurement(1, UnitCode("mm")), None])
+    @pytest.mark.parametrize("y", [Measurement(1, UnitCode("mm")), None])
+    @pytest.mark.parametrize("z", [Measurement(1, UnitCode("mm")), None])
+    @pytest.mark.parametrize("visual_marking", ["visual_marking", None])
+    def test_serialize_specimen_location_dicom(
+        self,
+        reference: Optional[str],
+        description: Optional[str],
+        x: Optional[Measurement],
+        y: Optional[Measurement],
+        z: Optional[Measurement],
+        visual_marking: Optional[str],
+    ):
+        # Arrange
+        location = SpecimenLocalization(
+            reference=reference,
+            description=description,
+            x=x,
+            y=y,
+            z=z,
+            visual_marking=visual_marking,
+        )
+        schema = SpecimenLocalizationDicomSchema()
+
+        # Act
+        serialized = schema.dump(location)
+
+        # Assert
+        assert isinstance(serialized, list)
+        item_iterator = iter(serialized)
+        for string, name in [
+            (reference, SampleCodes.location_frame_of_reference),
+            (description, SampleCodes.location_of_specimen),
+        ]:
+            if string is not None:
+                string_item = next(item_iterator)
+                self.assert_item_name_equals_code(string_item, name)
+                self.assert_item_string_equals_value(string_item, string)
+        for measurement, name in [
+            (x, SampleCodes.location_of_specimen_x),
+            (y, SampleCodes.location_of_specimen_y),
+            (z, SampleCodes.location_of_specimen_z),
+        ]:
+            if measurement is not None:
+                measurement_item = next(item_iterator)
+                self.assert_item_name_equals_code(measurement_item, name)
+                self.assert_item_measurement_equals_value(measurement_item, measurement)
+
+        if visual_marking is not None:
+            visual_marking_item = next(item_iterator)
+            self.assert_item_name_equals_code(
+                visual_marking_item, SampleCodes.visual_marking_of_specimen
+            )
+            self.assert_item_string_equals_value(visual_marking_item, visual_marking)
 
     def assert_item_name_equals_code(self, item: Dataset, name: Code):
         self.assert_code_dataset_equals_code(item.ConceptNameCodeSequence[0], name)
@@ -1340,6 +1544,13 @@ class TestPreparationStepDicomSchema:
         self, item: Dataset, value: Union[Code, ConceptCode]
     ):
         self.assert_code_dataset_equals_code(item.ConceptCodeSequence[0], value)
+
+    def assert_item_measurement_equals_value(self, item: Dataset, value: Measurement):
+        assert item.FloatingPointValue == value.value
+        self.assert_code_dataset_equals_code(
+            item.MeasurementUnitsCodeSequence[0],
+            value.unit,
+        )
 
     def assert_code_dataset_equals_code(
         self, item: Dataset, code: Union[Code, ConceptCode]

@@ -20,50 +20,18 @@ from marshmallow import ValidationError, fields
 import numpy as np
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
-from wsidicom.conceptcode import CidConceptCode, CidConceptCodeType
+from wsidicom.conceptcode import CidConceptCode, CidConceptCodeType, UnitCode
 from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.metadata.optical_path import LutDataType
 
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
-    SlideSamplePosition,
-    Specimen,
+    Measurement,
     SpecimenIdentifier,
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
 )
-
-
-class SlideSamplePositionJsonField(fields.Field):
-    def _serialize(
-        self, value: Optional[Union[str, SlideSamplePosition]], attr, obj, **kwargs
-    ) -> Optional[Union[str, Dict]]:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            return value
-        return {
-            "x": value.x,
-            "y": value.y,
-            "z": value.z,
-        }
-
-    def _deserialize(
-        self,
-        value: Union[str, Dict],
-        attr: Optional[str],
-        data: Optional[Mapping[str, Any]],
-        **kwargs,
-    ) -> Union[str, SlideSamplePosition]:
-        try:
-            if isinstance(value, str):
-                return value
-            return SlideSamplePosition(value["x"], value["y"], value["z"])
-        except ValueError as error:
-            raise ValidationError(
-                "Could not deserialize slide sample position."
-            ) from error
 
 
 class IssuerOfIdentifierJsonField(fields.Field):
@@ -96,7 +64,6 @@ class IssuerOfIdentifierJsonField(fields.Field):
         try:
             identifier = value["identifier"]
             if "issuer_type" in value:
-                print(value["issuer_type"], type(value["issuer_type"]))
                 issuer_type = UniversalIssuerType(value["issuer_type"])
                 local_identifier = value.get("local_identifier", None)
                 return UniversalIssuerOfIdentifier(
@@ -104,7 +71,6 @@ class IssuerOfIdentifierJsonField(fields.Field):
                 )
             return LocalIssuerOfIdentifier(identifier)
         except ValueError as error:
-            print(error)
             raise ValidationError(
                 "Could not deserialize issuer of identifier."
             ) from error
@@ -418,3 +384,24 @@ class FileLoadingField(fields.Field):
             raise ValidationError(f"File {path} does not exist or is not a file.")
         with open(path, "rb") as file:
             return file.read()
+
+
+class MeasurementJsonField(fields.Field):
+    def _serialize(
+        self, value: Optional[Measurement], attr, obj, **kwargs
+    ) -> Optional[Dict[str, Any]]:
+        if value is None:
+            return None
+        return {"value": value.value, "unit": value.unit.value}
+
+    def _deserialize(
+        self,
+        value: Dict[str, Any],
+        attr: Optional[str],
+        data: Optional[Mapping[str, Any]],
+        **kwargs,
+    ) -> Measurement:
+        try:
+            return Measurement(value["value"], UnitCode.from_unit(value["unit"]))
+        except ValueError as error:
+            raise ValidationError("Could not deserialize measurement.") from error

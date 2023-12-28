@@ -24,7 +24,6 @@ the `SpecimenJsonSchema`, which serializes all the contained specimens individua
 deserialization, recreates the specimen object linkage in the `sampled_from` attribute.
 """
 import dataclasses
-import datetime
 from typing import (
     Any,
     Dict,
@@ -47,6 +46,10 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
 )
+from wsidicom.metadata.json_schema.sample.model import (
+    SerializedSampling,
+    SerializedSamplingChainConstraint,
+)
 
 from wsidicom.metadata.sample import (
     Collection,
@@ -58,15 +61,17 @@ from wsidicom.metadata.sample import (
     Sample,
     SampledSpecimen,
     Sampling,
+    SamplingLocation,
     SlideSample,
     Specimen,
     SpecimenIdentifier,
+    SpecimenLocalization,
     Staining,
 )
 from wsidicom.metadata.json_schema.fields import (
     CodeJsonField,
     JsonFieldFactory,
-    SlideSamplePositionJsonField,
+    MeasurementJsonField,
     SpecimenIdentifierJsonField,
     UidJsonField,
 )
@@ -86,27 +91,24 @@ already be created.
 """
 
 
-@dataclasses.dataclass
-class SerializedSamplingChainConstraint:
-    """Simplified representation of a sampling chain constraint, replacing the sampling
-    with the identifier of the sampled specimen and the index of the sampling step
-    within the step sequence of the specimen."""
+class SamplingLocationJsonSchema(Schema):
+    reference = fields.String(allow_none=True)
+    description = fields.String(allow_none=True)
+    x = MeasurementJsonField(allow_none=True)
+    y = MeasurementJsonField(allow_none=True)
+    z = MeasurementJsonField(allow_none=True)
 
-    identifier: Union[str, SpecimenIdentifier]
-    sampling_step_index: int
+    @post_load
+    def post_load(self, data: Dict[str, Any], **kwargs) -> SamplingLocation:
+        return SamplingLocation(**data)
 
 
-@dataclasses.dataclass
-class SerializedSampling:
-    """Simplified representation of a `Sampling`, replacing the sampled specimen with
-    the idententifier and sampling constratins with simplified sampling constraints."""
+class SpecimenLocalizationJsonSchema(SamplingLocationJsonSchema):
+    visual_marking = fields.String(allow_none=True)
 
-    method: SpecimenSamplingProcedureCode
-    sampling_chain_constraints: Optional[
-        Sequence[SerializedSamplingChainConstraint]
-    ] = None
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
+    @post_load
+    def post_load(self, data: Dict[str, Any], **kwargs) -> SpecimenLocalization:
+        return SpecimenLocalization(**data)
 
 
 class SamplingConstraintJsonSchema(Schema):
@@ -160,6 +162,7 @@ class SamplingJsonSchema(BasePreparationStepJsonSchema):
     )
     date_time = fields.DateTime(allow_none=True)
     description = fields.String(allow_none=True)
+    location = fields.Nested(SamplingLocationJsonSchema, allow_none=True)
     _load_class = SerializedSampling
 
 
@@ -302,7 +305,9 @@ class SlideSampleJsonSchema(BaseSpecimenJsonSchema):
     anatomical_sites = fields.List(CodeJsonField(), allow_none=True)
     sampled_from = fields.Nested(SamplingConstraintJsonSchema)
     uid = UidJsonField(allow_none=True)
-    position = SlideSamplePositionJsonField(allow_none=True)
+    localization = fields.Nested(SpecimenLocalizationJsonSchema, allow_none=True)
+    short_description = fields.String(allow_none=True)
+    detailed_description = fields.String(allow_none=True)
 
     def post_load(
         self, data: Mapping[str, Any], parent: Optional[Sampling]
@@ -311,8 +316,10 @@ class SlideSampleJsonSchema(BaseSpecimenJsonSchema):
             identifier=data["identifier"],
             sampled_from=parent,
             anatomical_sites=data["anatomical_sites"],
-            uid=data.get("uid"),
-            position=data.get("position"),
+            uid=data.get("uid", None),
+            localization=data.get("localization", None),
+            short_description=data.get("short_description", None),
+            detailed_description=data.get("detailed_description", None),
         )
 
 

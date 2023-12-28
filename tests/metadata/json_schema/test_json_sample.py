@@ -13,7 +13,13 @@
 #    limitations under the License.
 
 import datetime
+from typing import Any, Dict
 
+import pytest
+from pydicom.sr.coding import Code
+from pydicom.uid import UID
+
+from tests.metadata.json_schema.helpers import assert_dict_equals_code
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     SpecimenCollectionProcedureCode,
@@ -21,33 +27,134 @@ from wsidicom.conceptcode import (
     SpecimenFixativesCode,
     SpecimenPreparationStepsCode,
     SpecimenSamplingProcedureCode,
+    UnitCode,
 )
-from tests.metadata.json_schema.helpers import assert_dict_equals_code
-
+from wsidicom.metadata.json_schema.sample.schema import (
+    ExtractedSpecimenJsonSchema,
+    PreparationStepJsonSchema,
+    SampleJsonSchema,
+    SamplingConstraintJsonSchema,
+    SerializedSampling,
+    SerializedSamplingChainConstraint,
+    SlideSampleJsonSchema,
+    SpecimenJsonSchema,
+    SpecimenLocalizationJsonSchema,
+)
 from wsidicom.metadata.sample import (
     Collection,
     Embedding,
     ExtractedSpecimen,
     Fixation,
+    Measurement,
     Processing,
     Sample,
+    SamplingLocation,
     SlideSample,
+    SpecimenLocalization,
 )
-from wsidicom.metadata.json_schema.sample import (
-    ExtractedSpecimenJsonSchema,
-    PreparationStepJsonSchema,
-    SampleJsonSchema,
-    SerializedSamplingChainConstraint,
-    SamplingConstraintJsonSchema,
-    SerializedSampling,
-    SlideSampleJsonSchema,
-    SpecimenJsonSchema,
-)
-from pydicom.sr.coding import Code
-from pydicom.uid import UID
 
 
 class TestSampleJsonSchema:
+    @pytest.mark.parametrize(
+        ["localization", "expected"],
+        [
+            (
+                SpecimenLocalization(
+                    "reference",
+                    "description",
+                    Measurement(1, UnitCode("mm")),
+                    Measurement(2, UnitCode("mm")),
+                    Measurement(3, UnitCode("mm")),
+                    "marking",
+                ),
+                {
+                    "reference": "reference",
+                    "description": "description",
+                    "x": {
+                        "value": 1,
+                        "unit": "mm",
+                    },
+                    "y": {
+                        "value": 2,
+                        "unit": "mm",
+                    },
+                    "z": {
+                        "value": 3,
+                        "unit": "mm",
+                    },
+                    "visual_marking": "marking",
+                },
+            ),
+            (
+                SpecimenLocalization(),
+                {
+                    "reference": None,
+                    "description": None,
+                    "x": None,
+                    "y": None,
+                    "z": None,
+                    "visual_marking": None,
+                },
+            ),
+        ],
+    )
+    def test_specimen_localization_serialize(
+        self, localization: SpecimenLocalization, expected: Dict[str, Any]
+    ):
+        # Arrange
+
+        # Act
+        dumped = SpecimenLocalizationJsonSchema().dump(localization)
+
+        # Assert
+        assert isinstance(dumped, dict)
+        assert dumped == expected
+
+    @pytest.mark.parametrize(
+        ["localization", "expected"],
+        [
+            (
+                {
+                    "reference": "slide",
+                    "description": "left",
+                    "x": {
+                        "value": 1,
+                        "unit": "mm",
+                    },
+                    "y": {
+                        "value": 2,
+                        "unit": "mm",
+                    },
+                    "z": {
+                        "value": 3,
+                        "unit": "mm",
+                    },
+                    "visual_marking": "marking",
+                },
+                SpecimenLocalization(
+                    "slide",
+                    "left",
+                    Measurement(1, UnitCode("mm")),
+                    Measurement(2, UnitCode("mm")),
+                    Measurement(3, UnitCode("mm")),
+                    "marking",
+                ),
+            ),
+            ({}, SpecimenLocalization()),
+        ],
+    )
+    def test_specimen_localization_deserialize(
+        self, localization: Dict[str, Any], expected: SpecimenLocalization
+    ):
+        # Arrange
+
+        # Act
+        loaded = SpecimenLocalizationJsonSchema().load(localization)
+
+        # Assert
+        assert isinstance(loaded, SpecimenLocalization)
+        assert loaded == expected
+
     def test_sampling_constraint_serialize(self, extracted_specimen: ExtractedSpecimen):
         # Arrange
         sampling_chain_constraint = extracted_specimen.sample(
@@ -96,8 +203,19 @@ class TestSampleJsonSchema:
             datetime.datetime(2023, 8, 5),
             "description",
             [sampling_1],
+            SamplingLocation(
+                "reference",
+                "description",
+                Measurement(1, UnitCode("mm")),
+                Measurement(2, UnitCode("mm")),
+                Measurement(3, UnitCode("mm")),
+            ),
         )
         assert sampling_2.date_time is not None
+        assert sampling_2.location is not None
+        assert sampling_2.location.x is not None
+        assert sampling_2.location.y is not None
+        assert sampling_2.location.z is not None
 
         # Act
         dumped = PreparationStepJsonSchema().dump(sampling_2)
@@ -111,6 +229,15 @@ class TestSampleJsonSchema:
             dumped["sampling_chain_constraints"][0]["identifier"] == specimen.identifier
         )
         assert dumped["sampling_chain_constraints"][0]["sampling_step_index"] == 0
+        assert isinstance(dumped["location"], dict)
+        assert dumped["location"]["reference"] == sampling_2.location.reference
+        assert dumped["location"]["description"] == sampling_2.location.description
+        assert dumped["location"]["x"]["value"] == sampling_2.location.x.value
+        assert dumped["location"]["x"]["unit"] == sampling_2.location.x.unit.value
+        assert dumped["location"]["y"]["value"] == sampling_2.location.y.value
+        assert dumped["location"]["y"]["unit"] == sampling_2.location.y.unit.value
+        assert dumped["location"]["z"]["value"] == sampling_2.location.z.value
+        assert dumped["location"]["z"]["unit"] == sampling_2.location.z.unit.value
 
     def test_sampling_deserialize(self):
         # Arrange
@@ -125,6 +252,22 @@ class TestSampleJsonSchema:
             ],
             "date_time": "2023-08-05T00:00:00",
             "description": "description",
+            "location": {
+                "reference": "reference",
+                "description": "description",
+                "x": {
+                    "value": 1,
+                    "unit": "mm",
+                },
+                "y": {
+                    "value": 2,
+                    "unit": "mm",
+                },
+                "z": {
+                    "value": 3,
+                    "unit": "mm",
+                },
+            },
         }
 
         # Act
@@ -143,6 +286,21 @@ class TestSampleJsonSchema:
         assert (
             loaded.sampling_chain_constraints[0].sampling_step_index
             == dumped["sampling_chain_constraints"][0]["sampling_step_index"]
+        )
+        assert isinstance(loaded.location, SamplingLocation)
+        assert loaded.location.reference == dumped["location"]["reference"]
+        assert loaded.location.description == dumped["location"]["description"]
+        assert loaded.location.x == Measurement(
+            dumped["location"]["x"]["value"],
+            UnitCode(dumped["location"]["x"]["unit"]),
+        )
+        assert loaded.location.y == Measurement(
+            dumped["location"]["y"]["value"],
+            UnitCode(dumped["location"]["y"]["unit"]),
+        )
+        assert loaded.location.z == Measurement(
+            dumped["location"]["z"]["value"],
+            UnitCode(dumped["location"]["z"]["unit"]),
         )
 
     def test_collection_serialize(self):
@@ -417,6 +575,7 @@ class TestSampleJsonSchema:
         # Arrange
         assert slide_sample.sampled_from is not None
         assert slide_sample.anatomical_sites is not None
+        assert slide_sample.localization is not None
 
         # Act
         dumped = SlideSampleJsonSchema().dump(slide_sample)
@@ -433,7 +592,20 @@ class TestSampleJsonSchema:
         )
         assert dumped["sampled_from"]["sampling_step_index"] == 0
         assert dumped["uid"] == str(slide_sample.uid)
-        assert dumped["position"] == slide_sample.position
+        assert (
+            dumped["localization"]["reference"] == slide_sample.localization.reference
+        )
+        assert (
+            dumped["localization"]["description"]
+            == slide_sample.localization.description
+        )
+        assert dumped["localization"]["x"] == slide_sample.localization.x
+        assert dumped["localization"]["y"] == slide_sample.localization.y
+        assert dumped["localization"]["z"] == slide_sample.localization.z
+        assert (
+            dumped["localization"]["visual_marking"]
+            == slide_sample.localization.visual_marking
+        )
 
     def test_slide_sample_deserialize(self):
         # Arrange
@@ -445,7 +617,7 @@ class TestSampleJsonSchema:
             ],
             "sampled_from": {"identifier": "sample", "sampling_step_index": 1},
             "uid": "1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423",
-            "position": "left",
+            "localization": {"description": "left"},
         }
 
         # Act
@@ -458,7 +630,9 @@ class TestSampleJsonSchema:
         assert isinstance(anatomical_site, Code)
         assert_dict_equals_code(dumped["anatomical_sites"][0], anatomical_site)
         assert loaded["uid"] == UID(dumped["uid"])
-        assert loaded["position"] == dumped["position"]
+        assert (
+            loaded["localization"].description == dumped["localization"]["description"]
+        )
 
     def test_full_slide_sample_serialize(self, slide_sample: SlideSample):
         # Arrange
@@ -507,7 +681,7 @@ class TestSampleJsonSchema:
                 ],
                 "sampled_from": {"identifier": "sample", "sampling_step_index": 0},
                 "uid": "1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423",
-                "position": "left",
+                "localization": {"description": "left"},
             },
             {
                 "identifier": "sample",

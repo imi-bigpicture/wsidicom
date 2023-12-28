@@ -18,11 +18,14 @@ from dataclasses import dataclass
 from typing import (
     Any,
     Dict,
+    Generic,
+    Iterable,
     List,
     Optional,
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
 )
 
@@ -41,13 +44,16 @@ from wsidicom.conceptcode import (
     SpecimenPreparationStepsCode,
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
+    dataset_to_code,
 )
 from wsidicom.metadata.dicom_schema.fields import (
     CodeDicomField,
     CodeItemDicomField,
     DateTimeItemDicomField,
+    MeasurementtemDicomField,
     IssuerOfIdentifierDicomField,
     SingleCodeSequenceField,
+    SingleItemSequenceDicomField,
     StringDicomField,
     StringItemDicomField,
     StringOrCodeItemDicomField,
@@ -60,28 +66,13 @@ from wsidicom.metadata.dicom_schema.sample.model import (
     SpecimenDescriptionDicomModel,
     StainingDicomModel,
 )
-from wsidicom.metadata.dicom_schema.schema import DicomSchema, LoadType
-
-
-def dataset_to_code(dataset: Dataset) -> Code:
-    return Code(
-        dataset.CodeValue,
-        dataset.CodingSchemeDesignator,
-        dataset.CodeMeaning,
-        dataset.get("CodingSchemeVersion", None),
-    )
-
-
-def dataset_to_type(dataset: Dataset) -> Type:
-    if "ConceptCodeSequence" in dataset:
-        return Code
-    if "TextValue" in dataset:
-        return str
-    if "DateTime" in dataset:
-        return datetime.datetime
-    if "NumericValue" in dataset:
-        return float
-    raise NotImplementedError()
+from wsidicom.metadata.dicom_schema.schema import (
+    DicomSchema,
+    ItemField,
+    ItemSequenceDicomSchema,
+    LoadType,
+)
+from wsidicom.metadata.sample import Measurement, SpecimenLocalization
 
 
 class SampleCodes:
@@ -100,16 +91,49 @@ class SampleCodes:
     using_substance: Code = codes.SCT.UsingSubstance  # type: ignore
     fixative: Code = codes.SCT.TissueFixative  # type: ignore
     embedding: Code = codes.SCT.TissueEmbeddingMedium  # type: ignore
+    location_frame_of_reference: Code = codes.DCM.PositionFrameOfReference  # type: ignore
+    location_of_sampling_site: Code = codes.DCM.LocationOfSamplingSite  # type: ignore
+    location_of_sampling_site_x: Code = codes.DCM.LocationOfSamplingSiteXOffset  # type: ignore
+    location_of_sampling_site_y: Code = codes.DCM.LocationOfSamplingSiteYOffset  # type: ignore
+    location_of_sampling_site_z: Code = codes.DCM.LocationOfSamplingSiteZOffset  # type: ignore
+    location_of_specimen: Code = codes.DCM.LocationOfSpecimen  # type: ignore
+    location_of_specimen_x: Code = codes.DCM.LocationOfSpecimenXOffset  # type: ignore
+    location_of_specimen_y: Code = codes.DCM.LocationOfSpecimenYOffset  # type: ignore
+    location_of_specimen_z: Code = codes.DCM.LocationOfSpecimenZOffset  # type: ignore
+    visual_marking_of_specimen: Code = codes.DCM.VisualMarkingOfSpecimen  # type: ignore
 
 
-@dataclass
-class ItemField:
-    name: Code
-    value_types: Tuple[Type, ...]
-    many: bool
+class SpecimenLocalizationDicomSchema(ItemSequenceDicomSchema[SpecimenLocalization]):
+    reference = StringItemDicomField(allow_none=True)
+    description = StringItemDicomField(allow_none=True)
+    x = MeasurementtemDicomField(allow_none=True)
+    y = MeasurementtemDicomField(allow_none=True)
+    z = MeasurementtemDicomField(allow_none=True)
+    visual_marking = StringItemDicomField(allow_none=True)
+
+    @property
+    def load_type(self):
+        return SpecimenLocalization
+
+    @property
+    def item_fields(self) -> Dict[str, ItemField]:
+        return {
+            "reference": ItemField(
+                SampleCodes.location_frame_of_reference, (str,), False
+            ),
+            "description": ItemField(SampleCodes.location_of_specimen, (str,), False),
+            "x": ItemField(SampleCodes.location_of_specimen_x, (Measurement,), False),
+            "y": ItemField(SampleCodes.location_of_specimen_y, (Measurement,), False),
+            "z": ItemField(SampleCodes.location_of_specimen_z, (Measurement,), False),
+            "visual_marking": ItemField(
+                SampleCodes.visual_marking_of_specimen, (str,), False
+            ),
+        }
 
 
-class BasePreparationStepDicomSchema(DicomSchema[LoadType]):
+class BasePreparationStepDicomSchema(ItemSequenceDicomSchema[LoadType]):
+    _dump_only_fields = ["processing_type"]
+
     identifier = StringItemDicomField()
     issuer_of_identifier = StringItemDicomField(allow_none=True, load_default=None)
     date_time = DateTimeItemDicomField(allow_none=True, load_default=None)
@@ -123,82 +147,6 @@ class BasePreparationStepDicomSchema(DicomSchema[LoadType]):
     processing = CodeItemDicomField(
         load_type=SpecimenPreparationStepsCode, allow_none=True, load_default=None
     )
-
-    @property
-    @abstractmethod
-    def item_fields(self) -> Dict[str, ItemField]:
-        """Describe the fields in the schema.
-
-        Fields should be ordered as in TID 8001. The key is the python name of the
-        field, and the value is a ItemField with the DICOM code name of the field,
-        the allowed value types (tuple of one or more types), and if the field can
-        hold multiple values (e.g. is a list)."""
-        raise NotImplementedError()
-
-    @post_dump
-    def post_dump(
-        self, data: Dict[str, Union[Dataset, Sequence[Dataset]]], many: bool, **kwargs
-    ) -> Dataset:
-        """Format the preparation step content items into sequence in a dataset."""
-        dataset = Dataset()
-        dataset.SpecimenPreparationStepContentItemSequence = [
-            self._name_item(flatten_item, name)
-            for item, name in [
-                (data[key], description.name)
-                for key, description in self.item_fields.items()
-            ]
-            if item is not None
-            for flatten_item in ([item] if isinstance(item, Dataset) else item)
-        ]
-        return dataset
-
-    @pre_load
-    def pre_load(self, dataset: Dataset, many: bool, **kwargs) -> Dict[str, Any]:
-        """Parse the preparation step content items from a dataset into a dictionary."""
-        data = {
-            key: self._get_item(dataset, description)
-            for key, description in self.item_fields.items()
-        }
-        data.pop("processing_type")
-        return data
-
-    @staticmethod
-    def _name_item(item: Dataset, name: Code):
-        """Add concept name code sequence to dataset."""
-        name_dataset = Dataset()
-        name_dataset.CodeValue = name.value
-        name_dataset.CodingSchemeDesignator = name.scheme_designator
-        name_dataset.CodeMeaning = name.meaning
-        name_dataset.CodingSchemeVersion = name.scheme_version
-        item.ConceptNameCodeSequence = [name_dataset]
-        return item
-
-    def _get_item(
-        self, dataset: Dataset, field: ItemField
-    ) -> Optional[Union[Dataset, List[Dataset]]]:
-        """Get item dataset from dataset specimen preparation step content item sequence.
-
-        Parameters
-        ----------
-        dataset: Dataset
-            Dataset to get item from.
-        field:
-            Description of the field to get.
-
-        Returns
-        -------
-        Optional[Union[Dataset, List[Dataset]]]
-            Item dataset or datasets or None if not found.
-        """
-        items = (
-            item
-            for item in dataset.SpecimenPreparationStepContentItemSequence
-            if dataset_to_code(item.ConceptNameCodeSequence[0]) == field.name
-            and dataset_to_type(item) in field.value_types
-        )
-        if field.many:
-            return list(items)
-        return next(items, None)
 
 
 class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
@@ -214,6 +162,11 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
         load_default=None,
     )
     parent_specimen_type = CodeItemDicomField(AnatomicPathologySpecimenTypesCode)
+    location_reference = StringItemDicomField(allow_none=True)
+    location_description = StringItemDicomField(allow_none=True)
+    location_x = MeasurementtemDicomField(allow_none=True)
+    location_y = MeasurementtemDicomField(allow_none=True)
+    location_z = MeasurementtemDicomField(allow_none=True)
 
     @property
     def load_type(self):
@@ -247,6 +200,21 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
             ),
             "parent_specimen_type": ItemField(
                 SampleCodes.parent_specimen_type, (Code,), False
+            ),
+            "location_reference": ItemField(
+                SampleCodes.location_frame_of_reference, (str,), False
+            ),
+            "location_description": ItemField(
+                SampleCodes.location_of_sampling_site, (str,), False
+            ),
+            "location_x": ItemField(
+                SampleCodes.location_of_sampling_site_x, (Measurement,), False
+            ),
+            "location_y": ItemField(
+                SampleCodes.location_of_sampling_site_y, (Measurement,), False
+            ),
+            "location_z": ItemField(
+                SampleCodes.location_of_sampling_site_z, (Measurement,), False
             ),
             "fixative": ItemField(SampleCodes.fixative, (Code,), False),
             "embedding": ItemField(SampleCodes.embedding, (Code,), False),
@@ -353,11 +321,11 @@ class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
         }
 
 
-class PreparationStepDicomSchema(marshmallow.Schema):
+class PreparationStepDicomField(marshmallow.fields.Field):
     """Mapping step type to schema."""
 
     _type_to_schema_mapping: Dict[
-        Type[SpecimenPreparationStepDicomModel], Type[DicomSchema]
+        Type[SpecimenPreparationStepDicomModel], Type[ItemSequenceDicomSchema]
     ] = {
         SamplingDicomModel: SamplingDicomSchema,
         CollectionDicomModel: CollectionDicomSchema,
@@ -366,52 +334,71 @@ class PreparationStepDicomSchema(marshmallow.Schema):
     }
 
     """Mapping key in serialized step to schema."""
-    _processing_type_to_schema_mapping: Dict[Code, Type[DicomSchema]] = {
+    _processing_type_to_schema_mapping: Dict[Code, Type[ItemSequenceDicomSchema]] = {
         SampleCodes.sampling_method: SamplingDicomSchema,
         SampleCodes.specimen_collection: CollectionDicomSchema,
         SampleCodes.sample_processing: ProcessingDicomSchema,
         SampleCodes.staining: StainingDicomSchema,
     }
 
-    def dump(self, step: SpecimenPreparationStepDicomModel, **kwargs) -> Dataset:
+    def _serialize(
+        self,
+        step: SpecimenPreparationStepDicomModel,
+        attr: str | None,
+        obj: Any,
+        **kwargs
+    ) -> List[Dataset]:
+        """Serialize step to dataset."""
         return self._subschema_dump(step)
 
-    def load(self, dataset: Dataset, **kwargs):
-        return self._subschema_load(dataset)
+    def _deserialize(
+        self, sequence: Iterable[Dataset], attr: str | None, data: Any, **kwargs
+    ) -> SpecimenPreparationStepDicomModel:
+        """Deserialize step from dataset."""
+        return self._subschema_load(sequence)
 
-    def _subschema_load(self, dataset: Dataset) -> SpecimenPreparationStepDicomModel:
+    def _subschema_load(
+        self, sequence: Iterable[Dataset]
+    ) -> SpecimenPreparationStepDicomModel:
         """Select a schema and load and return step using the schema."""
         try:
             processing_type: Code = next(
                 dataset_to_code(item.ConceptCodeSequence[0])
-                for item in dataset.SpecimenPreparationStepContentItemSequence
+                for item in sequence
                 if dataset_to_code(item.ConceptNameCodeSequence[0])
                 == SampleCodes.processing_type
             )
             schema = self._processing_type_to_schema_mapping[processing_type]
         except (StopIteration, KeyError):
             raise NotImplementedError()
-        loaded = schema().load(dataset, many=False)
+        loaded = schema().load(sequence, many=False)
         assert isinstance(loaded, SpecimenPreparationStepDicomModel)
         return loaded
 
-    def _subschema_dump(self, step: SpecimenPreparationStepDicomModel) -> Dataset:
+    def _subschema_dump(self, step: SpecimenPreparationStepDicomModel) -> List[Dataset]:
         """Select a schema and dump the step using the schema."""
         schema = self._type_to_schema_mapping[type(step)]
         dumped = schema().dump(step, many=False)
-        assert isinstance(dumped, Dataset)
+        assert isinstance(dumped, list)
         return dumped
 
 
 class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel]):
     identifier = StringDicomField(data_key="SpecimenIdentifier")
     uid = StringDicomField(data_key="SpecimenUID")
-    # specimen_location:
+    location = marshmallow.fields.Nested(
+        SpecimenLocalizationDicomSchema(),
+        data_key="SpecimenLocalizationContentItemSequence",
+        allow_none=True,
+    )
     issuer_of_identifier = IssuerOfIdentifierDicomField(
         data_key="IssuerOfTheSpecimenIdentifierSequence", allow_none=True
     )
     steps = marshmallow.fields.List(
-        marshmallow.fields.Nested(PreparationStepDicomSchema()),
+        SingleItemSequenceDicomField(
+            PreparationStepDicomField(),
+            data_key="SpecimenPreparationStepContentItemSequence",
+        ),
         data_key="SpecimenPreparationStepContentItemSequence",
         load_default=[],
     )

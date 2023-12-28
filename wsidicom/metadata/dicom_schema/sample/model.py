@@ -47,13 +47,14 @@ from wsidicom.metadata.sample import (
     ExtractedSpecimen,
     Fixation,
     IssuerOfIdentifier,
+    Measurement,
     PreparationStep,
     Processing,
     Sample,
     SampledSpecimen,
     Sampling,
+    SamplingLocation,
     SlideSample,
-    SlideSamplePosition,
     Specimen,
     SpecimenIdentifier,
     Staining,
@@ -97,8 +98,13 @@ class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
 class SamplingDicomModel(SpecimenPreparationStepDicomModel):
     method: SpecimenSamplingProcedureCode
     parent_specimen_identifier: str
-    issuer_of_parent_specimen_identifier: Optional[str]
     parent_specimen_type: AnatomicPathologySpecimenTypesCode
+    issuer_of_parent_specimen_identifier: Optional[str]
+    location_reference: Optional[str] = None
+    location_description: Optional[str] = None
+    location_x: Optional[Measurement] = None
+    location_y: Optional[Measurement] = None
+    location_z: Optional[Measurement] = None
 
     @classmethod
     def from_step(
@@ -140,6 +146,15 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             fixative=None,
             embedding=None,
             processing=None,
+            location_reference=sampling.location.reference
+            if sampling.location is not None
+            else None,
+            location_description=sampling.location.description
+            if sampling.location is not None
+            else None,
+            location_x=sampling.location.x if sampling.location is not None else None,
+            location_y=sampling.location.y if sampling.location is not None else None,
+            location_z=sampling.location.z if sampling.location is not None else None,
         )
 
     def get_parent_identifier(self) -> Union[str, SpecimenIdentifier]:
@@ -154,6 +169,27 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
                 ),
             )
         return self.parent_specimen_identifier
+
+    @property
+    def sampling_location(self) -> Optional[SamplingLocation]:
+        if any(
+            item is not None
+            for item in (
+                self.location_reference,
+                self.location_description,
+                self.location_x,
+                self.location_y,
+                self.location_z,
+            )
+        ):
+            return SamplingLocation(
+                reference=self.location_reference,
+                description=self.location_description,
+                x=self.location_x,
+                y=self.location_y,
+                z=self.location_z,
+            )
+        return None
 
 
 @dataclass
@@ -294,6 +330,7 @@ class SpecimenDescriptionDicomModel:
     issuer_of_identifier: Optional[IssuerOfIdentifier] = None
     short_description: Optional[str] = None
     detailed_description: Optional[str] = None
+    localization: Optional[SamplingLocation] = None
 
     @classmethod
     def to_dicom_model(
@@ -312,12 +349,7 @@ class SpecimenDescriptionDicomModel:
         identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
             slide_sample.identifier
         )
-        if isinstance(slide_sample.position, str):
-            position = slide_sample.position
-        elif isinstance(slide_sample.position, SlideSamplePosition):
-            position = slide_sample.position.to_tuple()
-        else:
-            position = None
+        # TODO position
         return cls(
             identifier=identifier,
             issuer_of_identifier=issuer,
@@ -329,6 +361,7 @@ class SpecimenDescriptionDicomModel:
             # specimen_type=slide_sample.type,
             short_description=slide_sample.short_description,
             detailed_description=slide_sample.detailed_description,
+            localization=slide_sample.localization,
         )
 
     @classmethod
@@ -619,7 +652,6 @@ class SpecimenDescriptionDicomModel:
                     else:
                         sampling_constraints = None
                     existing_specimens[parent_identifier] = parent
-
                 if isinstance(parent, Sample):
                     # If Sample create sampling with constraint
                     sampling = parent.sample(
@@ -627,6 +659,7 @@ class SpecimenDescriptionDicomModel:
                         date_time=step.date_time,
                         description=step.description,
                         sampling_chain_constraints=sampling_constraints,
+                        location=step.sampling_location,
                     )
                 else:
                     # Extracted specimen can not have constraint
@@ -634,6 +667,7 @@ class SpecimenDescriptionDicomModel:
                         method=step.method,
                         date_time=step.date_time,
                         description=step.description,
+                        location=step.sampling_location,
                     )
 
                 samplings.append(sampling)

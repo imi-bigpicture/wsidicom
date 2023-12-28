@@ -4,11 +4,13 @@ from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DSfloat
 import pytest
+from tests.metadata.dicom_schema.test_dicom_sample import create_code_dataset
+from wsidicom.conceptcode import UnitCode
 
 from wsidicom.metadata.dicom_schema.fields import (
     CodeItemDicomField,
     DateTimeItemDicomField,
-    FloatContentItemDicomField,
+    MeasurementtemDicomField,
     IssuerOfIdentifierDicomField,
     StringItemDicomField,
     StringOrCodeItemDicomField,
@@ -16,6 +18,7 @@ from wsidicom.metadata.dicom_schema.fields import (
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
+    Measurement,
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
 )
@@ -114,31 +117,46 @@ class TestDicomFields:
     def test_float_content_item_dicom_field_serialize(self):
         # Arrange
         value = 1.0
-        field = FloatContentItemDicomField(Code("1234", "DCM", "Test Unit"))
+        unit = UnitCode("mm", "UCUM", "mm")
+        measurement = Measurement(value, unit)
+        field = MeasurementtemDicomField()
 
         # Act
-        serialized = field.serialize("attribute", {"attribute": value})
+        serialized = field.serialize("attribute", {"attribute": measurement})
 
         # Assert
         assert isinstance(serialized, Dataset)
         assert "NumericValue" in serialized
-        assert serialized.NumericValue == DSfloat(value)
+        assert serialized.NumericValue == DSfloat(measurement.value)
         assert "FloatingPointValue" in serialized
-        assert serialized.FloatingPointValue == value
+        assert serialized.FloatingPointValue == measurement.value
+        assert "MeasurementUnitsCodeSequence" in serialized
+        assert serialized.MeasurementUnitsCodeSequence[0].CodeValue == unit.value
+        assert (
+            serialized.MeasurementUnitsCodeSequence[0].CodingSchemeDesignator
+            == unit.scheme_designator
+        )
+        assert serialized.MeasurementUnitsCodeSequence[0].CodeMeaning == unit.meaning
 
     def test_float_content_item_dicom_field_deserialize(self):
         # Arrange
+        value = 1.0
+        unit = Code("1234", "DCM", "Test Unit")
         dataset = Dataset()
         dataset.NumericValue = DSfloat(1.0)
         dataset.FloatingPointValue = 1.0
-        field = FloatContentItemDicomField(Code("1234", "DCM", "Test Unit"))
+        unit_dataset = create_code_dataset(unit)
+        dataset.MeasurementUnitsCodeSequence = [unit_dataset]
+
+        field = MeasurementtemDicomField()
 
         # Act
         deserialized = field.deserialize(dataset, "attribute")
 
         # Assert
-        assert isinstance(deserialized, float)
-        assert deserialized == 1.0
+        assert isinstance(deserialized, Measurement)
+        assert deserialized.value == value
+        assert deserialized.unit == unit
 
     @pytest.mark.parametrize("value", ["test", Code("1234", "DCM", "Test Code")])
     def test_string_or_code_item_dicom_field_serialize(self, value: Union[str, Code]):

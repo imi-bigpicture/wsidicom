@@ -29,6 +29,7 @@ from wsidicom.conceptcode import (
     SpecimenPreparationStepsCode,
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
+    UnitCode,
 )
 
 
@@ -131,6 +132,62 @@ class UniversalIssuerOfIdentifier(IssuerOfIdentifier):
         return identifier
 
 
+@dataclass
+class Measurement:
+    value: float
+    unit: UnitCode
+
+
+@dataclass
+class SamplingLocation:
+    """The location of a sampling.
+
+    Parameters
+    ----------
+    reference: Optinal[str] = None
+        Description of coordinate system and origin reference point used for the
+        location.
+    description: Optional[str] = None
+        Description of the location.
+    x: Optional[Measurement] = None
+        The x-coordinate of the location.
+    y: Optional[Measurement] = None
+        The y-coordinate of the location.
+    z: Optional[Measurement] = None
+        The z-coordinate of the location.
+    """
+
+    reference: Optional[str] = None
+    description: Optional[str] = None
+    x: Optional[Measurement] = None
+    y: Optional[Measurement] = None
+    z: Optional[Measurement] = None
+
+
+@dataclass
+class SpecimenLocalization(SamplingLocation):
+    """The location of a specimen.
+
+    Parameters
+    ----------
+    reference: Optinal[str] = None
+        Description of coordinate system and origin reference point used for the
+        location.
+    description: Optional[str] = None
+        Description of the location.
+    x: Optional[Measurement] = None
+        The x-coordinate of the location.
+    y: Optional[Measurement] = None
+        The y-coordinate of the location.
+    z: Optional[Measurement] = None
+        The z-coordinate of the location.
+    visual_marking: Optional[str] = None
+        Description of visual marking of the specimen, for example ink or shape.
+    """
+
+    visual_marking: Optional[str] = None
+
+
 @dataclass(unsafe_hash=True)
 class SpecimenIdentifier:
     """A specimen identifier including an optional issuer."""
@@ -194,6 +251,7 @@ class Sampling(PreparationStep):
     sampling_chain_constraints: Optional[Sequence["Sampling"]] = None
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
+    location: Optional[SamplingLocation] = None
 
 
 @dataclass
@@ -396,6 +454,7 @@ class ExtractedSpecimen(Specimen):
         method: SpecimenSamplingProcedureCode,
         date_time: Optional[datetime.datetime] = None,
         description: Optional[str] = None,
+        location: Optional[SamplingLocation] = None,
     ) -> Sampling:
         """Create a sampling from the specimen that can be used to create a new sample."""
         sampling = Sampling(
@@ -404,6 +463,7 @@ class ExtractedSpecimen(Specimen):
             sampling_chain_constraints=None,
             date_time=date_time,
             description=description,
+            location=location,
         )
         self.add(sampling)
         return sampling
@@ -432,6 +492,7 @@ class Sample(SampledSpecimen):
         date_time: Optional[datetime.datetime] = None,
         description: Optional[str] = None,
         sampling_chain_constraints: Optional[Sequence[Sampling]] = None,
+        location: Optional[SamplingLocation] = None,
     ) -> Sampling:
         """Create a sampling from the specimen that can be used to create a new sample."""
         self._check_sampling_constraints(sampling_chain_constraints)
@@ -444,21 +505,10 @@ class Sample(SampledSpecimen):
             sampling_chain_constraints=sampling_chain_constraints,
             date_time=date_time,
             description=description,
+            location=location,
         )
         self.add(sampling)
         return sampling
-
-
-@dataclass
-class SlideSamplePosition:
-    """The position of a sample on a slide. `x` and `y` in mm and `z` in um."""
-
-    x: float
-    y: float
-    z: float
-
-    def to_tuple(self) -> Tuple[float, float, float]:
-        return (self.x, self.y, self.z)
 
 
 @dataclass
@@ -469,7 +519,7 @@ class SlideSample(SampledSpecimen):
     anatomical_sites: Optional[Sequence[Code]] = None
     sampled_from: Optional[Sampling] = None
     uid: Optional[UID] = None
-    position: Optional[Union[str, SlideSamplePosition]] = None
+    localization: Optional[SpecimenLocalization] = None
     steps: List[PreparationStep] = field(default_factory=list)
     short_description: Optional[str] = None
     detailed_description: Optional[str] = None

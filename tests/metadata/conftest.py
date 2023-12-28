@@ -22,7 +22,6 @@ from pydicom.uid import UID
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     Code,
-    ConceptCode,
     IlluminationCode,
     IlluminationColorCode,
     ImagePathFilterCode,
@@ -31,7 +30,6 @@ from wsidicom.conceptcode import (
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
-    SpecimenPreparationProcedureCode,
     SpecimenPreparationStepsCode,
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
@@ -63,14 +61,16 @@ from wsidicom.metadata.sample import (
     Embedding,
     ExtractedSpecimen,
     Fixation,
+    Measurement,
     PreparationStep,
     Processing,
     Sample,
     Sampling,
     SlideSample,
-    SlideSamplePosition,
+    SpecimenLocalization,
     SpecimenIdentifier,
     Staining,
+    SamplingLocation,
 )
 
 
@@ -260,6 +260,7 @@ def sampling(
     extracted_specimen: ExtractedSpecimen,
     date_time: datetime.datetime,
     description: str,
+    location: SamplingLocation,
 ):
     yield Sampling(
         extracted_specimen,
@@ -267,6 +268,7 @@ def sampling(
         [],
         date_time=date_time,
         description=description,
+        location=location,
     )
 
 
@@ -336,7 +338,7 @@ def slide_sample(sample: Sample):
             "Sectioning to slide",
         ),
         uid=UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
-        position="left",
+        localization=SpecimenLocalization(description="left"),
     )
 
 
@@ -407,7 +409,7 @@ def slide():
             [part_1.samplings[0]],
         ),
         UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
-        SlideSamplePosition(0, 0, 0),
+        SpecimenLocalization(description="left"),
     )
 
     sample_2 = SlideSample(
@@ -420,7 +422,7 @@ def slide():
             [part_2.samplings[0]],
         ),
         UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445424"),
-        position=SlideSamplePosition(10, 0, 0),
+        SpecimenLocalization(description="right"),
     )
 
     stainings = [

@@ -36,11 +36,12 @@ from pydicom.multival import MultiValue
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DA, DT, TM, DSfloat, PersonName
 
-from wsidicom.conceptcode import ConceptCode
+from wsidicom.conceptcode import ConceptCode, UnitCode
 from wsidicom.geometry import Orientation, PointMm
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
+    Measurement,
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
 )
@@ -535,28 +536,35 @@ class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime]):
         return DT(dataset.DateTime)
 
 
-class FloatContentItemDicomField(ContentItemDicomField[float]):
-    def __init__(self, unit: Code, **kwargs):
-        self._unit = unit
-        super().__init__(**kwargs)
-
+class MeasurementtemDicomField(ContentItemDicomField[Measurement]):
     def _serialize(
-        self, value: Optional[float], attr: Optional[str], obj: Any, **kwargs
+        self, value: Optional[Measurement], attr: Optional[str], obj: Any, **kwargs
     ) -> Optional[Dataset]:
         if value is None:
             return None
         dataset = Dataset()
-        dataset.NumericValue = DSfloat(value)
-        dataset.FloatingPointValue = value
+        dataset.NumericValue = DSfloat(value.value)
+        dataset.FloatingPointValue = value.value
         unit_dataset = Dataset()
-        unit_dataset.CodeValue = self._unit.value
-        unit_dataset.CodingSchemeDesignator = self._unit.scheme_designator
-        unit_dataset.CodeMeaning = self._unit.meaning
-        unit_dataset.CodingSchemeVersion = self._unit.scheme_version
+        unit_dataset.CodeValue = value.unit.value
+        unit_dataset.CodingSchemeDesignator = value.unit.scheme_designator
+        unit_dataset.CodeMeaning = value.unit.meaning
+        if value.unit.scheme_version is not None:
+            unit_dataset.CodingSchemeVersion = value.unit.scheme_version
         dataset.MeasurementUnitsCodeSequence = [unit_dataset]
         return dataset
 
     def _deserialize(self, dataset: Dataset, attr: Optional[str], obj: Any, **kwargs):
         if hasattr(dataset, "FloatingPointValue"):
-            return dataset.FloatingPointValue
-        return DSfloat(dataset.NumericValue)
+            value = dataset.FloatingPointValue
+        else:
+            value = DSfloat(dataset.NumericValue)
+            assert isinstance(value, float)
+        unit_dataset = dataset.MeasurementUnitsCodeSequence[0]
+        unit = UnitCode(
+            value=unit_dataset.CodeValue,
+            scheme_designator=unit_dataset.CodingSchemeDesignator,
+            meaning=unit_dataset.CodeMeaning,
+            scheme_version=unit_dataset.get("CodingSchemeVersion", None),
+        )
+        return Measurement(value=value, unit=unit)

@@ -304,7 +304,13 @@ class UnitCode(SingleConceptCode):
             Code created from meaning.
 
         """
-        return Code(value=unit, scheme_designator="UCUM", meaning=unit)
+        if unit == "1":
+            meaning = "unary"
+        elif unit == "{ratio}":
+            meaning = "ratio"
+        else:
+            meaning = unit
+        return Code(value=unit, scheme_designator="UCUM", meaning=meaning)
 
     @classmethod
     def meanings(cls) -> List[str]:
@@ -478,3 +484,12 @@ class ConceptNameCode(SingleConceptCode):
     @classmethod
     def list(cls) -> List[str]:
         return []
+
+
+def dataset_to_code(dataset: Dataset) -> Code:
+    return Code(
+        dataset.CodeValue,
+        dataset.CodingSchemeDesignator,
+        dataset.CodeMeaning,
+        dataset.get("CodingSchemeVersion", None),
+    )

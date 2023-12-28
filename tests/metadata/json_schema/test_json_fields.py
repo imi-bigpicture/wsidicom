@@ -19,70 +19,72 @@ from pydicom.sr.coding import Code
 from pydicom.uid import UID
 
 from tests.metadata.json_schema.helpers import assert_dict_equals_code
-from wsidicom.conceptcode import IlluminationColorCode
+from wsidicom.conceptcode import IlluminationColorCode, UnitCode
 from wsidicom.geometry import PointMm
 from wsidicom.metadata.json_schema.fields import (
     CodeJsonField,
     JsonFieldFactory,
     PointMmJsonField,
-    SlideSamplePositionJsonField,
     SpecimenIdentifierJsonField,
     StringOrCodeJsonField,
     UidJsonField,
+    MeasurementJsonField,
 )
 from wsidicom.metadata.sample import (
     LocalIssuerOfIdentifier,
-    SlideSamplePosition,
     SpecimenIdentifier,
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
+    Measurement,
 )
 
 
 class TestFields:
     @pytest.mark.parametrize(
-        "slide_sample_position", ["position", SlideSamplePosition(1, 2, 3)]
+        ["measurement", "expected"],
+        [
+            (
+                Measurement(1.0, UnitCode("mm", "UCUM", "mm")),
+                {"value": 1.0, "unit": "mm"},
+            ),
+            (Measurement(1.0, UnitCode("m", "UCUM", "m")), {"value": 1.0, "unit": "m"}),
+        ],
     )
-    def test_slide_sample_position_serialize(
-        self, slide_sample_position: Union[str, SlideSamplePosition]
+    def test_measurement_serialize(
+        self, measurement: Measurement, expected: Dict[str, Any]
     ):
         # Arrange
 
         # Act
-        dumped = SlideSamplePositionJsonField()._serialize(
-            slide_sample_position, None, None
-        )
+        dumped = MeasurementJsonField()._serialize(measurement, None, None)
 
         # Assert
-        if isinstance(slide_sample_position, str):
-            assert dumped == slide_sample_position
-        else:
-            assert isinstance(dumped, dict)
-            assert dumped["x"] == slide_sample_position.x
-            assert dumped["y"] == slide_sample_position.y
-            assert dumped["z"] == slide_sample_position.z
+        assert isinstance(dumped, dict)
+        assert dumped["value"] == measurement.value
+        assert dumped["unit"] == measurement.unit.value
 
     @pytest.mark.parametrize(
-        "slide_sample_position", ["position", {"x": 1, "y": 2, "z": 3}]
+        ["measurement", "expected"],
+        [
+            (
+                {"value": 1.0, "unit": "mm"},
+                Measurement(1.0, UnitCode("mm", "UCUM", "mm")),
+            ),
+            ({"value": 1.0, "unit": "m"}, Measurement(1.0, UnitCode("m", "UCUM", "m"))),
+        ],
     )
-    def test_slide_sample_position_deserialize(
-        self, slide_sample_position: Union[str, Dict[str, float]]
+    def test_measurement_deserialize(
+        self, measurement: Dict[str, Any], expected: Measurement
     ):
         # Arrange
 
         # Act
-        loaded = SlideSamplePositionJsonField()._deserialize(
-            slide_sample_position, None, None
-        )
+        loaded = MeasurementJsonField()._deserialize(measurement, None, None)
 
         # Assert
-        if isinstance(slide_sample_position, str):
-            assert loaded == slide_sample_position
-        else:
-            assert isinstance(loaded, SlideSamplePosition)
-            assert loaded.x == slide_sample_position["x"]
-            assert loaded.y == slide_sample_position["y"]
-            assert loaded.z == slide_sample_position["z"]
+        assert isinstance(loaded, Measurement)
+        assert loaded.value == measurement["value"]
+        assert loaded.unit.value == measurement["unit"]
 
     @pytest.mark.parametrize(
         "identifier",

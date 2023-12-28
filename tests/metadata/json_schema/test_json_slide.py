@@ -14,7 +14,6 @@
 
 from typing import Any, Dict
 from tests.metadata.json_schema.helpers import assert_dict_equals_code
-from wsidicom.metadata.sample import SlideSamplePosition
 from wsidicom.metadata.json_schema.slide import SlideJsonSchema
 from wsidicom.metadata.slide import Slide
 from wsidicom.conceptcode import SpecimenStainsCode
@@ -23,13 +22,19 @@ from wsidicom.conceptcode import SpecimenStainsCode
 class TestSlideJsonSchema:
     def test_slide_serialize(self, slide: Slide):
         # Arrange
+        assert slide.stainings is not None
+        assert slide.samples is not None
+        sample = slide.samples[0]
+        assert sample.anatomical_sites is not None
+        assert sample.sampled_from is not None
+        assert sample.localization is not None
+        assert sample.localization.description is not None
+        block_1 = sample.sampled_from.specimen
 
         # Act
         dumped = SlideJsonSchema().dump(slide)
 
         # Assert
-        assert slide.stainings is not None
-        assert slide.samples is not None
         assert isinstance(dumped, dict)
         assert dumped["identifier"] == slide.identifier
         for index, staining in enumerate(slide.stainings):
@@ -40,21 +45,16 @@ class TestSlideJsonSchema:
                     dumped_staining["substances"][stain_index], stain
                 )
 
-        sample = slide.samples[0]
-        assert isinstance(sample.position, SlideSamplePosition)
         dumped_sample = dumped["samples"][0]
         assert dumped_sample["identifier"] == sample.identifier
-        assert sample.anatomical_sites is not None
         assert_dict_equals_code(
             dumped_sample["anatomical_sites"][0], sample.anatomical_sites[0]
         )
         assert dumped_sample["uid"] == str(sample.uid)
-        assert dumped_sample["position"]["x"] == sample.position.x
-        assert dumped_sample["position"]["y"] == sample.position.y
-        assert dumped_sample["position"]["z"] == sample.position.z
-
-        assert sample.sampled_from is not None
-        block_1 = sample.sampled_from.specimen
+        assert (
+            dumped_sample["localization"]["description"]
+            == sample.localization.description
+        )
         dumped_block_1 = dumped["samples"][1]
         assert dumped_block_1["identifier"] == block_1.identifier
         assert_dict_equals_code(dumped_block_1["type"], block_1.type)
