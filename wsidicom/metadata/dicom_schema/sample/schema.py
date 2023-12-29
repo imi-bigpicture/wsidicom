@@ -13,24 +13,15 @@
 #    limitations under the License.
 
 import datetime
-from abc import abstractmethod
-from dataclasses import dataclass
 from typing import (
     Any,
     Dict,
-    Generic,
     Iterable,
     List,
-    Optional,
-    Sequence,
-    Tuple,
     Type,
-    TypeVar,
-    Union,
 )
 
 import marshmallow
-from marshmallow import post_dump, pre_load
 from pydicom import Dataset
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code

@@ -35,10 +35,10 @@ from wsidicom.metadata.dicom_schema.sample.model import (
     CollectionDicomModel,
     SpecimenPreparationStepDicomModel,
     ProcessingDicomModel,
-    SpecimenDescriptionDicomModel,
     StainingDicomModel,
     SamplingDicomModel,
 )
+from wsidicom.metadata.dicom_schema.sample.parser import SpecimenDicomParser
 from wsidicom.metadata.dicom_schema.sample.schema import (
     CollectionDicomSchema,
     ProcessingDicomSchema,
@@ -816,9 +816,7 @@ class TestSampleDicom:
             schema.load(description)
             for description in dataset.SpecimenDescriptionSequence
         ]
-        slide_samples, stainings = SpecimenDescriptionDicomModel.from_dicom_model(
-            models
-        )
+        slide_samples, stainings = SpecimenDicomParser().parse_descriptions(models)
 
         # Assert
         assert slide_samples is not None

@@ -61,9 +61,9 @@ from wsidicom.metadata.json_schema.sample.model import (
     SamplingConstraintJsonModel,
     SamplingJsonModel,
     SlideSampleJsonModel,
-    SpecimenFactory,
     SpecimenJsonModel,
 )
+from wsidicom.metadata.json_schema.sample.parser import SpecimenJsonParser
 from wsidicom.metadata.sample import (
     Collection,
     Embedding,
@@ -362,8 +362,8 @@ class SpecimenJsonSchema(Schema):
             loaded = [self._subschema_load(data)]
         else:
             loaded = [self._subschema_load(item) for item in data]
-        specimen_factory = SpecimenFactory(loaded)
-        return specimen_factory.create_specimens()
+        specimen_parser = SpecimenJsonParser(loaded)
+        return specimen_parser.create_specimens()
 
     @classmethod
     def _get_samplings(

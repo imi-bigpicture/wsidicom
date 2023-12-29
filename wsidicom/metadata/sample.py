@@ -23,6 +23,7 @@ from pydicom.sr.coding import Code
 from pydicom.uid import UID, generate_uid
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
+    ContainerTypeCode,
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
@@ -337,10 +338,12 @@ class Specimen(metaclass=ABCMeta):
         identifier: Union[str, SpecimenIdentifier],
         type: AnatomicPathologySpecimenTypesCode,
         steps: Sequence[PreparationStep],
+        container: Optional[ContainerTypeCode] = None,
     ):
         self.identifier = identifier
         self.type = type
         self.steps = list(steps)
+        self.container = container
 
     @property
     def samplings(self) -> List[Sampling]:
@@ -362,8 +365,9 @@ class SampledSpecimen(Specimen, metaclass=ABCMeta):
         type: AnatomicPathologySpecimenTypesCode,
         sampled_from: Optional[Union[Sampling, Sequence[Sampling]]],
         steps: Sequence[PreparationStep],
+        container: Optional[ContainerTypeCode] = None,
     ):
-        super().__init__(identifier, type, steps)
+        super().__init__(identifier, type, steps, container)
         if sampled_from is None:
             sampled_from = []
         elif isinstance(sampled_from, Sampling):
@@ -419,6 +423,7 @@ class ExtractedSpecimen(Specimen):
     type: AnatomicPathologySpecimenTypesCode
     extraction_step: Optional[Collection] = None
     steps: List[PreparationStep] = field(default_factory=list)
+    container: Optional[ContainerTypeCode] = None
 
     def __post_init__(self):
         if self.extraction_step is not None:
@@ -434,7 +439,12 @@ class ExtractedSpecimen(Specimen):
             )
             if extraction_step is not None:
                 self.extraction_step = extraction_step
-        super().__init__(identifier=self.identifier, type=self.type, steps=self.steps)
+        super().__init__(
+            identifier=self.identifier,
+            type=self.type,
+            steps=self.steps,
+            container=self.container,
+        )
 
     def add(self, step: PreparationStep) -> None:
         if isinstance(step, Collection) and len(self.steps) != 0:
@@ -469,6 +479,7 @@ class Sample(SampledSpecimen):
     type: AnatomicPathologySpecimenTypesCode
     sampled_from: Sequence[Sampling]
     steps: Sequence[PreparationStep] = field(default_factory=list)
+    container: Optional[ContainerTypeCode] = None
 
     def __post_init__(self):
         super().__init__(
@@ -476,6 +487,7 @@ class Sample(SampledSpecimen):
             type=self.type,
             sampled_from=self.sampled_from,
             steps=self.steps,
+            container=self.container,
         )
 
     def sample(
@@ -522,6 +534,7 @@ class SlideSample(SampledSpecimen):
             type=AnatomicPathologySpecimenTypesCode("Slide"),
             sampled_from=self.sampled_from,
             steps=self.steps,
+            container=ContainerTypeCode("Microscope slide"),
         )
 
     @cached_property

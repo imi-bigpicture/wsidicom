@@ -20,6 +20,8 @@ from wsidicom.conceptcode import ContainerTypeCode
 from wsidicom.metadata.defaults import defaults
 
 from wsidicom.metadata.defaults import Defaults
+from wsidicom.metadata.dicom_schema.sample.formatter import SpecimenDicomFormatter
+from wsidicom.metadata.dicom_schema.sample.parser import SpecimenDicomParser
 from wsidicom.metadata.dicom_schema.schema import DicomSchema
 from wsidicom.metadata.dicom_schema.fields import (
     DefaultingDicomField,
@@ -27,7 +29,6 @@ from wsidicom.metadata.dicom_schema.fields import (
     StringDicomField,
 )
 from wsidicom.metadata.dicom_schema.sample import (
-    SpecimenDescriptionDicomModel,
     SpecimenDescriptionDicomSchema,
 )
 from wsidicom.metadata.sample import SlideSample
@@ -72,7 +73,7 @@ class SlideDicomSchema(DicomSchema[Slide]):
         else:
             samples = slide.samples
         dicom_samples = [
-            SpecimenDescriptionDicomModel.to_dicom_model(slide_sample, slide.stainings)
+            SpecimenDicomFormatter.to_dicom(slide_sample, slide.stainings)
             for slide_sample in samples
         ]
 
@@ -89,7 +90,7 @@ class SlideDicomSchema(DicomSchema[Slide]):
         dicom_samples = data.get("samples", None)
         if dicom_samples is not None:
             try:
-                samples, stainings = SpecimenDescriptionDicomModel.from_dicom_model(
+                samples, stainings = SpecimenDicomParser().parse_descriptions(
                     dicom_samples
                 )
 

@@ -20,9 +20,6 @@ import datetime
 from dataclasses import dataclass
 
 from typing import (
-    Callable,
-    Dict,
-    Iterable,
     List,
     Optional,
     Sequence,
@@ -37,7 +34,6 @@ from wsidicom.metadata.sample import (
     ExtractedSpecimen,
     PreparationStep,
     Sample,
-    SampledSpecimen,
     SamplingLocation,
     SlideSample,
     Specimen,
@@ -46,32 +42,6 @@ from wsidicom.metadata.sample import (
     Sampling,
     Collection,
 )
-
-
-class SpecimenDictionary(UserDict[Union[str, SpecimenIdentifier], Specimen]):
-    """Dictionary for specimens that creates missing specimens when accessed."""
-
-    def __init__(
-        self,
-        create_missing: Callable[[Union[str, SpecimenIdentifier]], Specimen],
-        *args,
-        **kwargs,
-    ):
-        """Initialize dictionary.
-
-        Parameters
-        ----------
-        create_missing: Callable[[Union[str, SpecimenIdentifier]], Specimen]
-            Function that creates a specimen for a given identifier.
-        """
-        super().__init__(*args, **kwargs)
-        self._create_missing = create_missing
-
-    def __missing__(self, key: Union[str, SpecimenIdentifier]) -> Specimen:
-        """Create missing specimen."""
-        specimen = self._create_missing(key)
-        self[key] = specimen
-        return specimen
 
 
 @dataclass
@@ -93,13 +63,15 @@ class SamplingConstraintJsonModel:
 
     def from_json_model(
         self,
-        specimens: SpecimenDictionary,
+        specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
     ) -> Sampling:
         """Create sampling from json model.
 
         Parameters
         ----------
-        specimens: SpecimenDictionary
+        specimens: UserDict[
+            Union[str, SpecimenIdentifier], Specimen
+        ]
             Dictionary providing specimens.
 
         Returns
@@ -125,7 +97,7 @@ class SamplingJsonModel:
     def from_json_model(
         self,
         specimen: Specimen,
-        specimens: SpecimenDictionary,
+        specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
     ) -> Sampling:
         """Create sampling from json model.
 
@@ -133,7 +105,9 @@ class SamplingJsonModel:
         ----------
         specimen: Specimen
             The specimen that has been sampled.
-        specimens: SpecimenDictionary
+        specimens: UserDict[
+            Union[str, SpecimenIdentifier], Specimen
+        ]
             Dictionary providing specimens.
 
         Returns
@@ -152,14 +126,16 @@ class SamplingJsonModel:
 
     def _get_sampling_constraints(
         self,
-        specimens: SpecimenDictionary,
+        specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
     ) -> Optional[List[Sampling]]:
         """
         Get list of constraint sampling this sampling.
 
         Parameters
         ---------
-        specimens: SpecimenDictionary
+        specimens: UserDict[
+            Union[str, SpecimenIdentifier], Specimen
+        ]
             Dictionary providing specimens.
 
         Returns
@@ -183,12 +159,16 @@ class SpecimenJsonModel:
     steps: List[Union[PreparationStep, SamplingJsonModel]]
 
     @abstractmethod
-    def from_json_model(self, specimens: SpecimenDictionary) -> Specimen:
+    def from_json_model(
+        self, specimens: UserDict[Union[str, SpecimenIdentifier], Specimen]
+    ) -> Specimen:
         """Return specimen created from this json model.
 
         Parameters
         ----------
-        specimens: SpecimenDictionary
+        specimens: UserDict[
+            Union[str, SpecimenIdentifier], Specimen
+        ]
             Dictionary providing specimens.
 
         Returns
@@ -205,7 +185,7 @@ class ExtractedSpecimenJsonModel(SpecimenJsonModel):
 
     def from_json_model(
         self,
-        specimens: SpecimenDictionary,
+        specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
     ) -> ExtractedSpecimen:
         specimen = ExtractedSpecimen(
             identifier=self.identifier,
@@ -234,7 +214,7 @@ class SampleJsonModel(SpecimenJsonModel):
 
     def from_json_model(
         self,
-        specimens: SpecimenDictionary,
+        specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
     ) -> Sample:
         sample = Sample(
             identifier=self.identifier,
@@ -265,7 +245,7 @@ class SlideSampleJsonModel(SpecimenJsonModel):
 
     def from_json_model(
         self,
-        specimens: SpecimenDictionary,
+        specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
     ) -> SlideSample:
         sample = SlideSample(
             identifier=self.identifier,
@@ -287,64 +267,3 @@ class SlideSampleJsonModel(SpecimenJsonModel):
                 )
             sample.add(step)
         return sample
-
-
-class SpecimenFactory:
-    """Factory for creating specimens from json models."""
-
-    def __init__(self, specimen_models: Iterable[SpecimenJsonModel]):
-        """Initiate factory.
-
-        Parameters
-        ----------
-        specimen_models: Iterable[SpecimenJsonModel]
-            Json models to create specimens from.
-        """
-        self._specimens = SpecimenDictionary(self._make_specimen)
-        self._specimen_models_by_identifier: Dict[
-            Union[str, SpecimenIdentifier], SpecimenJsonModel
-        ] = {specimen.identifier: specimen for specimen in specimen_models}
-
-    def create_specimens(self) -> List[Specimen]:
-        """Create specimens
-
-        Returns
-        -------
-        List[Specimen]
-            List of created specimens.
-        """
-        for identifier in self._specimen_models_by_identifier:
-            self._specimens[identifier] = self._make_specimen(identifier)
-        sampled_specimens = [
-            sampled_from.specimen.identifier
-            for specimen in self._specimens.values()
-            if isinstance(specimen, SampledSpecimen)
-            for sampled_from in specimen.sampled_from_list
-        ]
-        return [
-            specimen
-            for specimen in self._specimens.values()
-            if specimen.identifier not in sampled_specimens
-        ]
-
-    def _make_specimen(
-        self,
-        identifier: Union[str, SpecimenIdentifier],
-    ) -> Specimen:
-        """Create specimen by identifier from json model.
-
-        Create nested specimens that the specimen is sampled from if needed.
-
-        Parameters
-        ----------
-        identifier: Union[str, SpecimenIdentifier]
-            Identifier of specimen to create
-
-        Returns
-        -------
-        Specimen
-            Specimen created from json model.
-
-        """
-        specimen_model = self._specimen_models_by_identifier[identifier]
-        return specimen_model.from_json_model(self._specimens)
