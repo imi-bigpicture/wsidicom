@@ -372,24 +372,16 @@ class SampledSpecimen(Specimen, metaclass=ABCMeta):
             sampled_from = list(sampled_from)
         self._sampled_from = sampled_from
 
+    @property
+    def sampled_from_list(self) -> List[Sampling]:
+        return self._sampled_from
+
     def add(self, step: PreparationStep) -> None:
         if isinstance(step, Collection):
             raise ValueError(
                 "A collection step can only be added to specimens of type `ExtractedSpecimen`"
             )
         self.steps.append(step)
-
-    def get_samplings(self) -> Dict[Union[str, SpecimenIdentifier], Specimen]:
-        """Return a dictionary containing this specimen and all recursive sampled specimens."""
-        samplings: Dict[Union[str, SpecimenIdentifier], Specimen] = {
-            self.identifier: self
-        }
-        for sampling in self._sampled_from:
-            if not isinstance(sampling.specimen, SampledSpecimen):
-                samplings.update({sampling.specimen.identifier: sampling.specimen})
-            else:
-                samplings.update(sampling.specimen.get_samplings())
-        return samplings
 
     def _check_sampling_constraints(
         self, constraints: Optional[Sequence[Sampling]]

@@ -29,13 +29,18 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     UnitCode,
 )
+from wsidicom.metadata.json_schema.sample.model import (
+    ExtractedSpecimenJsonModel,
+    SampleJsonModel,
+    SlideSampleJsonModel,
+)
 from wsidicom.metadata.json_schema.sample.schema import (
     ExtractedSpecimenJsonSchema,
     PreparationStepJsonSchema,
     SampleJsonSchema,
     SamplingConstraintJsonSchema,
-    SerializedSampling,
-    SerializedSamplingChainConstraint,
+    SamplingJsonModel,
+    SamplingConstraintJsonModel,
     SlideSampleJsonSchema,
     SpecimenJsonSchema,
     SpecimenLocalizationJsonSchema,
@@ -177,7 +182,7 @@ class TestSampleJsonSchema:
         loaded = SamplingConstraintJsonSchema().load(dumped)
 
         # Assert
-        assert isinstance(loaded, SerializedSamplingChainConstraint)
+        assert isinstance(loaded, SamplingConstraintJsonModel)
         assert loaded.identifier == dumped["identifier"]
         assert loaded.sampling_step_index == dumped["sampling_step_index"]
 
@@ -274,7 +279,7 @@ class TestSampleJsonSchema:
         loaded = PreparationStepJsonSchema().load(dumped)
 
         # Assert
-        assert isinstance(loaded, SerializedSampling)
+        assert isinstance(loaded, SamplingJsonModel)
         assert loaded.sampling_chain_constraints is not None
         assert_dict_equals_code(dumped["sampling_method"], loaded.method)
         assert loaded.date_time == datetime.datetime.fromisoformat(dumped["date_time"])
@@ -495,9 +500,9 @@ class TestSampleJsonSchema:
         loaded = ExtractedSpecimenJsonSchema().load(dumped)
 
         # Assert
-        assert isinstance(loaded, dict)
-        assert loaded["identifier"] == dumped["identifier"]
-        collection = loaded["steps"][0]
+        assert isinstance(loaded, ExtractedSpecimenJsonModel)
+        assert loaded.identifier == dumped["identifier"]
+        collection = loaded.steps[0]
         assert isinstance(collection, Collection)
         assert_dict_equals_code(
             dumped["steps"][0]["extraction_method"], collection.method
@@ -506,8 +511,8 @@ class TestSampleJsonSchema:
             dumped["steps"][0]["date_time"]
         )
         assert collection.description == dumped["steps"][0]["description"]
-        assert isinstance(loaded["type"], AnatomicPathologySpecimenTypesCode)
-        assert_dict_equals_code(dumped["type"], loaded["type"])
+        assert isinstance(loaded.type, AnatomicPathologySpecimenTypesCode)
+        assert_dict_equals_code(dumped["type"], loaded.type)
 
     def test_sample_serialize(self, sample: Sample):
         # Arrange
@@ -558,9 +563,9 @@ class TestSampleJsonSchema:
         loaded = SampleJsonSchema().load(dumped)
 
         # Assert
-        assert isinstance(loaded, dict)
-        assert loaded["identifier"] == dumped["identifier"]
-        processing = loaded["steps"][0]
+        assert isinstance(loaded, SampleJsonModel)
+        assert loaded.identifier == dumped["identifier"]
+        processing = loaded.steps[0]
         assert isinstance(processing, Processing)
         assert_dict_equals_code(
             dumped["steps"][0]["processing_method"], processing.method
@@ -568,8 +573,8 @@ class TestSampleJsonSchema:
         assert processing.date_time == datetime.datetime.fromisoformat(
             dumped["steps"][0]["date_time"]
         )
-        assert isinstance(loaded["type"], AnatomicPathologySpecimenTypesCode)
-        assert_dict_equals_code(dumped["type"], loaded["type"])
+        assert isinstance(loaded.type, AnatomicPathologySpecimenTypesCode)
+        assert_dict_equals_code(dumped["type"], loaded.type)
 
     def test_slide_sample_serialize(self, slide_sample: SlideSample):
         # Arrange
@@ -624,15 +629,15 @@ class TestSampleJsonSchema:
         loaded = SlideSampleJsonSchema().load(dumped)
 
         # Assert
-        assert isinstance(loaded, dict)
-        assert loaded["identifier"] == dumped["identifier"]
-        anatomical_site = loaded["anatomical_sites"][0]
+        assert isinstance(loaded, SlideSampleJsonModel)
+        assert loaded.identifier == dumped["identifier"]
+        assert loaded.anatomical_sites is not None
+        anatomical_site = loaded.anatomical_sites[0]
         assert isinstance(anatomical_site, Code)
         assert_dict_equals_code(dumped["anatomical_sites"][0], anatomical_site)
-        assert loaded["uid"] == UID(dumped["uid"])
-        assert (
-            loaded["localization"].description == dumped["localization"]["description"]
-        )
+        assert loaded.uid == UID(dumped["uid"])
+        assert loaded.localization is not None
+        assert loaded.localization.description == dumped["localization"]["description"]
 
     def test_full_slide_sample_serialize(self, slide_sample: SlideSample):
         # Arrange
@@ -764,7 +769,10 @@ class TestSampleJsonSchema:
 
         # Act
         dumped = SpecimenJsonSchema().dump(slide_sample)
+        print(dumped)
         loaded = SpecimenJsonSchema().load(dumped)
+        print(slide_sample)
+        print(loaded[0])
 
         # Assert
         assert str(loaded[0]) == str(slide_sample)

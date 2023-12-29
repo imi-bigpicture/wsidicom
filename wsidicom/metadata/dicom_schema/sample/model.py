@@ -471,7 +471,7 @@ class SpecimenDescriptionDicomModel:
     ) -> List[SpecimenPreparationStepDicomModel]:
         sample_preparation_steps = [
             step
-            for sampling in slide_sample._sampled_from
+            for sampling in slide_sample.sampled_from_list
             for step in cls._get_steps_for_sampling(sampling, slide_sample.identifier)
         ]
         if stainings is None:
