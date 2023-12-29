@@ -26,6 +26,7 @@ from typing import (
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
+    ContainerTypeCode,
 )
 from wsidicom.metadata.dicom_schema.sample.model import (
     CollectionDicomModel,
@@ -125,15 +126,16 @@ class SpecimenDicomParser:
             steps_by_identifier[identifier].append(step)
 
         identifier = description.get_identifier()
-        preparation_steps, samplings = self._parse_preparation_steps_for_specimen(
+        preparation_steps, samplings, _ = self._parse_preparation_steps_for_specimen(
             identifier, steps_by_identifier
         )
 
         if len(samplings) > 1:
             raise ValueError("Should be max one sampling, got.", len(samplings))
+        print(description.localization)
         return SlideSample(
             identifier=identifier,
-            anatomical_sites=[],
+            anatomical_sites=description.anatomical_sites,
             sampled_from=next(iter(samplings), None),
             uid=description.uid,
             localization=description.localization,
@@ -148,7 +150,7 @@ class SpecimenDicomParser:
             List[Optional[SpecimenPreparationStepDicomModel]],
         ],
         stop_at_step: Optional[SpecimenPreparationStepDicomModel] = None,
-    ) -> Tuple[List[PreparationStep], List[Sampling]]:
+    ) -> Tuple[List[PreparationStep], List[Sampling], Optional[ContainerTypeCode]]:
         """
         Parse preparation steps and samplings for a specimen.
 
@@ -177,6 +179,7 @@ class SpecimenDicomParser:
             Parsed PreparationSteps and Samplings for the specimen.
 
         """
+        container: Optional[ContainerTypeCode] = None
         if stop_at_step is not None:
             if (
                 not isinstance(stop_at_step, SamplingDicomModel)
@@ -234,7 +237,10 @@ class SpecimenDicomParser:
                         description=step.description,
                     )
                 )
+                container = step.container
             elif isinstance(step, ProcessingDicomModel):
+                # Processing steps are parsed by fixative, embedding, and/or processing
+                # properties
                 pass
 
             elif isinstance(step, SamplingDicomModel):
@@ -245,6 +251,7 @@ class SpecimenDicomParser:
                     (
                         parent_steps,
                         sampling_constraints,
+                        parent_container,
                     ) = self._parse_preparation_steps_for_specimen(
                         parent_identifier, steps_by_identifier, step
                     )
@@ -288,6 +295,7 @@ class SpecimenDicomParser:
                     raise ValueError()
 
                 samplings.append(sampling)
+                container = step.container
             else:
                 raise NotImplementedError(f"Step of type {type(step)}")
             if step.fixative is not None:
@@ -317,7 +325,7 @@ class SpecimenDicomParser:
 
             # Clear this step so that it will not be processed again
             steps_by_identifier[identifier][index] = None
-        return preparation_steps, samplings
+        return preparation_steps, samplings, container
 
     def _create_specimen(
         self,
@@ -357,7 +365,11 @@ class SpecimenDicomParser:
 
         """
         logging.debug(f"Creating specimen with identifier {identifier}")
-        preparation_steps, samplings = self._parse_preparation_steps_for_specimen(
+        (
+            preparation_steps,
+            samplings,
+            container,
+        ) = self._parse_preparation_steps_for_specimen(
             identifier, steps_by_identifier, stop_at_step
         )
 
@@ -366,10 +378,12 @@ class SpecimenDicomParser:
                 identifier=identifier,
                 type=specimen_type,
                 steps=preparation_steps,
+                container=container,
             )
         return Sample(
             identifier=identifier,
             type=specimen_type,
             sampled_from=samplings,
             steps=preparation_steps,
+            container=container,
         )

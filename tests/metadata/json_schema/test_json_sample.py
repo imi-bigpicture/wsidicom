@@ -456,6 +456,7 @@ class TestSampleJsonSchema:
         # Arrange
         assert extracted_specimen.extraction_step is not None
         assert extracted_specimen.extraction_step.date_time is not None
+        assert extracted_specimen.container is not None
 
         # Act
         dumped = ExtractedSpecimenJsonSchema().dump(extracted_specimen)
@@ -473,6 +474,7 @@ class TestSampleJsonSchema:
             == extracted_specimen.extraction_step.date_time.isoformat()
         )
         assert_dict_equals_code(dumped["type"], extracted_specimen.type)
+        assert_dict_equals_code(dumped["container"], extracted_specimen.container)
 
     def test_extracted_specimen_deserialize(self):
         # Arrange
@@ -493,6 +495,11 @@ class TestSampleJsonSchema:
                 "value": "430861001",
                 "scheme_designator": "SCT",
                 "meaning": "Gross specimen",
+            },
+            "container": {
+                "value": "434711009",
+                "scheme_designator": "SCT",
+                "meaning": "Specimen container",
             },
         }
 
@@ -519,6 +526,7 @@ class TestSampleJsonSchema:
         processing = sample.steps[0]
         assert isinstance(processing, Processing)
         assert processing.date_time is not None
+        assert sample.container is not None
 
         # Act
         dumped = SampleJsonSchema().dump(sample)
@@ -536,6 +544,7 @@ class TestSampleJsonSchema:
             == sample.sampled_from[0].specimen.identifier
         )
         assert dumped["sampled_from"][0]["sampling_step_index"] == 0
+        assert_dict_equals_code(dumped["container"], sample.container)
 
     def test_sampled_specimen_deserialize(self):
         # Arrange
@@ -556,6 +565,11 @@ class TestSampleJsonSchema:
                 "value": "430856003",
                 "scheme_designator": "SCT",
                 "meaning": "Tissue section",
+            },
+            "container": {
+                "value": "434464009",
+                "scheme_designator": "SCT",
+                "meaning": "Tissue cassette",
             },
         }
 
@@ -769,10 +783,7 @@ class TestSampleJsonSchema:
 
         # Act
         dumped = SpecimenJsonSchema().dump(slide_sample)
-        print(dumped)
         loaded = SpecimenJsonSchema().load(dumped)
-        print(slide_sample)
-        print(loaded[0])
 
         # Assert
         assert str(loaded[0]) == str(slide_sample)

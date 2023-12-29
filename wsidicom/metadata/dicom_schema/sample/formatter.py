@@ -20,6 +20,7 @@ from typing import (
     Sequence,
     Union,
 )
+from wsidicom.conceptcode import ContainerTypeCode
 
 from wsidicom.metadata.dicom_schema.sample.model import (
     SamplingDicomModel,
@@ -88,7 +89,10 @@ class SpecimenDicomFormatter:
 
     @classmethod
     def _get_steps_for_sampling(
-        cls, sampling: Sampling, sample_identifier: Union[str, SpecimenIdentifier]
+        cls,
+        sampling: Sampling,
+        sample_identifier: Union[str, SpecimenIdentifier],
+        container: Optional[ContainerTypeCode] = None,
     ) -> List[SpecimenPreparationStepDicomModel]:
         """Return DICOM steps for the specimen the sample was sampled from."""
         if isinstance(sampling.specimen, SampledSpecimen):
@@ -98,18 +102,18 @@ class SpecimenDicomFormatter:
                 if sampling.sampling_chain_constraints is None
                 or sampling in sampling.sampling_chain_constraints
                 for step in cls._get_steps_for_sampling(
-                    sampling, sampling.specimen.identifier
+                    sampling, sampling.specimen.identifier, sampling.specimen.container
                 )
             ]
         else:
             steps = []
         steps.extend(
-            SpecimenPreparationStepDicomModel.from_step(
-                step, sampling.specimen.identifier
-            )
+            SpecimenPreparationStepDicomModel.from_step(step, sampling.specimen)
             for step in cls._get_steps_before_sampling(sampling.specimen, sampling)
         )
-        steps.append(SamplingDicomModel.from_step(sampling, sample_identifier))
+        steps.append(
+            SamplingDicomModel.from_step(sampling, sample_identifier, container)
+        )
         return steps
 
     @staticmethod

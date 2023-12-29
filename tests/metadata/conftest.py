@@ -22,6 +22,7 @@ from pydicom.uid import UID
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     Code,
+    ContainerTypeCode,
     IlluminationCode,
     IlluminationColorCode,
     ImagePathFilterCode,
@@ -303,7 +304,10 @@ def extracted_specimen(
     collection: Collection, identifier: Union[str, SpecimenIdentifier]
 ):
     yield ExtractedSpecimen(
-        identifier, AnatomicPathologySpecimenTypesCode("Gross specimen"), collection
+        identifier,
+        AnatomicPathologySpecimenTypesCode("Gross specimen"),
+        collection,
+        container=ContainerTypeCode("Specimen container"),
     )
 
 
@@ -324,6 +328,7 @@ def sample(extracted_specimen: ExtractedSpecimen):
             ),
         ],
         [processing],
+        container=ContainerTypeCode("Tissue cassette"),
     )
 
 

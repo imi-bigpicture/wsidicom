@@ -41,6 +41,7 @@ from marshmallow import Schema, fields, post_load, pre_dump
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
+    ContainerTypeCode,
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
@@ -288,6 +289,7 @@ class ExtractedSpecimenJsonSchema(BaseSpecimenJsonSchema[ExtractedSpecimen]):
     """Schema for extracted specimen that has not been sampled from other specimen."""
 
     type = JsonFieldFactory.concept_code(AnatomicPathologySpecimenTypesCode)()
+    container = JsonFieldFactory.concept_code(ContainerTypeCode)(load_default=None)
 
     @property
     def load_type(self) -> Type[ExtractedSpecimenJsonModel]:
@@ -299,6 +301,7 @@ class SampleJsonSchema(BaseSpecimenJsonSchema[SampleJsonModel]):
 
     sampled_from = fields.List(fields.Nested(SamplingConstraintJsonSchema))
     type = JsonFieldFactory.concept_code(AnatomicPathologySpecimenTypesCode)()
+    container = JsonFieldFactory.concept_code(ContainerTypeCode)(load_default=None)
 
     @property
     def load_type(self) -> Type[SampleJsonModel]:

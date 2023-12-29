@@ -26,6 +26,7 @@ from pydicom.uid import UID
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
+    ContainerTypeCode,
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
@@ -43,6 +44,7 @@ from wsidicom.metadata.sample import (
     Processing,
     Sampling,
     SamplingLocation,
+    Specimen,
     SpecimenIdentifier,
     SpecimenLocalization,
     Staining,
@@ -61,16 +63,22 @@ class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
 
     @classmethod
     def from_step(
-        cls, step: PreparationStep, specimen_identifier: Union[str, SpecimenIdentifier]
+        cls,
+        step: PreparationStep,
+        specimen: Specimen,
     ) -> "SpecimenPreparationStepDicomModel":
         if isinstance(step, Sampling):
-            return SamplingDicomModel.from_step(step, specimen_identifier)
+            return SamplingDicomModel.from_step(
+                step, specimen.identifier, specimen.container
+            )
         if isinstance(step, Collection):
-            return CollectionDicomModel.from_step(step, specimen_identifier)
+            return CollectionDicomModel.from_step(
+                step, specimen.identifier, specimen.container
+            )
         if isinstance(step, (Processing, Embedding, Fixation)):
-            return ProcessingDicomModel.from_step(step, specimen_identifier)
+            return ProcessingDicomModel.from_step(step, specimen.identifier)
         if isinstance(step, Staining):
-            return StainingDicomModel.from_step(step, specimen_identifier)
+            return StainingDicomModel.from_step(step, specimen.identifier)
         raise NotImplementedError()
 
     def get_identifier(self) -> Union[str, SpecimenIdentifier]:
@@ -93,10 +101,14 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
     location_x: Optional[Measurement] = None
     location_y: Optional[Measurement] = None
     location_z: Optional[Measurement] = None
+    container: Optional[ContainerTypeCode] = None
 
     @classmethod
     def from_step(
-        cls, sampling: Sampling, specimen_identifier: Union[str, SpecimenIdentifier]
+        cls,
+        sampling: Sampling,
+        specimen_identifier: Union[str, SpecimenIdentifier],
+        container: Optional[ContainerTypeCode],
     ) -> "SamplingDicomModel":
         """Return Dicom dataset for the step.
 
@@ -143,6 +155,7 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             location_x=sampling.location.x if sampling.location is not None else None,
             location_y=sampling.location.y if sampling.location is not None else None,
             location_z=sampling.location.z if sampling.location is not None else None,
+            container=container,
         )
 
     def get_parent_identifier(self) -> Union[str, SpecimenIdentifier]:
@@ -183,12 +196,14 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
 @dataclass
 class CollectionDicomModel(SpecimenPreparationStepDicomModel):
     method: SpecimenCollectionProcedureCode
+    container: Optional[ContainerTypeCode] = None
 
     @classmethod
     def from_step(
         cls,
         collection: Collection,
         specimen_identifier: Union[str, SpecimenIdentifier],
+        container: Optional[ContainerTypeCode],
     ) -> "CollectionDicomModel":
         """Return Dicom dataset for the step.
 
@@ -217,6 +232,7 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
             fixative=None,
             embedding=None,
             processing=None,
+            container=container,
         )
 
 

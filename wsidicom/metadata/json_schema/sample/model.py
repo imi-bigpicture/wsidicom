@@ -28,6 +28,7 @@ from typing import (
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
+    ContainerTypeCode,
     SpecimenSamplingProcedureCode,
 )
 from wsidicom.metadata.sample import (
@@ -182,14 +183,14 @@ class SpecimenJsonModel:
 @dataclass
 class ExtractedSpecimenJsonModel(SpecimenJsonModel):
     type: AnatomicPathologySpecimenTypesCode
+    container: Optional[ContainerTypeCode]
 
     def from_json_model(
         self,
         specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
     ) -> ExtractedSpecimen:
         specimen = ExtractedSpecimen(
-            identifier=self.identifier,
-            type=self.type,
+            identifier=self.identifier, type=self.type, container=self.container
         )
         for index, step in enumerate(self.steps):
             if isinstance(step, SamplingJsonModel):
@@ -211,6 +212,7 @@ class ExtractedSpecimenJsonModel(SpecimenJsonModel):
 class SampleJsonModel(SpecimenJsonModel):
     type: AnatomicPathologySpecimenTypesCode
     sampled_from: Sequence[SamplingConstraintJsonModel]
+    container: Optional[ContainerTypeCode]
 
     def from_json_model(
         self,
@@ -222,6 +224,7 @@ class SampleJsonModel(SpecimenJsonModel):
             sampled_from=[
                 sample.from_json_model(specimens) for sample in self.sampled_from
             ],
+            container=self.container,
         )
         for step in self.steps:
             if isinstance(step, SamplingJsonModel):

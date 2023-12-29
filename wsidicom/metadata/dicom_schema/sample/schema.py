@@ -28,6 +28,7 @@ from pydicom.sr.coding import Code
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
+    ContainerTypeCode,
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
@@ -92,6 +93,7 @@ class SampleCodes:
     location_of_specimen_y: Code = codes.DCM.LocationOfSpecimenYOffset  # type: ignore
     location_of_specimen_z: Code = codes.DCM.LocationOfSpecimenZOffset  # type: ignore
     visual_marking_of_specimen: Code = codes.DCM.VisualMarkingOfSpecimen  # type: ignore
+    container: Code = codes.SCT.SpecimenContainer  # type: ignore
 
 
 class SpecimenLocalizationDicomSchema(ItemSequenceDicomSchema[SpecimenLocalization]):
@@ -158,6 +160,9 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
     location_x = MeasurementtemDicomField(allow_none=True)
     location_y = MeasurementtemDicomField(allow_none=True)
     location_z = MeasurementtemDicomField(allow_none=True)
+    container = CodeItemDicomField(
+        load_type=ContainerTypeCode, allow_none=True, load_default=None
+    )
 
     @property
     def load_type(self):
@@ -170,6 +175,7 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
             "issuer_of_identifier": ItemField(
                 SampleCodes.issuer_of_identifier, (str,), False
             ),
+            "container": ItemField(SampleCodes.container, (Code,), False),
             "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
             "date_time": ItemField(
                 SampleCodes.datetime_of_processing,
@@ -219,6 +225,9 @@ class CollectionDicomSchema(BasePreparationStepDicomSchema[CollectionDicomModel]
         dump_only=True,
     )
     method = CodeItemDicomField(SpecimenCollectionProcedureCode)
+    container = CodeItemDicomField(
+        load_type=ContainerTypeCode, allow_none=True, load_default=None
+    )
 
     @property
     def load_type(self):
@@ -231,6 +240,7 @@ class CollectionDicomSchema(BasePreparationStepDicomSchema[CollectionDicomModel]
             "issuer_of_identifier": ItemField(
                 SampleCodes.issuer_of_identifier, (str,), False
             ),
+            "container": ItemField(SampleCodes.container, (Code,), False),
             "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
             "date_time": ItemField(
                 SampleCodes.datetime_of_processing,
@@ -377,7 +387,7 @@ class PreparationStepDicomField(marshmallow.fields.Field):
 class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel]):
     identifier = StringDicomField(data_key="SpecimenIdentifier")
     uid = StringDicomField(data_key="SpecimenUID")
-    location = marshmallow.fields.Nested(
+    localization = marshmallow.fields.Nested(
         SpecimenLocalizationDicomSchema(),
         data_key="SpecimenLocalizationContentItemSequence",
         allow_none=True,
@@ -414,3 +424,8 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     @property
     def load_type(self):
         return SpecimenDescriptionDicomModel
+
+    @marshmallow.post_load
+    def post_load(self, data, **kwargs):
+        print(data.keys())
+        return super().post_load(data, **kwargs)
