@@ -42,12 +42,14 @@ from wsidicom.metadata.sample import (
     Measurement,
     PreparationStep,
     Processing,
+    Receiving,
     Sampling,
     SamplingLocation,
     Specimen,
     SpecimenIdentifier,
     SpecimenLocalization,
     Staining,
+    Storage,
 )
 
 
@@ -233,6 +235,50 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
             embedding=None,
             processing=None,
             container=container,
+        )
+
+
+@dataclass
+class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
+    @classmethod
+    def from_step(
+        cls,
+        receiving: Receiving,
+        specimen_identifier: Union[str, SpecimenIdentifier],
+    ):
+        identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
+            specimen_identifier
+        )
+        return cls(
+            identifier=identifier,
+            issuer_of_identifier=issuer,
+            date_time=receiving.date_time,
+            description=receiving.description,
+            fixative=None,
+            embedding=None,
+            processing=None,
+        )
+
+
+@dataclass
+class StorageDicomModel(SpecimenPreparationStepDicomModel):
+    @classmethod
+    def from_step(
+        cls,
+        storage: Storage,
+        specimen_identifier: Union[str, SpecimenIdentifier],
+    ):
+        identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
+            specimen_identifier
+        )
+        return cls(
+            identifier=identifier,
+            issuer_of_identifier=issuer,
+            date_time=storage.date_time,
+            description=storage.description,
+            fixative=None,
+            embedding=None,
+            processing=None,
         )
 
 

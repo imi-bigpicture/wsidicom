@@ -62,9 +62,8 @@ from wsidicom.metadata.sample import (
     Embedding,
     ExtractedSpecimen,
     Fixation,
-    Measurement,
-    PreparationStep,
     Processing,
+    Receiving,
     Sample,
     Sampling,
     SlideSample,
@@ -72,6 +71,7 @@ from wsidicom.metadata.sample import (
     SpecimenIdentifier,
     Staining,
     SamplingLocation,
+    Storage,
 )
 
 
@@ -238,8 +238,26 @@ def fixative():
 
 
 @pytest.fixture()
-def embedding():
+def medium():
     yield None
+
+
+@pytest.fixture()
+def embedding(date_time: datetime.datetime, description: str):
+    yield Embedding(
+        SpecimenEmbeddingMediaCode("Paraffin wax"),
+        date_time,
+        description,
+    )
+
+
+@pytest.fixture()
+def fixation(date_time: datetime.datetime, description: str):
+    yield Fixation(
+        SpecimenFixativesCode("Neutral Buffered Formalin"),
+        date_time,
+        description,
+    )
 
 
 @pytest.fixture()
@@ -289,6 +307,22 @@ def staining(date_time: datetime.datetime, description: str):
             SpecimenStainsCode("hematoxylin stain"),
             SpecimenStainsCode("water soluble eosin stain"),
         ],
+        date_time=date_time,
+        description=description,
+    )
+
+
+@pytest.fixture()
+def storage(date_time: datetime.datetime, description: str):
+    yield Storage(
+        date_time=date_time,
+        description=description,
+    )
+
+
+@pytest.fixture()
+def receiving(date_time: datetime.datetime, description: str):
+    yield Receiving(
         date_time=date_time,
         description=description,
     )

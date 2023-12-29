@@ -52,11 +52,13 @@ from wsidicom.metadata.dicom_schema.fields import (
 )
 from wsidicom.metadata.dicom_schema.sample.model import (
     CollectionDicomModel,
+    ReceivingDicomModel,
     SpecimenPreparationStepDicomModel,
     ProcessingDicomModel,
     SamplingDicomModel,
     SpecimenDescriptionDicomModel,
     StainingDicomModel,
+    StorageDicomModel,
 )
 from wsidicom.metadata.dicom_schema.schema import (
     DicomSchema,
@@ -94,6 +96,8 @@ class SampleCodes:
     location_of_specimen_z: Code = codes.DCM.LocationOfSpecimenZOffset  # type: ignore
     visual_marking_of_specimen: Code = codes.DCM.VisualMarkingOfSpecimen  # type: ignore
     container: Code = codes.SCT.SpecimenContainer  # type: ignore
+    receiving: Code = codes.SCT.SpecimenReceiving  # type: ignore
+    storage: Code = codes.DCM.SpecimenStorage  # type: ignore
 
 
 class SpecimenLocalizationDicomSchema(ItemSequenceDicomSchema[SpecimenLocalization]):
@@ -322,6 +326,68 @@ class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
         }
 
 
+class ReceivingDicomSchema(BasePreparationStepDicomSchema[ReceivingDicomModel]):
+    processing_type = CodeItemDicomField(
+        load_type=SpecimenPreparationProcedureCode,
+        dump_default=SampleCodes.receiving,
+        dump_only=True,
+    )
+
+    @property
+    def load_type(self):
+        return ReceivingDicomModel
+
+    @property
+    def item_fields(self) -> Dict[str, ItemField]:
+        return {
+            "identifier": ItemField(SampleCodes.identifier, (str,), False),
+            "issuer_of_identifier": ItemField(
+                SampleCodes.issuer_of_identifier, (str,), False
+            ),
+            "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
+            "date_time": ItemField(
+                SampleCodes.datetime_of_processing,
+                (datetime.datetime,),
+                False,
+            ),
+            "description": ItemField(SampleCodes.processing_description, (str,), False),
+            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
+            "fixative": ItemField(SampleCodes.fixative, (Code,), False),
+            "embedding": ItemField(SampleCodes.embedding, (Code,), False),
+        }
+
+
+class StorageDicomSchema(BasePreparationStepDicomSchema[StorageDicomModel]):
+    processing_type = CodeItemDicomField(
+        load_type=SpecimenPreparationProcedureCode,
+        dump_default=SampleCodes.storage,
+        dump_only=True,
+    )
+
+    @property
+    def load_type(self):
+        return StorageDicomModel
+
+    @property
+    def item_fields(self) -> Dict[str, ItemField]:
+        return {
+            "identifier": ItemField(SampleCodes.identifier, (str,), False),
+            "issuer_of_identifier": ItemField(
+                SampleCodes.issuer_of_identifier, (str,), False
+            ),
+            "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
+            "date_time": ItemField(
+                SampleCodes.datetime_of_processing,
+                (datetime.datetime,),
+                False,
+            ),
+            "description": ItemField(SampleCodes.processing_description, (str,), False),
+            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
+            "fixative": ItemField(SampleCodes.fixative, (Code,), False),
+            "embedding": ItemField(SampleCodes.embedding, (Code,), False),
+        }
+
+
 class PreparationStepDicomField(marshmallow.fields.Field):
     """Mapping step type to schema."""
 
@@ -332,6 +398,8 @@ class PreparationStepDicomField(marshmallow.fields.Field):
         CollectionDicomModel: CollectionDicomSchema,
         ProcessingDicomModel: ProcessingDicomSchema,
         StainingDicomModel: StainingDicomSchema,
+        ReceivingDicomModel: ReceivingDicomSchema,
+        StorageDicomModel: StorageDicomSchema,
     }
 
     """Mapping key in serialized step to schema."""
@@ -340,6 +408,8 @@ class PreparationStepDicomField(marshmallow.fields.Field):
         SampleCodes.specimen_collection: CollectionDicomSchema,
         SampleCodes.sample_processing: ProcessingDicomSchema,
         SampleCodes.staining: StainingDicomSchema,
+        SampleCodes.receiving: ReceivingDicomSchema,
+        SampleCodes.storage: StorageDicomSchema,
     }
 
     def _serialize(

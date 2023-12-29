@@ -22,10 +22,6 @@ from pydicom.uid import UID
 from tests.metadata.json_schema.helpers import assert_dict_equals_code
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
-    SpecimenCollectionProcedureCode,
-    SpecimenEmbeddingMediaCode,
-    SpecimenFixativesCode,
-    SpecimenPreparationStepsCode,
     SpecimenSamplingProcedureCode,
     UnitCode,
 )
@@ -38,12 +34,13 @@ from wsidicom.metadata.json_schema.sample.schema import (
     ExtractedSpecimenJsonSchema,
     PreparationStepJsonSchema,
     SampleJsonSchema,
+    SamplingConstraintJsonModel,
     SamplingConstraintJsonSchema,
     SamplingJsonModel,
-    SamplingConstraintJsonModel,
     SlideSampleJsonSchema,
     SpecimenJsonSchema,
     SpecimenLocalizationJsonSchema,
+    PreparationAction,
 )
 from wsidicom.metadata.sample import (
     Collection,
@@ -52,10 +49,12 @@ from wsidicom.metadata.sample import (
     Fixation,
     Measurement,
     Processing,
+    Receiving,
     Sample,
     SamplingLocation,
     SlideSample,
     SpecimenLocalization,
+    Storage,
 )
 
 
@@ -247,6 +246,7 @@ class TestSampleJsonSchema:
     def test_sampling_deserialize(self):
         # Arrange
         dumped = {
+            "action": "sampling",
             "sampling_method": {
                 "value": "434472006",
                 "scheme_designator": "SCT",
@@ -308,14 +308,8 @@ class TestSampleJsonSchema:
             UnitCode(dumped["location"]["z"]["unit"]),
         )
 
-    def test_collection_serialize(self):
+    def test_collection_serialize(self, collection: Collection):
         # Arrange
-        collection = Collection(
-            SpecimenCollectionProcedureCode("Excision"),
-            datetime.datetime(2023, 8, 5),
-            "description",
-        )
-        assert collection.date_time is not None
 
         # Act
         dumped = PreparationStepJsonSchema().dump(collection)
@@ -323,37 +317,41 @@ class TestSampleJsonSchema:
         # Assert
         assert isinstance(dumped, dict)
         assert_dict_equals_code(dumped["extraction_method"], collection.method)
-        assert dumped["date_time"] == collection.date_time.isoformat()
-        assert dumped["description"] == collection.description
+        if collection.date_time is not None:
+            assert dumped["date_time"] == collection.date_time.isoformat()
+        else:
+            assert "date_time" not in dumped
+        if collection.description is not None:
+            assert dumped["description"] == collection.description
+        else:
+            assert "description" not in dumped
 
-    def test_collection_deserialize(self):
+    def test_collection_deserialize(self, collection: Collection):
         # Arrange
         dumped = {
+            "action": "collection",
             "extraction_method": {
-                "value": "65801008",
-                "scheme_designator": "SCT",
-                "meaning": "Excision",
+                "value": collection.method.value,
+                "scheme_designator": collection.method.scheme_designator,
+                "meaning": collection.method.meaning,
             },
-            "date_time": "2023-08-05T00:00:00",
-            "description": "description",
         }
+        if collection.date_time is not None:
+            dumped["date_time"] = collection.date_time.isoformat()
+        if collection.description is not None:
+            dumped["description"] = collection.description
 
         # Act
         loaded = PreparationStepJsonSchema().load(dumped)
 
         # Assert
         assert isinstance(loaded, Collection)
-        assert_dict_equals_code(dumped["extraction_method"], loaded.method)
-        assert loaded.date_time == datetime.datetime.fromisoformat(dumped["date_time"])
-        assert loaded.description == dumped["description"]
+        assert loaded.method == collection.method
+        assert loaded.date_time == collection.date_time
+        assert loaded.description == collection.description
 
-    def test_processing_serialize(self):
+    def test_processing_serialize(self, processing: Processing):
         # Arrange
-        processing = Processing(
-            SpecimenPreparationStepsCode("Specimen clearing"),
-            datetime.datetime(2023, 8, 5),
-        )
-        assert processing.date_time is not None
 
         # Act
         dumped = PreparationStepJsonSchema().dump(processing)
@@ -361,34 +359,41 @@ class TestSampleJsonSchema:
         # Assert
         assert isinstance(dumped, dict)
         assert_dict_equals_code(dumped["processing_method"], processing.method)
-        assert dumped["date_time"] == processing.date_time.isoformat()
+        if processing.date_time is not None:
+            assert dumped["date_time"] == processing.date_time.isoformat()
+        else:
+            assert "date_time" not in dumped
+        if processing.description is not None:
+            assert dumped["description"] == processing.description
+        else:
+            assert "description" not in dumped
 
-    def test_processing_deserialize(self):
+    def test_processing_deserialize(self, processing: Processing):
         # Arrange
         dumped = {
+            "action": "processing",
             "processing_method": {
-                "value": "433452008",
-                "scheme_designator": "SCT",
-                "meaning": "Specimen clearing",
+                "value": processing.method.value,
+                "scheme_designator": processing.method.scheme_designator,
+                "meaning": processing.method.meaning,
             },
-            "date_time": "2023-08-05T00:00:00",
         }
+        if processing.date_time is not None:
+            dumped["date_time"] = processing.date_time.isoformat()
+        if processing.description is not None:
+            dumped["description"] = processing.description
 
         # Act
         loaded = PreparationStepJsonSchema().load(dumped)
 
         # Assert
         assert isinstance(loaded, Processing)
-        assert_dict_equals_code(dumped["processing_method"], loaded.method)
-        assert loaded.date_time == datetime.datetime.fromisoformat(dumped["date_time"])
+        assert loaded.method == processing.method
+        assert loaded.date_time == processing.date_time
+        assert loaded.description == processing.description
 
-    def test_embedding_serialize(self):
+    def test_embedding_serialize(self, embedding: Embedding):
         # Arrange
-        embedding = Embedding(
-            SpecimenEmbeddingMediaCode("Paraffin wax"),
-            datetime.datetime(2023, 8, 5),
-        )
-        assert embedding.date_time is not None
 
         # Act
         dumped = PreparationStepJsonSchema().dump(embedding)
@@ -396,34 +401,41 @@ class TestSampleJsonSchema:
         # Assert
         assert isinstance(dumped, dict)
         assert_dict_equals_code(dumped["medium"], embedding.medium)
-        assert dumped["date_time"] == embedding.date_time.isoformat()
+        if embedding.date_time is not None:
+            assert dumped["date_time"] == embedding.date_time.isoformat()
+        else:
+            assert "date_time" not in dumped
+        if embedding.description is not None:
+            assert dumped["description"] == embedding.description
+        else:
+            assert "description" not in dumped
 
-    def test_embedding_deserialize(self):
+    def test_embedding_deserialize(self, embedding: Embedding):
         # Arrange
         dumped = {
+            "action": "embedding",
             "medium": {
-                "value": "311731000",
-                "scheme_designator": "SCT",
-                "meaning": "Paraffin wax",
+                "value": embedding.medium.value,
+                "scheme_designator": embedding.medium.scheme_designator,
+                "meaning": embedding.medium.meaning,
             },
-            "date_time": "2023-08-05T00:00:00",
         }
+        if embedding.date_time is not None:
+            dumped["date_time"] = embedding.date_time.isoformat()
+        if embedding.description is not None:
+            dumped["description"] = embedding.description
 
         # Act
         loaded = PreparationStepJsonSchema().load(dumped)
 
         # Assert
         assert isinstance(loaded, Embedding)
-        assert_dict_equals_code(dumped["medium"], loaded.medium)
-        assert loaded.date_time == datetime.datetime.fromisoformat(dumped["date_time"])
+        assert loaded.medium == embedding.medium
+        assert loaded.date_time == embedding.date_time
+        assert loaded.description == embedding.description
 
-    def test_fixation_serialize(self):
+    def test_fixation_serialize(self, fixation: Fixation):
         # Arrange
-        fixation = Fixation(
-            SpecimenFixativesCode("Neutral Buffered Formalin"),
-            datetime.datetime(2023, 8, 5),
-        )
-        assert fixation.date_time is not None
 
         # Act
         dumped = PreparationStepJsonSchema().dump(fixation)
@@ -431,26 +443,106 @@ class TestSampleJsonSchema:
         # Assert
         assert isinstance(dumped, dict)
         assert_dict_equals_code(dumped["fixative"], fixation.fixative)
-        assert dumped["date_time"] == fixation.date_time.isoformat()
+        if fixation.date_time is not None:
+            assert dumped["date_time"] == fixation.date_time.isoformat()
+        else:
+            assert "date_time" not in dumped
+        if fixation.description is not None:
+            assert dumped["description"] == fixation.description
+        else:
+            assert "description" not in dumped
 
-    def test_fixation_deserialize(self):
+    def test_fixation_deserialize(self, fixation: Fixation):
         # Arrange
         dumped = {
+            "action": "fixation",
             "fixative": {
-                "value": "434162003",
-                "scheme_designator": "SCT",
-                "meaning": "Neutral Buffered Formalin",
+                "value": fixation.fixative.value,
+                "scheme_designator": fixation.fixative.scheme_designator,
+                "meaning": fixation.fixative.meaning,
             },
-            "date_time": "2023-08-05T00:00:00",
         }
+        if fixation.date_time is not None:
+            dumped["date_time"] = fixation.date_time.isoformat()
+        if fixation.description is not None:
+            dumped["description"] = fixation.description
 
         # Act
         loaded = PreparationStepJsonSchema().load(dumped)
 
         # Assert
         assert isinstance(loaded, Fixation)
-        assert_dict_equals_code(dumped["fixative"], loaded.fixative)
-        assert loaded.date_time == datetime.datetime.fromisoformat(dumped["date_time"])
+        assert loaded.fixative == fixation.fixative
+        assert loaded.date_time == fixation.date_time
+        assert loaded.description == fixation.description
+
+    def test_receiving_serialize(self, receiving: Receiving):
+        # Arrange
+
+        # Act
+        dumped = PreparationStepJsonSchema().dump(receiving)
+
+        # Assert
+        assert isinstance(dumped, dict)
+        assert dumped["action"] == PreparationAction.RECEIVING.value
+        if receiving.date_time is not None:
+            assert dumped["date_time"] == receiving.date_time.isoformat()
+        else:
+            assert "date_time" not in dumped
+        if receiving.description is not None:
+            assert dumped["description"] == receiving.description
+        else:
+            assert "description" not in dumped
+
+    def test_receiving_deserialize(self, receiving: Receiving):
+        # Arrange
+        dumped = {"action": PreparationAction.RECEIVING.value}
+        if receiving.date_time is not None:
+            dumped["date_time"] = receiving.date_time.isoformat()
+        if receiving.description is not None:
+            dumped["description"] = receiving.description
+
+        # Act
+        loaded = PreparationStepJsonSchema().load(dumped)
+
+        # Assert
+        assert isinstance(loaded, Receiving)
+        assert loaded.date_time == receiving.date_time
+        assert loaded.description == receiving.description
+
+    def test_storage_serialize(self, storage: Storage):
+        # Arrange
+
+        # Act
+        dumped = PreparationStepJsonSchema().dump(storage)
+
+        # Assert
+        assert isinstance(dumped, dict)
+        assert dumped["action"] == PreparationAction.STORAGE.value
+        if storage.date_time is not None:
+            assert dumped["date_time"] == storage.date_time.isoformat()
+        else:
+            assert "date_time" not in dumped
+        if storage.description is not None:
+            assert dumped["description"] == storage.description
+        else:
+            assert "description" not in dumped
+
+    def test_storage_deserialize(self, storage: Storage):
+        # Arrange
+        dumped = {"action": PreparationAction.STORAGE.value}
+        if storage.date_time is not None:
+            dumped["date_time"] = storage.date_time.isoformat()
+        if storage.description is not None:
+            dumped["description"] = storage.description
+
+        # Act
+        loaded = PreparationStepJsonSchema().load(dumped)
+
+        # Assert
+        assert isinstance(loaded, Storage)
+        assert loaded.date_time == storage.date_time
+        assert loaded.description == storage.description
 
     def test_extracted_specimen_serialize(self, extracted_specimen: ExtractedSpecimen):
         # Arrange
@@ -482,6 +574,7 @@ class TestSampleJsonSchema:
             "identifier": "specimen",
             "steps": [
                 {
+                    "action": "collection",
                     "extraction_method": {
                         "value": "65801008",
                         "scheme_designator": "SCT",
@@ -552,6 +645,7 @@ class TestSampleJsonSchema:
             "identifier": "sample",
             "steps": [
                 {
+                    "action": "processing",
                     "processing_method": {
                         "value": "433452008",
                         "scheme_designator": "SCT",
@@ -706,6 +800,7 @@ class TestSampleJsonSchema:
                 "identifier": "sample",
                 "steps": [
                     {
+                        "action": "processing",
                         "processing_method": {
                             "value": "433452008",
                             "scheme_designator": "SCT",
@@ -714,6 +809,7 @@ class TestSampleJsonSchema:
                         "date_time": "2023-08-05T00:00:00",
                     },
                     {
+                        "action": "sampling",
                         "sampling_method": {
                             "value": "434472006",
                             "scheme_designator": "SCT",
@@ -735,6 +831,7 @@ class TestSampleJsonSchema:
                 "identifier": "specimen",
                 "steps": [
                     {
+                        "action": "collection",
                         "extraction_method": {
                             "value": "65801008",
                             "scheme_designator": "SCT",
@@ -744,6 +841,7 @@ class TestSampleJsonSchema:
                         "description": "description",
                     },
                     {
+                        "action": "sampling",
                         "sampling_method": {
                             "value": "122459003",
                             "scheme_designator": "SCT",

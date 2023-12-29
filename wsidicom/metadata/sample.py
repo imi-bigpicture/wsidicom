@@ -34,40 +34,6 @@ from wsidicom.conceptcode import (
 )
 
 
-"""
-A root specimen is created by giving it an identifier, a type, and optionally the
-extraction method used.
-
-To any specimen steps can be added. These are added to a list of steps, representing the
-order that the specimen was processed.
-
-A sampled specimen is created by one or more parent specimens, a sampling method, a type,
-and an identifier.
-The sampling can optionally be specific the to one or more specimens in the parent specimen.
-A sampled specimen keeps track of the specimens it was sampled from. A sampling step is added to the parent
-specimen representing the sampling (defining the sampling method, the sub-specimen
-sampled (if not whole specimen), and the identifier of the new sample.)
-
-Finally a slide sample will be made (using a create_slide_sample()-method?). The slide
-sample has added position.
-
-When DICOMizing the chain of samples, we start at the slide sample. For each specimen, we
-process the steps in reverse order and convert the steps into SpecimenPreparationSteps.
-For a Sample-specimen We then go to the linked sampled_from specimens and find the step
-corresponding to the sampling, and parse all the steps prior to that step (again in reverse
-order). Finally we end up at the TakenSpecimen which does not have a parent specimen.
-
-When we parse the parent specimen steps for a sample, we only consider steps (processing
-and sampling) the for sub-specimens in the parent the sample was sampled from, if specified.
-E.g. there might be steps specific to one of the parent specimens samples, that is or is not
-included. We only follow the sampled_from linkage of the given specimen.
-
-Highdicom does not support the Specimen Receiving and Specimen Storage steps, so skip those.
-Highdicom does not support Specimen Container and Specimen Type in the SpecimenPreparationStep,
-consider making a PR.
-"""
-
-
 class UniversalIssuerType(Enum):
     """The type of a universal issuer of an identifier."""
 
@@ -326,6 +292,18 @@ class Staining(PreparationStep):
     """
 
     substances: List[Union[str, SpecimenStainsCode]]
+    date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
+
+
+@dataclass
+class Receiving(PreparationStep):
+    date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
+
+
+@dataclass
+class Storage(PreparationStep):
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
 

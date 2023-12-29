@@ -132,7 +132,6 @@ class SpecimenDicomParser:
 
         if len(samplings) > 1:
             raise ValueError("Should be max one sampling, got.", len(samplings))
-        print(description.localization)
         return SlideSample(
             identifier=identifier,
             anatomical_sites=description.anatomical_sites,

@@ -56,6 +56,7 @@ def json_slide():
                 "identifier": "block 1",
                 "steps": [
                     {
+                        "action": "embedding",
                         "medium": {
                             "value": "311731000",
                             "scheme_designator": "SCT",
@@ -64,6 +65,7 @@ def json_slide():
                         "date_time": "2023-08-05T00:00:00",
                     },
                     {
+                        "action": "sampling",
                         "sampling_method": {
                             "value": "434472006",
                             "scheme_designator": "SCT",
@@ -76,6 +78,7 @@ def json_slide():
                         "description": "Sampling to slide",
                     },
                     {
+                        "action": "sampling",
                         "sampling_method": {
                             "value": "434472006",
                             "scheme_designator": "SCT",
@@ -102,6 +105,7 @@ def json_slide():
                 "identifier": "part 1",
                 "steps": [
                     {
+                        "action": "collection",
                         "extraction_method": {
                             "value": "17636008",
                             "scheme_designator": "SCT",
@@ -111,6 +115,7 @@ def json_slide():
                         "description": "Extracted",
                     },
                     {
+                        "action": "fixation",
                         "fixative": {
                             "value": "434162003",
                             "scheme_designator": "SCT",
@@ -119,6 +124,7 @@ def json_slide():
                         "date_time": "2023-08-05T00:00:00",
                     },
                     {
+                        "action": "sampling",
                         "sampling_method": {
                             "value": "122459003",
                             "scheme_designator": "SCT",
@@ -139,6 +145,7 @@ def json_slide():
                 "identifier": "part 2",
                 "steps": [
                     {
+                        "action": "collection",
                         "extraction_method": {
                             "value": "17636008",
                             "scheme_designator": "SCT",
@@ -148,6 +155,7 @@ def json_slide():
                         "description": "Extracted",
                     },
                     {
+                        "action": "fixation",
                         "fixative": {
                             "value": "434162003",
                             "scheme_designator": "SCT",
@@ -156,6 +164,7 @@ def json_slide():
                         "date_time": "2023-08-05T00:00:00",
                     },
                     {
+                        "action": "sampling",
                         "sampling_method": {
                             "value": "122459003",
                             "scheme_designator": "SCT",

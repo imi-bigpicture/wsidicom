@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import datetime
-from typing import List, Optional, Sequence, Union
+from typing import Iterator, List, Optional, Sequence, Union
 from pydicom import Dataset
 from pydicom.valuerep import DSfloat
 import pytest
@@ -38,16 +38,20 @@ from wsidicom.metadata.dicom_schema.sample.model import (
     ProcessingDicomModel,
     StainingDicomModel,
     SamplingDicomModel,
+    ReceivingDicomModel,
+    StorageDicomModel,
 )
 from wsidicom.metadata.dicom_schema.sample.parser import SpecimenDicomParser
 from wsidicom.metadata.dicom_schema.sample.schema import (
     CollectionDicomSchema,
     ProcessingDicomSchema,
+    ReceivingDicomSchema,
     SamplingDicomSchema,
     SpecimenDescriptionDicomSchema,
     SpecimenLocalizationDicomSchema,
     StainingDicomSchema,
     SampleCodes,
+    StorageDicomSchema,
 )
 
 from wsidicom.metadata.sample import (
@@ -65,6 +69,8 @@ from wsidicom.metadata.sample import (
     Sampling,
     Processing,
     Staining,
+    Receiving,
+    Storage,
 )
 
 
@@ -146,7 +152,7 @@ def collection_dicom(
     collection: Collection,
     identifier: Union[str, SpecimenIdentifier],
     fixative: Optional[SpecimenFixativesCode],
-    embedding: Optional[SpecimenEmbeddingMediaCode],
+    medium: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
     container: Optional[ContainerTypeCode],
 ):
@@ -157,7 +163,7 @@ def collection_dicom(
         date_time=collection.date_time,
         description=collection.description,
         fixative=fixative,
-        embedding=embedding,
+        embedding=medium,
         method=collection.method,
         processing=processing_method,
         container=container,
@@ -213,7 +219,7 @@ def sampling_dicom(
     sampling: Sampling,
     identifier: Union[str, SpecimenIdentifier],
     fixative: Optional[SpecimenFixativesCode],
-    embedding: Optional[SpecimenEmbeddingMediaCode],
+    medium: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
     container: Optional[ContainerTypeCode],
 ):
@@ -231,7 +237,7 @@ def sampling_dicom(
         description=sampling.description,
         method=sampling.method,
         fixative=fixative,
-        embedding=embedding,
+        embedding=medium,
         parent_specimen_identifier=parent_identifier,
         issuer_of_parent_specimen_identifier=parent_issuer,
         parent_specimen_type=sampling.specimen.type,
@@ -341,7 +347,7 @@ def processing_dicom(
     processing: Processing,
     identifier: Union[str, SpecimenIdentifier],
     fixative: Optional[SpecimenFixativesCode],
-    embedding: Optional[SpecimenEmbeddingMediaCode],
+    medium: Optional[SpecimenEmbeddingMediaCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield ProcessingDicomModel(
@@ -351,7 +357,7 @@ def processing_dicom(
         description=processing.description,
         processing=processing.method,
         fixative=fixative,
-        embedding=embedding,
+        embedding=medium,
     )
 
 
@@ -403,7 +409,7 @@ def staining_dicom(
     staining: Staining,
     identifier: Union[str, SpecimenIdentifier],
     fixative: Optional[SpecimenFixativesCode],
-    embedding: Optional[SpecimenEmbeddingMediaCode],
+    medium: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
@@ -414,7 +420,7 @@ def staining_dicom(
         description=staining.description,
         substances=staining.substances,
         fixative=fixative,
-        embedding=embedding,
+        embedding=medium,
         processing=processing_method,
     )
 
@@ -461,10 +467,99 @@ def staining_dataset(
 
 
 @pytest.fixture()
-def description_dataset(
-    collection_dataset: Dataset,
+def receiving_dicom(
+    receiving: Receiving,
+    identifier: Union[str, SpecimenIdentifier],
 ):
-    pass
+    identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
+    yield ReceivingDicomModel(
+        identifier=identifier,
+        issuer_of_identifier=issuer,
+        date_time=receiving.date_time,
+        description=receiving.description,
+        fixative=None,
+        embedding=None,
+        processing=None,
+    )
+
+
+def create_receiving_dataset(
+    receiving_dicom: ReceivingDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    dataset = Dataset()
+    items = create_identifier_items(identifier)
+    items.append(create_processing_type_item(receiving_dicom))
+    if receiving_dicom.date_time is not None:
+        items.append(
+            create_datetime_item(
+                SampleCodes.datetime_of_processing, receiving_dicom.date_time
+            ),
+        )
+    if receiving_dicom.description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.processing_description, receiving_dicom.description
+            )
+        )
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset
+
+
+@pytest.fixture()
+def receiving_dataset(
+    receiving_dicom: ReceivingDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    yield create_receiving_dataset(receiving_dicom, identifier)
+
+
+@pytest.fixture()
+def storage_dicom(
+    storage: Storage,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
+    yield StorageDicomModel(
+        identifier=identifier,
+        issuer_of_identifier=issuer,
+        date_time=storage.date_time,
+        description=storage.description,
+        fixative=None,
+        embedding=None,
+        processing=None,
+    )
+
+
+def create_storage_dataset(
+    storage_dicom: StorageDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    dataset = Dataset()
+    items = create_identifier_items(identifier)
+    items.append(create_processing_type_item(storage_dicom))
+    if storage_dicom.date_time is not None:
+        items.append(
+            create_datetime_item(
+                SampleCodes.datetime_of_processing, storage_dicom.date_time
+            ),
+        )
+    if storage_dicom.description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.processing_description, storage_dicom.description
+            )
+        )
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset
+
+
+@pytest.fixture()
+def storage_dataset(
+    storage_dicom: StorageDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    yield create_storage_dataset(storage_dicom, identifier)
 
 
 def create_description(
@@ -715,6 +810,10 @@ def create_processing_type_item(step: SpecimenPreparationStepDicomModel):
         processing_type_code = SampleCodes.sample_processing
     elif isinstance(step, StainingDicomModel):
         processing_type_code = SampleCodes.staining
+    elif isinstance(step, ReceivingDicomModel):
+        processing_type_code = SampleCodes.receiving
+    elif isinstance(step, StorageDicomModel):
+        processing_type_code = SampleCodes.storage
     else:
         raise NotImplementedError()
     dataset.ConceptCodeSequence = [create_code_dataset(processing_type_code)]
@@ -751,7 +850,7 @@ class TestSampleDicom:
     @pytest.mark.parametrize(
         "fixative", [SpecimenFixativesCode("Neutral Buffered Formalin")]
     )
-    @pytest.mark.parametrize("embedding", [SpecimenEmbeddingMediaCode("Paraffin wax")])
+    @pytest.mark.parametrize("medium", [SpecimenEmbeddingMediaCode("Paraffin wax")])
     @pytest.mark.parametrize("short_description", [None, "short description"])
     @pytest.mark.parametrize("detailed_description", [None, "detailed description"])
     @pytest.mark.parametrize(
@@ -770,7 +869,7 @@ class TestSampleDicom:
         collection_method: SpecimenCollectionProcedureCode,
         fixative: SpecimenFixativesCode,
         specimen_sampling_method: SpecimenSamplingProcedureCode,
-        embedding: SpecimenEmbeddingMediaCode,
+        medium: SpecimenEmbeddingMediaCode,
         block_sampling_method: SpecimenSamplingProcedureCode,
         block_type: AnatomicPathologySpecimenTypesCode,
         specimen_localization: SpecimenLocalization,
@@ -797,7 +896,7 @@ class TestSampleDicom:
                 collection_method,
                 fixative,
                 specimen_sampling_method,
-                embedding,
+                medium,
                 block_sampling_method,
                 block_type,
                 specimen_localization,
@@ -840,7 +939,7 @@ class TestSampleDicom:
             assert block.container == block_container
             embedding_step = block.steps[0]
             assert isinstance(embedding_step, Embedding)
-            assert embedding_step.medium == embedding
+            assert embedding_step.medium == medium
             assert len(block.sampled_from) == len(specimen_ids)
             for index, specimen_id in enumerate(specimen_ids):
                 assert block.sampled_from[index].method == specimen_sampling_method
@@ -888,60 +987,51 @@ class TestPreparationStepDicomSchema:
 
         # Assert
         assert isinstance(serialized, list)
-        # First item should be identifier
         item_iterator = iter(serialized)
-        identifier_item = next(item_iterator)
-        self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
-        self.assert_item_string_equals_value(
-            identifier_item,
+        # First item should be identifier
+        self.assert_next_item_equals_string(
+            item_iterator,
+            SampleCodes.identifier,
             identifier if isinstance(identifier, str) else identifier.value,
         )
         # Next item can be issuer of identifier
         if isinstance(identifier, SpecimenIdentifier) and identifier.issuer is not None:
-            issuer_of_identifier_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                issuer_of_identifier_item, SampleCodes.issuer_of_identifier
-            )
-            self.assert_item_string_equals_value(
-                issuer_of_identifier_item, identifier.issuer.to_hl7v2()
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.issuer_of_identifier,
+                identifier.issuer.to_hl7v2(),
             )
         # Next item can be container type
         if collection_dicom.container is not None:
-            container_item = next(item_iterator)
-            self.assert_item_name_equals_code(container_item, SampleCodes.container)
-            self.assert_item_code_equals_value(
-                container_item, collection_dicom.container
+            self.assert_next_item_equals_code(
+                item_iterator, SampleCodes.container, collection_dicom.container
             )
         # Next item should be processing type
-        processing_type_item = next(item_iterator)
-        self.assert_item_name_equals_code(
-            processing_type_item, SampleCodes.processing_type
-        )
-        self.assert_item_code_equals_value(
-            processing_type_item, SampleCodes.specimen_collection
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.processing_type,
+            SampleCodes.specimen_collection,
         )
         # Next item can be date time
         if collection_dicom.date_time is not None:
-            date_time_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                date_time_item, SampleCodes.datetime_of_processing
-            )
-            self.assert_item_datetime_equals_value(
-                date_time_item, collection_dicom.date_time
+            self.assert_next_item_equals_datetime(
+                item_iterator,
+                SampleCodes.datetime_of_processing,
+                collection_dicom.date_time,
             )
         # Next item can be description
         if collection_dicom.description is not None:
-            collection_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                collection_item, SampleCodes.processing_description
-            )
-            self.assert_item_string_equals_value(
-                collection_item, collection_dicom.description
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.processing_description,
+                collection_dicom.description,
             )
         # Last item should be method
-        method_item = next(item_iterator)
-        self.assert_item_name_equals_code(method_item, SampleCodes.specimen_collection)
-        self.assert_item_code_equals_value(method_item, collection_dicom.method.code)
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.specimen_collection,
+            collection_dicom.method,
+        )
         # There should be no more items
         assert next(item_iterator, None) is None
 
@@ -960,7 +1050,7 @@ class TestPreparationStepDicomSchema:
         ],
     )
     @pytest.mark.parametrize(
-        ["fixative", "embedding"],
+        ["fixative", "medium"],
         [
             [None, None],
             [
@@ -1041,130 +1131,104 @@ class TestPreparationStepDicomSchema:
 
         # Assert
         assert isinstance(serialized, list)
-        # First item should be identifier
         item_iterator = iter(serialized)
-        identifier_item = next(item_iterator)
-        self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
-        self.assert_item_string_equals_value(
-            identifier_item,
+        # First item should be identifier
+        self.assert_next_item_equals_string(
+            item_iterator,
+            SampleCodes.identifier,
             identifier if isinstance(identifier, str) else identifier.value,
         )
         # Next item can be issuer of identifier
         if isinstance(identifier, SpecimenIdentifier) and identifier.issuer is not None:
-            issuer_of_identifier_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                issuer_of_identifier_item, SampleCodes.issuer_of_identifier
-            )
-            self.assert_item_string_equals_value(
-                issuer_of_identifier_item, identifier.issuer.to_hl7v2()
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.issuer_of_identifier,
+                identifier.issuer.to_hl7v2(),
             )
         # Next item can be container type
         if sampling_dicom.container is not None:
-            container_item = next(item_iterator)
-            self.assert_item_name_equals_code(container_item, SampleCodes.container)
-            self.assert_item_code_equals_value(container_item, sampling_dicom.container)
+            self.assert_next_item_equals_code(
+                item_iterator, SampleCodes.container, sampling_dicom.container
+            )
         # Next item should be processing type
-        processing_type_item = next(item_iterator)
-        self.assert_item_name_equals_code(
-            processing_type_item, SampleCodes.processing_type
-        )
-        self.assert_item_code_equals_value(
-            processing_type_item, SampleCodes.sampling_method
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.processing_type,
+            SampleCodes.sampling_method,
         )
         # Next item can be date time
         if sampling_dicom.date_time is not None:
-            date_time_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                date_time_item, SampleCodes.datetime_of_processing
-            )
-            self.assert_item_datetime_equals_value(
-                date_time_item, sampling_dicom.date_time
+            self.assert_next_item_equals_datetime(
+                item_iterator,
+                SampleCodes.datetime_of_processing,
+                sampling_dicom.date_time,
             )
         # Next item can be description
         if sampling_dicom.description is not None:
-            collection_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                collection_item, SampleCodes.processing_description
-            )
-            self.assert_item_string_equals_value(
-                collection_item, sampling_dicom.description
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.processing_description,
+                sampling_dicom.description,
             )
         # Next item should be method
-        method_item = next(item_iterator)
-        self.assert_item_name_equals_code(method_item, SampleCodes.sampling_method)
-        self.assert_item_code_equals_value(method_item, sampling_dicom.method.code)
-        # Next item should be parent specimen identifier
-        parent_specimen_identifier_item = next(item_iterator)
-        self.assert_item_name_equals_code(
-            parent_specimen_identifier_item, SampleCodes.parent_specimen_identifier
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.sampling_method,
+            sampling_dicom.method,
         )
-        self.assert_item_string_equals_value(
-            parent_specimen_identifier_item, sampling_dicom.parent_specimen_identifier
+        # Next item should be parent specimen identifier
+        self.assert_next_item_equals_string(
+            item_iterator,
+            SampleCodes.parent_specimen_identifier,
+            sampling_dicom.parent_specimen_identifier,
         )
         # Next item can be parent specimen identifier issuer
         if sampling_dicom.issuer_of_parent_specimen_identifier is not None:
-            parent_specimen_identifier_issuer_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                parent_specimen_identifier_issuer_item,
+            self.assert_next_item_equals_string(
+                item_iterator,
                 SampleCodes.issuer_of_parent_specimen_identifier,
-            )
-            self.assert_item_string_equals_value(
-                parent_specimen_identifier_issuer_item,
                 sampling_dicom.issuer_of_parent_specimen_identifier,
             )
         # Next item should be parent specimen type
-        parent_specimen_type_item = next(item_iterator)
-        self.assert_item_name_equals_code(
-            parent_specimen_type_item, SampleCodes.parent_specimen_type
-        )
-        self.assert_item_code_equals_value(
-            parent_specimen_type_item,
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.parent_specimen_type,
             sampling_dicom.parent_specimen_type,
         )
         # Next item can be location reference
         if sampling_dicom.location_reference is not None:
-            location_reference_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                location_reference_item, SampleCodes.location_frame_of_reference
-            )
-            self.assert_item_string_equals_value(
-                location_reference_item, sampling_dicom.location_reference
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.location_frame_of_reference,
+                sampling_dicom.location_reference,
             )
         # Next item can be location description
         if sampling_dicom.location_description is not None:
-            location_description_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                location_description_item, SampleCodes.location_of_sampling_site
-            )
-            self.assert_item_string_equals_value(
-                location_description_item, sampling_dicom.location_description
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.location_of_sampling_site,
+                sampling_dicom.location_description,
             )
         # Next item can be location x
         if sampling_dicom.location_x is not None:
-            location_x_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                location_x_item, SampleCodes.location_of_sampling_site_x
-            )
-            self.assert_item_measurement_equals_value(
-                location_x_item, sampling_dicom.location_x
+            self.assert_next_item_equals_measurement(
+                item_iterator,
+                SampleCodes.location_of_sampling_site_x,
+                sampling_dicom.location_x,
             )
         # Next item can be location y
         if sampling_dicom.location_y is not None:
-            location_y_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                location_y_item, SampleCodes.location_of_sampling_site_y
-            )
-            self.assert_item_measurement_equals_value(
-                location_y_item, sampling_dicom.location_y
+            self.assert_next_item_equals_measurement(
+                item_iterator,
+                SampleCodes.location_of_sampling_site_y,
+                sampling_dicom.location_y,
             )
         # Next item can be location z
         if sampling_dicom.location_z is not None:
-            location_z_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                location_z_item, SampleCodes.location_of_sampling_site_z
-            )
-            self.assert_item_measurement_equals_value(
-                location_z_item, sampling_dicom.location_z
+            self.assert_next_item_equals_measurement(
+                item_iterator,
+                SampleCodes.location_of_sampling_site_z,
+                sampling_dicom.location_z,
             )
         # There should be no more items
         assert next(item_iterator, None) is None
@@ -1184,7 +1248,7 @@ class TestPreparationStepDicomSchema:
         ],
     )
     @pytest.mark.parametrize(
-        ["fixative", "embedding"],
+        ["fixative", "medium"],
         [
             [None, None],
             [
@@ -1250,6 +1314,16 @@ class TestPreparationStepDicomSchema:
             SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
         ],
     )
+    @pytest.mark.parametrize(
+        ["fixative", "medium"],
+        [
+            [None, None],
+            [
+                SpecimenFixativesCode("Neutral Buffered Formalin"),
+                SpecimenEmbeddingMediaCode("Paraffin wax"),
+            ],
+        ],
+    )
     def test_serialize_processing_dicom(
         self,
         processing_dicom: ProcessingDicomModel,
@@ -1263,57 +1337,56 @@ class TestPreparationStepDicomSchema:
 
         # Assert
         assert isinstance(serialized, list)
-        # First item should be identifier
         item_iterator = iter(serialized)
-        identifier_item = next(item_iterator)
-        self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
-        self.assert_item_string_equals_value(
-            identifier_item,
+        # First item should be identifier
+        self.assert_next_item_equals_string(
+            item_iterator,
+            SampleCodes.identifier,
             identifier if isinstance(identifier, str) else identifier.value,
         )
         # Next item can be issuer of identifier
         if isinstance(identifier, SpecimenIdentifier) and identifier.issuer is not None:
-            issuer_of_identifier_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                issuer_of_identifier_item, SampleCodes.issuer_of_identifier
-            )
-            self.assert_item_string_equals_value(
-                issuer_of_identifier_item, identifier.issuer.to_hl7v2()
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.issuer_of_identifier,
+                identifier.issuer.to_hl7v2(),
             )
         # Next item should be processing type
-        processing_type_item = next(item_iterator)
-        self.assert_item_name_equals_code(
-            processing_type_item, SampleCodes.processing_type
-        )
-        self.assert_item_code_equals_value(
-            processing_type_item, SampleCodes.sample_processing
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.processing_type,
+            SampleCodes.sample_processing,
         )
         # Next item can be date time
         if processing_dicom.date_time is not None:
-            date_time_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                date_time_item, SampleCodes.datetime_of_processing
-            )
-            self.assert_item_datetime_equals_value(
-                date_time_item, processing_dicom.date_time
+            self.assert_next_item_equals_datetime(
+                item_iterator,
+                SampleCodes.datetime_of_processing,
+                processing_dicom.date_time,
             )
         # Next item can be description
         if processing_dicom.description is not None:
-            collection_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                collection_item, SampleCodes.processing_description
-            )
-            self.assert_item_string_equals_value(
-                collection_item, processing_dicom.description
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.processing_description,
+                processing_dicom.description,
             )
         # Next item can be method
         if processing_dicom.processing is not None:
-            collection_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                collection_item, SampleCodes.processing_description
+            self.assert_next_item_equals_code(
+                item_iterator,
+                SampleCodes.processing_description,
+                processing_dicom.processing,
             )
-            self.assert_item_code_equals_value(
-                collection_item, processing_dicom.processing
+        # Next item can be fixative
+        if processing_dicom.fixative is not None:
+            self.assert_next_item_equals_code(
+                item_iterator, SampleCodes.fixative, processing_dicom.fixative
+            )
+        # Next item can be embedding
+        if processing_dicom.embedding is not None:
+            self.assert_next_item_equals_code(
+                item_iterator, SampleCodes.embedding, processing_dicom.embedding
             )
         # There should be no more items
         assert next(item_iterator, None) is None
@@ -1333,7 +1406,7 @@ class TestPreparationStepDicomSchema:
         ],
     )
     @pytest.mark.parametrize(
-        ["fixative", "embedding"],
+        ["fixative", "medium"],
         [
             [None, None],
             [
@@ -1395,59 +1468,51 @@ class TestPreparationStepDicomSchema:
 
         # Assert
         assert isinstance(serialized, list)
-        # First item should be identifier
         item_iterator = iter(serialized)
-        identifier_item = next(item_iterator)
-        self.assert_item_name_equals_code(identifier_item, SampleCodes.identifier)
-        self.assert_item_string_equals_value(
-            identifier_item,
+        item_iterator = iter(serialized)
+        # First item should be identifier
+        self.assert_next_item_equals_string(
+            item_iterator,
+            SampleCodes.identifier,
             identifier if isinstance(identifier, str) else identifier.value,
         )
         # Next item can be issuer of identifier
         if isinstance(identifier, SpecimenIdentifier) and identifier.issuer is not None:
-            issuer_of_identifier_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                issuer_of_identifier_item, SampleCodes.issuer_of_identifier
-            )
-            self.assert_item_string_equals_value(
-                issuer_of_identifier_item, identifier.issuer.to_hl7v2()
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.issuer_of_identifier,
+                identifier.issuer.to_hl7v2(),
             )
         # Next item should be processing type
-        processing_type_item = next(item_iterator)
-        self.assert_item_name_equals_code(
-            processing_type_item, SampleCodes.processing_type
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.processing_type,
+            SampleCodes.staining,
         )
-        self.assert_item_code_equals_value(processing_type_item, SampleCodes.staining)
         # Next item can be date time
         if staining_dicom.date_time is not None:
-            date_time_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                date_time_item, SampleCodes.datetime_of_processing
-            )
-            self.assert_item_datetime_equals_value(
-                date_time_item, staining_dicom.date_time
+            self.assert_next_item_equals_datetime(
+                item_iterator,
+                SampleCodes.datetime_of_processing,
+                staining_dicom.date_time,
             )
         # Next item can be description
         if staining_dicom.description is not None:
-            collection_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                collection_item, SampleCodes.processing_description
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.processing_description,
+                staining_dicom.description,
             )
-            self.assert_item_string_equals_value(
-                collection_item, staining_dicom.description
-            )
-        # Next item can be method
+        # Next item can be staining
         for substance in staining_dicom.substances:
-            substance_item = next(item_iterator)
-            self.assert_item_name_equals_code(
-                substance_item,
-                SampleCodes.using_substance,
-            )
             if isinstance(substance, SpecimenStainsCode):
-                self.assert_item_code_equals_value(substance_item, substance)
+                self.assert_next_item_equals_code(
+                    item_iterator, SampleCodes.using_substance, substance
+                )
             else:
-                self.assert_item_string_equals_value(substance_item, substance)
-
+                self.assert_next_item_equals_string(
+                    item_iterator, SampleCodes.using_substance, substance
+                )
         # There should be no more items
         assert next(item_iterator, None) is None
 
@@ -1463,16 +1528,6 @@ class TestPreparationStepDicomSchema:
         [
             "identifier",
             SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
-        ],
-    )
-    @pytest.mark.parametrize(
-        ["fixative", "embedding"],
-        [
-            [None, None],
-            [
-                SpecimenFixativesCode("Neutral Buffered Formalin"),
-                SpecimenEmbeddingMediaCode("Paraffin wax"),
-            ],
         ],
     )
     def test_deserialize_staining_dicom(
@@ -1498,6 +1553,204 @@ class TestPreparationStepDicomSchema:
         assert deserialized.description == staining_dicom.description
         assert deserialized.fixative == staining_dicom.fixative
         assert deserialized.embedding == staining_dicom.embedding
+
+    @pytest.mark.parametrize(
+        ["date_time", "description"],
+        [
+            [datetime.datetime(2021, 1, 1), "description"],
+            [None, None],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "identifier",
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
+    )
+    def test_serialize_receiving_dicom(
+        self,
+        receiving_dicom: ReceivingDicomModel,
+        identifier: Union[str, SpecimenIdentifier],
+    ):
+        # Arrange
+        schema = ReceivingDicomSchema()
+
+        # Act
+        serialized = schema.dump(receiving_dicom)
+
+        # Assert
+        assert isinstance(serialized, list)
+        item_iterator = iter(serialized)
+        # First item should be identifier
+        self.assert_next_item_equals_string(
+            item_iterator,
+            SampleCodes.identifier,
+            identifier if isinstance(identifier, str) else identifier.value,
+        )
+        # Next item can be issuer of identifier
+        if isinstance(identifier, SpecimenIdentifier) and identifier.issuer is not None:
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.issuer_of_identifier,
+                identifier.issuer.to_hl7v2(),
+            )
+        # Next item should be processing type
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.processing_type,
+            SampleCodes.receiving,
+        )
+        # Next item can be date time
+        if receiving_dicom.date_time is not None:
+            self.assert_next_item_equals_datetime(
+                item_iterator,
+                SampleCodes.datetime_of_processing,
+                receiving_dicom.date_time,
+            )
+        # Next item can be description
+        if receiving_dicom.description is not None:
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.processing_description,
+                receiving_dicom.description,
+            )
+        # There should be no more items
+        assert next(item_iterator, None) is None
+
+    @pytest.mark.parametrize(
+        ["date_time", "description"],
+        [
+            [datetime.datetime(2021, 1, 1), "description"],
+            [None, None],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "identifier",
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
+    )
+    def test_deserialize_receiving_dicom(
+        self,
+        receiving_dicom: ReceivingDicomModel,
+        receiving_dataset: Dataset,
+    ):
+        # Arrange
+
+        schema = ReceivingDicomSchema()
+
+        # Act
+        deserialized = schema.load(
+            receiving_dataset.SpecimenPreparationStepContentItemSequence
+        )
+
+        # Assert
+        assert isinstance(deserialized, ReceivingDicomModel)
+        assert deserialized.identifier == receiving_dicom.identifier
+        assert deserialized.issuer_of_identifier == receiving_dicom.issuer_of_identifier
+        assert deserialized.date_time == receiving_dicom.date_time
+        assert deserialized.description == receiving_dicom.description
+
+    @pytest.mark.parametrize(
+        ["date_time", "description"],
+        [
+            [datetime.datetime(2021, 1, 1), "description"],
+            [None, None],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "identifier",
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
+    )
+    def test_serialize_storage_dicom(
+        self,
+        storage_dicom: StorageDicomModel,
+        identifier: Union[str, SpecimenIdentifier],
+    ):
+        # Arrange
+        schema = StorageDicomSchema()
+
+        # Act
+        serialized = schema.dump(storage_dicom)
+
+        # Assert
+        assert isinstance(serialized, list)
+        item_iterator = iter(serialized)
+        # First item should be identifier
+        self.assert_next_item_equals_string(
+            item_iterator,
+            SampleCodes.identifier,
+            identifier if isinstance(identifier, str) else identifier.value,
+        )
+        # Next item can be issuer of identifier
+        if isinstance(identifier, SpecimenIdentifier) and identifier.issuer is not None:
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.issuer_of_identifier,
+                identifier.issuer.to_hl7v2(),
+            )
+        # Next item should be processing type
+        self.assert_next_item_equals_code(
+            item_iterator,
+            SampleCodes.processing_type,
+            SampleCodes.storage,
+        )
+        # Next item can be date time
+        if storage_dicom.date_time is not None:
+            self.assert_next_item_equals_datetime(
+                item_iterator,
+                SampleCodes.datetime_of_processing,
+                storage_dicom.date_time,
+            )
+        # Next item can be description
+        if storage_dicom.description is not None:
+            self.assert_next_item_equals_string(
+                item_iterator,
+                SampleCodes.processing_description,
+                storage_dicom.description,
+            )
+        # There should be no more items
+        assert next(item_iterator, None) is None
+
+    @pytest.mark.parametrize(
+        ["date_time", "description"],
+        [
+            [datetime.datetime(2021, 1, 1), "description"],
+            [None, None],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "identifier",
+        [
+            "identifier",
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+        ],
+    )
+    def test_deserialize_storage_dicom(
+        self,
+        storage_dicom: StorageDicomModel,
+        storage_dataset: Dataset,
+    ):
+        # Arrange
+
+        schema = StorageDicomSchema()
+
+        # Act
+        deserialized = schema.load(
+            storage_dataset.SpecimenPreparationStepContentItemSequence
+        )
+
+        # Assert
+        assert isinstance(deserialized, StorageDicomModel)
+        assert deserialized.identifier == storage_dicom.identifier
+        assert deserialized.issuer_of_identifier == storage_dicom.issuer_of_identifier
+        assert deserialized.date_time == storage_dicom.date_time
+        assert deserialized.description == storage_dicom.description
 
     @pytest.mark.parametrize("reference", ["reference", None])
     @pytest.mark.parametrize("description", ["description", None])
@@ -1556,6 +1809,63 @@ class TestPreparationStepDicomSchema:
             )
             self.assert_item_string_equals_value(visual_marking_item, visual_marking)
 
+    @pytest.mark.parametrize("reference", ["reference", None])
+    @pytest.mark.parametrize("description", ["description", None])
+    @pytest.mark.parametrize("x", [Measurement(1, UnitCode("mm")), None])
+    @pytest.mark.parametrize("y", [Measurement(1, UnitCode("mm")), None])
+    @pytest.mark.parametrize("z", [Measurement(1, UnitCode("mm")), None])
+    @pytest.mark.parametrize("visual_marking", ["visual_marking", None])
+    def test_deserialize_specimen_location_dicom(
+        self,
+        reference: Optional[str],
+        description: Optional[str],
+        x: Optional[Measurement],
+        y: Optional[Measurement],
+        z: Optional[Measurement],
+        visual_marking: Optional[str],
+    ):
+        # Arrange
+        sequence = []
+        if reference is not None:
+            sequence.append(
+                create_string_item(SampleCodes.location_frame_of_reference, reference)
+            )
+        if description is not None:
+            sequence.append(
+                create_string_item(SampleCodes.location_of_specimen, description)
+            )
+        if x is not None:
+            sequence.append(
+                create_measurement_item(SampleCodes.location_of_specimen_x, x)
+            )
+        if y is not None:
+            sequence.append(
+                create_measurement_item(SampleCodes.location_of_specimen_y, y)
+            )
+        if z is not None:
+            sequence.append(
+                create_measurement_item(SampleCodes.location_of_specimen_z, z)
+            )
+        if visual_marking is not None:
+            sequence.append(
+                create_string_item(
+                    SampleCodes.visual_marking_of_specimen, visual_marking
+                )
+            )
+        schema = SpecimenLocalizationDicomSchema()
+
+        # Act
+        deserialized = schema.load(sequence)
+
+        # Assert
+        assert isinstance(deserialized, SpecimenLocalization)
+        assert deserialized.reference == reference
+        assert deserialized.description == description
+        assert deserialized.x == x
+        assert deserialized.y == y
+        assert deserialized.z == z
+        assert deserialized.visual_marking == visual_marking
+
     def assert_item_name_equals_code(self, item: Dataset, name: Code):
         self.assert_code_dataset_equals_code(item.ConceptNameCodeSequence[0], name)
 
@@ -1587,3 +1897,31 @@ class TestPreparationStepDicomSchema:
             item.CodeMeaning,
             code.meaning,
         )
+
+    def assert_next_item_equals_string(
+        self, iterator: Iterator[Dataset], name: Code, value: str
+    ):
+        item = next(iterator)
+        self.assert_item_name_equals_code(item, name)
+        self.assert_item_string_equals_value(item, value)
+
+    def assert_next_item_equals_code(
+        self, iterator: Iterator[Dataset], name: Code, value: Union[Code, ConceptCode]
+    ):
+        item = next(iterator)
+        self.assert_item_name_equals_code(item, name)
+        self.assert_item_code_equals_value(item, value)
+
+    def assert_next_item_equals_datetime(
+        self, iterator: Iterator[Dataset], name: Code, value: datetime.datetime
+    ):
+        item = next(iterator)
+        self.assert_item_name_equals_code(item, name)
+        self.assert_item_datetime_equals_value(item, value)
+
+    def assert_next_item_equals_measurement(
+        self, iterator: Iterator[Dataset], name: Code, value: Measurement
+    ):
+        item = next(iterator)
+        self.assert_item_name_equals_code(item, name)
+        self.assert_item_measurement_equals_value(item, value)

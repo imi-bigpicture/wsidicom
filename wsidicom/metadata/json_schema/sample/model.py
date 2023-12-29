@@ -14,6 +14,7 @@
 
 from abc import abstractmethod
 from collections import UserDict
+from enum import Enum
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
 import datetime
@@ -43,6 +44,17 @@ from wsidicom.metadata.sample import (
     Sampling,
     Collection,
 )
+
+
+class PreparationAction(Enum):
+    SAMPLING = "sampling"
+    COLLECTION = "collection"
+    PROCESSING = "processing"
+    STAINING = "staining"
+    FIXATION = "fixation"
+    EMBEDDING = "embedding"
+    RECEIVING = "receiving"
+    STORAGE = "storage"
 
 
 @dataclass

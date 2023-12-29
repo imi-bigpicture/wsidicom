@@ -305,7 +305,7 @@ class PatientNameDicomField(fields.String):
     def _deserialize(self, value: PersonName, attr, data, **kwargs) -> str:
         return str(value)
 
-    def _serialize(self, value: str, attr, obj, **kwargs) -> PersonName:
+    def _serialize(self, value: str, attr, obj, **kwargs) -> Optional[PersonName]:
         return PersonName(value)
 
 

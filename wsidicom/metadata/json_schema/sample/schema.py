@@ -31,7 +31,6 @@ from typing import (
     Generic,
     Iterable,
     List,
-    Mapping,
     Type,
     TypeVar,
     Union,
@@ -58,6 +57,7 @@ from wsidicom.metadata.json_schema.fields import (
 )
 from wsidicom.metadata.json_schema.sample.model import (
     ExtractedSpecimenJsonModel,
+    PreparationAction,
     SampleJsonModel,
     SamplingConstraintJsonModel,
     SamplingJsonModel,
@@ -72,6 +72,7 @@ from wsidicom.metadata.sample import (
     Fixation,
     PreparationStep,
     Processing,
+    Receiving,
     Sample,
     SampledSpecimen,
     Sampling,
@@ -81,6 +82,7 @@ from wsidicom.metadata.sample import (
     SpecimenIdentifier,
     SpecimenLocalization,
     Staining,
+    Storage,
 )
 
 """For sampling steps referencing other sampling steps in sampling_chain_constraints we
@@ -136,7 +138,16 @@ class BasePreparationStepJsonSchema(Schema):
     """Base Schema for serializing and deserializing a `PreparationStep`."""
 
     _load_class: Type[
-        Union[SamplingJsonModel, Collection, Processing, Embedding, Fixation, Staining]
+        Union[
+            SamplingJsonModel,
+            Collection,
+            Processing,
+            Embedding,
+            Fixation,
+            Staining,
+            Receiving,
+            Storage,
+        ]
     ]
 
     @post_load
@@ -154,6 +165,7 @@ class BasePreparationStepJsonSchema(Schema):
 
 
 class SamplingJsonSchema(BasePreparationStepJsonSchema):
+    action = fields.Constant(PreparationAction.SAMPLING.value, dump_only=True)
     method = JsonFieldFactory.concept_code(SpecimenSamplingProcedureCode)(
         data_key="sampling_method"
     )
@@ -167,6 +179,7 @@ class SamplingJsonSchema(BasePreparationStepJsonSchema):
 
 
 class CollectionJsonSchema(BasePreparationStepJsonSchema):
+    action = fields.Constant(PreparationAction.COLLECTION.value, dump_only=True)
     method = JsonFieldFactory.concept_code(SpecimenCollectionProcedureCode)(
         data_key="extraction_method"
     )
@@ -176,31 +189,53 @@ class CollectionJsonSchema(BasePreparationStepJsonSchema):
 
 
 class ProcessingJsonSchema(BasePreparationStepJsonSchema):
+    action = fields.Constant(PreparationAction.PROCESSING.value, dump_only=True)
     method = JsonFieldFactory.concept_code(SpecimenPreparationStepsCode)(
         data_key="processing_method"
     )
     date_time = fields.DateTime(allow_none=True)
+    description = fields.String(allow_none=True)
     _load_class = Processing
 
 
 class EmbeddingJsonSchema(BasePreparationStepJsonSchema):
+    action = fields.Constant(PreparationAction.EMBEDDING.value, dump_only=True)
     medium = JsonFieldFactory.concept_code(SpecimenEmbeddingMediaCode)()
     date_time = fields.DateTime(allow_none=True)
+    description = fields.String(allow_none=True)
     _load_class = Embedding
 
 
 class FixationJsonSchema(BasePreparationStepJsonSchema):
+    action = fields.Constant(PreparationAction.FIXATION.value, dump_only=True)
     fixative = JsonFieldFactory.concept_code(SpecimenFixativesCode)()
     date_time = fields.DateTime(allow_none=True)
+    description = fields.String(allow_none=True)
     _load_class = Fixation
 
 
 class StainingJsonSchema(BasePreparationStepJsonSchema):
+    action = fields.Constant(PreparationAction.STAINING.value, dump_only=True)
     substances = fields.List(
         JsonFieldFactory.concept_code(SpecimenStainsCode)(), allow_none=True
     )
     date_time = fields.DateTime(allow_none=True)
+    description = fields.String(allow_none=True)
     _load_class = Staining
+
+
+class ReceivingJsonSchema(BasePreparationStepJsonSchema):
+    action = fields.Constant(PreparationAction.RECEIVING.value, dump_only=True)
+    date_time = fields.DateTime(allow_none=True)
+    description = fields.String(allow_none=True)
+    _load_class = Receiving
+
+
+class StorageJsonSchema(BasePreparationStepJsonSchema):
+    action = fields.Constant(PreparationAction.STORAGE.value, dump_only=True)
+    date_time = fields.DateTime(allow_none=True)
+    description = fields.String(allow_none=True)
+    _load_class = Storage
 
 
 class PreparationStepJsonSchema(Schema):
@@ -213,15 +248,20 @@ class PreparationStepJsonSchema(Schema):
         Processing: ProcessingJsonSchema,
         Embedding: EmbeddingJsonSchema,
         Fixation: FixationJsonSchema,
+        Receiving: ReceivingJsonSchema,
+        Storage: StorageJsonSchema,
     }
 
     """Mapping key in serialized step to schema."""
-    _key_to_schema_mapping: Dict[str, Type[Schema]] = {
-        "sampling_method": SamplingJsonSchema,
-        "extraction_method": CollectionJsonSchema,
-        "processing_method": ProcessingJsonSchema,
-        "medium": EmbeddingJsonSchema,
-        "fixative": FixationJsonSchema,
+    _action_to_schema_mapping: Dict[PreparationAction, Type[Schema]] = {
+        PreparationAction.SAMPLING: SamplingJsonSchema,
+        PreparationAction.COLLECTION: CollectionJsonSchema,
+        PreparationAction.PROCESSING: ProcessingJsonSchema,
+        PreparationAction.EMBEDDING: EmbeddingJsonSchema,
+        PreparationAction.FIXATION: FixationJsonSchema,
+        PreparationAction.STAINING: StainingJsonSchema,
+        PreparationAction.RECEIVING: ReceivingJsonSchema,
+        PreparationAction.STORAGE: StorageJsonSchema,
     }
 
     def dump(
@@ -235,24 +275,21 @@ class PreparationStepJsonSchema(Schema):
 
     def load(
         self,
-        data: Union[Mapping[str, Any], Iterable[Mapping[str, Any]]],
+        data: Union[Dict[str, Any], Iterable[Dict[str, Any]]],
         **kwargs,
     ):
-        if isinstance(data, Mapping):
-            return self._subschema_load(data)
+        if isinstance(data, dict):
+            return self._subschema_load(data)  # type: ignore
         return [self._subschema_load(step) for step in data]
 
     def _subschema_load(
-        self, step: Mapping
+        self, step: Dict[str, Any]
     ) -> Union[PreparationStep, SamplingJsonModel]:
         """Select a schema and load and return step using the schema."""
         try:
-            schema = next(
-                schema
-                for key, schema in self._key_to_schema_mapping.items()
-                if key in step
-            )
-        except StopIteration:
+            action = PreparationAction(step.pop("action"))
+            schema = self._action_to_schema_mapping[action]
+        except KeyError:
             raise NotImplementedError()
         loaded = schema().load(step, many=False)
         assert isinstance(loaded, (PreparationStep, SamplingJsonModel))
@@ -280,7 +317,7 @@ class BaseSpecimenJsonSchema(Schema, Generic[LoadType]):
         raise NotImplementedError()
 
     @post_load
-    def post_load(self, data: Mapping[str, Any], **kwargs) -> LoadType:
+    def post_load(self, data: Dict[str, Any], **kwargs) -> LoadType:
         """Return a specimen of given load type using the defined dataclass fields."""
         return self.load_type(**data)
 
@@ -357,12 +394,12 @@ class SpecimenJsonSchema(Schema):
 
     def load(
         self,
-        data: Union[Mapping[str, Any], Iterable[Mapping[str, Any]]],
+        data: Union[Dict[str, Any], Iterable[Dict[str, Any]]],
         **kwargs,
     ) -> List[Specimen]:
         """Load serialized specimen or list of specimen as `Specimen`."""
-        if isinstance(data, Mapping):
-            loaded = [self._subschema_load(data)]
+        if isinstance(data, dict):
+            loaded = [self._subschema_load(data)]  # type: ignore
         else:
             loaded = [self._subschema_load(item) for item in data]
         specimen_parser = SpecimenJsonParser(loaded)
@@ -384,7 +421,7 @@ class SpecimenJsonSchema(Schema):
         return samplings
 
     @classmethod
-    def _subschema_select(cls, specimen: Mapping) -> Type[Schema]:
+    def _subschema_select(cls, specimen: Dict[str, Any]) -> Type[Schema]:
         try:
             return next(
                 schema
@@ -394,7 +431,7 @@ class SpecimenJsonSchema(Schema):
         except StopIteration:
             raise NotImplementedError()
 
-    def _subschema_load(self, specimen: Mapping) -> SpecimenJsonModel:
+    def _subschema_load(self, specimen: Dict[str, Any]) -> SpecimenJsonModel:
         """Select a schema and load and return specimen using the schema."""
         schema = self._subschema_select(specimen)
         loaded = schema().load(specimen, many=False)
