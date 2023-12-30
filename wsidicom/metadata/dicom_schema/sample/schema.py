@@ -18,6 +18,7 @@ from typing import (
     Dict,
     Iterable,
     List,
+    Optional,
     Type,
 )
 
@@ -415,7 +416,7 @@ class PreparationStepDicomField(marshmallow.fields.Field):
     def _serialize(
         self,
         step: SpecimenPreparationStepDicomModel,
-        attr: str | None,
+        attr: Optional[str],
         obj: Any,
         **kwargs
     ) -> List[Dataset]:
@@ -423,7 +424,7 @@ class PreparationStepDicomField(marshmallow.fields.Field):
         return self._subschema_dump(step)
 
     def _deserialize(
-        self, sequence: Iterable[Dataset], attr: str | None, data: Any, **kwargs
+        self, sequence: Iterable[Dataset], attr: Optional[str], data: Any, **kwargs
     ) -> SpecimenPreparationStepDicomModel:
         """Deserialize step from dataset."""
         return self._subschema_load(sequence)
