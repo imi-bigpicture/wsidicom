@@ -22,7 +22,7 @@ from wsidicom.metadata.defaults import defaults
 from wsidicom.metadata.defaults import Defaults
 from wsidicom.metadata.dicom_schema.sample.formatter import SpecimenDicomFormatter
 from wsidicom.metadata.dicom_schema.sample.parser import SpecimenDicomParser
-from wsidicom.metadata.dicom_schema.schema import DefaultIfValidationFailedDicomSchema
+from wsidicom.metadata.dicom_schema.schema import ModuleDicomSchema
 from wsidicom.metadata.dicom_schema.fields import (
     DefaultingDicomField,
     SingleCodeSequenceField,
@@ -35,7 +35,7 @@ from wsidicom.metadata.sample import SlideSample
 from wsidicom.metadata.slide import Slide
 
 
-class SlideDicomSchema(DefaultIfValidationFailedDicomSchema[Slide]):
+class SlideDicomSchema(ModuleDicomSchema[Slide]):
     identifier = DefaultingDicomField(
         StringDicomField(),
         dump_default=Defaults.string,
@@ -99,3 +99,7 @@ class SlideDicomSchema(DefaultIfValidationFailedDicomSchema[Slide]):
         data["samples"] = samples
         data["stainings"] = stainings
         return super().post_load(data, **kwargs)
+
+    @property
+    def module_name(self) -> str:
+        return "slide"

@@ -40,7 +40,7 @@ from wsidicom.conceptcode import (
 
 from wsidicom.metadata.defaults import Defaults
 from wsidicom.metadata.dicom_schema.schema import (
-    DefaultIfValidationFailedDicomSchema,
+    ModuleDicomSchema,
     DicomSchema,
     LoadType,
 )
@@ -603,7 +603,7 @@ class ObjectivesSchema(DicomSchema[Objectives]):
         return Objectives
 
 
-class OpticalPathDicomSchema(DefaultIfValidationFailedDicomSchema[OpticalPath]):
+class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
     identifier = StringDicomField(data_key="OpticalPathIdentifier", load_default=None)
     description = StringDicomField(data_key="OpticalPathDescription", load_default=None)
     illumination_types = DefaultingDicomField(
@@ -664,3 +664,7 @@ class OpticalPathDicomSchema(DefaultIfValidationFailedDicomSchema[OpticalPath]):
         elif illumination_color_code is not None:
             data["illumination"] = illumination_color_code
         return super().post_load(data, **kwargs)
+
+    @property
+    def module_name(self) -> str:
+        return "optical_path"

@@ -20,11 +20,11 @@ from wsidicom.metadata.dicom_schema.fields import (
     ListDicomField,
     StringDicomField,
 )
-from wsidicom.metadata.dicom_schema.schema import DefaultIfValidationFailedDicomSchema
+from wsidicom.metadata.dicom_schema.schema import ModuleDicomSchema
 from wsidicom.metadata.equipment import Equipment
 
 
-class EquipmentDicomSchema(DefaultIfValidationFailedDicomSchema[Equipment]):
+class EquipmentDicomSchema(ModuleDicomSchema[Equipment]):
     manufacturer = DefaultingDicomField(
         StringDicomField(),
         dump_default=Defaults.string,
@@ -53,3 +53,7 @@ class EquipmentDicomSchema(DefaultIfValidationFailedDicomSchema[Equipment]):
     @property
     def load_type(self) -> Type[Equipment]:
         return Equipment
+
+    @property
+    def module_name(self) -> str:
+        return "equipment"

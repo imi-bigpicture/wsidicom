@@ -107,13 +107,21 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
         return attributes
 
 
-class DefaultIfValidationFailedDicomSchema(DicomSchema[LoadType]):
+class ModuleDicomSchema(DicomSchema[LoadType]):
+    @property
+    @abstractmethod
+    def module_name(self) -> str:
+        raise NotImplementedError()
+
     def load(self, dataset: Dataset, **kwargs) -> LoadType:
         """Load dataset to LoadType. Return default LoadType if validation error."""
         try:
             return super().load(dataset, **kwargs)  # type: ignore
         except ValidationError:
-            logging.warning(f"Failed to load item with schema {self}", exc_info=True)
+            logging.warning(
+                f"Failed to load module {self.module_name} with schema {self}",
+                exc_info=True,
+            )
             return self.load_type()
 
 

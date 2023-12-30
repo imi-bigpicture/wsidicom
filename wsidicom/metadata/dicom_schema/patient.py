@@ -15,7 +15,7 @@
 from collections import defaultdict
 from typing import Any, Dict, Type
 from wsidicom.metadata.dicom_schema.schema import (
-    DefaultIfValidationFailedDicomSchema,
+    ModuleDicomSchema,
     DicomSchema,
 )
 from wsidicom.metadata.dicom_schema.fields import (
@@ -68,7 +68,7 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
         return super().post_load(data, **kwargs)
 
 
-class PatientDicomSchema(DefaultIfValidationFailedDicomSchema[Patient]):
+class PatientDicomSchema(ModuleDicomSchema[Patient]):
     name = PatientNameDicomField(data_key="PatientName", load_default=None)
     identifier = StringDicomField(data_key="PatientID", load_default=None)
     birth_date = DateDicomField(data_key="PatientBirthDate", load_default=None)
@@ -112,3 +112,7 @@ class PatientDicomSchema(DefaultIfValidationFailedDicomSchema[Patient]):
         elif species_description_string is not None:
             data["species_description"] = species_description_string
         return super().post_load(data, **kwargs)
+
+    @property
+    def module_name(self) -> str:
+        return "patient"

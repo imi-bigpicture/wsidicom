@@ -442,8 +442,8 @@ class PreparationStepDicomField(marshmallow.fields.Field):
                 == SampleCodes.processing_type
             )
             schema = self._processing_type_to_schema_mapping[processing_type]
-        except (StopIteration, KeyError):
-            raise NotImplementedError()
+        except (StopIteration, KeyError, marshmallow.ValidationError) as e:
+            raise marshmallow.ValidationError("Failed to load") from e
         loaded = schema().load(sequence, many=False)
         assert isinstance(loaded, SpecimenPreparationStepDicomModel)
         return loaded
