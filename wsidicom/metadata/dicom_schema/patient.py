@@ -14,7 +14,10 @@
 
 from collections import defaultdict
 from typing import Any, Dict, Type
-from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.schema import (
+    DefaultIfValidationFailedDicomSchema,
+    DicomSchema,
+)
 from wsidicom.metadata.dicom_schema.fields import (
     BooleanDicomField,
     CodeDicomField,
@@ -65,7 +68,7 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
         return super().post_load(data, **kwargs)
 
 
-class PatientDicomSchema(DicomSchema[Patient]):
+class PatientDicomSchema(DefaultIfValidationFailedDicomSchema[Patient]):
     name = PatientNameDicomField(data_key="PatientName", load_default=None)
     identifier = StringDicomField(data_key="PatientID", load_default=None)
     birth_date = DateDicomField(data_key="PatientBirthDate", load_default=None)

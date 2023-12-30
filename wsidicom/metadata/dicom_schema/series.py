@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from typing import Type
-from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.schema import DefaultIfValidationFailedDicomSchema
 from wsidicom.metadata.dicom_schema.fields import (
     DefaultingDicomField,
     DefaultingTagDicomField,
@@ -25,7 +25,7 @@ from marshmallow import fields
 from wsidicom.metadata.series import Series
 
 
-class SeriesDicomSchema(DicomSchema[Series]):
+class SeriesDicomSchema(DefaultIfValidationFailedDicomSchema[Series]):
     uid = DefaultingTagDicomField(
         UidDicomField(), tag="default_uid", data_key="SeriesInstanceUID"
     )

@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from typing import Type
-from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.schema import DefaultIfValidationFailedDicomSchema
 from wsidicom.metadata.dicom_schema.fields import (
     DateDicomField,
     DefaultingTagDicomField,
@@ -27,7 +27,7 @@ from wsidicom.metadata.dicom_schema.fields import (
 from wsidicom.metadata.study import Study
 
 
-class StudyDicomSchema(DicomSchema[Study]):
+class StudyDicomSchema(DefaultIfValidationFailedDicomSchema[Study]):
     uid = DefaultingTagDicomField(
         UidDicomField(), tag="default_uid", data_key="StudyInstanceUID", allow_none=True
     )

@@ -15,6 +15,7 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 import datetime
+import logging
 from typing import (
     Any,
     Dict,
@@ -28,7 +29,7 @@ from typing import (
     TypeVar,
     Union,
 )
-from marshmallow import Schema, post_dump, pre_load, post_load
+from marshmallow import Schema, ValidationError, post_dump, pre_load, post_load
 from pydicom import Dataset
 from pydicom.sr.coding import Code
 from wsidicom.conceptcode import dataset_to_code
@@ -104,6 +105,16 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
                 if de_flattened is not None:
                     attributes[key] = de_flattened
         return attributes
+
+
+class DefaultIfValidationFailedDicomSchema(DicomSchema[LoadType]):
+    def load(self, dataset: Dataset, **kwargs) -> LoadType:
+        """Load dataset to LoadType. Return default LoadType if validation error."""
+        try:
+            return super().load(dataset, **kwargs)  # type: ignore
+        except ValidationError:
+            logging.warning(f"Failed to load item with schema {self}", exc_info=True)
+            return self.load_type()
 
 
 @dataclass

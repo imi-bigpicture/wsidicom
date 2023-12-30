@@ -80,6 +80,7 @@ class SampleCodes:
     parent_specimen_identifier: Code = codes.DCM.ParentSpecimenIdentifier  # type: ignore
     issuer_of_parent_specimen_identifier: Code = codes.DCM.IssuerOfParentSpecimenIdentifier  # type: ignore
     parent_specimen_type: Code = codes.DCM.ParentSpecimenType  # type: ignore
+    specimen_type: Code = codes.SCT.SpecimenType  # type: ignore
     specimen_collection: Code = codes.SCT.SpecimenCollection  # type: ignore
     sample_processing: Code = codes.SCT.SpecimenProcessing  # type: ignore
     staining: Code = codes.SCT.Staining  # type: ignore
@@ -471,7 +472,7 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
             PreparationStepDicomField(),
             data_key="SpecimenPreparationStepContentItemSequence",
         ),
-        data_key="SpecimenPreparationStepContentItemSequence",
+        data_key="SpecimenPreparationSequence",
         load_default=[],
     )
     anatomical_sites = marshmallow.fields.List(
@@ -495,8 +496,3 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     @property
     def load_type(self):
         return SpecimenDescriptionDicomModel
-
-    @marshmallow.post_load
-    def post_load(self, data, **kwargs):
-        print(data.keys())
-        return super().post_load(data, **kwargs)

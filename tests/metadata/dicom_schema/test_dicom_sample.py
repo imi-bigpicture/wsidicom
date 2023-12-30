@@ -361,6 +361,12 @@ def processing_dicom(
     )
 
 
+def create_specimen_preparation_dataset(step: List[Dataset]):
+    dataset = Dataset()
+    dataset.SpecimenPreparationStepContentItemSequence = step
+    return dataset
+
+
 def create_processing_dataset(
     processing_dicom: ProcessingDicomModel,
     identifier: Union[str, SpecimenIdentifier],
@@ -684,7 +690,7 @@ def create_description(
     description = Dataset()
     description.SpecimenIdentifier = slide_sample_id
     description.SpecimenUID = slide_sample_uid
-    description.SpecimenPreparationStepContentItemSequence = [
+    description.SpecimenPreparationSequence = [
         collection,
         fixation,
         sampling_to_block,
@@ -954,6 +960,331 @@ class TestSampleDicom:
                 collection_step = specimen.steps[0]
                 assert isinstance(collection_step, Collection)
                 assert collection_step.method == collection_method
+
+    def test_example_specimen_module(self):
+        # Example based on
+        # https://dicom.nema.org/medical/dicom/current/output/chtml/part17/sect_NN.6.2.html
+        # The specimen type is changed from "Anatomic part" to "tissue specimen" as
+        # "Anatomic part" is not part of CID 8103.
+        # The embedding medium is changed from "Paraffin" to "Parrafin wax". as
+        # "Paraffin" is not part of CID 8114.
+        # A sampling step between block and slide is added as there is otherwise no
+        # connection between the block and the slide.
+        # Issuer of identifier has been added to last steps as an issuer is defined
+        # in the dataset
+
+        # Arrange
+        issuer_of_identifier = "Case Medical Center"
+        slide_identifier = "S07-100 A 5 1"
+        slide_uid = UID("1.2.840.99790.986.33.1677.1.1.19.5")
+        slide_short_descriptin = (
+            "Part A: LEFT UPPER LOBE, Block 5: Mass (2 pc), Slide 1: H&E"
+        )
+        slide_detailed_description = (
+            "A: Received fresh for intraoperative consultation, labeled with the "
+            'patient\'s name, number and "left upper lobe," is a pink-tan, '
+            "wedge-shaped segment of soft tissue, 6.9 x 4.2 x 1.0 cm. The pleural "
+            "surface is pink-tan and glistening with a stapled line measuring 12.0 cm. "
+            "in length. The pleural surface shows a 0.5 cm. area of puckering. "
+            "The pleural surface is inked black. The cut surface reveals a 1.2 x 1.1 "
+            "cm, white-gray, irregular mass abutting the pleural surface and deep to "
+            "the puckered area. The remainder of the cut surface is red-brown and "
+            "congested. No other lesions are identified. Representative sections are "
+            "submitted."
+            ""
+            'Block 5: "Mass" (2 pieces)'
+        )
+        primary_anatomic_structure = Code("44714003", "SCT", "Left upper lobe of lung")
+        specimen_identifier = "S07-100 A"
+        specimen_container = ContainerTypeCode("Specimen container")
+        specimen_type = AnatomicPathologySpecimenTypesCode("tissue specimen")
+        collection_method = SpecimenCollectionProcedureCode("Excision")
+        collection_description = "Taken"
+        collection_datetime = datetime.datetime(2007, 3, 23, 8, 27)
+        specimen_receiving_datetime = datetime.datetime(2007, 3, 23, 9, 43)
+        block_identifier = "S07-100 A 5"
+        block_container = ContainerTypeCode("Tissue cassette")
+        block_type = AnatomicPathologySpecimenTypesCode("Gross specimen")
+        block_sampling_method = SpecimenSamplingProcedureCode("Dissection")
+        block_sampling_description = "Block Creation"
+        block_sampling_location = "Mass"
+        block_fixation_datetime = datetime.datetime(2007, 3, 23, 19, 0)
+        block_fixative = SpecimenFixativesCode("Formalin")
+        block_fixation_description = "Standard Block Processing (Formalin)"
+        block_embedding_datetime = datetime.datetime(2007, 3, 24, 5, 0)
+        block_embedding_medium = SpecimenEmbeddingMediaCode("Paraffin wax")
+        block_embedding_description = "Embedding (paraffin)"
+        slide_sampling_method = SpecimenSamplingProcedureCode("Block sectioning")
+        slide_sampling_description = "Slide Creation"
+        staining_datetime = datetime.datetime(2007, 3, 24, 7, 0)
+        staining_substances = [
+            SpecimenStainsCode("hematoxylin stain"),
+            SpecimenStainsCode("water soluble eosin stain"),
+        ]
+
+        steps: List[List[Dataset]] = [
+            # Part Collection in OR
+            [
+                create_string_item(SampleCodes.identifier, specimen_identifier),
+                create_string_item(
+                    SampleCodes.issuer_of_identifier, issuer_of_identifier
+                ),
+                create_code_item(
+                    SampleCodes.container,
+                    specimen_container,
+                ),
+                create_code_item(
+                    SampleCodes.specimen_type,
+                    specimen_type,
+                ),
+                create_code_item(
+                    SampleCodes.processing_type, SampleCodes.specimen_collection
+                ),
+                create_datetime_item(
+                    SampleCodes.datetime_of_processing, collection_datetime
+                ),
+                create_string_item(
+                    SampleCodes.processing_description, collection_description
+                ),
+                create_code_item(
+                    SampleCodes.specimen_collection,
+                    collection_method,
+                ),
+            ],
+            # Specimen received in Pathology department
+            [
+                create_string_item(SampleCodes.identifier, specimen_identifier),
+                create_string_item(
+                    SampleCodes.issuer_of_identifier, issuer_of_identifier
+                ),
+                create_code_item(
+                    SampleCodes.container,
+                    specimen_container,
+                ),
+                create_code_item(
+                    SampleCodes.specimen_type,
+                    specimen_type,
+                ),
+                create_code_item(SampleCodes.processing_type, SampleCodes.receiving),
+                create_datetime_item(
+                    SampleCodes.datetime_of_processing,
+                    specimen_receiving_datetime,
+                ),
+            ],
+            # Sampling to block
+            [
+                create_string_item(SampleCodes.identifier, block_identifier),
+                create_string_item(
+                    SampleCodes.issuer_of_identifier, issuer_of_identifier
+                ),
+                create_code_item(
+                    SampleCodes.container,
+                    block_container,
+                ),
+                create_code_item(SampleCodes.specimen_type, block_type),
+                create_code_item(
+                    SampleCodes.processing_type, SampleCodes.sampling_method
+                ),
+                create_string_item(
+                    SampleCodes.processing_description, block_sampling_description
+                ),
+                create_code_item(
+                    SampleCodes.sampling_method,
+                    block_sampling_method,
+                ),
+                create_string_item(
+                    SampleCodes.parent_specimen_identifier,
+                    specimen_identifier,
+                ),
+                create_string_item(
+                    SampleCodes.issuer_of_parent_specimen_identifier,
+                    issuer_of_identifier,
+                ),
+                create_code_item(
+                    SampleCodes.parent_specimen_type,
+                    specimen_type,
+                ),
+                create_string_item(
+                    SampleCodes.location_of_sampling_site,
+                    block_sampling_location,
+                ),
+            ],
+            # Block processing
+            [
+                create_string_item(SampleCodes.identifier, block_identifier),
+                create_string_item(
+                    SampleCodes.issuer_of_identifier, issuer_of_identifier
+                ),
+                create_code_item(
+                    SampleCodes.container,
+                    block_container,
+                ),
+                create_code_item(SampleCodes.specimen_type, block_type),
+                create_code_item(
+                    SampleCodes.processing_type, SampleCodes.sample_processing
+                ),
+                create_datetime_item(
+                    SampleCodes.datetime_of_processing,
+                    block_fixation_datetime,
+                ),
+                create_string_item(
+                    SampleCodes.processing_description,
+                    block_fixation_description,
+                ),
+                create_code_item(
+                    SampleCodes.fixative,
+                    block_fixative,
+                ),
+            ],
+            # Block embedding
+            [
+                create_string_item(SampleCodes.identifier, block_identifier),
+                create_string_item(
+                    SampleCodes.issuer_of_identifier, issuer_of_identifier
+                ),
+                create_code_item(
+                    SampleCodes.container,
+                    block_container,
+                ),
+                create_code_item(SampleCodes.specimen_type, block_type),
+                create_code_item(
+                    SampleCodes.processing_type, SampleCodes.sample_processing
+                ),
+                create_datetime_item(
+                    SampleCodes.datetime_of_processing,
+                    block_embedding_datetime,
+                ),
+                create_string_item(
+                    SampleCodes.processing_description, block_embedding_description
+                ),
+                create_code_item(
+                    SampleCodes.embedding,
+                    block_embedding_medium,
+                ),
+            ],
+            # Block sampling to slide (not in example)
+            [
+                create_string_item(SampleCodes.identifier, slide_identifier),
+                create_string_item(
+                    SampleCodes.issuer_of_identifier, issuer_of_identifier
+                ),
+                create_code_item(
+                    SampleCodes.processing_type, SampleCodes.sampling_method
+                ),
+                create_string_item(
+                    SampleCodes.processing_description, slide_sampling_description
+                ),
+                create_code_item(
+                    SampleCodes.sampling_method,
+                    slide_sampling_method,
+                ),
+                create_string_item(
+                    SampleCodes.parent_specimen_identifier,
+                    block_identifier,
+                ),
+                create_string_item(
+                    SampleCodes.issuer_of_parent_specimen_identifier,
+                    issuer_of_identifier,
+                ),
+                create_code_item(SampleCodes.parent_specimen_type, block_type),
+            ],
+            # Slide Staining
+            [
+                create_string_item(SampleCodes.identifier, slide_identifier),
+                create_string_item(
+                    SampleCodes.issuer_of_identifier, issuer_of_identifier
+                ),
+                create_code_item(SampleCodes.processing_type, SampleCodes.staining),
+                create_datetime_item(
+                    SampleCodes.datetime_of_processing,
+                    staining_datetime,
+                ),
+                create_code_item(SampleCodes.using_substance, staining_substances[0]),
+                create_code_item(SampleCodes.using_substance, staining_substances[1]),
+            ],
+        ]
+        dataset = Dataset()
+        dataset.SpecimenIdentifier = slide_identifier
+        issuer_of_identifier_dataset = Dataset()
+        issuer_of_identifier_dataset.LocalNamespaceEntityID = issuer_of_identifier
+        dataset.IssuerOfTheSpecimenIdentifierSequence = [issuer_of_identifier_dataset]
+        dataset.SpecimenUID = slide_uid
+        dataset.SpecimenShortDescription = slide_short_descriptin
+        dataset.SpecimenDetailedDescription = slide_detailed_description
+        dataset.PrimaryAnatomicStructureSequence = [
+            create_code_dataset(primary_anatomic_structure)
+        ]
+        dataset.SpecimenPreparationSequence = [
+            create_specimen_preparation_dataset(step) for step in steps
+        ]
+        schema = SpecimenDescriptionDicomSchema()
+
+        # Act
+        model = schema.load(dataset)
+        slide_samples, stainings = SpecimenDicomParser().parse_descriptions([model])
+
+        # Assert
+        assert slide_samples is not None
+        assert len(slide_samples) == 1
+        slide_sample = slide_samples[0]
+        assert isinstance(slide_sample, SlideSample)
+        assert slide_sample.identifier == SpecimenIdentifier(
+            slide_identifier, LocalIssuerOfIdentifier(issuer_of_identifier)
+        )
+        assert slide_sample.uid == slide_uid
+        assert slide_sample.anatomical_sites == [primary_anatomic_structure]
+        assert slide_sample.localization is None
+        assert slide_sample.sampled_from is not None
+        assert slide_sample.sampled_from.method == slide_sampling_method
+        block = slide_sample.sampled_from.specimen
+        assert isinstance(block, Sample)
+        assert block.identifier == SpecimenIdentifier(
+            block_identifier, LocalIssuerOfIdentifier(issuer_of_identifier)
+        )
+        assert block.type == block_type
+        assert block.container == block_container
+        fixation_step = block.steps[0]
+        assert isinstance(fixation_step, Fixation)
+        assert fixation_step.fixative == block_fixative
+        assert fixation_step.date_time == block_fixation_datetime
+        assert fixation_step.description == block_fixation_description
+        embedding_step = block.steps[1]
+        assert isinstance(embedding_step, Embedding)
+        assert embedding_step.medium == block_embedding_medium
+        assert embedding_step.date_time == block_embedding_datetime
+        assert embedding_step.description == block_embedding_description
+        sampling_to_slide_step = block.steps[2]
+        assert isinstance(sampling_to_slide_step, Sampling)
+        assert sampling_to_slide_step.method == slide_sampling_method
+        assert sampling_to_slide_step.description == slide_sampling_description
+        assert len(block.sampled_from) == 1
+        specimen = block.sampled_from[0].specimen
+        assert isinstance(specimen, ExtractedSpecimen)
+        assert specimen.identifier == SpecimenIdentifier(
+            specimen_identifier, LocalIssuerOfIdentifier(issuer_of_identifier)
+        )
+        assert specimen.type == specimen_type
+        assert specimen.container == specimen_container
+        collection_step = specimen.steps[0]
+        assert isinstance(collection_step, Collection)
+        assert collection_step.method == collection_method
+        assert collection_step.date_time == collection_datetime
+        assert collection_step.description == collection_description
+        receiving_step = specimen.steps[1]
+        assert isinstance(receiving_step, Receiving)
+        assert receiving_step.date_time == specimen_receiving_datetime
+        sampling_to_block_step = specimen.steps[2]
+        assert isinstance(sampling_to_block_step, Sampling)
+        assert sampling_to_block_step.method == block_sampling_method
+        assert sampling_to_block_step.description == block_sampling_description
+        assert sampling_to_block_step.location == SamplingLocation(
+            description=block_sampling_location
+        )
+        assert stainings is not None
+        assert len(stainings) == 1
+        staining = stainings[0]
+        assert staining.substances == staining_substances
+        assert staining.date_time == staining_datetime
 
 
 class TestPreparationStepDicomSchema:

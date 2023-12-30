@@ -82,12 +82,11 @@ class SpecimenDicomParser:
         """
 
         slide_samples: List[SlideSample] = []
-        stainings: List[Staining] = []
         for specimen_description in specimen_descriptions:
             slide_sample = self._create_slide_sample(specimen_description)
             slide_samples.append(slide_sample)
 
-        return slide_samples, stainings
+        return slide_samples, self._created_stainings
 
     def _create_slide_sample(
         self, description: SpecimenDescriptionDicomModel
@@ -108,7 +107,6 @@ class SpecimenDicomParser:
             Parsed sample.
 
         """
-
         steps_by_identifier, stainings = self._parse_steps_by_identifier(
             description.steps
         )
@@ -178,7 +176,7 @@ class SpecimenDicomParser:
                 )
                 stainings.append(staining)
             elif isinstance(step, SamplingDicomModel):
-                parent_identifier = step.parent_specimen_identifier
+                parent_identifier = step.parent_identifier
                 steps_by_identifier[parent_identifier].append(step)
             identifier = step.specimen_identifier
             steps_by_identifier[identifier].append(step)
@@ -236,7 +234,7 @@ class SpecimenDicomParser:
             if step is None:
                 # This step has already been parsed, skip to next.
                 continue
-            if step.identifier != identifier:
+            if step.specimen_identifier != identifier:
                 # This is OK if SpecimenSampling with matching parent identifier
                 if (
                     not isinstance(step, SamplingDicomModel)

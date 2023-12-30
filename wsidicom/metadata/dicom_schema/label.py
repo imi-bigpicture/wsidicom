@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from typing import Any, Dict, Type
-from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.schema import DefaultIfValidationFailedDicomSchema
 from marshmallow import fields, post_load, pre_dump
 from wsidicom.metadata.dicom_schema.fields import BooleanDicomField, StringDicomField
 
@@ -21,7 +21,7 @@ from wsidicom.metadata.label import Label
 from wsidicom.instance import ImageType
 
 
-class LabelDicomSchema(DicomSchema[Label]):
+class LabelDicomSchema(DefaultIfValidationFailedDicomSchema[Label]):
     text = StringDicomField(data_key="LabelText", allow_none=True)
     barcode = StringDicomField(data_key="BarcodeValue", allow_none=True)
     label_in_volume_image = BooleanDicomField(load_only=True, allow_none=True)

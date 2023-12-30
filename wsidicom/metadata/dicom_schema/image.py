@@ -15,7 +15,10 @@
 from typing import Any, Dict, Type
 
 from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.schema import DicomSchema
+from wsidicom.metadata.dicom_schema.schema import (
+    DefaultIfValidationFailedDicomSchema,
+    DicomSchema,
+)
 from marshmallow import fields, post_load, pre_dump
 from wsidicom.metadata.dicom_schema.fields import (
     BooleanDicomField,
@@ -64,7 +67,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
         return ImageCoordinateSystem
 
 
-class ImageDicomSchema(DicomSchema[Image]):
+class ImageDicomSchema(DefaultIfValidationFailedDicomSchema[Image]):
     # TODO pixel_spacing, focal_plane_spacing, and depth_of_field
 
     acquisition_datetime = DefaultingDicomField(
