@@ -142,7 +142,8 @@ def assert_dicom_optical_path_equals_optical_path(
     dicom_optical_path: Dataset, optical_path: OpticalPath
 ):
     assert dicom_optical_path.OpticalPathIdentifier == optical_path.identifier
-    assert dicom_optical_path.OpticalPathDescription == optical_path.description
+    if optical_path.description is not None:
+        assert dicom_optical_path.OpticalPathDescription == optical_path.description
     if optical_path.illumination_types is not None:
         assert_dicom_code_dataset_equals_code(
             dicom_optical_path.IlluminationTypeCodeSequence[0],

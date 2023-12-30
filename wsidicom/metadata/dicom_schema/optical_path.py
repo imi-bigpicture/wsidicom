@@ -638,13 +638,14 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
     def pre_dump(self, optical_path: OpticalPath, **kwargs):
         fields = {
             "identifier": optical_path.identifier,
-            "description": optical_path.description,
             "illumination_types": optical_path.illumination_types,
             "light_path_filter": optical_path.light_path_filter,
             "image_path_filter": optical_path.image_path_filter,
             "objective": optical_path.objective,
             "lut": optical_path.lut,
         }
+        if optical_path.description is not None:
+            fields["description"] = optical_path.description
         if optical_path.icc_profile is not None:
             fields["icc_profile"] = optical_path.icc_profile
         if isinstance(optical_path.illumination, float):

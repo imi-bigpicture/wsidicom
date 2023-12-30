@@ -311,13 +311,12 @@ class TestDicomSchema:
         serialized = schema.dump(optical_path)
 
         # Assert
-        # TODO Assert id is filled
         assert isinstance(serialized, Dataset)
+        assert "OpticalPathIdentifier" in serialized
         assert_dicom_code_sequence_equals_codes(
             serialized.IlluminationTypeCodeSequence, [Defaults.illumination_type]
         )
-        # TODO empty should not be in serialized
-        # assert "OpticalPathDescription" not in serialized
+        assert "OpticalPathDescription" not in serialized
         assert "IlluminationWaveLength" not in serialized
         assert_dicom_code_dataset_equals_code(
             serialized.IlluminationColorCodeSequence[0], Defaults.illumination
