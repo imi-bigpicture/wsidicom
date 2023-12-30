@@ -226,7 +226,7 @@ class TestSampleJsonSchema:
 
         # Assert
         assert isinstance(dumped, dict)
-        assert_dict_equals_code(dumped["sampling_method"], sampling_2.method)
+        assert_dict_equals_code(dumped["method"], sampling_2.method)
         assert dumped["date_time"] == sampling_2.date_time.isoformat()
         assert dumped["description"] == sampling_2.description
         assert (
@@ -247,7 +247,7 @@ class TestSampleJsonSchema:
         # Arrange
         dumped = {
             "action": "sampling",
-            "sampling_method": {
+            "method": {
                 "value": "434472006",
                 "scheme_designator": "SCT",
                 "meaning": "Block sectioning",
@@ -281,7 +281,7 @@ class TestSampleJsonSchema:
         # Assert
         assert isinstance(loaded, SamplingJsonModel)
         assert loaded.sampling_chain_constraints is not None
-        assert_dict_equals_code(dumped["sampling_method"], loaded.method)
+        assert_dict_equals_code(dumped["method"], loaded.method)
         assert loaded.date_time == datetime.datetime.fromisoformat(dumped["date_time"])
         assert loaded.description == dumped["description"]
         assert (
@@ -316,7 +316,7 @@ class TestSampleJsonSchema:
 
         # Assert
         assert isinstance(dumped, dict)
-        assert_dict_equals_code(dumped["extraction_method"], collection.method)
+        assert_dict_equals_code(dumped["method"], collection.method)
         if collection.date_time is not None:
             assert dumped["date_time"] == collection.date_time.isoformat()
         else:
@@ -330,7 +330,7 @@ class TestSampleJsonSchema:
         # Arrange
         dumped = {
             "action": "collection",
-            "extraction_method": {
+            "method": {
                 "value": collection.method.value,
                 "scheme_designator": collection.method.scheme_designator,
                 "meaning": collection.method.meaning,
@@ -358,7 +358,10 @@ class TestSampleJsonSchema:
 
         # Assert
         assert isinstance(dumped, dict)
-        assert_dict_equals_code(dumped["processing_method"], processing.method)
+        if processing.method is not None:
+            assert_dict_equals_code(dumped["method"], processing.method)
+        else:
+            assert "method" not in dumped
         if processing.date_time is not None:
             assert dumped["date_time"] == processing.date_time.isoformat()
         else:
@@ -370,14 +373,15 @@ class TestSampleJsonSchema:
 
     def test_processing_deserialize(self, processing: Processing):
         # Arrange
-        dumped = {
+        dumped: Dict[str, Any] = {
             "action": "processing",
-            "processing_method": {
+        }
+        if processing.method is not None:
+            dumped["method"] = {
                 "value": processing.method.value,
                 "scheme_designator": processing.method.scheme_designator,
                 "meaning": processing.method.meaning,
-            },
-        }
+            }
         if processing.date_time is not None:
             dumped["date_time"] = processing.date_time.isoformat()
         if processing.description is not None:
@@ -558,7 +562,7 @@ class TestSampleJsonSchema:
         assert isinstance(dumped, dict)
         assert dumped["identifier"] == extracted_specimen.identifier
         assert_dict_equals_code(
-            dumped["steps"][0]["extraction_method"],
+            dumped["steps"][0]["method"],
             extracted_specimen.extraction_step.method,
         )
         assert (
@@ -575,7 +579,7 @@ class TestSampleJsonSchema:
             "steps": [
                 {
                     "action": "collection",
-                    "extraction_method": {
+                    "method": {
                         "value": "65801008",
                         "scheme_designator": "SCT",
                         "meaning": "Excision",
@@ -604,9 +608,7 @@ class TestSampleJsonSchema:
         assert loaded.identifier == dumped["identifier"]
         collection = loaded.steps[0]
         assert isinstance(collection, Collection)
-        assert_dict_equals_code(
-            dumped["steps"][0]["extraction_method"], collection.method
-        )
+        assert_dict_equals_code(dumped["steps"][0]["method"], collection.method)
         assert collection.date_time == datetime.datetime.fromisoformat(
             dumped["steps"][0]["date_time"]
         )
@@ -618,8 +620,6 @@ class TestSampleJsonSchema:
         # Arrange
         processing = sample.steps[0]
         assert isinstance(processing, Processing)
-        assert processing.date_time is not None
-        assert sample.container is not None
 
         # Act
         dumped = SampleJsonSchema().dump(sample)
@@ -627,17 +627,24 @@ class TestSampleJsonSchema:
         # Assert
         assert isinstance(dumped, dict)
         assert dumped["identifier"] == sample.identifier
-        assert_dict_equals_code(
-            dumped["steps"][0]["processing_method"], processing.method
-        )
-        assert dumped["steps"][0]["date_time"] == processing.date_time.isoformat()
+        if processing.method is not None:
+            assert_dict_equals_code(dumped["steps"][0]["method"], processing.method)
+        else:
+            assert "method" not in dumped["steps"][0]
+        if processing.date_time is not None:
+            assert dumped["steps"][0]["date_time"] == processing.date_time.isoformat()
+        else:
+            assert "date_time" not in dumped["steps"][0]
         assert_dict_equals_code(dumped["type"], sample.type)
         assert (
             dumped["sampled_from"][0]["identifier"]
             == sample.sampled_from[0].specimen.identifier
         )
         assert dumped["sampled_from"][0]["sampling_step_index"] == 0
-        assert_dict_equals_code(dumped["container"], sample.container)
+        if sample.container is not None:
+            assert_dict_equals_code(dumped["container"], sample.container)
+        else:
+            assert "container" not in dumped
 
     def test_sampled_specimen_deserialize(self):
         # Arrange
@@ -646,7 +653,7 @@ class TestSampleJsonSchema:
             "steps": [
                 {
                     "action": "processing",
-                    "processing_method": {
+                    "method": {
                         "value": "433452008",
                         "scheme_designator": "SCT",
                         "meaning": "Specimen clearing",
@@ -675,9 +682,10 @@ class TestSampleJsonSchema:
         assert loaded.identifier == dumped["identifier"]
         processing = loaded.steps[0]
         assert isinstance(processing, Processing)
-        assert_dict_equals_code(
-            dumped["steps"][0]["processing_method"], processing.method
-        )
+        if processing.method is not None:
+            assert_dict_equals_code(dumped["steps"][0]["method"], processing.method)
+        else:
+            assert "method" not in dumped["steps"][0]
         assert processing.date_time == datetime.datetime.fromisoformat(
             dumped["steps"][0]["date_time"]
         )
@@ -801,7 +809,7 @@ class TestSampleJsonSchema:
                 "steps": [
                     {
                         "action": "processing",
-                        "processing_method": {
+                        "method": {
                             "value": "433452008",
                             "scheme_designator": "SCT",
                             "meaning": "Specimen clearing",
@@ -810,7 +818,7 @@ class TestSampleJsonSchema:
                     },
                     {
                         "action": "sampling",
-                        "sampling_method": {
+                        "method": {
                             "value": "434472006",
                             "scheme_designator": "SCT",
                             "meaning": "Block sectioning",
@@ -832,7 +840,7 @@ class TestSampleJsonSchema:
                 "steps": [
                     {
                         "action": "collection",
-                        "extraction_method": {
+                        "method": {
                             "value": "65801008",
                             "scheme_designator": "SCT",
                             "meaning": "Excision",
@@ -842,7 +850,7 @@ class TestSampleJsonSchema:
                     },
                     {
                         "action": "sampling",
-                        "sampling_method": {
+                        "method": {
                             "value": "122459003",
                             "scheme_designator": "SCT",
                             "meaning": "Dissection",

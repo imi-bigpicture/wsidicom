@@ -66,7 +66,7 @@ def json_slide():
                     },
                     {
                         "action": "sampling",
-                        "sampling_method": {
+                        "method": {
                             "value": "434472006",
                             "scheme_designator": "SCT",
                             "meaning": "Block sectioning",
@@ -79,7 +79,7 @@ def json_slide():
                     },
                     {
                         "action": "sampling",
-                        "sampling_method": {
+                        "method": {
                             "value": "434472006",
                             "scheme_designator": "SCT",
                             "meaning": "Block sectioning",
@@ -106,7 +106,7 @@ def json_slide():
                 "steps": [
                     {
                         "action": "collection",
-                        "extraction_method": {
+                        "method": {
                             "value": "17636008",
                             "scheme_designator": "SCT",
                             "meaning": "Specimen collection",
@@ -125,7 +125,7 @@ def json_slide():
                     },
                     {
                         "action": "sampling",
-                        "sampling_method": {
+                        "method": {
                             "value": "122459003",
                             "scheme_designator": "SCT",
                             "meaning": "Dissection",
@@ -146,7 +146,7 @@ def json_slide():
                 "steps": [
                     {
                         "action": "collection",
-                        "extraction_method": {
+                        "method": {
                             "value": "17636008",
                             "scheme_designator": "SCT",
                             "meaning": "Specimen collection",
@@ -165,7 +165,7 @@ def json_slide():
                     },
                     {
                         "action": "sampling",
-                        "sampling_method": {
+                        "method": {
                             "value": "122459003",
                             "scheme_designator": "SCT",
                             "meaning": "Dissection",

@@ -243,10 +243,10 @@ class Processing(PreparationStep):
 
     See
     https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8113.html
-    for allowed proo´cessing methods.
+    for allowed processing methods.
     """
 
-    method: SpecimenPreparationStepsCode
+    method: Optional[SpecimenPreparationStepsCode] = None
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
 

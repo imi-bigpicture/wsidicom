@@ -166,9 +166,7 @@ class BasePreparationStepJsonSchema(Schema):
 
 class SamplingJsonSchema(BasePreparationStepJsonSchema):
     action = fields.Constant(PreparationAction.SAMPLING.value, dump_only=True)
-    method = JsonFieldFactory.concept_code(SpecimenSamplingProcedureCode)(
-        data_key="sampling_method"
-    )
+    method = JsonFieldFactory.concept_code(SpecimenSamplingProcedureCode)()
     sampling_chain_constraints = fields.List(
         fields.Nested(SamplingConstraintJsonSchema, allow_none=True), allow_none=True
     )
@@ -180,9 +178,7 @@ class SamplingJsonSchema(BasePreparationStepJsonSchema):
 
 class CollectionJsonSchema(BasePreparationStepJsonSchema):
     action = fields.Constant(PreparationAction.COLLECTION.value, dump_only=True)
-    method = JsonFieldFactory.concept_code(SpecimenCollectionProcedureCode)(
-        data_key="extraction_method"
-    )
+    method = JsonFieldFactory.concept_code(SpecimenCollectionProcedureCode)()
     date_time = fields.DateTime(allow_none=True)
     description = fields.String(allow_none=True)
     _load_class = Collection
@@ -191,7 +187,7 @@ class CollectionJsonSchema(BasePreparationStepJsonSchema):
 class ProcessingJsonSchema(BasePreparationStepJsonSchema):
     action = fields.Constant(PreparationAction.PROCESSING.value, dump_only=True)
     method = JsonFieldFactory.concept_code(SpecimenPreparationStepsCode)(
-        data_key="processing_method"
+        allow_none=True
     )
     date_time = fields.DateTime(allow_none=True)
     description = fields.String(allow_none=True)

@@ -83,7 +83,8 @@ class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
             return StainingDicomModel.from_step(step, specimen.identifier)
         raise NotImplementedError()
 
-    def get_identifier(self) -> Union[str, SpecimenIdentifier]:
+    @property
+    def specimen_identifier(self) -> Union[str, SpecimenIdentifier]:
         if self.issuer_of_identifier is None:
             return self.identifier
         return SpecimenIdentifier(
@@ -160,7 +161,8 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             container=container,
         )
 
-    def get_parent_identifier(self) -> Union[str, SpecimenIdentifier]:
+    @property
+    def parent_identifier(self) -> Union[str, SpecimenIdentifier]:
         if (
             self.issuer_of_parent_specimen_identifier is not None
             and self.issuer_of_parent_specimen_identifier != ""
@@ -382,7 +384,8 @@ class SpecimenDescriptionDicomModel:
     detailed_description: Optional[str] = None
     localization: Optional[SpecimenLocalization] = None
 
-    def get_identifier(self) -> Union[str, SpecimenIdentifier]:
+    @property
+    def specimen_identifier(self) -> Union[str, SpecimenIdentifier]:
         if self.issuer_of_identifier is None:
             return self.identifier
         return SpecimenIdentifier(self.identifier, self.issuer_of_identifier)
