@@ -72,12 +72,17 @@ class LutSegmentType(Enum):
 class LutDicomParser:
     @classmethod
     def from_dataset(cls, lut_sequence: Sequence[Dataset]) -> Optional[Lut]:
-        """Read LUT from a DICOM optical path dataset..
+        """Read LUT from a DICOM lut sequence.
 
         Parameters
         ----------
-        dataset: Dataset
-            Optical path dataset with LUT to parse.
+        lut_sequence : Sequence[Dataset]
+            DICOM optical path dataset.
+
+        Returns
+        -------
+        Lut
+            Parsed LUT.
 
         """
         dataset = lut_sequence[0]

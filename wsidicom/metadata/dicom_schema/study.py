@@ -28,17 +28,6 @@ from wsidicom.metadata.study import Study
 
 
 class StudyDicomSchema(DicomSchema[Study]):
-    """
-    Type 1
-    - uid
-    Type 2
-    - identifier
-    - date
-    - time
-    - accession number
-    - referring_physician_name
-    """
-
     uid = DefaultingTagDicomField(
         UidDicomField(), tag="default_uid", data_key="StudyInstanceUID", allow_none=True
     )

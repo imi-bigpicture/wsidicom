@@ -22,16 +22,6 @@ from wsidicom.instance import ImageType
 
 
 class LabelDicomSchema(DicomSchema[Label]):
-    """
-    type 1
-    burned_in_annotation
-    specimen_label_in_image
-
-    type 2
-    text (if label type)
-    barcode (if label type)
-    """
-
     text = StringDicomField(data_key="LabelText", allow_none=True)
     barcode = StringDicomField(data_key="BarcodeValue", allow_none=True)
     label_in_volume_image = BooleanDicomField(load_only=True, allow_none=True)

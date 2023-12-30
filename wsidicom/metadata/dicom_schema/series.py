@@ -26,12 +26,6 @@ from wsidicom.metadata.series import Series
 
 
 class SeriesDicomSchema(DicomSchema[Series]):
-    """
-    Type 1
-    - uid
-    - number
-    """
-
     uid = DefaultingTagDicomField(
         UidDicomField(), tag="default_uid", data_key="SeriesInstanceUID"
     )

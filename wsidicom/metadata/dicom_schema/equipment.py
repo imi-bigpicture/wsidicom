@@ -25,14 +25,6 @@ from wsidicom.metadata.equipment import Equipment
 
 
 class EquipmentDicomSchema(DicomSchema[Equipment]):
-    """
-    Type 1:
-    - manufacturer
-    - model_name
-    - device_serial_number
-    - software_versions
-    """
-
     manufacturer = DefaultingDicomField(
         StringDicomField(),
         dump_default=Defaults.string,

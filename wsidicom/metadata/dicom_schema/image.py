@@ -65,14 +65,6 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
 
 
 class ImageDicomSchema(DicomSchema[Image]):
-    """
-    Type 1
-    acquisition_datetime
-    focus_method
-    extended_depth_of_field_bool
-    image_coordinate_system
-    """
-
     # TODO pixel_spacing, focal_plane_spacing, and depth_of_field
 
     acquisition_datetime = DefaultingDicomField(

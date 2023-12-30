@@ -66,19 +66,6 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
 
 
 class PatientDicomSchema(DicomSchema[Patient]):
-    """
-    Type 1:
-    - method_strings (if identity_removed)
-    - method_codes (if identity_removed)
-    Type 2:
-    - name
-    - idenentifier
-    - birth_date
-    - sex
-    Type 3:
-    - identity_removed
-    """
-
     name = PatientNameDicomField(data_key="PatientName", load_default=None)
     identifier = StringDicomField(data_key="PatientID", load_default=None)
     birth_date = DateDicomField(data_key="PatientBirthDate", load_default=None)

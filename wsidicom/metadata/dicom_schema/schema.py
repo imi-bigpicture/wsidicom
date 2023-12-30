@@ -74,6 +74,8 @@ class BaseDicomSchema(Schema, Generic[LoadType, DumpType]):
 
 
 class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
+    """Base DICOM schema for attributes in a dataset."""
+
     @property
     def dump_type(self) -> Type[Dataset]:
         return Dataset
@@ -112,6 +114,8 @@ class ItemField:
 
 
 class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
+    """Base DICOM schema for sequence of content items (each a dataset)."""
+
     _dump_only_fields: List[str] = []
 
     @property
@@ -128,8 +132,8 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
     def item_fields(self) -> Dict[str, ItemField]:
         """Describe the fields in the schema.
 
-        Fields should be ordered as in TID 8001. The key is the python name of the
-        field, and the value is a ItemField with the DICOM code name of the field,
+        Fields should be ordered as in TID if applicable. The key is the python name of
+        the field, and the value is a ItemField with the DICOM code name of the field,
         the allowed value types (tuple of one or more types), and if the field can
         hold multiple values (e.g. is a list)."""
         raise NotImplementedError()

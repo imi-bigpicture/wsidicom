@@ -36,13 +36,6 @@ from wsidicom.metadata.slide import Slide
 
 
 class SlideDicomSchema(DicomSchema[Slide]):
-    """
-    IssuerOfTheContainerIdentifierSequence
-    ContainerComponentSequence:
-        ContainerComponentTypeCodeSequence
-        ContainerComponentMaterial
-    """
-
     identifier = DefaultingDicomField(
         StringDicomField(),
         dump_default=Defaults.string,
