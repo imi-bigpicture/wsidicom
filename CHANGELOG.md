@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- RLE encoding using image codecs.
+- JPEG 2000 encoding of lossless YBR using image codecs.
+
 ## [0.17.0] - 2023-12-10
 
 ### Added
