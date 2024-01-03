@@ -46,7 +46,6 @@ from wsidicom.metadata.dicom_schema.fields import (
     MeasurementtemDicomField,
     IssuerOfIdentifierDicomField,
     SingleCodeSequenceField,
-    SingleItemSequenceDicomField,
     StringDicomField,
     StringItemDicomField,
     StringOrCodeItemDicomField,
@@ -420,14 +419,20 @@ class PreparationStepDicomField(marshmallow.fields.Field):
         attr: Optional[str],
         obj: Any,
         **kwargs
-    ) -> List[Dataset]:
+    ) -> Dataset:
         """Serialize step to dataset."""
-        return self._subschema_dump(step)
+        assert self.data_key is not None
+        sequence = self._subschema_dump(step)
+        dataset = Dataset()
+        setattr(dataset, self.data_key, sequence)
+        return dataset
 
     def _deserialize(
-        self, sequence: Iterable[Dataset], attr: Optional[str], data: Any, **kwargs
+        self, dataset: Dataset, attr: Optional[str], data: Any, **kwargs
     ) -> SpecimenPreparationStepDicomModel:
         """Deserialize step from dataset."""
+        assert self.data_key is not None
+        sequence = getattr(dataset, self.data_key)
         return self._subschema_load(sequence)
 
     def _subschema_load(
@@ -468,9 +473,8 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
         data_key="IssuerOfTheSpecimenIdentifierSequence", allow_none=True
     )
     steps = marshmallow.fields.List(
-        SingleItemSequenceDicomField(
-            PreparationStepDicomField(),
-            data_key="SpecimenPreparationStepContentItemSequence",
+        PreparationStepDicomField(
+            data_key="SpecimenPreparationStepContentItemSequence"
         ),
         data_key="SpecimenPreparationSequence",
         load_default=[],

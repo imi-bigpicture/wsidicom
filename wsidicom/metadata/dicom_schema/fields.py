@@ -35,9 +35,10 @@ from pydicom import DataElement, Dataset
 from pydicom.multival import MultiValue
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DA, DT, TM, DSfloat, PersonName
+from pydicom.uid import UID
 
 from wsidicom.conceptcode import ConceptCode, UnitCode
-from wsidicom.geometry import Orientation, PointMm
+from wsidicom.geometry import Orientation, PointMm, SizeMm
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
@@ -178,7 +179,14 @@ class ListDicomField(fields.List):
         return super()._deserialize(value, attr, data, **kwargs)
 
 
-class FlatteningNestedField(fields.Nested):
+class FlattenOnDumpNestedDicomField(fields.Nested):
+    """Field that flattens the nested dataset into the parent dataset on dump.
+
+    On load the nested fields are deflatten from the parent dataset to a nested dataset.
+
+    The flatten/deflatten is done by the parent schema.
+    """
+
     def __init__(self, nested: Schema, **kwargs):
         self._nested = nested
         super().__init__(nested=nested, **kwargs)
@@ -193,7 +201,7 @@ class FlatteningNestedField(fields.Nested):
         for nested_field in self.nested_schema.fields.values():
             if nested_field.dump_only:
                 continue
-            if isinstance(nested_field, FlatteningNestedField):
+            if isinstance(nested_field, FlattenOnDumpNestedDicomField):
                 de_flatten_nested_field = nested_field.de_flatten(dataset)
                 if de_flatten_nested_field is not None:
                     nested.update(de_flatten_nested_field)
@@ -218,6 +226,48 @@ class FlatteningNestedField(fields.Nested):
         if nested_obj is None and self.dump_default != missing:
             nested_obj = self.dump_default
         return super()._serialize(nested_obj, attr, obj, **kwargs)
+
+
+class FlattenOnLoadNestedDicomField(fields.Nested):
+    """Field that flattens the nested loaded item into the parent item on load.
+
+    On dump the nested fields are deflatten from the parent dataset to a nested dataset.
+    """
+
+    def __init__(self, nested: Schema, **kwargs):
+        self._nested = nested
+        super().__init__(nested=nested, **kwargs)
+
+    @property
+    def nested_schema(self) -> Schema:
+        return self._nested
+
+    def de_flatten(self, dataset: Dataset) -> Optional[Dataset]:
+        """Create new dataset containing the attributes defined in nested schema."""
+        nested = Dataset()
+        for nested_field in self.nested_schema.fields.values():
+            if nested_field.dump_only:
+                continue
+            if isinstance(nested_field, FlattenOnDumpNestedDicomField):
+                de_flatten_nested_field = nested_field.de_flatten(dataset)
+                if de_flatten_nested_field is not None:
+                    nested.update(de_flatten_nested_field)
+            elif nested_field.data_key is not None and nested_field.data_key in dataset:
+                nested_value = dataset.get(nested_field.data_key)
+                setattr(nested, nested_field.data_key, nested_value)
+        if len(nested) == 0:
+            return None
+        return nested
+
+    def flatten(self, data: Dict[str, Any]):
+        """Insert attributes from nested dataset into data."""
+        key = self.name
+        if self.data_key is not None:
+            key = self.data_key
+        nested = data.pop(key, None)
+        if isinstance(nested, Dataset):
+            for nested_key, nested_value in nested.items():
+                data[nested_key] = nested_value  # type: ignore
 
 
 CodeType = TypeVar("CodeType", Code, ConceptCode)
@@ -298,7 +348,33 @@ class FloatOrCodeDicomField(fields.Field, Generic[CodeType]):
 
 
 class UidDicomField(fields.Field):
-    pass
+    def _deserialize(self, value: Any, attr, data, **kwargs):
+        if value is None or value == "":
+            return None
+        if isinstance(value, UID):
+            return value
+        return UID(value)
+
+
+class UidDatasetDicomField(UidDicomField):
+    def __init__(self, data_key: str, **kwargs):
+        self._data_key = data_key
+        super().__init__(data_key=data_key, **kwargs)
+
+    def _serialize(
+        self, value: Optional[UID], attr: Optional[str], obj: Any, **kwargs
+    ) -> Optional[Dataset]:
+        if value is None:
+            return None
+        dataset = Dataset()
+        setattr(dataset, self._data_key, value)
+        return dataset
+
+    def _deserialize(self, value: Dataset, attr, data, **kwargs) -> Optional[UID]:
+        nested_value = getattr(value, self._data_key, None)
+        if nested_value is None:
+            return None
+        return self._deserialize(nested_value, attr, data, **kwargs)
 
 
 class PatientNameDicomField(fields.String):
@@ -342,6 +418,22 @@ class IssuerOfIdentifierDicomField(fields.Field):
         else:
             raise NotImplementedError()
         return [dataset]
+
+
+class PixelSpacingDicomField(fields.Field):
+    def _serialize(
+        self, value: Optional[SizeMm], attr: Optional[str], obj: Any, **kwargs
+    ):
+        if value is None:
+            return None
+        return [DSfloat(value.width, True), DSfloat(value.height, True)]
+
+    def _deserialize(
+        self, value: Optional[Sequence[DSfloat]], attr, data, **kwargs
+    ) -> Optional[SizeMm]:
+        if value is None or len(value) == 0:
+            return None
+        return SizeMm(value[0], value[1])
 
 
 ValueType = TypeVar("ValueType")
@@ -416,27 +508,33 @@ class DefaultingListTagDicomField(fields.List):
         return super()._serialize(value, attr, obj, **kwargs)
 
 
-class SingleItemSequenceDicomField(fields.Field, Generic[ValueType]):
-    def __init__(self, nested: Field, data_key: str, **kwargs):
+class NestedDatasetDicomField(fields.Nested, Generic[ValueType]):
+    """Field for attribute of a single-item dataset sequence with a nested
+    sing-item dataset sequence with the item the nested schema should handle."""
+
+    def __init__(self, nested: Schema, data_key: str, nested_data_key: str, **kwargs):
         self._nested = nested
         self._data_key = data_key
-        super().__init__(data_key=data_key, **kwargs)
+        self._nested_data_key = nested_data_key
+        super().__init__(nested=nested, data_key=data_key, **kwargs)
 
     def _serialize(
         self, value: Optional[ValueType], attr: Optional[str], obj: Any, **kwargs
-    ) -> Optional[Dataset]:
-        nested_value = self._nested._serialize(value, attr, obj, **kwargs)
+    ) -> Optional[List[Dataset]]:
+        nested_value = super()._serialize(value, attr, obj, **kwargs)
         if nested_value is None:
             return None
         dataset = Dataset()
-        setattr(dataset, self._data_key, nested_value)
-        return dataset
+        setattr(dataset, self._nested_data_key, [nested_value])
+        return [dataset]
 
-    def _deserialize(self, value: Dataset, attr, data, **kwargs) -> Optional[ValueType]:
-        nested_value = getattr(value, self._data_key, None)
+    def _deserialize(
+        self, value: Sequence[Dataset], attr, data, **kwargs
+    ) -> Optional[ValueType]:
+        nested_value = getattr(value[0], self._nested_data_key, None)
         if nested_value is None:
             return None
-        return self._nested._deserialize(nested_value, attr, data, **kwargs)
+        return super()._deserialize(nested_value[0], attr, data, **kwargs)  # type: ignore
 
 
 class ContentItemDicomField(fields.Field, Generic[ValueType]):

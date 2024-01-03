@@ -24,8 +24,8 @@ from wsidicom.metadata.dicom_schema.fields import (
     DefaultingListDicomField,
     DefaultingListTagDicomField,
     DefaultingTagDicomField,
-    FlatteningNestedField,
-    SingleItemSequenceDicomField,
+    FlattenOnDumpNestedDicomField,
+    UidDatasetDicomField,
     UidDicomField,
 )
 from wsidicom.metadata.dicom_schema.equipment import EquipmentDicomSchema
@@ -48,31 +48,31 @@ from wsidicom.metadata.wsi import WsiMetadata
 
 
 class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
-    study = FlatteningNestedField(
+    study = FlattenOnDumpNestedDicomField(
         StudyDicomSchema(), dump_default=Study(), load_default=Study()
     )
-    series = FlatteningNestedField(
+    series = FlattenOnDumpNestedDicomField(
         SeriesDicomSchema(), dump_default=Series(), load_default=Series()
     )
-    patient = FlatteningNestedField(
+    patient = FlattenOnDumpNestedDicomField(
         PatientDicomSchema(), dump_default=Patient(), load_default=Patient()
     )
-    equipment = FlatteningNestedField(
+    equipment = FlattenOnDumpNestedDicomField(
         EquipmentDicomSchema(), dump_default=Equipment(), load_default=Equipment()
     )
     optical_paths = DefaultingListDicomField(
-        FlatteningNestedField(OpticalPathDicomSchema()),
+        FlattenOnDumpNestedDicomField(OpticalPathDicomSchema()),
         data_key="OpticalPathSequence",
         dump_default=[OpticalPath()],
         load_default=[],
     )
-    slide = FlatteningNestedField(
+    slide = FlattenOnDumpNestedDicomField(
         SlideDicomSchema(), dump_default=Slide(), load_default=Slide()
     )
-    label = FlatteningNestedField(
+    label = FlattenOnDumpNestedDicomField(
         LabelDicomSchema(), dump_default=Label(), load_default=Label()
     )
-    image = FlatteningNestedField(
+    image = FlattenOnDumpNestedDicomField(
         ImageDicomSchema(), dump_default=Image(), load_default=Image()
     )
     frame_of_reference_uid = DefaultingTagDicomField(
@@ -82,9 +82,7 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
         tag="default_frame_of_reference_uid",
     )
     dimension_organization_uids = DefaultingListTagDicomField(
-        SingleItemSequenceDicomField(
-            UidDicomField(), data_key="DimensionOrganizationUID"
-        ),
+        UidDatasetDicomField(data_key="DimensionOrganizationUID"),
         tag="default_dimension_organization_uids",
         data_key="DimensionOrganizationSequence",
     )

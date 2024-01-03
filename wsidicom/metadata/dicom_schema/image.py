@@ -12,23 +12,28 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Type
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Type
 
-from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.schema import (
-    ModuleDicomSchema,
-    DicomSchema,
-)
 from marshmallow import fields, post_load, pre_dump
+
+from wsidicom.geometry import SizeMm
+from wsidicom.metadata.defaults import Defaults
 from wsidicom.metadata.dicom_schema.fields import (
     BooleanDicomField,
     DateTimeDicomField,
     DefaultingDicomField,
-    FlatteningNestedField,
+    FlattenOnDumpNestedDicomField,
+    FloatDicomField,
     ImageOrientationSlideField,
+    NestedDatasetDicomField,
     OffsetInSlideCoordinateSystemField,
+    PixelSpacingDicomField,
 )
-
+from wsidicom.metadata.dicom_schema.schema import (
+    DicomSchema,
+    ModuleDicomSchema,
+)
 from wsidicom.metadata.image import (
     ExtendedDepthOfField,
     FocusMethod,
@@ -67,9 +72,26 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
         return ImageCoordinateSystem
 
 
-class ImageDicomSchema(ModuleDicomSchema[Image]):
-    # TODO pixel_spacing, focal_plane_spacing, and depth_of_field
+@dataclass
+class PixelMeasureDicomModel:
+    pixel_spacing: Optional[SizeMm] = None
+    focal_plane_spacing: Optional[float] = None
+    depth_of_field: Optional[float] = None
 
+
+class PixelMeasureDicomSchema(DicomSchema[PixelMeasureDicomModel]):
+    pixel_spacing = PixelSpacingDicomField(data_key="PixelSpacing", allow_none=True)
+    focal_plane_spacing = FloatDicomField(
+        data_key="SpacingBetweenSlices", allow_none=True
+    )
+    depth_of_field = FloatDicomField(data_key="SliceThickness", allow_none=True)
+
+    @property
+    def load_type(self) -> Type[PixelMeasureDicomModel]:
+        return PixelMeasureDicomModel
+
+
+class ImageDicomSchema(ModuleDicomSchema[Image]):
     acquisition_datetime = DefaultingDicomField(
         DateTimeDicomField(),
         data_key="AcquisitionDateTime",
@@ -83,15 +105,20 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         load_default=None,
     )
     extended_depth_of_field_bool = BooleanDicomField(data_key="ExtendedDepthOfField")
-    extended_depth_of_field = FlatteningNestedField(
+    extended_depth_of_field = FlattenOnDumpNestedDicomField(
         ExtendedDepthOfFieldDicomSchema(),
         allow_none=True,
         load_default=None,
     )
-    image_coordinate_system = FlatteningNestedField(
+    image_coordinate_system = FlattenOnDumpNestedDicomField(
         ImageCoordinateSystemDicomSchema(),
         allow_none=True,
         load_default=None,
+    )
+    pixel_measure = NestedDatasetDicomField(
+        PixelMeasureDicomSchema(),
+        data_key="SharedFunctionalGroupsSequence",
+        nested_data_key="PixelMeasuresSequence",
     )
 
     @property
@@ -106,6 +133,11 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
             "extended_depth_of_field_bool": image.extended_depth_of_field is not None,
             "extended_depth_of_field": image.extended_depth_of_field,
             "image_coordinate_system": image.image_coordinate_system,
+            "pixel_measure": PixelMeasureDicomModel(
+                pixel_spacing=image.pixel_spacing,
+                focal_plane_spacing=image.focal_plane_spacing,
+                depth_of_field=image.depth_of_field,
+            ),
         }
 
     @post_load
@@ -119,6 +151,13 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
                     f"not match depth of field data {extended_depth_of_field}.",
                 )
             )
+        pixel_measure: Optional[PixelMeasureDicomModel] = data.pop(
+            "pixel_measure", None
+        )
+        if pixel_measure is not None:
+            data["pixel_spacing"] = pixel_measure.pixel_spacing
+            data["focal_plane_spacing"] = pixel_measure.focal_plane_spacing
+            data["depth_of_field"] = pixel_measure.depth_of_field
         return super().post_load(data, **kwargs)
 
     @property

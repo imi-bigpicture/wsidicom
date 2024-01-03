@@ -34,7 +34,7 @@ from wsidicom.conceptcode import (
     LenseCode,
     LightPathFilterCode,
 )
-from wsidicom.geometry import PointMm
+from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.instance import ImageType
 from wsidicom.metadata import (
     Equipment,
@@ -140,18 +140,18 @@ class TestDicomSchema:
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
-                None,
-                None,
-                None,
+                SizeMm(0.5, 0.5),
+                0.25,
+                2.5,
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
-                None,
-                None,
-                None,
+                SizeMm(0.5, 0.5),
+                0.25,
+                2.5,
             ],
         ],
     )
@@ -196,18 +196,18 @@ class TestDicomSchema:
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
-                None,
-                None,
-                None,
+                SizeMm(0.5, 0.5),
+                0.25,
+                2.5,
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
-                None,
-                None,
-                None,
+                SizeMm(0.5, 0.5),
+                0.25,
+                2.5,
             ],
             [None, None, None, None, None, None, None],
         ],

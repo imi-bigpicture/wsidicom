@@ -16,7 +16,7 @@ from datetime import datetime
 import pytest
 from pydicom import Dataset
 from pydicom.sr.coding import Code
-from pydicom.valuerep import DT
+from pydicom.valuerep import DT, DSfloat
 from tests.metadata.dicom_schema.helpers import (
     bool_to_dicom_literal,
     code_to_code_dataset,
@@ -80,6 +80,26 @@ def dicom_image(image: Image):
         )
     else:
         dataset.ExtendedDepthOfField = "NO"
+    if any(
+        item is not None
+        for item in [
+            image.pixel_spacing,
+            image.focal_plane_spacing,
+            image.depth_of_field,
+        ]
+    ):
+        pixel_spacing_dataset = Dataset()
+        if image.pixel_spacing is not None:
+            pixel_spacing_dataset.PixelSpacing = [
+                DSfloat(value) for value in image.pixel_spacing.to_tuple()
+            ]
+        if image.focal_plane_spacing is not None:
+            pixel_spacing_dataset.SpacingBetweenSlices = image.focal_plane_spacing
+        if image.depth_of_field is not None:
+            pixel_spacing_dataset.SliceThickness = image.depth_of_field
+        shared_functional_group_dataset = Dataset()
+        shared_functional_group_dataset.PixelMeasuresSequence = [pixel_spacing_dataset]
+        dataset.SharedFunctionalGroupsSequence = [shared_functional_group_dataset]
     yield dataset
 
 

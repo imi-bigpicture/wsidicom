@@ -35,7 +35,8 @@ from pydicom.sr.coding import Code
 from wsidicom.conceptcode import dataset_to_code
 
 from wsidicom.metadata.dicom_schema.fields import (
-    FlatteningNestedField,
+    FlattenOnDumpNestedDicomField,
+    FlattenOnLoadNestedDicomField,
 )
 from wsidicom.metadata.sample import Measurement
 
@@ -85,7 +86,7 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
     def post_dump(self, data: Dict[str, Any], many: bool, **kwargs) -> Dataset:
         """Create pydicom Dataset from attributes in dictionary."""
         for field in self.fields.values():
-            if isinstance(field, FlatteningNestedField):
+            if isinstance(field, FlattenOnDumpNestedDicomField):
                 field.flatten(data)
         dataset = Dataset()
         dataset.update(data)  # type: ignore
@@ -100,10 +101,13 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
                 continue
             if field.data_key is not None and field.data_key in dataset:
                 attributes[field.data_key] = dataset.get(field.data_key)
-            elif isinstance(field, FlatteningNestedField):
+            elif isinstance(field, FlattenOnDumpNestedDicomField):
                 de_flattened = field.de_flatten(dataset)
                 if de_flattened is not None:
                     attributes[key] = de_flattened
+        print("pre load", attributes.keys())
+        if "SharedFunctionalGroupsSequence" in attributes:
+            print("pre load", attributes.get("SharedFunctionalGroupsSequence"))
         return attributes
 
 

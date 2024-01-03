@@ -23,7 +23,7 @@ from wsidicom.metadata.dicom_schema.fields import (
     CodeDicomField,
     DateDicomField,
     EnumDicomField,
-    FlatteningNestedField,
+    FlattenOnDumpNestedDicomField,
     ListDicomField,
     PatientNameDicomField,
     SingleCodeSequenceField,
@@ -79,7 +79,7 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
     species_description_code = SingleCodeSequenceField(
         Code, data_key="PatientSpeciesCodeSequence", allow_none=True
     )
-    de_identification = FlatteningNestedField(
+    de_identification = FlattenOnDumpNestedDicomField(
         PatientDeIdentificationDicomSchema(), allow_none=True
     )
 

@@ -18,7 +18,7 @@ import marshmallow
 from marshmallow import pre_load
 from pydicom import Dataset
 from wsidicom.metadata.dicom_schema.schema import DicomSchema
-from wsidicom.metadata.dicom_schema.fields import FlatteningNestedField
+from wsidicom.metadata.dicom_schema.fields import FlattenOnDumpNestedDicomField
 
 
 class PropertySchema(DicomSchema):
@@ -34,7 +34,7 @@ class PropertySchema(DicomSchema):
 
 
 class ChildSchema(DicomSchema):
-    nested = FlatteningNestedField(PropertySchema())
+    nested = FlattenOnDumpNestedDicomField(PropertySchema())
 
     @property
     def load_type(self) -> Type[dict]:
@@ -46,7 +46,7 @@ class ChildSchema(DicomSchema):
 
 
 class ParentSchema(DicomSchema):
-    nested = FlatteningNestedField(ChildSchema())
+    nested = FlattenOnDumpNestedDicomField(ChildSchema())
 
     @property
     def load_type(self) -> Type[dict]:

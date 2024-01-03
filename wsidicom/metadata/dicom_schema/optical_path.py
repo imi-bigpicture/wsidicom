@@ -47,7 +47,7 @@ from wsidicom.metadata.dicom_schema.schema import (
 from wsidicom.metadata.dicom_schema.fields import (
     CodeDicomField,
     DefaultingDicomField,
-    FlatteningNestedField,
+    FlattenOnDumpNestedDicomField,
     FloatDicomField,
     SingleCodeSequenceField,
     StringDicomField,
@@ -622,13 +622,13 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
 
     icc_profile = fields.Raw(data_key="ICCProfile", load_default=None)
     lut = LutDicomField(data_key="PaletteColorLookupTableSequence", load_default=None)
-    light_path_filter = FlatteningNestedField(
+    light_path_filter = FlattenOnDumpNestedDicomField(
         LightPathFilterDicomSchema(), load_default=None
     )
-    image_path_filter = FlatteningNestedField(
+    image_path_filter = FlattenOnDumpNestedDicomField(
         ImagePathFilterDicomSchema(), load_default=None
     )
-    objective = FlatteningNestedField(ObjectivesSchema(), load_default=None)
+    objective = FlattenOnDumpNestedDicomField(ObjectivesSchema(), load_default=None)
 
     @property
     def load_type(self) -> Type[OpticalPath]:

@@ -17,6 +17,7 @@ from typing import Sequence, Union
 from pydicom import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.coding import Code
+from pydicom.valuerep import DSfloat
 
 
 from wsidicom.conceptcode import (
@@ -117,6 +118,29 @@ def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
         assert dicom_image.ImageOrientationSlide == list(
             image.image_coordinate_system.orientation.values
         )
+    if any(
+        item is not None
+        for item in [
+            image.pixel_spacing,
+            image.focal_plane_spacing,
+            image.depth_of_field,
+        ]
+    ):
+        assert "SharedFunctionalGroupsSequence" in dicom_image
+        shared_functional_group = dicom_image.SharedFunctionalGroupsSequence[0]
+        assert "PixelMeasuresSequence" in shared_functional_group
+        pixel_measures = shared_functional_group.PixelMeasuresSequence[0]
+        if image.pixel_spacing is not None:
+            assert pixel_measures.PixelSpacing == [
+                DSfloat(image.pixel_spacing.width),
+                DSfloat(image.pixel_spacing.height),
+            ]
+        if image.focal_plane_spacing is not None:
+            assert pixel_measures.SpacingBetweenSlices == DSfloat(
+                image.focal_plane_spacing
+            )
+        if image.depth_of_field is not None:
+            assert pixel_measures.SliceThickness == DSfloat(image.depth_of_field)
 
 
 def assert_dicom_label_equals_label(
