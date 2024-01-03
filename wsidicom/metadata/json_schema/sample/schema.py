@@ -83,6 +83,7 @@ from wsidicom.metadata.sample import (
     SpecimenLocalization,
     Staining,
     Storage,
+    UnknownSampling,
 )
 
 """For sampling steps referencing other sampling steps in sampling_chain_constraints we
@@ -166,7 +167,9 @@ class BasePreparationStepJsonSchema(Schema):
 
 class SamplingJsonSchema(BasePreparationStepJsonSchema):
     action = fields.Constant(PreparationAction.SAMPLING.value, dump_only=True)
-    method = JsonFieldFactory.concept_code(SpecimenSamplingProcedureCode)()
+    method = JsonFieldFactory.concept_code(SpecimenSamplingProcedureCode)(
+        allow_none=True
+    )
     sampling_chain_constraints = fields.List(
         fields.Nested(SamplingConstraintJsonSchema, allow_none=True), allow_none=True
     )
@@ -240,6 +243,7 @@ class PreparationStepJsonSchema(Schema):
     """Mapping step type to schema."""
     _type_to_schema_mapping: Dict[Type[PreparationStep], Type[Schema]] = {
         Sampling: SamplingJsonSchema,
+        UnknownSampling: SamplingJsonSchema,
         Collection: CollectionJsonSchema,
         Processing: ProcessingJsonSchema,
         Embedding: EmbeddingJsonSchema,
@@ -321,8 +325,12 @@ class BaseSpecimenJsonSchema(Schema, Generic[LoadType]):
 class ExtractedSpecimenJsonSchema(BaseSpecimenJsonSchema[ExtractedSpecimen]):
     """Schema for extracted specimen that has not been sampled from other specimen."""
 
-    type = JsonFieldFactory.concept_code(AnatomicPathologySpecimenTypesCode)()
-    container = JsonFieldFactory.concept_code(ContainerTypeCode)(load_default=None)
+    type = JsonFieldFactory.concept_code(AnatomicPathologySpecimenTypesCode)(
+        allow_none=True, load_default=None
+    )
+    container = JsonFieldFactory.concept_code(ContainerTypeCode)(
+        allow_none=True, load_default=None
+    )
 
     @property
     def load_type(self) -> Type[ExtractedSpecimenJsonModel]:
@@ -333,8 +341,12 @@ class SampleJsonSchema(BaseSpecimenJsonSchema[SampleJsonModel]):
     """Schema for sampled specimen."""
 
     sampled_from = fields.List(fields.Nested(SamplingConstraintJsonSchema))
-    type = JsonFieldFactory.concept_code(AnatomicPathologySpecimenTypesCode)()
-    container = JsonFieldFactory.concept_code(ContainerTypeCode)(load_default=None)
+    type = JsonFieldFactory.concept_code(AnatomicPathologySpecimenTypesCode)(
+        allow_none=True, load_default=None
+    )
+    container = JsonFieldFactory.concept_code(ContainerTypeCode)(
+        allow_none=True, load_default=None
+    )
 
     @property
     def load_type(self) -> Type[SampleJsonModel]:
@@ -347,9 +359,11 @@ class SlideSampleJsonSchema(BaseSpecimenJsonSchema[SlideSampleJsonModel]):
     anatomical_sites = fields.List(CodeJsonField(), allow_none=True)
     sampled_from = fields.Nested(SamplingConstraintJsonSchema)
     uid = UidJsonField(allow_none=True)
-    localization = fields.Nested(SpecimenLocalizationJsonSchema, allow_none=True)
-    short_description = fields.String(allow_none=True)
-    detailed_description = fields.String(allow_none=True)
+    localization = fields.Nested(
+        SpecimenLocalizationJsonSchema, allow_none=True, load_default=None
+    )
+    short_description = fields.String(allow_none=True, load_default=None)
+    detailed_description = fields.String(allow_none=True, load_default=None)
 
     @property
     def load_type(self) -> Type[SlideSampleJsonModel]:

@@ -203,8 +203,15 @@ class PreparationStep(metaclass=ABCMeta):
     """
 
 
+class BaseSampling(PreparationStep, metaclass=ABCMeta):
+    """Either a `Sampling` or a `UnknownSampling`."""
+
+    specimen: "Specimen"
+    sampling_chain_constraints: Optional[Sequence["BaseSampling"]]
+
+
 @dataclass
-class Sampling(PreparationStep):
+class Sampling(BaseSampling):
     """
     The sampling of a specimen into samples that can be used to create new specimens.
 
@@ -215,10 +222,24 @@ class Sampling(PreparationStep):
 
     specimen: "Specimen"
     method: SpecimenSamplingProcedureCode
-    sampling_chain_constraints: Optional[Sequence["Sampling"]] = None
+    sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
     location: Optional[SamplingLocation] = None
+
+
+@dataclass
+class UnknownSampling(BaseSampling):
+    """
+    Represent an unknown relation between a parent specimen and a child sample.
+
+    The relation between the parent and child can be direct (e.g. from block to slide)
+    or several steps inbetween can be missing (e.g. from specimen to slide). If possible
+    it is prefered to use the `Sampling` class instead.
+    """
+
+    specimen: "Specimen"
+    sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
 
 
 @dataclass
@@ -314,7 +335,7 @@ class Specimen(metaclass=ABCMeta):
     def __init__(
         self,
         identifier: Union[str, SpecimenIdentifier],
-        type: AnatomicPathologySpecimenTypesCode,
+        type: Optional[AnatomicPathologySpecimenTypesCode],
         steps: Sequence[PreparationStep],
         container: Optional[ContainerTypeCode] = None,
     ):
@@ -340,22 +361,22 @@ class SampledSpecimen(Specimen, metaclass=ABCMeta):
     def __init__(
         self,
         identifier: Union[str, SpecimenIdentifier],
-        type: AnatomicPathologySpecimenTypesCode,
-        sampled_from: Optional[Union[Sampling, Sequence[Sampling]]],
+        type: Optional[AnatomicPathologySpecimenTypesCode],
+        sampled_from: Optional[Union[BaseSampling, Sequence[BaseSampling]]],
         steps: Sequence[PreparationStep],
         container: Optional[ContainerTypeCode] = None,
     ):
         super().__init__(identifier, type, steps, container)
         if sampled_from is None:
             sampled_from = []
-        elif isinstance(sampled_from, Sampling):
+        elif isinstance(sampled_from, BaseSampling):
             sampled_from = [sampled_from]
         elif not isinstance(sampled_from, list):
             sampled_from = list(sampled_from)
         self._sampled_from = sampled_from
 
     @property
-    def sampled_from_list(self) -> List[Sampling]:
+    def sampled_from_list(self) -> List[BaseSampling]:
         return self._sampled_from
 
     def add(self, step: PreparationStep) -> None:
@@ -366,12 +387,12 @@ class SampledSpecimen(Specimen, metaclass=ABCMeta):
         self.steps.append(step)
 
     def _check_sampling_constraints(
-        self, constraints: Optional[Sequence[Sampling]]
+        self, constraints: Optional[Sequence[BaseSampling]]
     ) -> None:
         if constraints is None:
             return
 
-        def recursive_search(sampling: Sampling, specimen: Specimen) -> bool:
+        def recursive_search(sampling: BaseSampling, specimen: Specimen) -> bool:
             """Recursively search for sampling in samplings for specimen."""
             if sampling in specimen.samplings:
                 return True
@@ -398,25 +419,20 @@ class ExtractedSpecimen(Specimen):
     chain."""
 
     identifier: Union[str, SpecimenIdentifier]
-    type: AnatomicPathologySpecimenTypesCode
-    extraction_step: Optional[Collection] = None
+    extraction_step: Collection
+    type: Optional[AnatomicPathologySpecimenTypesCode] = None
     steps: List[PreparationStep] = field(default_factory=list)
     container: Optional[ContainerTypeCode] = None
 
     def __post_init__(self):
-        if self.extraction_step is not None:
-            # Add self.extraction step as first in list of steps
+        print(self.extraction_step)
+        if len(self.steps) == 0 or (
+            len(self.steps) > 0 and self.steps[0] != self.extraction_step
+        ):
             self.steps.insert(
                 0,
                 self.extraction_step,
             )
-        else:
-            # If extraction step in steps, set it as self.extraction_step
-            extraction_step = next(
-                (step for step in self.steps if isinstance(step, Collection)), None
-            )
-            if extraction_step is not None:
-                self.extraction_step = extraction_step
         super().__init__(
             identifier=self.identifier,
             type=self.type,
@@ -431,20 +447,26 @@ class ExtractedSpecimen(Specimen):
 
     def sample(
         self,
-        method: SpecimenSamplingProcedureCode,
+        method: Optional[SpecimenSamplingProcedureCode] = None,
         date_time: Optional[datetime.datetime] = None,
         description: Optional[str] = None,
         location: Optional[SamplingLocation] = None,
-    ) -> Sampling:
+    ) -> BaseSampling:
         """Create a sampling from the specimen that can be used to create a new sample."""
-        sampling = Sampling(
-            specimen=self,
-            method=method,
-            sampling_chain_constraints=None,
-            date_time=date_time,
-            description=description,
-            location=location,
-        )
+        if method is None or self.type is None:
+            sampling = UnknownSampling(
+                specimen=self,
+                sampling_chain_constraints=None,
+            )
+        else:
+            sampling = Sampling(
+                specimen=self,
+                method=method,
+                sampling_chain_constraints=None,
+                date_time=date_time,
+                description=description,
+                location=location,
+            )
         self.add(sampling)
         return sampling
 
@@ -454,8 +476,8 @@ class Sample(SampledSpecimen):
     """A specimen that has been sampled from one or more other specimens."""
 
     identifier: Union[str, SpecimenIdentifier]
-    type: AnatomicPathologySpecimenTypesCode
-    sampled_from: Sequence[Sampling]
+    sampled_from: Sequence[BaseSampling]
+    type: Optional[AnatomicPathologySpecimenTypesCode] = None
     steps: Sequence[PreparationStep] = field(default_factory=list)
     container: Optional[ContainerTypeCode] = None
 
@@ -470,25 +492,32 @@ class Sample(SampledSpecimen):
 
     def sample(
         self,
-        method: SpecimenSamplingProcedureCode,
+        method: Optional[SpecimenSamplingProcedureCode] = None,
         date_time: Optional[datetime.datetime] = None,
         description: Optional[str] = None,
-        sampling_chain_constraints: Optional[Sequence[Sampling]] = None,
+        sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None,
         location: Optional[SamplingLocation] = None,
-    ) -> Sampling:
+    ) -> BaseSampling:
         """Create a sampling from the specimen that can be used to create a new sample."""
         self._check_sampling_constraints(sampling_chain_constraints)
         if sampling_chain_constraints is not None:
             for sampling_chain_constraint in sampling_chain_constraints:
                 assert isinstance(sampling_chain_constraint, Sampling)
-        sampling = Sampling(
-            specimen=self,
-            method=method,
-            sampling_chain_constraints=sampling_chain_constraints,
-            date_time=date_time,
-            description=description,
-            location=location,
-        )
+
+        if method is None or self.type is None:
+            sampling = UnknownSampling(
+                specimen=self,
+                sampling_chain_constraints=sampling_chain_constraints,
+            )
+        else:
+            sampling = Sampling(
+                specimen=self,
+                method=method,
+                sampling_chain_constraints=sampling_chain_constraints,
+                date_time=date_time,
+                description=description,
+                location=location,
+            )
         self.add(sampling)
         return sampling
 
@@ -499,7 +528,7 @@ class SlideSample(SampledSpecimen):
 
     identifier: Union[str, SpecimenIdentifier]
     anatomical_sites: Optional[Sequence[Code]] = None
-    sampled_from: Optional[Sampling] = None
+    sampled_from: Optional[BaseSampling] = None
     uid: Optional[UID] = None
     localization: Optional[SpecimenLocalization] = None
     steps: List[PreparationStep] = field(default_factory=list)

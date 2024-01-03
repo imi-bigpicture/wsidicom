@@ -22,13 +22,9 @@ from wsidicom.conceptcode import SpecimenStainsCode
 class TestSlideJsonSchema:
     def test_slide_serialize(self, slide: Slide):
         # Arrange
-        assert slide.stainings is not None
         assert slide.samples is not None
         sample = slide.samples[0]
-        assert sample.anatomical_sites is not None
         assert sample.sampled_from is not None
-        assert sample.localization is not None
-        assert sample.localization.description is not None
         block_1 = sample.sampled_from.specimen
 
         # Act
@@ -37,27 +33,37 @@ class TestSlideJsonSchema:
         # Assert
         assert isinstance(dumped, dict)
         assert dumped["identifier"] == slide.identifier
-        for index, staining in enumerate(slide.stainings):
-            dumped_staining = dumped["stainings"][index]
-            for stain_index, stain in enumerate(staining.substances):
-                assert isinstance(stain, SpecimenStainsCode)
-                assert_dict_equals_code(
-                    dumped_staining["substances"][stain_index], stain
-                )
+        if slide.stainings is not None:
+            for index, staining in enumerate(slide.stainings):
+                dumped_staining = dumped["stainings"][index]
+                for stain_index, stain in enumerate(staining.substances):
+                    assert isinstance(stain, SpecimenStainsCode)
+                    assert_dict_equals_code(
+                        dumped_staining["substances"][stain_index], stain
+                    )
+        else:
+            assert "stainings" not in dumped
 
         dumped_sample = dumped["samples"][0]
         assert dumped_sample["identifier"] == sample.identifier
-        assert_dict_equals_code(
-            dumped_sample["anatomical_sites"][0], sample.anatomical_sites[0]
-        )
+        if sample.anatomical_sites is not None:
+            assert_dict_equals_code(
+                dumped_sample["anatomical_sites"][0], sample.anatomical_sites[0]
+            )
+        else:
+            assert "anatomical_sites" not in dumped_sample
         assert dumped_sample["uid"] == str(sample.uid)
-        assert (
-            dumped_sample["localization"]["description"]
-            == sample.localization.description
-        )
+        if sample.localization is not None:
+            assert (
+                dumped_sample["localization"]["description"]
+                == sample.localization.description
+            )
+        else:
+            assert "localization" not in dumped_sample
         dumped_block_1 = dumped["samples"][1]
         assert dumped_block_1["identifier"] == block_1.identifier
-        assert_dict_equals_code(dumped_block_1["type"], block_1.type)
+        if block_1.type is not None:
+            assert_dict_equals_code(dumped_block_1["type"], block_1.type)
 
     def test_slide_deserialize(self, json_slide: Dict[str, Any]):
         # Arrange

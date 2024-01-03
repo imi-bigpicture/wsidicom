@@ -71,6 +71,7 @@ from wsidicom.metadata.sample import (
     Staining,
     Receiving,
     Storage,
+    UnknownSampling,
 )
 
 
@@ -155,6 +156,7 @@ def collection_dicom(
     medium: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
     container: Optional[ContainerTypeCode],
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield CollectionDicomModel(
@@ -167,6 +169,7 @@ def collection_dicom(
         method=collection.method,
         processing=processing_method,
         container=container,
+        specimen_type=specimen_type,
     )
 
 
@@ -179,6 +182,10 @@ def create_collection_dataset(
     if collection_dicom.container is not None:
         items.append(
             create_code_item(SampleCodes.container, collection_dicom.container)
+        )
+    if collection_dicom.specimen_type is not None:
+        items.append(
+            create_code_item(SampleCodes.specimen_type, collection_dicom.specimen_type)
         )
     items.append(create_processing_type_item(collection_dicom))
     if collection_dicom.date_time is not None:
@@ -222,6 +229,7 @@ def sampling_dicom(
     medium: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
     container: Optional[ContainerTypeCode],
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     (
@@ -230,6 +238,7 @@ def sampling_dicom(
     ) = SpecimenIdentifier.get_string_identifier_and_issuer(
         sampling.specimen.identifier
     )
+    assert sampling.specimen.type is not None
     yield SamplingDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
@@ -252,6 +261,7 @@ def sampling_dicom(
         location_y=sampling.location.y if sampling.location is not None else None,
         location_z=sampling.location.z if sampling.location is not None else None,
         container=container,
+        specimen_type=specimen_type,
     )
 
 
@@ -262,6 +272,10 @@ def create_sampling_dataset(
     items = create_identifier_items(identifier)
     if sampling_dicom.container is not None:
         items.append(create_code_item(SampleCodes.container, sampling_dicom.container))
+    if sampling_dicom.specimen_type is not None:
+        items.append(
+            create_code_item(SampleCodes.specimen_type, sampling_dicom.specimen_type)
+        )
     items.append(create_processing_type_item(sampling_dicom))
     if sampling_dicom.date_time is not None:
         items.append(
@@ -358,6 +372,8 @@ def processing_dicom(
         processing=processing.method,
         fixative=fixative,
         embedding=medium,
+        container=None,
+        specimen_type=None,
     )
 
 
@@ -428,6 +444,8 @@ def staining_dicom(
         fixative=fixative,
         embedding=medium,
         processing=processing_method,
+        container=None,
+        specimen_type=None,
     )
 
 
@@ -486,6 +504,8 @@ def receiving_dicom(
         fixative=None,
         embedding=None,
         processing=None,
+        container=None,
+        specimen_type=None,
     )
 
 
@@ -534,6 +554,8 @@ def storage_dicom(
         fixative=None,
         embedding=None,
         processing=None,
+        container=None,
+        specimen_type=None,
     )
 
 
@@ -600,6 +622,7 @@ def create_description(
             method=collection_method,
             processing=None,
             container=specimen_container,
+            specimen_type=specimen_type,
         ),
         identifier=specimen_id,
     )
@@ -612,6 +635,8 @@ def create_description(
             fixative=fixative,
             embedding=None,
             processing=None,
+            container=None,
+            specimen_type=None,
         ),
         identifier=specimen_id,
     )
@@ -638,6 +663,7 @@ def create_description(
             location_y=sampling_location.y if sampling_location is not None else None,
             location_z=sampling_location.z if sampling_location is not None else None,
             container=block_container,
+            specimen_type=block_type,
         ),
         identifier=block_id,
     )
@@ -650,6 +676,8 @@ def create_description(
             fixative=None,
             embedding=embedding_medium,
             processing=None,
+            container=None,
+            specimen_type=None,
         ),
         identifier=block_id,
     )
@@ -666,6 +694,8 @@ def create_description(
             issuer_of_parent_specimen_identifier=None,
             parent_specimen_type=block_type,
             processing=None,
+            specimen_type=None,
+            container=None,
             location_reference=None,
             location_description=None,
             location_x=None,
@@ -684,6 +714,8 @@ def create_description(
             fixative=None,
             embedding=None,
             processing=None,
+            container=None,
+            specimen_type=None,
         ),
         identifier=slide_sample_id,
     )
@@ -937,7 +969,8 @@ class TestSampleDicom:
             assert slide_sample.anatomical_sites == primary_anatomic_structures
             assert slide_sample.localization == specimen_localization
             assert slide_sample.sampled_from is not None
-            assert slide_sample.sampled_from.method == block_sampling_method
+            if isinstance(slide_sample.sampled_from, Sampling):
+                assert slide_sample.sampled_from.method == block_sampling_method
             block = slide_sample.sampled_from.specimen
             assert isinstance(block, Sample)
             assert block.identifier == block_id
@@ -948,8 +981,10 @@ class TestSampleDicom:
             assert embedding_step.medium == medium
             assert len(block.sampled_from) == len(specimen_ids)
             for index, specimen_id in enumerate(specimen_ids):
-                assert block.sampled_from[index].method == specimen_sampling_method
-                specimen = block.sampled_from[index].specimen
+                loaded_specimen_sampling = block.sampled_from[index]
+                if isinstance(loaded_specimen_sampling, Sampling):
+                    assert loaded_specimen_sampling.method == specimen_sampling_method
+                specimen = loaded_specimen_sampling.specimen
                 assert isinstance(specimen, ExtractedSpecimen)
                 assert specimen.identifier == specimen_id
                 assert specimen.type == specimen_type
@@ -1014,7 +1049,7 @@ class TestSampleDicom:
         block_embedding_datetime = datetime.datetime(2007, 3, 24, 5, 0)
         block_embedding_medium = SpecimenEmbeddingMediaCode("Paraffin wax")
         block_embedding_description = "Embedding (paraffin)"
-        slide_sampling_method = SpecimenSamplingProcedureCode("Block sectioning")
+        # slide_sampling_method = SpecimenSamplingProcedureCode("Block sectioning")
         slide_sampling_description = "Slide Creation"
         staining_datetime = datetime.datetime(2007, 3, 24, 7, 0)
         staining_substances = [
@@ -1162,32 +1197,32 @@ class TestSampleDicom:
                     block_embedding_medium,
                 ),
             ],
-            # Block sampling to slide (not in example)
-            [
-                create_string_item(SampleCodes.identifier, slide_identifier),
-                create_string_item(
-                    SampleCodes.issuer_of_identifier, issuer_of_identifier
-                ),
-                create_code_item(
-                    SampleCodes.processing_type, SampleCodes.sampling_method
-                ),
-                create_string_item(
-                    SampleCodes.processing_description, slide_sampling_description
-                ),
-                create_code_item(
-                    SampleCodes.sampling_method,
-                    slide_sampling_method,
-                ),
-                create_string_item(
-                    SampleCodes.parent_specimen_identifier,
-                    block_identifier,
-                ),
-                create_string_item(
-                    SampleCodes.issuer_of_parent_specimen_identifier,
-                    issuer_of_identifier,
-                ),
-                create_code_item(SampleCodes.parent_specimen_type, block_type),
-            ],
+            # # Block sampling to slide (not in example)
+            # [
+            #     create_string_item(SampleCodes.identifier, slide_identifier),
+            #     create_string_item(
+            #         SampleCodes.issuer_of_identifier, issuer_of_identifier
+            #     ),
+            #     create_code_item(
+            #         SampleCodes.processing_type, SampleCodes.sampling_method
+            #     ),
+            #     create_string_item(
+            #         SampleCodes.processing_description, slide_sampling_description
+            #     ),
+            #     create_code_item(
+            #         SampleCodes.sampling_method,
+            #         slide_sampling_method,
+            #     ),
+            #     create_string_item(
+            #         SampleCodes.parent_specimen_identifier,
+            #         block_identifier,
+            #     ),
+            #     create_string_item(
+            #         SampleCodes.issuer_of_parent_specimen_identifier,
+            #         issuer_of_identifier,
+            #     ),
+            #     create_code_item(SampleCodes.parent_specimen_type, block_type),
+            # ],
             # Slide Staining
             [
                 create_string_item(SampleCodes.identifier, slide_identifier),
@@ -1235,7 +1270,7 @@ class TestSampleDicom:
         assert slide_sample.anatomical_sites == [primary_anatomic_structure]
         assert slide_sample.localization is None
         assert slide_sample.sampled_from is not None
-        assert slide_sample.sampled_from.method == slide_sampling_method
+        assert isinstance(slide_sample.sampled_from, UnknownSampling)
         block = slide_sample.sampled_from.specimen
         assert isinstance(block, Sample)
         assert block.identifier == SpecimenIdentifier(
@@ -1254,9 +1289,7 @@ class TestSampleDicom:
         assert embedding_step.date_time == block_embedding_datetime
         assert embedding_step.description == block_embedding_description
         sampling_to_slide_step = block.steps[2]
-        assert isinstance(sampling_to_slide_step, Sampling)
-        assert sampling_to_slide_step.method == slide_sampling_method
-        assert sampling_to_slide_step.description == slide_sampling_description
+        assert isinstance(sampling_to_slide_step, UnknownSampling)
         assert len(block.sampled_from) == 1
         specimen = block.sampled_from[0].specimen
         assert isinstance(specimen, ExtractedSpecimen)
@@ -1305,6 +1338,9 @@ class TestPreparationStepDicomSchema:
     @pytest.mark.parametrize(
         "container", [None, ContainerTypeCode("Specimen container")]
     )
+    @pytest.mark.parametrize(
+        "specimen_type", [None, AnatomicPathologySpecimenTypesCode("tissue specimen")]
+    )
     def test_serialize_collection_dicom(
         self,
         collection_dicom: CollectionDicomModel,
@@ -1336,6 +1372,13 @@ class TestPreparationStepDicomSchema:
         if collection_dicom.container is not None:
             self.assert_next_item_equals_code(
                 item_iterator, SampleCodes.container, collection_dicom.container
+            )
+        # Next item can be specimen type
+        if collection_dicom.specimen_type is not None:
+            self.assert_next_item_equals_code(
+                item_iterator,
+                SampleCodes.specimen_type,
+                collection_dicom.specimen_type,
             )
         # Next item should be processing type
         self.assert_next_item_equals_code(
@@ -1393,6 +1436,9 @@ class TestPreparationStepDicomSchema:
     @pytest.mark.parametrize(
         "container", [None, ContainerTypeCode("Specimen container")]
     )
+    @pytest.mark.parametrize(
+        "specimen_type", [None, AnatomicPathologySpecimenTypesCode("tissue specimen")]
+    )
     def test_deserialize_collection_dicom(
         self,
         collection_dicom: CollectionDicomModel,
@@ -1418,6 +1464,7 @@ class TestPreparationStepDicomSchema:
         assert deserialized.fixative == collection_dicom.fixative
         assert deserialized.embedding == collection_dicom.embedding
         assert deserialized.container == collection_dicom.container
+        assert deserialized.specimen_type == collection_dicom.specimen_type
 
     @pytest.mark.parametrize(
         ["date_time", "description"],
@@ -1448,6 +1495,9 @@ class TestPreparationStepDicomSchema:
     )
     @pytest.mark.parametrize(
         "container", [None, ContainerTypeCode("Specimen container")]
+    )
+    @pytest.mark.parametrize(
+        "specimen_type", [None, AnatomicPathologySpecimenTypesCode("tissue specimen")]
     )
     def test_serialize_sampling_dicom(
         self,
@@ -1480,6 +1530,13 @@ class TestPreparationStepDicomSchema:
         if sampling_dicom.container is not None:
             self.assert_next_item_equals_code(
                 item_iterator, SampleCodes.container, sampling_dicom.container
+            )
+        # Next item can be specimen type
+        if sampling_dicom.specimen_type is not None:
+            self.assert_next_item_equals_code(
+                item_iterator,
+                SampleCodes.specimen_type,
+                sampling_dicom.specimen_type,
             )
         # Next item should be processing type
         self.assert_next_item_equals_code(
@@ -1604,6 +1661,9 @@ class TestPreparationStepDicomSchema:
     @pytest.mark.parametrize(
         "container", [None, ContainerTypeCode("Specimen container")]
     )
+    @pytest.mark.parametrize(
+        "specimen_type", [None, AnatomicPathologySpecimenTypesCode("tissue specimen")]
+    )
     def test_deserialize_sampling_dicom(
         self, sampling_dicom: SamplingDicomModel, sampling_dataset: Dataset
     ):
@@ -1630,6 +1690,7 @@ class TestPreparationStepDicomSchema:
         assert deserialized.location_y == sampling_dicom.location_y
         assert deserialized.location_z == sampling_dicom.location_z
         assert deserialized.container == sampling_dicom.container
+        assert deserialized.specimen_type == sampling_dicom.specimen_type
 
     @pytest.mark.parametrize(
         ["date_time", "description"],

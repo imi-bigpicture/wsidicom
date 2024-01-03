@@ -105,9 +105,6 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
                 de_flattened = field.de_flatten(dataset)
                 if de_flattened is not None:
                     attributes[key] = de_flattened
-        print("pre load", attributes.keys())
-        if "SharedFunctionalGroupsSequence" in attributes:
-            print("pre load", attributes.get("SharedFunctionalGroupsSequence"))
         return attributes
 
 

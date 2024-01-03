@@ -14,16 +14,16 @@
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import (
     Dict,
     Iterable,
     List,
     Optional,
-    Set,
+    Sequence,
     Tuple,
     Union,
 )
-
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
@@ -39,8 +39,8 @@ from wsidicom.metadata.dicom_schema.sample.model import (
     StainingDicomModel,
     StorageDicomModel,
 )
-
 from wsidicom.metadata.sample import (
+    BaseSampling,
     Collection,
     Embedding,
     ExtractedSpecimen,
@@ -49,13 +49,22 @@ from wsidicom.metadata.sample import (
     Processing,
     Receiving,
     Sample,
-    Sampling,
     SlideSample,
     Specimen,
     SpecimenIdentifier,
     Staining,
     Storage,
 )
+
+
+@dataclass
+class ParsedSpecimen:
+    """Parsed specimen steps."""
+
+    preparation_steps: List[PreparationStep]
+    sampling: Optional[BaseSampling]
+    container: Optional[ContainerTypeCode]
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode]
 
 
 class SpecimenDicomParser:
@@ -65,7 +74,7 @@ class SpecimenDicomParser:
 
     def parse_descriptions(
         self, specimen_descriptions: Iterable[SpecimenDescriptionDicomModel]
-    ) -> Tuple[Optional[List[SlideSample]], Optional[List[Staining]]]:
+    ) -> Tuple[List[SlideSample], List[Staining]]:
         """
         Parse specimen descriptions into samples and stainings.
 
@@ -76,7 +85,7 @@ class SpecimenDicomParser:
 
         Returns
         ----------
-        Optional[Tuple[List["SlideSample"], List[Staining]]]
+        Tuple[List[SlideSample], List[Staining]]
             Samples and stainings parsed from descriptions.
 
         """
@@ -107,9 +116,8 @@ class SpecimenDicomParser:
             Parsed sample.
 
         """
-        steps_by_identifier, stainings = self._parse_steps_by_identifier(
-            description.steps
-        )
+        steps_by_identifier = self._order_steps_by_identifier(description.steps)
+        stainings = self._parse_stainings(description.steps)
         for staining in stainings:
             if not any(
                 existing_staining == staining
@@ -117,34 +125,50 @@ class SpecimenDicomParser:
             ):
                 self._created_stainings.append(staining)
         identifier = description.specimen_identifier
-        preparation_steps, samplings, _ = self._parse_preparation_steps_for_specimen(
+        parsed_specimen = self._parse_preparation_steps_for_specimen(
             identifier, steps_by_identifier
         )
-
-        if len(samplings) > 1:
-            raise ValueError("Should be max one sampling, got.", len(samplings))
         return SlideSample(
             identifier=identifier,
             anatomical_sites=description.anatomical_sites,
-            sampled_from=next(iter(samplings), None),
+            sampled_from=parsed_specimen.sampling,
             uid=description.uid,
             localization=description.localization,
-            steps=preparation_steps,
+            steps=parsed_specimen.preparation_steps,
         )
 
-    def _parse_steps_by_identifier(
+    def _parse_stainings(
         self,
         steps: List[SpecimenPreparationStepDicomModel],
-    ) -> Tuple[
-        Dict[
-            Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
-        ],
-        List[Staining],
-    ]:
+    ) -> List[Staining]:
         """
-        Parse steps into dictionary of steps by specimen identifier and list of
-        stainings.
+        Parse stainings from steps.
+
+        Parameters
+        ----------
+        steps: List[SpecimenPreparationStepDicomModel]
+            Steps to parse.
+
+        Returns
+        ----------
+        List[Staining]
+            Parsed stainings.
+
+        """
+        return [
+            Staining(
+                step.substances, date_time=step.date_time, description=step.description
+            )
+            for step in steps
+            if isinstance(step, StainingDicomModel)
+        ]
+
+    def _order_steps_by_identifier(
+        self,
+        steps: List[SpecimenPreparationStepDicomModel],
+    ) -> Dict[Union[str, SpecimenIdentifier], List[SpecimenPreparationStepDicomModel],]:
+        """
+        Parse steps into dictionary of steps by specimen identifier.
 
         Parameters
         ----------
@@ -153,44 +177,29 @@ class SpecimenDicomParser:
 
         Returns
         -------
-        Tuple[
-            Dict[
-                Union[str, SpecimenIdentifier],
-                List[Optional[SpecimenPreparationStepDicomModel]],
-            ],
-            List[Staining],
-        ]
-            Steps ordered by specimen identifier and stainings.
+        Dict[
+            Union[str, SpecimenIdentifier],
+            List[SpecimenPreparationStepDicomModel],
+        ]:
+            Steps ordered by specimen identifier.
         """
-        stainings: List[Staining] = []
         steps_by_identifier: Dict[
             Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
+            List[SpecimenPreparationStepDicomModel],
         ] = defaultdict(list)
         for step in steps:
-            if isinstance(step, StainingDicomModel):
-                staining = Staining(
-                    step.substances,
-                    date_time=step.date_time,
-                    description=step.description,
-                )
-                stainings.append(staining)
-            elif isinstance(step, SamplingDicomModel):
-                parent_identifier = step.parent_identifier
-                steps_by_identifier[parent_identifier].append(step)
             identifier = step.specimen_identifier
             steps_by_identifier[identifier].append(step)
-        return steps_by_identifier, stainings
+        return steps_by_identifier
 
     def _parse_preparation_steps_for_specimen(
         self,
         identifier: Union[str, SpecimenIdentifier],
         steps_by_identifier: Dict[
             Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
+            List[SpecimenPreparationStepDicomModel],
         ],
-        stop_at_step: Optional[SpecimenPreparationStepDicomModel] = None,
-    ) -> Tuple[List[PreparationStep], List[Sampling], Optional[ContainerTypeCode]]:
+    ) -> ParsedSpecimen:
         """
         Parse preparation steps and samplings for a specimen.
 
@@ -202,7 +211,7 @@ class SpecimenDicomParser:
             The identifier of the specimen to parse.
         steps_by_identifier: Dict[
             Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
+            List[SpecimenPreparationStepDicomModel],
         ]
             DICOM preparation steps ordered by specimen identifier.
         stop_at_step: Optional[SpecimenPreparationStepDicomModel] = None:
@@ -211,26 +220,15 @@ class SpecimenDicomParser:
 
         Returns
         ----------
-        Tuple[List[PreparationStep], List[Sampling]]
-            Parsed PreparationSteps and Samplings for the specimen.
+        ParsedSpecimen
+            Parsed steps for specimin.
 
         """
         container: Optional[ContainerTypeCode] = None
-        if stop_at_step is not None:
-            if (
-                not isinstance(stop_at_step, SamplingDicomModel)
-                or stop_at_step.parent_identifier != identifier
-            ):
-                raise ValueError(
-                    "Stop at step should be a parent SpecimenSampling step."
-                )
-
-        samplings: List[Sampling] = []
+        specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None
+        sampling: Optional[BaseSampling] = None
         preparation_steps: List[PreparationStep] = []
         for index, step in enumerate(steps_by_identifier[identifier]):
-            if stop_at_step is not None and stop_at_step == step:
-                # We should not parse the rest of the list
-                break
             if step is None:
                 # This step has already been parsed, skip to next.
                 continue
@@ -247,16 +245,36 @@ class SpecimenDicomParser:
                     raise ValueError(error)
                 # Skip to next
                 continue
-            step_preparation_steps, step_samplings, step_container = self._parse_step(
-                index, step, identifier, steps_by_identifier
-            )
-            preparation_steps.extend(step_preparation_steps)
-            samplings.extend(step_samplings)
-            if step_container is not None:
-                container = step_container
-            # Clear this step so that it will not be processed again
-            steps_by_identifier[identifier][index] = None
-        return preparation_steps, samplings, container
+            parsed_step = self._parse_step(index, step, identifier, steps_by_identifier)
+            preparation_steps.extend(parsed_step.preparation_steps)
+            if parsed_step.sampling is not None:
+                if sampling is not None:
+                    raise ValueError(
+                        "Should not be more than one sampling for a specimen."
+                    )
+                sampling = parsed_step.sampling
+
+            # Update container and specimen type
+            if step.specimen_type is not None:
+                if specimen_type is not None and specimen_type != step.specimen_type:
+                    raise ValueError(
+                        f"Got missmatching specimen types {specimen_type} and "
+                        f"{step.specimen_type} in steps for specimen {identifier}."
+                    )
+                specimen_type = step.specimen_type
+            if step.container is not None:
+                if container is not None and container != step.container:
+                    raise ValueError(
+                        f"Got missmatching container types {container} and "
+                        f"{step.container} in steps for specimen {identifier}."
+                    )
+                container = step.container
+        return ParsedSpecimen(
+            preparation_steps=preparation_steps,
+            sampling=sampling,
+            container=container,
+            specimen_type=specimen_type,
+        )
 
     def _parse_step(
         self,
@@ -265,9 +283,9 @@ class SpecimenDicomParser:
         identifier: Union[str, SpecimenIdentifier],
         steps_by_identifier: Dict[
             Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
+            List[SpecimenPreparationStepDicomModel],
         ],
-    ) -> Tuple[List[PreparationStep], List[Sampling], Optional[ContainerTypeCode]]:
+    ) -> ParsedSpecimen:
         """Parse step and return nested preparation steps and samplings.
 
         Parameters
@@ -280,108 +298,43 @@ class SpecimenDicomParser:
             Identifier of specimen to parse.
         steps_by_identifier: Dict[
             Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
+            List[SpecimenPreparationStepDicomModel],
         ]
             DICOM preparation steps ordered by specimen identifier.
 
         Returns
         -------
-        Tuple[List[PreparationStep], List[Sampling], Optional[ContainerTypeCode]]
-            Parsed preparation steps, samplings, and optional container.
+        ParsedSpecimen
+            Parsed step for specimen.
         """
         preparation_steps: List[PreparationStep] = []
-        samplings: List[Sampling] = []
-        container: Optional[ContainerTypeCode] = None
+        sampling: Optional[BaseSampling] = None
 
-        if isinstance(step, StainingDicomModel):
-            # Stainings are handled elsewhere
-            pass
-        elif isinstance(step, CollectionDicomModel):
-            any_sampling_steps = any(
-                sampling_step
-                for sampling_step in steps_by_identifier[identifier]
-                if sampling_step is not None
-                and isinstance(sampling_step, SamplingDicomModel)
-                and sampling_step.identifier == identifier
-            )
-            if index != 0 or any_sampling_steps:
-                raise ValueError(
-                    (
-                        "Collection step should be first step and there should not "
-                        "be any sampling steps."
-                    )
-                )
+        if isinstance(step, CollectionDicomModel):
             preparation_steps.append(
-                Collection(
-                    step.method,
-                    date_time=step.date_time,
-                    description=step.description,
+                self._create_collection_step(
+                    index, step, identifier, steps_by_identifier
                 )
             )
-            container = step.container
+        elif isinstance(step, SamplingDicomModel):
+            sampling = self._create_sampling_step(index, step, steps_by_identifier)
+        elif index == 0:
+            # First step was not a collection step or a sampling step, this specimen
+            # thus has no defined parent.
+            sampling = self._create_unknown_sampling(identifier, steps_by_identifier)
         elif isinstance(step, ProcessingDicomModel):
             if step.processing is not None:
                 # Only add processing step if has processing code.
                 preparation_steps.append(
                     Processing(step.processing, step.date_time, step.description)
                 )
-        elif isinstance(step, SamplingDicomModel):
-            parent_identifier = step.parent_identifier
-            if parent_identifier in self._created_specimens:
-                # Parent already exists. Parse any non-parsed steps
-                parent = self._created_specimens[parent_identifier]
-                (
-                    parent_steps,
-                    sampling_constraints,
-                    parent_container,
-                ) = self._parse_preparation_steps_for_specimen(
-                    parent_identifier, steps_by_identifier, step
-                )
-                for parent_step in parent_steps:
-                    # Only add step if an equivalent does not exists
-                    if not any(step == parent_step for step in parent.steps):
-                        parent.add(parent_step)
-                if isinstance(parent, Sample):
-                    parent._sampled_from.extend(sampling_constraints)
-            else:
-                # Need to create parent
-                parent = self._create_specimen(
-                    parent_identifier,
-                    step.parent_specimen_type,
-                    steps_by_identifier,
-                    step,
-                )
-                if isinstance(parent, Sample):
-                    sampling_constraints = parent.sampled_from
-                else:
-                    sampling_constraints = None
-                self._created_specimens[parent_identifier] = parent
-            if isinstance(parent, Sample):
-                # If Sample create sampling with constraint
-                sampling = parent.sample(
-                    method=step.method,
-                    date_time=step.date_time,
-                    description=step.description,
-                    sampling_chain_constraints=sampling_constraints,
-                    location=step.sampling_location,
-                )
-            elif isinstance(parent, ExtractedSpecimen):
-                # Extracted specimen can not have constraint
-                sampling = parent.sample(
-                    method=step.method,
-                    date_time=step.date_time,
-                    description=step.description,
-                    location=step.sampling_location,
-                )
-            else:
-                raise ValueError(f"Unknown parent type {type(parent)}.")
-
-            samplings.append(sampling)
-            container = step.container
         elif isinstance(step, ReceivingDicomModel):
             preparation_steps.append(Receiving(step.date_time, step.description))
         elif isinstance(step, StorageDicomModel):
             preparation_steps.append(Storage(step.date_time, step.description))
+        elif isinstance(step, StainingDicomModel):
+            # Stainings are handled elsewhere
+            pass
         else:
             raise NotImplementedError(f"Step of type {type(step)}")
         # Fixative, embedding, and processing (for other than processing step)
@@ -410,17 +363,139 @@ class SpecimenDicomParser:
                     description=step.description,
                 )
             )
-        return preparation_steps, samplings, container
+
+        return ParsedSpecimen(
+            preparation_steps=preparation_steps,
+            sampling=sampling,
+            container=step.container,
+            specimen_type=step.specimen_type,
+        )
+
+    def _create_collection_step(
+        self,
+        index: int,
+        step: CollectionDicomModel,
+        identifier: Union[str, SpecimenIdentifier],
+        steps_by_identifier: Dict[
+            Union[str, SpecimenIdentifier],
+            List[SpecimenPreparationStepDicomModel],
+        ],
+    ) -> Collection:
+        any_sampling_steps = any(
+            sampling_step
+            for sampling_step in steps_by_identifier[identifier]
+            if sampling_step is not None
+            and isinstance(sampling_step, SamplingDicomModel)
+            and sampling_step.identifier == identifier
+        )
+        if index != 0 or any_sampling_steps:
+            raise ValueError(
+                (
+                    "Collection step should be first step and there should not "
+                    "be any sampling steps."
+                )
+            )
+        return Collection(
+            step.method,
+            date_time=step.date_time,
+            description=step.description,
+        )
+
+    def _create_sampling_step(
+        self,
+        index: int,
+        step: SamplingDicomModel,
+        steps_by_identifier: Dict[
+            Union[str, SpecimenIdentifier],
+            List[SpecimenPreparationStepDicomModel],
+        ],
+    ) -> BaseSampling:
+        if index != 0:
+            raise ValueError("Sampling step should be first step.")
+        parent_identifier = step.parent_identifier
+        sampling_constraints: Optional[Sequence[BaseSampling]] = None
+        if parent_identifier in self._created_specimens:
+            pass
+            # Parent already exists. Parse any non-parsed steps
+            parent = self._created_specimens[parent_identifier]
+            if isinstance(parent, Sample):
+                sampling_constraints = parent.sampled_from
+            parsed_parent = self._parse_preparation_steps_for_specimen(
+                parent_identifier, steps_by_identifier
+            )
+            for parent_step in parsed_parent.preparation_steps:
+                # Only add step if an equivalent does not exists
+                if not any(step == parent_step for step in parent.steps):
+                    parent.add(parent_step)
+                    assert False
+            if (
+                parsed_parent.sampling is not None
+                and isinstance(parent, Sample)
+                and parsed_parent.sampling not in parent.sampled_from_list
+            ):
+                parent._sampled_from.append(parsed_parent.sampling)
+                sampling_constraints = [parsed_parent.sampling]
+        else:
+            # Need to create parent
+            parent = self._create_specimen(
+                parent_identifier,
+                step.parent_specimen_type,
+                steps_by_identifier,
+            )
+            if isinstance(parent, Sample):
+                sampling_constraints = parent.sampled_from
+            self._created_specimens[parent_identifier] = parent
+        if isinstance(parent, Sample):
+            # If Sample create sampling with constraint
+            return parent.sample(
+                method=step.method,
+                date_time=step.date_time,
+                description=step.description,
+                sampling_chain_constraints=sampling_constraints,
+                location=step.sampling_location,
+            )
+        if isinstance(parent, ExtractedSpecimen):
+            # Extracted specimen can not have constraint
+            return parent.sample(
+                method=step.method,
+                date_time=step.date_time,
+                description=step.description,
+                location=step.sampling_location,
+            )
+        raise ValueError(f"Unknown parent type {type(parent)}.")
+
+    def _create_unknown_sampling(
+        self,
+        identifier: Union[str, SpecimenIdentifier],
+        steps_by_identifier: Dict[
+            Union[str, SpecimenIdentifier],
+            List[SpecimenPreparationStepDicomModel],
+        ],
+    ) -> Optional[BaseSampling]:
+        # If not first described specimen create a UnknownSampling from previous
+        # listed specimen.
+        this_specimen_index = list(steps_by_identifier.keys()).index(identifier)
+        if this_specimen_index == 0:
+            return None
+        previous_specimen_identifier = list(steps_by_identifier.keys())[
+            this_specimen_index - 1
+        ]
+        previous_specimen = self._create_specimen(
+            previous_specimen_identifier,
+            None,
+            steps_by_identifier,
+        )
+        sampling = previous_specimen.sample()
+        return sampling
 
     def _create_specimen(
         self,
         identifier: Union[str, SpecimenIdentifier],
-        specimen_type: AnatomicPathologySpecimenTypesCode,
+        specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
         steps_by_identifier: Dict[
             Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
+            List[SpecimenPreparationStepDicomModel],
         ],
-        stop_at_step: SpecimenPreparationStepDicomModel,
     ) -> Union[ExtractedSpecimen, Sample]:
         """
         Create an ExtractedSpecimen or Sample.
@@ -433,11 +508,10 @@ class SpecimenDicomParser:
             The coded type of the specimen to create.
         steps_by_identifier: Dict[
             Union[str, SpecimenIdentifier],
-            List[Optional[SpecimenPreparationStepDicomModel]],
+            List[SpecimenPreparationStepDicomModel],
         ]
             DICOM preparation steps ordered by specimen identifier.
-        stop_at_step: SpecimenPreparationStepDicomModel,
-            Stop processing steps for this specimen at this step in the list.
+
 
         Returns
         ----------
@@ -446,25 +520,37 @@ class SpecimenDicomParser:
 
         """
         logging.debug(f"Creating specimen with identifier {identifier}")
-        (
-            preparation_steps,
-            samplings,
-            container,
-        ) = self._parse_preparation_steps_for_specimen(
-            identifier, steps_by_identifier, stop_at_step
+        parsed_specimin = self._parse_preparation_steps_for_specimen(
+            identifier, steps_by_identifier
         )
-
-        if len(samplings) == 0:
+        if specimen_type is None:
+            specimen_type = parsed_specimin.specimen_type
+        elif (
+            parsed_specimin.specimen_type is not None
+            and specimen_type != parsed_specimin.specimen_type
+        ):
+            raise ValueError(
+                f"Specimen type {specimen_type} and step specimen type "
+                f"{parsed_specimin.specimen_type} do not match."
+            )
+        if len(parsed_specimin.preparation_steps) > 0 and isinstance(
+            parsed_specimin.preparation_steps[0], Collection
+        ):
+            collection_step = parsed_specimin.preparation_steps.pop(0)
+            assert isinstance(collection_step, Collection)
             return ExtractedSpecimen(
                 identifier=identifier,
+                extraction_step=collection_step,
                 type=specimen_type,
-                steps=preparation_steps,
-                container=container,
+                steps=parsed_specimin.preparation_steps,
+                container=parsed_specimin.container,
             )
         return Sample(
             identifier=identifier,
             type=specimen_type,
-            sampled_from=samplings,
-            steps=preparation_steps,
-            container=container,
+            sampled_from=[parsed_specimin.sampling]
+            if parsed_specimin.sampling is not None
+            else [],
+            steps=parsed_specimin.preparation_steps,
+            container=parsed_specimin.container,
         )

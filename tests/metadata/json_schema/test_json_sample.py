@@ -22,6 +22,7 @@ from pydicom.uid import UID
 from tests.metadata.json_schema.helpers import assert_dict_equals_code
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
+    SpecimenCollectionProcedureCode,
     SpecimenSamplingProcedureCode,
     UnitCode,
 )
@@ -51,6 +52,7 @@ from wsidicom.metadata.sample import (
     Processing,
     Receiving,
     Sample,
+    Sampling,
     SamplingLocation,
     SlideSample,
     SpecimenLocalization,
@@ -189,6 +191,7 @@ class TestSampleJsonSchema:
         # Arrange
         specimen = ExtractedSpecimen(
             "specimen",
+            Collection(SpecimenCollectionProcedureCode("Specimen collection")),
             AnatomicPathologySpecimenTypesCode("Gross specimen"),
         )
         sampling_1 = specimen.sample(
@@ -198,8 +201,8 @@ class TestSampleJsonSchema:
         )
         sample = Sample(
             "sample",
-            AnatomicPathologySpecimenTypesCode("Tissue section"),
             [sampling_1],
+            AnatomicPathologySpecimenTypesCode("Tissue section"),
             [],
         )
         sampling_2 = sample.sample(
@@ -215,6 +218,7 @@ class TestSampleJsonSchema:
                 Measurement(3, UnitCode("mm")),
             ),
         )
+        assert isinstance(sampling_2, Sampling)
         assert sampling_2.date_time is not None
         assert sampling_2.location is not None
         assert sampling_2.location.x is not None
@@ -281,7 +285,11 @@ class TestSampleJsonSchema:
         # Assert
         assert isinstance(loaded, SamplingJsonModel)
         assert loaded.sampling_chain_constraints is not None
-        assert_dict_equals_code(dumped["method"], loaded.method)
+        if "method" in dumped:
+            assert loaded.method is not None
+            assert_dict_equals_code(dumped["method"], loaded.method)
+        else:
+            assert loaded.method is None
         assert loaded.date_time == datetime.datetime.fromisoformat(dumped["date_time"])
         assert loaded.description == dumped["description"]
         assert (
@@ -550,9 +558,6 @@ class TestSampleJsonSchema:
 
     def test_extracted_specimen_serialize(self, extracted_specimen: ExtractedSpecimen):
         # Arrange
-        assert extracted_specimen.extraction_step is not None
-        assert extracted_specimen.extraction_step.date_time is not None
-        assert extracted_specimen.container is not None
 
         # Act
         dumped = ExtractedSpecimenJsonSchema().dump(extracted_specimen)
@@ -561,16 +566,29 @@ class TestSampleJsonSchema:
 
         assert isinstance(dumped, dict)
         assert dumped["identifier"] == extracted_specimen.identifier
-        assert_dict_equals_code(
-            dumped["steps"][0]["method"],
-            extracted_specimen.extraction_step.method,
-        )
-        assert (
-            dumped["steps"][0]["date_time"]
-            == extracted_specimen.extraction_step.date_time.isoformat()
-        )
-        assert_dict_equals_code(dumped["type"], extracted_specimen.type)
-        assert_dict_equals_code(dumped["container"], extracted_specimen.container)
+        if extracted_specimen.extraction_step is not None:
+            assert_dict_equals_code(
+                dumped["steps"][0]["method"],
+                extracted_specimen.extraction_step.method,
+            )
+            if extracted_specimen.extraction_step.date_time is not None:
+                assert (
+                    dumped["steps"][0]["date_time"]
+                    == extracted_specimen.extraction_step.date_time.isoformat()
+                )
+            else:
+                assert "date_time" not in dumped["steps"][0]
+        else:
+            assert "steps" not in dumped["steps"][0]
+            assert "date_time" not in dumped["steps"][0]
+        if extracted_specimen.type is not None:
+            assert_dict_equals_code(dumped["type"], extracted_specimen.type)
+        else:
+            assert "type" not in dumped
+        if extracted_specimen.container is not None:
+            assert_dict_equals_code(dumped["container"], extracted_specimen.container)
+        else:
+            assert "container" not in dumped
 
     def test_extracted_specimen_deserialize(self):
         # Arrange
@@ -635,7 +653,10 @@ class TestSampleJsonSchema:
             assert dumped["steps"][0]["date_time"] == processing.date_time.isoformat()
         else:
             assert "date_time" not in dumped["steps"][0]
-        assert_dict_equals_code(dumped["type"], sample.type)
+        if sample.type is not None:
+            assert_dict_equals_code(dumped["type"], sample.type)
+        else:
+            assert "type" not in dumped
         assert (
             dumped["sampled_from"][0]["identifier"]
             == sample.sampled_from[0].specimen.identifier

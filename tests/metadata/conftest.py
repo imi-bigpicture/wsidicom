@@ -339,8 +339,8 @@ def extracted_specimen(
 ):
     yield ExtractedSpecimen(
         identifier,
-        AnatomicPathologySpecimenTypesCode("Gross specimen"),
         collection,
+        AnatomicPathologySpecimenTypesCode("Gross specimen"),
         container=ContainerTypeCode("Specimen container"),
     )
 
@@ -353,7 +353,6 @@ def sample(extracted_specimen: ExtractedSpecimen):
     )
     yield Sample(
         "sample",
-        AnatomicPathologySpecimenTypesCode("Tissue section"),
         [
             extracted_specimen.sample(
                 SpecimenSamplingProcedureCode("Dissection"),
@@ -361,6 +360,7 @@ def sample(extracted_specimen: ExtractedSpecimen):
                 "Sampling to block",
             ),
         ],
+        AnatomicPathologySpecimenTypesCode("Tissue section"),
         [processing],
         container=ContainerTypeCode("Tissue cassette"),
     )
@@ -385,12 +385,12 @@ def slide_sample(sample: Sample):
 def slide():
     part_1 = ExtractedSpecimen(
         "part 1",
-        AnatomicPathologySpecimenTypesCode("tissue specimen"),
         Collection(
             SpecimenCollectionProcedureCode("Specimen collection"),
             datetime.datetime(2023, 8, 5),
             "Extracted",
         ),
+        AnatomicPathologySpecimenTypesCode("tissue specimen"),
         [
             Fixation(
                 SpecimenFixativesCode("Neutral Buffered Formalin"),
@@ -401,12 +401,12 @@ def slide():
 
     part_2 = ExtractedSpecimen(
         "part 2",
-        AnatomicPathologySpecimenTypesCode("tissue specimen"),
         Collection(
             SpecimenCollectionProcedureCode("Specimen collection"),
             datetime.datetime(2023, 8, 5),
             "Extracted",
         ),
+        AnatomicPathologySpecimenTypesCode("tissue specimen"),
         [
             Fixation(
                 SpecimenFixativesCode("Neutral Buffered Formalin"),
@@ -417,7 +417,6 @@ def slide():
 
     block = Sample(
         "block 1",
-        AnatomicPathologySpecimenTypesCode("tissue specimen"),
         [
             part_1.sample(
                 SpecimenSamplingProcedureCode("Dissection"),
@@ -430,6 +429,7 @@ def slide():
                 "Sampling to block",
             ),
         ],
+        AnatomicPathologySpecimenTypesCode("tissue specimen"),
         [
             Embedding(
                 SpecimenEmbeddingMediaCode("Paraffin wax"),

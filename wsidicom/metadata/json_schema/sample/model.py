@@ -12,14 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import datetime
 from abc import abstractmethod
 from collections import UserDict
-from enum import Enum
-from pydicom.sr.coding import Code
-from pydicom.uid import UID
-import datetime
 from dataclasses import dataclass
-
+from enum import Enum
 from typing import (
     List,
     Optional,
@@ -27,22 +24,27 @@ from typing import (
     Union,
 )
 
+from pydicom.sr.coding import Code
+from pydicom.uid import UID
+
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     ContainerTypeCode,
     SpecimenSamplingProcedureCode,
 )
 from wsidicom.metadata.sample import (
+    BaseSampling,
+    Collection,
     ExtractedSpecimen,
     PreparationStep,
     Sample,
+    Sampling,
     SamplingLocation,
     SlideSample,
     Specimen,
     SpecimenIdentifier,
     SpecimenLocalization,
-    Sampling,
-    Collection,
+    UnknownSampling,
 )
 
 
@@ -101,7 +103,7 @@ class SamplingJsonModel:
     """Simplified representation of a `Sampling`, replacing the sampled specimen with
     the idententifier and sampling constratins with simplified sampling constraints."""
 
-    method: SpecimenSamplingProcedureCode
+    method: Optional[SpecimenSamplingProcedureCode] = None
     sampling_chain_constraints: Optional[Sequence[SamplingConstraintJsonModel]] = None
     date_time: Optional[datetime.datetime] = None
     location: Optional[SamplingLocation] = None
@@ -111,7 +113,7 @@ class SamplingJsonModel:
         self,
         specimen: Specimen,
         specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
-    ) -> Sampling:
+    ) -> BaseSampling:
         """Create sampling from json model.
 
         Parameters
@@ -128,6 +130,11 @@ class SamplingJsonModel:
         Sampling
             Created sampling.
         """
+        if self.method is None:
+            return UnknownSampling(
+                specimen,
+                self._get_sampling_constraints(specimens),
+            )
         return Sampling(
             specimen,
             self.method,
@@ -201,21 +208,29 @@ class ExtractedSpecimenJsonModel(SpecimenJsonModel):
         self,
         specimens: UserDict[Union[str, SpecimenIdentifier], Specimen],
     ) -> ExtractedSpecimen:
+        if len(self.steps) == 0:
+            raise ValueError("An ExtractedSpecimen must have at least extraction step.")
+        extraction_step = self.steps[0]
+        if not isinstance(extraction_step, Collection):
+            raise ValueError(
+                "First step of an ExtractedSpecimen must be a Collection step."
+            )
+
         specimen = ExtractedSpecimen(
-            identifier=self.identifier, type=self.type, container=self.container
+            identifier=self.identifier,
+            extraction_step=extraction_step,
+            type=self.type,
+            container=self.container,
         )
-        for index, step in enumerate(self.steps):
+        for step in self.steps:
             if isinstance(step, SamplingJsonModel):
                 step = step.from_json_model(specimen, specimens)
             elif isinstance(step, Collection):
-                if index != 0:
+                if step != extraction_step:
                     raise ValueError(
-                        (
-                            "Collection step can only be added as first step to "
-                            " an ExtractedSpecimen"
-                        )
+                        "There should be only one Collection step.",
                     )
-                specimen.extraction_step = step
+                continue
             specimen.add(step)
         return specimen
 

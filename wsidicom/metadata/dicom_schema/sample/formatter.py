@@ -18,9 +18,7 @@ from typing import (
     List,
     Optional,
     Sequence,
-    Union,
 )
-from wsidicom.conceptcode import ContainerTypeCode
 
 from wsidicom.metadata.dicom_schema.sample.model import (
     SamplingDicomModel,
@@ -29,6 +27,7 @@ from wsidicom.metadata.dicom_schema.sample.model import (
     StainingDicomModel,
 )
 from wsidicom.metadata.sample import (
+    BaseSampling,
     PreparationStep,
     SampledSpecimen,
     Sampling,
@@ -78,21 +77,20 @@ class SpecimenDicomFormatter:
         sample_preparation_steps = [
             step
             for sampling in slide_sample.sampled_from_list
-            for step in cls._get_steps_for_sampling(sampling, slide_sample.identifier)
+            for step in cls._get_steps_for_sampling(sampling, slide_sample)
         ]
         if stainings is None:
             return sample_preparation_steps
         for staining in stainings:
-            step = StainingDicomModel.from_step(staining, slide_sample.identifier)
+            step = StainingDicomModel.from_step(staining, slide_sample)
             sample_preparation_steps.append(step)
         return sample_preparation_steps
 
     @classmethod
     def _get_steps_for_sampling(
         cls,
-        sampling: Sampling,
-        sample_identifier: Union[str, SpecimenIdentifier],
-        container: Optional[ContainerTypeCode] = None,
+        sampling: BaseSampling,
+        sample: Specimen,
     ) -> List[SpecimenPreparationStepDicomModel]:
         """Return DICOM steps for the specimen the sample was sampled from."""
         if isinstance(sampling.specimen, SampledSpecimen):
@@ -101,24 +99,25 @@ class SpecimenDicomFormatter:
                 for sampling in sampling.specimen._sampled_from
                 if sampling.sampling_chain_constraints is None
                 or sampling in sampling.sampling_chain_constraints
-                for step in cls._get_steps_for_sampling(
-                    sampling, sampling.specimen.identifier, sampling.specimen.container
-                )
+                for step in cls._get_steps_for_sampling(sampling, sampling.specimen)
             ]
         else:
             steps = []
         steps.extend(
-            SpecimenPreparationStepDicomModel.from_step(step, sampling.specimen)
-            for step in cls._get_steps_before_sampling(sampling.specimen, sampling)
+            dicom_step
+            for dicom_step in [
+                SpecimenPreparationStepDicomModel.from_step(step, sampling.specimen)
+                for step in cls._get_steps_before_sampling(sampling.specimen, sampling)
+            ]
+            if dicom_step is not None
         )
-        steps.append(
-            SamplingDicomModel.from_step(sampling, sample_identifier, container)
-        )
+        if isinstance(sampling, Sampling):
+            steps.append(SamplingDicomModel.from_step(sampling, sample))
         return steps
 
     @staticmethod
     def _get_steps_before_sampling(
-        specimen: Specimen, sampling: Sampling
+        specimen: Specimen, sampling: BaseSampling
     ) -> Iterator[PreparationStep]:
         """Return the steps in specimen that occurred before the given sampling."""
         for step in specimen.steps:

@@ -43,8 +43,8 @@ from wsidicom.metadata.dicom_schema.fields import (
     CodeDicomField,
     CodeItemDicomField,
     DateTimeItemDicomField,
-    MeasurementtemDicomField,
     IssuerOfIdentifierDicomField,
+    MeasurementtemDicomField,
     SingleCodeSequenceField,
     StringDicomField,
     StringItemDicomField,
@@ -52,11 +52,11 @@ from wsidicom.metadata.dicom_schema.fields import (
 )
 from wsidicom.metadata.dicom_schema.sample.model import (
     CollectionDicomModel,
-    ReceivingDicomModel,
-    SpecimenPreparationStepDicomModel,
     ProcessingDicomModel,
+    ReceivingDicomModel,
     SamplingDicomModel,
     SpecimenDescriptionDicomModel,
+    SpecimenPreparationStepDicomModel,
     StainingDicomModel,
     StorageDicomModel,
 )
@@ -145,6 +145,37 @@ class BasePreparationStepDicomSchema(ItemSequenceDicomSchema[LoadType]):
     processing = CodeItemDicomField(
         load_type=SpecimenPreparationStepsCode, allow_none=True, load_default=None
     )
+    container = CodeItemDicomField(
+        load_type=ContainerTypeCode, allow_none=True, load_default=None
+    )
+    specimen_type = CodeItemDicomField(
+        load_type=AnatomicPathologySpecimenTypesCode,
+        allow_none=True,
+        load_default=None,
+    )
+
+    @property
+    def item_fields(self) -> Dict[str, ItemField]:
+        """TID 8001 Specimen Preparation, excluding Collection, Sampling, and Specimen
+        fields."""
+        return {
+            "identifier": ItemField(SampleCodes.identifier, (str,), False),
+            "issuer_of_identifier": ItemField(
+                SampleCodes.issuer_of_identifier, (str,), False
+            ),
+            "container": ItemField(SampleCodes.container, (Code,), False),
+            "specimen_type": ItemField(SampleCodes.specimen_type, (Code,), False),
+            "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
+            "date_time": ItemField(
+                SampleCodes.datetime_of_processing,
+                (datetime.datetime,),
+                False,
+            ),
+            "description": ItemField(SampleCodes.processing_description, (str,), False),
+            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
+            "fixative": ItemField(SampleCodes.fixative, (Code,), False),
+            "embedding": ItemField(SampleCodes.embedding, (Code,), False),
+        }
 
 
 class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
@@ -165,9 +196,6 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
     location_x = MeasurementtemDicomField(allow_none=True)
     location_y = MeasurementtemDicomField(allow_none=True)
     location_z = MeasurementtemDicomField(allow_none=True)
-    container = CodeItemDicomField(
-        load_type=ContainerTypeCode, allow_none=True, load_default=None
-    )
 
     @property
     def load_type(self):
@@ -181,6 +209,7 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
                 SampleCodes.issuer_of_identifier, (str,), False
             ),
             "container": ItemField(SampleCodes.container, (Code,), False),
+            "specimen_type": ItemField(SampleCodes.specimen_type, (Code,), False),
             "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
             "date_time": ItemField(
                 SampleCodes.datetime_of_processing,
@@ -230,9 +259,6 @@ class CollectionDicomSchema(BasePreparationStepDicomSchema[CollectionDicomModel]
         dump_only=True,
     )
     method = CodeItemDicomField(SpecimenCollectionProcedureCode)
-    container = CodeItemDicomField(
-        load_type=ContainerTypeCode, allow_none=True, load_default=None
-    )
 
     @property
     def load_type(self):
@@ -246,6 +272,7 @@ class CollectionDicomSchema(BasePreparationStepDicomSchema[CollectionDicomModel]
                 SampleCodes.issuer_of_identifier, (str,), False
             ),
             "container": ItemField(SampleCodes.container, (Code,), False),
+            "specimen_type": ItemField(SampleCodes.specimen_type, (Code,), False),
             "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
             "date_time": ItemField(
                 SampleCodes.datetime_of_processing,
@@ -274,25 +301,6 @@ class ProcessingDicomSchema(BasePreparationStepDicomSchema[ProcessingDicomModel]
     def load_type(self):
         return ProcessingDicomModel
 
-    @property
-    def item_fields(self) -> Dict[str, ItemField]:
-        return {
-            "identifier": ItemField(SampleCodes.identifier, (str,), False),
-            "issuer_of_identifier": ItemField(
-                SampleCodes.issuer_of_identifier, (str,), False
-            ),
-            "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
-            "date_time": ItemField(
-                SampleCodes.datetime_of_processing,
-                (datetime.datetime,),
-                False,
-            ),
-            "description": ItemField(SampleCodes.processing_description, (str,), False),
-            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
-            "fixative": ItemField(SampleCodes.fixative, (Code,), False),
-            "embedding": ItemField(SampleCodes.embedding, (Code,), False),
-        }
-
 
 class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
     processing_type = CodeItemDicomField(
@@ -313,6 +321,8 @@ class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
             "issuer_of_identifier": ItemField(
                 SampleCodes.issuer_of_identifier, (str,), False
             ),
+            "container": ItemField(SampleCodes.container, (Code,), False),
+            "specimen_type": ItemField(SampleCodes.specimen_type, (Code,), False),
             "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
             "date_time": ItemField(
                 SampleCodes.datetime_of_processing,
@@ -338,25 +348,6 @@ class ReceivingDicomSchema(BasePreparationStepDicomSchema[ReceivingDicomModel]):
     def load_type(self):
         return ReceivingDicomModel
 
-    @property
-    def item_fields(self) -> Dict[str, ItemField]:
-        return {
-            "identifier": ItemField(SampleCodes.identifier, (str,), False),
-            "issuer_of_identifier": ItemField(
-                SampleCodes.issuer_of_identifier, (str,), False
-            ),
-            "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
-            "date_time": ItemField(
-                SampleCodes.datetime_of_processing,
-                (datetime.datetime,),
-                False,
-            ),
-            "description": ItemField(SampleCodes.processing_description, (str,), False),
-            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
-            "fixative": ItemField(SampleCodes.fixative, (Code,), False),
-            "embedding": ItemField(SampleCodes.embedding, (Code,), False),
-        }
-
 
 class StorageDicomSchema(BasePreparationStepDicomSchema[StorageDicomModel]):
     processing_type = CodeItemDicomField(
@@ -368,25 +359,6 @@ class StorageDicomSchema(BasePreparationStepDicomSchema[StorageDicomModel]):
     @property
     def load_type(self):
         return StorageDicomModel
-
-    @property
-    def item_fields(self) -> Dict[str, ItemField]:
-        return {
-            "identifier": ItemField(SampleCodes.identifier, (str,), False),
-            "issuer_of_identifier": ItemField(
-                SampleCodes.issuer_of_identifier, (str,), False
-            ),
-            "processing_type": ItemField(SampleCodes.processing_type, (Code,), False),
-            "date_time": ItemField(
-                SampleCodes.datetime_of_processing,
-                (datetime.datetime,),
-                False,
-            ),
-            "description": ItemField(SampleCodes.processing_description, (str,), False),
-            "processing": ItemField(SampleCodes.processing_description, (Code,), False),
-            "fixative": ItemField(SampleCodes.fixative, (Code,), False),
-            "embedding": ItemField(SampleCodes.embedding, (Code,), False),
-        }
 
 
 class PreparationStepDicomField(marshmallow.fields.Field):

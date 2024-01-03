@@ -50,6 +50,7 @@ from wsidicom.metadata.sample import (
     SpecimenLocalization,
     Staining,
     Storage,
+    UnknownSampling,
 )
 
 
@@ -62,26 +63,33 @@ class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
     fixative: Optional[SpecimenFixativesCode]
     embedding: Optional[SpecimenEmbeddingMediaCode]
     processing: Optional[SpecimenPreparationStepsCode]
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode]
+    container: Optional[ContainerTypeCode]
 
     @classmethod
     def from_step(
         cls,
         step: PreparationStep,
         specimen: Specimen,
-    ) -> "SpecimenPreparationStepDicomModel":
+    ) -> Optional["SpecimenPreparationStepDicomModel"]:
         if isinstance(step, Sampling):
-            return SamplingDicomModel.from_step(
-                step, specimen.identifier, specimen.container
-            )
+            if step.specimen.type is None:
+                return None
+            return SamplingDicomModel.from_step(step, specimen)
+        if isinstance(step, UnknownSampling):
+            return None
         if isinstance(step, Collection):
-            return CollectionDicomModel.from_step(
-                step, specimen.identifier, specimen.container
-            )
+            return CollectionDicomModel.from_step(step, specimen)
         if isinstance(step, (Processing, Embedding, Fixation)):
-            return ProcessingDicomModel.from_step(step, specimen.identifier)
+            return ProcessingDicomModel.from_step(step, specimen)
         if isinstance(step, Staining):
-            return StainingDicomModel.from_step(step, specimen.identifier)
-        raise NotImplementedError()
+            return StainingDicomModel.from_step(step, specimen)
+        if isinstance(step, Receiving):
+            return ReceivingDicomModel.from_step(step, specimen)
+        if isinstance(step, Storage):
+            return StorageDicomModel.from_step(step, specimen)
+
+        raise NotImplementedError(f"Unknown preparation step type {type(step)}.")
 
     @property
     def specimen_identifier(self) -> Union[str, SpecimenIdentifier]:
@@ -104,14 +112,12 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
     location_x: Optional[Measurement] = None
     location_y: Optional[Measurement] = None
     location_z: Optional[Measurement] = None
-    container: Optional[ContainerTypeCode] = None
 
     @classmethod
     def from_step(
         cls,
         sampling: Sampling,
-        specimen_identifier: Union[str, SpecimenIdentifier],
-        container: Optional[ContainerTypeCode],
+        specimen: Specimen,
     ) -> "SamplingDicomModel":
         """Return Dicom dataset for the step.
 
@@ -128,8 +134,10 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             Dicom dataset describing the processing step.
 
         """
+        if sampling.specimen.type is None:
+            raise ValueError("Sampled specimen must have a specimen type.")
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
-            specimen_identifier
+            specimen.identifier
         )
         (
             parent_identifier,
@@ -158,7 +166,8 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             location_x=sampling.location.x if sampling.location is not None else None,
             location_y=sampling.location.y if sampling.location is not None else None,
             location_z=sampling.location.z if sampling.location is not None else None,
-            container=container,
+            container=specimen.container,
+            specimen_type=specimen.type,
         )
 
     @property
@@ -200,14 +209,12 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
 @dataclass
 class CollectionDicomModel(SpecimenPreparationStepDicomModel):
     method: SpecimenCollectionProcedureCode
-    container: Optional[ContainerTypeCode] = None
 
     @classmethod
     def from_step(
         cls,
         collection: Collection,
-        specimen_identifier: Union[str, SpecimenIdentifier],
-        container: Optional[ContainerTypeCode],
+        specimen: Specimen,
     ) -> "CollectionDicomModel":
         """Return Dicom dataset for the step.
 
@@ -225,7 +232,7 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
 
         """
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
-            specimen_identifier
+            specimen.identifier
         )
         return cls(
             identifier=identifier,
@@ -236,7 +243,8 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
             fixative=None,
             embedding=None,
             processing=None,
-            container=container,
+            container=specimen.container,
+            specimen_type=specimen.type,
         )
 
 
@@ -246,10 +254,10 @@ class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
     def from_step(
         cls,
         receiving: Receiving,
-        specimen_identifier: Union[str, SpecimenIdentifier],
+        specimen: Specimen,
     ):
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
-            specimen_identifier
+            specimen.identifier
         )
         return cls(
             identifier=identifier,
@@ -259,6 +267,8 @@ class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
             fixative=None,
             embedding=None,
             processing=None,
+            container=None,
+            specimen_type=None,
         )
 
 
@@ -268,10 +278,10 @@ class StorageDicomModel(SpecimenPreparationStepDicomModel):
     def from_step(
         cls,
         storage: Storage,
-        specimen_identifier: Union[str, SpecimenIdentifier],
+        specimen: Specimen,
     ):
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
-            specimen_identifier
+            specimen.identifier
         )
         return cls(
             identifier=identifier,
@@ -281,6 +291,8 @@ class StorageDicomModel(SpecimenPreparationStepDicomModel):
             fixative=None,
             embedding=None,
             processing=None,
+            container=None,
+            specimen_type=None,
         )
 
 
@@ -290,7 +302,7 @@ class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
     def from_step(
         cls,
         processing: Union[Processing, Embedding, Fixation],
-        specimen_identifier: Union[str, SpecimenIdentifier],
+        specimen: Specimen,
     ) -> "ProcessingDicomModel":
         """Return Dicom dataset for the step.
 
@@ -308,7 +320,7 @@ class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
 
         """
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
-            specimen_identifier
+            specimen.identifier
         )
         if isinstance(processing, Processing):
             method = processing.method
@@ -331,6 +343,8 @@ class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
             fixative=fixative,
             embedding=embedding,
             processing=method,
+            container=None,
+            specimen_type=specimen.type,
         )
 
 
@@ -340,7 +354,9 @@ class StainingDicomModel(SpecimenPreparationStepDicomModel):
 
     @classmethod
     def from_step(
-        cls, staining: Staining, specimen_identifier: Union[str, SpecimenIdentifier]
+        cls,
+        staining: Staining,
+        specimen: Specimen,
     ) -> "StainingDicomModel":
         """Return Dicom dataset for the step.
 
@@ -356,7 +372,7 @@ class StainingDicomModel(SpecimenPreparationStepDicomModel):
 
         """
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
-            specimen_identifier
+            specimen.identifier
         )
         return cls(
             identifier=identifier,
@@ -367,6 +383,8 @@ class StainingDicomModel(SpecimenPreparationStepDicomModel):
             fixative=None,
             embedding=None,
             processing=None,
+            container=None,
+            specimen_type=specimen.type,
         )
 
 
@@ -377,7 +395,6 @@ class SpecimenDescriptionDicomModel:
     identifier: str
     uid: UID
     steps: List[SpecimenPreparationStepDicomModel]
-    # specimen_type: AnatomicPathologySpecimenTypesCode
     anatomical_sites: List[Code]
     issuer_of_identifier: Optional[IssuerOfIdentifier] = None
     short_description: Optional[str] = None
