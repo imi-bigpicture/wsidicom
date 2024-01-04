@@ -258,14 +258,14 @@ class SpecimenDicomParser:
             if step.specimen_type is not None:
                 if specimen_type is not None and specimen_type != step.specimen_type:
                     raise ValueError(
-                        f"Got missmatching specimen types {specimen_type} and "
+                        f"Got mismatching specimen types {specimen_type} and "
                         f"{step.specimen_type} in steps for specimen {identifier}."
                     )
                 specimen_type = step.specimen_type
             if step.container is not None:
                 if container is not None and container != step.container:
                     raise ValueError(
-                        f"Got missmatching container types {container} and "
+                        f"Got mismatching container types {container} and "
                         f"{step.container} in steps for specimen {identifier}."
                     )
                 container = step.container

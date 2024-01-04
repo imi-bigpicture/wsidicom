@@ -233,42 +233,65 @@ def description():
 
 
 @pytest.fixture()
-def fixative():
-    yield None
-
-
-@pytest.fixture()
 def medium():
-    yield None
+    yield SpecimenEmbeddingMediaCode("Paraffin wax")
 
 
 @pytest.fixture()
-def embedding(date_time: datetime.datetime, description: str):
-    yield Embedding(
-        SpecimenEmbeddingMediaCode("Paraffin wax"),
-        date_time,
-        description,
-    )
+def fixative():
+    yield SpecimenFixativesCode("Neutral Buffered Formalin")
 
 
 @pytest.fixture()
-def fixation(date_time: datetime.datetime, description: str):
-    yield Fixation(
-        SpecimenFixativesCode("Neutral Buffered Formalin"),
-        date_time,
-        description,
-    )
+def collection_method():
+    yield SpecimenCollectionProcedureCode("Specimen collection")
+
+
+@pytest.fixture()
+def sampling_method():
+    yield SpecimenSamplingProcedureCode("Dissection")
 
 
 @pytest.fixture()
 def processing_method():
-    yield None
+    yield SpecimenPreparationStepsCode("Specimen clearing")
 
 
 @pytest.fixture()
-def collection(date_time: datetime.datetime, description: str):
+def embedding(
+    date_time: datetime.datetime, description: str, medium: SpecimenEmbeddingMediaCode
+):
+    yield Embedding(
+        medium,
+        date_time,
+        description,
+    )
+
+
+@pytest.fixture()
+def fixation(
+    date_time: datetime.datetime, description: str, fixative: SpecimenFixativesCode
+):
+    yield Fixation(
+        fixative,
+        date_time,
+        description,
+    )
+
+
+@pytest.fixture()
+def identifier():
+    yield "identifier"
+
+
+@pytest.fixture()
+def collection(
+    date_time: datetime.datetime,
+    description: str,
+    collection_method: SpecimenCollectionProcedureCode,
+):
     yield Collection(
-        SpecimenCollectionProcedureCode("Excision"),
+        collection_method,
         date_time,
         description,
     )
@@ -280,11 +303,12 @@ def sampling(
     date_time: datetime.datetime,
     description: str,
     location: SamplingLocation,
+    sampling_method: SpecimenSamplingProcedureCode,
 ):
     assert extracted_specimen.type is not None
     yield Sampling(
         extracted_specimen,
-        SpecimenSamplingProcedureCode("Dissection"),
+        sampling_method,
         extracted_specimen.type,
         [],
         date_time=date_time,
@@ -294,9 +318,13 @@ def sampling(
 
 
 @pytest.fixture()
-def processing(date_time: datetime.datetime, description: str):
+def processing(
+    date_time: datetime.datetime,
+    description: str,
+    processing_method: SpecimenPreparationStepsCode,
+):
     yield Processing(
-        SpecimenPreparationStepsCode("Specimen clearing"),
+        processing_method,
         date_time,
         description,
     )
@@ -328,11 +356,6 @@ def receiving(date_time: datetime.datetime, description: str):
         date_time=date_time,
         description=description,
     )
-
-
-@pytest.fixture()
-def identifier():
-    yield "identifier"
 
 
 @pytest.fixture()

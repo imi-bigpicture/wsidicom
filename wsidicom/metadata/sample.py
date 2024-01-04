@@ -87,7 +87,7 @@ class LocalIssuerOfIdentifier(IssuerOfIdentifier):
 
 @dataclass(unsafe_hash=True)
 class UniversalIssuerOfIdentifier(IssuerOfIdentifier):
-    """A universal issuer of an identifier. Can optinally also define a local identifer."""
+    """A universal issuer of an identifier. Can optionally also define a local identifier."""
 
     identifier: str
     issuer_type: UniversalIssuerType
@@ -111,7 +111,7 @@ class SamplingLocation:
 
     Parameters
     ----------
-    reference: Optinal[str] = None
+    reference: Optional[str] = None
         Description of coordinate system and origin reference point used for the
         location.
     description: Optional[str] = None
@@ -137,7 +137,7 @@ class SpecimenLocalization(SamplingLocation):
 
     Parameters
     ----------
-    reference: Optinal[str] = None
+    reference: Optional[str] = None
         Description of coordinate system and origin reference point used for the
         location.
     description: Optional[str] = None
@@ -235,8 +235,8 @@ class UnknownSampling(BaseSampling):
     Represent an unknown relation between a parent specimen and a child sample.
 
     The relation between the parent and child can be direct (e.g. from block to slide)
-    or several steps inbetween can be missing (e.g. from specimen to slide). If possible
-    it is prefered to use the `Sampling` class instead.
+    or several steps in between can be missing (e.g. from specimen to slide). If possible
+    it is preferred to use the `Sampling` class instead.
     """
 
     specimen: "BaseSpecimen"

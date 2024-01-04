@@ -432,6 +432,8 @@ class TestExampleSpecimenModule:
         slide_samples, stainings = SpecimenDicomParser().parse_descriptions([model])
 
         # Assert
+        print(slide_samples[0])
+        assert False
         assert slide_samples is not None
         assert len(slide_samples) == 1
         slide_sample = slide_samples[0]

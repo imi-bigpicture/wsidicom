@@ -68,7 +68,7 @@ class WsiDicomFileTarget(Target):
             Offset table to use.
         include_levels: Optional[Sequence[int]] = None
             Optional list indices (in present levels) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indicies can be used,
+            includes the two lowest levels. Negative indices can be used,
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.

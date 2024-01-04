@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Refactored frame index reading (basic, extended, and no offset table and native pixel data) and table writing (basic and extended offset table).
-- Refactored methods for getting multiple tiles for `ImageData` to make it easier to implement more efficent methods.
+- Refactored methods for getting multiple tiles for `ImageData` to make it easier to implement more efficient methods.
 
 ## [0.15.2] - 2023-12-01
 

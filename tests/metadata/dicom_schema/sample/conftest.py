@@ -220,6 +220,8 @@ def processing_dicom(
     identifier: Union[str, SpecimenIdentifier],
     fixative: Optional[SpecimenFixativesCode],
     medium: Optional[SpecimenEmbeddingMediaCode],
+    container: Optional[ContainerTypeCode],
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield ProcessingDicomModel(
@@ -230,8 +232,8 @@ def processing_dicom(
         processing=processing.method,
         fixative=fixative,
         embedding=medium,
-        container=None,
-        specimen_type=None,
+        container=container,
+        specimen_type=specimen_type,
     )
 
 
@@ -250,6 +252,8 @@ def staining_dicom(
     fixative: Optional[SpecimenFixativesCode],
     medium: Optional[SpecimenEmbeddingMediaCode],
     processing_method: Optional[SpecimenPreparationStepsCode],
+    container: Optional[ContainerTypeCode],
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield StainingDicomModel(
@@ -261,8 +265,8 @@ def staining_dicom(
         fixative=fixative,
         embedding=medium,
         processing=processing_method,
-        container=None,
-        specimen_type=None,
+        container=container,
+        specimen_type=specimen_type,
     )
 
 
@@ -278,6 +282,11 @@ def staining_dataset(
 def receiving_dicom(
     receiving: Receiving,
     identifier: Union[str, SpecimenIdentifier],
+    fixative: Optional[SpecimenFixativesCode],
+    medium: Optional[SpecimenEmbeddingMediaCode],
+    processing_method: Optional[SpecimenPreparationStepsCode],
+    container: Optional[ContainerTypeCode],
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield ReceivingDicomModel(
@@ -285,11 +294,11 @@ def receiving_dicom(
         issuer_of_identifier=issuer,
         date_time=receiving.date_time,
         description=receiving.description,
-        fixative=None,
-        embedding=None,
-        processing=None,
-        container=None,
-        specimen_type=None,
+        fixative=fixative,
+        embedding=medium,
+        processing=processing_method,
+        container=container,
+        specimen_type=specimen_type,
     )
 
 
@@ -305,6 +314,11 @@ def receiving_dataset(
 def storage_dicom(
     storage: Storage,
     identifier: Union[str, SpecimenIdentifier],
+    fixative: Optional[SpecimenFixativesCode],
+    medium: Optional[SpecimenEmbeddingMediaCode],
+    processing_method: Optional[SpecimenPreparationStepsCode],
+    container: Optional[ContainerTypeCode],
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield StorageDicomModel(
@@ -312,11 +326,11 @@ def storage_dicom(
         issuer_of_identifier=issuer,
         date_time=storage.date_time,
         description=storage.description,
-        fixative=None,
-        embedding=None,
-        processing=None,
-        container=None,
-        specimen_type=None,
+        fixative=fixative,
+        embedding=medium,
+        processing=processing_method,
+        container=container,
+        specimen_type=specimen_type,
     )
 
 

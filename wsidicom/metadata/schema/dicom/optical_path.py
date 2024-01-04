@@ -402,7 +402,7 @@ class LutDicomFormatter:
                         # skip it and set start of segmented data to length of segment.
                         start = segment.length
                     elif index != end_index or len(segments) == 1:
-                        # Last contstant segment can be skipped if not only segment.
+                        # Last constant segment can be skipped if not only segment.
                         cls._pack_constant_segment(
                             buffer,
                             segment,
