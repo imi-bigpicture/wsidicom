@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Models for DICOM WSI metadata.
+- Serializers from DICOM WSI to and from DICOM and json.
+
+### Removed
+
+- `OpticalManager`, replaced by new metadata model.
+
 ## [0.17.0] - 2023-12-10
 
 ### Added
