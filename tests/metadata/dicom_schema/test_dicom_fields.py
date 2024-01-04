@@ -1,26 +1,41 @@
+#    Copyright 2023 SECTRA AB
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
 import datetime
 from typing import Optional, Union
+
+import pytest
 from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DSfloat
-import pytest
+
 from tests.metadata.dicom_schema.helpers import create_code_dataset
 from wsidicom.conceptcode import UnitCode
-
-from wsidicom.metadata.schema.dicom.fields import (
-    CodeItemDicomField,
-    DateTimeItemDicomField,
-    MeasurementtemDicomField,
-    IssuerOfIdentifierDicomField,
-    StringItemDicomField,
-    StringOrCodeItemDicomField,
-)
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
     Measurement,
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
+)
+from wsidicom.metadata.schema.dicom.fields import (
+    CodeItemDicomField,
+    DateTimeItemDicomField,
+    IssuerOfIdentifierDicomField,
+    MeasurementtemDicomField,
+    StringItemDicomField,
+    StringOrCodeItemDicomField,
 )
 
 
