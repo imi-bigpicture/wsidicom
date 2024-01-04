@@ -427,13 +427,12 @@ class SpecimenDicomParser:
                 # Only add step if an equivalent does not exists
                 if not any(step == parent_step for step in parent.steps):
                     parent.add(parent_step)
-                    assert False
             if (
                 parsed_parent.sampling is not None
                 and isinstance(parent, Sample)
                 and parsed_parent.sampling not in parent.sampled_from_list
             ):
-                parent._sampled_from.append(parsed_parent.sampling)
+                parent.sampled_from_list.append(parsed_parent.sampling)
                 sampling_constraints = [parsed_parent.sampling]
         else:
             # Need to create parent
