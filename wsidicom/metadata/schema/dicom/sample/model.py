@@ -14,7 +14,7 @@
 
 import datetime
 from abc import ABCMeta
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
     List,
     Optional,
@@ -55,17 +55,28 @@ from wsidicom.metadata.sample import (
 )
 
 
-@dataclass
 class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
-    identifier: str
-    issuer_of_identifier: Optional[str]
-    date_time: Optional[datetime.datetime]
-    description: Optional[str]
-    fixative: Optional[SpecimenFixativesCode]
-    embedding: Optional[SpecimenEmbeddingMediaCode]
-    processing: Optional[SpecimenPreparationStepsCode]
-    specimen_type: Optional[AnatomicPathologySpecimenTypesCode]
-    container: Optional[ContainerTypeCode]
+    def __init__(
+        self,
+        identifier: str,
+        issuer_of_identifier: Optional[str] = None,
+        date_time: Optional[datetime.datetime] = None,
+        description: Optional[str] = None,
+        fixative: Optional[SpecimenFixativesCode] = None,
+        embedding: Optional[SpecimenEmbeddingMediaCode] = None,
+        processing: Optional[SpecimenPreparationStepsCode] = None,
+        specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None,
+        container: Optional[ContainerTypeCode] = None,
+    ):
+        self.identifier = identifier
+        self.issuer_of_identifier = issuer_of_identifier
+        self.date_time = date_time
+        self.description = description
+        self.fixative = fixative
+        self.embedding = embedding
+        self.processing = processing
+        self.specimen_type = specimen_type
+        self.container = container
 
     @classmethod
     def from_step(
@@ -104,15 +115,37 @@ class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
 
 @dataclass
 class SamplingDicomModel(SpecimenPreparationStepDicomModel):
+    identifier: str
     method: SpecimenSamplingProcedureCode
     parent_specimen_identifier: str
     parent_specimen_type: AnatomicPathologySpecimenTypesCode
-    issuer_of_parent_specimen_identifier: Optional[str]
+    issuer_of_identifier: Optional[str] = None
+    issuer_of_parent_specimen_identifier: Optional[str] = None
+    date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
+    fixative: Optional[SpecimenFixativesCode] = None
+    embedding: Optional[SpecimenEmbeddingMediaCode] = None
+    processing: Optional[SpecimenPreparationStepsCode] = None
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    container: Optional[ContainerTypeCode] = None
     location_reference: Optional[str] = None
     location_description: Optional[str] = None
     location_x: Optional[Measurement] = None
     location_y: Optional[Measurement] = None
     location_z: Optional[Measurement] = None
+
+    def __post_init__(self):
+        super().__init__(
+            identifier=self.identifier,
+            issuer_of_identifier=self.issuer_of_identifier,
+            date_time=self.date_time,
+            description=self.description,
+            fixative=self.fixative,
+            embedding=self.embedding,
+            processing=self.processing,
+            specimen_type=self.specimen_type,
+            container=self.container,
+        )
 
     @classmethod
     def from_step(
@@ -146,7 +179,6 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
         ) = SpecimenIdentifier.get_string_identifier_and_issuer(
             sampling.specimen.identifier
         )
-        print(identifier)
         return cls(
             identifier=identifier,
             issuer_of_identifier=issuer,
@@ -156,9 +188,6 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             parent_specimen_identifier=parent_identifier,
             issuer_of_parent_specimen_identifier=parent_issuer,
             parent_specimen_type=sampling.specimen.type,
-            fixative=None,
-            embedding=None,
-            processing=None,
             location_reference=sampling.location.reference
             if sampling.location is not None
             else None,
@@ -210,7 +239,29 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
 
 @dataclass
 class CollectionDicomModel(SpecimenPreparationStepDicomModel):
+    identifier: str
     method: SpecimenCollectionProcedureCode
+    issuer_of_identifier: Optional[str] = None
+    date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
+    fixative: Optional[SpecimenFixativesCode] = None
+    embedding: Optional[SpecimenEmbeddingMediaCode] = None
+    processing: Optional[SpecimenPreparationStepsCode] = None
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    container: Optional[ContainerTypeCode] = None
+
+    def __post_init__(self):
+        super().__init__(
+            identifier=self.identifier,
+            issuer_of_identifier=self.issuer_of_identifier,
+            date_time=self.date_time,
+            description=self.description,
+            fixative=self.fixative,
+            embedding=self.embedding,
+            processing=self.processing,
+            specimen_type=self.specimen_type,
+            container=self.container,
+        )
 
     @classmethod
     def from_step(
@@ -242,9 +293,6 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
             date_time=collection.date_time,
             description=collection.description,
             method=collection.method,
-            fixative=None,
-            embedding=None,
-            processing=None,
             container=specimen.container,
             specimen_type=specimen.type,
         )
@@ -252,6 +300,16 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
 
 @dataclass
 class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
+    identifier: str
+    issuer_of_identifier: Optional[str] = None
+    date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
+    fixative: Optional[SpecimenFixativesCode] = None
+    embedding: Optional[SpecimenEmbeddingMediaCode] = None
+    processing: Optional[SpecimenPreparationStepsCode] = None
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    container: Optional[ContainerTypeCode] = None
+
     @classmethod
     def from_step(
         cls,
@@ -266,9 +324,6 @@ class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
             issuer_of_identifier=issuer,
             date_time=receiving.date_time,
             description=receiving.description,
-            fixative=None,
-            embedding=None,
-            processing=None,
             container=specimen.container,
             specimen_type=specimen.type,
         )
@@ -276,6 +331,16 @@ class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
 
 @dataclass
 class StorageDicomModel(SpecimenPreparationStepDicomModel):
+    identifier: str
+    issuer_of_identifier: Optional[str] = None
+    date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
+    fixative: Optional[SpecimenFixativesCode] = None
+    embedding: Optional[SpecimenEmbeddingMediaCode] = None
+    processing: Optional[SpecimenPreparationStepsCode] = None
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    container: Optional[ContainerTypeCode] = None
+
     @classmethod
     def from_step(
         cls,
@@ -290,9 +355,6 @@ class StorageDicomModel(SpecimenPreparationStepDicomModel):
             issuer_of_identifier=issuer,
             date_time=storage.date_time,
             description=storage.description,
-            fixative=None,
-            embedding=None,
-            processing=None,
             container=specimen.container,
             specimen_type=specimen.type,
         )
@@ -300,6 +362,16 @@ class StorageDicomModel(SpecimenPreparationStepDicomModel):
 
 @dataclass
 class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
+    identifier: str
+    issuer_of_identifier: Optional[str] = None
+    date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
+    fixative: Optional[SpecimenFixativesCode] = None
+    embedding: Optional[SpecimenEmbeddingMediaCode] = None
+    processing: Optional[SpecimenPreparationStepsCode] = None
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    container: Optional[ContainerTypeCode] = None
+
     @classmethod
     def from_step(
         cls,
@@ -352,7 +424,16 @@ class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
 
 @dataclass
 class StainingDicomModel(SpecimenPreparationStepDicomModel):
+    identifier: str
     substances: Sequence[Union[str, SpecimenStainsCode]]
+    issuer_of_identifier: Optional[str] = None
+    date_time: Optional[datetime.datetime] = None
+    description: Optional[str] = None
+    fixative: Optional[SpecimenFixativesCode] = None
+    embedding: Optional[SpecimenEmbeddingMediaCode] = None
+    processing: Optional[SpecimenPreparationStepsCode] = None
+    specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    container: Optional[ContainerTypeCode] = None
 
     @classmethod
     def from_step(
@@ -382,9 +463,6 @@ class StainingDicomModel(SpecimenPreparationStepDicomModel):
             date_time=staining.date_time,
             description=staining.description,
             substances=staining.substances,
-            fixative=None,
-            embedding=None,
-            processing=None,
             container=specimen.container,
             specimen_type=specimen.type,
         )
@@ -396,8 +474,8 @@ class SpecimenDescriptionDicomModel:
 
     identifier: str
     uid: UID
-    steps: List[SpecimenPreparationStepDicomModel]
-    anatomical_sites: List[Code]
+    steps: List[SpecimenPreparationStepDicomModel] = field(default_factory=list)
+    anatomical_sites: List[Code] = field(default_factory=list)
     issuer_of_identifier: Optional[IssuerOfIdentifier] = None
     short_description: Optional[str] = None
     detailed_description: Optional[str] = None

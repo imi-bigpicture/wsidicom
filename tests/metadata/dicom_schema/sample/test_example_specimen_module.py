@@ -568,8 +568,6 @@ class TestExampleSpecimenModule:
             anatomical_sites=[primary_anatomic_structure],
             sampled_from=slide_sampling,
             uid=specimen_uid,
-            localization=None,
-            steps=[],
             short_description=slide_short_description,
             detailed_description=slide_detailed_description,
         )

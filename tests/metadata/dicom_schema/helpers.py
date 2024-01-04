@@ -615,9 +615,8 @@ def create_storage_dataset(
     return dataset
 
 
-def create_description_dataset(
+def create_specimen_preparation_sequence(
     slide_sample_id: str,
-    slide_sample_uid: UID,
     specimen_id: str,
     block_id: str,
     specimen_type: AnatomicPathologySpecimenTypesCode,
@@ -627,25 +626,15 @@ def create_description_dataset(
     embedding_medium: SpecimenEmbeddingMediaCode,
     block_sampling_method: SpecimenSamplingProcedureCode,
     block_type: AnatomicPathologySpecimenTypesCode,
-    sample_localization: SpecimenLocalization,
     sampling_location: SamplingLocation,
-    primary_anatomic_structures: Sequence[Code],
     stains: Sequence[SpecimenStainsCode],
-    short_description: Optional[str] = None,
-    detailed_description: Optional[str] = None,
     specimen_container: Optional[ContainerTypeCode] = None,
     block_container: Optional[ContainerTypeCode] = None,
 ):
     collection = create_collection_dataset(
         CollectionDicomModel(
             identifier=specimen_id,
-            issuer_of_identifier=None,
-            date_time=None,
-            description=None,
-            fixative=None,
-            embedding=None,
             method=collection_method,
-            processing=None,
             container=specimen_container,
             specimen_type=specimen_type,
         ),
@@ -654,30 +643,16 @@ def create_description_dataset(
     fixation = create_processing_dataset(
         ProcessingDicomModel(
             identifier=specimen_id,
-            issuer_of_identifier=None,
-            date_time=None,
-            description=None,
             fixative=fixative,
-            embedding=None,
-            processing=None,
-            container=None,
-            specimen_type=None,
         ),
         identifier=specimen_id,
     )
     sampling_to_block = create_sampling_dataset(
         SamplingDicomModel(
             identifier=specimen_id,
-            issuer_of_identifier=None,
-            date_time=None,
-            description=None,
-            fixative=None,
-            embedding=None,
             method=specimen_sampling_method,
             parent_specimen_identifier=specimen_id,
-            issuer_of_parent_specimen_identifier=None,
             parent_specimen_type=specimen_type,
-            processing=None,
             location_reference=sampling_location.reference
             if sampling_location is not None
             else None,
@@ -695,59 +670,27 @@ def create_description_dataset(
     embedding = create_processing_dataset(
         ProcessingDicomModel(
             identifier=block_id,
-            issuer_of_identifier=None,
-            date_time=None,
-            description=None,
-            fixative=None,
             embedding=embedding_medium,
-            processing=None,
-            container=None,
-            specimen_type=None,
         ),
         identifier=block_id,
     )
     sampling_to_slide = create_sampling_dataset(
         SamplingDicomModel(
             identifier=block_id,
-            issuer_of_identifier=None,
-            date_time=None,
-            description=None,
-            fixative=None,
-            embedding=None,
             method=block_sampling_method,
             parent_specimen_identifier=block_id,
-            issuer_of_parent_specimen_identifier=None,
             parent_specimen_type=block_type,
-            processing=None,
-            specimen_type=None,
-            container=None,
-            location_reference=None,
-            location_description=None,
-            location_x=None,
-            location_y=None,
-            location_z=None,
         ),
         identifier=slide_sample_id,
     )
     staining = create_staining_dataset(
         StainingDicomModel(
             identifier=slide_sample_id,
-            issuer_of_identifier=None,
-            date_time=None,
-            description=None,
             substances=list(stains),
-            fixative=None,
-            embedding=None,
-            processing=None,
-            container=None,
-            specimen_type=None,
         ),
         identifier=slide_sample_id,
     )
-    description = Dataset()
-    description.SpecimenIdentifier = slide_sample_id
-    description.SpecimenUID = slide_sample_uid
-    description.SpecimenPreparationSequence = [
+    return [
         collection,
         fixation,
         sampling_to_block,
@@ -755,12 +698,28 @@ def create_description_dataset(
         sampling_to_slide,
         staining,
     ]
+
+
+def create_description_dataset(
+    slide_sample_id: str,
+    slide_sample_uid: UID,
+    primary_anatomic_structures: Optional[Sequence[Code]] = None,
+    sample_localization: Optional[SpecimenLocalization] = None,
+    short_description: Optional[str] = None,
+    detailed_description: Optional[str] = None,
+    preparation_step_datasets: Optional[Sequence[Dataset]] = None,
+):
+    description = Dataset()
+    description.SpecimenIdentifier = slide_sample_id
+    description.SpecimenUID = slide_sample_uid
+    description.SpecimenPreparationSequence = preparation_step_datasets
     description.SpecimenTypeCodeSequence = [
         create_code_dataset(AnatomicPathologySpecimenTypesCode("Slide"))
     ]
-    description.PrimaryAnatomicStructureSequence = [
-        create_code_dataset(item) for item in primary_anatomic_structures
-    ]
+    if primary_anatomic_structures is not None:
+        description.PrimaryAnatomicStructureSequence = [
+            create_code_dataset(item) for item in primary_anatomic_structures
+        ]
     description.SpecimenShortDescription = short_description
     description.SpecimenDetailedDescription = detailed_description
     if sample_localization is not None:
