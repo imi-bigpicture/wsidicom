@@ -28,7 +28,7 @@ from wsidicom.errors import WsiDicomMatchError
 from wsidicom.geometry import SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageType, WsiDataset, WsiInstance
-from wsidicom.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
+from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.uid import SlideUids
 

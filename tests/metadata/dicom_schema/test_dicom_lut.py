@@ -17,7 +17,7 @@ import numpy as np
 from typing import Sequence, Tuple
 from pydicom import Dataset
 import pytest
-from wsidicom.metadata.dicom_schema.optical_path import (
+from wsidicom.metadata.schema.dicom.optical_path import (
     LutDicomParser,
     LutDicomFormatter,
 )

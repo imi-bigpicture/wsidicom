@@ -54,17 +54,17 @@ from wsidicom.metadata import (
     WsiMetadata,
 )
 from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.dicom_schema.equipment import EquipmentDicomSchema
-from wsidicom.metadata.dicom_schema.image import ImageDicomSchema
-from wsidicom.metadata.dicom_schema.label import LabelDicomSchema
-from wsidicom.metadata.dicom_schema.optical_path import (
+from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
+from wsidicom.metadata.schema.dicom.image import ImageDicomSchema
+from wsidicom.metadata.schema.dicom.label import LabelDicomSchema
+from wsidicom.metadata.schema.dicom.optical_path import (
     OpticalPathDicomSchema,
 )
-from wsidicom.metadata.dicom_schema.patient import PatientDicomSchema
-from wsidicom.metadata.dicom_schema.series import SeriesDicomSchema
-from wsidicom.metadata.dicom_schema.slide import SlideDicomSchema
-from wsidicom.metadata.dicom_schema.study import StudyDicomSchema
-from wsidicom.metadata.dicom_schema.wsi import WsiMetadataDicomSchema
+from wsidicom.metadata.schema.dicom.patient import PatientDicomSchema
+from wsidicom.metadata.schema.dicom.series import SeriesDicomSchema
+from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
+from wsidicom.metadata.schema.dicom.study import StudyDicomSchema
+from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.sample import SlideSample
 
 

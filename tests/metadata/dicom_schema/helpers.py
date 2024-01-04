@@ -13,16 +13,25 @@
 #    limitations under the License.
 
 
-from typing import Sequence, Union
+import datetime
+from typing import Iterator, List, Optional, Sequence, Union
+
 from pydicom import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.coding import Code
+from pydicom.uid import UID
 from pydicom.valuerep import DSfloat
 
-
 from wsidicom.conceptcode import (
+    AnatomicPathologySpecimenTypesCode,
     ConceptCode,
+    ContainerTypeCode,
     IlluminationColorCode,
+    SpecimenCollectionProcedureCode,
+    SpecimenEmbeddingMediaCode,
+    SpecimenFixativesCode,
+    SpecimenSamplingProcedureCode,
+    SpecimenStainsCode,
 )
 from wsidicom.instance import ImageType
 from wsidicom.metadata import (
@@ -34,7 +43,23 @@ from wsidicom.metadata import (
     Series,
     Study,
 )
-from wsidicom.metadata.dicom_schema.optical_path import LutDicomParser
+from wsidicom.metadata.sample import (
+    Measurement,
+    SamplingLocation,
+    SpecimenIdentifier,
+    SpecimenLocalization,
+)
+from wsidicom.metadata.schema.dicom.optical_path import LutDicomParser
+from wsidicom.metadata.schema.dicom.sample.model import (
+    CollectionDicomModel,
+    ProcessingDicomModel,
+    ReceivingDicomModel,
+    SamplingDicomModel,
+    SpecimenPreparationStepDicomModel,
+    StainingDicomModel,
+    StorageDicomModel,
+)
+from wsidicom.metadata.schema.dicom.sample.schema import SampleCodes
 
 
 def code_to_code_dataset(code: Code):
@@ -289,3 +314,576 @@ def assert_dicom_study_equals_study(dicom_study: Dataset, study: Study):
     assert dicom_study.StudyTime == study.time
     assert dicom_study.AccessionNumber == study.accession_number
     assert dicom_study.ReferringPhysicianName == study.referring_physician_name
+
+
+def assert_item_name_equals_code(item: Dataset, name: Code):
+    assert_code_dataset_equals_code(item.ConceptNameCodeSequence[0], name)
+
+
+def assert_item_string_equals_value(item: Dataset, value: str):
+    assert item.TextValue == value
+
+
+def assert_item_datetime_equals_value(item: Dataset, value: datetime.datetime):
+    assert item.DateTime == value
+
+
+def assert_item_code_equals_value(item: Dataset, value: Union[Code, ConceptCode]):
+    assert_code_dataset_equals_code(item.ConceptCodeSequence[0], value)
+
+
+def assert_item_measurement_equals_value(item: Dataset, value: Measurement):
+    assert item.FloatingPointValue == value.value
+    assert_code_dataset_equals_code(
+        item.MeasurementUnitsCodeSequence[0],
+        value.unit,
+    )
+
+
+def assert_code_dataset_equals_code(item: Dataset, code: Union[Code, ConceptCode]):
+    assert item.CodeValue == code.value, (item.CodeMeaning, code.meaning)
+    assert item.CodingSchemeDesignator == code.scheme_designator, (
+        item.CodeMeaning,
+        code.meaning,
+    )
+
+
+def assert_next_item_equals_string(iterator: Iterator[Dataset], name: Code, value: str):
+    item = next(iterator)
+    assert_item_name_equals_code(item, name)
+    assert_item_string_equals_value(item, value)
+
+
+def assert_next_item_equals_code(
+    iterator: Iterator[Dataset], name: Code, value: Union[Code, ConceptCode]
+):
+    item = next(iterator)
+    assert_item_name_equals_code(item, name)
+    assert_item_code_equals_value(item, value)
+
+
+def assert_next_item_equals_datetime(
+    iterator: Iterator[Dataset], name: Code, value: datetime.datetime
+):
+    item = next(iterator)
+    assert_item_name_equals_code(item, name)
+    assert_item_datetime_equals_value(item, value)
+
+
+def assert_next_item_equals_measurement(
+    iterator: Iterator[Dataset], name: Code, value: Measurement
+):
+    item = next(iterator)
+    assert_item_name_equals_code(item, name)
+    assert_item_measurement_equals_value(item, value)
+
+
+def create_collection_dataset(
+    collection_dicom: CollectionDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    dataset = Dataset()
+    items = create_identifier_items(identifier)
+    if collection_dicom.container is not None:
+        items.append(
+            create_code_item(SampleCodes.container, collection_dicom.container)
+        )
+    if collection_dicom.specimen_type is not None:
+        items.append(
+            create_code_item(SampleCodes.specimen_type, collection_dicom.specimen_type)
+        )
+    items.append(create_processing_type_item(collection_dicom))
+    if collection_dicom.date_time is not None:
+        items.append(
+            create_datetime_item(
+                SampleCodes.datetime_of_processing, collection_dicom.date_time
+            ),
+        )
+    if collection_dicom.description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.processing_description, collection_dicom.description
+            )
+        )
+    items.append(
+        create_code_item(SampleCodes.specimen_collection, collection_dicom.method)
+    )
+    if collection_dicom.fixative is not None:
+        items.append(create_code_item(SampleCodes.fixative, collection_dicom.fixative))
+    if collection_dicom.embedding is not None:
+        items.append(
+            create_code_item(SampleCodes.embedding, collection_dicom.embedding)
+        )
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset
+
+
+def create_sampling_dataset(
+    sampling_dicom: SamplingDicomModel, identifier: Union[str, SpecimenIdentifier]
+):
+    dataset = Dataset()
+    items = create_identifier_items(identifier)
+    if sampling_dicom.container is not None:
+        items.append(create_code_item(SampleCodes.container, sampling_dicom.container))
+    if sampling_dicom.specimen_type is not None:
+        items.append(
+            create_code_item(SampleCodes.specimen_type, sampling_dicom.specimen_type)
+        )
+    items.append(create_processing_type_item(sampling_dicom))
+    if sampling_dicom.date_time is not None:
+        items.append(
+            create_datetime_item(
+                SampleCodes.datetime_of_processing, sampling_dicom.date_time
+            ),
+        )
+    if sampling_dicom.description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.processing_description, sampling_dicom.description
+            )
+        )
+    items.append(create_code_item(SampleCodes.sampling_method, sampling_dicom.method))
+    items.append(
+        create_string_item(
+            SampleCodes.parent_specimen_identifier,
+            sampling_dicom.parent_specimen_identifier,
+        )
+    )
+    if sampling_dicom.issuer_of_parent_specimen_identifier is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.issuer_of_parent_specimen_identifier,
+                sampling_dicom.issuer_of_parent_specimen_identifier,
+            )
+        )
+    items.append(
+        create_code_item(
+            SampleCodes.parent_specimen_type, sampling_dicom.parent_specimen_type
+        )
+    )
+    if sampling_dicom.location_reference is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.location_frame_of_reference,
+                sampling_dicom.location_reference,
+            )
+        )
+    if sampling_dicom.location_description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.location_of_sampling_site,
+                sampling_dicom.location_description,
+            )
+        )
+    if sampling_dicom.location_x is not None:
+        items.append(
+            create_measurement_item(
+                SampleCodes.location_of_sampling_site_x, sampling_dicom.location_x
+            )
+        )
+    if sampling_dicom.location_y is not None:
+        items.append(
+            create_measurement_item(
+                SampleCodes.location_of_sampling_site_y, sampling_dicom.location_y
+            )
+        )
+    if sampling_dicom.location_z is not None:
+        items.append(
+            create_measurement_item(
+                SampleCodes.location_of_sampling_site_z, sampling_dicom.location_z
+            )
+        )
+    if sampling_dicom.fixative is not None:
+        items.append(create_code_item(SampleCodes.fixative, sampling_dicom.fixative))
+    if sampling_dicom.embedding is not None:
+        items.append(create_code_item(SampleCodes.embedding, sampling_dicom.embedding))
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset
+
+
+def create_processing_dataset(
+    processing_dicom: ProcessingDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    dataset = Dataset()
+    items = create_identifier_items(identifier)
+    items.append(create_processing_type_item(processing_dicom))
+    if processing_dicom.date_time is not None:
+        items.append(
+            create_datetime_item(
+                SampleCodes.datetime_of_processing, processing_dicom.date_time
+            ),
+        )
+    if processing_dicom.description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.processing_description, processing_dicom.description
+            )
+        )
+    if processing_dicom.processing is not None:
+        items.append(
+            create_code_item(
+                SampleCodes.processing_description, processing_dicom.processing
+            )
+        )
+    if processing_dicom.fixative is not None:
+        items.append(create_code_item(SampleCodes.fixative, processing_dicom.fixative))
+    if processing_dicom.embedding is not None:
+        items.append(
+            create_code_item(SampleCodes.embedding, processing_dicom.embedding)
+        )
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset
+
+
+def create_staining_dataset(
+    staining_dicom: StainingDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    dataset = Dataset()
+    items = create_identifier_items(identifier)
+    items.append(create_processing_type_item(staining_dicom))
+    if staining_dicom.date_time is not None:
+        items.append(
+            create_datetime_item(
+                SampleCodes.datetime_of_processing, staining_dicom.date_time
+            ),
+        )
+    if staining_dicom.description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.processing_description, staining_dicom.description
+            )
+        )
+    for substance in staining_dicom.substances:
+        items.append(
+            create_code_item(SampleCodes.using_substance, substance)
+            if isinstance(substance, SpecimenStainsCode)
+            else create_string_item(SampleCodes.using_substance, substance)
+        )
+    if staining_dicom.fixative is not None:
+        items.append(create_code_item(SampleCodes.fixative, staining_dicom.fixative))
+    if staining_dicom.embedding is not None:
+        items.append(create_code_item(SampleCodes.embedding, staining_dicom.embedding))
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset
+
+
+def create_receiving_dataset(
+    receiving_dicom: ReceivingDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    dataset = Dataset()
+    items = create_identifier_items(identifier)
+    items.append(create_processing_type_item(receiving_dicom))
+    if receiving_dicom.date_time is not None:
+        items.append(
+            create_datetime_item(
+                SampleCodes.datetime_of_processing, receiving_dicom.date_time
+            ),
+        )
+    if receiving_dicom.description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.processing_description, receiving_dicom.description
+            )
+        )
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset
+
+
+def create_storage_dataset(
+    storage_dicom: StorageDicomModel,
+    identifier: Union[str, SpecimenIdentifier],
+):
+    dataset = Dataset()
+    items = create_identifier_items(identifier)
+    items.append(create_processing_type_item(storage_dicom))
+    if storage_dicom.date_time is not None:
+        items.append(
+            create_datetime_item(
+                SampleCodes.datetime_of_processing, storage_dicom.date_time
+            ),
+        )
+    if storage_dicom.description is not None:
+        items.append(
+            create_string_item(
+                SampleCodes.processing_description, storage_dicom.description
+            )
+        )
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset
+
+
+def create_description_dataset(
+    slide_sample_id: str,
+    slide_sample_uid: UID,
+    specimen_id: str,
+    block_id: str,
+    specimen_type: AnatomicPathologySpecimenTypesCode,
+    collection_method: SpecimenCollectionProcedureCode,
+    fixative: SpecimenFixativesCode,
+    specimen_sampling_method: SpecimenSamplingProcedureCode,
+    embedding_medium: SpecimenEmbeddingMediaCode,
+    block_sampling_method: SpecimenSamplingProcedureCode,
+    block_type: AnatomicPathologySpecimenTypesCode,
+    sample_localization: SpecimenLocalization,
+    sampling_location: SamplingLocation,
+    primary_anatomic_structures: Sequence[Code],
+    stains: Sequence[SpecimenStainsCode],
+    short_description: Optional[str] = None,
+    detailed_description: Optional[str] = None,
+    specimen_container: Optional[ContainerTypeCode] = None,
+    block_container: Optional[ContainerTypeCode] = None,
+):
+    collection = create_collection_dataset(
+        CollectionDicomModel(
+            identifier=specimen_id,
+            issuer_of_identifier=None,
+            date_time=None,
+            description=None,
+            fixative=None,
+            embedding=None,
+            method=collection_method,
+            processing=None,
+            container=specimen_container,
+            specimen_type=specimen_type,
+        ),
+        identifier=specimen_id,
+    )
+    fixation = create_processing_dataset(
+        ProcessingDicomModel(
+            identifier=specimen_id,
+            issuer_of_identifier=None,
+            date_time=None,
+            description=None,
+            fixative=fixative,
+            embedding=None,
+            processing=None,
+            container=None,
+            specimen_type=None,
+        ),
+        identifier=specimen_id,
+    )
+    sampling_to_block = create_sampling_dataset(
+        SamplingDicomModel(
+            identifier=specimen_id,
+            issuer_of_identifier=None,
+            date_time=None,
+            description=None,
+            fixative=None,
+            embedding=None,
+            method=specimen_sampling_method,
+            parent_specimen_identifier=specimen_id,
+            issuer_of_parent_specimen_identifier=None,
+            parent_specimen_type=specimen_type,
+            processing=None,
+            location_reference=sampling_location.reference
+            if sampling_location is not None
+            else None,
+            location_description=sampling_location.description
+            if sampling_location is not None
+            else None,
+            location_x=sampling_location.x if sampling_location is not None else None,
+            location_y=sampling_location.y if sampling_location is not None else None,
+            location_z=sampling_location.z if sampling_location is not None else None,
+            container=block_container,
+            specimen_type=block_type,
+        ),
+        identifier=block_id,
+    )
+    embedding = create_processing_dataset(
+        ProcessingDicomModel(
+            identifier=block_id,
+            issuer_of_identifier=None,
+            date_time=None,
+            description=None,
+            fixative=None,
+            embedding=embedding_medium,
+            processing=None,
+            container=None,
+            specimen_type=None,
+        ),
+        identifier=block_id,
+    )
+    sampling_to_slide = create_sampling_dataset(
+        SamplingDicomModel(
+            identifier=block_id,
+            issuer_of_identifier=None,
+            date_time=None,
+            description=None,
+            fixative=None,
+            embedding=None,
+            method=block_sampling_method,
+            parent_specimen_identifier=block_id,
+            issuer_of_parent_specimen_identifier=None,
+            parent_specimen_type=block_type,
+            processing=None,
+            specimen_type=None,
+            container=None,
+            location_reference=None,
+            location_description=None,
+            location_x=None,
+            location_y=None,
+            location_z=None,
+        ),
+        identifier=slide_sample_id,
+    )
+    staining = create_staining_dataset(
+        StainingDicomModel(
+            identifier=slide_sample_id,
+            issuer_of_identifier=None,
+            date_time=None,
+            description=None,
+            substances=list(stains),
+            fixative=None,
+            embedding=None,
+            processing=None,
+            container=None,
+            specimen_type=None,
+        ),
+        identifier=slide_sample_id,
+    )
+    description = Dataset()
+    description.SpecimenIdentifier = slide_sample_id
+    description.SpecimenUID = slide_sample_uid
+    description.SpecimenPreparationSequence = [
+        collection,
+        fixation,
+        sampling_to_block,
+        embedding,
+        sampling_to_slide,
+        staining,
+    ]
+    description.SpecimenTypeCodeSequence = [
+        create_code_dataset(AnatomicPathologySpecimenTypesCode("Slide"))
+    ]
+    description.PrimaryAnatomicStructureSequence = [
+        create_code_dataset(item) for item in primary_anatomic_structures
+    ]
+    description.SpecimenShortDescription = short_description
+    description.SpecimenDetailedDescription = detailed_description
+    if sample_localization is not None:
+        sample_localization_sequence = []
+        if sample_localization.reference is not None:
+            sample_localization_sequence.append(
+                create_string_item(
+                    SampleCodes.location_frame_of_reference,
+                    sample_localization.reference,
+                )
+            )
+        if sample_localization.description is not None:
+            sample_localization_sequence.append(
+                create_string_item(
+                    SampleCodes.location_of_specimen, sample_localization.description
+                )
+            )
+        if sample_localization.x is not None:
+            sample_localization_sequence.append(
+                create_measurement_item(
+                    SampleCodes.location_of_specimen_x, sample_localization.x
+                )
+            )
+        if sample_localization.y is not None:
+            sample_localization_sequence.append(
+                create_measurement_item(
+                    SampleCodes.location_of_specimen_x, sample_localization.y
+                )
+            )
+        if sample_localization.y is not None:
+            sample_localization_sequence.append(
+                create_measurement_item(
+                    SampleCodes.location_of_specimen_x, sample_localization.y
+                )
+            )
+        if sample_localization.visual_marking is not None:
+            sample_localization_sequence.append(
+                create_string_item(
+                    SampleCodes.visual_marking_of_specimen,
+                    sample_localization.visual_marking,
+                )
+            )
+        description.SpecimenLocalizationContentItemSequence = (
+            sample_localization_sequence
+        )
+    return description
+
+
+def create_identifier_items(identifier: Union[str, SpecimenIdentifier]):
+    identifier_item = create_string_item(
+        SampleCodes.identifier,
+        identifier if isinstance(identifier, str) else identifier.value,
+    )
+    if not isinstance(identifier, SpecimenIdentifier) or identifier.issuer is None:
+        return [identifier_item]
+    issuer_item = create_string_item(
+        SampleCodes.issuer_of_identifier,
+        identifier.issuer.to_hl7v2(),
+    )
+    return [identifier_item, issuer_item]
+
+
+def create_code_dataset(code: Union[Code, ConceptCode]):
+    dataset = Dataset()
+    dataset.CodeValue = code.value
+    dataset.CodingSchemeDesignator = code.scheme_designator
+    dataset.CodeMeaning = code.meaning
+    dataset.CodingSchemeVersion = code.scheme_version
+    return dataset
+
+
+def create_string_item(name: Code, value: str):
+    dataset = Dataset()
+    dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
+    dataset.TextValue = value
+    return dataset
+
+
+def create_datetime_item(name: Code, value: datetime.datetime):
+    dataset = Dataset()
+    dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
+    dataset.DateTime = value
+    return dataset
+
+
+def create_code_item(name: Code, value: Union[Code, ConceptCode]):
+    dataset = Dataset()
+    dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
+    dataset.ConceptCodeSequence = [create_code_dataset(value)]
+    return dataset
+
+
+def create_measurement_item(name: Code, value: Measurement):
+    dataset = Dataset()
+    dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
+    dataset.NumericValue = DSfloat(value.value)
+    dataset.FloatingPointValue = value.value
+    dataset.MeasurementUnitsCodeSequence = [create_code_dataset(value.unit)]
+    return dataset
+
+
+def create_processing_type_item(step: SpecimenPreparationStepDicomModel):
+    dataset = Dataset()
+    dataset.ConceptNameCodeSequence = [create_code_dataset(SampleCodes.processing_type)]
+    if isinstance(step, CollectionDicomModel):
+        processing_type_code = SampleCodes.specimen_collection
+    elif isinstance(step, SamplingDicomModel):
+        processing_type_code = SampleCodes.sampling_method
+    elif isinstance(step, SpecimenPreparationStepDicomModel):
+        processing_type_code = SampleCodes.sample_processing
+    elif isinstance(step, StainingDicomModel):
+        processing_type_code = SampleCodes.staining
+    elif isinstance(step, ReceivingDicomModel):
+        processing_type_code = SampleCodes.receiving
+    elif isinstance(step, StorageDicomModel):
+        processing_type_code = SampleCodes.storage
+    else:
+        raise NotImplementedError()
+    dataset.ConceptCodeSequence = [create_code_dataset(processing_type_code)]
+    return dataset
+
+
+def create_specimen_preparation_dataset(step: List[Dataset]):
+    dataset = Dataset()
+    dataset.SpecimenPreparationStepContentItemSequence = step
+    return dataset

@@ -26,7 +26,7 @@ from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex
-from wsidicom.metadata.dicom_schema.image import ImageCoordinateSystemDicomSchema
+from wsidicom.metadata.schema.dicom.image import ImageCoordinateSystemDicomSchema
 from wsidicom.metadata.image import ImageCoordinateSystem
 
 

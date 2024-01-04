@@ -14,7 +14,7 @@
 
 from typing import Any, Dict
 from tests.metadata.json_schema.helpers import assert_dict_equals_code
-from wsidicom.metadata.json_schema.slide import SlideJsonSchema
+from wsidicom.metadata.schema.json.slide import SlideJsonSchema
 from wsidicom.metadata.slide import Slide
 from wsidicom.conceptcode import SpecimenStainsCode
 

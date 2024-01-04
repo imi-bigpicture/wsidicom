@@ -17,7 +17,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union
 
 from pydicom.sr.coding import Code
 from pydicom.uid import UID, generate_uid
@@ -206,7 +206,7 @@ class PreparationStep(metaclass=ABCMeta):
 class BaseSampling(PreparationStep, metaclass=ABCMeta):
     """Either a `Sampling` or a `UnknownSampling`."""
 
-    specimen: "Specimen"
+    specimen: "BaseSpecimen"
     sampling_chain_constraints: Optional[Sequence["BaseSampling"]]
 
 
@@ -220,8 +220,9 @@ class Sampling(BaseSampling):
     for allowed sampling methods.
     """
 
-    specimen: "Specimen"
+    specimen: "BaseSpecimen"
     method: SpecimenSamplingProcedureCode
+    specimen_type: AnatomicPathologySpecimenTypesCode = field(repr=False)
     sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
@@ -238,7 +239,7 @@ class UnknownSampling(BaseSampling):
     it is prefered to use the `Sampling` class instead.
     """
 
-    specimen: "Specimen"
+    specimen: "BaseSpecimen"
     sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
 
 
@@ -312,7 +313,7 @@ class Staining(PreparationStep):
     for allowed stain codes.
     """
 
-    substances: List[Union[str, SpecimenStainsCode]]
+    substances: Sequence[Union[str, SpecimenStainsCode]]
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
 
@@ -329,7 +330,7 @@ class Storage(PreparationStep):
     description: Optional[str] = None
 
 
-class Specimen(metaclass=ABCMeta):
+class BaseSpecimen(metaclass=ABCMeta):
     """Metaclass for a specimen."""
 
     def __init__(
@@ -355,7 +356,7 @@ class Specimen(metaclass=ABCMeta):
         raise NotImplementedError()
 
 
-class SampledSpecimen(Specimen, metaclass=ABCMeta):
+class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
     """Metaclass for a specimen thas has been sampled from one or more specimens."""
 
     def __init__(
@@ -382,17 +383,18 @@ class SampledSpecimen(Specimen, metaclass=ABCMeta):
     def add(self, step: PreparationStep) -> None:
         if isinstance(step, Collection):
             raise ValueError(
-                "A collection step can only be added to specimens of type `ExtractedSpecimen`"
+                "A collection step can only be added to specimens of type `Specimen`"
             )
         self.steps.append(step)
 
-    def _check_sampling_constraints(
+    def _check_sampling_constraints_in_sampling_chain(
         self, constraints: Optional[Sequence[BaseSampling]]
     ) -> None:
+        """Check that the sampling chain for the specimen contains the constraints."""
         if constraints is None:
             return
 
-        def recursive_search(sampling: BaseSampling, specimen: Specimen) -> bool:
+        def recursive_search(sampling: BaseSampling, specimen: BaseSpecimen) -> bool:
             """Recursively search for sampling in samplings for specimen."""
             if sampling in specimen.samplings:
                 return True
@@ -410,29 +412,70 @@ class SampledSpecimen(Specimen, metaclass=ABCMeta):
                     f"from {constraint}"
                 )
 
+    def is_sampling_constraint_is_unambiguous(
+        self,
+        constraints: Iterable[Union[str, SpecimenIdentifier]],
+    ):
+        """Check that the sampling chain for the specimen is is not branching when
+        following the constraints."""
+        if len(self._sampled_from) == 0:
+            # No sampling chain, is unambiguous
+            return True
+        if len(self._sampled_from) > 1:
+            # Check that at one and only one of the samplings are in the constraints
+            samplings_in_constraints = (
+                sampling
+                for sampling in self._sampled_from
+                if sampling.specimen.identifier in constraints
+            )
+            first_sampling_in_constraints = next(samplings_in_constraints, None)
+            if first_sampling_in_constraints is None:
+                return False
+            if next(samplings_in_constraints, None) is not None:
+                return False
+            sampling_to_check = first_sampling_in_constraints
+        else:
+            # Only one sampling to check
+            sampling_to_check = self._sampled_from[0]
+
+        if not isinstance(sampling_to_check.specimen, SampledSpecimen):
+            # Sampling chain ends non-sampled specimen, is unambiguous
+            return True
+
+        # Update the constrain and check the parent specimen
+        sub_constraint = set(constraints)
+        if sampling_to_check.sampling_chain_constraints is not None:
+            sub_constraint.update(
+                constraint.specimen.identifier
+                for constraint in sampling_to_check.sampling_chain_constraints
+            )
+        return sampling_to_check.specimen.is_sampling_constraint_is_unambiguous(
+            sub_constraint
+        )
+
 
 @dataclass
-class ExtractedSpecimen(Specimen):
+class Specimen(BaseSpecimen):
     """A specimen that has been extracted/taken from a patient in some way. Does not
     need to represent the actual first specimen in the collection chain, but should
-    represent the first known (i.e. that we have metadata for) specimen in the collection
-    chain."""
+    represent the first known (i.e. that we have metadata for) specimen in the
+    collection chain."""
 
     identifier: Union[str, SpecimenIdentifier]
-    extraction_step: Collection
+    extraction_step: Optional[Collection] = None
     type: Optional[AnatomicPathologySpecimenTypesCode] = None
     steps: List[PreparationStep] = field(default_factory=list)
     container: Optional[ContainerTypeCode] = None
 
     def __post_init__(self):
-        print(self.extraction_step)
-        if len(self.steps) == 0 or (
-            len(self.steps) > 0 and self.steps[0] != self.extraction_step
-        ):
-            self.steps.insert(
-                0,
-                self.extraction_step,
-            )
+        if self.extraction_step is not None:
+            if len(self.steps) == 0 or (
+                len(self.steps) > 0 and self.steps[0] != self.extraction_step
+            ):
+                self.steps.insert(
+                    0,
+                    self.extraction_step,
+                )
         super().__init__(
             identifier=self.identifier,
             type=self.type,
@@ -462,6 +505,7 @@ class ExtractedSpecimen(Specimen):
             sampling = Sampling(
                 specimen=self,
                 method=method,
+                specimen_type=self.type,
                 sampling_chain_constraints=None,
                 date_time=date_time,
                 description=description,
@@ -499,7 +543,7 @@ class Sample(SampledSpecimen):
         location: Optional[SamplingLocation] = None,
     ) -> BaseSampling:
         """Create a sampling from the specimen that can be used to create a new sample."""
-        self._check_sampling_constraints(sampling_chain_constraints)
+        self._check_sampling_constraints_in_sampling_chain(sampling_chain_constraints)
         if sampling_chain_constraints is not None:
             for sampling_chain_constraint in sampling_chain_constraints:
                 assert isinstance(sampling_chain_constraint, Sampling)
@@ -512,6 +556,7 @@ class Sample(SampledSpecimen):
         else:
             sampling = Sampling(
                 specimen=self,
+                specimen_type=self.type,
                 method=method,
                 sampling_chain_constraints=sampling_chain_constraints,
                 date_time=date_time,
@@ -534,15 +579,39 @@ class SlideSample(SampledSpecimen):
     steps: List[PreparationStep] = field(default_factory=list)
     short_description: Optional[str] = None
     detailed_description: Optional[str] = None
+    container: ContainerTypeCode = field(
+        init=False, default=ContainerTypeCode("Microscope slide")
+    )
+    type: AnatomicPathologySpecimenTypesCode = field(
+        init=False, default=AnatomicPathologySpecimenTypesCode("Slide")
+    )
 
     def __post_init__(self):
+        self._check_slide_sample_sampling_constraints()
         super().__init__(
             identifier=self.identifier,
-            type=AnatomicPathologySpecimenTypesCode("Slide"),
+            type=self.type,
             sampled_from=self.sampled_from,
             steps=self.steps,
-            container=ContainerTypeCode("Microscope slide"),
+            container=self.container,
         )
+
+    def _check_slide_sample_sampling_constraints(self):
+        """Check that the sampling chain for the slide sample is not branching."""
+        if self.sampled_from is None or not isinstance(
+            self.sampled_from.specimen, SampledSpecimen
+        ):
+            # No sampling constraints possible
+            return
+        if not self.sampled_from.specimen.is_sampling_constraint_is_unambiguous(
+            [
+                constraint.specimen.identifier
+                for constraint in self.sampled_from.sampling_chain_constraints
+            ]
+            if self.sampled_from.sampling_chain_constraints is not None
+            else []
+        ):
+            raise ValueError("Sampling constraints for slide sample are ambiguous.")
 
     @cached_property
     def default_uid(self) -> UID:

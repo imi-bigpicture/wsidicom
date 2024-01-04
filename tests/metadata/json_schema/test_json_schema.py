@@ -38,13 +38,15 @@ from wsidicom.metadata import (
     Series,
     Study,
 )
-from wsidicom.metadata.json_schema.equipment import EquipmentJsonSchema
-from wsidicom.metadata.json_schema.image import ImageJsonSchema
-from wsidicom.metadata.json_schema.label import LabelJsonSchema
-from wsidicom.metadata.json_schema.optical import OpticalPathJsonSchema
-from wsidicom.metadata.json_schema.patient import PatientJsonSchema
-from wsidicom.metadata.json_schema.series import SeriesJsonSchema
-from wsidicom.metadata.json_schema.study import StudyJsonSchema
+from wsidicom.metadata.schema.json import (
+    EquipmentJsonSchema,
+    ImageJsonSchema,
+    LabelJsonSchema,
+    OpticalPathJsonSchema,
+    PatientJsonSchema,
+    SeriesJsonSchema,
+    StudyJsonSchema,
+)
 
 
 class TestJsonSchema:

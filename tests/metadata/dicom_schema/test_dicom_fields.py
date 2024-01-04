@@ -4,10 +4,10 @@ from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DSfloat
 import pytest
-from tests.metadata.dicom_schema.test_dicom_sample import create_code_dataset
+from tests.metadata.dicom_schema.helpers import create_code_dataset
 from wsidicom.conceptcode import UnitCode
 
-from wsidicom.metadata.dicom_schema.fields import (
+from wsidicom.metadata.schema.dicom.fields import (
     CodeItemDicomField,
     DateTimeItemDicomField,
     MeasurementtemDicomField,

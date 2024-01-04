@@ -60,7 +60,7 @@ from wsidicom.metadata.optical_path import ConstantLutSegment, LinearLutSegment
 from wsidicom.metadata.sample import (
     Collection,
     Embedding,
-    ExtractedSpecimen,
+    Specimen,
     Fixation,
     Processing,
     Receiving,
@@ -276,14 +276,16 @@ def collection(date_time: datetime.datetime, description: str):
 
 @pytest.fixture()
 def sampling(
-    extracted_specimen: ExtractedSpecimen,
+    extracted_specimen: Specimen,
     date_time: datetime.datetime,
     description: str,
     location: SamplingLocation,
 ):
+    assert extracted_specimen.type is not None
     yield Sampling(
         extracted_specimen,
         SpecimenSamplingProcedureCode("Dissection"),
+        extracted_specimen.type,
         [],
         date_time=date_time,
         description=description,
@@ -337,7 +339,7 @@ def identifier():
 def extracted_specimen(
     collection: Collection, identifier: Union[str, SpecimenIdentifier]
 ):
-    yield ExtractedSpecimen(
+    yield Specimen(
         identifier,
         collection,
         AnatomicPathologySpecimenTypesCode("Gross specimen"),
@@ -346,7 +348,7 @@ def extracted_specimen(
 
 
 @pytest.fixture()
-def sample(extracted_specimen: ExtractedSpecimen):
+def sample(extracted_specimen: Specimen):
     processing = Processing(
         SpecimenPreparationStepsCode("Specimen clearing"),
         datetime.datetime(2023, 8, 5),
@@ -383,7 +385,7 @@ def slide_sample(sample: Sample):
 
 @pytest.fixture()
 def slide():
-    part_1 = ExtractedSpecimen(
+    part_1 = Specimen(
         "part 1",
         Collection(
             SpecimenCollectionProcedureCode("Specimen collection"),
@@ -399,7 +401,7 @@ def slide():
         ],
     )
 
-    part_2 = ExtractedSpecimen(
+    part_2 = Specimen(
         "part 2",
         Collection(
             SpecimenCollectionProcedureCode("Specimen collection"),

@@ -17,8 +17,8 @@ from typing import Type
 import marshmallow
 from marshmallow import pre_load
 from pydicom import Dataset
-from wsidicom.metadata.dicom_schema.schema import DicomSchema
-from wsidicom.metadata.dicom_schema.fields import FlattenOnDumpNestedDicomField
+from wsidicom.metadata.schema.dicom.schema import DicomSchema
+from wsidicom.metadata.schema.dicom.fields import FlattenOnDumpNestedDicomField
 
 
 class PropertySchema(DicomSchema):

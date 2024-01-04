@@ -26,27 +26,27 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     UnitCode,
 )
-from wsidicom.metadata.json_schema.sample.model import (
-    ExtractedSpecimenJsonModel,
+from wsidicom.metadata.schema.json.sample.model import (
+    SpecimenJsonModel,
     SampleJsonModel,
     SlideSampleJsonModel,
 )
-from wsidicom.metadata.json_schema.sample.schema import (
-    ExtractedSpecimenJsonSchema,
+from wsidicom.metadata.schema.json.sample.schema import (
+    SpecimenJsonSchema,
+    PreparationAction,
     PreparationStepJsonSchema,
     SampleJsonSchema,
     SamplingConstraintJsonModel,
     SamplingConstraintJsonSchema,
     SamplingJsonModel,
     SlideSampleJsonSchema,
-    SpecimenJsonSchema,
+    AllSpecimenJsonSchema,
     SpecimenLocalizationJsonSchema,
-    PreparationAction,
 )
 from wsidicom.metadata.sample import (
     Collection,
     Embedding,
-    ExtractedSpecimen,
+    Specimen,
     Fixation,
     Measurement,
     Processing,
@@ -57,6 +57,7 @@ from wsidicom.metadata.sample import (
     SlideSample,
     SpecimenLocalization,
     Storage,
+    UnknownSampling,
 )
 
 
@@ -161,7 +162,7 @@ class TestSampleJsonSchema:
         assert isinstance(loaded, SpecimenLocalization)
         assert loaded == expected
 
-    def test_sampling_constraint_serialize(self, extracted_specimen: ExtractedSpecimen):
+    def test_sampling_constraint_serialize(self, extracted_specimen: Specimen):
         # Arrange
         sampling_chain_constraint = extracted_specimen.sample(
             SpecimenSamplingProcedureCode("Dissection")
@@ -189,7 +190,7 @@ class TestSampleJsonSchema:
 
     def test_sampling_serialize(self):
         # Arrange
-        specimen = ExtractedSpecimen(
+        specimen = Specimen(
             "specimen",
             Collection(SpecimenCollectionProcedureCode("Specimen collection")),
             AnatomicPathologySpecimenTypesCode("Gross specimen"),
@@ -315,6 +316,70 @@ class TestSampleJsonSchema:
             dumped["location"]["z"]["value"],
             UnitCode(dumped["location"]["z"]["unit"]),
         )
+
+    def test_unkown_sampling_serialize(self):
+        # Arrange
+        specimen = Specimen(
+            "specimen",
+            Collection(SpecimenCollectionProcedureCode("Specimen collection")),
+            AnatomicPathologySpecimenTypesCode("Gross specimen"),
+        )
+        sampling_1 = specimen.sample(
+            SpecimenSamplingProcedureCode("Dissection"),
+            datetime.datetime(2023, 8, 5),
+            "description",
+        )
+        sample = Sample(
+            "sample",
+            [sampling_1],
+            AnatomicPathologySpecimenTypesCode("Tissue section"),
+            [],
+        )
+        sampling_2 = sample.sample(sampling_chain_constraints=[sampling_1])
+        assert isinstance(sampling_2, UnknownSampling)
+
+        # Act
+        dumped = PreparationStepJsonSchema().dump(sampling_2)
+
+        # Assert
+        assert isinstance(dumped, dict)
+        assert "method" not in dumped
+        assert "date_time" not in dumped
+        assert "description" not in dumped
+        assert (
+            dumped["sampling_chain_constraints"][0]["identifier"] == specimen.identifier
+        )
+        assert dumped["sampling_chain_constraints"][0]["sampling_step_index"] == 0
+        assert "location" not in dumped
+
+    def test_unkown_sampling_deserialize(self):
+        # Arrange
+        dumped = {
+            "action": "sampling",
+            "sampling_chain_constraints": [
+                {"identifier": "specimen", "sampling_step_index": 0}
+            ],
+        }
+
+        # Act
+        loaded = PreparationStepJsonSchema().load(dumped)
+
+        # Assert
+        assert isinstance(loaded, SamplingJsonModel)
+        assert loaded.sampling_chain_constraints is not None
+        assert loaded.method is None
+
+        assert loaded.date_time is None
+        assert loaded.description is None
+        assert (
+            loaded.sampling_chain_constraints[0].identifier
+            == dumped["sampling_chain_constraints"][0]["identifier"]
+        )
+        assert (
+            loaded.sampling_chain_constraints[0].sampling_step_index
+            == dumped["sampling_chain_constraints"][0]["sampling_step_index"]
+        )
+        assert loaded.location is None
 
     def test_collection_serialize(self, collection: Collection):
         # Arrange
@@ -556,11 +621,11 @@ class TestSampleJsonSchema:
         assert loaded.date_time == storage.date_time
         assert loaded.description == storage.description
 
-    def test_extracted_specimen_serialize(self, extracted_specimen: ExtractedSpecimen):
+    def test_extracted_specimen_serialize(self, extracted_specimen: Specimen):
         # Arrange
 
         # Act
-        dumped = ExtractedSpecimenJsonSchema().dump(extracted_specimen)
+        dumped = SpecimenJsonSchema().dump(extracted_specimen)
 
         # Assert
 
@@ -619,10 +684,10 @@ class TestSampleJsonSchema:
         }
 
         # Act
-        loaded = ExtractedSpecimenJsonSchema().load(dumped)
+        loaded = SpecimenJsonSchema().load(dumped)
 
         # Assert
-        assert isinstance(loaded, ExtractedSpecimenJsonModel)
+        assert isinstance(loaded, SpecimenJsonModel)
         assert loaded.identifier == dumped["identifier"]
         collection = loaded.steps[0]
         assert isinstance(collection, Collection)
@@ -784,7 +849,7 @@ class TestSampleJsonSchema:
         specimen = sample.sampled_from[0].specimen
 
         # Act
-        dumped = SpecimenJsonSchema().dump(slide_sample)
+        dumped = AllSpecimenJsonSchema().dump(slide_sample)
 
         # Assert
         assert isinstance(dumped, list)
@@ -890,7 +955,7 @@ class TestSampleJsonSchema:
         ]
 
         # Act
-        loaded = SpecimenJsonSchema().load(dumped)
+        loaded = AllSpecimenJsonSchema().load(dumped)
 
         # Assert
         assert isinstance(loaded, list)
@@ -902,15 +967,15 @@ class TestSampleJsonSchema:
         assert isinstance(sample, Sample)
         assert sample.identifier == dumped[1]["identifier"]
         specimen = sample.sampled_from[0].specimen
-        assert isinstance(specimen, ExtractedSpecimen)
+        assert isinstance(specimen, Specimen)
         assert specimen.identifier == dumped[2]["identifier"]
 
     def test_slide_sample_rountrip(self, slide_sample: SlideSample):
         # Arrange
 
         # Act
-        dumped = SpecimenJsonSchema().dump(slide_sample)
-        loaded = SpecimenJsonSchema().load(dumped)
+        dumped = AllSpecimenJsonSchema().dump(slide_sample)
+        loaded = AllSpecimenJsonSchema().load(dumped)
 
         # Assert
         assert str(loaded[0]) == str(slide_sample)
