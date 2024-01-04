@@ -287,6 +287,20 @@ Every processing step (including staining) also have the optional properties `da
 
 These steps are parsed from the `SpecimenPreparationSequence` following [`TID 8004`](https://dicom.nema.org/medical/dicom/current/output/chtml/part16/chapter_C.html#sect_TID_8004) for each specimen identifier in the item sequence.
 
+### Exporting to json
+
+The metadata can be exported to json:
+
+```python
+from wsidicom.metadata.schema.json import WsiMetadataJsonSchema
+
+with WsiDicom.open(path_to_folder) as wsi:
+    metadata = wsi.metadata
+
+schema = WsiMetadataJsonSchema()
+metadata_json = schema.dump(metadata)
+```
+
 ## Saving files
 
 An opened WsiDicom instance can be saved to a new path using the save()-method. The produced files will be:
