@@ -12,12 +12,15 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""DICOM schema for Patient model."""
+
 from collections import defaultdict
 from typing import Any, Dict, Type
-from wsidicom.metadata.schema.dicom.schema import (
-    ModuleDicomSchema,
-    DicomSchema,
-)
+
+from marshmallow import fields, post_load, pre_dump
+from pydicom.sr.coding import Code
+
+from wsidicom.metadata.patient import Patient, PatientDeIdentification, PatientSex
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
     CodeDicomField,
@@ -29,9 +32,10 @@ from wsidicom.metadata.schema.dicom.fields import (
     SingleCodeSequenceField,
     StringDicomField,
 )
-from marshmallow import fields, pre_dump, post_load
-from pydicom.sr.coding import Code
-from wsidicom.metadata.patient import Patient, PatientDeIdentification, PatientSex
+from wsidicom.metadata.schema.dicom.schema import (
+    DicomSchema,
+    ModuleDicomSchema,
+)
 
 
 class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):

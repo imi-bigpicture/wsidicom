@@ -12,7 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from marshmallow import Schema, fields, post_load
+"""Json schema for Patient model."""
+
+from marshmallow import fields
+
 from wsidicom.metadata.patient import Patient, PatientDeIdentification, PatientSex
 from wsidicom.metadata.schema.common import LoadingSchema
 from wsidicom.metadata.schema.json.fields import StringOrCodeJsonField

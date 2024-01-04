@@ -13,11 +13,13 @@
 #    limitations under the License.
 
 """Optical path model."""
+
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Generic, Optional, Sequence, Type, TypeVar, Union
 
 import numpy as np
+
 from wsidicom.conceptcode import (
     IlluminationCode,
     IlluminationColorCode,

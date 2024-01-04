@@ -12,14 +12,21 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""DICOM schema for complete WsiMetadata model."""
+
 from typing import Sequence, Type
 
 from marshmallow import fields
 from pydicom import Dataset
 from pydicom.uid import VLWholeSlideMicroscopyImageStorage
-from wsidicom.instance.dataset import ImageType
 
-from wsidicom.metadata.schema.dicom.schema import DicomSchema
+from wsidicom.instance.dataset import ImageType
+from wsidicom.metadata.equipment import Equipment
+from wsidicom.metadata.image import Image
+from wsidicom.metadata.label import Label
+from wsidicom.metadata.optical_path import OpticalPath
+from wsidicom.metadata.patient import Patient
+from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingListDicomField,
     DefaultingListTagDicomField,
@@ -28,19 +35,14 @@ from wsidicom.metadata.schema.dicom.fields import (
     UidDatasetDicomField,
     UidDicomField,
 )
-from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.image import ImageDicomSchema
 from wsidicom.metadata.schema.dicom.label import LabelDicomSchema
 from wsidicom.metadata.schema.dicom.optical_path import OpticalPathDicomSchema
 from wsidicom.metadata.schema.dicom.patient import PatientDicomSchema
+from wsidicom.metadata.schema.dicom.schema import DicomSchema
 from wsidicom.metadata.schema.dicom.series import SeriesDicomSchema
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 from wsidicom.metadata.schema.dicom.study import StudyDicomSchema
-from wsidicom.metadata.equipment import Equipment
-from wsidicom.metadata.image import Image
-from wsidicom.metadata.label import Label
-from wsidicom.metadata.optical_path import OpticalPath
-from wsidicom.metadata.patient import Patient
 from wsidicom.metadata.series import Series
 from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study

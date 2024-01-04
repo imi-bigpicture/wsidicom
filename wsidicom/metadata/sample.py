@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Models for specimen description."""
+
 import datetime
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
@@ -21,6 +23,7 @@ from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union
 
 from pydicom.sr.coding import Code
 from pydicom.uid import UID, generate_uid
+
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     ContainerTypeCode,

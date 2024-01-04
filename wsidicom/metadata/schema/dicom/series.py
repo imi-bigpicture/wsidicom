@@ -12,16 +12,18 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""DICOM schema for Series model."""
+
 from typing import Type
-from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
+
+from marshmallow import fields
+
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
     DefaultingTagDicomField,
     UidDicomField,
 )
-
-from marshmallow import fields
-
+from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 from wsidicom.metadata.series import Series
 
 

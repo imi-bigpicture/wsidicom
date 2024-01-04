@@ -12,17 +12,16 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""DICOM schema for Slide model."""
+
 import logging
 from typing import Any, Dict, Type
 
-from marshmallow import fields, post_dump, pre_dump, post_load
-from wsidicom.conceptcode import ContainerTypeCode
-from wsidicom.metadata.defaults import defaults
+from marshmallow import fields, post_dump, post_load, pre_dump
 
-from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.schema.dicom.sample.formatter import SpecimenDicomFormatter
-from wsidicom.metadata.schema.dicom.sample.parser import SpecimenDicomParser
-from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
+from wsidicom.conceptcode import ContainerTypeCode
+from wsidicom.metadata.sample import SlideSample
+from wsidicom.metadata.schema.dicom.defaults import Defaults, defaults
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
     SingleCodeSequenceField,
@@ -31,7 +30,9 @@ from wsidicom.metadata.schema.dicom.fields import (
 from wsidicom.metadata.schema.dicom.sample import (
     SpecimenDescriptionDicomSchema,
 )
-from wsidicom.metadata.sample import SlideSample
+from wsidicom.metadata.schema.dicom.sample.formatter import SpecimenDicomFormatter
+from wsidicom.metadata.schema.dicom.sample.parser import SpecimenDicomParser
+from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 from wsidicom.metadata.slide import Slide
 
 

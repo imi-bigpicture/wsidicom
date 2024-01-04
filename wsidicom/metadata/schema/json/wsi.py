@@ -12,22 +12,24 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Json schema for complete WsiMetadata."""
+
 from marshmallow import fields
 
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import Image
+from wsidicom.metadata.label import Label
+from wsidicom.metadata.patient import Patient
 from wsidicom.metadata.schema.common import LoadingSchema
 from wsidicom.metadata.schema.json.equipment import EquipmentJsonSchema
 from wsidicom.metadata.schema.json.fields import UidJsonField
 from wsidicom.metadata.schema.json.image import ImageJsonSchema
 from wsidicom.metadata.schema.json.label import LabelJsonSchema
-from wsidicom.metadata.schema.json.optical import OpticalPathJsonSchema
+from wsidicom.metadata.schema.json.optical_path import OpticalPathJsonSchema
 from wsidicom.metadata.schema.json.patient import PatientJsonSchema
 from wsidicom.metadata.schema.json.series import SeriesJsonSchema
 from wsidicom.metadata.schema.json.slide import SlideJsonSchema
 from wsidicom.metadata.schema.json.study import StudyJsonSchema
-from wsidicom.metadata.label import Label
-from wsidicom.metadata.patient import Patient
 from wsidicom.metadata.series import Series
 from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study

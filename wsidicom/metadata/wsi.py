@@ -13,12 +13,12 @@
 #    limitations under the License.
 
 """Complete WSI model."""
+
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional, Sequence
 
 from pydicom.uid import UID, generate_uid
-
 
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import Image

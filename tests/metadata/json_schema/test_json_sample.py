@@ -40,7 +40,7 @@ from wsidicom.metadata.schema.json.sample.schema import (
     SamplingConstraintJsonSchema,
     SamplingJsonModel,
     SlideSampleJsonSchema,
-    AllSpecimenJsonSchema,
+    BaseSpecimenJsonSchema,
     SpecimenLocalizationJsonSchema,
 )
 from wsidicom.metadata.sample import (
@@ -849,7 +849,7 @@ class TestSampleJsonSchema:
         specimen = sample.sampled_from[0].specimen
 
         # Act
-        dumped = AllSpecimenJsonSchema().dump(slide_sample)
+        dumped = BaseSpecimenJsonSchema().dump(slide_sample)
 
         # Assert
         assert isinstance(dumped, list)
@@ -955,7 +955,7 @@ class TestSampleJsonSchema:
         ]
 
         # Act
-        loaded = AllSpecimenJsonSchema().load(dumped)
+        loaded = BaseSpecimenJsonSchema().load(dumped)
 
         # Assert
         assert isinstance(loaded, list)
@@ -974,8 +974,8 @@ class TestSampleJsonSchema:
         # Arrange
 
         # Act
-        dumped = AllSpecimenJsonSchema().dump(slide_sample)
-        loaded = AllSpecimenJsonSchema().load(dumped)
+        dumped = BaseSpecimenJsonSchema().dump(slide_sample)
+        loaded = BaseSpecimenJsonSchema().load(dumped)
 
         # Assert
         assert str(loaded[0]) == str(slide_sample)

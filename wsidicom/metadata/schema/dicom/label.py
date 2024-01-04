@@ -12,13 +12,16 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Type
-from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
-from marshmallow import fields, post_load, pre_dump
-from wsidicom.metadata.schema.dicom.fields import BooleanDicomField, StringDicomField
+"""DICOM schema for Label model."""
 
-from wsidicom.metadata.label import Label
+from typing import Any, Dict, Type
+
+from marshmallow import fields, post_load, pre_dump
+
 from wsidicom.instance import ImageType
+from wsidicom.metadata.label import Label
+from wsidicom.metadata.schema.dicom.fields import BooleanDicomField, StringDicomField
+from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 
 
 class LabelDicomSchema(ModuleDicomSchema[Label]):

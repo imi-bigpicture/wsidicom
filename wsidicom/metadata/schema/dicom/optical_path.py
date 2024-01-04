@@ -12,9 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from enum import Enum
+"""DICOM schema for Optical path model."""
+
 import io
 import struct
+from enum import Enum
 from typing import (
     Any,
     Dict,
@@ -30,27 +32,13 @@ import numpy as np
 from marshmallow import fields, post_load, pre_dump
 from pydicom import Dataset
 from pydicom.sr.coding import Code
+
 from wsidicom.conceptcode import (
     IlluminationCode,
     IlluminationColorCode,
     ImagePathFilterCode,
     LenseCode,
     LightPathFilterCode,
-)
-
-from wsidicom.metadata.defaults import Defaults
-from wsidicom.metadata.schema.dicom.schema import (
-    ModuleDicomSchema,
-    DicomSchema,
-    LoadType,
-)
-from wsidicom.metadata.schema.dicom.fields import (
-    CodeDicomField,
-    DefaultingDicomField,
-    FlattenOnDumpNestedDicomField,
-    FloatDicomField,
-    SingleCodeSequenceField,
-    StringDicomField,
 )
 from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
@@ -59,11 +47,25 @@ from wsidicom.metadata.optical_path import (
     LightPathFilter,
     LinearLutSegment,
     Lut,
+    LutDataType,
     LutSegment,
     Objectives,
     OpticalFilter,
     OpticalPath,
-    LutDataType,
+)
+from wsidicom.metadata.schema.dicom.defaults import Defaults
+from wsidicom.metadata.schema.dicom.fields import (
+    CodeDicomField,
+    DefaultingDicomField,
+    FlattenOnDumpNestedDicomField,
+    FloatDicomField,
+    SingleCodeSequenceField,
+    StringDicomField,
+)
+from wsidicom.metadata.schema.dicom.schema import (
+    DicomSchema,
+    LoadType,
+    ModuleDicomSchema,
 )
 
 

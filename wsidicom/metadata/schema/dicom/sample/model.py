@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Models for use during DICOM specimen serialization."""
+
 import datetime
 from abc import ABCMeta
 from dataclasses import dataclass, field
@@ -36,6 +38,7 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
 )
 from wsidicom.metadata.sample import (
+    BaseSpecimen,
     Collection,
     Embedding,
     Fixation,
@@ -46,7 +49,6 @@ from wsidicom.metadata.sample import (
     Receiving,
     Sampling,
     SamplingLocation,
-    BaseSpecimen,
     SpecimenIdentifier,
     SpecimenLocalization,
     Staining,

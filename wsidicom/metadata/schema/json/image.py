@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Json schema for Image model."""
+
 from marshmallow import fields
 
 from wsidicom.metadata.image import (

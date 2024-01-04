@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 """Label model."""
+
 from dataclasses import dataclass
 from typing import List, Optional
 

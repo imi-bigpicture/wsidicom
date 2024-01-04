@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module with DICOM specimen description parser."""
+
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
@@ -29,6 +31,22 @@ from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     ContainerTypeCode,
 )
+from wsidicom.metadata.sample import (
+    BaseSampling,
+    BaseSpecimen,
+    Collection,
+    Embedding,
+    Fixation,
+    PreparationStep,
+    Processing,
+    Receiving,
+    Sample,
+    SlideSample,
+    Specimen,
+    SpecimenIdentifier,
+    Staining,
+    Storage,
+)
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
     ProcessingDicomModel,
@@ -38,22 +56,6 @@ from wsidicom.metadata.schema.dicom.sample.model import (
     SpecimenPreparationStepDicomModel,
     StainingDicomModel,
     StorageDicomModel,
-)
-from wsidicom.metadata.sample import (
-    BaseSampling,
-    Collection,
-    Embedding,
-    Specimen,
-    Fixation,
-    PreparationStep,
-    Processing,
-    Receiving,
-    Sample,
-    SlideSample,
-    BaseSpecimen,
-    SpecimenIdentifier,
-    Staining,
-    Storage,
 )
 
 

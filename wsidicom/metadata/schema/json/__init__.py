@@ -12,15 +12,14 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Schemas for serializing metadata models to and from json."""
+
 from wsidicom.metadata.schema.json.equipment import EquipmentJsonSchema
 from wsidicom.metadata.schema.json.image import ImageJsonSchema
 from wsidicom.metadata.schema.json.label import LabelJsonSchema
-from wsidicom.metadata.schema.json.optical import OpticalPathJsonSchema
+from wsidicom.metadata.schema.json.optical_path import OpticalPathJsonSchema
 from wsidicom.metadata.schema.json.patient import PatientJsonSchema
-from wsidicom.metadata.schema.json.sample import (
-    AllSpecimenJsonSchema,
-    StainingJsonSchema,
-)
 from wsidicom.metadata.schema.json.series import SeriesJsonSchema
+from wsidicom.metadata.schema.json.slide import SlideJsonSchema
 from wsidicom.metadata.schema.json.study import StudyJsonSchema
 from wsidicom.metadata.schema.json.wsi import WsiMetadataJsonSchema

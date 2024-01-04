@@ -12,5 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module for serializing specimen description."""
+
 from wsidicom.metadata.schema.dicom.sample.model import SpecimenDescriptionDicomModel
 from wsidicom.metadata.schema.dicom.sample.schema import SpecimenDescriptionDicomSchema

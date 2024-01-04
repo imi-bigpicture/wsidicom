@@ -12,10 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from abc import abstractmethod
-from dataclasses import dataclass
+"""Base DICOM schemas."""
+
 import datetime
 import logging
+from abc import abstractmethod
+from dataclasses import dataclass
 from typing import (
     Any,
     Dict,
@@ -29,16 +31,17 @@ from typing import (
     TypeVar,
     Union,
 )
+
 from marshmallow import ValidationError, post_dump, pre_load
 from pydicom import Dataset
 from pydicom.sr.coding import Code
-from wsidicom.conceptcode import dataset_to_code
-from wsidicom.metadata.schema.common import LoadType, LoadingSchema
 
+from wsidicom.conceptcode import dataset_to_code
+from wsidicom.metadata.sample import Measurement
+from wsidicom.metadata.schema.common import LoadingSchema, LoadType
 from wsidicom.metadata.schema.dicom.fields import (
     FlattenOnDumpNestedDicomField,
 )
-from wsidicom.metadata.sample import Measurement
 
 DumpType = TypeVar("DumpType", Dataset, Iterable[Dataset])
 
@@ -98,6 +101,8 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
 
 
 class ModuleDicomSchema(DicomSchema[LoadType]):
+    """Base DICOM schema for a module, returning a default when failing to load."""
+
     @property
     @abstractmethod
     def module_name(self) -> str:

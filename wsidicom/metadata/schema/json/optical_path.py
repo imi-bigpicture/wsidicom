@@ -12,29 +12,32 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Json schema for Optical path model."""
+
 import dataclasses
 from typing import Any, Dict, Iterable, Mapping, Type, Union
+
 from marshmallow import Schema, fields, post_load
+
 from wsidicom.conceptcode import (
-    ImagePathFilterCode,
-    LightPathFilterCode,
-    LenseCode,
     IlluminationCode,
     IlluminationColorCode,
+    ImagePathFilterCode,
+    LenseCode,
+    LightPathFilterCode,
 )
 from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
     DiscreteLutSegment,
     ImagePathFilter,
+    LightPathFilter,
     LinearLutSegment,
     Lut,
     LutSegment,
     Objectives,
-    LightPathFilter,
     OpticalPath,
 )
 from wsidicom.metadata.schema.common import LoadingSchema
-
 from wsidicom.metadata.schema.json.fields import (
     FileLoadingField,
     JsonFieldFactory,

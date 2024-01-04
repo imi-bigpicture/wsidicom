@@ -12,10 +12,13 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Json schema for Slide model."""
+
 from marshmallow import fields
+
 from wsidicom.metadata.schema.common import LoadingSchema
 from wsidicom.metadata.schema.json.sample import (
-    AllSpecimenJsonSchema,
+    BaseSpecimenJsonSchema,
     StainingJsonSchema,
 )
 from wsidicom.metadata.slide import Slide
@@ -24,7 +27,7 @@ from wsidicom.metadata.slide import Slide
 class SlideJsonSchema(LoadingSchema[Slide]):
     identifier = fields.String(allow_none=True)
     stainings = fields.List(fields.Nested(StainingJsonSchema()), allow_none=True)
-    samples = fields.Nested(AllSpecimenJsonSchema(), allow_none=True, many=True)
+    samples = fields.Nested(BaseSpecimenJsonSchema(), allow_none=True, many=True)
 
     @property
     def load_type(self):

@@ -12,16 +12,18 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""DICOM schema for Equipment model."""
+
 from typing import Type
 
-from wsidicom.metadata.defaults import Defaults
+from wsidicom.metadata.equipment import Equipment
+from wsidicom.metadata.schema.dicom.defaults import Defaults
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
     ListDicomField,
     StringDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
-from wsidicom.metadata.equipment import Equipment
 
 
 class EquipmentDicomSchema(ModuleDicomSchema[Equipment]):

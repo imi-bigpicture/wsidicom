@@ -12,13 +12,21 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""DICOM schema for Image model."""
+
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Type
 
 from marshmallow import fields, post_load, pre_dump
 
 from wsidicom.geometry import SizeMm
-from wsidicom.metadata.defaults import Defaults
+from wsidicom.metadata.image import (
+    ExtendedDepthOfField,
+    FocusMethod,
+    Image,
+    ImageCoordinateSystem,
+)
+from wsidicom.metadata.schema.dicom.defaults import Defaults
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
     DateTimeDicomField,
@@ -33,12 +41,6 @@ from wsidicom.metadata.schema.dicom.fields import (
 from wsidicom.metadata.schema.dicom.schema import (
     DicomSchema,
     ModuleDicomSchema,
-)
-from wsidicom.metadata.image import (
-    ExtendedDepthOfField,
-    FocusMethod,
-    Image,
-    ImageCoordinateSystem,
 )
 
 

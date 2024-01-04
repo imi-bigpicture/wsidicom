@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Module with DICOM specimen description formatter."""
+
 from typing import (
     Iterable,
     Iterator,
@@ -20,21 +22,21 @@ from typing import (
     Sequence,
 )
 
+from wsidicom.metadata.sample import (
+    BaseSampling,
+    BaseSpecimen,
+    PreparationStep,
+    SampledSpecimen,
+    Sampling,
+    SlideSample,
+    SpecimenIdentifier,
+    Staining,
+)
 from wsidicom.metadata.schema.dicom.sample.model import (
     SamplingDicomModel,
     SpecimenDescriptionDicomModel,
     SpecimenPreparationStepDicomModel,
     StainingDicomModel,
-)
-from wsidicom.metadata.sample import (
-    BaseSampling,
-    PreparationStep,
-    SampledSpecimen,
-    Sampling,
-    SlideSample,
-    BaseSpecimen,
-    SpecimenIdentifier,
-    Staining,
 )
 
 

@@ -12,8 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""DICOM schema for Study model."""
+
 from typing import Type
-from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
+
 from wsidicom.metadata.schema.dicom.fields import (
     DateDicomField,
     DefaultingTagDicomField,
@@ -22,8 +24,7 @@ from wsidicom.metadata.schema.dicom.fields import (
     TimeDicomField,
     UidDicomField,
 )
-
-
+from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 from wsidicom.metadata.study import Study
 
 

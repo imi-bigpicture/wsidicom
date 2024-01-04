@@ -53,7 +53,7 @@ from wsidicom.metadata import (
     Study,
     WsiMetadata,
 )
-from wsidicom.metadata.defaults import Defaults
+from wsidicom.metadata.schema.dicom.defaults import Defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.image import ImageDicomSchema
 from wsidicom.metadata.schema.dicom.label import LabelDicomSchema

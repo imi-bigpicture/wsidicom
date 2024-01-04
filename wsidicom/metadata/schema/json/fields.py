@@ -12,18 +12,21 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""Json fields for serializing values."""
+
+
 import dataclasses
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Type, Union
 
-from marshmallow import ValidationError, fields
 import numpy as np
+from marshmallow import ValidationError, fields
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
+
 from wsidicom.conceptcode import CidConceptCode, CidConceptCodeType, UnitCode
 from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.metadata.optical_path import LutDataType
-
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,

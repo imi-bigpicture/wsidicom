@@ -13,6 +13,6 @@
 #    limitations under the License.
 
 from wsidicom.metadata.schema.json.sample.schema import (
-    AllSpecimenJsonSchema,
+    BaseSpecimenJsonSchema,
     StainingJsonSchema,
 )

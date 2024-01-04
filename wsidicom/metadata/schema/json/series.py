@@ -12,9 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from marshmallow import fields
-from wsidicom.metadata.schema.common import LoadingSchema
+"""Json schema for Series model."""
 
+from marshmallow import fields
+
+from wsidicom.metadata.schema.common import LoadingSchema
 from wsidicom.metadata.schema.json.fields import UidJsonField
 from wsidicom.metadata.series import Series
 

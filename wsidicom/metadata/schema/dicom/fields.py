@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""DICOM fields for attribute serialization."""
+
 import datetime
 import math
 from abc import abstractmethod
