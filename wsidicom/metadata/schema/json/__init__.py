@@ -23,3 +23,4 @@ from wsidicom.metadata.schema.json.sample import (
 )
 from wsidicom.metadata.schema.json.series import SeriesJsonSchema
 from wsidicom.metadata.schema.json.study import StudyJsonSchema
+from wsidicom.metadata.schema.json.wsi import WsiMetadataJsonSchema
