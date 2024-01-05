@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import logging
-from copy import deepcopy
+from copy import deepcopy, copy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
@@ -660,13 +660,13 @@ class WsiDataset(Dataset):
             Copy of dataset set as tiled full.
 
         """
-        dataset = deepcopy(self)
+        dataset = copy(self)
         dataset.DimensionOrganizationType = "TILED_FULL"
         # Make a new Shared functional group sequence and Pixel measure
         # sequence if not in dataset, otherwise update the Pixel measure
         # sequence
-        shared_functional_group = getattr(
-            dataset, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()])
+        shared_functional_group = deepcopy(
+            getattr(self, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()]))
         )
         plane_position_slide = Dataset()
         plane_position_slide.ZOffsetInSlideCoordinateSystem = DSfloat(
@@ -681,16 +681,16 @@ class WsiDataset(Dataset):
             "PixelMeasuresSequence",
             DicomSequence([Dataset()]),
         )
-        if dataset.pixel_spacing is not None:
+        if self.pixel_spacing is not None:
             pixel_measure[0].PixelSpacing = [
-                DSfloat(dataset.pixel_spacing.height * scale, True),
-                DSfloat(dataset.pixel_spacing.width * scale, True),
+                DSfloat(self.pixel_spacing.height * scale, True),
+                DSfloat(self.pixel_spacing.width * scale, True),
             ]
         pixel_measure[0].SpacingBetweenSlices = DSfloat(
             self._get_spacing_between_slices_for_focal_planes(focal_planes), True
         )
 
-        if dataset.slice_thickness is not None:
+        if self.slice_thickness is not None:
             pixel_measure[0].SliceThickness = DSfloat(dataset.slice_thickness, True)
 
         shared_functional_group[0].PixelMeasuresSequence = pixel_measure
@@ -715,7 +715,7 @@ class WsiDataset(Dataset):
     @classmethod
     def create_instance_dataset(
         cls,
-        base_dataset: Dataset,
+        dataset: Dataset,
         image_type: ImageType,
         image_data: ImageData,
         pyramid_index: Optional[int] = None,
@@ -736,7 +736,6 @@ class WsiDataset(Dataset):
         WsiDataset
             Dataset for instance.
         """
-        dataset = deepcopy(base_dataset)
         if image_type == ImageType.VOLUME and pyramid_index == 0:
             resampled = "NONE"
         else:
