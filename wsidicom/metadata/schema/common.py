@@ -66,10 +66,11 @@ class DefaultOnValidationExceptionField(fields.Field):
     def _deserialize(self, value, attr, data, **kwargs):
         try:
             return self.inner._deserialize(value, attr, data, **kwargs)
-        except ValidationError:
+        except ValidationError as exception:
             logging.warning(
-                f"Could not deserialize {attr} using {self.inner}, "
-                f"returning default {self.load_default}"
+                f"Could not deserialize {attr} using {self.inner} "
+                f"due to exception {exception}"
+                f"returning default value {self.load_default}"
             )
             return self.load_default
 

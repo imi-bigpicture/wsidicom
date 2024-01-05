@@ -395,7 +395,7 @@ class PreparationStepDicomField(marshmallow.fields.Field):
         step: SpecimenPreparationStepDicomModel,
         attr: Optional[str],
         obj: Any,
-        **kwargs
+        **kwargs,
     ) -> Dataset:
         """Serialize step to dataset."""
         assert self.data_key is not None
@@ -423,9 +423,16 @@ class PreparationStepDicomField(marshmallow.fields.Field):
                 if dataset_to_code(item.ConceptNameCodeSequence[0])
                 == SampleCodes.processing_type
             )
+        except StopIteration as e:
+            raise marshmallow.ValidationError(
+                "Failed to load step due to missing processing type"
+            ) from e
+        try:
             schema = self._processing_type_to_schema_mapping[processing_type]
-        except (StopIteration, KeyError, marshmallow.ValidationError) as e:
-            raise marshmallow.ValidationError("Failed to load") from e
+        except KeyError as e:
+            raise marshmallow.ValidationError(
+                f"Failed to load step due to unknown processing type {processing_type}"
+            ) from e
         loaded = schema().load(sequence, many=False)
         assert isinstance(loaded, SpecimenPreparationStepDicomModel)
         return loaded
