@@ -76,7 +76,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
 
     def load(self, dataset: Dataset, **kwargs) -> Optional[ImageCoordinateSystem]:
         try:
-            super().load(dataset, **kwargs)
+            return super().load(dataset, **kwargs)
         except TypeError:
             return None
 
