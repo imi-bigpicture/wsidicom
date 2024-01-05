@@ -15,6 +15,7 @@
 """Schemas for serializing specimen description."""
 
 import datetime
+import logging
 from typing import (
     Any,
     Dict,
@@ -24,7 +25,7 @@ from typing import (
     Type,
 )
 
-import marshmallow
+from marshmallow import ValidationError, fields, post_load
 from pydicom import Dataset
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
@@ -41,10 +42,9 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
     dataset_to_code,
 )
+from wsidicom.config import settings
 from wsidicom.metadata.sample import Measurement, SampleLocalization
-from wsidicom.metadata.schema.common import (
-    DefaultOnValidationExceptionField,
-)
+from wsidicom.metadata.schema.common import DefaultOnValidationExceptionField
 from wsidicom.metadata.schema.dicom.fields import (
     CodeDicomField,
     CodeItemDicomField,
@@ -313,7 +313,7 @@ class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
         dump_default=SampleCodes.staining,
         dump_only=True,
     )
-    substances = marshmallow.fields.List(StringOrCodeItemDicomField(SpecimenStainsCode))
+    substances = fields.List(StringOrCodeItemDicomField(SpecimenStainsCode))
 
     @property
     def load_type(self):
@@ -366,7 +366,7 @@ class StorageDicomSchema(BasePreparationStepDicomSchema[StorageDicomModel]):
         return StorageDicomModel
 
 
-class PreparationStepDicomField(marshmallow.fields.Field):
+class PreparationStepDicomField(fields.Field):
     """Mapping step type to schema."""
 
     _type_to_schema_mapping: Dict[
@@ -388,6 +388,12 @@ class PreparationStepDicomField(marshmallow.fields.Field):
         SampleCodes.staining: StainingDicomSchema,
         SampleCodes.receiving: ReceivingDicomSchema,
         SampleCodes.storage: StorageDicomSchema,
+        Code("P3-4000A", "SRT", "Sampling of tissue specimen"): SamplingDicomSchema,
+        Code("P3-02000", "SRT", "Specimen collection"): CollectionDicomSchema,
+        Code("P3-05000", "SRT", "Specimen processing"): ProcessingDicomSchema,
+        Code("P3-00003", "SRT", "Staining"): StainingDicomSchema,
+        Code("P3-05013", "SRT", "Specimen receiving"): ReceivingDicomSchema,
+        Code("111729", "DCM", "Specimen storage"): StorageDicomSchema,
     }
 
     def _serialize(
@@ -406,7 +412,7 @@ class PreparationStepDicomField(marshmallow.fields.Field):
 
     def _deserialize(
         self, dataset: Dataset, attr: Optional[str], data: Any, **kwargs
-    ) -> SpecimenPreparationStepDicomModel:
+    ) -> Optional[SpecimenPreparationStepDicomModel]:
         """Deserialize step from dataset."""
         assert self.data_key is not None
         sequence = getattr(dataset, self.data_key)
@@ -414,26 +420,36 @@ class PreparationStepDicomField(marshmallow.fields.Field):
 
     def _subschema_load(
         self, sequence: Iterable[Dataset]
-    ) -> SpecimenPreparationStepDicomModel:
+    ) -> Optional[SpecimenPreparationStepDicomModel]:
         """Select a schema and load and return step using the schema."""
         try:
-            processing_type: Code = next(
-                dataset_to_code(item.ConceptCodeSequence[0])
-                for item in sequence
-                if dataset_to_code(item.ConceptNameCodeSequence[0])
-                == SampleCodes.processing_type
-            )
-        except StopIteration as e:
-            raise marshmallow.ValidationError(
-                "Failed to load step due to missing processing type"
-            ) from e
-        try:
-            schema = self._processing_type_to_schema_mapping[processing_type]
-        except KeyError as e:
-            raise marshmallow.ValidationError(
-                f"Failed to load step due to unknown processing type {processing_type}"
-            ) from e
-        loaded = schema().load(sequence, many=False)
+            try:
+                processing_type: Code = next(
+                    dataset_to_code(item.ConceptCodeSequence[0])
+                    for item in sequence
+                    if dataset_to_code(item.ConceptNameCodeSequence[0])
+                    == SampleCodes.processing_type
+                )
+            except StopIteration:
+                raise ValidationError(
+                    "Failed to load processing step due to missing processing type."
+                )
+            try:
+                schema = self._processing_type_to_schema_mapping[processing_type]
+            except KeyError:
+                raise ValidationError(
+                    "Failed to load processing step due to unknown "
+                    f"processing type {processing_type}"
+                )
+            loaded = schema().load(sequence, many=False)
+        except ValidationError:
+            if settings._ignore_specimen_preparation_step_on_validation_error:
+                logging.warning(
+                    "Failed to load processing step due to validation error.",
+                    exc_info=True,
+                )
+                return None
+            raise
         assert isinstance(loaded, SpecimenPreparationStepDicomModel)
         return loaded
 
@@ -448,7 +464,7 @@ class PreparationStepDicomField(marshmallow.fields.Field):
 class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel]):
     identifier = StringDicomField(data_key="SpecimenIdentifier")
     uid = StringDicomField(data_key="SpecimenUID")
-    localization = marshmallow.fields.Nested(
+    localization = fields.Nested(
         SampleLocalizationDicomSchema(),
         data_key="SpecimenLocalizationContentItemSequence",
         allow_none=True,
@@ -457,7 +473,7 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
         data_key="IssuerOfTheSpecimenIdentifierSequence", allow_none=True
     )
     steps = DefaultOnValidationExceptionField(
-        marshmallow.fields.List(
+        fields.List(
             PreparationStepDicomField(
                 data_key="SpecimenPreparationStepContentItemSequence"
             )
@@ -465,7 +481,7 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
         data_key="SpecimenPreparationSequence",
         load_default=[],
     )
-    anatomical_sites = marshmallow.fields.List(
+    anatomical_sites = fields.List(
         CodeDicomField(Code),
         data_key="PrimaryAnatomicStructureSequence",
         load_default=[],
@@ -486,3 +502,11 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     @property
     def load_type(self):
         return SpecimenDescriptionDicomModel
+
+    @post_load
+    def post_load(
+        self, data: Dict[str, Any], **kwargs
+    ) -> SpecimenDescriptionDicomModel:
+        """Remove None values from steps before loading to object."""
+        data["steps"] = [step for step in data["steps"] if step is not None]
+        return super().post_load(data, **kwargs)

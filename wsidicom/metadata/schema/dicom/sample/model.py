@@ -47,10 +47,10 @@ from wsidicom.metadata.sample import (
     PreparationStep,
     Processing,
     Receiving,
+    SampleLocalization,
     Sampling,
     SamplingLocation,
     SpecimenIdentifier,
-    SampleLocalization,
     Staining,
     Storage,
     UnknownSampling,
@@ -106,12 +106,14 @@ class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
         raise NotImplementedError(f"Unknown preparation step type {type(step)}.")
 
     @property
-    def specimen_identifier(self) -> Union[str, SpecimenIdentifier]:
+    def specimen_identifier(self) -> SpecimenIdentifier:
         if self.issuer_of_identifier is None:
-            return self.identifier
+            issuer = None
+        else:
+            issuer = IssuerOfIdentifier.from_hl7v2(self.issuer_of_identifier)
         return SpecimenIdentifier(
             self.identifier,
-            IssuerOfIdentifier.from_hl7v2(self.issuer_of_identifier),
+            issuer,
         )
 
 
@@ -204,18 +206,17 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
         )
 
     @property
-    def parent_identifier(self) -> Union[str, SpecimenIdentifier]:
-        if (
-            self.issuer_of_parent_specimen_identifier is not None
-            and self.issuer_of_parent_specimen_identifier != ""
-        ):
-            return SpecimenIdentifier(
-                self.parent_specimen_identifier,
-                IssuerOfIdentifier.from_hl7v2(
-                    self.issuer_of_parent_specimen_identifier
-                ),
+    def parent_identifier(self) -> SpecimenIdentifier:
+        if self.issuer_of_parent_specimen_identifier is None:
+            issuer = None
+        else:
+            issuer = IssuerOfIdentifier.from_hl7v2(
+                self.issuer_of_parent_specimen_identifier
             )
-        return self.parent_specimen_identifier
+        return SpecimenIdentifier(
+            self.parent_specimen_identifier,
+            issuer,
+        )
 
     @property
     def sampling_location(self) -> Optional[SamplingLocation]:
@@ -484,7 +485,5 @@ class SpecimenDescriptionDicomModel:
     localization: Optional[SampleLocalization] = None
 
     @property
-    def specimen_identifier(self) -> Union[str, SpecimenIdentifier]:
-        if self.issuer_of_identifier is None:
-            return self.identifier
+    def specimen_identifier(self) -> SpecimenIdentifier:
         return SpecimenIdentifier(self.identifier, self.issuer_of_identifier)

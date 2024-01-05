@@ -231,6 +231,21 @@ class SpecimenIdentifier:
             return identifier, None
         return identifier.value, identifier.issuer
 
+    def simplify(self) -> Union[str, "SpecimenIdentifier"]:
+        """Return a simplified version of the identifier."""
+        if self.issuer is None:
+            return self.value
+        return self
+
+    def relaxed_matching(self, other: "SpecimenIdentifier") -> bool:
+        """Determine if other specimen identifiers is equal to this, but does not
+        require issuer to be the same if one of the issuers is None."""
+        if self == other:
+            return True
+        if self.value != other.value:
+            return False
+        return self.issuer is None or other.issuer is None
+
 
 class PreparationStep(metaclass=ABCMeta):
     """

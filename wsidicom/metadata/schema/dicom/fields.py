@@ -31,13 +31,12 @@ from typing import (
 )
 
 from marshmallow import Schema, fields
-from marshmallow.fields import Field
 from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
 from pydicom.multival import MultiValue
 from pydicom.sr.coding import Code
-from pydicom.valuerep import DA, DT, TM, DSfloat, PersonName
 from pydicom.uid import UID
+from pydicom.valuerep import DA, DT, TM, DSfloat, PersonName
 
 from wsidicom.conceptcode import ConceptCode, UnitCode
 from wsidicom.geometry import Orientation, PointMm, SizeMm
@@ -466,7 +465,7 @@ ValueType = TypeVar("ValueType")
 
 
 class TypeDicomField(fields.Field, Generic[ValueType]):
-    def __init__(self, nested: Field, **kwargs):
+    def __init__(self, nested: fields.Field, **kwargs):
         self._nested = nested
         super().__init__(**kwargs)
 
@@ -484,7 +483,7 @@ class DefaultingDicomField(TypeDicomField[ValueType]):
     """Wrapper around a field that should always be present and have a value. Default
     value is constant."""
 
-    def __init__(self, nested: Field, dump_default: ValueType, **kwargs):
+    def __init__(self, nested: fields.Field, dump_default: ValueType, **kwargs):
         self._dump_default = dump_default
         super().__init__(nested=nested, dump_default=dump_default, **kwargs)
 
@@ -499,7 +498,7 @@ class DefaultingDicomField(TypeDicomField[ValueType]):
 class DefaultingNoneDicomField(DefaultingDicomField[Optional[ValueType]]):
     """Wrapper around a field that should always be present but can be None."""
 
-    def __init__(self, nested: Field, **kwargs):
+    def __init__(self, nested: fields.Field, **kwargs):
         super().__init__(nested=nested, dump_default=None, **kwargs)
 
     def _serialize(
@@ -512,7 +511,7 @@ class DefaultingTagDicomField(TypeDicomField[ValueType]):
     """Wrapper around a field that should always be present and have a value. Default
     value is taken from object by attribute defined by tag."""
 
-    def __init__(self, nested: Field, tag: str, **kwargs):
+    def __init__(self, nested: fields.Field, tag: str, **kwargs):
         self._tag = tag
         super().__init__(nested=nested, **kwargs)
 
@@ -525,7 +524,7 @@ class DefaultingTagDicomField(TypeDicomField[ValueType]):
 
 
 class DefaultingListDicomField(fields.List):
-    def __init__(self, nested: Field, dump_default: List, **kwargs):
+    def __init__(self, nested: fields.Field, dump_default: List, **kwargs):
         self._dump_default = dump_default
         super().__init__(cls_or_instance=nested, dump_default=dump_default, **kwargs)
 
@@ -536,7 +535,7 @@ class DefaultingListDicomField(fields.List):
 
 
 class DefaultingListTagDicomField(fields.List):
-    def __init__(self, nested: Field, tag: str, **kwargs):
+    def __init__(self, nested: fields.Field, tag: str, **kwargs):
         self._tag = tag
         super().__init__(cls_or_instance=nested, **kwargs)
 
@@ -547,7 +546,7 @@ class DefaultingListTagDicomField(fields.List):
 
 
 class NestedDatasetDicomField(fields.Nested, Generic[ValueType]):
-    """Field for attribute of a single-item dataset sequence with a nested
+    """fields.Field for attribute of a single-item dataset sequence with a nested
     sing-item dataset sequence with the item the nested schema should handle."""
 
     def __init__(self, nested: Schema, data_key: str, nested_data_key: str, **kwargs):

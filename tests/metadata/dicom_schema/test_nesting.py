@@ -14,15 +14,15 @@
 
 from typing import Type
 
-import marshmallow
-from marshmallow import pre_load
+from marshmallow import fields, pre_load
 from pydicom import Dataset
-from wsidicom.metadata.schema.dicom.schema import DicomSchema
+
 from wsidicom.metadata.schema.dicom.fields import FlattenOnDumpNestedDicomField
+from wsidicom.metadata.schema.dicom.schema import DicomSchema
 
 
 class PropertySchema(DicomSchema):
-    value = marshmallow.fields.String(data_key="PatientID")
+    value = fields.String(data_key="PatientID")
 
     @property
     def load_type(self) -> Type[dict]:
