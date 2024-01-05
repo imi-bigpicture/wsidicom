@@ -69,6 +69,13 @@ class WsiMetadata:
     frame_of_reference_uid: Optional[UID] = None
     dimension_organization_uids: Optional[Sequence[UID]] = None
 
+    def __post_init__(self):
+        optical_path_identifiers = set(
+            optical_path.identifier for optical_path in self.optical_paths
+        )
+        if len(optical_path_identifiers) != len(self.optical_paths):
+            raise ValueError("Duplicate optical path identifiers")
+
     @cached_property
     def default_frame_of_reference_uid(self) -> UID:
         """Frame of reference uid used if not set."""
