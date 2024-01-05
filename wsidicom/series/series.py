@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
+from functools import cached_property
 from typing import (
     Iterable,
     List,
@@ -54,7 +55,6 @@ class Series(metaclass=ABCMeta):
             self._uids = self._validate_series(self.groups)
         else:
             self._uids = None
-        self._metadata = WsiMetadataDicomSchema().load(self.datasets[0])
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.groups})"
@@ -115,9 +115,9 @@ class Series(metaclass=ABCMeta):
         series_instances = [series.instances.values() for series in self.groups]
         return [instance for sublist in series_instances for instance in sublist]
 
-    @property
+    @cached_property
     def metadata(self) -> WsiMetadata:
-        return self._metadata
+        return WsiMetadataDicomSchema().load(self.datasets[0])
 
     @classmethod
     def open(

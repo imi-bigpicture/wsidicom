@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from functools import cached_property
 import logging
 import os
 from pathlib import Path
@@ -77,18 +78,6 @@ class WsiDicom:
         self._overviews = Overviews.open(source.overview_instances)
         self._annotations = list(source.annotation_instances)
         self._uids = self._validate_collection()
-
-        if self.labels is not None:
-            label_metadata = self.labels.metadata
-        else:
-            label_metadata = None
-        if self.overviews is not None:
-            overview_metadata = self.overviews.metadata
-        else:
-            overview_metadata = None
-        self._metadata = WsiMetadata.merge_image_types(
-            self._levels.metadata, label_metadata, overview_metadata
-        )
 
     @classmethod
     def open(
@@ -258,9 +247,19 @@ class WsiDicom:
         ]
         return [series for series in collection if series is not None]
 
-    @property
+    @cached_property
     def metadata(self) -> WsiMetadata:
-        return self._metadata
+        if self.labels is not None:
+            label_metadata = self.labels.metadata
+        else:
+            label_metadata = None
+        if self.overviews is not None:
+            overview_metadata = self.overviews.metadata
+        else:
+            overview_metadata = None
+        return WsiMetadata.merge_image_types(
+            self._levels.metadata, label_metadata, overview_metadata
+        )
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         string = self.__class__.__name__
