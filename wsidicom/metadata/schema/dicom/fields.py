@@ -423,7 +423,7 @@ class IssuerOfIdentifierDicomField(fields.Field):
         self, value: Optional[IssuerOfIdentifier], attr, obj, **kwargs
     ) -> Optional[Sequence[Dataset]]:
         if value is None:
-            return None
+            return []
         dataset = Dataset()
         if isinstance(value, UniversalIssuerOfIdentifier):
             dataset.UniversalEntityID = value.identifier
