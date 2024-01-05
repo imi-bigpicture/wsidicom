@@ -231,22 +231,6 @@ class SpecimenDicomParser:
         sampling: Optional[BaseSampling] = None
         preparation_steps: List[PreparationStep] = []
         for index, step in enumerate(steps_by_identifier[identifier]):
-            if step is None:
-                # This step has already been parsed, skip to next.
-                continue
-            if step.specimen_identifier != identifier:
-                # This is OK if SpecimenSampling with matching parent identifier
-                if (
-                    not isinstance(step, SamplingDicomModel)
-                    or step.parent_identifier != identifier
-                ):
-                    error = (
-                        f"Got step of unexpected type {type(step)}"
-                        f"or identifier {step.identifier} for specimen {identifier}"
-                    )
-                    raise ValueError(error)
-                # Skip to next
-                continue
             parsed_step = self._parse_step(index, step, identifier, steps_by_identifier)
             preparation_steps.extend(parsed_step.preparation_steps)
             if parsed_step.sampling is not None:
