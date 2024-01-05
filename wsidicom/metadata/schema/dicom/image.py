@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Type
 
 from marshmallow import fields, post_load, pre_dump
+from pydicom.dataset import Dataset
 
 from wsidicom.geometry import SizeMm
 from wsidicom.metadata.image import (
@@ -72,6 +73,12 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
     @property
     def load_type(self) -> Type[ImageCoordinateSystem]:
         return ImageCoordinateSystem
+
+    def load(self, dataset: Dataset, **kwargs) -> Optional[ImageCoordinateSystem]:
+        try:
+            super().load(dataset, **kwargs)
+        except TypeError:
+            return None
 
 
 @dataclass
