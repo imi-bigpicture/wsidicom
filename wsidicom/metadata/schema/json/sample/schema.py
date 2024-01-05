@@ -66,7 +66,7 @@ from wsidicom.metadata.sample import (
     SlideSample,
     BaseSpecimen,
     SpecimenIdentifier,
-    SpecimenLocalization,
+    SampleLocalization,
     Staining,
     Storage,
     UnknownSampling,
@@ -85,14 +85,14 @@ class SamplingLocationJsonSchema(LoadingSchema[SamplingLocation]):
         return SamplingLocation
 
 
-class SpecimenLocalizationJsonSchema(
+class SampleLocalizationJsonSchema(
     SamplingLocationJsonSchema, LoadingSchema[SamplingLocation]
 ):
     visual_marking = fields.String(allow_none=True)
 
     @property
     def load_type(self) -> Type[SamplingLocation]:
-        return SpecimenLocalization
+        return SampleLocalization
 
 
 class SamplingConstraintJsonSchema(LoadingSchema[SamplingConstraintJsonModel]):
@@ -314,7 +314,7 @@ class SlideSampleJsonSchema(LoadingSchema[SlideSampleJsonModel]):
     sampled_from = fields.Nested(SamplingConstraintJsonSchema)
     uid = UidJsonField(allow_none=True)
     localization = fields.Nested(
-        SpecimenLocalizationJsonSchema, allow_none=True, load_default=None
+        SampleLocalizationJsonSchema, allow_none=True, load_default=None
     )
     short_description = fields.String(allow_none=True, load_default=None)
     detailed_description = fields.String(allow_none=True, load_default=None)

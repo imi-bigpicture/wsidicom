@@ -26,6 +26,19 @@ class Label:
     Corresponds to the `Required, Empty if Unknown` attributes in the Slide Label
     module:
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.8.12.8.html
+
+    Parameters
+    ----------
+    text : Optional[str] = None
+        The label text.
+    barcode : Optional[str] = None
+        The label barcode.
+    label_in_volume_image : bool = False
+        Whether the label is present in the volume image.
+    label_in_overview_image : bool = False
+        Whether the label is present in the overview image.
+    label_is_phi : bool = True
+        Whether the label is personal health information.
     """
 
     text: Optional[str] = None

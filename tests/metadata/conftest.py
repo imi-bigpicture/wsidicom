@@ -67,7 +67,7 @@ from wsidicom.metadata.sample import (
     Sample,
     Sampling,
     SlideSample,
-    SpecimenLocalization,
+    SampleLocalization,
     SpecimenIdentifier,
     Staining,
     SamplingLocation,
@@ -402,7 +402,7 @@ def slide_sample(sample: Sample):
             "Sectioning to slide",
         ),
         uid=UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
-        localization=SpecimenLocalization(description="left"),
+        localization=SampleLocalization(description="left"),
     )
 
 
@@ -473,7 +473,7 @@ def slide():
             [part_1.samplings[0]],
         ),
         UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
-        SpecimenLocalization(description="left"),
+        SampleLocalization(description="left"),
     )
 
     sample_2 = SlideSample(
@@ -486,7 +486,7 @@ def slide():
             [part_2.samplings[0]],
         ),
         UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445424"),
-        SpecimenLocalization(description="right"),
+        SampleLocalization(description="right"),
     )
 
     stainings = [

@@ -30,7 +30,13 @@ class Series:
     Common Series Module:
     https://dicom.nema.org/medical/Dicom/current/output/chtml/part03/sect_C.7.3.html
 
-    The `Modality` attribute is fixed to `SM`.
+
+    Parameters
+    ----------
+    uid : Optional[UID] = None
+        The series instance UID.
+    number : Optional[int] = None
+        The series number.
     """
 
     uid: Optional[UID] = None

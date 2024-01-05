@@ -25,9 +25,20 @@ class Slide:
     """
     Metadata for a slide.
 
-    A slide has a an identifier and contains one or more samples. The position of the
-    samples can be specified using a SampleLocation. All the samples on the slide has
-    been stained with the same stainings.
+    A slide has a an identifier and contains one or more samples. All the samples on the
+    slide has been stained with the same stainings.
+
+    Corresponds to attributes in the Specimen Module:
+    https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.6.22.html
+
+    Parameters
+    ----------
+    identifier : Optional[str] = None
+        The identifier of the slide (Container Identifier).
+    stainings : Optional[Sequence[Staining]] = None
+        List of stainings used on the slide.
+    samples : Optional[Sequence[SlideSample]] = None
+        List of samples on the slide.
     """
 
     identifier: Optional[str] = None

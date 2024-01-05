@@ -23,12 +23,24 @@ from wsidicom.geometry import Orientation, PointMm, RegionMm, SizeMm
 
 
 class FocusMethod(Enum):
+    """Focus methods."""
+
     AUTO = "auto"
     MANUAL = "manual"
 
 
 @dataclass
 class ExtendedDepthOfField:
+    """Extended depth of field.
+
+    Parameters
+    ----------
+    number_of_focal_planes : int
+        The number of focal planes used for extended depth of field.
+    distance_between_focal_planes : float
+        The distance between the focal planes used for extended depth of field.
+    """
+
     number_of_focal_planes: int
     distance_between_focal_planes: float
 
@@ -38,6 +50,16 @@ GeometryType = TypeVar("GeometryType", PointMm, RegionMm)
 
 @dataclass
 class ImageCoordinateSystem:
+    """Image coordinate system.
+
+    Parameters
+    ----------
+    origin : PointMm
+        The position of the top left pixel in the slide coorindate system.
+    rotation : float
+        The rotation of the image in degrees in the slide coordinate system.
+    """
+
     origin: PointMm
     rotation: float
 
@@ -76,6 +98,23 @@ class Image:
     Corresponds to the `Required, Empty if Unknown` attributes in the Slide Label
     module:
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.8.12.8.html
+
+    Parameters
+    ----------
+    acquisition_datetime : Optional[datetime.datetime] = None
+        The acquisition datetime of the image.
+    focus_method : Optional[FocusMethod] = None
+        The focus method used for imaging.
+    extended_depth_of_field : Optional[ExtendedDepthOfField] = None
+        Describes if extended depth of field has been used for imaging.
+    image_coordinate_system : Optional[ImageCoordinateSystem] = None
+        The image coordinate system in relation the slide frame of reference.
+    pixel_spacing : Optional[SizeMm] = None
+        The pixel spacing in mm per pixel.
+    focal_plane_spacing : Optional[float] = None
+        The spacing between focal planes if image with multiple focal planes.
+    depth_of_field : Optional[float] = None
+        The depth of field of the image.
     """
 
     acquisition_datetime: Optional[datetime.datetime] = None

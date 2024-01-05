@@ -47,7 +47,7 @@ from wsidicom.metadata.sample import (
     Measurement,
     SamplingLocation,
     SpecimenIdentifier,
-    SpecimenLocalization,
+    SampleLocalization,
 )
 from wsidicom.metadata.schema.dicom.optical_path import LutDicomParser
 from wsidicom.metadata.schema.dicom.sample.model import (
@@ -634,7 +634,7 @@ def create_description_dataset(
     slide_sample_id: str,
     slide_sample_uid: UID,
     primary_anatomic_structures: Optional[Sequence[Code]] = None,
-    sample_localization: Optional[SpecimenLocalization] = None,
+    sample_localization: Optional[SampleLocalization] = None,
     short_description: Optional[str] = None,
     detailed_description: Optional[str] = None,
     preparation_step_datasets: Optional[Sequence[Dataset]] = None,
@@ -692,9 +692,7 @@ def create_description_dataset(
                     sample_localization.visual_marking,
                 )
             )
-        description.SpecimenLocalizationContentItemSequence = (
-            sample_localization_sequence
-        )
+        description.SampleLocalizationContentItemSequence = sample_localization_sequence
     return description
 
 

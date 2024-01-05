@@ -32,6 +32,32 @@ from wsidicom.metadata.study import Study
 
 @dataclass
 class WsiMetadata:
+    """Metadata for a whole slide image.
+
+    Parameters
+    ----------
+    study: Study
+        Metadata of the study the image belongs to.
+    series: Series
+        Metadata of the series the image belongs to.
+    patient: Patient
+        Metadata of the patient the related to the imaged slide.
+    equipment: Equipment
+        Metadata of the scanner equipment used to acquire the image.
+    optical_paths: Sequence[OpticalPath]
+        Metadata of the optical paths used to acquire the image.
+    slide: Slide
+        Metadata of the imaged slide.
+    label: Label
+        Metadata of the label of the slide.
+    image: Image
+        Technical metadata of the image.
+    frame_of_reference_uid: Optional[UID] = None
+        The frame of reference uid of the image.
+    dimension_organization_uids: Optional[Sequence[UID]] = None
+        The dimension organization uids of the image.
+    """
+
     study: Study
     series: Series
     patient: Patient

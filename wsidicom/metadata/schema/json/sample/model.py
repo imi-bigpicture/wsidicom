@@ -43,7 +43,7 @@ from wsidicom.metadata.sample import (
     SlideSample,
     BaseSpecimen,
     SpecimenIdentifier,
-    SpecimenLocalization,
+    SampleLocalization,
     UnknownSampling,
 )
 
@@ -265,7 +265,7 @@ class SlideSampleJsonModel(BaseSpecimenJsonModel):
     anatomical_sites: Optional[Sequence[Code]] = None
     sampled_from: Optional[SamplingConstraintJsonModel] = None
     uid: Optional[UID] = None
-    localization: Optional[SpecimenLocalization] = None
+    localization: Optional[SampleLocalization] = None
     short_description: Optional[str] = None
     detailed_description: Optional[str] = None
 

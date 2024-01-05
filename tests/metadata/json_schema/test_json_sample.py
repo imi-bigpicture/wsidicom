@@ -41,7 +41,7 @@ from wsidicom.metadata.schema.json.sample.schema import (
     SamplingJsonModel,
     SlideSampleJsonSchema,
     BaseSpecimenJsonSchema,
-    SpecimenLocalizationJsonSchema,
+    SampleLocalizationJsonSchema,
 )
 from wsidicom.metadata.sample import (
     Collection,
@@ -55,7 +55,7 @@ from wsidicom.metadata.sample import (
     Sampling,
     SamplingLocation,
     SlideSample,
-    SpecimenLocalization,
+    SampleLocalization,
     Storage,
     UnknownSampling,
 )
@@ -66,7 +66,7 @@ class TestSampleJsonSchema:
         ["localization", "expected"],
         [
             (
-                SpecimenLocalization(
+                SampleLocalization(
                     "reference",
                     "description",
                     Measurement(1, UnitCode("mm")),
@@ -93,7 +93,7 @@ class TestSampleJsonSchema:
                 },
             ),
             (
-                SpecimenLocalization(),
+                SampleLocalization(),
                 {
                     "reference": None,
                     "description": None,
@@ -106,12 +106,12 @@ class TestSampleJsonSchema:
         ],
     )
     def test_specimen_localization_serialize(
-        self, localization: SpecimenLocalization, expected: Dict[str, Any]
+        self, localization: SampleLocalization, expected: Dict[str, Any]
     ):
         # Arrange
 
         # Act
-        dumped = SpecimenLocalizationJsonSchema().dump(localization)
+        dumped = SampleLocalizationJsonSchema().dump(localization)
 
         # Assert
         assert isinstance(dumped, dict)
@@ -138,7 +138,7 @@ class TestSampleJsonSchema:
                     },
                     "visual_marking": "marking",
                 },
-                SpecimenLocalization(
+                SampleLocalization(
                     "slide",
                     "left",
                     Measurement(1, UnitCode("mm")),
@@ -147,19 +147,19 @@ class TestSampleJsonSchema:
                     "marking",
                 ),
             ),
-            ({}, SpecimenLocalization()),
+            ({}, SampleLocalization()),
         ],
     )
     def test_specimen_localization_deserialize(
-        self, localization: Dict[str, Any], expected: SpecimenLocalization
+        self, localization: Dict[str, Any], expected: SampleLocalization
     ):
         # Arrange
 
         # Act
-        loaded = SpecimenLocalizationJsonSchema().load(localization)
+        loaded = SampleLocalizationJsonSchema().load(localization)
 
         # Assert
-        assert isinstance(loaded, SpecimenLocalization)
+        assert isinstance(loaded, SampleLocalization)
         assert loaded == expected
 
     def test_sampling_constraint_serialize(self, extracted_specimen: Specimen):

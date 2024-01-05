@@ -30,6 +30,21 @@ class Study:
     Corresponds to the `Required` and `Required, Empty if Unknown` attributes in the
     General Study Module:
     https://dicom.nema.org/medical/Dicom/current/output/chtml/part03/sect_C.7.2.html
+
+    Parameters
+    ----------
+    uid : Optional[UID] = None
+        The study instance UID.
+    identifier : Optional[str] = None
+        The study identifier (study ID).
+    date : Optional[datetime.date] = None
+        The date the study was performed.
+    time : Optional[datetime.time] = None
+        The time the study was performed.
+    accession_number : Optional[str] = None
+        The accession number of the study.
+    referring_physician_name : Optional[str] = None
+        The name of the referring physician.
     """
 
     uid: Optional[UID] = None

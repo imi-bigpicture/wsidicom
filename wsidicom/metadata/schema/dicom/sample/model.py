@@ -50,7 +50,7 @@ from wsidicom.metadata.sample import (
     Sampling,
     SamplingLocation,
     SpecimenIdentifier,
-    SpecimenLocalization,
+    SampleLocalization,
     Staining,
     Storage,
     UnknownSampling,
@@ -481,7 +481,7 @@ class SpecimenDescriptionDicomModel:
     issuer_of_identifier: Optional[IssuerOfIdentifier] = None
     short_description: Optional[str] = None
     detailed_description: Optional[str] = None
-    localization: Optional[SpecimenLocalization] = None
+    localization: Optional[SampleLocalization] = None
 
     @property
     def specimen_identifier(self) -> Union[str, SpecimenIdentifier]:

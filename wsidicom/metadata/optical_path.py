@@ -14,7 +14,7 @@
 
 """Optical path model."""
 
-from abc import abstractmethod
+from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from typing import Generic, Optional, Sequence, Type, TypeVar, Union
 
@@ -31,13 +31,16 @@ from wsidicom.conceptcode import (
 LutDataType = Type[Union[np.uint8, np.uint16]]
 
 
-class LutSegment:
+class LutSegment(metaclass=ABCMeta):
+    """Metaclass for a LUT segment."""
+
     @abstractmethod
     def __len__(self) -> int:
         raise NotImplementedError()
 
     @abstractmethod
     def array(self, data_type: LutDataType) -> np.ndarray:
+        """Return the segment as an array of the given data type."""
         raise NotImplementedError()
 
 
@@ -46,7 +49,13 @@ class DiscreteLutSegment(LutSegment):
     """A discrete segmented defined by a sequence of values.
 
     Note that when serializing, if the next segment is a Linear segment its start value
-    will be included in this segment."""
+    will be included in this segment.
+
+    Parameters
+    ----------
+    values: Sequence[int]
+        The discrete values of the segment.
+    """
 
     values: Sequence[int]
 
@@ -64,7 +73,17 @@ class LinearLutSegment(LutSegment):
     Note that the corresponding Dicom Linear Segment Type does not define the start
     value. When serialized to Dicom the start value will be included in the previous
     segment (as last value in a Discrete or Linear segment) and the length reduced by
-    one."""
+    one.
+
+    Parameters
+    ----------
+    start_value: int
+        The start value of the linear segment.
+    end_value: int
+        The end value of the linear segment.
+    length: int
+        The length of the linear segment.
+    """
 
     start_value: int
     end_value: int
@@ -84,7 +103,15 @@ class LinearLutSegment(LutSegment):
 
 @dataclass
 class ConstantLutSegment(LutSegment):
-    """A constant segment defined by a value and a length."""
+    """A constant segment defined by a value and a length.
+
+    Parameters
+    ----------
+    value: int
+        The value of the constant segment.
+    length: int
+        The length of the constant segment.
+    """
 
     value: int
     length: int
@@ -102,7 +129,19 @@ class ConstantLutSegment(LutSegment):
 
 @dataclass
 class Lut:
-    """Represents a LUT."""
+    """Represents a LUT.
+
+    Parameters
+    ----------
+    red: Sequence[LutSegment]
+        The red segments of the LUT.
+    green: Sequence[LutSegment]
+        The green segments of the LUT.
+    blue: Sequence[LutSegment]
+        The blue segments of the LUT.
+    data_type: LutDataType
+        The data type of the LUT.
+    """
 
     red: Sequence[LutSegment]
     green: Sequence[LutSegment]
@@ -173,7 +212,19 @@ OpticalFilterType = TypeVar("OpticalFilterType", bound="OpticalFilter")
 
 @dataclass
 class OpticalFilter(Generic[OpticalFilterCodeType]):
-    """Metaclass for filter conditions for optical path."""
+    """Metaclass for filter conditions for optical path.
+
+    Parameters
+    ----------
+    filters: Sequence[OpticalFilterCodeType] = []
+        The filters used.
+    nominal: Optional[float] = None
+        The nominal value of the filter in nm.
+    low_pass: Optional[float] = None
+        The low pass value of the filter in nm.
+    high_pass: Optional[float] = None
+        The high pass value of the filter in nm.
+    """
 
     filters: Sequence[OpticalFilterCodeType] = field(default_factory=list)
     nominal: Optional[float] = None
@@ -182,17 +233,59 @@ class OpticalFilter(Generic[OpticalFilterCodeType]):
 
 
 class LightPathFilter(OpticalFilter[LightPathFilterCode]):
-    """Set of light path filter conditions for optical path."""
+    """Set of light path filter conditions for optical path.
+
+    Parameters
+    ----------
+    filters: Sequence[LightPathFilterCode] = []
+        The filters used. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8124.html
+        or `LightPathFilterCode.meanings` for a list of valid codes.
+    nominal: Optional[float] = None
+        The nominal value of the filter in nm.
+    low_pass: Optional[float] = None
+        The low pass value of the filter in nm.
+    high_pass: Optional[float] = None
+        The high pass value of the filter in nm.
+    """
 
 
 @dataclass
 class ImagePathFilter(OpticalFilter[ImagePathFilterCode]):
-    """Set of image path filter conditions for optical path."""
+    """Set of image path filter conditions for optical path.
+
+    Parameters
+    ----------
+    filters: Sequence[ImagePathFilterCode] = []
+        The filters used. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8124.html
+        or ImagePathFilterCode.meanings` for a list of valid codes.
+    nominal: Optional[float] = None
+        The nominal value of the filter in nm.
+    low_pass: Optional[float] = None
+        The low pass value of the filter in nm.
+    high_pass: Optional[float] = None
+        The high pass value of the filter in nm.
+    """
 
 
 @dataclass
 class Objectives:
-    """Set of lens conditions for optical path."""
+    """Set of lens conditions for optical path.
+
+    Parameters
+    ----------
+    lenses: Sequence[LenseCode] = []
+        Lenses used. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8121.html
+        or `LensCode.meanings` for a list of valid codes.
+    condenser_power: Optional[float] = None
+        The condenser power.
+    objective_power: Optional[float] = None
+        The objective power.
+    objective_numerical_aperature: Optional[float] = None
+        The objective numerical aperature.
+    """
 
     lenses: Sequence[LenseCode] = field(default_factory=list)
     condenser_power: Optional[float] = None
@@ -208,6 +301,26 @@ class OpticalPath:
     Corresponds to the `Required`, `Required, Empty if Unknown`, and selected
     `Optional` attributes for an Optical Path Sequence item in the Optical Path Module:
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.html
+
+    Parameters
+    identifier : Optional[str] = None
+        Identifier of the optical path.
+    description : Optional[str] = None
+        Description of the optical path.
+    illumination_types : Optional[Sequence[IlluminationCode]] = None
+        Illumination types used in the optical path.
+    illumination : Optional[Union[float, IlluminationColorCode]] = None
+        Illumination used in the optical path.
+    icc_profile : Optional[bytes] = None
+        ICC profile for the optical path.
+    lut : Optional[Lut] = None
+        Lookup table to use for the optical path.
+    light_path_filter : Optional[LightPathFilter] = None
+        Light path filter used in th optical path.
+    image_path_filter : Optional[ImagePathFilter] = None
+        Image path filter used in the optical path.
+    objective : Optional[Objectives] = None
+        Objectives used in the optical path.
     """
 
     identifier: Optional[str] = None

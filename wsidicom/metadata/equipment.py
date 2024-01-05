@@ -25,6 +25,17 @@ class Equipment:
 
     Corresponds to the `Required` attributes in the Enhanced General Equipment Module:
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.5.2.html
+
+    Parameters
+    ----------
+    manufacturer : Optional[str] = None
+        The scanner manufacturer.
+    model_name : Optional[str] = None
+        The scanner model name.
+    device_serial_number : Optional[str] = None
+        The scanner device serial number.
+    software_versions : Optional[Sequence[str]] = None
+        The scanner software versions.
     """
 
     manufacturer: Optional[str] = None

@@ -23,6 +23,8 @@ from pydicom.sr.coding import Code
 
 
 class PatientSex(Enum):
+    """Patient sex."""
+
     F = "female"
     M = "male"
     O = "other"
@@ -30,6 +32,16 @@ class PatientSex(Enum):
 
 @dataclass
 class PatientDeIdentification:
+    """Patient de-identification.
+
+    Parameters
+    ----------
+    identity_removed : bool
+        Whether the patient identity has been removed.
+    methods : Optional[Sequence[Union[str, Code]]] = None
+        The methods used to de-identify the patient.
+    """
+
     identity_removed: bool
     methods: Optional[Sequence[Union[str, Code]]] = None
 
@@ -43,6 +55,20 @@ class Patient:
     Patient Module:
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.html
 
+    Parameters
+    ----------
+    name : Optional[str] = None
+        The patient name.
+    identifier : Optional[str] = None
+        The patient identifier.
+    birth_date : Optional[datetime.date] = None
+        The patient birth date.
+    sex : Optional[PatientSex] = None
+        The sex of the patient.
+    species_description : Optional[Union[str, Code]] = None
+        The species description of the patient.
+    de_identification : Optional[PatientDeIdentification] = None
+        The de-identification of the patient.
     """
 
     name: Optional[str] = None

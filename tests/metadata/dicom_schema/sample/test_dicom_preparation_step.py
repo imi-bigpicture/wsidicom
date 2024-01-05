@@ -43,7 +43,7 @@ from wsidicom.metadata.sample import (
     LocalIssuerOfIdentifier,
     Measurement,
     SpecimenIdentifier,
-    SpecimenLocalization,
+    SampleLocalization,
 )
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
@@ -59,7 +59,7 @@ from wsidicom.metadata.schema.dicom.sample.schema import (
     ReceivingDicomSchema,
     SampleCodes,
     SamplingDicomSchema,
-    SpecimenLocalizationDicomSchema,
+    SampleLocalizationDicomSchema,
     StainingDicomSchema,
     StorageDicomSchema,
 )
@@ -163,7 +163,7 @@ class TestPreparationStepDicomSchema:
         "location",
         [
             None,
-            SpecimenLocalization(
+            SampleLocalization(
                 "reference",
                 "description",
                 Measurement(1, UnitCode("cm")),
@@ -257,7 +257,7 @@ class TestPreparationStepDicomSchema:
         "location",
         [
             None,
-            SpecimenLocalization(
+            SampleLocalization(
                 "reference",
                 "description",
                 Measurement(1, UnitCode("cm")),
@@ -499,7 +499,7 @@ class TestPreparationStepDicomSchema:
         assert deserialized.specimen_type == storage_dicom.specimen_type
 
 
-class TestSpecimenLocalizationDicomSchema:
+class TestSampleLocalizationDicomSchema:
     @pytest.mark.parametrize("reference", ["reference", None])
     @pytest.mark.parametrize("description", ["description", None])
     @pytest.mark.parametrize("x", [Measurement(1, UnitCode("mm")), None])
@@ -516,7 +516,7 @@ class TestSpecimenLocalizationDicomSchema:
         visual_marking: Optional[str],
     ):
         # Arrange
-        location = SpecimenLocalization(
+        location = SampleLocalization(
             reference=reference,
             description=description,
             x=x,
@@ -524,7 +524,7 @@ class TestSpecimenLocalizationDicomSchema:
             z=z,
             visual_marking=visual_marking,
         )
-        schema = SpecimenLocalizationDicomSchema()
+        schema = SampleLocalizationDicomSchema()
 
         # Act
         serialized = schema.dump(location)
@@ -600,13 +600,13 @@ class TestSpecimenLocalizationDicomSchema:
                     SampleCodes.visual_marking_of_specimen, visual_marking
                 )
             )
-        schema = SpecimenLocalizationDicomSchema()
+        schema = SampleLocalizationDicomSchema()
 
         # Act
         deserialized = schema.load(sequence)
 
         # Assert
-        assert isinstance(deserialized, SpecimenLocalization)
+        assert isinstance(deserialized, SampleLocalization)
         assert deserialized.reference == reference
         assert deserialized.description == description
         assert deserialized.x == x

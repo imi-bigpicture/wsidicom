@@ -47,7 +47,7 @@ from wsidicom.metadata.schema.dicom.sample.model import (
 from wsidicom.metadata.sample import (
     Collection,
     SamplingLocation,
-    SpecimenLocalization,
+    SampleLocalization,
     SpecimenIdentifier,
     Sampling,
     Processing,
@@ -104,7 +104,7 @@ def block_type():
 
 @pytest.fixture()
 def specimen_localization():
-    yield SpecimenLocalization(description="left")
+    yield SampleLocalization(description="left")
 
 
 @pytest.fixture()

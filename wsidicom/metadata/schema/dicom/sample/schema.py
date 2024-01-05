@@ -68,7 +68,7 @@ from wsidicom.metadata.schema.dicom.schema import (
     ItemSequenceDicomSchema,
     LoadType,
 )
-from wsidicom.metadata.sample import Measurement, SpecimenLocalization
+from wsidicom.metadata.sample import Measurement, SampleLocalization
 
 
 class SampleCodes:
@@ -103,7 +103,7 @@ class SampleCodes:
     storage: Code = codes.DCM.SpecimenStorage  # type: ignore
 
 
-class SpecimenLocalizationDicomSchema(ItemSequenceDicomSchema[SpecimenLocalization]):
+class SampleLocalizationDicomSchema(ItemSequenceDicomSchema[SampleLocalization]):
     reference = StringItemDicomField(allow_none=True)
     description = StringItemDicomField(allow_none=True)
     x = MeasurementtemDicomField(allow_none=True)
@@ -113,7 +113,7 @@ class SpecimenLocalizationDicomSchema(ItemSequenceDicomSchema[SpecimenLocalizati
 
     @property
     def load_type(self):
-        return SpecimenLocalization
+        return SampleLocalization
 
     @property
     def item_fields(self) -> Dict[str, ItemField]:
@@ -439,8 +439,8 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     identifier = StringDicomField(data_key="SpecimenIdentifier")
     uid = StringDicomField(data_key="SpecimenUID")
     localization = marshmallow.fields.Nested(
-        SpecimenLocalizationDicomSchema(),
-        data_key="SpecimenLocalizationContentItemSequence",
+        SampleLocalizationDicomSchema(),
+        data_key="SampleLocalizationContentItemSequence",
         allow_none=True,
     )
     issuer_of_identifier = IssuerOfIdentifierDicomField(

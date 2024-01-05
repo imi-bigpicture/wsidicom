@@ -50,7 +50,7 @@ class UniversalIssuerType(Enum):
 
 
 class IssuerOfIdentifier(metaclass=ABCMeta):
-    """Metaclass for an issuer of an identifier."""
+    """Metaclass for an issuer of an issuer of identifier."""
 
     @abstractmethod
     def to_hl7v2(self) -> str:
@@ -80,7 +80,13 @@ class IssuerOfIdentifier(metaclass=ABCMeta):
 
 @dataclass(unsafe_hash=True)
 class LocalIssuerOfIdentifier(IssuerOfIdentifier):
-    """A local issuer of an identifier."""
+    """A local issuer of an identifier.
+
+    Parameters
+    ----------
+    identifier: str
+        The identifier of the local issuer.
+    """
 
     identifier: str
 
@@ -90,7 +96,17 @@ class LocalIssuerOfIdentifier(IssuerOfIdentifier):
 
 @dataclass(unsafe_hash=True)
 class UniversalIssuerOfIdentifier(IssuerOfIdentifier):
-    """A universal issuer of an identifier. Can optionally also define a local identifier."""
+    """A universal issuer of an identifier.
+
+    Parameters
+    ----------
+    identifier: str
+        The identifier of the universal issuer.
+    issuer_type: UniversalIssuerType
+        The type of the universal issuer.
+    local_identifier: Optional[str] = None
+        Optional local identifier of the universal issuer.
+    """
 
     identifier: str
     issuer_type: UniversalIssuerType
@@ -104,6 +120,16 @@ class UniversalIssuerOfIdentifier(IssuerOfIdentifier):
 
 @dataclass
 class Measurement:
+    """A measurement with a value and a unit.
+
+    Parameters
+    ----------
+    value: float
+        The value of the measurement.
+    unit: UnitCode
+        The unit of the measurement.
+    """
+
     value: float
     unit: UnitCode
 
@@ -135,8 +161,8 @@ class SamplingLocation:
 
 
 @dataclass
-class SpecimenLocalization(SamplingLocation):
-    """The location of a specimen.
+class SampleLocalization(SamplingLocation):
+    """The location of a sample on a slide.
 
     Parameters
     ----------
@@ -152,7 +178,7 @@ class SpecimenLocalization(SamplingLocation):
     z: Optional[Measurement] = None
         The z-coordinate of the location.
     visual_marking: Optional[str] = None
-        Description of visual marking of the specimen, for example ink or shape.
+        Description of visual marking of the sample, for example ink or shape.
     """
 
     visual_marking: Optional[str] = None
@@ -160,7 +186,15 @@ class SpecimenLocalization(SamplingLocation):
 
 @dataclass(unsafe_hash=True)
 class SpecimenIdentifier:
-    """A specimen identifier including an optional issuer."""
+    """A specimen identifier including an optional issuer.
+
+    Parameters
+    ----------
+    value: str
+        The value of the identifier.
+    issuer: Optional[IssuerOfIdentifier] = None
+        Optional issuer of the identifier.
+    """
 
     value: str
     issuer: Optional[IssuerOfIdentifier] = None
@@ -218,9 +252,27 @@ class Sampling(BaseSampling):
     """
     The sampling of a specimen into samples that can be used to create new specimens.
 
-    See
-    https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8110.html
-    for allowed sampling methods.
+    Parameters
+    ----------
+    specimen: BaseSpecimen
+        The specimen that was sampled.
+    method: SpecimenSamplingProcedureCode
+        Method used for sampling. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8110.html
+        or `SpecimenSamplingProcedureCode.meanings` for allowed sampling methods.
+    specimen_type: AnatomicPathologySpecimenTypesCode
+        The type of the specimen. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8103.html
+         or `AnatomicPathologySpecimenTypesCode.meanings` for allowed specimen types.
+    sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
+        Optional constraints on the sampling chain. The constraints can be used to
+        define a single branch from the sample to a end specimen in the sampling chain.
+    date_time: Optional[datetime.datetime] = None
+        Optional date and time when the sampling was performed.
+    description: Optional[str] = None
+        Optional description of the sampling.
+    location: Optional[SamplingLocation] = None
+        Optional location of the sampling in the parent specimen.
     """
 
     specimen: "BaseSpecimen"
@@ -238,8 +290,16 @@ class UnknownSampling(BaseSampling):
     Represent an unknown relation between a parent specimen and a child sample.
 
     The relation between the parent and child can be direct (e.g. from block to slide)
-    or several steps in between can be missing (e.g. from specimen to slide). If possible
-    it is preferred to use the `Sampling` class instead.
+    or several steps in between can be missing (e.g. from specimen to slide). If
+    possible is preferred to use the `Sampling` class instead.
+
+    Parameters
+    ----------
+    specimen: BaseSpecimen
+        The specimen that was sampled.
+    sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
+        Optional constraints on the sampling chain. The constraints should be used to
+        define a single branch for the sample in the sampling chain.
     """
 
     specimen: "BaseSpecimen"
@@ -251,9 +311,16 @@ class Collection(PreparationStep):
     """
     The collection of a specimen from a body.
 
-    See
-    https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8109.html
-    for allowed collection methods.
+    Parameters
+    ----------
+    method: SpecimenCollectionProcedureCode
+        Method used for collection. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8109.html
+        or `SpecimenCollectionProcedureCode.meanings` for allowed collection methods.
+    date_time: Optional[datetime.datetime] = None
+        Optional date and time when the collection was performed.
+    description: Optional[str] = None
+        Optional description of the collection.
     """
 
     method: SpecimenCollectionProcedureCode
@@ -266,9 +333,16 @@ class Processing(PreparationStep):
     """
     Other processing steps, such as heating or clearing, made on a specimen.
 
-    See
-    https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8113.html
-    for allowed processing methods.
+    Parameters
+    ----------
+    method: SpecimenPreparationStepsCode
+        Method used for processing. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8113.html
+        or `SpecimenPreparationStepsCode.meanings` for allowed processing methods.
+    date_time: Optional[datetime.datetime] = None
+        Optional date and time when the processing was performed.
+    description: Optional[str] = None
+        Optional description of the processing.
     """
 
     method: Optional[SpecimenPreparationStepsCode] = None
@@ -281,9 +355,16 @@ class Embedding(PreparationStep):
     """
     Embedding of a specimen in an medium.
 
-    See
-    https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8115.html
-    for allowed mediums.
+    Parameters
+    ----------
+    medium: SpecimenEmbeddingMediaCode
+        The medium used for embedding. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8115.html
+        or `SpecimenEmbeddingMediaCode.meanings` for allowed mediums.
+    date_time: Optional[datetime.datetime] = None
+        Optional date and time when the embedding was performed.
+    description: Optional[str] = None
+        Optional description of the embedding.
     """
 
     medium: SpecimenEmbeddingMediaCode
@@ -296,9 +377,16 @@ class Fixation(PreparationStep):
     """
     Fixation of a specimen using a fixative.
 
-    See
-    https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8114.html
-    for allowed fixatives.
+    Parameters
+    ----------
+    fixative: SpecimenFixativesCode
+        The fixative used for fixation. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8114.html
+        or `SpecimenFixativesCode.meanings` for allowed fixatives.
+    date_time: Optional[datetime.datetime] = None
+        Optional date and time when the fixation was performed.
+    description: Optional[str] = None
+        Optional description of the fixation.
     """
 
     fixative: SpecimenFixativesCode
@@ -311,9 +399,16 @@ class Staining(PreparationStep):
     """
     Staining of a specimen using staining substances.
 
-    The substances can be given either as string or coded values. See
-    https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8112.html
-    for allowed stain codes.
+    Parameters
+    ----------
+    substances: Sequence[Union[str, SpecimenStainsCode]]
+        The substances used for staining. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8112.html
+        pr SpecimenStainsCode.meanings` for allowed stain codes.
+    date_time: Optional[datetime.datetime] = None
+        Optional date and time when the staining was performed.
+    description: Optional[str] = None
+        Optional description of the staining.
     """
 
     substances: Sequence[Union[str, SpecimenStainsCode]]
@@ -323,12 +418,34 @@ class Staining(PreparationStep):
 
 @dataclass
 class Receiving(PreparationStep):
+    """
+    Reception of a specimen.
+
+    Parameters
+    ----------
+    date_time: Optional[datetime.datetime] = None
+        Optional date and time when the reception was performed.
+    description: Optional[str] = None
+        Optional description of the reception.
+    """
+
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
 
 
 @dataclass
 class Storage(PreparationStep):
+    """
+    Storage of a specimen.
+
+    Parameters
+    ----------
+    date_time: Optional[datetime.datetime] = None
+        Optional date and time when the storage was performed.
+    description: Optional[str] = None
+        Optional description of the storage.
+    """
+
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
 
@@ -462,7 +579,25 @@ class Specimen(BaseSpecimen):
     """A specimen that has been extracted/taken from a patient in some way. Does not
     need to represent the actual first specimen in the collection chain, but should
     represent the first known (i.e. that we have metadata for) specimen in the
-    collection chain."""
+    collection chain.
+
+    Parameters
+    ----------
+    identifier: Union[str, SpecimenIdentifier]
+        The identifier of the specimen.
+    extraction_step: Optional[Collection] = None
+        Optional collection step for the specimen.
+    type: Optional[AnatomicPathologySpecimenTypesCode] = None
+        Optional type of the specimen. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8103.html
+        or `AnatomicPathologySpecimenTypesCode.meanings` for allowed specimen types.
+    steps: Sequence[PreparationStep] = []
+        Optional sequence of preparation steps for the specimen.
+    container: Optional[ContainerTypeCode] = None
+        Optional container type of the specimen. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8101.html
+        or `ContainerTypeCode.meanings` for allowed container types.
+    """
 
     identifier: Union[str, SpecimenIdentifier]
     extraction_step: Optional[Collection] = None
@@ -520,7 +655,25 @@ class Specimen(BaseSpecimen):
 
 @dataclass
 class Sample(SampledSpecimen):
-    """A specimen that has been sampled from one or more other specimens."""
+    """A specimen that has been sampled from one or more other specimens.
+
+    Parameters
+    ----------
+    identifier: Union[str, SpecimenIdentifier]
+        The identifier of the sample.
+    sampled_from: Sequence[BaseSampling]
+        Sequence of samplings that the sample was made from.
+    type: Optional[AnatomicPathologySpecimenTypesCode] = None
+        Optional type of the sample. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8103.html
+        or `AnatomicPathologySpecimenTypesCode.meanings` for allowed specimen types.
+    steps: Sequence[PreparationStep] = []
+        Optional sequence of preparation steps for the sample.
+    container: Optional[ContainerTypeCode] = None
+        Optional container type of the sample. See
+        https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8101.html
+        or `ContainerTypeCode.meanings` for allowed container types.
+    """
 
     identifier: Union[str, SpecimenIdentifier]
     sampled_from: Sequence[BaseSampling]
@@ -572,13 +725,33 @@ class Sample(SampledSpecimen):
 
 @dataclass
 class SlideSample(SampledSpecimen):
-    """A sample that has been placed on a slide."""
+    """A sample that has been placed on a slide.
+
+    Parameters
+    ----------
+    identifier: Union[str, SpecimenIdentifier]
+        The identifier of the slide sample.
+    anatomical_sites: Optional[Sequence[Code]] = None
+        Optional primary anatomic structures of interest in the slide sample.
+    sampled_from: Optional[BaseSampling] = None
+        Optional sampling that the slide sample was made from.
+    uid: Optional[UID] = None
+        Optional UID of the slide sample.
+    localization: Optional[SampleLocalization] = None
+        Optional localization of the slide sample on the slide.
+    steps: Sequence[PreparationStep] = []
+        Optional sequence of preparation steps for the slide sample.
+    short_description: Optional[str] = None
+        Optional short description of the slide sample. Should max be 64 characters.
+    detailed_description: Optional[str] = None
+        Optional detailed description of the slide sample.
+    """
 
     identifier: Union[str, SpecimenIdentifier]
     anatomical_sites: Optional[Sequence[Code]] = None
     sampled_from: Optional[BaseSampling] = None
     uid: Optional[UID] = None
-    localization: Optional[SpecimenLocalization] = None
+    localization: Optional[SampleLocalization] = None
     steps: List[PreparationStep] = field(default_factory=list)
     short_description: Optional[str] = None
     detailed_description: Optional[str] = None
