@@ -605,6 +605,7 @@ class CodeItemDicomField(ContentItemDicomField[Code]):
         code_dataset.CodeMeaning = value.meaning
         code_dataset.CodingSchemeVersion = value.scheme_version
         dataset = Dataset()
+        dataset.ValueType = "CODE"
         dataset.ConceptCodeSequence = [code_dataset]
         return dataset
 
@@ -626,6 +627,7 @@ class StringItemDicomField(ContentItemDicomField[str]):
         if value is None:
             return None
         dataset = Dataset()
+        dataset.ValueType = "TEXT"
         dataset.TextValue = value
         return dataset
 
@@ -649,7 +651,7 @@ class StringOrCodeItemDicomField(ContentItemDicomField[Union[str, Code]]):
         return self._code_field._serialize(value, attr, obj, **kwargs)
 
     def _deserialize(self, dataset: Dataset, attr: str, obj: Any, **kwargs):
-        if hasattr(dataset, "TextValue"):
+        if dataset.ValueType == "TEXT" or hasattr(dataset, "TextValue"):
             return self._string_field.deserialize(dataset, attr, obj, **kwargs)
         return self._code_field.deserialize(dataset, attr, obj, **kwargs)
 
@@ -665,6 +667,7 @@ class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime]):
         if value is None:
             return None
         dataset = Dataset()
+        dataset.ValueType = "DATETIME"
         dataset.DateTime = DT(value)
         return dataset
 
@@ -682,6 +685,7 @@ class MeasurementtemDicomField(ContentItemDicomField[Measurement]):
         if value is None:
             return None
         dataset = Dataset()
+        dataset.ValueType = "NUMERIC"
         dataset.NumericValue = DSfloat(value.value)
         dataset.FloatingPointValue = value.value
         unit_dataset = Dataset()

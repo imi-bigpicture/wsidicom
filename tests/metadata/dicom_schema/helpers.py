@@ -759,12 +759,14 @@ def create_code_dataset(code: Union[Code, ConceptCode]):
 def create_string_item(name: Code, value: str):
     dataset = Dataset()
     dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
+    dataset.ValueType = "TEXT"
     dataset.TextValue = value
     return dataset
 
 
 def create_datetime_item(name: Code, value: datetime.datetime):
     dataset = Dataset()
+    dataset.ValueType = "DATETIME"
     dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
     dataset.DateTime = value
     return dataset
@@ -772,6 +774,7 @@ def create_datetime_item(name: Code, value: datetime.datetime):
 
 def create_code_item(name: Code, value: Union[Code, ConceptCode]):
     dataset = Dataset()
+    dataset.ValueType = "CODE"
     dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
     dataset.ConceptCodeSequence = [create_code_dataset(value)]
     return dataset
@@ -779,6 +782,7 @@ def create_code_item(name: Code, value: Union[Code, ConceptCode]):
 
 def create_measurement_item(name: Code, value: Measurement):
     dataset = Dataset()
+    dataset.ValueType = "NUMERIC"
     dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
     dataset.NumericValue = DSfloat(value.value)
     dataset.FloatingPointValue = value.value
@@ -788,6 +792,7 @@ def create_measurement_item(name: Code, value: Measurement):
 
 def create_processing_type_item(step: SpecimenPreparationStepDicomModel):
     dataset = Dataset()
+    dataset.ValueType = "CODE"
     dataset.ConceptNameCodeSequence = [create_code_dataset(SampleCodes.processing_type)]
     if isinstance(step, CollectionDicomModel):
         processing_type_code = SampleCodes.specimen_collection

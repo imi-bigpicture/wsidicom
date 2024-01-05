@@ -50,6 +50,8 @@ class TestDicomFields:
 
         # Assert
         assert isinstance(serialized, Dataset)
+        assert "ValueType" in serialized
+        assert serialized.ValueType == "CODE"
         assert "ConceptCodeSequence" in serialized
         assert serialized.ConceptCodeSequence[0].CodeValue == code.value
         assert (
@@ -61,6 +63,7 @@ class TestDicomFields:
     def test_code_content_item_dicom_field_deserialize(self):
         # Arrange
         dataset = Dataset()
+        dataset.ValueType = "CODE"
         code_dataset = Dataset()
         code_dataset.CodeValue = "1234"
         code_dataset.CodingSchemeDesignator = "DCM"
@@ -87,12 +90,15 @@ class TestDicomFields:
 
         # Assert
         assert isinstance(serialized, Dataset)
+        assert "ValueType" in serialized
+        assert serialized.ValueType == "TEXT"
         assert "TextValue" in serialized
         assert serialized.TextValue == value
 
     def test_text_content_item_dicom_field_deserialize(self):
         # Arrange
         dataset = Dataset()
+        dataset.ValueType = "TEXT"
         dataset.TextValue = "test"
         field = StringItemDicomField()
 
@@ -113,12 +119,15 @@ class TestDicomFields:
 
         # Assert
         assert isinstance(serialized, Dataset)
+        assert "ValueType" in serialized
+        assert serialized.ValueType == "DATETIME"
         assert "DateTime" in serialized
         assert serialized.DateTime == value
 
     def test_datetime_content_item_dicom_field_deserialize(self):
         # Arrange
         dataset = Dataset()
+        dataset.ValueType = "DATETIME"
         dataset.DateTime = "20210101"
         field = DateTimeItemDicomField()
 
@@ -141,6 +150,8 @@ class TestDicomFields:
 
         # Assert
         assert isinstance(serialized, Dataset)
+        assert "ValueType" in serialized
+        assert serialized.ValueType == "NUMERIC"
         assert "NumericValue" in serialized
         assert serialized.NumericValue == DSfloat(measurement.value)
         assert "FloatingPointValue" in serialized
@@ -158,6 +169,7 @@ class TestDicomFields:
         value = 1.0
         unit = Code("1234", "DCM", "Test Unit")
         dataset = Dataset()
+        dataset.ValueType = "NUMERIC"
         dataset.NumericValue = DSfloat(1.0)
         dataset.FloatingPointValue = 1.0
         unit_dataset = create_code_dataset(unit)
@@ -183,10 +195,13 @@ class TestDicomFields:
 
         # Assert
         assert isinstance(serialized, Dataset)
+        assert "ValueType" in serialized
         if isinstance(value, str):
+            assert serialized.ValueType == "TEXT"
             assert "TextValue" in serialized
             assert serialized.TextValue == value
         else:
+            assert serialized.ValueType == "CODE"
             assert "ConceptCodeSequence" in serialized
             assert serialized.ConceptCodeSequence[0].CodeValue == value.value
             assert (
@@ -200,8 +215,10 @@ class TestDicomFields:
         # Arrange
         dataset = Dataset()
         if isinstance(value, str):
+            dataset.ValueType = "TEXT"
             dataset.TextValue = value
         else:
+            dataset.ValueType = "CODE"
             code_dataset = Dataset()
             code_dataset.CodeValue = value.value
             code_dataset.CodingSchemeDesignator = value.scheme_designator

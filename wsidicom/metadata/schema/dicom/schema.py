@@ -230,13 +230,14 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
 
     @staticmethod
     def dataset_to_type(dataset: Dataset) -> Type:
-        if "ConceptCodeSequence" in dataset:
+        value_type = dataset.ValueType
+        if value_type == "CODE":
             return Code
-        if "TextValue" in dataset:
+        if value_type == "TEXT":
             return str
-        if "DateTime" in dataset:
+        if value_type == "DATETIME":
             return datetime.datetime
-        if "NumericValue" in dataset:
+        if value_type == "NUMERIC":
             return Measurement
         raise NotImplementedError(
             f"Not implemented type-handling for dataset {dataset}."
