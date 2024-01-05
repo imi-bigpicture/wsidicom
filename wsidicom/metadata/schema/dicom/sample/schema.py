@@ -440,7 +440,7 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     uid = StringDicomField(data_key="SpecimenUID")
     localization = marshmallow.fields.Nested(
         SampleLocalizationDicomSchema(),
-        data_key="SampleLocalizationContentItemSequence",
+        data_key="SpecimenLocalizationContentItemSequence",
         allow_none=True,
     )
     issuer_of_identifier = IssuerOfIdentifierDicomField(

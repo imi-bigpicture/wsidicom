@@ -193,11 +193,15 @@ def assert_dicom_optical_path_equals_optical_path(
     assert dicom_optical_path.OpticalPathIdentifier == optical_path.identifier
     if optical_path.description is not None:
         assert dicom_optical_path.OpticalPathDescription == optical_path.description
+    else:
+        assert "OpticalPathDescription" not in dicom_optical_path
     if optical_path.illumination_types is not None:
         assert_dicom_code_dataset_equals_code(
             dicom_optical_path.IlluminationTypeCodeSequence[0],
             optical_path.illumination_types[0],
         )
+    # else:
+    #     assert "IlluminationTypeCodeSequence" not in dicom_optical_path
     if isinstance(optical_path.illumination, float):
         assert dicom_optical_path.IlluminationWaveLength == optical_path.illumination
     elif isinstance(optical_path.illumination, IlluminationColorCode):
@@ -205,6 +209,9 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.IlluminationColorCodeSequence[0],
             optical_path.illumination,
         )
+    # else:
+    #     assert "IlluminationWaveLength" not in dicom_optical_path
+    #     assert "IlluminationColorCodeSequence" not in dicom_optical_path
     if optical_path.light_path_filter is not None:
         assert (
             dicom_optical_path.LightPathFilterPassThroughWavelength
@@ -218,6 +225,10 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.LightPathFilterTypeStackCodeSequence,
             optical_path.light_path_filter.filters,
         )
+    # else:
+    #     assert "LightPathFilterPassThroughWavelength" not in dicom_optical_path
+    #     assert "LightPathFilterPassBand" not in dicom_optical_path
+    #     assert "LightPathFilterTypeStackCodeSequence" not in dicom_optical_path
     if optical_path.image_path_filter is not None:
         assert (
             dicom_optical_path.ImagePathFilterPassThroughWavelength
@@ -231,6 +242,10 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.ImagePathFilterTypeStackCodeSequence,
             optical_path.image_path_filter.filters,
         )
+    # else:
+    #     assert "ImagePathFilterPassThroughWavelength" not in dicom_optical_path
+    #     assert "ImagePathFilterPassBand" not in dicom_optical_path
+    #     assert "ImagePathFilterTypeStackCodeSequence" not in dicom_optical_path
     if optical_path.objective is not None:
         assert_dicom_code_sequence_equals_codes(
             dicom_optical_path.LensesCodeSequence,
@@ -248,6 +263,11 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.ObjectiveLensNumericalAperture
             == optical_path.objective.objective_numerical_aperature
         )
+    else:
+        assert "LensesCodeSequence" not in dicom_optical_path
+        assert "CondenserLensPower" not in dicom_optical_path
+        assert "ObjectiveLensPower" not in dicom_optical_path
+        assert "ObjectiveLensNumericalAperture" not in dicom_optical_path
     if optical_path.lut is not None:
         assert "PaletteColorLookupTableSequence" in dicom_optical_path
         assert isinstance(
@@ -258,10 +278,14 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.PaletteColorLookupTableSequence
         )
         assert parsed_lut == optical_path.lut
+    # else:
+    #     assert "PaletteColorLookupTableSequence" not in dicom_optical_path
     if optical_path.icc_profile is not None:
         assert "ICCProfile" in dicom_optical_path
         assert isinstance(dicom_optical_path.ICCProfile, bytes)
         assert dicom_optical_path.ICCProfile == optical_path.icc_profile
+    else:
+        assert "ICCProfile" not in dicom_optical_path
 
 
 def assert_dicom_patient_equals_patient(dicom_patient: Dataset, patient: Patient):
@@ -692,7 +716,9 @@ def create_description_dataset(
                     sample_localization.visual_marking,
                 )
             )
-        description.SampleLocalizationContentItemSequence = sample_localization_sequence
+        description.SpecimenLocalizationContentItemSequence = (
+            sample_localization_sequence
+        )
     return description
 
 
