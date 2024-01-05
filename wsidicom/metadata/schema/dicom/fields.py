@@ -669,7 +669,10 @@ class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime]):
         return dataset
 
     def _deserialize(self, dataset: Dataset, attr: Optional[str], obj: Any, **kwargs):
-        return DT(dataset.DateTime)
+        try:
+            return DT(dataset.DateTime)
+        except ValueError:
+            return None
 
 
 class MeasurementtemDicomField(ContentItemDicomField[Measurement]):
