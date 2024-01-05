@@ -12,12 +12,13 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import io
 import logging
-from copy import deepcopy, copy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
+from pydicom import dcmread
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
@@ -660,14 +661,22 @@ class WsiDataset(Dataset):
             Copy of dataset set as tiled full.
 
         """
-        dataset = copy(self)
+        # Workaround for deepcopy not working
+        # See https://github.com/pydicom/pydicom/issues/1816
+        with io.BytesIO() as buffer:
+            self.is_implicit_VR = False
+            self.is_little_endian = True
+            self.save_as(buffer)
+            buffer.seek(0)
+            dataset = WsiDataset(dcmread(buffer, force=True))
         dataset.DimensionOrganizationType = "TILED_FULL"
         # Make a new Shared functional group sequence and Pixel measure
         # sequence if not in dataset, otherwise update the Pixel measure
         # sequence
-        shared_functional_group = deepcopy(
-            getattr(self, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()]))
+        shared_functional_group = getattr(
+            dataset, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()])
         )
+
         plane_position_slide = Dataset()
         plane_position_slide.ZOffsetInSlideCoordinateSystem = DSfloat(
             focal_planes[0], True
@@ -681,10 +690,10 @@ class WsiDataset(Dataset):
             "PixelMeasuresSequence",
             DicomSequence([Dataset()]),
         )
-        if self.pixel_spacing is not None:
+        if dataset.pixel_spacing is not None:
             pixel_measure[0].PixelSpacing = [
-                DSfloat(self.pixel_spacing.height * scale, True),
-                DSfloat(self.pixel_spacing.width * scale, True),
+                DSfloat(dataset.pixel_spacing.height * scale, True),
+                DSfloat(dataset.pixel_spacing.width * scale, True),
             ]
         pixel_measure[0].SpacingBetweenSlices = DSfloat(
             self._get_spacing_between_slices_for_focal_planes(focal_planes), True

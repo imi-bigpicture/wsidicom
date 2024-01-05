@@ -82,7 +82,6 @@ class TestWsiDicomFileTargetIntegration:
         # Arrange
         wsi = wsi_factory(wsi_name)
         transcoder = Encoder.create_for_settings(settings)
-        print(wsi.levels.base_level.default_instance.dataset.LossyImageCompressionRatio)
 
         # Act
         with WsiDicomFileTarget(
