@@ -606,7 +606,12 @@ class ObjectivesSchema(DicomSchema[Objectives]):
 
 
 class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
-    identifier = StringDicomField(data_key="OpticalPathIdentifier", load_default=None)
+    identifier = DefaultingDicomField(
+        StringDicomField(),
+        data_key="OpticalPathIdentifier",
+        load_default=None,
+        dump_default=Defaults.optical_path_identifier,
+    )
     description = StringDicomField(data_key="OpticalPathDescription", load_default=None)
     illumination_types = DefaultingDicomField(
         fields.List(CodeDicomField(IlluminationCode)),

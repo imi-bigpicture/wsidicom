@@ -103,7 +103,7 @@ def block_type():
 
 
 @pytest.fixture()
-def specimen_localization():
+def sample_localization():
     yield SampleLocalization(description="left")
 
 

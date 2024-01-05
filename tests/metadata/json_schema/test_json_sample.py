@@ -105,7 +105,7 @@ class TestSampleJsonSchema:
             ),
         ],
     )
-    def test_specimen_localization_serialize(
+    def test_sample_localization_serialize(
         self, localization: SampleLocalization, expected: Dict[str, Any]
     ):
         # Arrange
@@ -150,7 +150,7 @@ class TestSampleJsonSchema:
             ({}, SampleLocalization()),
         ],
     )
-    def test_specimen_localization_deserialize(
+    def test_sample_localization_deserialize(
         self, localization: Dict[str, Any], expected: SampleLocalization
     ):
         # Arrange

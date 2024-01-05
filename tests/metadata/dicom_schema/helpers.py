@@ -49,6 +49,7 @@ from wsidicom.metadata.sample import (
     SpecimenIdentifier,
     SampleLocalization,
 )
+from wsidicom.metadata.schema.dicom.defaults import Defaults
 from wsidicom.metadata.schema.dicom.optical_path import LutDicomParser
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
@@ -190,7 +191,12 @@ def assert_dicom_label_equals_label(
 def assert_dicom_optical_path_equals_optical_path(
     dicom_optical_path: Dataset, optical_path: OpticalPath
 ):
-    assert dicom_optical_path.OpticalPathIdentifier == optical_path.identifier
+    if optical_path.identifier is not None:
+        assert dicom_optical_path.OpticalPathIdentifier == optical_path.identifier
+    else:
+        assert (
+            dicom_optical_path.OpticalPathIdentifier == Defaults.optical_path_identifier
+        )
     if optical_path.description is not None:
         assert dicom_optical_path.OpticalPathDescription == optical_path.description
     else:
@@ -200,8 +206,11 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.IlluminationTypeCodeSequence[0],
             optical_path.illumination_types[0],
         )
-    # else:
-    #     assert "IlluminationTypeCodeSequence" not in dicom_optical_path
+    else:
+        assert_dicom_code_dataset_equals_code(
+            dicom_optical_path.IlluminationTypeCodeSequence[0],
+            Defaults.illumination_type,
+        )
     if isinstance(optical_path.illumination, float):
         assert dicom_optical_path.IlluminationWaveLength == optical_path.illumination
     elif isinstance(optical_path.illumination, IlluminationColorCode):
@@ -209,9 +218,11 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.IlluminationColorCodeSequence[0],
             optical_path.illumination,
         )
-    # else:
-    #     assert "IlluminationWaveLength" not in dicom_optical_path
-    #     assert "IlluminationColorCodeSequence" not in dicom_optical_path
+    else:
+        assert_dicom_code_dataset_equals_code(
+            dicom_optical_path.IlluminationColorCodeSequence[0],
+            Defaults.illumination,
+        )
     if optical_path.light_path_filter is not None:
         assert (
             dicom_optical_path.LightPathFilterPassThroughWavelength
@@ -225,10 +236,10 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.LightPathFilterTypeStackCodeSequence,
             optical_path.light_path_filter.filters,
         )
-    # else:
-    #     assert "LightPathFilterPassThroughWavelength" not in dicom_optical_path
-    #     assert "LightPathFilterPassBand" not in dicom_optical_path
-    #     assert "LightPathFilterTypeStackCodeSequence" not in dicom_optical_path
+    else:
+        assert "LightPathFilterPassThroughWavelength" not in dicom_optical_path
+        assert "LightPathFilterPassBand" not in dicom_optical_path
+        assert "LightPathFilterTypeStackCodeSequence" not in dicom_optical_path
     if optical_path.image_path_filter is not None:
         assert (
             dicom_optical_path.ImagePathFilterPassThroughWavelength
@@ -242,10 +253,10 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.ImagePathFilterTypeStackCodeSequence,
             optical_path.image_path_filter.filters,
         )
-    # else:
-    #     assert "ImagePathFilterPassThroughWavelength" not in dicom_optical_path
-    #     assert "ImagePathFilterPassBand" not in dicom_optical_path
-    #     assert "ImagePathFilterTypeStackCodeSequence" not in dicom_optical_path
+    else:
+        assert "ImagePathFilterPassThroughWavelength" not in dicom_optical_path
+        assert "ImagePathFilterPassBand" not in dicom_optical_path
+        assert "ImagePathFilterTypeStackCodeSequence" not in dicom_optical_path
     if optical_path.objective is not None:
         assert_dicom_code_sequence_equals_codes(
             dicom_optical_path.LensesCodeSequence,
@@ -278,8 +289,8 @@ def assert_dicom_optical_path_equals_optical_path(
             dicom_optical_path.PaletteColorLookupTableSequence
         )
         assert parsed_lut == optical_path.lut
-    # else:
-    #     assert "PaletteColorLookupTableSequence" not in dicom_optical_path
+    else:
+        assert "PaletteColorLookupTableSequence" not in dicom_optical_path
     if optical_path.icc_profile is not None:
         assert "ICCProfile" in dicom_optical_path
         assert isinstance(dicom_optical_path.ICCProfile, bytes)

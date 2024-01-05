@@ -16,17 +16,26 @@
 
 from typing import Any, Dict, Type
 
-from marshmallow import fields, post_load, pre_dump
+from marshmallow import fields, post_dump, post_load, pre_dump
 
 from wsidicom.instance import ImageType
 from wsidicom.metadata.label import Label
-from wsidicom.metadata.schema.dicom.fields import BooleanDicomField, StringDicomField
+from wsidicom.metadata.schema.dicom.fields import (
+    BooleanDicomField,
+    DefaultingDicomField,
+    StringDicomField,
+)
 from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 
 
 class LabelDicomSchema(ModuleDicomSchema[Label]):
-    text = StringDicomField(data_key="LabelText", allow_none=True)
-    barcode = StringDicomField(data_key="BarcodeValue", allow_none=True)
+    text = DefaultingDicomField(
+        StringDicomField(), data_key="LabelText", allow_none=True, dump_default=None
+    )
+    barcode = DefaultingDicomField(
+        StringDicomField(), data_key="BarcodeValue", allow_none=True, dump_default=None
+    )
+
     label_in_volume_image = BooleanDicomField(load_only=True, allow_none=True)
     label_in_overview_image = BooleanDicomField(load_only=True, allow_none=True)
     label_is_phi = BooleanDicomField(load_only=True, allow_none=True)
@@ -51,15 +60,25 @@ class LabelDicomSchema(ModuleDicomSchema[Label]):
             label_in_image = "True"
             contains_phi = label.label_is_phi
         attributes = {
+            "text": label.text,
+            "barcode": label.barcode,
             "burned_in_annotation": contains_phi,
             "specimen_label_in_image": label_in_image,
         }
-        # Label image type should have text and barcode even if empty
-        label_required_fields = {"text": label.text, "barcode": label.barcode}
-        for key, value in label_required_fields.items():
-            if image_type == ImageType.LABEL or value is not None:
-                attributes[key] = value
+
         return attributes
+
+    @post_dump
+    def post_dump(self, data: Dict[str, Any], **kwargs):
+        # Remove text and barcode if empty and not label image type
+        image_type = self.context.get("image_type", None)
+        if image_type != ImageType.LABEL:
+            if data["LabelText"] is None:
+                data.pop("LabelText")
+            if data["BarcodeValue"] is None:
+                data.pop("BarcodeValue")
+
+        return super().post_dump(data, **kwargs)
 
     @post_load
     def post_load(self, data: Dict[str, Any], **kwargs):

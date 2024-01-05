@@ -40,6 +40,7 @@ from wsidicom.conceptcode import dataset_to_code
 from wsidicom.metadata.sample import Measurement
 from wsidicom.metadata.schema.common import LoadingSchema, LoadType
 from wsidicom.metadata.schema.dicom.fields import (
+    DefaultingDicomField,
     FlattenOnDumpNestedDicomField,
 )
 
@@ -79,7 +80,15 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
         """Create pydicom Dataset from attributes in dictionary."""
         for field in self.fields.values():
             if isinstance(field, FlattenOnDumpNestedDicomField):
+                # Flatten nested fields into data
                 field.flatten(data)
+            if (
+                field.data_key in data
+                and data[field.data_key] is None
+                and not isinstance(field, DefaultingDicomField)
+            ):
+                # Remove empty non-defaulting fields
+                data.pop(field.data_key)
         dataset = Dataset()
         dataset.update(data)  # type: ignore
         return dataset
@@ -94,6 +103,7 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
             if field.data_key is not None and field.data_key in dataset:
                 attributes[field.data_key] = dataset.get(field.data_key)
             elif isinstance(field, FlattenOnDumpNestedDicomField):
+                # De-flatten nested fields from dataset
                 de_flattened = field.de_flatten(dataset)
                 if de_flattened is not None:
                     attributes[key] = de_flattened

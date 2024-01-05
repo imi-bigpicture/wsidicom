@@ -487,6 +487,18 @@ class DefaultingDicomField(TypeDicomField[ValueType]):
         return super()._serialize(value, attr, obj, **kwargs)
 
 
+class DefaultingNoneDicomField(DefaultingDicomField[Optional[ValueType]]):
+    """Wrapper around a field that should always be present but can be None."""
+
+    def __init__(self, nested: Field, **kwargs):
+        super().__init__(nested=nested, dump_default=None, **kwargs)
+
+    def _serialize(
+        self, value: Optional[ValueType], attr: Optional[str], obj: Any, **kwargs
+    ):
+        return super()._serialize(value, attr, obj, **kwargs)
+
+
 class DefaultingTagDicomField(TypeDicomField[ValueType]):
     """Wrapper around a field that should always be present and have a value. Default
     value is taken from object by attribute defined by tag."""

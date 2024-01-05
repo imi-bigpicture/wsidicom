@@ -109,7 +109,7 @@ class TestSampleDicom:
         medium: SpecimenEmbeddingMediaCode,
         block_sampling_method: SpecimenSamplingProcedureCode,
         block_type: AnatomicPathologySpecimenTypesCode,
-        specimen_localization: SampleLocalization,
+        sample_localization: SampleLocalization,
         sampling_location: SamplingLocation,
         primary_anatomic_structures: Sequence[Code],
         stains: Sequence[SpecimenStainsCode],
@@ -144,7 +144,7 @@ class TestSampleDicom:
                 slide_sample_id,
                 slide_sample_uid,
                 primary_anatomic_structures,
-                specimen_localization,
+                sample_localization,
                 short_description=short_description,
                 detailed_description=detailed_description,
                 preparation_step_datasets=preparation_steps,
@@ -170,7 +170,7 @@ class TestSampleDicom:
             assert slide_sample.identifier == slide_sample_ids[slide_sample_index]
             assert slide_sample.uid == slide_sample_uids[slide_sample_index]
             assert slide_sample.anatomical_sites == primary_anatomic_structures
-            assert slide_sample.localization == specimen_localization
+            assert slide_sample.localization == sample_localization
             assert slide_sample.sampled_from is not None
             if isinstance(slide_sample.sampled_from, Sampling):
                 assert slide_sample.sampled_from.method == block_sampling_method
@@ -250,7 +250,7 @@ class TestSampleDicom:
         medium: SpecimenEmbeddingMediaCode,
         block_sampling_method: SpecimenSamplingProcedureCode,
         block_type: AnatomicPathologySpecimenTypesCode,
-        specimen_localization: SampleLocalization,
+        sample_localization: SampleLocalization,
         sampling_location: SamplingLocation,
         primary_anatomic_structures: Sequence[Code],
         stains: Sequence[SpecimenStainsCode],
@@ -291,7 +291,7 @@ class TestSampleDicom:
                 identifier=slide_sample_id,
                 uid=slide_sample_uid,
                 anatomical_sites=primary_anatomic_structures,
-                localization=specimen_localization,
+                localization=sample_localization,
                 sampled_from=block.sample(
                     method=block_sampling_method,
                 ),
@@ -321,8 +321,14 @@ class TestSampleDicom:
             assert isinstance(description, Dataset)
             assert description.SpecimenIdentifier == slide_sample_id
             assert description.SpecimenUID == slide_sample_uid
-            assert description.SpecimenShortDescription == short_description
-            assert description.SpecimenDetailedDescription == detailed_description
+            if short_description is not None:
+                assert description.SpecimenShortDescription == short_description
+            else:
+                assert "SpecimenShortDescription" not in description
+            if detailed_description is not None:
+                assert description.SpecimenDetailedDescription == detailed_description
+            else:
+                assert "SpecimenDetailedDescription" not in description
             assert len(description.PrimaryAnatomicStructureSequence) == len(
                 primary_anatomic_structures
             )
