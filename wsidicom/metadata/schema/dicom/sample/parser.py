@@ -418,17 +418,25 @@ class SpecimenDicomParser:
         sampling_constraints: Optional[Sequence[BaseSampling]] = None
         if parent_identifier in self._created_specimens:
             pass
-            # Parent already exists. Parse any non-parsed steps
+            # Parent already exists.
             parent = self._created_specimens[parent_identifier]
             if isinstance(parent, Sample):
                 sampling_constraints = parent.sampled_from
             parsed_parent = self._parse_preparation_steps_for_specimen(
                 parent_identifier, steps_by_identifier
             )
-            for parent_step in parsed_parent.preparation_steps:
-                # Only add step if an equivalent does not exists
-                if not any(step == parent_step for step in parent.steps):
-                    parent.add(parent_step)
+            existing_parent_steps_without_samplings = [
+                parent_step
+                for parent_step in parent.steps
+                if not isinstance(parent_step, BaseSampling)
+            ]
+            if (
+                not parsed_parent.preparation_steps
+                == existing_parent_steps_without_samplings
+            ):
+                raise ValueError(
+                    f"Specimen {parent_identifier} already exists with different steps."
+                )
             if (
                 parsed_parent.sampling is not None
                 and isinstance(parent, Sample)

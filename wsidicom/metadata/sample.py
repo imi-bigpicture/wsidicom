@@ -470,10 +470,17 @@ class BaseSpecimen(metaclass=ABCMeta):
         """Return list of samplings done on the specimen."""
         return [step for step in self.steps if isinstance(step, Sampling)]
 
-    @abstractmethod
     def add(self, step: PreparationStep) -> None:
         """Add a preparation step to the sequence of steps for the specimen."""
-        raise NotImplementedError()
+        if not isinstance(step, BaseSampling):
+            if any(
+                isinstance(present_step, BaseSampling) for present_step in self.steps
+            ):
+                raise ValueError(
+                    "Only additional samplings can be added to a specimen that has "
+                    "been sampled."
+                )
+        self.steps.append(step)
 
 
 class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
@@ -505,7 +512,7 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
             raise ValueError(
                 "A collection step can only be added to specimens of type `Specimen`"
             )
-        self.steps.append(step)
+        super().add(step)
 
     def _check_sampling_constraints_in_sampling_chain(
         self, constraints: Optional[Sequence[BaseSampling]]
@@ -624,7 +631,7 @@ class Specimen(BaseSpecimen):
     def add(self, step: PreparationStep) -> None:
         if isinstance(step, Collection) and len(self.steps) != 0:
             raise ValueError("A Collection-step must be the first step.")
-        self.steps.append(step)
+        super().add(step)
 
     def sample(
         self,
