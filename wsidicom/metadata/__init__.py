@@ -33,7 +33,28 @@ from wsidicom.metadata.optical_path import (
     OpticalPath,
 )
 from wsidicom.metadata.patient import Patient, PatientDeIdentification, PatientSex
-from wsidicom.metadata.sample import Specimen, SampledSpecimen, SlideSample
+from wsidicom.metadata.sample import (
+    Collection,
+    Embedding,
+    Fixation,
+    LocalIssuerOfIdentifier,
+    Measurement,
+    Processing,
+    Receiving,
+    Sample,
+    SampledSpecimen,
+    SampleLocalization,
+    Sampling,
+    SamplingLocation,
+    SlideSample,
+    Specimen,
+    SpecimenIdentifier,
+    Staining,
+    Storage,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
+    UnknownSampling,
+)
 from wsidicom.metadata.series import Series
 from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study
