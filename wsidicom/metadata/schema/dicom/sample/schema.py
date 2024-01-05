@@ -41,6 +41,10 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
     dataset_to_code,
 )
+from wsidicom.metadata.sample import Measurement, SampleLocalization
+from wsidicom.metadata.schema.common import (
+    DefaultOnValidationExceptionField,
+)
 from wsidicom.metadata.schema.dicom.fields import (
     CodeDicomField,
     CodeItemDicomField,
@@ -68,7 +72,6 @@ from wsidicom.metadata.schema.dicom.schema import (
     ItemSequenceDicomSchema,
     LoadType,
 )
-from wsidicom.metadata.sample import Measurement, SampleLocalization
 
 
 class SampleCodes:
@@ -446,9 +449,11 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     issuer_of_identifier = IssuerOfIdentifierDicomField(
         data_key="IssuerOfTheSpecimenIdentifierSequence", allow_none=True
     )
-    steps = marshmallow.fields.List(
-        PreparationStepDicomField(
-            data_key="SpecimenPreparationStepContentItemSequence"
+    steps = DefaultOnValidationExceptionField(
+        marshmallow.fields.List(
+            PreparationStepDicomField(
+                data_key="SpecimenPreparationStepContentItemSequence"
+            )
         ),
         data_key="SpecimenPreparationSequence",
         load_default=[],
