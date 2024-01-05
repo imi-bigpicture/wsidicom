@@ -238,8 +238,9 @@ class TestDicomFields:
         serialized = field.serialize("issuer", {"issuer": issuer})
 
         # Assert
+        assert isinstance(serialized, list)
         if issuer is None:
-            assert serialized is None
+            assert len(serialized) == 0
         else:
             assert isinstance(serialized, list)
             assert len(serialized) == 1
