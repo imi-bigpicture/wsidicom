@@ -670,7 +670,6 @@ class TestExampleSpecimenModule:
 
         # Sampling to block
         step = next(step_iterator)
-        # print(step.SpecimenPreparationStepContentItemSequence)
         step_item_iterator = iter(step.SpecimenPreparationStepContentItemSequence)
         assert_next_item_equals_string(
             step_item_iterator, SampleCodes.identifier, block_identifier

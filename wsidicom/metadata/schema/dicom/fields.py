@@ -85,7 +85,10 @@ class DateTimeDicomField(StringLikeDicomField):
     def _deserialize(self, value, attr, data, **kwargs) -> Any:
         if value is None:
             return None
-        return DT(value)
+        try:
+            return DT(value)
+        except ValueError:
+            return None
 
 
 class DateDicomField(StringLikeDicomField):
@@ -99,7 +102,10 @@ class DateDicomField(StringLikeDicomField):
     def _deserialize(self, value, attr, data, **kwargs) -> Any:
         if value is None:
             return None
-        return DA(value)
+        try:
+            return DA(value)
+        except ValueError:
+            return None
 
 
 class TimeDicomField(StringLikeDicomField):
@@ -113,7 +119,10 @@ class TimeDicomField(StringLikeDicomField):
     def _deserialize(self, value, attr, data, **kwargs) -> Any:
         if value is None:
             return None
-        return TM(value)
+        try:
+            return TM(value)
+        except ValueError:
+            return None
 
 
 class BooleanDicomField(fields.Boolean):

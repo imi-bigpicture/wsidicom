@@ -39,8 +39,12 @@ class LabelDicomSchema(ModuleDicomSchema[Label]):
     label_in_volume_image = BooleanDicomField(load_only=True, allow_none=True)
     label_in_overview_image = BooleanDicomField(load_only=True, allow_none=True)
     label_is_phi = BooleanDicomField(load_only=True, allow_none=True)
-    burned_in_annotation = BooleanDicomField(data_key="BurnedInAnnotation")
-    specimen_label_in_image = BooleanDicomField(data_key="SpecimenLabelInImage")
+    burned_in_annotation = BooleanDicomField(
+        data_key="BurnedInAnnotation", load_default=False
+    )
+    specimen_label_in_image = BooleanDicomField(
+        data_key="SpecimenLabelInImage", load_default=False
+    )
     image_type = fields.List(StringDicomField(), load_only=True, data_key="ImageType")
 
     @property
