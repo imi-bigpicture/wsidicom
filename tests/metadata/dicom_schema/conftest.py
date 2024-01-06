@@ -283,7 +283,7 @@ def dicom_wsi_metadata(
     dataset.update(dicom_series)
     dataset.update(dicom_patient)
     dataset.OpticalPathSequence = [dicom_optical_path]
-    dimension_organization_sequence = list()
+    dimension_organization_sequence = []
     for uid in wsi_metadata.default_dimension_organization_uids:
         dimension_organization = Dataset()
         dimension_organization.DimensionOrganizationUID = uid

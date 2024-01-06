@@ -399,7 +399,7 @@ class UidDatasetDicomField(UidDicomField):
         nested_value = getattr(value, self._data_key, None)
         if nested_value is None:
             return None
-        return self._deserialize(nested_value, attr, data, **kwargs)
+        return super()._deserialize(nested_value, attr, data, **kwargs)
 
 
 class PatientNameDicomField(fields.String):

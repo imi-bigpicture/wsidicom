@@ -676,6 +676,14 @@ class TestDicomSchema:
         assert deserialized.study == study
         assert deserialized.series == series
         assert deserialized.patient == patient
+        assert (
+            deserialized.frame_of_reference_uid
+            == wsi_metadata.default_frame_of_reference_uid
+        )
+        assert (
+            deserialized.dimension_organization_uids
+            == wsi_metadata.default_dimension_organization_uids
+        )
 
     def test_deserialize_wsi_metadata_from_multiple_datasets(
         self,
