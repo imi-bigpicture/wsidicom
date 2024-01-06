@@ -114,7 +114,14 @@ class StepsDirectory:
         Optional[SpecimenIdentifier]
             Identifier of previous specimen, if any.
         """
-        this_specimen_index = list(self._steps_by_identifier.keys()).index(identifier)
+        matching_identifier = self._get_identifier(
+            identifier, self._steps_by_identifier
+        )
+        if matching_identifier is None:
+            return None
+        this_specimen_index = list(self._steps_by_identifier.keys()).index(
+            matching_identifier
+        )
         if this_specimen_index == 0:
             return None
         return list(self._steps_by_identifier.keys())[this_specimen_index - 1]
