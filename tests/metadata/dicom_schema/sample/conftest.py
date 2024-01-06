@@ -13,12 +13,16 @@
 #    limitations under the License.
 
 from typing import Optional, Union
-import pytest
 
-from pydicom.uid import UID
+import pytest
+from pydicom import Dataset
 from pydicom.sr.coding import Code
+from pydicom.uid import UID
+
 from tests.metadata.dicom_schema.helpers import (
+    create_code_dataset,
     create_collection_dataset,
+    create_identifier_items,
     create_processing_dataset,
     create_receiving_dataset,
     create_sampling_dataset,
@@ -26,35 +30,35 @@ from tests.metadata.dicom_schema.helpers import (
     create_storage_dataset,
 )
 from wsidicom.conceptcode import (
+    AnatomicPathologySpecimenTypesCode,
     ContainerTypeCode,
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
     SpecimenPreparationStepsCode,
-    SpecimenStainsCode,
     SpecimenSamplingProcedureCode,
-    AnatomicPathologySpecimenTypesCode,
+    SpecimenStainsCode,
+)
+from wsidicom.metadata.sample import (
+    Collection,
+    Processing,
+    Receiving,
+    SampleLocalization,
+    Sampling,
+    SamplingLocation,
+    SpecimenIdentifier,
+    Staining,
+    Storage,
 )
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
     ProcessingDicomModel,
-    StainingDicomModel,
-    SamplingDicomModel,
     ReceivingDicomModel,
+    SamplingDicomModel,
+    StainingDicomModel,
     StorageDicomModel,
 )
-
-from wsidicom.metadata.sample import (
-    Collection,
-    SamplingLocation,
-    SampleLocalization,
-    SpecimenIdentifier,
-    Sampling,
-    Processing,
-    Staining,
-    Receiving,
-    Storage,
-)
+from wsidicom.metadata.schema.dicom.sample.schema import SampleCodes
 
 
 @pytest.fixture()
@@ -340,3 +344,46 @@ def storage_dataset(
     identifier: Union[str, SpecimenIdentifier],
 ):
     yield create_storage_dataset(storage_dicom, identifier)
+
+
+@pytest.fixture()
+def invalid_preparation_step_dataset(invalid_preparation_step_type: str):
+    identifier = "identifier"
+    items = create_identifier_items(identifier)
+    if invalid_preparation_step_type == "missing_processing_type":
+        # Processing type item has wrong concept name code
+        dataset = Dataset()
+        dataset.ValueType = "CODE"
+        dataset.ConceptNameCodeSequence = [
+            create_code_dataset(Code("not valid", "SCT", "not valid"))
+        ]
+        dataset.ConceptCodeSequence = [create_code_dataset(SampleCodes.sampling_method)]
+        items.append(dataset)
+    elif invalid_preparation_step_type == "unknown_processing_type":
+        # Processing type item has unknown concept code
+        dataset = Dataset()
+        dataset.ValueType = "CODE"
+        dataset.ConceptNameCodeSequence = [
+            create_code_dataset(SampleCodes.processing_type)
+        ]
+        dataset.ConceptCodeSequence = [
+            create_code_dataset(Code("not valid", "SCT", "not valid"))
+        ]
+        items.append(dataset)
+    elif invalid_preparation_step_type == "validation_error":
+        # Sampling does not specify method
+        dataset = Dataset()
+        dataset.ValueType = "CODE"
+        dataset.ConceptNameCodeSequence = [
+            create_code_dataset(SampleCodes.processing_type)
+        ]
+        dataset.ConceptCodeSequence = [create_code_dataset(SampleCodes.sampling_method)]
+        items.append(dataset)
+    else:
+        raise ValueError(
+            f"Unknown invalid preparation step type: {invalid_preparation_step_type}"
+        )
+
+    dataset = Dataset()
+    dataset.SpecimenPreparationStepContentItemSequence = items
+    return dataset

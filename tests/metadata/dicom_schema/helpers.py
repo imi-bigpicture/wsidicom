@@ -823,7 +823,7 @@ def create_processing_type_item(step: SpecimenPreparationStepDicomModel):
         processing_type_code = SampleCodes.specimen_collection
     elif isinstance(step, SamplingDicomModel):
         processing_type_code = SampleCodes.sampling_method
-    elif isinstance(step, SpecimenPreparationStepDicomModel):
+    elif isinstance(step, ProcessingDicomModel):
         processing_type_code = SampleCodes.sample_processing
     elif isinstance(step, StainingDicomModel):
         processing_type_code = SampleCodes.staining

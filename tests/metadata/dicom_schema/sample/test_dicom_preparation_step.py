@@ -14,10 +14,11 @@
 
 import datetime
 from typing import Optional, Union
+import marshmallow
 
 import pytest
 from pydicom import Dataset
-
+from pydicom.uid import UID
 from tests.metadata.dicom_schema.helpers import (
     assert_initial_common_preparation_step_items,
     assert_item_measurement_equals_value,
@@ -27,9 +28,11 @@ from tests.metadata.dicom_schema.helpers import (
     assert_next_item_equals_code,
     assert_next_item_equals_measurement,
     assert_next_item_equals_string,
+    create_description_dataset,
     create_measurement_item,
     create_string_item,
 )
+from wsidicom.config import settings
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     ContainerTypeCode,
@@ -50,16 +53,19 @@ from wsidicom.metadata.schema.dicom.sample.model import (
     ProcessingDicomModel,
     ReceivingDicomModel,
     SamplingDicomModel,
+    SpecimenDescriptionDicomModel,
     StainingDicomModel,
     StorageDicomModel,
 )
 from wsidicom.metadata.schema.dicom.sample.schema import (
     CollectionDicomSchema,
+    PreparationStepDicomField,
     ProcessingDicomSchema,
     ReceivingDicomSchema,
     SampleCodes,
     SamplingDicomSchema,
     SampleLocalizationDicomSchema,
+    SpecimenDescriptionDicomSchema,
     StainingDicomSchema,
     StorageDicomSchema,
 )
@@ -497,6 +503,112 @@ class TestPreparationStepDicomSchema:
         assert deserialized.processing == storage_dicom.processing
         assert deserialized.container == storage_dicom.container
         assert deserialized.specimen_type == storage_dicom.specimen_type
+
+
+@pytest.mark.parametrize(
+    "invalid_preparation_step_type",
+    ["missing_processing_type", "unknown_processing_type", "validation_error"],
+)
+class TestPreparationStepDicomErrorHandling:
+    def test_deserialize_step_validation_error_with_ignore_setting(
+        self, invalid_preparation_step_dataset: Dataset
+    ):
+        # Arrange
+        settings.ignore_specimen_preparation_step_on_validation_error = True
+        field = PreparationStepDicomField(
+            data_key="SpecimenPreparationStepContentItemSequence"
+        )
+
+        # Act
+        deserialized = field._deserialize(invalid_preparation_step_dataset, None, {})
+
+        # Assert
+        assert deserialized is None
+
+    def test_deserialize_step_validation_error_with_throw_setting(
+        self, invalid_preparation_step_dataset: Dataset
+    ):
+        # Arrange
+        settings.ignore_specimen_preparation_step_on_validation_error = False
+        field = PreparationStepDicomField(
+            data_key="SpecimenPreparationStepContentItemSequence"
+        )
+
+        # Act & Assert
+        with pytest.raises(marshmallow.ValidationError):
+            field._deserialize(invalid_preparation_step_dataset, None, {})
+
+    def test_deserialize_steps_validation_error_with_ignore_setting(
+        self,
+        invalid_preparation_step_dataset: Dataset,
+        slide_sample_id: str,
+        slide_sample_uid: UID,
+        staining_dataset: Dataset,
+    ):
+        # Arrange
+        settings.ignore_specimen_preparation_step_on_validation_error = True
+        description = create_description_dataset(
+            slide_sample_id,
+            slide_sample_uid,
+            preparation_step_datasets=[
+                invalid_preparation_step_dataset,
+                staining_dataset,
+            ],
+        )
+        dataset = Dataset()
+        dataset.SpecimenDescriptionSequence = [description]
+
+        schema = SpecimenDescriptionDicomSchema()
+
+        # Act
+        models = [
+            schema.load(description)
+            for description in dataset.SpecimenDescriptionSequence
+        ]
+
+        # Assert
+        assert len(models) == 1
+        model = models[0]
+        assert isinstance(model, SpecimenDescriptionDicomModel)
+        # Assert that the invalid preparation step was ignored
+        assert len(model.steps) == 1
+        step = model.steps[0]
+        assert isinstance(step, StainingDicomModel)
+
+    def test_deserialize_steps_validation_error_with_throw_setting(
+        self,
+        invalid_preparation_step_dataset: Dataset,
+        slide_sample_id: str,
+        slide_sample_uid: UID,
+        staining_dataset: Dataset,
+    ):
+        # Arrange
+        settings.ignore_specimen_preparation_step_on_validation_error = False
+        description = create_description_dataset(
+            slide_sample_id,
+            slide_sample_uid,
+            preparation_step_datasets=[
+                invalid_preparation_step_dataset,
+                staining_dataset,
+            ],
+        )
+        dataset = Dataset()
+        dataset.SpecimenDescriptionSequence = [description]
+
+        schema = SpecimenDescriptionDicomSchema()
+
+        # Act
+        models = [
+            schema.load(description)
+            for description in dataset.SpecimenDescriptionSequence
+        ]
+
+        # Assert
+        assert len(models) == 1
+        model = models[0]
+        assert isinstance(model, SpecimenDescriptionDicomModel)
+        # Assert that all preparation step are ignored
+        assert len(model.steps) == 0
 
 
 class TestSampleLocalizationDicomSchema:
