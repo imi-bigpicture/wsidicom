@@ -409,7 +409,7 @@ class Fixation(PreparationStep):
     description: Optional[str] = None
 
 
-@dataclass
+@dataclass()
 class Staining(PreparationStep):
     """
     Staining of a specimen using staining substances.

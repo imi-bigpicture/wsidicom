@@ -124,7 +124,7 @@ class ModuleDicomSchema(DicomSchema[LoadType]):
             return super().load(dataset, **kwargs)  # type: ignore
         except ValidationError:
             logging.warning(
-                f"Failed to load module {self.module_name} with schema {self}",
+                f"Failed to load module {self.module_name} with schema {self}.",
                 exc_info=True,
             )
             return self.load_type()

@@ -442,14 +442,16 @@ class PreparationStepDicomField(fields.Field):
                     f"processing type {processing_type}"
                 )
             loaded = schema().load(sequence, many=False)
-        except ValidationError:
+        except ValidationError as exception:
+            error = "Failed to load processing step due to validation error."
             if settings._ignore_specimen_preparation_step_on_validation_error:
-                logging.warning(
-                    "Failed to load processing step due to validation error.",
-                    exc_info=True,
-                )
+                logging.warning(error, exc_info=True)
                 return None
-            raise
+            raise ValidationError(
+                error + " Check the processing step for errors or set "
+                "`settings.ignore_specimen_preparation_step_on_validation_error` "
+                "to `True` to ignore this step."
+            ) from exception
         assert isinstance(loaded, SpecimenPreparationStepDicomModel)
         return loaded
 
