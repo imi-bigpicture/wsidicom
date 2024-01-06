@@ -380,7 +380,7 @@ class PreparationStepDicomField(fields.Field):
         StorageDicomModel: StorageDicomSchema,
     }
 
-    """Mapping key in serialized step to schema."""
+    """Mapping key in serialized step to schema. Keys are CID 8111 codes."""
     _processing_type_to_schema_mapping: Dict[Code, Type[ItemSequenceDicomSchema]] = {
         SampleCodes.sampling_method: SamplingDicomSchema,
         SampleCodes.specimen_collection: CollectionDicomSchema,
@@ -388,12 +388,6 @@ class PreparationStepDicomField(fields.Field):
         SampleCodes.staining: StainingDicomSchema,
         SampleCodes.receiving: ReceivingDicomSchema,
         SampleCodes.storage: StorageDicomSchema,
-        Code("P3-4000A", "SRT", "Sampling of tissue specimen"): SamplingDicomSchema,
-        Code("P3-02000", "SRT", "Specimen collection"): CollectionDicomSchema,
-        Code("P3-05000", "SRT", "Specimen processing"): ProcessingDicomSchema,
-        Code("P3-00003", "SRT", "Staining"): StainingDicomSchema,
-        Code("P3-05013", "SRT", "Specimen receiving"): ReceivingDicomSchema,
-        Code("111729", "DCM", "Specimen storage"): StorageDicomSchema,
     }
 
     def _serialize(
@@ -435,11 +429,16 @@ class PreparationStepDicomField(fields.Field):
                     "Failed to load processing step due to missing processing type."
                 )
             try:
-                schema = self._processing_type_to_schema_mapping[processing_type]
-            except KeyError:
+                # Iterate over schemas as code comparision can map SRT to SCT codes
+                schema = next(
+                    schema
+                    for name, schema in self._processing_type_to_schema_mapping.items()
+                    if name == processing_type
+                )
+            except StopIteration:
                 raise ValidationError(
                     "Failed to load processing step due to unknown "
-                    f"processing type {processing_type}"
+                    f"processing type {processing_type}."
                 )
             loaded = schema().load(sequence, many=False)
         except ValidationError as exception:
