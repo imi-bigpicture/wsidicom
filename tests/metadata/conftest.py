@@ -75,6 +75,11 @@ from wsidicom.metadata.sample import (
 )
 
 
+@pytest.fixture()
+def slide_identifier():
+    yield "slide identifier"
+
+
 @pytest.fixture
 def manufacturer():
     yield "manufacturer"
@@ -407,7 +412,7 @@ def slide_sample(sample: Sample):
 
 
 @pytest.fixture()
-def slide():
+def slide(slide_identifier: Union[str, SpecimenIdentifier]):
     part_1 = Specimen(
         "part 1",
         Collection(
@@ -499,7 +504,9 @@ def slide():
         ),
     ]
 
-    yield Slide(identifier="Slide 1", stainings=stainings, samples=[sample_1, sample_2])
+    yield Slide(
+        identifier=slide_identifier, stainings=stainings, samples=[sample_1, sample_2]
+    )
 
 
 @pytest.fixture()

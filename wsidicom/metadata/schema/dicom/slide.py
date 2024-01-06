@@ -45,8 +45,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         data_key="ContainerIdentifier",
         allow_none=True,
     )
-    issuer_of_identifier = DefaultingListDicomField(
-        IssuerOfIdentifierDicomField(),
+    issuer_of_identifier = IssuerOfIdentifierDicomField(
         dump_default=[],
         data_key="IssuerOfTheContainerIdentifierSequence",
         allow_none=True,
@@ -86,7 +85,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
             issuer_of_identifier = None
         return {
             "identifier": identifier,
-            "issuer": issuer_of_identifier,
+            "issuer_of_identifier": issuer_of_identifier,
             "samples": dicom_samples,
         }
 

@@ -13,13 +13,35 @@
 #    limitations under the License.
 
 from typing import Any, Dict
+
+import pytest
+
 from tests.metadata.json_schema.helpers import assert_dict_equals_code
+from wsidicom.conceptcode import SpecimenStainsCode
+from wsidicom.metadata.sample import (
+    LocalIssuerOfIdentifier,
+    SpecimenIdentifier,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
+)
 from wsidicom.metadata.schema.json.slide import SlideJsonSchema
 from wsidicom.metadata.slide import Slide
-from wsidicom.conceptcode import SpecimenStainsCode
 
 
 class TestSlideJsonSchema:
+    @pytest.mark.parametrize(
+        "slide_identifier",
+        [
+            None,
+            "identifier",
+            SpecimenIdentifier("identifier"),
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+            SpecimenIdentifier(
+                "identifier",
+                UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID),
+            ),
+        ],
+    )
     def test_slide_serialize(self, slide: Slide):
         # Arrange
         assert slide.samples is not None
@@ -32,7 +54,19 @@ class TestSlideJsonSchema:
 
         # Assert
         assert isinstance(dumped, dict)
-        assert dumped["identifier"] == slide.identifier
+        if isinstance(slide.identifier, SpecimenIdentifier):
+            assert dumped["identifier"]["value"] == slide.identifier.value
+            if isinstance(slide.identifier.issuer, UniversalIssuerOfIdentifier):
+                assert (
+                    dumped["identifier"]["issuer"]["identifier"]
+                    == slide.identifier.issuer.identifier
+                )
+                assert (
+                    dumped["identifier"]["issuer"]["issuer_type"]
+                    == slide.identifier.issuer.issuer_type.name
+                )
+        else:
+            assert dumped["identifier"] == slide.identifier
         if slide.stainings is not None:
             for index, staining in enumerate(slide.stainings):
                 dumped_staining = dumped["stainings"][index]
@@ -65,6 +99,19 @@ class TestSlideJsonSchema:
         if block_1.type is not None:
             assert_dict_equals_code(dumped_block_1["type"], block_1.type)
 
+    @pytest.mark.parametrize(
+        "slide_identifier",
+        [
+            None,
+            "identifier",
+            SpecimenIdentifier("identifier"),
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+            SpecimenIdentifier(
+                "identifier",
+                UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID),
+            ),
+        ],
+    )
     def test_slide_deserialize(self, json_slide: Dict[str, Any]):
         # Arrange
 

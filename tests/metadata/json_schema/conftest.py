@@ -12,14 +12,41 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from typing import Any, Dict, Optional, Union
 import pytest
 from pathlib import Path
 
+from wsidicom.metadata.sample import (
+    SpecimenIdentifier,
+    UniversalIssuerOfIdentifier,
+)
+
 
 @pytest.fixture()
-def json_slide():
+def json_slide_identifier(slide_identifier: Optional[Union[str, SpecimenIdentifier]]):
+    if slide_identifier is None:
+        yield None
+    elif isinstance(slide_identifier, str):
+        yield slide_identifier
+    elif not isinstance(slide_identifier.issuer, UniversalIssuerOfIdentifier):
+        yield {
+            "value": slide_identifier.value,
+        }
+    else:
+        yield {
+            "value": slide_identifier.value,
+            "issuer": {
+                "identifier": slide_identifier.issuer.identifier,
+                "type": slide_identifier.issuer.issuer_type.name,
+                "local": slide_identifier.issuer.local_identifier,
+            },
+        }
+
+
+@pytest.fixture()
+def json_slide(json_slide_identifier: Union[str, Dict[str, Any]]):
     yield {
-        "identifier": "Slide 1",
+        "identifier": json_slide_identifier,
         "stainings": [
             {
                 "substances": [

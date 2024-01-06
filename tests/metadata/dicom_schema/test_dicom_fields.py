@@ -20,7 +20,10 @@ from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DSfloat
 
-from tests.metadata.dicom_schema.helpers import create_code_dataset
+from tests.metadata.dicom_schema.helpers import (
+    assert_dicom_issuer_of_identifier_equals_issuer_of_identifier,
+    create_code_dataset,
+)
 from wsidicom.conceptcode import UnitCode
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
@@ -263,20 +266,4 @@ class TestDicomFields:
             assert len(serialized) == 1
             item = serialized[0]
             assert isinstance(item, Dataset)
-            if isinstance(issuer, LocalIssuerOfIdentifier):
-                assert "LocalNamespaceEntityID" in item
-                assert item.LocalNamespaceEntityID == issuer.identifier
-                assert "UniversalEntityID" not in item
-                assert "UniversalEntityIDType" not in item
-            elif isinstance(issuer, UniversalIssuerOfIdentifier):
-                assert "UniversalEntityID" in item
-                assert item.UniversalEntityID == issuer.identifier
-                assert "UniversalEntityIDType" in item
-                assert item.UniversalEntityIDType == issuer.issuer_type.name
-                if issuer.local_identifier is not None:
-                    assert "LocalNamespaceEntityID" in item
-                    assert item.LocalNamespaceEntityID == issuer.local_identifier
-                else:
-                    assert "LocalNamespaceEntityID" not in item
-            else:
-                raise ValueError(f"Unexpected issuer type: {issuer}")
+            assert_dicom_issuer_of_identifier_equals_issuer_of_identifier(item, issuer)

@@ -22,6 +22,7 @@ from tests.metadata.dicom_schema.helpers import (
     assert_dicom_code_sequence_equals_codes,
     assert_dicom_equipment_equals_equipment,
     assert_dicom_image_equals_image,
+    assert_dicom_issuer_of_identifier_equals_issuer_of_identifier,
     assert_dicom_label_equals_label,
     assert_dicom_optical_path_equals_optical_path,
     assert_dicom_patient_equals_patient,
@@ -65,7 +66,13 @@ from wsidicom.metadata.schema.dicom.series import SeriesDicomSchema
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 from wsidicom.metadata.schema.dicom.study import StudyDicomSchema
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
-from wsidicom.metadata.sample import SlideSample
+from wsidicom.metadata.sample import (
+    LocalIssuerOfIdentifier,
+    SlideSample,
+    SpecimenIdentifier,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
+)
 
 
 class TestDicomSchema:
@@ -487,6 +494,19 @@ class TestDicomSchema:
         assert isinstance(deserialized, Study)
         assert deserialized == study
 
+    @pytest.mark.parametrize(
+        "slide_identifier",
+        [
+            None,
+            "identifier",
+            SpecimenIdentifier("identifier"),
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+            SpecimenIdentifier(
+                "identifier",
+                UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID),
+            ),
+        ],
+    )
     def test_serialize_slide(self, slide: Slide):
         # Arrange
         schema = SlideDicomSchema()
@@ -500,7 +520,19 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(serialized, Dataset)
-        assert serialized.ContainerIdentifier == slide.identifier
+        if slide.identifier is None:
+            assert serialized.ContainerIdentifier == Defaults.string
+        elif isinstance(slide.identifier, str):
+            assert serialized.ContainerIdentifier == slide.identifier
+        else:
+            assert serialized.ContainerIdentifier == slide.identifier.value
+            if slide.identifier.issuer is not None:
+                assert "IssuerOfTheContainerIdentifierSequence" in serialized
+                assert len(serialized.IssuerOfTheContainerIdentifierSequence) == 1
+                assert_dicom_issuer_of_identifier_equals_issuer_of_identifier(
+                    serialized.IssuerOfTheContainerIdentifierSequence[0],
+                    slide.identifier.issuer,
+                )
         assert_dicom_code_dataset_equals_code(
             serialized.ContainerTypeCodeSequence[0], Defaults.slide_container_type
         )
@@ -532,6 +564,19 @@ class TestDicomSchema:
         ):
             assert specimen_description.SpecimenIdentifier == sample.identifier
 
+    @pytest.mark.parametrize(
+        "slide_identifier",
+        [
+            None,
+            "identifier",
+            SpecimenIdentifier("identifier"),
+            SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("issuer")),
+            SpecimenIdentifier(
+                "identifier",
+                UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID),
+            ),
+        ],
+    )
     def test_deserialize_slide(self, slide: Slide):
         # Arrange
         schema = SlideDicomSchema()

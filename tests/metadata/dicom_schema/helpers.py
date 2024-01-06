@@ -44,10 +44,13 @@ from wsidicom.metadata import (
     Study,
 )
 from wsidicom.metadata.sample import (
+    IssuerOfIdentifier,
+    LocalIssuerOfIdentifier,
     Measurement,
     SamplingLocation,
     SpecimenIdentifier,
     SampleLocalization,
+    UniversalIssuerOfIdentifier,
 )
 from wsidicom.metadata.schema.dicom.defaults import Defaults
 from wsidicom.metadata.schema.dicom.optical_path import LutDicomParser
@@ -77,6 +80,28 @@ def bool_to_dicom_literal(value: bool) -> str:
     if value:
         return "YES"
     return "NO"
+
+
+def assert_dicom_issuer_of_identifier_equals_issuer_of_identifier(
+    dataset: Dataset, issuer: IssuerOfIdentifier
+):
+    if isinstance(issuer, LocalIssuerOfIdentifier):
+        assert "LocalNamespaceEntityID" in dataset
+        assert dataset.LocalNamespaceEntityID == issuer.identifier
+        assert "UniversalEntityID" not in dataset
+        assert "UniversalEntityIDType" not in dataset
+    elif isinstance(issuer, UniversalIssuerOfIdentifier):
+        assert "UniversalEntityID" in dataset
+        assert dataset.UniversalEntityID == issuer.identifier
+        assert "UniversalEntityIDType" in dataset
+        assert dataset.UniversalEntityIDType == issuer.issuer_type.name
+        if issuer.local_identifier is not None:
+            assert "LocalNamespaceEntityID" in dataset
+            assert dataset.LocalNamespaceEntityID == issuer.local_identifier
+        else:
+            assert "LocalNamespaceEntityID" not in dataset
+    else:
+        raise ValueError(f"Unexpected issuer type: {issuer}")
 
 
 def assert_dicom_bool_equals_bool(dicom_bool: str, expected_bool: bool):
