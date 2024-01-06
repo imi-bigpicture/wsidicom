@@ -17,6 +17,7 @@
 from marshmallow import fields
 
 from wsidicom.metadata.schema.common import LoadingSchema
+from wsidicom.metadata.schema.json.fields import SpecimenIdentifierJsonField
 from wsidicom.metadata.schema.json.sample import (
     BaseSpecimenJsonSchema,
     StainingJsonSchema,
@@ -25,7 +26,7 @@ from wsidicom.metadata.slide import Slide
 
 
 class SlideJsonSchema(LoadingSchema[Slide]):
-    identifier = fields.String(allow_none=True)
+    identifier = SpecimenIdentifierJsonField(allow_none=True)
     stainings = fields.List(fields.Nested(StainingJsonSchema()), allow_none=True)
     samples = fields.Nested(BaseSpecimenJsonSchema(), allow_none=True, many=True)
 

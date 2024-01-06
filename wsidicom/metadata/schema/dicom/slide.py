@@ -20,10 +20,12 @@ from typing import Any, Dict, Type
 from marshmallow import fields, post_dump, post_load, pre_dump
 
 from wsidicom.conceptcode import ContainerTypeCode
-from wsidicom.metadata.sample import SlideSample
+from wsidicom.metadata.sample import SlideSample, SpecimenIdentifier
 from wsidicom.metadata.schema.dicom.defaults import Defaults, defaults
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
+    DefaultingListDicomField,
+    IssuerOfIdentifierDicomField,
     SingleCodeSequenceField,
     StringDicomField,
 )
@@ -41,6 +43,12 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         StringDicomField(),
         dump_default=Defaults.string,
         data_key="ContainerIdentifier",
+        allow_none=True,
+    )
+    issuer_of_identifier = DefaultingListDicomField(
+        IssuerOfIdentifierDicomField(),
+        dump_default=[],
+        data_key="IssuerOfTheContainerIdentifierSequence",
         allow_none=True,
     )
     samples = fields.List(
@@ -70,18 +78,26 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
             SpecimenDicomFormatter.to_dicom(slide_sample, slide.stainings)
             for slide_sample in samples
         ]
-
-        return {"identifier": slide.identifier, "samples": dicom_samples}
+        if isinstance(slide.identifier, SpecimenIdentifier):
+            identifier = slide.identifier.value
+            issuer_of_identifier = slide.identifier.issuer
+        else:
+            identifier = slide.identifier
+            issuer_of_identifier = None
+        return {
+            "identifier": identifier,
+            "issuer": issuer_of_identifier,
+            "samples": dicom_samples,
+        }
 
     @post_dump
     def post_dump(self, data: Dict[str, Any], **kwargs):
-        data["IssuerOfTheContainerIdentifierSequence"] = []
         data["ContainerComponentSequence"] = []
         return super().post_dump(data, **kwargs)
 
     @post_load
     def post_load(self, data: Dict[str, Any], **kwargs):
-        dicom_samples = data.get("samples", None)
+        dicom_samples = data.pop("samples", None)
         if dicom_samples is not None:
             try:
                 samples, stainings = SpecimenDicomParser().parse_descriptions(
@@ -99,6 +115,11 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
             stainings = None
         data["samples"] = samples
         data["stainings"] = stainings
+        issuer_of_identifier = data.pop("issuer_of_identifier", None)
+        if issuer_of_identifier is not None:
+            data["identifier"] = SpecimenIdentifier(
+                value=data["identifier"], issuer=issuer_of_identifier
+            )
         return super().post_load(data, **kwargs)
 
     @property
