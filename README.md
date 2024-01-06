@@ -301,6 +301,13 @@ schema = WsiMetadataJsonSchema()
 metadata_json = schema.dump(metadata)
 ```
 
+### Settings
+
+The strictness of parsing of DICOM WSI metadata can be configured using the following settings (see [Settings](#settings)):
+
+- `strict_specimen_identifier_check`: Controls how to handle matching between specimen identifiers if one of the identifiers have a issuer of identifier set and the other does not. If `True` the identifiers are considered equal (provided that the identifier value is the same), if `False` the issuer of identifier must always also match. This setting is useful if for example a issuer of identifier is specified in the `Specimen Description Sequence` but steps in the `Specimen Preparation Sequence` lacks the issuer of identifier. The default value is `True`.
+- `ignore_specimen_preparation_step_on_validation_error`: Controls how to handle if a stap in the `Specimen Preparation Sequence` fails to validate. If `True`, only steps that fails will be ignored. If `False` all steps will be ignored. The default value is `True`.
+
 ## Saving files
 
 An opened WsiDicom instance can be saved to a new path using the save()-method. The produced files will be:
@@ -334,7 +341,7 @@ with WsiDicom.open(path_to_folder) as slide:
 ```python
 from wsidicom import settings
 settings.strict_uid_check = True
-settings._strict_attribute_check = True
+settings.strict_attribute_check = True
 ```
 
 ## Annotation usage
