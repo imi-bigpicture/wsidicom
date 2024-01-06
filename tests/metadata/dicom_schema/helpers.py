@@ -698,6 +698,7 @@ def create_description_dataset(
     short_description: Optional[str] = None,
     detailed_description: Optional[str] = None,
     preparation_step_datasets: Optional[Sequence[Dataset]] = None,
+    slide_sample_issuer: Optional[IssuerOfIdentifier] = None,
 ):
     description = Dataset()
     description.SpecimenIdentifier = slide_sample_id
@@ -706,6 +707,29 @@ def create_description_dataset(
     description.SpecimenTypeCodeSequence = [
         create_code_dataset(AnatomicPathologySpecimenTypesCode("Slide"))
     ]
+    if slide_sample_issuer is not None:
+        issuer_of_identifier_dataset = Dataset()
+        if isinstance(slide_sample_issuer, LocalIssuerOfIdentifier):
+            issuer_of_identifier_dataset.LocalNamespaceEntityID = (
+                slide_sample_issuer.identifier
+            )
+        elif isinstance(slide_sample_issuer, UniversalIssuerOfIdentifier):
+            issuer_of_identifier_dataset.UniversalEntityID = (
+                slide_sample_issuer.identifier
+            )
+            issuer_of_identifier_dataset.UniversalEntityIDType = (
+                slide_sample_issuer.issuer_type.name
+            )
+            if slide_sample_issuer.local_identifier is not None:
+                issuer_of_identifier_dataset.LocalNamespaceEntityID = (
+                    slide_sample_issuer.local_identifier
+                )
+        else:
+            raise ValueError(f"Unexpected issuer type: {slide_sample_issuer}")
+        description.IssuerOfTheSpecimenIdentifierSequence = [
+            issuer_of_identifier_dataset
+        ]
+
     if primary_anatomic_structures is not None:
         description.PrimaryAnatomicStructureSequence = [
             create_code_dataset(item) for item in primary_anatomic_structures

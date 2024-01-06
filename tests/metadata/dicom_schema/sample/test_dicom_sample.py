@@ -13,47 +13,57 @@
 #    limitations under the License.
 
 from typing import List, Optional, Sequence
-from pydicom import Dataset
-import pytest
 
-from pydicom.uid import UID
+import pytest
+from pydicom import Dataset
 from pydicom.sr.coding import Code
+from pydicom.uid import UID
+
 from tests.metadata.dicom_schema.helpers import (
     assert_next_item_equals_code,
     assert_next_item_equals_measurement,
     assert_next_item_equals_string,
     create_description_dataset,
+    create_processing_dataset,
     create_sampling_dataset,
     create_specimen_preparation_sequence,
+    create_staining_dataset,
 )
 from wsidicom.conceptcode import (
+    AnatomicPathologySpecimenTypesCode,
     ContainerTypeCode,
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
-    SpecimenStainsCode,
     SpecimenSamplingProcedureCode,
-    AnatomicPathologySpecimenTypesCode,
+    SpecimenStainsCode,
+    SpecimenPreparationStepsCode,
+)
+from wsidicom.config import settings
+from wsidicom.metadata.sample import (
+    Collection,
+    Embedding,
+    Fixation,
+    LocalIssuerOfIdentifier,
+    Processing,
+    Sample,
+    SampleLocalization,
+    Sampling,
+    SamplingLocation,
+    SlideSample,
+    Specimen,
+    SpecimenIdentifier,
+    Staining,
 )
 from wsidicom.metadata.schema.dicom.sample.formatter import SpecimenDicomFormatter
-from wsidicom.metadata.schema.dicom.sample.model import SamplingDicomModel
+from wsidicom.metadata.schema.dicom.sample.model import (
+    ProcessingDicomModel,
+    SamplingDicomModel,
+)
 from wsidicom.metadata.schema.dicom.sample.parser import SpecimenDicomParser
 from wsidicom.metadata.schema.dicom.sample.schema import (
     SampleCodes,
     SpecimenDescriptionDicomSchema,
-)
-
-from wsidicom.metadata.sample import (
-    Collection,
-    Embedding,
-    Specimen,
-    Fixation,
-    Sample,
-    SamplingLocation,
-    SlideSample,
-    SampleLocalization,
-    Sampling,
-    Staining,
 )
 
 
@@ -587,3 +597,93 @@ class TestSampleDicom:
         assert isinstance(slide_sample.sampled_from.specimen, Specimen)
         assert slide_sample.sampled_from.specimen.identifier == block_id
         assert slide_sample.sampled_from.specimen.type == block_type
+
+    @pytest.mark.parametrize(
+        ["setting", "slide_sample_issuer", "processing_issuer", "processing_expected"],
+        [
+            (False, "issuer 1", "issuer 1", True),
+            (False, "issuer 1", "issuer 2", False),
+            (False, "issuer 1", None, True),
+            (False, None, "issuer 1", True),
+            (False, None, None, True),
+            (True, "issuer 1", "issuer 1", True),
+            (True, "issuer 1", "issuer 2", False),
+            (True, "issuer 1", None, False),
+            (True, None, "issuer 1", False),
+            (True, None, None, True),
+        ],
+    )
+    def test_handling_of_preparation_step_with_mismatching_issuer(
+        self,
+        slide_sample_id: str,
+        slide_sample_uid: UID,
+        setting: bool,
+        slide_sample_issuer: Optional[str],
+        processing_issuer: Optional[str],
+        processing_expected: bool,
+    ):
+        # Arrange
+        settings.strict_specimen_identifier_check = setting
+        if slide_sample_issuer is not None:
+            local_slide_sample_issuer = LocalIssuerOfIdentifier(slide_sample_issuer)
+            slide_sample_identifier = SpecimenIdentifier(
+                slide_sample_id, local_slide_sample_issuer
+            )
+        else:
+            local_slide_sample_issuer = None
+            slide_sample_identifier = slide_sample_id
+        if processing_issuer is not None:
+            processing_identifier = SpecimenIdentifier(
+                slide_sample_id, LocalIssuerOfIdentifier(processing_issuer)
+            )
+        else:
+            processing_identifier = slide_sample_id
+        processing_1_method = SpecimenPreparationStepsCode("Specimen clearing")
+        processing_1 = create_processing_dataset(
+            ProcessingDicomModel(
+                identifier=slide_sample_id,
+                processing=processing_1_method,
+                issuer_of_identifier=slide_sample_issuer,
+            ),
+            identifier=slide_sample_identifier,
+        )
+        processing_2_method = SpecimenPreparationStepsCode("Specimen freezing")
+        processing_2 = create_processing_dataset(
+            ProcessingDicomModel(
+                identifier=slide_sample_id,
+                processing=processing_2_method,
+                issuer_of_identifier=processing_issuer,
+            ),
+            identifier=processing_identifier,
+        )
+        description = create_description_dataset(
+            slide_sample_id,
+            slide_sample_uid,
+            preparation_step_datasets=[processing_1, processing_2],
+            slide_sample_issuer=local_slide_sample_issuer,
+        )
+        dataset = Dataset()
+        dataset.SpecimenDescriptionSequence = [description]
+
+        schema = SpecimenDescriptionDicomSchema()
+
+        # Act
+        models = [
+            schema.load(description)
+            for description in dataset.SpecimenDescriptionSequence
+        ]
+        slide_samples, stainings = SpecimenDicomParser().parse_descriptions(models)
+
+        # Assert
+        assert len(slide_samples) == 1
+        slide_sample = slide_samples[0]
+        if processing_expected:
+            assert len(slide_sample.steps) == 2
+            assert isinstance(slide_sample.steps[0], Processing)
+            assert slide_sample.steps[0].method == processing_1_method
+            assert isinstance(slide_sample.steps[1], Processing)
+            assert slide_sample.steps[1].method == processing_2_method
+        else:
+            assert len(slide_sample.steps) == 1
+            assert isinstance(slide_sample.steps[0], Processing)
+            assert slide_sample.steps[0].method == processing_1_method

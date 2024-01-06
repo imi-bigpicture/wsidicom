@@ -119,7 +119,6 @@ class SpecimenDicomParser:
             Parsed sample.
 
         """
-        steps_by_identifier = self._order_steps_by_identifier(description.steps)
         stainings = self._parse_stainings(description.steps)
         for staining in stainings:
             if not any(
@@ -127,6 +126,8 @@ class SpecimenDicomParser:
                 for existing_staining in self._created_stainings
             ):
                 self._created_stainings.append(staining)
+
+        steps_by_identifier = self._order_steps_by_identifier(description.steps)
         identifier = description.specimen_identifier
         parsed_specimen = self._parse_preparation_steps_for_specimen(
             identifier, steps_by_identifier
@@ -349,20 +350,25 @@ class SpecimenDicomParser:
         """
         preparation_steps: List[PreparationStep] = []
         sampling: Optional[BaseSampling] = None
-
-        if isinstance(step, CollectionDicomModel):
-            preparation_steps.append(
-                self._create_collection_step(
-                    index, step, identifier, steps_by_identifier
+        # First handle collection and sampling steps that should be on index 0
+        if index == 0:
+            if isinstance(step, CollectionDicomModel):
+                preparation_steps.append(
+                    self._create_collection_step(
+                        index, step, identifier, steps_by_identifier
+                    )
                 )
-            )
-        elif isinstance(step, SamplingDicomModel):
-            sampling = self._create_sampling_step(index, step, steps_by_identifier)
-        elif index == 0:
-            # First step was not a collection step or a sampling step, this specimen
-            # thus has no defined parent.
-            sampling = self._create_unknown_sampling(identifier, steps_by_identifier)
-        elif isinstance(step, ProcessingDicomModel):
+            elif isinstance(step, SamplingDicomModel):
+                sampling = self._create_sampling_step(index, step, steps_by_identifier)
+            else:
+                # First step was not a collection step or a sampling step, this specimen
+                # thus has no defined parent. Add a unknown sampling to previous
+                # specimen if any
+                sampling = self._create_unknown_sampling(
+                    identifier, steps_by_identifier
+                )
+
+        if isinstance(step, ProcessingDicomModel):
             if step.processing is not None:
                 # Only add processing step if has processing code.
                 preparation_steps.append(
@@ -375,8 +381,14 @@ class SpecimenDicomParser:
         elif isinstance(step, StainingDicomModel):
             # Stainings are handled elsewhere
             pass
+        elif isinstance(step, (CollectionDicomModel, SamplingDicomModel)):
+            if index != 0:
+                raise ValueError(
+                    f"Found unexpected step of type {type(step)} at index {index}. "
+                    "Collection and sampling steps should only be on index 0"
+                )
         else:
-            raise NotImplementedError(f"Step of type {type(step)}")
+            raise NotImplementedError(f"Step of type {type(step)} at index {index}.")
         # Fixative, embedding, and processing (for other than processing step)
         # are parsed into separate steps
         if step.fixative is not None:
@@ -403,7 +415,6 @@ class SpecimenDicomParser:
                     description=step.description,
                 )
             )
-
         return ParsedSpecimen(
             preparation_steps=preparation_steps,
             sampling=sampling,
