@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import (
     Dict,
     Iterable,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -243,7 +244,43 @@ class StepsDirectory:
 
 
 class SpecimenDicomParser:
-    """Parser for DICOM specimen descriptions."""
+    """Parser for DICOM Specimen Description models deserialized from DICOM dataset.
+
+    The DICOM Specimen Description contains a list of Specimen Preparation Steps
+    describing the preparation of a specimen. The steps are ordered chronologically and
+    describes specimen collection, sampling, staining, etc. for (potentially) the whole
+    specimen branch from the extracted specimen to the slide sample.
+
+    We assume (and check) that one Specimen Description only describes one branch of the
+    specimen tree, i.e. if for example a slide sample is sampled from a block that has
+    been prepared from two different extracted specimens, the Specimen Description will
+    only contain steps for one of the extracted specimens. There might be another slide
+    sample on the slide with a Specimen Description containing steps for the other
+    extracted specimen.
+
+    We also assume (and check) that when the sample specimen occurs in multiple
+    Specimen Descriptions it has the same steps, i.e. the specimen has not been further
+    processed after performing one of the samplings.
+
+    We assume (and check) that all slide samples on a slide have been stained with the
+    same stainings.
+
+    When parsing multiple Specimen Descriptions, we merge any specimens that
+    have the same identifier, i.e. two slide samples from the same block will have the
+    samme block object as parent specimen.
+
+    Any Specimen Preparation Step can specify a processing method, fixative, and/or
+    embedding, e.g. a sampling step can optionally also define a fixative. We create
+    separate steps for each of these (processing method, fixative, embedding).
+
+    The parsing of the Specimen Description starts with parsing the steps for the
+    slide sample, and then recursively parsing the steps for the parent specimen. Parent
+    specimens are either identified by a sampling step or by assuming that the specimen
+    was sampled from the previous specimen in the Specimen Description (if any). The
+    later sampling will produce an `UnknownSampling`, as the sampling step is missing
+    properties as `method` and it can't be certain that the found parent specimen is the
+    immediate parent specimen or a specimen further up the specimen branch.
+    """
 
     def __init__(self):
         self._parsed_specimens: Dict[SpecimenIdentifier, BaseSpecimen] = {}
@@ -292,12 +329,12 @@ class SpecimenDicomParser:
 
         """
         stainings = self._parse_stainings(description.steps)
-        for staining in stainings:
-            if not any(
-                existing_staining == staining
-                for existing_staining in self._parsed_stainings
-            ):
-                self._parsed_stainings.append(staining)
+        if len(self._parsed_stainings) == 0:
+            self._parsed_stainings = list(stainings)
+        elif any(staining not in self._parsed_stainings for staining in stainings):
+            raise NotImplementedError(
+                "Handling slide samples with different stainings is not implemented."
+            )
         steps_directory = StepsDirectory(description.steps)
         identifier = description.specimen_identifier
         parsed_specimen = self._parse_preparation_steps_for_specimen(
@@ -321,7 +358,7 @@ class SpecimenDicomParser:
     def _parse_stainings(
         self,
         steps: List[SpecimenPreparationStepDicomModel],
-    ) -> List[Staining]:
+    ) -> Iterator[Staining]:
         """
         Parse stainings from steps.
 
@@ -332,17 +369,17 @@ class SpecimenDicomParser:
 
         Returns
         ----------
-        List[Staining]
+        Iterator[Staining]
             Parsed stainings.
 
         """
-        return [
+        return (
             Staining(
                 step.substances, date_time=step.date_time, description=step.description
             )
             for step in steps
             if isinstance(step, StainingDicomModel)
-        ]
+        )
 
     def _parse_preparation_steps_for_specimen(
         self, identifier: SpecimenIdentifier, steps_directory: StepsDirectory
@@ -576,7 +613,7 @@ class SpecimenDicomParser:
                 method=step.method,
                 date_time=step.date_time,
                 description=step.description,
-                sampling_chain_constraints=sampling_constraints,
+                sampling_constraints=sampling_constraints,
                 location=step.sampling_location,
             )
         if isinstance(parent, Specimen):
@@ -625,7 +662,7 @@ class SpecimenDicomParser:
             return parent, sampling_constraints
 
         # Parent already exists. Check that parents preparation steps match and
-        # add the new sampling chain to the parent.
+        # add the new sampling tree to the parent.
         parent = self._parsed_specimens[parent_identifier]
         parsed_parent = self._parse_preparation_steps_for_specimen(
             parent_identifier, steps_directory
@@ -647,7 +684,7 @@ class SpecimenDicomParser:
             and parsed_parent.sampling is not None
             and parsed_parent.sampling not in parent.sampled_from_list
         ):
-            # Parsed parent adds a new sampling chain
+            # Parsed parent adds a new sampling branch
             parent.sampled_from_list.append(parsed_parent.sampling)
             sampling_constraints = [parsed_parent.sampling]
         return parent, sampling_constraints

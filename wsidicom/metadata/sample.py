@@ -259,7 +259,7 @@ class BaseSampling(PreparationStep, metaclass=ABCMeta):
     """Either a `Sampling` or a `UnknownSampling`."""
 
     specimen: "BaseSpecimen"
-    sampling_chain_constraints: Optional[Sequence["BaseSampling"]]
+    sampling_constraints: Optional[Sequence["BaseSampling"]]
 
 
 @dataclass
@@ -279,9 +279,9 @@ class Sampling(BaseSampling):
         The type of the specimen. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8103.html
          or `AnatomicPathologySpecimenTypesCode.meanings` for allowed specimen types.
-    sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
-        Optional constraints on the sampling chain. The constraints can be used to
-        define a single branch from the sample to a end specimen in the sampling chain.
+    sampling_constraints: Optional[Sequence[BaseSampling]] = None
+        Optional constraints on the sampling tree. The constraints can be used to
+        define a single branch from the sample to a end specimen in the sampling tree.
     date_time: Optional[datetime.datetime] = None
         Optional date and time when the sampling was performed.
     description: Optional[str] = None
@@ -293,7 +293,7 @@ class Sampling(BaseSampling):
     specimen: "BaseSpecimen"
     method: SpecimenSamplingProcedureCode
     specimen_type: AnatomicPathologySpecimenTypesCode = field(repr=False)
-    sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
+    sampling_constraints: Optional[Sequence[BaseSampling]] = None
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
     location: Optional[SamplingLocation] = None
@@ -312,13 +312,13 @@ class UnknownSampling(BaseSampling):
     ----------
     specimen: BaseSpecimen
         The specimen that was sampled.
-    sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
-        Optional constraints on the sampling chain. The constraints should be used to
-        define a single branch for the sample in the sampling chain.
+    sampling_constraints: Optional[Sequence[BaseSampling]] = None
+        Optional constraints on the sampling tree. The constraints should be used to
+        define a single branch for the sample in the sampling tree.
     """
 
     specimen: "BaseSpecimen"
-    sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None
+    sampling_constraints: Optional[Sequence[BaseSampling]] = None
 
 
 @dataclass
@@ -529,10 +529,10 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
             )
         super().add(step)
 
-    def _check_sampling_constraints_in_sampling_chain(
+    def _check_sampling_constraints_in_sampling_tree(
         self, constraints: Optional[Sequence[BaseSampling]]
     ) -> None:
-        """Check that the sampling chain for the specimen contains the constraints."""
+        """Check that the sampling tree for the specimen contains the constraints."""
         if constraints is None:
             return
 
@@ -558,10 +558,10 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
         self,
         constraints: Iterable[Union[str, SpecimenIdentifier]],
     ):
-        """Check that the sampling chain for the specimen is is not branching when
+        """Check that the sampling tree for the specimen is is not branching when
         following the constraints."""
         if len(self._sampled_from) == 0:
-            # No sampling chain, is unambiguous
+            # No sampling tree, is unambiguous
             return True
         if len(self._sampled_from) > 1:
             # Check that at one and only one of the samplings are in the constraints
@@ -581,15 +581,15 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
             sampling_to_check = self._sampled_from[0]
 
         if not isinstance(sampling_to_check.specimen, SampledSpecimen):
-            # Sampling chain ends non-sampled specimen, is unambiguous
+            # Sampling tree ends non-sampled specimen, is unambiguous
             return True
 
         # Update the constrain and check the parent specimen
         sub_constraint = set(constraints)
-        if sampling_to_check.sampling_chain_constraints is not None:
+        if sampling_to_check.sampling_constraints is not None:
             sub_constraint.update(
                 constraint.specimen.identifier
-                for constraint in sampling_to_check.sampling_chain_constraints
+                for constraint in sampling_to_check.sampling_constraints
             )
         return sampling_to_check.specimen.is_sampling_constraint_is_unambiguous(
             sub_constraint
@@ -599,9 +599,9 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
 @dataclass
 class Specimen(BaseSpecimen):
     """A specimen that has been extracted/taken from a patient in some way. Does not
-    need to represent the actual first specimen in the collection chain, but should
+    need to represent the actual first specimen in the collection tree, but should
     represent the first known (i.e. that we have metadata for) specimen in the
-    collection chain.
+    collection tree.
 
     Parameters
     ----------
@@ -659,14 +659,14 @@ class Specimen(BaseSpecimen):
         if method is None or self.type is None:
             sampling = UnknownSampling(
                 specimen=self,
-                sampling_chain_constraints=None,
+                sampling_constraints=None,
             )
         else:
             sampling = Sampling(
                 specimen=self,
                 method=method,
                 specimen_type=self.type,
-                sampling_chain_constraints=None,
+                sampling_constraints=None,
                 date_time=date_time,
                 description=description,
                 location=location,
@@ -717,26 +717,26 @@ class Sample(SampledSpecimen):
         method: Optional[SpecimenSamplingProcedureCode] = None,
         date_time: Optional[datetime.datetime] = None,
         description: Optional[str] = None,
-        sampling_chain_constraints: Optional[Sequence[BaseSampling]] = None,
+        sampling_constraints: Optional[Sequence[BaseSampling]] = None,
         location: Optional[SamplingLocation] = None,
     ) -> BaseSampling:
         """Create a sampling from the specimen that can be used to create a new sample."""
-        self._check_sampling_constraints_in_sampling_chain(sampling_chain_constraints)
-        if sampling_chain_constraints is not None:
-            for sampling_chain_constraint in sampling_chain_constraints:
-                assert isinstance(sampling_chain_constraint, Sampling)
+        self._check_sampling_constraints_in_sampling_tree(sampling_constraints)
+        if sampling_constraints is not None:
+            for sampling_constraint in sampling_constraints:
+                assert isinstance(sampling_constraint, Sampling)
 
         if method is None or self.type is None:
             sampling = UnknownSampling(
                 specimen=self,
-                sampling_chain_constraints=sampling_chain_constraints,
+                sampling_constraints=sampling_constraints,
             )
         else:
             sampling = Sampling(
                 specimen=self,
                 specimen_type=self.type,
                 method=method,
-                sampling_chain_constraints=sampling_chain_constraints,
+                sampling_constraints=sampling_constraints,
                 date_time=date_time,
                 description=description,
                 location=location,
@@ -795,7 +795,7 @@ class SlideSample(SampledSpecimen):
         )
 
     def _check_slide_sample_sampling_constraints(self):
-        """Check that the sampling chain for the slide sample is not branching."""
+        """Check that the sampling tree for the slide sample is not branching."""
         if self.sampled_from is None or not isinstance(
             self.sampled_from.specimen, SampledSpecimen
         ):
@@ -804,9 +804,9 @@ class SlideSample(SampledSpecimen):
         if not self.sampled_from.specimen.is_sampling_constraint_is_unambiguous(
             [
                 constraint.specimen.identifier
-                for constraint in self.sampled_from.sampling_chain_constraints
+                for constraint in self.sampled_from.sampling_constraints
             ]
-            if self.sampled_from.sampling_chain_constraints is not None
+            if self.sampled_from.sampling_constraints is not None
             else []
         ):
             raise ValueError("Sampling constraints for slide sample are ambiguous.")

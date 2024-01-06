@@ -297,7 +297,7 @@ def assert_dicom_optical_path_equals_optical_path(
         )
         assert (
             dicom_optical_path.ObjectiveLensNumericalAperture
-            == optical_path.objective.objective_numerical_aperature
+            == optical_path.objective.objective_numerical_aperture
         )
     else:
         assert "LensesCodeSequence" not in dicom_optical_path

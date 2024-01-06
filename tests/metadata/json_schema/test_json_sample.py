@@ -164,16 +164,16 @@ class TestSampleJsonSchema:
 
     def test_sampling_constraint_serialize(self, extracted_specimen: Specimen):
         # Arrange
-        sampling_chain_constraint = extracted_specimen.sample(
+        sampling_constraint = extracted_specimen.sample(
             SpecimenSamplingProcedureCode("Dissection")
         )
 
         # Act
-        dumped = SamplingConstraintJsonSchema().dump(sampling_chain_constraint)
+        dumped = SamplingConstraintJsonSchema().dump(sampling_constraint)
 
         # Arrange
         assert isinstance(dumped, dict)
-        assert dumped["identifier"] == sampling_chain_constraint.specimen.identifier
+        assert dumped["identifier"] == sampling_constraint.specimen.identifier
         assert dumped["sampling_step_index"] == 0
 
     def test_sampling_constraint_deserialize(self):
@@ -234,10 +234,8 @@ class TestSampleJsonSchema:
         assert_dict_equals_code(dumped["method"], sampling_2.method)
         assert dumped["date_time"] == sampling_2.date_time.isoformat()
         assert dumped["description"] == sampling_2.description
-        assert (
-            dumped["sampling_chain_constraints"][0]["identifier"] == specimen.identifier
-        )
-        assert dumped["sampling_chain_constraints"][0]["sampling_step_index"] == 0
+        assert dumped["sampling_constraints"][0]["identifier"] == specimen.identifier
+        assert dumped["sampling_constraints"][0]["sampling_step_index"] == 0
         assert isinstance(dumped["location"], dict)
         assert dumped["location"]["reference"] == sampling_2.location.reference
         assert dumped["location"]["description"] == sampling_2.location.description
@@ -257,7 +255,7 @@ class TestSampleJsonSchema:
                 "scheme_designator": "SCT",
                 "meaning": "Block sectioning",
             },
-            "sampling_chain_constraints": [
+            "sampling_constraints": [
                 {"identifier": "specimen", "sampling_step_index": 0}
             ],
             "date_time": "2023-08-05T00:00:00",
@@ -285,7 +283,7 @@ class TestSampleJsonSchema:
 
         # Assert
         assert isinstance(loaded, SamplingJsonModel)
-        assert loaded.sampling_chain_constraints is not None
+        assert loaded.sampling_constraints is not None
         if "method" in dumped:
             assert loaded.method is not None
             assert_dict_equals_code(dumped["method"], loaded.method)
@@ -294,12 +292,12 @@ class TestSampleJsonSchema:
         assert loaded.date_time == datetime.datetime.fromisoformat(dumped["date_time"])
         assert loaded.description == dumped["description"]
         assert (
-            loaded.sampling_chain_constraints[0].identifier
-            == dumped["sampling_chain_constraints"][0]["identifier"]
+            loaded.sampling_constraints[0].identifier
+            == dumped["sampling_constraints"][0]["identifier"]
         )
         assert (
-            loaded.sampling_chain_constraints[0].sampling_step_index
-            == dumped["sampling_chain_constraints"][0]["sampling_step_index"]
+            loaded.sampling_constraints[0].sampling_step_index
+            == dumped["sampling_constraints"][0]["sampling_step_index"]
         )
         assert isinstance(loaded.location, SamplingLocation)
         assert loaded.location.reference == dumped["location"]["reference"]
@@ -335,7 +333,7 @@ class TestSampleJsonSchema:
             AnatomicPathologySpecimenTypesCode("Tissue section"),
             [],
         )
-        sampling_2 = sample.sample(sampling_chain_constraints=[sampling_1])
+        sampling_2 = sample.sample(sampling_constraints=[sampling_1])
         assert isinstance(sampling_2, UnknownSampling)
 
         # Act
@@ -346,17 +344,15 @@ class TestSampleJsonSchema:
         assert "method" not in dumped
         assert "date_time" not in dumped
         assert "description" not in dumped
-        assert (
-            dumped["sampling_chain_constraints"][0]["identifier"] == specimen.identifier
-        )
-        assert dumped["sampling_chain_constraints"][0]["sampling_step_index"] == 0
+        assert dumped["sampling_constraints"][0]["identifier"] == specimen.identifier
+        assert dumped["sampling_constraints"][0]["sampling_step_index"] == 0
         assert "location" not in dumped
 
     def test_unkown_sampling_deserialize(self):
         # Arrange
         dumped = {
             "action": "sampling",
-            "sampling_chain_constraints": [
+            "sampling_constraints": [
                 {"identifier": "specimen", "sampling_step_index": 0}
             ],
         }
@@ -366,18 +362,18 @@ class TestSampleJsonSchema:
 
         # Assert
         assert isinstance(loaded, SamplingJsonModel)
-        assert loaded.sampling_chain_constraints is not None
+        assert loaded.sampling_constraints is not None
         assert loaded.method is None
 
         assert loaded.date_time is None
         assert loaded.description is None
         assert (
-            loaded.sampling_chain_constraints[0].identifier
-            == dumped["sampling_chain_constraints"][0]["identifier"]
+            loaded.sampling_constraints[0].identifier
+            == dumped["sampling_constraints"][0]["identifier"]
         )
         assert (
-            loaded.sampling_chain_constraints[0].sampling_step_index
-            == dumped["sampling_chain_constraints"][0]["sampling_step_index"]
+            loaded.sampling_constraints[0].sampling_step_index
+            == dumped["sampling_constraints"][0]["sampling_step_index"]
         )
         assert loaded.location is None
 
@@ -909,7 +905,7 @@ class TestSampleJsonSchema:
                             "scheme_designator": "SCT",
                             "meaning": "Block sectioning",
                         },
-                        "sampling_chain_constraints": None,
+                        "sampling_constraints": None,
                         "date_time": "2023-08-05T00:00:00",
                         "description": "Sectioning to slide",
                     },
@@ -941,7 +937,7 @@ class TestSampleJsonSchema:
                             "scheme_designator": "SCT",
                             "meaning": "Dissection",
                         },
-                        "sampling_chain_constraints": None,
+                        "sampling_constraints": None,
                         "date_time": "2023-08-05T00:00:00",
                         "description": "Sampling to block",
                     },

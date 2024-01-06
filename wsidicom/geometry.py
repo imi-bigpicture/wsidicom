@@ -185,37 +185,37 @@ class Size:
 
     def all_less_than(self, item: "Size") -> bool:
         """If all dimensions is smaller than corresponding dimension in item."""
-        return all(self._comparision_operation(item, int.__lt__))
+        return all(self._comparison_operation(item, int.__lt__))
 
     def all_less_than_or_equal(self, item: "Size") -> bool:
         """If all dimensions is smaller or equal to corresponding dimension in item."""
-        return all(self._comparision_operation(item, int.__le__))
+        return all(self._comparison_operation(item, int.__le__))
 
     def all_greater_than(self, item: "Size") -> bool:
         """If all dimensions is greater than to corresponding dimension in item."""
-        return all(self._comparision_operation(item, int.__gt__))
+        return all(self._comparison_operation(item, int.__gt__))
 
     def all_greater_than_or_equal(self, item: "Size") -> bool:
         """If all dimensions is greater or equal to corresponding dimension in item."""
-        return all(self._comparision_operation(item, int.__ge__))
+        return all(self._comparison_operation(item, int.__ge__))
 
     def any_less_than(self, item: "Size") -> bool:
         """If any dimension is smaller than corresponding dimension in item."""
-        return any(self._comparision_operation(item, int.__lt__))
+        return any(self._comparison_operation(item, int.__lt__))
 
     def any_less_than_or_equal(self, item: "Size") -> bool:
         """If any dimension is smaller or equal to corresponding dimension in item."""
-        return any(self._comparision_operation(item, int.__le__))
+        return any(self._comparison_operation(item, int.__le__))
 
     def any_greater_than(self, item: "Size") -> bool:
         """If any dimension is greater than to corresponding dimension in item."""
-        return any(self._comparision_operation(item, int.__gt__))
+        return any(self._comparison_operation(item, int.__gt__))
 
     def any_greater_than_or_equal(self, item: "Size") -> bool:
         """If any dimension is greater or equal to corresponding dimension in item."""
-        return any(self._comparision_operation(item, int.__ge__))
+        return any(self._comparison_operation(item, int.__ge__))
 
-    def _comparision_operation(
+    def _comparison_operation(
         self, item: "Size", operation: Callable[[int, int], bool]
     ) -> Iterable[bool]:
         return (

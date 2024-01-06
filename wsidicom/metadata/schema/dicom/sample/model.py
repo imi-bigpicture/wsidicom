@@ -86,6 +86,20 @@ class SpecimenPreparationStepDicomModel(metaclass=ABCMeta):
         step: PreparationStep,
         specimen: BaseSpecimen,
     ) -> Optional["SpecimenPreparationStepDicomModel"]:
+        """Return DICOM model for the step.
+
+        Parameters
+        ----------
+        step: PreparationStep
+            Step to convert into DICOM model.
+        specimen: BaseSpecimen
+            Specimen that was processed.
+
+        Returns
+        -------
+        Optional[SpecimenPreparationStepDicomModel]
+            DICOM model for the step, or None if no step should be produced.
+        """
         if isinstance(step, Sampling):
             if step.specimen.type is None:
                 return None

@@ -357,8 +357,8 @@ class TestJsonSchema:
             == optical_path.objective.objective_power
         )
         assert (
-            dumped["objective"]["objective_numerical_aperature"]
-            == optical_path.objective.objective_numerical_aperature
+            dumped["objective"]["objective_numerical_aperture"]
+            == optical_path.objective.objective_numerical_aperture
         )
         if optical_path.lut is not None:
             assert_lut_is_equal(dumped["lut"], optical_path.lut)
@@ -424,7 +424,7 @@ class TestJsonSchema:
                 ],
                 "condenser_power": 10.0,
                 "objective_power": 20.0,
-                "objective_numerical_aperature": 0.5,
+                "objective_numerical_aperture": 0.5,
             },
             "lut": {
                 "bits": 16,
@@ -500,8 +500,8 @@ class TestJsonSchema:
             loaded.objective.objective_power == dumped["objective"]["objective_power"]
         )
         assert (
-            loaded.objective.objective_numerical_aperature
-            == dumped["objective"]["objective_numerical_aperature"]
+            loaded.objective.objective_numerical_aperture
+            == dumped["objective"]["objective_numerical_aperture"]
         )
         assert loaded.icc_profile == icc_profile
         assert_lut_is_equal(dumped["lut"], loaded.lut)

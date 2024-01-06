@@ -68,7 +68,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
 
     @pre_dump
     def pre_dump(self, slide: Slide, **kwargs):
-        # move staining to samples so that sample field can serialize both
+        # Move staining to samples so that sample field can serialize both
         if slide.samples is None:
             samples = [SlideSample(identifier=defaults.string)]
         else:

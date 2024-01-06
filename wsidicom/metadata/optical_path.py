@@ -283,14 +283,14 @@ class Objectives:
         The condenser power.
     objective_power: Optional[float] = None
         The objective power.
-    objective_numerical_aperature: Optional[float] = None
-        The objective numerical aperature.
+    objective_numerical_aperture: Optional[float] = None
+        The objective numerical aperture.
     """
 
     lenses: Sequence[LenseCode] = field(default_factory=list)
     condenser_power: Optional[float] = None
     objective_power: Optional[float] = None
-    objective_numerical_aperature: Optional[float] = None
+    objective_numerical_aperture: Optional[float] = None
 
 
 @dataclass

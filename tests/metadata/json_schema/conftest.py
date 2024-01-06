@@ -98,7 +98,7 @@ def json_slide(json_slide_identifier: Union[str, Dict[str, Any]]):
                             "scheme_designator": "SCT",
                             "meaning": "Block sectioning",
                         },
-                        "sampling_chain_constraints": [
+                        "sampling_constraints": [
                             {"identifier": "part 1", "sampling_step_index": 0}
                         ],
                         "date_time": "2023-08-05T00:00:00",
@@ -111,7 +111,7 @@ def json_slide(json_slide_identifier: Union[str, Dict[str, Any]]):
                             "scheme_designator": "SCT",
                             "meaning": "Block sectioning",
                         },
-                        "sampling_chain_constraints": [
+                        "sampling_constraints": [
                             {"identifier": "part 2", "sampling_step_index": 0}
                         ],
                         "date_time": "2023-08-05T00:00:00",
@@ -157,7 +157,7 @@ def json_slide(json_slide_identifier: Union[str, Dict[str, Any]]):
                             "scheme_designator": "SCT",
                             "meaning": "Dissection",
                         },
-                        "sampling_chain_constraints": None,
+                        "sampling_constraints": None,
                         "date_time": "2023-08-05T00:00:00",
                         "description": "Sampling to block",
                     },
@@ -197,7 +197,7 @@ def json_slide(json_slide_identifier: Union[str, Dict[str, Any]]):
                             "scheme_designator": "SCT",
                             "meaning": "Dissection",
                         },
-                        "sampling_chain_constraints": None,
+                        "sampling_constraints": None,
                         "date_time": "2023-08-05T00:00:00",
                         "description": "Sampling to block",
                     },

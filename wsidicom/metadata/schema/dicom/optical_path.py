@@ -596,7 +596,7 @@ class ObjectivesSchema(DicomSchema[Objectives]):
     )
     condenser_power = FloatDicomField(data_key="CondenserLensPower", allow_none=True)
     objective_power = FloatDicomField(data_key="ObjectiveLensPower", allow_none=True)
-    objective_numerical_aperature = FloatDicomField(
+    objective_numerical_aperture = FloatDicomField(
         data_key="ObjectiveLensNumericalAperture", allow_none=True
     )
 

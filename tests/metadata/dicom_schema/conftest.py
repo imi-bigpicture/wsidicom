@@ -190,7 +190,7 @@ def dicom_optical_path(optical_path: OpticalPath):
         dataset.CondenserLensPower = optical_path.objective.condenser_power
         dataset.ObjectiveLensPower = optical_path.objective.objective_power
         dataset.ObjectiveLensNumericalAperture = (
-            optical_path.objective.objective_numerical_aperature
+            optical_path.objective.objective_numerical_aperture
         )
     if optical_path.lut is not None:
         dataset.PaletteColorLookupTableSequence = LutDicomFormatter.to_dataset(

@@ -61,7 +61,7 @@ class PreparationAction(Enum):
 
 @dataclass
 class SamplingConstraintJsonModel:
-    """Simplified representation of a `Sampling` to use as sampling chain constraint,
+    """Simplified representation of a `Sampling` to use as sampling tree constraint,
     replacing the sampling with the identifier of the sampled specimen and the index of
     the sampling step within the step sequence of the specimen."""
 
@@ -104,7 +104,7 @@ class SamplingJsonModel:
     the idententifier and sampling constraints with simplified sampling constraints."""
 
     method: Optional[SpecimenSamplingProcedureCode] = None
-    sampling_chain_constraints: Optional[Sequence[SamplingConstraintJsonModel]] = None
+    sampling_constraints: Optional[Sequence[SamplingConstraintJsonModel]] = None
     date_time: Optional[datetime.datetime] = None
     location: Optional[SamplingLocation] = None
     description: Optional[str] = None
@@ -164,11 +164,11 @@ class SamplingJsonModel:
         Optional[List[Sampling]]
             List of constraint samplings, or None if no constraints.
         """
-        if self.sampling_chain_constraints is None:
+        if self.sampling_constraints is None:
             return None
         return [
             constraint.from_json_model(specimens)
-            for constraint in self.sampling_chain_constraints
+            for constraint in self.sampling_constraints
         ]
 
 

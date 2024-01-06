@@ -115,7 +115,7 @@ class SamplingJsonSchema(DataclassLoadingSchema[SamplingJsonModel]):
     method = JsonFieldFactory.concept_code(SpecimenSamplingProcedureCode)(
         allow_none=True
     )
-    sampling_chain_constraints = fields.List(
+    sampling_constraints = fields.List(
         fields.Nested(SamplingConstraintJsonSchema, allow_none=True), allow_none=True
     )
     date_time = fields.DateTime(allow_none=True)

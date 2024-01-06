@@ -429,7 +429,7 @@ class PreparationStepDicomField(fields.Field):
                     "Failed to load processing step due to missing processing type."
                 )
             try:
-                # Iterate over schemas as code comparision can map SRT to SCT codes
+                # Iterate over schemas as code comparison can map SRT to SCT codes
                 schema = next(
                     schema
                     for name, schema in self._processing_type_to_schema_mapping.items()
