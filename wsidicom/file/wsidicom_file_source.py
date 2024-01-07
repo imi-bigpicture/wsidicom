@@ -140,6 +140,15 @@ class WsiDicomFileSource(Source):
         return [reader for reader_list in reader_lists for reader in reader_list]
 
     @property
+    def files(self) -> Optional[List[Path]]:
+        """Return the files in the source, if any."""
+        if all(reader.filepath is None for reader in self.readers):
+            return None
+        return [
+            reader.filepath for reader in self.readers if reader.filepath is not None
+        ]
+
+    @property
     def is_ready_for_viewing(self) -> Optional[bool]:
         """
         Returns True if files in source are formatted for fast viewing.

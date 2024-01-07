@@ -261,6 +261,13 @@ class WsiDicom:
             self._levels.metadata, label_metadata, overview_metadata
         )
 
+    @property
+    def files(self) -> Optional[List[Path]]:
+        """Return opened files if source is file-based."""
+        if isinstance(self._source, WsiDicomFileSource):
+            return self._source.files
+        return None
+
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         string = self.__class__.__name__
         if depth is not None:
