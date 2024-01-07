@@ -316,7 +316,7 @@ class OpticalPath:
     lut : Optional[Lut] = None
         Lookup table to use for the optical path.
     light_path_filter : Optional[LightPathFilter] = None
-        Light path filter used in th optical path.
+        Light path filter used in the optical path.
     image_path_filter : Optional[ImagePathFilter] = None
         Image path filter used in the optical path.
     objective : Optional[Objectives] = None
