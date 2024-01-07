@@ -16,11 +16,13 @@
 
 from marshmallow import fields
 
+from wsidicom.codec.encoder import LossyCompressionIsoStandard
 from wsidicom.metadata.image import (
     ExtendedDepthOfField,
     FocusMethod,
     Image,
     ImageCoordinateSystem,
+    LossyCompression,
 )
 from wsidicom.metadata.schema.common import LoadingSchema
 from wsidicom.metadata.schema.json.fields import PointMmJsonField, SizeMmJsonField
@@ -44,6 +46,15 @@ class ImageCoordinateSystemJsonSchema(LoadingSchema[ImageCoordinateSystem]):
         return ImageCoordinateSystem
 
 
+class LossyCompressionJsonSchema(LoadingSchema[LossyCompression]):
+    method = fields.Enum(LossyCompressionIsoStandard, by_value=True)
+    ratio = fields.Float()
+
+    @property
+    def load_type(self):
+        return LossyCompression
+
+
 class ImageJsonSchema(LoadingSchema[Image]):
     acquisition_datetime = fields.DateTime(allow_none=True)
     focus_method = fields.Enum(FocusMethod, by_value=True, allow_none=True)
@@ -56,6 +67,9 @@ class ImageJsonSchema(LoadingSchema[Image]):
     pixel_spacing = SizeMmJsonField()
     focal_plane_spacing = fields.Float()
     depth_of_field = fields.Float()
+    lossy_compressions = fields.List(
+        fields.Nested(LossyCompressionJsonSchema()), allow_none=True
+    )
 
     @property
     def load_type(self):

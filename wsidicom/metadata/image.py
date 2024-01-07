@@ -17,8 +17,9 @@
 import datetime
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, TypeVar
+from typing import Optional, Sequence, TypeVar
 
+from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.geometry import Orientation, PointMm, RegionMm, SizeMm
 
 
@@ -91,6 +92,22 @@ class ImageCoordinateSystem:
 
 
 @dataclass
+class LossyCompression:
+    """Lossy compression.
+
+    Parameters
+    ----------
+    method : LossyCompressionIsoStandard
+        The method used for lossy compression.
+    ratio : float
+        The compression ratio.
+    """
+
+    method: LossyCompressionIsoStandard
+    ratio: float
+
+
+@dataclass
 class Image:
     """
     Image metadata.
@@ -115,6 +132,8 @@ class Image:
         The spacing between focal planes if image with multiple focal planes.
     depth_of_field : Optional[float] = None
         The depth of field of the image.
+    lossy_compressions : Optional[Sequence[LossyCompression]] = None
+        The lossy compressions method that has been applied to the image data.
     """
 
     acquisition_datetime: Optional[datetime.datetime] = None
@@ -124,3 +143,4 @@ class Image:
     pixel_spacing: Optional[SizeMm] = None
     focal_plane_spacing: Optional[float] = None
     depth_of_field: Optional[float] = None
+    lossy_compressions: Optional[Sequence[LossyCompression]] = None

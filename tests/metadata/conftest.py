@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 from pydicom.uid import UID
 
+from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     Code,
@@ -56,21 +57,22 @@ from wsidicom.metadata import (
     Study,
     WsiMetadata,
 )
+from wsidicom.metadata.image import LossyCompression
 from wsidicom.metadata.optical_path import ConstantLutSegment, LinearLutSegment
 from wsidicom.metadata.sample import (
     Collection,
     Embedding,
-    Specimen,
     Fixation,
     Processing,
     Receiving,
     Sample,
-    Sampling,
-    SlideSample,
     SampleLocalization,
+    Sampling,
+    SamplingLocation,
+    SlideSample,
+    Specimen,
     SpecimenIdentifier,
     Staining,
-    SamplingLocation,
     Storage,
 )
 
@@ -116,6 +118,11 @@ def equipment(
 
 
 @pytest.fixture()
+def lossy_compressions():
+    yield [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 0.5)]
+
+
+@pytest.fixture()
 def image(
     acquisition_datetime: Optional[datetime.datetime],
     focus_method: Optional[FocusMethod],
@@ -124,6 +131,7 @@ def image(
     pixel_spacing: Optional[SizeMm],
     focal_plane_spacing: Optional[float],
     depth_of_field: Optional[float],
+    lossy_compressions: Optional[Sequence[LossyCompression]],
 ):
     yield Image(
         acquisition_datetime,
@@ -133,6 +141,7 @@ def image(
         pixel_spacing,
         focal_plane_spacing,
         depth_of_field,
+        lossy_compressions,
     )
 
 

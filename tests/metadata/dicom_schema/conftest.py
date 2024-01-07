@@ -13,36 +13,37 @@
 #    limitations under the License.
 
 from datetime import datetime
+
 import pytest
 from pydicom import Dataset
 from pydicom.sr.coding import Code
 from pydicom.valuerep import DT, DSfloat
+
 from tests.metadata.dicom_schema.helpers import (
     bool_to_dicom_literal,
     code_to_code_dataset,
 )
 from wsidicom.conceptcode import IlluminationColorCode
-from wsidicom.instance import ImageType
 from wsidicom.geometry import PointMm
-
+from wsidicom.instance import ImageType
 from wsidicom.metadata import (
     Equipment,
     Image,
+    Label,
     OpticalPath,
     Patient,
     Series,
     Slide,
     Study,
     WsiMetadata,
-    Label,
 )
-from wsidicom.metadata.schema.dicom.optical_path import LutDicomFormatter
-from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 from wsidicom.metadata.image import (
     ExtendedDepthOfField,
     FocusMethod,
     ImageCoordinateSystem,
 )
+from wsidicom.metadata.schema.dicom.optical_path import LutDicomFormatter
+from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 
 
 @pytest.fixture()
@@ -100,6 +101,17 @@ def dicom_image(image: Image):
         shared_functional_group_dataset = Dataset()
         shared_functional_group_dataset.PixelMeasuresSequence = [pixel_spacing_dataset]
         dataset.SharedFunctionalGroupsSequence = [shared_functional_group_dataset]
+
+    if image.lossy_compressions is not None:
+        dataset.LossyImageCompression = "01"
+        dataset.LossyImageCompressionMethod = [
+            compression.method.value for compression in image.lossy_compressions
+        ]
+        dataset.LossyImageCompressionRatio = [
+            DSfloat(compression.ratio, True) for compression in image.lossy_compressions
+        ]
+    else:
+        dataset.LossyImageCompression = "00"
     yield dataset
 
 

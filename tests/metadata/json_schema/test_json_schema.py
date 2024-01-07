@@ -23,6 +23,7 @@ from tests.metadata.json_schema.helpers import (
     assert_dict_equals_code,
     assert_lut_is_equal,
 )
+from wsidicom.codec.encoder import LossyCompressionIsoStandard
 from wsidicom.conceptcode import Code, IlluminationColorCode
 from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.metadata import (
@@ -193,6 +194,15 @@ class TestJsonSchema:
             assert dumped["depth_of_field"] is None
         else:
             assert dumped["depth_of_field"] == image.depth_of_field
+        if image.lossy_compressions is None:
+            assert dumped["lossy_compressions"] is None
+        else:
+            assert len(dumped["lossy_compressions"]) == len(image.lossy_compressions)
+            for dumped_compression, expected_compression in zip(
+                dumped["lossy_compressions"], image.lossy_compressions
+            ):
+                assert dumped_compression["method"] == expected_compression.method.value
+                assert dumped_compression["ratio"] == expected_compression.ratio
 
     def test_image_deserialize(self):
         # Arrange
@@ -210,6 +220,13 @@ class TestJsonSchema:
             "pixel_spacing": {"width": 0.01, "height": 0.01},
             "focal_plane_spacing": 0.001,
             "depth_of_field": 0.01,
+            "lossy_compressions": [
+                {"method": LossyCompressionIsoStandard.JPEG_LOSSY.value, "ratio": 0.25},
+                {
+                    "method": LossyCompressionIsoStandard.JPEG_2000_IRREVERSIBLE,
+                    "ratio": 0.35,
+                },
+            ],
         }
 
         # Act
@@ -248,6 +265,15 @@ class TestJsonSchema:
         assert loaded.pixel_spacing.height == dumped["pixel_spacing"]["height"]
         assert loaded.focal_plane_spacing == dumped["focal_plane_spacing"]
         assert loaded.depth_of_field == dumped["depth_of_field"]
+        assert loaded.lossy_compressions is not None
+        assert len(loaded.lossy_compressions) == len(dumped["lossy_compressions"])
+        for loaded_compression, dumped_compression in zip(
+            loaded.lossy_compressions, dumped["lossy_compressions"]
+        ):
+            assert loaded_compression.method == LossyCompressionIsoStandard(
+                dumped_compression["method"]
+            )
+            assert loaded_compression.ratio == dumped_compression["ratio"]
 
     def test_label_serialize(self, label: Label):
         # Arrange

@@ -15,29 +15,34 @@
 """DICOM schema for Image model."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Optional, Sequence, Type
 
 from marshmallow import fields, post_load, pre_dump
 from pydicom.dataset import Dataset
 
+from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.geometry import SizeMm
 from wsidicom.metadata.image import (
     ExtendedDepthOfField,
     FocusMethod,
     Image,
     ImageCoordinateSystem,
+    LossyCompression,
 )
 from wsidicom.metadata.schema.dicom.defaults import Defaults
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
     DateTimeDicomField,
     DefaultingDicomField,
+    EnumDicomField,
     FlattenOnDumpNestedDicomField,
     FloatDicomField,
     ImageOrientationSlideField,
+    ListDicomField,
     NestedDatasetDicomField,
     OffsetInSlideCoordinateSystemField,
     PixelSpacingDicomField,
+    StringDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import (
     DicomSchema,
@@ -100,6 +105,56 @@ class PixelMeasureDicomSchema(DicomSchema[PixelMeasureDicomModel]):
         return PixelMeasureDicomModel
 
 
+class LossyCompressionDicomSchema:
+    method = StringDicomField()
+    ratio = FloatDicomField()
+
+
+class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):
+    methods = ListDicomField(
+        EnumDicomField(LossyCompressionIsoStandard, by_value=True),
+        data_key="LossyImageCompressionMethod",
+        dump_none_if_empty=True,
+    )
+    ratios = ListDicomField(
+        FloatDicomField(),
+        data_key="LossyImageCompressionRatio",
+        dump_none_if_empty=True,
+    )
+    lossy_compressed = BooleanDicomField(
+        data_key="LossyImageCompression", dump_only=True, truthy="01", falsy="00"
+    )
+
+    @property
+    def load_type(self) -> Type[Sequence[LossyCompression]]:
+        return list
+
+    @pre_dump
+    def pre_dump(
+        self, lossy_compressions: Sequence[LossyCompression], **kwargs
+    ) -> Dict[str, Any]:
+        return {
+            "methods": [compression.method for compression in lossy_compressions],
+            "ratios": [compression.ratio for compression in lossy_compressions],
+            "lossy_compressed": len(lossy_compressions) > 0,
+        }
+
+    @post_load
+    def post_load(self, data: Dict[str, Any], **kwargs) -> Sequence[LossyCompression]:
+        methods = data.pop("methods", [])
+        ratios = data.pop("ratios", [])
+        if len(methods) != len(ratios):
+            raise ValueError(
+                (
+                    f"Number of lossy compression methods {len(methods)} did not match "
+                    f"number of ratios {len(ratios)}."
+                )
+            )
+        return [
+            LossyCompression(method, ratio) for method, ratio in zip(methods, ratios)
+        ]
+
+
 class ImageDicomSchema(ModuleDicomSchema[Image]):
     acquisition_datetime = DefaultingDicomField(
         DateTimeDicomField(),
@@ -129,6 +184,11 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         data_key="SharedFunctionalGroupsSequence",
         nested_data_key="PixelMeasuresSequence",
     )
+    lossy_compressions = FlattenOnDumpNestedDicomField(
+        LossyCompressionsDicomSchema(),
+        allow_none=True,
+        load_default=None,
+    )
 
     @property
     def load_type(self) -> Type[Image]:
@@ -147,6 +207,9 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
                 focal_plane_spacing=image.focal_plane_spacing,
                 depth_of_field=image.depth_of_field,
             ),
+            "lossy_compressions": image.lossy_compressions
+            if image.lossy_compressions
+            else [],
         }
 
     @post_load
@@ -167,6 +230,7 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
             data["pixel_spacing"] = pixel_measure.pixel_spacing
             data["focal_plane_spacing"] = pixel_measure.focal_plane_spacing
             data["depth_of_field"] = pixel_measure.depth_of_field
+
         return super().post_load(data, **kwargs)
 
     @property

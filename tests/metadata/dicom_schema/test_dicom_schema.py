@@ -29,6 +29,7 @@ from tests.metadata.dicom_schema.helpers import (
     assert_dicom_series_equals_series,
     assert_dicom_study_equals_study,
 )
+from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.conceptcode import (
     IlluminationColorCode,
     ImagePathFilterCode,
@@ -54,6 +55,14 @@ from wsidicom.metadata import (
     Study,
     WsiMetadata,
 )
+from wsidicom.metadata.image import LossyCompression
+from wsidicom.metadata.sample import (
+    LocalIssuerOfIdentifier,
+    SlideSample,
+    SpecimenIdentifier,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
+)
 from wsidicom.metadata.schema.dicom.defaults import Defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.image import ImageDicomSchema
@@ -66,13 +75,6 @@ from wsidicom.metadata.schema.dicom.series import SeriesDicomSchema
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 from wsidicom.metadata.schema.dicom.study import StudyDicomSchema
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
-from wsidicom.metadata.sample import (
-    LocalIssuerOfIdentifier,
-    SlideSample,
-    SpecimenIdentifier,
-    UniversalIssuerOfIdentifier,
-    UniversalIssuerType,
-)
 
 
 class TestDicomSchema:
@@ -140,6 +142,7 @@ class TestDicomSchema:
             "pixel_spacing",
             "focal_plane_spacing",
             "depth_of_field",
+            "lossy_compressions",
         ],
         [
             [
@@ -150,6 +153,7 @@ class TestDicomSchema:
                 SizeMm(0.5, 0.5),
                 0.25,
                 2.5,
+                None,
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
@@ -159,6 +163,12 @@ class TestDicomSchema:
                 SizeMm(0.5, 0.5),
                 0.25,
                 2.5,
+                [
+                    LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 0.5),
+                    LossyCompression(
+                        LossyCompressionIsoStandard.JPEG_2000_IRREVERSIBLE, 0.2
+                    ),
+                ],
             ],
         ],
     )
@@ -186,6 +196,9 @@ class TestDicomSchema:
         assert serialized.AcquisitionDateTime == Defaults.date_time
         assert serialized.FocusMethod == Defaults.focus_method.name
         assert serialized.ExtendedDepthOfField == "NO"
+        assert "LossyImageCompressionMethod" not in serialized
+        assert "LossyImageCompressionRatio" not in serialized
+        assert serialized.LossyImageCompression == "00"
 
     @pytest.mark.parametrize(
         [
@@ -196,6 +209,7 @@ class TestDicomSchema:
             "pixel_spacing",
             "focal_plane_spacing",
             "depth_of_field",
+            "lossy_compressions",
         ],
         [
             [
@@ -206,6 +220,7 @@ class TestDicomSchema:
                 SizeMm(0.5, 0.5),
                 0.25,
                 2.5,
+                None,
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
@@ -215,8 +230,14 @@ class TestDicomSchema:
                 SizeMm(0.5, 0.5),
                 0.25,
                 2.5,
+                [
+                    LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 0.5),
+                    LossyCompression(
+                        LossyCompressionIsoStandard.JPEG_2000_IRREVERSIBLE, 0.2
+                    ),
+                ],
             ],
-            [None, None, None, None, None, None, None],
+            [None, None, None, None, None, None, None, None],
         ],
     )
     def test_deserialize_image(self, dicom_image: Dataset, image: Image):

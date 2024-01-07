@@ -29,7 +29,7 @@ from pydicom.uid import (
 from pydicom.tag import BaseTag
 from pydicom.valuerep import DSfloat
 from pydicom.multival import MultiValue
-from wsidicom.codec.encoder import LossyCompressionIsoStandard
+from wsidicom.codec import LossyCompressionIsoStandard
 
 from wsidicom.config import settings
 from wsidicom.errors import (

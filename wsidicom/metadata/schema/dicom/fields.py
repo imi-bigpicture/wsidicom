@@ -125,8 +125,17 @@ class TimeDicomField(StringLikeDicomField):
 
 
 class BooleanDicomField(fields.Boolean):
-    def __init__(self, **kwargs):
-        super().__init__(truthy=set(["YES"]), falsy=set(["NO"]), **kwargs)
+    def __init__(
+        self,
+        truthy: Optional[str] = None,
+        falsy: Optional[str] = None,
+        **kwargs,
+    ):
+        if truthy is None:
+            truthy = "YES"
+        if falsy is None:
+            falsy = "NO"
+        super().__init__(truthy=set([truthy]), falsy=set([falsy]), **kwargs)
 
     def _serialize(self, value: bool, attr: Optional[str], obj: Any, **kwargs):
         if value:
@@ -195,6 +204,20 @@ class ImageOrientationSlideField(fields.Field):
 
 class ListDicomField(fields.List):
     """Wrapper around normal list that handles single-valued lists from pydicom."""
+
+    def __init__(
+        self,
+        cls_or_instance: Union[fields.Field, type],
+        dump_none_if_empty: bool = False,
+        **kwargs,
+    ):
+        self._dump_none_if_empty = dump_none_if_empty
+        super().__init__(cls_or_instance, **kwargs)
+
+    def _serialize(self, value, attr, obj, **kwargs) -> Any:
+        if self._dump_none_if_empty and value is None or len(value) == 0:
+            return None
+        return super()._serialize(value, attr, obj, **kwargs)
 
     def _deserialize(
         self, value: Union[Any, List[Any]], attr, data, **kwargs

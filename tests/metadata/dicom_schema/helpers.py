@@ -47,9 +47,9 @@ from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
     Measurement,
+    SampleLocalization,
     SamplingLocation,
     SpecimenIdentifier,
-    SampleLocalization,
     UniversalIssuerOfIdentifier,
 )
 from wsidicom.metadata.schema.dicom.defaults import Defaults
@@ -192,6 +192,30 @@ def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
             )
         if image.depth_of_field is not None:
             assert pixel_measures.SliceThickness == DSfloat(image.depth_of_field)
+    if image.lossy_compressions is not None:
+        assert "LossyImageCompressionMethod" in dicom_image
+        assert "LossyImageCompressionRatio" in dicom_image
+        dicom_methods = dicom_image.LossyImageCompressionMethod
+        if isinstance(dicom_methods, str):
+            dicom_methods = [dicom_methods]
+        dicom_ratios = dicom_image.LossyImageCompressionRatio
+        if isinstance(dicom_ratios, float):
+            dicom_ratios = [dicom_ratios]
+
+        assert len(dicom_methods) == len(image.lossy_compressions)
+        assert len(dicom_ratios) == len(image.lossy_compressions)
+        for lossy_compression, dicom_method, dicom_ratio in zip(
+            image.lossy_compressions,
+            dicom_methods,
+            dicom_ratios,
+        ):
+            assert lossy_compression.method.value == dicom_method
+            assert lossy_compression.ratio == dicom_ratio
+        assert dicom_image.LossyImageCompression == "01"
+    else:
+        assert "LossyImageCompressionMethod" not in dicom_image
+        assert "LossyImageCompressionRatio" not in dicom_image
+        assert dicom_image.LossyImageCompression == "00"
 
 
 def assert_dicom_label_equals_label(

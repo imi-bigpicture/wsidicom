@@ -25,8 +25,8 @@ from pydicom.uid import JPEGBaseline8Bit
 
 from tests.data_gen import create_layer_file
 from wsidicom import WsiDicom
-from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 from wsidicom.config import settings
+from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
