@@ -120,7 +120,7 @@ class TestDicomSchema:
             [None, None, None, None],
         ],
     )
-    def test_deserialize_dicom_equipment(
+    def test_deserialize_equipment(
         self, dicom_equipment: Dataset, equipment: Equipment
     ):
         # Arrange
