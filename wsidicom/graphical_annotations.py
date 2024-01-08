@@ -117,7 +117,7 @@ class Measurement:
             Other base to compare to.
 
         Returns
-        ----------
+        -------
         bool
             True if bases are same.
         """
@@ -133,7 +133,7 @@ class Measurement:
             Dataset containing measurement sequence item (group).
 
         Returns
-        ----------
+        -------
         MeasurementType
             Measurement type of the measurement group.
         """
@@ -155,7 +155,7 @@ class Measurement:
             Dataset containing measurement sequence item (group).
 
         Returns
-        ----------
+        -------
         List[float]
             Measurement values of the measurement group.
         """
@@ -178,7 +178,7 @@ class Measurement:
             Number of annotations.
 
         Returns
-        ----------
+        -------
         List[int]
             Measurement indices of the measurement group.
         """
@@ -203,7 +203,7 @@ class Measurement:
             Number of annotations in group.
 
         Returns
-        ----------
+        -------
         Iterator[Tuple[int, 'Measurement']]:
             Generator for annotation index and measurement.
         """
@@ -230,7 +230,7 @@ class Measurement:
             Number of annotations in group.
 
         Returns
-        ----------
+        -------
         Dict[int, List[Measurement]]
             Dict of measurements grouped by annotation number as key.
         """
@@ -286,7 +286,7 @@ class Geometry(metaclass=ABCMeta):
             List of float to convert.
 
         Returns
-        ----------
+        -------
         List[Tuple[float, float]]
             List of coordinates (Tuple of floats).
         """
@@ -317,7 +317,7 @@ class Geometry(metaclass=ABCMeta):
             Name of the y coordinate.
 
         Returns
-        ----------
+        -------
         List[Tuple[float, float]]
             List of coordinates (Tuple of floats).
         """
@@ -352,7 +352,7 @@ class Geometry(metaclass=ABCMeta):
             Object with shapely-like attributes.
 
         Returns
-        ----------
+        -------
         Geometry
             Geometry created from object.
         """
@@ -385,7 +385,7 @@ class Geometry(metaclass=ABCMeta):
             Geojson geometry dictionary.
 
         Returns
-        ----------
+        -------
         Geometry
             Geometry created from Geojson dictionary.
         """
@@ -617,7 +617,7 @@ class Annotation:
             Unit of measurement type to get.
 
         Returns
-        ----------
+        -------
         List[Measurement]
             List of measurements of specified type.
         """
@@ -640,7 +640,7 @@ class Annotation:
             Unit of measurement type to get.
 
         Returns
-        ----------
+        -------
         List[Measurement]
             List of values for measurements of specified type.
         """
@@ -761,7 +761,7 @@ class AnnotationGroup(Generic[GeometryType]):
         """Return coordinates for annotations in group np array.
 
         Returns
-        ----------
+        -------
         np.ndarray
             Coordinates in annotation group.
         """
@@ -775,7 +775,7 @@ class AnnotationGroup(Generic[GeometryType]):
         """Return number of annotations in group.
 
         Returns
-        ----------
+        -------
         int
             Number of annotations in group.
         """
@@ -810,7 +810,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Uid this group was created from.
 
         Returns
-        ----------
+        -------
         AnnotationGroupType
             Annotation group from dataset.
         """
@@ -848,7 +848,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing annotation group label.
 
         Returns
-        ----------
+        -------
         str
             Annotation group label from dataset.
         """
@@ -865,7 +865,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing annotation group focal planes.
 
         Returns
-        ----------
+        -------
         List[float]
             Annotation group focal planes from dataset.
         """
@@ -890,7 +890,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing annotation group optical paths.
 
         Returns
-        ----------
+        -------
         List[str]
             Annotation group optical paths from dataset.
         """
@@ -909,7 +909,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing annotation group.
 
         Returns
-        ----------
+        -------
         int
             Number of annotations in group
         """
@@ -928,7 +928,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing measurement sequence.
 
         Returns
-        ----------
+        -------
         Dict[int, List[Measurement]]:
             Measurements grouped by annotation index.
         """
@@ -949,7 +949,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing annotation group.
 
         Returns
-        ----------
+        -------
         bool
             True if group uses double float.
         """
@@ -965,7 +965,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing annotation group.
 
         Returns
-        ----------
+        -------
         List[float]
             The coordinates for the annotations in the group.
         """
@@ -986,7 +986,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing annotation group.
 
         Returns
-        ----------
+        -------
         List[Geometry]
             Geometries in the annotation group.
         """
@@ -1002,7 +1002,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Dataset containing annotation group.
 
         Returns
-        ----------
+        -------
         List[float]
             The coordinates for the annotations in the group.
         """
@@ -1019,7 +1019,7 @@ class AnnotationGroup(Generic[GeometryType]):
         """Return measurement types in annotation group.
 
         Returns
-        ----------
+        -------
         List[Tuple[MeasurementCode, UnitCode]]
             Measurement code-unit-pairs in annotation group.
         """
@@ -1043,7 +1043,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Unit of measurement type to get.
 
         Returns
-        ----------
+        -------
         List[Measurement]
             Measurements of specified type.
         """
@@ -1066,7 +1066,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Unit of measurement type to create.
 
         Returns
-        ----------
+        -------
         np.ndarray
             Measurement indices in annotation group of specified type.
         """
@@ -1088,7 +1088,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Unit of measurement type to create.
 
         Returns
-        ----------
+        -------
         np.ndarray
             Measurement values in annotation group of specified type.
         """
@@ -1111,7 +1111,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Unit of measurement type to check.
 
         Returns
-        ----------
+        -------
         bool
             True if this measurement code-unit-pair maps one-to-one to
             annotations.
@@ -1135,7 +1135,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Unit of measurement create sequence for.
 
         Returns
-        ----------
+        -------
         DicomSequence
             A sequence of the measurement values of specified type and unit.
         """
@@ -1164,7 +1164,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Unit of measurement to create sequence for.
 
         Returns
-        ----------
+        -------
         Dataset
             A measurement sequence item for the specified measurement type and
             unit.
@@ -1187,7 +1187,7 @@ class AnnotationGroup(Generic[GeometryType]):
             The Annotation Group Sequence.
 
         Returns
-        ----------
+        -------
         Dataset
             The Annotation Group Sequence with focal plane attributes.
         """
@@ -1208,7 +1208,7 @@ class AnnotationGroup(Generic[GeometryType]):
             The Annotation Group Sequence.
 
         Returns
-        ----------
+        -------
         Dataset
             The Annotation Group Sequence with optical path attributes.
         """
@@ -1229,7 +1229,7 @@ class AnnotationGroup(Generic[GeometryType]):
             The Annotation Group Sequence.
 
         Returns
-        ----------
+        -------
         Dataset
             The Annotation Group Sequence with inserted coordinates.
         """
@@ -1248,7 +1248,7 @@ class AnnotationGroup(Generic[GeometryType]):
             The Annotation Group Sequence.
 
         Returns
-        ----------
+        -------
         Dataset
             The Annotation Group Sequence with inserted measurements.
         """
@@ -1270,7 +1270,7 @@ class AnnotationGroup(Generic[GeometryType]):
             The index of the group.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset containing the group.
         """
@@ -1356,7 +1356,7 @@ class AnnotationGroup(Generic[GeometryType]):
             Group type code.
 
         Returns
-        ----------
+        -------
         AnnotationGroup
             Group created from geometries.
 
@@ -1388,7 +1388,7 @@ class PointAnnotationGroup(AnnotationGroup[Point]):
             Dataset containing annotation group.
 
         Returns
-        ----------
+        -------
         List[Geometry]
             Point geometries in the annotation group.
         """
@@ -1408,7 +1408,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
         starting at index 1 and in relation to geometry data length.
 
         Returns
-        ----------
+        -------
         np.ndarray
             List of indices in annotation group
         """
@@ -1431,7 +1431,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
             Dataset containing sup 222 indices.
 
         Returns
-        ----------
+        -------
         List[int]
             List of indices in dataset.
         """
@@ -1451,7 +1451,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
             Dataset containing annotation group.
 
         Returns
-        ----------
+        -------
         List[Geometry]
             Polyline geometries in the annotation group.
         """
@@ -1488,7 +1488,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
             The index of the group.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset containing the group.
         """
@@ -1642,7 +1642,7 @@ class AnnotationInstance:
             DICOM annotation dataset to read.
 
         Returns
-        ----------
+        -------
         List[AnnotationGroup]
             Annotation groups read from dataset.
         """
@@ -1698,7 +1698,7 @@ class AnnotationInstance:
             Group number of group to return
 
         Returns
-        ----------
+        -------
         Annotation
             Annotation group with group number
         """

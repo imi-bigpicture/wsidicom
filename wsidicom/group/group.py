@@ -14,7 +14,7 @@
 
 
 from collections import defaultdict
-from typing import Dict, Iterable, List, Optional, OrderedDict, Sequence, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from PIL.Image import Image
 from pydicom.uid import UID
@@ -42,7 +42,7 @@ class Group:
     """Represents a group of instances having the same size, but possibly
     different z coordinate and/or optical path."""
 
-    def __init__(self, instances: Sequence[WsiInstance]):
+    def __init__(self, instances: Iterable[WsiInstance]):
         """Create a group of WsiInstances. Instances should match in the common
         uids, wsi type, and tile size.
 
@@ -56,7 +56,7 @@ class Group:
         }
         self._validate_group()
 
-        base_instance = instances[0]
+        base_instance = next(iter(self._instances.values()))
         self._image_type = base_instance.image_type
         self._uids = base_instance.uids
 
@@ -149,33 +149,6 @@ class Group:
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         return self.default_instance.image_coordinate_system
 
-    @classmethod
-    def open(
-        cls,
-        instances: Iterable[WsiInstance],
-    ) -> List["Group"]:
-        """Return list of groups created from wsi instances.
-
-        Parameters
-        ----------
-        files: Iterable[WsiInstance]
-            Instances to create groups from.
-
-        Returns
-        ----------
-        List[Group]
-            List of created groups.
-
-        """
-        groups: List["Group"] = []
-
-        grouped_instances = cls._group_instances(instances)
-
-        for group in grouped_instances.values():
-            groups.append(cls(group))
-
-        return groups
-
     def matches(self, other_group: "Group") -> bool:
         """Check if group matches other group. If strict common Uids should
         match. Wsi type should always match.
@@ -186,7 +159,7 @@ class Group:
             Other group to match against.
 
         Returns
-        ----------
+        -------
         bool
             True if other group matches.
         """
@@ -204,7 +177,7 @@ class Group:
             Pixel region to check
 
         Returns
-        ----------
+        -------
         bool
             True if pixel position and size is within image
         """
@@ -227,7 +200,7 @@ class Group:
             Optical path of the searched instance
 
         Returns
-        ----------
+        -------
         WsiInstance
             The instance containing selected path and z coordinate
         """
@@ -270,7 +243,7 @@ class Group:
         """Read full image using default z coordinate and path.
 
         Returns
-        ----------
+        -------
         Image
             Full image of the group.
         """
@@ -304,7 +277,7 @@ class Group:
             Number of threads to use for read.
 
         Returns
-        ----------
+        -------
         Image
             Region as image
         """
@@ -341,7 +314,7 @@ class Group:
             Number of threads to use for read.
 
         Returns
-        ----------
+        -------
         Image
             Region as image
         """
@@ -378,7 +351,7 @@ class Group:
             Optical path
 
         Returns
-        ----------
+        -------
         Image
             The tile as image
         """
@@ -405,7 +378,7 @@ class Group:
             Optical path
 
         Returns
-        ----------
+        -------
         bytes
             The tile as bytes
         """
@@ -425,7 +398,7 @@ class Group:
             Region in mm
 
         Returns
-        ----------
+        -------
         Region
             Region in pixels
         """
@@ -453,35 +426,6 @@ class Group:
 
         WsiDataset.check_duplicate_dataset(self.datasets, self)
         WsiInstance.check_duplicate_instance(instances, self)
-
-    @classmethod
-    def _group_instances(
-        cls, instances: Iterable[WsiInstance]
-    ) -> OrderedDict[Size, List[WsiInstance]]:
-        """Return instances grouped and sorted by image size.
-
-        Parameters
-        ----------
-        instances: Iterable[WsiInstance]
-            Instances to group by image size.
-
-        Returns
-        ----------
-        OrderedDict[Size, List[WsiInstance]]:
-            Instances grouped by size, with size as key.
-
-        """
-        grouped_instances: Dict[Size, List[WsiInstance]] = {}
-        for instance in instances:
-            try:
-                grouped_instances[instance.size].append(instance)
-            except KeyError:
-                grouped_instances[instance.size] = [instance]
-        return OrderedDict(
-            sorted(
-                grouped_instances.items(), key=lambda item: item[0].width, reverse=True
-            )
-        )
 
     @staticmethod
     def _get_frame_information(

@@ -42,7 +42,8 @@ from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.optical import OpticalManager
-from wsidicom.series import Labels, Levels, Overviews
+from wsidicom.pyramids import Pyramids
+from wsidicom.series import Labels, Pyramid, Overviews
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
 from wsidicom.uid import SlideUids
@@ -72,7 +73,7 @@ class WsiDicom:
         """
         self._source = source
         self._source_owned = source_owned
-        self._levels = Levels.open(source.level_instances)
+        self._pyramids = Pyramids.open(source.level_instances)
         self._labels = Labels.open(source.label_instances)
         self._overviews = Overviews.open(source.overview_instances)
         self._annotations = list(source.annotation_instances)
@@ -99,7 +100,7 @@ class WsiDicom:
             streams for multiple files, or a path to a folder containing files.
 
         Returns
-        ----------
+        -------
         WsiDicom
             WsiDicom created from WSI DICOM files in path.
         """
@@ -134,7 +135,7 @@ class WsiDicom:
             supported transfer syntax is requested.
 
         Returns
-        ----------
+        -------
         WsiDicom
             WsiDicom created from WSI DICOM instances in study-series.
         """
@@ -165,7 +166,7 @@ class WsiDicom:
             Path to DICOMDIR file or directory with a DICOMDIR file.
 
         Returns
-        ----------
+        -------
         WsiDicom
             WsiDicom created from WSI DICOM files in DICOMDIR.
         """
@@ -186,7 +187,7 @@ class WsiDicom:
 
     def __repr__(self) -> str:
         return (
-            f"{type(self).__name__}({self.levels}, {self.labels}"
+            f"{type(self).__name__}({self.pyramids}, {self.labels}"
             f"{self.overviews}, {self.annotations})"
         )
 
@@ -194,37 +195,40 @@ class WsiDicom:
         return self.pretty_str()
 
     @property
-    def size(self) -> Size:
-        """Return pixel size of base level."""
-        return self.levels.size
+    def size(self) -> List[Size]:
+        """Return pixel size of base level of each pyramids."""
+        return [pyramid.size for pyramid in self.pyramids]
 
     @property
-    def mm_size(self) -> SizeMm:
-        return self.levels.mm_size
+    def mm_size(self) -> List[SizeMm]:
+        """Return image size in mm of each pyramids."""
+        return [pyramid.mm_size for pyramid in self.pyramids]
 
     @property
-    def tile_size(self) -> Size:
-        """Return tile size of levels."""
-        return self.levels.tile_size
+    def tile_size(self) -> List[Size]:
+        """Return tile size of each pyramids."""
+        return [pyramid.tile_size for pyramid in self.pyramids]
 
     @property
-    def pixel_spacing(self) -> SizeMm:
-        return self.levels.pixel_spacing
+    def pixel_spacing(self) -> List[SizeMm]:
+        """Return pixel spacing in mm/pixel of base level of each pyramids."""
+        return [pyramid.pixel_spacing for pyramid in self.pyramids]
 
     @property
-    def mpp(self) -> SizeMm:
-        return self.levels.mpp
+    def mpp(self) -> List[SizeMm]:
+        """Return pixel size in um/pixel of base level of each pyramids."""
+        return [pyramid.mpp for pyramid in self.pyramids]
 
     @property
     def uids(self) -> Optional[SlideUids]:
         return self._uids
 
     @property
-    def levels(self) -> Levels:
-        """Return contained levels."""
-        if self._levels is not None:
-            return self._levels
-        raise WsiDicomNotFoundError("levels", str(self))
+    def pyramids(self) -> Pyramids:
+        """Return contained pyramids."""
+        if self._pyramids is not None:
+            return self._pyramids
+        raise WsiDicomNotFoundError("pyramids", str(self))
 
     @property
     def labels(self) -> Optional[Labels]:
@@ -242,12 +246,12 @@ class WsiDicom:
         return self._annotations
 
     @property
-    def collection(self) -> List[Union[Levels, Labels, Overviews]]:
-        collection: List[Optional[Union[Levels, Labels, Overviews]]] = [
-            self._levels,
+    def collection(self) -> List[Union[Pyramid, Labels, Overviews]]:
+        collection: List[Optional[Union[Pyramid, Labels, Overviews]]] = [
             self._labels,
             self._overviews,
         ]
+        collection.extend(pyramid for pyramid in self._pyramids)
         return [series for series in collection if series is not None]
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
@@ -258,8 +262,8 @@ class WsiDicom:
                 return string
         return (
             string
-            + " of levels:\n"
-            + list_pretty_str(self.levels.groups, indent, depth, 0, 2)
+            + " of pyramids:\n"
+            + list_pretty_str(list(self.pyramids), indent, depth, 0, 2)
         )
 
     def read_label(self, index: int = 0) -> Image:
@@ -272,17 +276,14 @@ class WsiDicom:
             Index of the label image to read.
 
         Returns
-        ----------
+        -------
         Image
-            label as image.
+            Label as Pillow image.
         """
         if self.labels is None:
             raise WsiDicomNotFoundError("label", str(self))
-        try:
-            label = self.labels[index]
-            return label.get_default_full()
-        except IndexError as exception:
-            raise WsiDicomNotFoundError("label", "series") from exception
+        label = self.labels.get(index)
+        return label.get_default_full()
 
     def read_overview(self, index: int = 0) -> Image:
         """Read overview image of the whole slide. If several overview
@@ -294,43 +295,45 @@ class WsiDicom:
             Index of the overview image to read.
 
         Returns
-        ----------
+        -------
         Image
-            Overview as image.
+            Overview as Pillow image.
         """
         if self.overviews is None:
             raise WsiDicomNotFoundError("overview", str(self))
-        try:
-            overview = self.overviews[index]
-            return overview.get_default_full()
-        except IndexError as exception:
-            raise WsiDicomNotFoundError("overview", "series") from exception
+        overview = self.overviews.get(index)
+        return overview.get_default_full()
 
     def read_thumbnail(
         self,
-        size: Tuple[int, int] = (512, 512),
+        size: Union[int, Tuple[int, int]] = 512,
         z: Optional[float] = None,
         path: Optional[str] = None,
+        pyramid: int = 0,
     ) -> Image:
-        """Read thumbnail image of the whole slide with dimensions
-        no larger than given size.
+        """Read thumbnail image of the whole slide with dimensions no larger than given
+        size.
 
         Parameters
         ----------
-        size: Tuple[int, int] = (512, 512)
+        size: Union[int, Tuple[int, int]] = 512
             Upper size limit for thumbnail.
         z: Optional[float] = None
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
+        pyramid: int = 0
+            Pyramid to read thumbnail from.
 
         Returns
-        ----------
+        -------
         Image
-            Thumbnail as image,
+            Thumbnail as Pillow image,
         """
+        if isinstance(size, int):
+            size = (size, size)
         thumbnail_size = Size.from_tuple(size)
-        level = self.levels.get_closest_by_size(thumbnail_size)
+        level = self.pyramids.get(pyramid).get_closest_by_size(thumbnail_size)
         region = Region(position=Point(0, 0), size=level.size)
         image = level.get_region(region, z, path)
         image.thumbnail((size), resample=settings.pillow_resampling_filter)
@@ -343,6 +346,7 @@ class WsiDicom:
         size: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None,
+        pyramid: int = 0,
         threads: int = 1,
     ) -> Image:
         """Read region defined by pixels.
@@ -359,15 +363,17 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
+        pyramid: int = 0
+            Pyramid to read region from.
         threads: int = 1
             Number of threads to use for read.
 
         Returns
-        ----------
+        -------
         Image
-            Region as image
+            Region as Pillow image.
         """
-        wsi_level = self.levels.get_closest_by_level(level)
+        wsi_level = self.pyramids.get(pyramid).get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         scaled_region = (
             Region(position=Point.from_tuple(location), size=Size.from_tuple(size))
@@ -390,6 +396,7 @@ class WsiDicom:
         size: Tuple[float, float],
         z: Optional[float] = None,
         path: Optional[str] = None,
+        pyramid: int = 0,
         slide_origin: bool = False,
         threads: int = 1,
     ) -> Image:
@@ -398,27 +405,29 @@ class WsiDicom:
         Parameters
         ----------
         location: Tuple[float, float]
-            Upper left corner of region in mm, or lower left corner if using
-            slide origin.
+            Upper left corner of region in mm, or lower left corner if using slide
+            origin.
         level: int
-            Level in pyramid
+            Level in pyramid.
         size: Tuple[float, float].
-            Size of region in mm
+            Size of region in mm.
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            Optical path, optional.
+        pyramid: int = 0
+            Pyramid to read region from.
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
         threads: int = 1
             Number of threads to use for read.
 
         Returns
-        ----------
+        -------
         Image
-            Region as image
+            Region as Pillow image.
         """
-        wsi_level = self.levels.get_closest_by_level(level)
+        wsi_level = self.pyramids.get(pyramid).get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
         image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
@@ -434,6 +443,7 @@ class WsiDicom:
         size: Tuple[float, float],
         z: Optional[float] = None,
         path: Optional[str] = None,
+        pyramid: int = 0,
         slide_origin: bool = False,
         threads: int = 1,
     ) -> Image:
@@ -442,8 +452,8 @@ class WsiDicom:
         Parameters
         ----------
         location: Tuple[float, float].
-            Upper left corner of region in mm, or lower left corner if using
-            slide origin.
+            Upper left corner of region in mm, or lower left corner if using slide
+            origin.
         mpp: float
             Requested pixel spacing (um/pixel).
         size: Tuple[float, float].
@@ -452,18 +462,20 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
+        pyramid: int = 0
+            Pyramid to read region from.
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
         threads: int = 1
             Number of threads to use for read.
 
         Returns
-        -----------
+        --------
         Image
-            Region as image
+            Region as Pillow image.
         """
         pixel_spacing = mpp / 1000.0
-        wsi_level = self.levels.get_closest_by_pixel_spacing(
+        wsi_level = self.pyramids.get(pyramid).get_closest_by_pixel_spacing(
             SizeMm(pixel_spacing, pixel_spacing)
         )
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
@@ -479,32 +491,36 @@ class WsiDicom:
         tile: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None,
+        pyramid: int = 0,
     ) -> Image:
-        """Read tile in pyramid level as image.
+        """Read tile in pyramid level as Pillow image.
 
         Parameters
         ----------
         level: int
-            Pyramid level
+            Pyramid level.
         tile: int, int
-            tile xy coordinate
+            tile xy coordinate.
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            Optical path, optional.
+        pyramid: int = 0
+            Pyramid to read tile from.
 
         Returns
-        ----------
+        -------
         Image
-            Tile as image
+            Tile as Pillow image.
         """
         tile_point = Point.from_tuple(tile)
+        wsi_pyramid = self.pyramids.get(pyramid)
         try:
-            wsi_level = self.levels.get_level(level)
+            wsi_level = wsi_pyramid.get(level)
             return wsi_level.get_tile(tile_point, z, path)
         except WsiDicomNotFoundError:
             # Scale from closest level
-            wsi_level = self.levels.get_closest_by_level(level)
+            wsi_level = wsi_pyramid.get_closest_by_level(level)
             return wsi_level.get_scaled_tile(tile_point, level, z, path)
 
     def read_encoded_tile(
@@ -513,6 +529,7 @@ class WsiDicom:
         tile: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None,
+        pyramid: int = 0,
     ) -> bytes:
         """Read tile in pyramid level as encoded bytes. For non-existing levels
         the tile is scaled down from a lower level, using the similar encoding.
@@ -520,30 +537,37 @@ class WsiDicom:
         Parameters
         ----------
         level: int
-            Pyramid level
+            Pyramid level.
         tile: int, int
-            tile xy coordinate
+            Tile xy coordinate.
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            Optical path, optional.
+        pyramid: int = 0
+            Pyramid to read tile from.
 
         Returns
-        ----------
+        -------
         bytes
             Tile in file encoding.
         """
         tile_point = Point.from_tuple(tile)
+        wsi_pyramid = self.pyramids.get(pyramid)
         try:
-            wsi_level = self.levels.get_level(level)
+            wsi_level = wsi_pyramid.get(level)
             return wsi_level.get_encoded_tile(tile_point, z, path)
         except WsiDicomNotFoundError:
             # Scale from closest level
-            wsi_level = self.levels.get_closest_by_level(level)
+            wsi_level = wsi_pyramid.get_closest_by_level(level)
             return wsi_level.get_scaled_encoded_tile(tile_point, level, z, path)
 
     def get_instance(
-        self, level: int, z: Optional[float] = None, path: Optional[str] = None
+        self,
+        level: int,
+        z: Optional[float] = None,
+        path: Optional[str] = None,
+        pyramid: int = 0,
     ) -> WsiInstance:
         """Return instance fulfilling level, z and/or path.
 
@@ -552,16 +576,18 @@ class WsiDicom:
         level: int
             Pyramid level
         z: Optional[float] = None
-            Z coordinate, optional
+            Z coordinate, optional.
         path: Optional[str] = None
-            optical path, optional
+            Optical path, optional.
+        pyramid: int = 0
+            Pyramid to read tile from.
 
         Returns
-        ----------
+        -------
         WsiInstance:
             Instance
         """
-        wsi_level = self.levels.get_level(level)
+        wsi_level = self.pyramids.get(pyramid).get(level)
         return wsi_level.get_instance(z, path)
 
     def close(self) -> None:
@@ -624,7 +650,7 @@ class WsiDicom:
             will be copied as is.
 
         Returns
-        ----------
+        -------
         List[Path]
             List of paths of created files.
         """
@@ -651,7 +677,8 @@ class WsiDicom:
             add_missing_levels,
             transcoding,
         ) as target:
-            target.save_levels(self.levels)
+            for pyramid in self.pyramids:
+                target.save_pyramid(pyramid)
             if include_overviews and self.overviews is not None:
                 target.save_overviews(self.overviews)
             if include_labels:
@@ -676,7 +703,7 @@ class WsiDicom:
         Raises WsiDicomMatchError otherwise. Returns base uid for collection.
 
         Returns
-        ----------
+        -------
         SlideUids
             Matching uids
         """

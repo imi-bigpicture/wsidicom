@@ -19,7 +19,7 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
-from wsidicom.series import Labels, Levels, Overviews
+from wsidicom.series import Labels, Pyramid, Overviews
 
 """A Target enables creating new instances."""
 
@@ -68,8 +68,8 @@ class Target(metaclass=ABCMeta):
         self.__enter__()
 
     @abstractmethod
-    def save_levels(self, levels: Levels) -> None:
-        """Should save the levels to the target."""
+    def save_pyramid(self, pyramid: Pyramid) -> None:
+        """Should save the pyramid to the target."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -118,7 +118,7 @@ class Target(metaclass=ABCMeta):
             levels.
 
         Returns
-        ----------
+        -------
         bool
             True if level should be included.
         """

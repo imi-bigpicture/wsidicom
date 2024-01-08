@@ -586,7 +586,7 @@ class TestWsiDicomAnnotation:
             Collection of annotations to save.
 
         Returns
-        ----------
+        -------
         AnnotationInstance
             Read back annotation collection.
 

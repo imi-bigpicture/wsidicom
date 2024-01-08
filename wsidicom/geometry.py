@@ -412,7 +412,7 @@ class Region:
             Region to be cropped.
 
         Returns
-        ----------
+        -------
         Region
             Cropped region.
         """
@@ -432,7 +432,7 @@ class Region:
             Point to be cropped.
 
         Returns
-        ----------
+        -------
         Region
             Cropped region.
         """
@@ -450,7 +450,7 @@ class Region:
             The zoom level.
 
         Returns
-        ----------
+        -------
         Region
             Zoomed region.
         """
@@ -503,7 +503,7 @@ class RegionMm:
             The zoom level.
 
         Returns
-        ----------
+        -------
         RegionMm
             Zoomed region.
         """

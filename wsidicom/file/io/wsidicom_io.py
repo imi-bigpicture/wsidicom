@@ -102,7 +102,7 @@ class WsiDicomIO(DicomIO):
             If to set the stream to implicit VR.
 
         Returns
-        ----------
+        -------
         WsiDicomIO
             Instance of WsiDicomIO.
         """
