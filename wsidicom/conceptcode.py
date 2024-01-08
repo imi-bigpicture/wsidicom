@@ -42,12 +42,10 @@ class ConceptCode:
         )
 
     def __eq__(self, other: Any) -> bool:
-        if isinstance(other, (ConceptCode, Code)):
-            return (
-                other.value == self.value
-                and other.scheme_designator == self.scheme_designator
-                and other.scheme_version == self.scheme_version
-            )
+        if isinstance(other, Code):
+            return self.code == other
+        if isinstance(other, ConceptCode):
+            return self.code == other.code
         return NotImplemented
 
     @property
@@ -219,7 +217,11 @@ class CidConceptCode(ConceptCode):
     @classmethod
     def _from_meaning(cls: Type[CidConceptCodeType], meaning: str) -> Code:
         try:
-            return next(code for code in cls.cid.values() if code.meaning == meaning)
+            return next(
+                code
+                for code in cls.cid.values()
+                if code.meaning.lower() == meaning.lower()
+            )
         except StopIteration:
             raise ValueError(
                 f"There is no code with meaning '{meaning}' in {list(cls.cid.keys())}."
