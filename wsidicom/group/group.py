@@ -205,10 +205,6 @@ class Group:
             The instance containing selected path and z coordinate
         """
         if z is None and path is None:
-            instance = self.default_instance
-            z = instance.default_z
-            path = instance.default_path
-
             return self.default_instance
 
         # Sort instances by number of focal planes (prefer simplest instance)
@@ -218,26 +214,29 @@ class Group:
         try:
             if z is None:
                 # Select the instance with selected optical path
-                instance = next(i for i in sorted_instances if path in i.optical_paths)
-            elif path is None:
-                # Select the instance with selected z
-                instance = next(i for i in sorted_instances if z in i.focal_planes)
-            else:
-                # Select by both path and z
-                instance = next(
-                    i
-                    for i in sorted_instances
-                    if (z in i.focal_planes and path in i.optical_paths)
+                return next(
+                    instance
+                    for instance in sorted_instances
+                    if path in instance.optical_paths
                 )
+            if path is None:
+                # Select the instance with selected z
+                return next(
+                    instance
+                    for instance in sorted_instances
+                    if z in instance.focal_planes
+                )
+
+            # Select by both path and z
+            return next(
+                instance
+                for instance in sorted_instances
+                if (z in instance.focal_planes and path in instance.optical_paths)
+            )
         except StopIteration as exception:
             raise WsiDicomNotFoundError(
                 f"Instance for path: {path}, z: {z}", "group"
             ) from exception
-        if z is None:
-            z = instance.default_z
-        if path is None:
-            path = instance.default_path
-        return instance
 
     def get_default_full(self) -> Image:
         """Read full image using default z coordinate and path.
