@@ -24,6 +24,7 @@ from wsidicom import WsiDicom
 from wsidicom.codec import Jpeg2kSettings, JpegSettings, Settings
 from wsidicom.codec.encoder import Encoder
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
+from wsidicom.pyramids import Pyramids
 from wsidicom.series.pyramid import Pyramid
 
 
@@ -39,9 +40,9 @@ class TestWsiDicomFileTargetIntegration:
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, False
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, None, False
         ) as target:
-            target.save_pyramid(wsi.pyramids[0])
+            target.save_pyramids(wsi.pyramids)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
@@ -61,9 +62,16 @@ class TestWsiDicomFileTargetIntegration:
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, include_levels, False
+            tmp_path,
+            generate_uid,
+            1,
+            16,
+            OffsetTableType.BASIC,
+            None,
+            include_levels,
+            False,
         ) as target:
-            target.save_pyramid(wsi.pyramids[0])
+            target.save_pyramids(wsi.pyramids)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
@@ -89,11 +97,12 @@ class TestWsiDicomFileTargetIntegration:
             1,
             16,
             OffsetTableType.BASIC,
+            None,
             [-1],
             False,
             transcoder,
         ) as target:
-            target.save_pyramid(wsi.pyramids[0])
+            target.save_pyramids(wsi.pyramids)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
@@ -144,13 +153,14 @@ class TestWsiDicomFileTargetIntegration:
             if level.size.any_greater_than(wsi.pyramids[0].tile_size)
         ]
         expected_levels_count = len(levels_larger_than_tile_size) + 1
-        levels_missing_smallest_levels = Pyramid(levels_larger_than_tile_size)
+        pyramid_missing_smallest_levels = Pyramid(levels_larger_than_tile_size)
+        pyramids = Pyramids([pyramid_missing_smallest_levels])
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, True
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, None, True
         ) as target:
-            target.save_pyramid(levels_missing_smallest_levels)
+            target.save_pyramids(pyramids)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
@@ -181,6 +191,7 @@ class TestWsiDicomFileTargetIntegration:
             1,
             100,
             OffsetTableType.BASIC,
+            None,
             None,
             False,
         ) as target:

@@ -641,6 +641,7 @@ class WsiDicom:
         workers: Optional[int] = None,
         chunk_size: Optional[int] = None,
         offset_table: Optional[Union["str", OffsetTableType]] = None,
+        include_pyramids: Optional[Sequence[int]] = None,
         include_levels: Optional[Sequence[int]] = None,
         include_labels: bool = True,
         include_overviews: bool = True,
@@ -672,8 +673,10 @@ class WsiDicom:
             `none`) or `OffsetTableType` enum. Default to None, which will use
             `bot` for encapsulated  syntaxes and `none` for non-encapsulated transfer
             syntaxes.
+        include_pyramids: Optional[Sequence[int]] = None
+            Optional list of indices (in present pyramids) to include.
         include_levels: Optional[Sequence[int]] = None
-            Optional list indices (in present levels) to include, e.g. [0, 1]
+            Optional list of indices (in all pyramids) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indicies can be used,
             e.g. [-1, -2] includes the two highest levels.
         include_labels: bool = True
@@ -712,12 +715,12 @@ class WsiDicom:
             workers,
             chunk_size,
             offset_table,
+            include_pyramids,
             include_levels,
             add_missing_levels,
             transcoding,
         ) as target:
-            for pyramid in self.pyramids:
-                target.save_pyramid(pyramid)
+            target.save_pyramids(self.pyramids)
             if include_overviews and self.overviews is not None:
                 target.save_overviews(self.overviews)
             if include_labels:
