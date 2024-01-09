@@ -71,6 +71,7 @@ class WsiDicom:
         source_owned: bool = False
             If source should be closed by this instance if used in a context manager.
         """
+        self._selected_pyramid = 0
         self._source = source
         self._source_owned = source_owned
         self._pyramids = Pyramids.open(source.level_instances)
@@ -195,29 +196,34 @@ class WsiDicom:
         return self.pretty_str()
 
     @property
-    def size(self) -> List[Size]:
-        """Return pixel size of base level of each pyramids."""
-        return [pyramid.size for pyramid in self.pyramids]
+    def size(self) -> Size:
+        """Return pixel size of base level of selected pyramid."""
+        return self.pyramids[self.selected_pyramid].size
 
     @property
-    def mm_size(self) -> List[SizeMm]:
-        """Return image size in mm of each pyramids."""
-        return [pyramid.mm_size for pyramid in self.pyramids]
+    def mm_size(self) -> SizeMm:
+        """Return image size in mm of selected pyramid."""
+        return self.pyramids[self.selected_pyramid].mm_size
 
     @property
-    def tile_size(self) -> List[Size]:
-        """Return tile size of each pyramids."""
-        return [pyramid.tile_size for pyramid in self.pyramids]
+    def tile_size(self) -> Size:
+        """Return tile size of selected pyramid."""
+        return self.pyramids[self.selected_pyramid].tile_size
 
     @property
-    def pixel_spacing(self) -> List[SizeMm]:
-        """Return pixel spacing in mm/pixel of base level of each pyramids."""
-        return [pyramid.pixel_spacing for pyramid in self.pyramids]
+    def pixel_spacing(self) -> SizeMm:
+        """Return pixel spacing in mm/pixel of base level of selected pyramid."""
+        return self.pyramids[self.selected_pyramid].pixel_spacing
 
     @property
-    def mpp(self) -> List[SizeMm]:
-        """Return pixel size in um/pixel of base level of each pyramids."""
-        return [pyramid.mpp for pyramid in self.pyramids]
+    def mpp(self) -> SizeMm:
+        """Return pixel size in um/pixel of base level of selected pyramid."""
+        return self.pyramids[self.selected_pyramid].mpp
+
+    @property
+    def selected_pyramid(self) -> int:
+        """Return index of selected pyramid."""
+        return self._selected_pyramid
 
     @property
     def uids(self) -> Optional[SlideUids]:
@@ -266,6 +272,18 @@ class WsiDicom:
             + list_pretty_str(list(self.pyramids), indent, depth, 0, 2)
         )
 
+    def set_selected_pyramid(self, index: int) -> None:
+        """Set selected pyramid.
+
+        Parameters
+        ----------
+        index: int
+            Index of pyramid to select.
+        """
+        if index < 0 or index >= len(self.pyramids):
+            raise WsiDicomNotFoundError(f"Pyramid {index}", str(self.pyramids))
+        self._selected_pyramid = index
+
     def read_label(self, index: int = 0) -> Image:
         """Read label image of the whole slide. If several label
         images are present, index can be used to select a specific image.
@@ -309,7 +327,7 @@ class WsiDicom:
         size: Union[int, Tuple[int, int]] = 512,
         z: Optional[float] = None,
         path: Optional[str] = None,
-        pyramid: int = 0,
+        pyramid: Optional[int] = None,
     ) -> Image:
         """Read thumbnail image of the whole slide with dimensions no larger than given
         size.
@@ -322,8 +340,9 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
-        pyramid: int = 0
-            Pyramid to read thumbnail from.
+        pyramid: Optional[int] = None
+            Pyramid to read thumbnail from. If `None` the index in `selected_pyramid` is
+            used.
 
         Returns
         -------
@@ -333,6 +352,8 @@ class WsiDicom:
         if isinstance(size, int):
             size = (size, size)
         thumbnail_size = Size.from_tuple(size)
+        if pyramid is None:
+            pyramid = self.selected_pyramid
         level = self.pyramids.get(pyramid).get_closest_by_size(thumbnail_size)
         region = Region(position=Point(0, 0), size=level.size)
         image = level.get_region(region, z, path)
@@ -346,7 +367,7 @@ class WsiDicom:
         size: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        pyramid: int = 0,
+        pyramid: Optional[int] = None,
         threads: int = 1,
     ) -> Image:
         """Read region defined by pixels.
@@ -363,8 +384,9 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
-        pyramid: int = 0
-            Pyramid to read region from.
+        pyramid: Optional[int] = None
+            Pyramid to read region from. If `None` the index in `selected_pyramid` is
+            used.
         threads: int = 1
             Number of threads to use for read.
 
@@ -373,6 +395,8 @@ class WsiDicom:
         Image
             Region as Pillow image.
         """
+        if pyramid is None:
+            pyramid = self.selected_pyramid
         wsi_level = self.pyramids.get(pyramid).get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         scaled_region = (
@@ -396,7 +420,7 @@ class WsiDicom:
         size: Tuple[float, float],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        pyramid: int = 0,
+        pyramid: Optional[int] = None,
         slide_origin: bool = False,
         threads: int = 1,
     ) -> Image:
@@ -415,8 +439,9 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
-        pyramid: int = 0
-            Pyramid to read region from.
+        pyramid: Optional[int] = None
+            Pyramid to read region from. If `None` the index in `selected_pyramid` is
+            used.
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
         threads: int = 1
@@ -427,6 +452,8 @@ class WsiDicom:
         Image
             Region as Pillow image.
         """
+        if pyramid is None:
+            pyramid = self.selected_pyramid
         wsi_level = self.pyramids.get(pyramid).get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
@@ -443,7 +470,7 @@ class WsiDicom:
         size: Tuple[float, float],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        pyramid: int = 0,
+        pyramid: Optional[int] = None,
         slide_origin: bool = False,
         threads: int = 1,
     ) -> Image:
@@ -462,8 +489,9 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
-        pyramid: int = 0
-            Pyramid to read region from.
+        pyramid: Optional[int] = None
+            Pyramid to read region from. If `None` the index in `selected_pyramid` is
+            used.
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
         threads: int = 1
@@ -475,6 +503,8 @@ class WsiDicom:
             Region as Pillow image.
         """
         pixel_spacing = mpp / 1000.0
+        if pyramid is None:
+            pyramid = self.selected_pyramid
         wsi_level = self.pyramids.get(pyramid).get_closest_by_pixel_spacing(
             SizeMm(pixel_spacing, pixel_spacing)
         )
@@ -491,7 +521,7 @@ class WsiDicom:
         tile: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        pyramid: int = 0,
+        pyramid: Optional[int] = None,
     ) -> Image:
         """Read tile in pyramid level as Pillow image.
 
@@ -505,8 +535,9 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
-        pyramid: int = 0
-            Pyramid to read tile from.
+        pyramid: Optional[int] = None
+            Pyramid to read tile from. If `None` the index in `selected_pyramid` is
+            used.
 
         Returns
         -------
@@ -514,7 +545,9 @@ class WsiDicom:
             Tile as Pillow image.
         """
         tile_point = Point.from_tuple(tile)
-        wsi_pyramid = self.pyramids.get(pyramid)
+        wsi_pyramid = self.pyramids.get(
+            pyramid if pyramid is not None else self._selected_pyramid
+        )
         try:
             wsi_level = wsi_pyramid.get(level)
             return wsi_level.get_tile(tile_point, z, path)
@@ -529,7 +562,7 @@ class WsiDicom:
         tile: Tuple[int, int],
         z: Optional[float] = None,
         path: Optional[str] = None,
-        pyramid: int = 0,
+        pyramid: Optional[int] = None,
     ) -> bytes:
         """Read tile in pyramid level as encoded bytes. For non-existing levels
         the tile is scaled down from a lower level, using the similar encoding.
@@ -544,8 +577,9 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
-        pyramid: int = 0
-            Pyramid to read tile from.
+        pyramid: Optional[int] = None
+            Pyramid to read tile from. If `None` the index in `selected_pyramid` is
+            used.
 
         Returns
         -------
@@ -553,7 +587,9 @@ class WsiDicom:
             Tile in file encoding.
         """
         tile_point = Point.from_tuple(tile)
-        wsi_pyramid = self.pyramids.get(pyramid)
+        wsi_pyramid = self.pyramids.get(
+            pyramid if pyramid is not None else self._selected_pyramid
+        )
         try:
             wsi_level = wsi_pyramid.get(level)
             return wsi_level.get_encoded_tile(tile_point, z, path)
@@ -567,7 +603,7 @@ class WsiDicom:
         level: int,
         z: Optional[float] = None,
         path: Optional[str] = None,
-        pyramid: int = 0,
+        pyramid: Optional[int] = None,
     ) -> WsiInstance:
         """Return instance fulfilling level, z and/or path.
 
@@ -579,14 +615,17 @@ class WsiDicom:
             Z coordinate, optional.
         path: Optional[str] = None
             Optical path, optional.
-        pyramid: int = 0
-            Pyramid to read tile from.
+        pyramid: Optional[int] = None
+            Pyramid to read tile from. If `None` the index in `selected_pyramid` is
+            used.
 
         Returns
         -------
         WsiInstance:
             Instance
         """
+        if pyramid is None:
+            pyramid = self.selected_pyramid
         wsi_level = self.pyramids.get(pyramid).get(level)
         return wsi_level.get_instance(z, path)
 
