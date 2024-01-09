@@ -52,9 +52,19 @@ class Pyramids:
 
     @classmethod
     def open(cls, instances: Iterable[WsiInstance]) -> "Pyramids":
-        # Sort instances by image coordinate system and extended focus
-        # Create Levels for each group.
-        # Create Pyramids from Levels.
+        """Return Pyramids object created from wsi instances.
+
+        Parameters
+        ----------
+        instances: Iterable[WsiInstance]
+            Instances to create pyramids from.
+
+        Returns
+        -------
+        Pyramids
+            Pyramids created from wsi instances. Each pyramid has the same
+            image coordinate system and depth of field.
+        """
         instances_grouped_by_pyramid = cls._group_instances_into_pyramids(instances)
         return cls(
             [Pyramid.open(instances) for instances in instances_grouped_by_pyramid]

@@ -29,7 +29,8 @@ from wsidicom.stringprinting import list_pretty_str
 
 class Pyramid(Series[Level]):
     """Represents a list of Levels of the volume (e.g. pyramidal level) wsi flavor
-    forming a WSI pyramid."""
+    forming a WSI pyramid. All levels in the pyramid must have the same image origin
+    and extended depth of field."""
 
     def __init__(self, levels: Iterable[Level]):
         """Holds a stack of levels.
