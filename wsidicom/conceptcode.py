@@ -489,9 +489,12 @@ class ConceptNameCode(SingleConceptCode):
 
 
 def dataset_to_code(dataset: Dataset) -> Code:
+    version = dataset.get("CodingSchemeVersion", None)
+    if version == "":
+        version = None
     return Code(
         dataset.CodeValue,
         dataset.CodingSchemeDesignator,
         dataset.CodeMeaning,
-        dataset.get("CodingSchemeVersion", None),
+        version,
     )

@@ -340,7 +340,8 @@ class CodeDicomField(fields.Field, Generic[CodeType]):
         dataset.CodeValue = value.value
         dataset.CodingSchemeDesignator = value.scheme_designator
         dataset.CodeMeaning = value.meaning
-        dataset.CodingSchemeVersion = value.scheme_version
+        if value.scheme_version is not None and value.scheme_version != "":
+            dataset.CodingSchemeVersion = value.scheme_version
 
         return dataset
 
@@ -351,11 +352,14 @@ class CodeDicomField(fields.Field, Generic[CodeType]):
         data: Optional[Dict[str, Any]],
         **kwargs,
     ):
+        version = value.get("CodingSchemeVersion", None)
+        if version == "":
+            version = None
         return self._load_type(
             value=value.CodeValue,
             scheme_designator=value.CodingSchemeDesignator,
             meaning=value.CodeMeaning,
-            scheme_version=value.get("CodingSchemeVersion", None),
+            scheme_version=version,
         )
 
 
@@ -625,20 +629,22 @@ class CodeItemDicomField(ContentItemDicomField[Code]):
         code_dataset.CodeValue = value.value
         code_dataset.CodingSchemeDesignator = value.scheme_designator
         code_dataset.CodeMeaning = value.meaning
-        code_dataset.CodingSchemeVersion = value.scheme_version
+        if value.scheme_version is not None and value.scheme_version != "":
+            code_dataset.CodingSchemeVersion = value.scheme_version
         dataset = Dataset()
         dataset.ValueType = "CODE"
         dataset.ConceptCodeSequence = [code_dataset]
         return dataset
 
     def _deserialize(self, dataset: Dataset, attr: Optional[str], obj: Any, **kwargs):
+        version = dataset.ConceptCodeSequence[0].get("CodingSchemeVersion", None)
+        if version == "":
+            version = None
         return self._load_type(
             value=dataset.ConceptCodeSequence[0].CodeValue,
             scheme_designator=dataset.ConceptCodeSequence[0].CodingSchemeDesignator,
             meaning=dataset.ConceptCodeSequence[0].CodeMeaning,
-            scheme_version=dataset.ConceptCodeSequence[0].get(
-                "CodingSchemeVersion", None
-            ),
+            scheme_version=version,
         )
 
 
@@ -714,7 +720,7 @@ class MeasurementtemDicomField(ContentItemDicomField[Measurement]):
         unit_dataset.CodeValue = value.unit.value
         unit_dataset.CodingSchemeDesignator = value.unit.scheme_designator
         unit_dataset.CodeMeaning = value.unit.meaning
-        if value.unit.scheme_version is not None:
+        if value.unit.scheme_version is not None and value.unit.scheme_version != "":
             unit_dataset.CodingSchemeVersion = value.unit.scheme_version
         dataset.MeasurementUnitsCodeSequence = [unit_dataset]
         return dataset
@@ -726,10 +732,13 @@ class MeasurementtemDicomField(ContentItemDicomField[Measurement]):
             value = DSfloat(dataset.NumericValue)
             assert isinstance(value, float)
         unit_dataset = dataset.MeasurementUnitsCodeSequence[0]
+        version = unit_dataset.get("CodingSchemeVersion", None)
+        if version == "":
+            version = None
         unit = UnitCode(
             value=unit_dataset.CodeValue,
             scheme_designator=unit_dataset.CodingSchemeDesignator,
             meaning=unit_dataset.CodeMeaning,
-            scheme_version=unit_dataset.get("CodingSchemeVersion", None),
+            scheme_version=version,
         )
         return Measurement(value=value, unit=unit)

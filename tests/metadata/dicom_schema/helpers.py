@@ -117,7 +117,13 @@ def assert_dicom_code_dataset_equals_code(
     assert code_dataset.CodeValue == expected_code.value
     assert code_dataset.CodingSchemeDesignator == expected_code.scheme_designator
     assert code_dataset.CodeMeaning == expected_code.meaning
-    assert code_dataset.CodingSchemeVersion == expected_code.scheme_version
+    if expected_code.scheme_version is not None:
+        assert code_dataset.CodingSchemeVersion == expected_code.scheme_version
+    else:
+        assert (
+            "CodingSchemeVersion" not in code_dataset
+            or code_dataset.CodingSchemeVersion is None
+        )
 
 
 def assert_dicom_code_sequence_equals_codes(
