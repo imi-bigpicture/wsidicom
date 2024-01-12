@@ -24,7 +24,7 @@ WSI_SOP_CLASS_UID = UID("1.2.840.10008.5.1.4.1.1.77.1.6")
 ANN_SOP_CLASS_UID = UID("1.2.840.10008.5.1.4.1.1.91.1")
 
 
-@dataclass
+@dataclass(frozen=True)
 class SlideUids:
     """Represents the UIDs that should be common for all files of a slide."""
 
@@ -32,19 +32,11 @@ class SlideUids:
     series_instance: UID
     frame_of_reference: Optional[UID] = None
 
-    def __init__(
-        self,
-        study_instance: UID,
-        series_instance: UID,
-        frame_of_reference: Optional[UID] = None,
-    ) -> None:
-        if settings.strict_uid_check and frame_of_reference is None:
+    def __post_init__(self) -> None:
+        if settings.strict_uid_check and self.frame_of_reference is None:
             raise WsiDicomStrictRequirementError(
                 "Frame of reference uid is missing and strict uid check is " "enabled"
             )
-        self.study_instance = study_instance
-        self.series_instance = series_instance
-        self.frame_of_reference = frame_of_reference
 
     def __str__(self) -> str:
         return (
@@ -76,7 +68,7 @@ class SlideUids:
         return self.study_instance == other.study_instance
 
 
-@dataclass
+@dataclass(frozen=True)
 class FileUids:
     """Represents the UIDs in a DICOM-file."""
 

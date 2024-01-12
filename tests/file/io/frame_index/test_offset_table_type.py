@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import pytest
+
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 
 

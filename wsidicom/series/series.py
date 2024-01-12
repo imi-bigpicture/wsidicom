@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
+from functools import cached_property
 from collections import defaultdict
 from typing import (
     Dict,
@@ -31,6 +32,8 @@ from wsidicom.errors import WsiDicomMatchError, WsiDicomNotFoundError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageType, WsiDataset, WsiInstance
+from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
+from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.uid import SlideUids
 
 SeriesType = TypeVar("SeriesType", bound="Series")
@@ -120,6 +123,10 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
         """Return contained instances"""
         series_instances = [series.instances.values() for series in self]
         return [instance for sublist in series_instances for instance in sublist]
+
+    @cached_property
+    def metadata(self) -> WsiMetadata:
+        return WsiMetadataDicomSchema().load(self.datasets[0])
 
     @classmethod
     def open(

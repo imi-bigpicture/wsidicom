@@ -22,11 +22,12 @@ from wsidicom.codec import Codec, Decoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
-from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex
+from wsidicom.metadata.schema.dicom.image import ImageCoordinateSystemDicomSchema
+from wsidicom.metadata.image import ImageCoordinateSystem
 
 
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
@@ -109,7 +110,11 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     @cached_property
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         """Return the image origin of the image data."""
-        return ImageCoordinateSystem.from_dataset(self._datasets[0])
+        try:
+            schema = ImageCoordinateSystemDicomSchema()
+            return schema.load(self._datasets[0])
+        except TypeError:
+            return None
 
     @property
     def decoder(self) -> Decoder:

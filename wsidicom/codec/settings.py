@@ -15,7 +15,6 @@
 """Module with settings for encoding image data."""
 
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass
 from enum import Enum
 from typing import Literal, Optional, Union
 from pydicom.uid import (
@@ -336,7 +335,6 @@ class JpegLosslessSettings(Settings):
         return ".jpg"
 
 
-@dataclass
 class JpegLsSettings(Settings):
     def __init__(
         self,

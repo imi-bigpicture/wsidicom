@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from typing import Type
+
 import pytest
 from PIL import ImageChops, ImageStat
 from PIL.Image import Image
@@ -36,9 +37,9 @@ from wsidicom.codec.encoder import (
     Jpeg2kEncoder,
     JpegEncoder,
     JpegLsEncoder,
+    NumpyEncoder,
     PillowEncoder,
     PylibjpegRleEncoder,
-    NumpyEncoder,
 )
 from wsidicom.instance.dataset import WsiDataset
 

@@ -29,6 +29,8 @@ class Settings:
         self._prefered_decoder: Optional[str] = None
         self._open_web_theads: Optional[int] = None
         self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
+        self._strict_specimen_identifier_check = True
+        self._ignore_specimen_preparation_step_on_validation_error = True
 
     @property
     def strict_uid_check(self) -> bool:
@@ -86,6 +88,27 @@ class Settings:
     @pillow_resampling_filter.setter
     def pillow_resampling_filter(self, value: Pillow.Resampling) -> None:
         self._pillow_resampling_filter = value
+
+    @property
+    def strict_specimen_identifier_check(self) -> bool:
+        """If `True` the issuer of two specimen identifiers needs to match or both be
+        None for the identifiers to match. If `False` the identifiers will match also if
+        either issuer is None. Either way the identifier needs to match."""
+        return self._strict_specimen_identifier_check
+
+    @strict_specimen_identifier_check.setter
+    def strict_specimen_identifier_check(self, value: bool) -> None:
+        self._strict_specimen_identifier_check = value
+
+    @property
+    def ignore_specimen_preparation_step_on_validation_error(self) -> bool:
+        """If ignore specimen preparation steps that fails to validate. If false all
+        steps will be ignored if one fails to validate."""
+        return self._ignore_specimen_preparation_step_on_validation_error
+
+    @ignore_specimen_preparation_step_on_validation_error.setter
+    def ignore_specimen_preparation_step_on_validation_error(self, value: bool) -> None:
+        self._ignore_specimen_preparation_step_on_validation_error = value
 
 
 settings = Settings()

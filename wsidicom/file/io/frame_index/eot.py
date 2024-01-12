@@ -18,8 +18,8 @@ from pydicom.tag import Tag
 
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.frame_index.offset_table import OffsetTable
-from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
+from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
 
 
 class Eot(OffsetTable):

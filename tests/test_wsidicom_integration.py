@@ -15,8 +15,8 @@
 from hashlib import md5
 from pathlib import Path
 from typing import Any, Callable, Dict
-import numpy as np
 
+import numpy as np
 import pytest
 from PIL import Image as Pillow
 

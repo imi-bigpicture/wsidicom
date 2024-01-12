@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import struct
+
 import numpy as np
 import pytest
 

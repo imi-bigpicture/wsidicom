@@ -25,7 +25,7 @@ from wsidicom.geometry import (
     Size,
     SizeMm,
 )
-from wsidicom.instance import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem
 
 
 @pytest.mark.unittest
@@ -383,7 +383,7 @@ class TestWsiDicomGeomtry:
             (  # Image x along slide y, Image y along slide x
                 RegionMm(PointMm(2.0, 4.0), SizeMm(1.0, 2.0)),
                 ImageCoordinateSystem(
-                    PointMm(1.0, 2.0), Orientation((0, 1, 0, 1, 0, 0))
+                    PointMm(1.0, 2.0), Orientation((0, 1, 0, 1, 0, 0)).rotation
                 ),
                 PointMm(2.0, 1.0),
                 PointMm(4.0, 2.0),
@@ -391,7 +391,7 @@ class TestWsiDicomGeomtry:
             (  # Image x reversed to slide y, Image y reversed to slide x
                 RegionMm(PointMm(1.0, 4.0), SizeMm(2.0, 1.0)),
                 ImageCoordinateSystem(
-                    PointMm(4.0, 8.0), Orientation((0, -1, 0, -1, 0, 0))
+                    PointMm(4.0, 8.0), Orientation((0, -1, 0, -1, 0, 0)).rotation
                 ),
                 PointMm(3.0, 1.0),
                 PointMm(4.0, 3.0),
@@ -399,7 +399,7 @@ class TestWsiDicomGeomtry:
             (  # Image x along slide x, Image y reversed to slide y
                 RegionMm(PointMm(2.0, 5.0), SizeMm(2.0, 1.0)),
                 ImageCoordinateSystem(
-                    PointMm(1.0, 8.0), Orientation((1, 0, 0, 0, -1, 0))
+                    PointMm(1.0, 8.0), Orientation((1, 0, 0, 0, -1, 0)).rotation
                 ),
                 PointMm(1.0, 2.0),
                 PointMm(3.0, 3.0),
@@ -407,7 +407,7 @@ class TestWsiDicomGeomtry:
             (  # Image x reversed to slide x, Image y along slide y
                 RegionMm(PointMm(2.0, 3.0), SizeMm(2.0, 3.0)),
                 ImageCoordinateSystem(
-                    PointMm(5.0, 2.0), Orientation((-1, 0, 0, 0, 1, 0))
+                    PointMm(5.0, 2.0), Orientation((-1, 0, 0, 0, 1, 0)).rotation
                 ),
                 PointMm(1.0, 1.0),
                 PointMm(3.0, 4.0),

@@ -40,11 +40,11 @@ from wsidicom.file.io.frame_index import (
     OffsetTableType,
     OffsetTableWriter,
 )
-from wsidicom.tags import LossyImageCompressionRatioTag, PixelDataTag
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
+from wsidicom.tags import LossyImageCompressionRatioTag, PixelDataTag
 from wsidicom.thread import ConditionalThreadPoolExecutor
 from wsidicom.uid import WSI_SOP_CLASS_UID
 

@@ -13,18 +13,18 @@
 #    limitations under the License.
 
 """Module containing image codecs."""
-from wsidicom.codec.encoder import Encoder
+from wsidicom.codec.codec import Codec
+from wsidicom.codec.decoder import Decoder
+from wsidicom.codec.encoder import Encoder, LossyCompressionIsoStandard
+from wsidicom.codec.media_types import determine_media_type
 from wsidicom.codec.settings import (
     Channels,
-    JpegSettings,
-    JpegLosslessSettings,
     Jpeg2kSettings,
+    JpegLosslessSettings,
     JpegLsSettings,
+    JpegSettings,
     NumpySettings,
     RleSettings,
     Settings,
     Subsampling,
 )
-from wsidicom.codec.decoder import Decoder
-from wsidicom.codec.codec import Codec
-from wsidicom.codec.media_types import determine_media_type

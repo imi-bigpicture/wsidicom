@@ -40,9 +40,9 @@ from wsidicom.codec import (
     JpegSettings,
     NumpySettings,
     RleSettings,
+    Settings,
     Subsampling,
 )
-from wsidicom.codec import Settings
 from wsidicom.codec.decoder import (
     ImageCodecsDecoder,
     ImageCodecsRleDecoder,

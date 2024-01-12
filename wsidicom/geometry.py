@@ -14,11 +14,11 @@
 
 import logging
 import math
-from dataclasses import dataclass
-from typing import Callable, Iterable, Iterator, Tuple, Union, Sequence
+from dataclasses import dataclass, replace
+from typing import Callable, Iterable, Iterator, Sequence, Tuple, Union
 
 
-@dataclass
+@dataclass(frozen=True)
 class SizeMm:
     width: float
     height: float
@@ -62,7 +62,7 @@ class SizeMm:
             raise ValueError("input did not contain two values")
 
 
-@dataclass
+@dataclass(frozen=True)
 class PointMm:
     x: float
     y: float
@@ -124,7 +124,7 @@ class PointMm:
         return (self.x, self.y)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Size:
     width: int
     height: int
@@ -185,37 +185,37 @@ class Size:
 
     def all_less_than(self, item: "Size") -> bool:
         """If all dimensions is smaller than corresponding dimension in item."""
-        return all(self._comparision_operation(item, int.__lt__))
+        return all(self._comparison_operation(item, int.__lt__))
 
     def all_less_than_or_equal(self, item: "Size") -> bool:
         """If all dimensions is smaller or equal to corresponding dimension in item."""
-        return all(self._comparision_operation(item, int.__le__))
+        return all(self._comparison_operation(item, int.__le__))
 
     def all_greater_than(self, item: "Size") -> bool:
         """If all dimensions is greater than to corresponding dimension in item."""
-        return all(self._comparision_operation(item, int.__gt__))
+        return all(self._comparison_operation(item, int.__gt__))
 
     def all_greater_than_or_equal(self, item: "Size") -> bool:
         """If all dimensions is greater or equal to corresponding dimension in item."""
-        return all(self._comparision_operation(item, int.__ge__))
+        return all(self._comparison_operation(item, int.__ge__))
 
     def any_less_than(self, item: "Size") -> bool:
         """If any dimension is smaller than corresponding dimension in item."""
-        return any(self._comparision_operation(item, int.__lt__))
+        return any(self._comparison_operation(item, int.__lt__))
 
     def any_less_than_or_equal(self, item: "Size") -> bool:
         """If any dimension is smaller or equal to corresponding dimension in item."""
-        return any(self._comparision_operation(item, int.__le__))
+        return any(self._comparison_operation(item, int.__le__))
 
     def any_greater_than(self, item: "Size") -> bool:
         """If any dimension is greater than to corresponding dimension in item."""
-        return any(self._comparision_operation(item, int.__gt__))
+        return any(self._comparison_operation(item, int.__gt__))
 
     def any_greater_than_or_equal(self, item: "Size") -> bool:
         """If any dimension is greater or equal to corresponding dimension in item."""
-        return any(self._comparision_operation(item, int.__ge__))
+        return any(self._comparison_operation(item, int.__ge__))
 
-    def _comparision_operation(
+    def _comparison_operation(
         self, item: "Size", operation: Callable[[int, int], bool]
     ) -> Iterable[bool]:
         return (
@@ -256,7 +256,7 @@ class Size:
         return self.width * self.height
 
 
-@dataclass
+@dataclass(frozen=True)
 class Point:
     x: int
     y: int
@@ -340,7 +340,7 @@ class Point:
             raise ValueError("input did not contain two values")
 
 
-@dataclass
+@dataclass(frozen=True)
 class Region:
     position: Point
     size: Size
@@ -438,8 +438,9 @@ class Region:
         """
         tile_region = Region(position=point * tile_size, size=tile_size)
         cropped_tile_region = self.crop(tile_region)
-        cropped_tile_region.position = cropped_tile_region.position % tile_size
-        return cropped_tile_region
+        return replace(
+            cropped_tile_region, position=cropped_tile_region.position % tile_size
+        )
 
     def zoom(self, zoom: float) -> "Region":
         """Return center-zoomed region.
@@ -460,20 +461,30 @@ class Region:
         return Region(new_start, self.size)
 
 
-@dataclass
+@dataclass(frozen=True)
 class RegionMm:
     position: PointMm
     size: SizeMm
 
-    def __init__(self, position: PointMm, size: SizeMm):
-        if size.width < 0:
-            size.width = -size.width
-            position.x -= size.width
-        if size.height < 0:
-            size.height = -size.height
-            position.y -= size.height
-        self.position = position
-        self.size = size
+    # def __init__(self, position: PointMm, size: SizeMm):
+    #     if size.width < 0:
+    #         size.width = -size.width
+    #         position.x -= size.width
+    #     if size.height < 0:
+    #         size.height = -size.height
+    #         position.y -= size.height
+    #     self.position = position
+    #     self.size = size
+
+    # @classmethod
+    # def create(cls, position: PointMm, size: SizeMm) -> "RegionMm":
+    #     if size.width < 0:
+    #         size.width = -size.width
+    #         position.x -= size.width
+    #     if size.height < 0:
+    #         size.height = -size.height
+    #         position.y -= size.height
+    #     return cls(position, size)
 
     @property
     def start(self) -> PointMm:
@@ -531,6 +542,12 @@ class Orientation:
             * 180
             % 360
         )
+
+    @classmethod
+    def from_rotation(cls, rotation: float) -> "Orientation":
+        x = round(math.sin(rotation * math.pi / 180), 8)
+        y = round(math.cos(rotation * math.pi / 180), 8)
+        return cls((-x, y, 0, y, x, 0))
 
     @property
     def values(self) -> Tuple[float, float, float, float, float, float]:

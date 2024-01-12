@@ -23,8 +23,8 @@ from wsidicom.errors import WsiDicomError, WsiDicomUidDuplicateError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.dataset import ImageType, WsiDataset
 from wsidicom.instance.image_data import ImageData
-from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 from wsidicom.instance.pillow_image_data import PillowImageData
+from wsidicom.metadata.image import ImageCoordinateSystem
 from wsidicom.uid import SlideUids
 
 

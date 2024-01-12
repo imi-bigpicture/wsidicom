@@ -20,8 +20,8 @@ from typing import Sequence
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomBotOverflow
-from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
 
 
 class OffsetTableWriter(metaclass=ABCMeta):

@@ -15,6 +15,7 @@
 """Frame index for BOT, parsing the positions from the BOT."""
 
 from typing import List, Optional, Tuple
+
 from wsidicom.file.io.frame_index.offset_table import OffsetTable
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 

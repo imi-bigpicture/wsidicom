@@ -22,7 +22,7 @@ import pytest
 from pydicom import DataElement, Dataset
 from pydicom.dataset import FileMetaDataset
 from pydicom.filebase import DicomFileLike
-from pydicom.filereader import read_preamble, _read_file_meta_info
+from pydicom.filereader import _read_file_meta_info, read_preamble
 from pydicom.filewriter import write_file_meta_info
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag
 from pydicom.uid import (
@@ -44,11 +44,11 @@ from pydicom.uid import (
 )
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.tags import (
     LossyImageCompressionRatioTag,
     PixelDataTag,
 )
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 

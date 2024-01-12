@@ -19,6 +19,7 @@ from struct import unpack
 from typing import List, Tuple
 
 from pydicom.tag import ItemTag
+
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.frame_index.encapsulated_pixel_data import EncapsulatedPixelData
 
