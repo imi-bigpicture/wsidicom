@@ -15,14 +15,14 @@
 """Module for handling DICOM RLE data with imagecodecs PackBits codec."""
 
 import io
-from struct import pack, unpack
-from typing import List, Sequence, Tuple
+from struct import pack
+from typing import List, Sequence
 
 import numpy as np
 from wsidicom.codec.optionals import (
-    packbits_decode,
     packbits_encode,
     IMAGE_CODECS_AVAILABLE,
+    dicomrle_decode,
 )
 
 
@@ -113,34 +113,20 @@ class RleCodec:
         """
         if not cls.is_available():
             raise RuntimeError("Image codecs not available.")
-        components_per_channel = cls._bits_to_compnents_per_channel[bits]
-        segments = cls._parse_header(data)
-        channels = len(segments) // components_per_channel
-        with io.BytesIO() as buffer:
-            for segment_start, segment_end in segments:
-                segment_data = packbits_decode(data[segment_start:segment_end])
-                buffer.write(segment_data)
-            # Read data is uint8
-            array = np.frombuffer(buffer.getvalue(), dtype=np.uint8)
-            # Data is ordered by colunm, row, (high-low) byte, and channel
-            array = array.reshape(channels, components_per_channel, rows, cols)
-            # Transpose to row, col, channel, (high-low) byte
-            array = array.transpose((2, 3, 0, 1))
-            if bits == 16:
-                # Combine high and low bytes
-                array = array.copy().view(np.uint16).byteswap()
-            return array.squeeze()
-
-    @staticmethod
-    def _parse_header(data: bytes) -> Sequence[Tuple[int, int]]:
-        """Parse RLE header into segment start and end positions."""
-        header_items = unpack("<16L", data[0:64])
-        segments = header_items[0]
-        segment_positions = header_items[1 : segments + 1] + (len(data),)
-        return [
-            (segment_positions[index], segment_positions[index + 1])
-            for index in range(len(segment_positions) - 1)
-        ]
+        if bits == 16:
+            dtype = np.uint16
+        elif bits == 8:
+            dtype = np.uint8
+        else:
+            raise ValueError("Invalid bits.")
+        decoded_bytes = dicomrle_decode(data, dtype)
+        # Read data is uint8
+        decoded = np.frombuffer(decoded_bytes, dtype=dtype)
+        # Reshape to channels, rows, cols
+        decoded = decoded.reshape(len(decoded) // (rows * cols), rows, cols)
+        # Transpose to rows, cols, channels, and squeeze channels if only 1
+        decoded = decoded.transpose((1, 2, 0)).squeeze()
+        return decoded
 
     @staticmethod
     def _create_header(segment_positions: Sequence[int]):
