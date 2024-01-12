@@ -71,7 +71,7 @@ class FullTileIndex(TileIndex):
             ID of optical path to get.
 
         Returns
-        ----------
+        -------
         int
             Frame index.
         """
@@ -91,7 +91,7 @@ class FullTileIndex(TileIndex):
         Sequence are in mm.
 
         Returns
-        ----------
+        -------
         List[float]
             Focal planes, specified in um.
 
@@ -140,7 +140,7 @@ class FullTileIndex(TileIndex):
             Optical path identifier to search for.
 
         Returns
-        ----------
+        -------
         int
             The index of the optical path identifier in the optical path
             sequence.
@@ -166,7 +166,7 @@ class FullTileIndex(TileIndex):
             The z coordinate (in um) to search for.
 
         Returns
-        ----------
+        -------
         int
             Focal plane index for z coordinate.
         """

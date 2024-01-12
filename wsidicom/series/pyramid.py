@@ -15,17 +15,22 @@
 from typing import Iterable, List, Optional, OrderedDict
 
 
-from wsidicom.errors import WsiDicomNotFoundError, WsiDicomOutOfBoundsError
+from wsidicom.errors import (
+    WsiDicomNotFoundError,
+    WsiDicomOutOfBoundsError,
+)
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level
+from wsidicom.group.level import BaseLevel
 from wsidicom.instance import ImageCoordinateSystem, ImageType, WsiInstance
 from wsidicom.series.series import Series
-from wsidicom.stringprinting import str_indent
+from wsidicom.stringprinting import list_pretty_str
 
 
-class Levels(Series):
-    """Represents a series of Levels of the volume (e.g. pyramidal
-    level) wsi flavor."""
+class Pyramid(Series[Level]):
+    """Represents a list of Levels of the volume (e.g. pyramidal level) wsi flavor
+    forming a WSI pyramid. All levels in the pyramid must have the same image origin
+    and extended depth of field."""
 
     def __init__(self, levels: Iterable[Level]):
         """Holds a stack of levels.
@@ -33,14 +38,15 @@ class Levels(Series):
         Parameters
         ----------
         levels: Iterable[Level]
-            List of levels to include in series
+            List of levels to include in the pyramid.
         """
         self._levels = OrderedDict(
             (level.level, level)
             for level in sorted(levels, key=lambda level: level.level)
         )
-        if len(self.groups) != 0 and self.groups[0].uids is not None:
-            self._uids = self._validate_series(self.groups)
+        self._groups = list(self._levels.values())
+        if len(self._levels) != 0 and self._levels[0].uids is not None:
+            self._uids = self._validate_series(list(self._levels.values()))
         else:
             self._uids = None
         mm_size = next(
@@ -55,20 +61,40 @@ class Levels(Series):
             )
         self._mm_size = mm_size
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self._levels})"
+
+    def __str__(self) -> str:
+        """Return string representation of pyramid."""
+        return self.pretty_str()
+
     def __getitem__(self, index: int) -> Level:
+        return list(self._levels.values())[index]
+
+    def __len__(self) -> int:
+        return len(self._levels)
+
+    def get(self, index: int, pyramid_index: bool = True) -> Level:
         """Get level by index.
 
         Parameters
         ----------
         index: int
-            Index in series to get
+            Index in pyramid to get
+        pyramid_index: bool = True
+            If to get level by pyramid index (True) or list index (False).
 
         Returns
-        ----------
+        -------
         Level
-            The level at index in the series
+            The level at index in the pyramid
         """
-        return self.groups[index]
+        try:
+            if pyramid_index:
+                return self._levels[index]
+            return self[index]
+        except IndexError:
+            raise WsiDicomNotFoundError(f"Level index {index}", "pyramid")
 
     @property
     def image_type(self) -> ImageType:
@@ -91,36 +117,50 @@ class Levels(Series):
         return self.base_level.tile_size
 
     @classmethod
-    def open(cls, instances: Iterable[WsiInstance]) -> "Levels":
-        """Return overviews created from wsi files.
+    def open(cls, instances: Iterable[WsiInstance]) -> "Pyramid":
+        """Return pyramid created from wsi instances.
 
         Parameters
         ----------
         instances: Iterable[WsiInstance]
-            Instances to create levels from.
+            Instances to create pyramid from.
 
         Returns
-        ----------
-        Overviews
-            Created levels.
+        -------
+        Pyramid
+            Created pyramid.
         """
-        levels = Level.open(instances)
+        instances_grouped_by_size = cls._group_instances_by_size(instances)
+        base_level = BaseLevel(next(instances_grouped_by_size))
+        levels: List[Level] = [base_level]
+        levels.extend(
+            [
+                Level(instances, base_level.pixel_spacing)
+                for instances in instances_grouped_by_size
+            ]
+        )
         return cls(levels)
 
-    @property
-    def pyramid(self) -> str:
+    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         """Return string representation of pyramid."""
-        return "Pyramid levels in file:\n" + "\n".join(
-            [str_indent(2) + level.pyramid for level in self._levels.values()]
+        string = self.__class__.__name__
+        if depth is not None:
+            depth -= 1
+            if depth < 0:
+                return string
+        return (
+            string
+            + " of levels:\n"
+            + list_pretty_str(self._levels.values(), indent + 2, depth)
         )
 
     @property
-    def groups(self) -> List[Level]:
-        """Return contained groups."""
+    def levels(self) -> List[Level]:
+        """Return contained levels."""
         return list(self._levels.values())
 
     @property
-    def levels(self) -> List[int]:
+    def pyramid_indices(self) -> List[int]:
         """Return contained levels."""
         return list(self._levels.keys())
 
@@ -157,31 +197,11 @@ class Levels(Series):
             The level to check
 
         Returns
-        ----------
+        -------
         bool
             True if level is valid
         """
         return level <= self.highest_level
-
-    def get_level(self, level: int) -> Level:
-        """Return wsi level.
-
-        Parameters
-        ----------
-        level: int
-            The level of the wsi level to return
-
-        Returns
-        ----------
-        Level
-            The searched level
-        """
-        try:
-            return self._levels[level]
-        except KeyError as exception:
-            raise WsiDicomNotFoundError(
-                f"Level of {level}", "level series"
-            ) from exception
 
     def get_closest_by_level(self, level: int) -> Level:
         """Search for level that is closest to and smaller than the given
@@ -193,7 +213,7 @@ class Levels(Series):
             The level to search for
 
         Returns
-        ----------
+        -------
         Level
             The level closest to searched level
         """
@@ -221,11 +241,11 @@ class Levels(Series):
             The size to search for
 
         Returns
-        ----------
+        -------
         Level
             The level with size closest to searched size
         """
-        closest_size = self.groups[0].size
+        closest_size = self._levels[0].size
         closest = None
         for wsi_level in self._levels.values():
             if (size.width <= wsi_level.size.width) and (
@@ -247,7 +267,7 @@ class Levels(Series):
             Pixel spacing to search for
 
         Returns
-        ----------
+        -------
         Level
             The level with pixel spacing closest to searched spacing
         """

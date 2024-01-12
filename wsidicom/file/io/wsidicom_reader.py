@@ -145,7 +145,7 @@ class WsiDicomReader:
             Frame, including concatenation offset, to get.
 
         Returns
-        ----------
+        -------
         bytes
             The frame as bytes
         """
@@ -165,7 +165,7 @@ class WsiDicomReader:
             Path to file.
 
         Returns
-        ----------
+        -------
         WsiDicomFileReader
             WsiDicomFileReader for file.
         """

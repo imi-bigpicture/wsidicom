@@ -45,7 +45,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
              Frame index to get
 
         Returns
-        ----------
+        -------
         bytes
             The frame in bytes
         """
@@ -129,7 +129,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         bytes
             Tile as bytes.
         """
@@ -152,7 +152,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         Image
             Tile as Pillow Image.
         """
@@ -178,7 +178,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             Optical identifier
 
         Returns
-        ----------
+        -------
         int
             Tile frame index
         """

@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Callable, List, cast
+from typing import Callable, List
 
 import pytest
 from PIL import ImageChops, ImageFilter, ImageStat
@@ -24,8 +24,7 @@ from wsidicom import WsiDicom
 from wsidicom.codec import Jpeg2kSettings, JpegSettings, Settings
 from wsidicom.codec.encoder import Encoder
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
-from wsidicom.group.level import Level
-from wsidicom.series.levels import Levels
+from wsidicom.series import Pyramid, Pyramids
 
 
 @pytest.mark.integration
@@ -36,17 +35,17 @@ class TestWsiDicomFileTargetIntegration:
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)
-        expected_levels_count = len(wsi.levels)
+        expected_levels_count = len(wsi.pyramids[0])
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, False
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, None, False
         ) as target:
-            target.save_levels(wsi.levels)
+            target.save_pyramids(wsi.pyramids)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
-            assert expected_levels_count == len(saved_wsi.levels)
+            assert expected_levels_count == len(saved_wsi.pyramids[0])
 
     @pytest.mark.parametrize("include_levels", [[-1], [-1, -2]])
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
@@ -62,13 +61,20 @@ class TestWsiDicomFileTargetIntegration:
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, include_levels, False
+            tmp_path,
+            generate_uid,
+            1,
+            16,
+            OffsetTableType.BASIC,
+            None,
+            include_levels,
+            False,
         ) as target:
-            target.save_levels(wsi.levels)
+            target.save_pyramids(wsi.pyramids)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
-            assert len(saved_wsi.levels) == len(include_levels)
+            assert len(saved_wsi.pyramids[0]) == len(include_levels)
 
     @pytest.mark.parametrize("settings", [Jpeg2kSettings(), JpegSettings()])
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
@@ -82,7 +88,6 @@ class TestWsiDicomFileTargetIntegration:
         # Arrange
         wsi = wsi_factory(wsi_name)
         transcoder = Encoder.create_for_settings(settings)
-        print(wsi.levels.base_level.default_instance.dataset.LossyImageCompressionRatio)
 
         # Act
         with WsiDicomFileTarget(
@@ -91,16 +96,17 @@ class TestWsiDicomFileTargetIntegration:
             1,
             16,
             OffsetTableType.BASIC,
+            None,
             [-1],
             False,
             transcoder,
         ) as target:
-            target.save_levels(wsi.levels)
+            target.save_pyramids(wsi.pyramids)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
-            original_level = wsi.levels[-1]
-            level = saved_wsi.levels.base_level
+            original_level = wsi.pyramids[0][-1]
+            level = saved_wsi.pyramids[0].base_level
             assert (
                 level.default_instance.image_data.transfer_syntax
                 == transcoder.transfer_syntax
@@ -141,22 +147,29 @@ class TestWsiDicomFileTargetIntegration:
         # Arrange
         wsi = wsi_factory(wsi_name)
         levels_larger_than_tile_size = [
-            level for level in wsi.levels if level.size.any_greater_than(wsi.tile_size)
+            level
+            for level in wsi.pyramids[0]
+            if level.size.any_greater_than(wsi.pyramids[0].tile_size)
         ]
         expected_levels_count = len(levels_larger_than_tile_size) + 1
-        levels_missing_smallest_levels = Levels(levels_larger_than_tile_size)
+        pyramid_missing_smallest_levels = Pyramid(levels_larger_than_tile_size)
+        pyramids = Pyramids([pyramid_missing_smallest_levels])
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, True
+            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, None, True
         ) as target:
-            target.save_levels(levels_missing_smallest_levels)
+            target.save_pyramids(pyramids)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
-            assert expected_levels_count == len(saved_wsi.levels)
-            assert saved_wsi.levels[-1].size.all_less_than_or_equal(saved_wsi.tile_size)
-            assert saved_wsi.levels[-2].size.any_greater_than(saved_wsi.tile_size)
+            assert expected_levels_count == len(saved_wsi.pyramids[0])
+            assert saved_wsi.pyramids[0][-1].size.all_less_than_or_equal(
+                saved_wsi.pyramids[0].tile_size
+            )
+            assert saved_wsi.pyramids[0][-2].size.any_greater_than(
+                saved_wsi.pyramids[0].tile_size
+            )
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_create_child(
@@ -167,8 +180,8 @@ class TestWsiDicomFileTargetIntegration:
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)
-        target_level = cast(Level, wsi.levels[-2])
-        source_level = cast(Level, wsi.levels[-3])
+        target_level = wsi.pyramids[0][-2]
+        source_level = wsi.pyramids[0][-3]
 
         # Act
         with WsiDicomFileTarget(
@@ -178,13 +191,14 @@ class TestWsiDicomFileTargetIntegration:
             100,
             OffsetTableType.BASIC,
             None,
+            None,
             False,
         ) as target:
-            target._save_and_open_level(source_level, wsi.pixel_spacing, 2)
+            target._save_and_open_level(source_level, wsi.pyramids[0].pixel_spacing, 2)
 
         # Assert
         with WsiDicom.open(tmp_path) as created_wsi:
-            created_size = created_wsi.levels[0].size.to_tuple()
+            created_size = created_wsi.pyramids[0][0].size.to_tuple()
             target_size = target_level.size.to_tuple()
             assert created_size == target_size
 
