@@ -168,7 +168,9 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         dump_default=Defaults.focus_method,
         load_default=None,
     )
-    extended_depth_of_field_bool = BooleanDicomField(data_key="ExtendedDepthOfField")
+    extended_depth_of_field_bool = BooleanDicomField(
+        data_key="ExtendedDepthOfField", load_default=False
+    )
     extended_depth_of_field = FlattenOnDumpNestedDicomField(
         ExtendedDepthOfFieldDicomSchema(),
         allow_none=True,

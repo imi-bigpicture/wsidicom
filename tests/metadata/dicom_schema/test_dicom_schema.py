@@ -240,6 +240,7 @@ class TestDicomSchema:
             [None, None, None, None, None, None, None, None],
         ],
     )
+    @pytest.mark.parametrize("valid_dicom", [True, False])
     def test_deserialize_image(self, dicom_image: Dataset, image: Image):
         # Arrange
         schema = ImageDicomSchema()
