@@ -30,7 +30,7 @@ from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study
 
 
-@dataclass
+@dataclass(frozen=True)
 class WsiMetadata:
     """Metadata for a whole slide image.
 

@@ -44,7 +44,7 @@ class LutSegment(metaclass=ABCMeta):
         raise NotImplementedError()
 
 
-@dataclass
+@dataclass(frozen=True)
 class DiscreteLutSegment(LutSegment):
     """A discrete segmented defined by a sequence of values.
 
@@ -66,7 +66,7 @@ class DiscreteLutSegment(LutSegment):
         return np.array(self.values, dtype=data_type)
 
 
-@dataclass
+@dataclass(frozen=True)
 class LinearLutSegment(LutSegment):
     """A linear segment defined by start and end values and a length.
 
@@ -101,7 +101,7 @@ class LinearLutSegment(LutSegment):
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class ConstantLutSegment(LutSegment):
     """A constant segment defined by a value and a length.
 
@@ -127,7 +127,7 @@ class ConstantLutSegment(LutSegment):
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Lut:
     """Represents a LUT.
 
@@ -210,7 +210,7 @@ OpticalFilterCodeType = TypeVar(
 OpticalFilterType = TypeVar("OpticalFilterType", bound="OpticalFilter")
 
 
-@dataclass
+@dataclass(frozen=True)
 class OpticalFilter(Generic[OpticalFilterCodeType]):
     """Metaclass for filter conditions for optical path.
 
@@ -250,7 +250,6 @@ class LightPathFilter(OpticalFilter[LightPathFilterCode]):
     """
 
 
-@dataclass
 class ImagePathFilter(OpticalFilter[ImagePathFilterCode]):
     """Set of image path filter conditions for optical path.
 
@@ -269,7 +268,7 @@ class ImagePathFilter(OpticalFilter[ImagePathFilterCode]):
     """
 
 
-@dataclass
+@dataclass(frozen=True)
 class Objectives:
     """Set of lens conditions for optical path.
 
@@ -293,7 +292,7 @@ class Objectives:
     objective_numerical_aperture: Optional[float] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class OpticalPath:
     """
     Optical path metadata.

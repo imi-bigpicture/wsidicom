@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence
 
 
-@dataclass
+@dataclass(frozen=True)
 class Equipment:
     """
     Equipment used to produce the slide.

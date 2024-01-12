@@ -14,6 +14,7 @@
 
 """DICOM schema for Optical path model."""
 
+from dataclasses import replace
 import io
 import struct
 from enum import Enum
@@ -231,14 +232,17 @@ class LutDicomParser:
 
     @staticmethod
     def _create_start_segment(
-        start_length: int, segments: Sequence[LutSegment]
+        start_length: int, segments: List[LutSegment]
     ) -> Optional[ConstantLutSegment]:
         """Create a start segment if needed."""
         if start_length == 0:
             return None
         first_segment = segments[0]
         if isinstance(first_segment, ConstantLutSegment):
-            first_segment.length += start_length
+            first_segment = replace(
+                first_segment, length=first_segment.length + start_length
+            )
+            segments[0] = first_segment
             return None
         if isinstance(first_segment, DiscreteLutSegment):
             start_value = first_segment.values[0]
@@ -250,7 +254,7 @@ class LutDicomParser:
 
     @staticmethod
     def _create_end_segment(
-        start_length, total_length: int, segments: Sequence[LutSegment]
+        start_length, total_length: int, segments: List[LutSegment]
     ):
         """Create a end segment if needed."""
         length = start_length
@@ -262,7 +266,10 @@ class LutDicomParser:
         if segment_length == 0:
             return None
         if isinstance(last_segment, ConstantLutSegment):
-            last_segment.length += segment_length
+            last_segment = replace(
+                last_segment, length=last_segment.length + segment_length
+            )
+            segments[-1] = last_segment
             return None
         if isinstance(last_segment, DiscreteLutSegment):
             end_value = last_segment.values[-1]

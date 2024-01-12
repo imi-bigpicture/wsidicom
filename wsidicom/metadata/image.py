@@ -30,7 +30,7 @@ class FocusMethod(Enum):
     MANUAL = "manual"
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExtendedDepthOfField:
     """Extended depth of field.
 
@@ -49,7 +49,7 @@ class ExtendedDepthOfField:
 GeometryType = TypeVar("GeometryType", PointMm, RegionMm)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ImageCoordinateSystem:
     """Image coordinate system.
 
@@ -91,7 +91,7 @@ class ImageCoordinateSystem:
         return other.slide_to_image(slide)
 
 
-@dataclass
+@dataclass(frozen=True)
 class LossyCompression:
     """Lossy compression.
 
@@ -107,7 +107,7 @@ class LossyCompression:
     ratio: float
 
 
-@dataclass
+@dataclass(frozen=True)
 class Image:
     """
     Image metadata.

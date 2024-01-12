@@ -78,7 +78,7 @@ class IssuerOfIdentifier(metaclass=ABCMeta):
         )
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(frozen=True)
 class LocalIssuerOfIdentifier(IssuerOfIdentifier):
     """A local issuer of an identifier.
 
@@ -94,7 +94,7 @@ class LocalIssuerOfIdentifier(IssuerOfIdentifier):
         return self.identifier
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(frozen=True)
 class UniversalIssuerOfIdentifier(IssuerOfIdentifier):
     """A universal issuer of an identifier.
 
@@ -118,7 +118,7 @@ class UniversalIssuerOfIdentifier(IssuerOfIdentifier):
         return identifier
 
 
-@dataclass
+@dataclass(frozen=True)
 class Measurement:
     """A measurement with a value and a unit.
 
@@ -134,7 +134,7 @@ class Measurement:
     unit: UnitCode
 
 
-@dataclass
+@dataclass(frozen=True)
 class SamplingLocation:
     """The location of a sampling.
 
@@ -160,7 +160,7 @@ class SamplingLocation:
     z: Optional[Measurement] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class SampleLocalization(SamplingLocation):
     """The location of a sample on a slide.
 
@@ -184,7 +184,7 @@ class SampleLocalization(SamplingLocation):
     visual_marking: Optional[str] = None
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(frozen=True)
 class SpecimenIdentifier:
     """A specimen identifier including an optional issuer.
 
@@ -262,7 +262,7 @@ class BaseSampling(PreparationStep, metaclass=ABCMeta):
     sampling_constraints: Optional[Sequence["BaseSampling"]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Sampling(BaseSampling):
     """
     The sampling of a specimen into samples that can be used to create new specimens.
@@ -299,7 +299,7 @@ class Sampling(BaseSampling):
     location: Optional[SamplingLocation] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class UnknownSampling(BaseSampling):
     """
     Represent an unknown relation between a parent specimen and a child sample.
@@ -321,7 +321,7 @@ class UnknownSampling(BaseSampling):
     sampling_constraints: Optional[Sequence[BaseSampling]] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Collection(PreparationStep):
     """
     The collection of a specimen from a body.
@@ -343,7 +343,7 @@ class Collection(PreparationStep):
     description: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Processing(PreparationStep):
     """
     Other processing steps, such as heating or clearing, made on a specimen.
@@ -365,7 +365,7 @@ class Processing(PreparationStep):
     description: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Embedding(PreparationStep):
     """
     Embedding of a specimen in an medium.
@@ -387,7 +387,7 @@ class Embedding(PreparationStep):
     description: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Fixation(PreparationStep):
     """
     Fixation of a specimen using a fixative.
@@ -409,7 +409,7 @@ class Fixation(PreparationStep):
     description: Optional[str] = None
 
 
-@dataclass()
+@dataclass(frozen=True)
 class Staining(PreparationStep):
     """
     Staining of a specimen using staining substances.
@@ -431,7 +431,7 @@ class Staining(PreparationStep):
     description: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Receiving(PreparationStep):
     """
     Reception of a specimen.
@@ -448,7 +448,7 @@ class Receiving(PreparationStep):
     description: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Storage(PreparationStep):
     """
     Storage of a specimen.
@@ -468,17 +468,10 @@ class Storage(PreparationStep):
 class BaseSpecimen(metaclass=ABCMeta):
     """Metaclass for a specimen."""
 
-    def __init__(
-        self,
-        identifier: Union[str, SpecimenIdentifier],
-        type: Optional[AnatomicPathologySpecimenTypesCode],
-        steps: Sequence[PreparationStep],
-        container: Optional[ContainerTypeCode] = None,
-    ):
-        self.identifier = identifier
-        self.type = type
-        self.steps = list(steps)
-        self.container = container
+    steps: List[PreparationStep]
+    identifier: Union[str, SpecimenIdentifier]
+    type: Optional[AnatomicPathologySpecimenTypesCode]
+    container: Optional[ContainerTypeCode]
 
     @property
     def samplings(self) -> List[Sampling]:
@@ -501,26 +494,15 @@ class BaseSpecimen(metaclass=ABCMeta):
 class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
     """Metaclass for a specimen thas has been sampled from one or more specimens."""
 
-    def __init__(
-        self,
-        identifier: Union[str, SpecimenIdentifier],
-        type: Optional[AnatomicPathologySpecimenTypesCode],
-        sampled_from: Optional[Union[BaseSampling, Sequence[BaseSampling]]],
-        steps: Sequence[PreparationStep],
-        container: Optional[ContainerTypeCode] = None,
-    ):
-        super().__init__(identifier, type, steps, container)
-        if sampled_from is None:
-            sampled_from = []
-        elif isinstance(sampled_from, BaseSampling):
-            sampled_from = [sampled_from]
-        elif not isinstance(sampled_from, list):
-            sampled_from = list(sampled_from)
-        self._sampled_from = sampled_from
+    sampled_from: Optional[Union[BaseSampling, List[BaseSampling]]]
 
     @property
     def sampled_from_list(self) -> List[BaseSampling]:
-        return self._sampled_from
+        if self.sampled_from is None:
+            return []
+        if isinstance(self.sampled_from, BaseSampling):
+            return [self.sampled_from]
+        return self.sampled_from
 
     def add(self, step: PreparationStep) -> None:
         if isinstance(step, Collection):
@@ -543,7 +525,7 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
             if isinstance(specimen, SampledSpecimen):
                 return any(
                     recursive_search(sampling, sampling.specimen)
-                    for sampling in specimen._sampled_from
+                    for sampling in specimen.sampled_from_list
                 )
             return False
 
@@ -560,14 +542,14 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
     ):
         """Check that the sampling tree for the specimen is is not branching when
         following the constraints."""
-        if len(self._sampled_from) == 0:
+        if len(self.sampled_from_list) == 0:
             # No sampling tree, is unambiguous
             return True
-        if len(self._sampled_from) > 1:
+        if len(self.sampled_from_list) > 1:
             # Check that at one and only one of the samplings are in the constraints
             samplings_in_constraints = (
                 sampling
-                for sampling in self._sampled_from
+                for sampling in self.sampled_from_list
                 if sampling.specimen.identifier in constraints
             )
             first_sampling_in_constraints = next(samplings_in_constraints, None)
@@ -578,7 +560,7 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
             sampling_to_check = first_sampling_in_constraints
         else:
             # Only one sampling to check
-            sampling_to_check = self._sampled_from[0]
+            sampling_to_check = self.sampled_from_list[0]
 
         if not isinstance(sampling_to_check.specimen, SampledSpecimen):
             # Sampling tree ends non-sampled specimen, is unambiguous
@@ -596,7 +578,7 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Specimen(BaseSpecimen):
     """A specimen that has been extracted/taken from a patient in some way. Does not
     need to represent the actual first specimen in the collection tree, but should
@@ -636,12 +618,6 @@ class Specimen(BaseSpecimen):
                     0,
                     self.extraction_step,
                 )
-        super().__init__(
-            identifier=self.identifier,
-            type=self.type,
-            steps=self.steps,
-            container=self.container,
-        )
 
     def add(self, step: PreparationStep) -> None:
         if isinstance(step, Collection) and len(self.steps) != 0:
@@ -675,7 +651,7 @@ class Specimen(BaseSpecimen):
         return sampling
 
 
-@dataclass
+@dataclass(frozen=True)
 class Sample(SampledSpecimen):
     """A specimen that has been sampled from one or more other specimens.
 
@@ -702,15 +678,6 @@ class Sample(SampledSpecimen):
     type: Optional[AnatomicPathologySpecimenTypesCode] = None
     steps: Sequence[PreparationStep] = field(default_factory=list)
     container: Optional[ContainerTypeCode] = None
-
-    def __post_init__(self):
-        super().__init__(
-            identifier=self.identifier,
-            type=self.type,
-            sampled_from=self.sampled_from,
-            steps=self.steps,
-            container=self.container,
-        )
 
     def sample(
         self,
@@ -745,7 +712,7 @@ class Sample(SampledSpecimen):
         return sampling
 
 
-@dataclass
+@dataclass(frozen=True)
 class SlideSample(SampledSpecimen):
     """A sample that has been placed on a slide.
 
@@ -786,13 +753,6 @@ class SlideSample(SampledSpecimen):
 
     def __post_init__(self):
         self._check_slide_sample_sampling_constraints()
-        super().__init__(
-            identifier=self.identifier,
-            type=self.type,
-            sampled_from=self.sampled_from,
-            steps=self.steps,
-            container=self.container,
-        )
 
     def _check_slide_sample_sampling_constraints(self):
         """Check that the sampling tree for the slide sample is not branching."""

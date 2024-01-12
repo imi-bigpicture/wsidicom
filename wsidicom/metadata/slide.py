@@ -20,7 +20,7 @@ from typing import Optional, Sequence, Union
 from wsidicom.metadata.sample import SlideSample, SpecimenIdentifier, Staining
 
 
-@dataclass
+@dataclass(frozen=True)
 class Slide:
     """
     Metadata for a slide.

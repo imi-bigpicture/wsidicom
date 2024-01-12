@@ -22,7 +22,7 @@ from typing import Optional
 from pydicom.uid import UID, generate_uid
 
 
-@dataclass
+@dataclass(frozen=True)
 class Study:
     """
     Study metadata.

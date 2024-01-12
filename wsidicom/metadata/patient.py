@@ -30,7 +30,7 @@ class PatientSex(Enum):
     O = "other"
 
 
-@dataclass
+@dataclass(frozen=True)
 class PatientDeIdentification:
     """Patient de-identification.
 
@@ -46,7 +46,7 @@ class PatientDeIdentification:
     methods: Optional[Sequence[Union[str, Code]]] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Patient:
     """
     Patient metadata.

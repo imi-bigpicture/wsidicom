@@ -14,6 +14,7 @@
 
 """DICOM schema for complete WsiMetadata model."""
 
+from dataclasses import replace
 from typing import Sequence, Type
 
 from marshmallow import fields
@@ -143,5 +144,4 @@ class WsiMetadataDicomSchema(DicomSchema[WsiMetadata]):
         merged_label = Label.merge_image_types(
             metadata.label, label_label, overview_label
         )
-        metadata.label = merged_label
-        return metadata
+        return replace(metadata, label=merged_label)
