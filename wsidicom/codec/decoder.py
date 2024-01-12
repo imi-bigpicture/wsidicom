@@ -152,9 +152,8 @@ class Decoder(metaclass=ABCMeta):
             return ImageCodecsDecoder(transfer_syntax)
         elif decoder == PylibjpegRleDecoder:
             return PylibjpegRleDecoder(size, samples_per_pixel, bits)
-        # Does not support padded data
-        # elif decoder == ImageCodecsRleDecoder:
-        #     return ImageCodecsRleDecoder(size, samples_per_pixel, bits)
+        elif decoder == ImageCodecsRleDecoder:
+            return ImageCodecsRleDecoder(size, samples_per_pixel, bits)
         elif decoder == PydicomDecoder:
             return PydicomDecoder(
                 transfer_syntax=transfer_syntax,
@@ -194,9 +193,7 @@ class Decoder(metaclass=ABCMeta):
             "pillow": PillowDecoder,
             "imagecodecs": ImageCodecsDecoder,
             "pylibjpeg_rle": PylibjpegRleDecoder,
-            # imagecodes packbit does not allow padded data
-            # Uncomment when https://github.com/cgohlke/imagecodecs/issues/86 is fixed
-            # "imagecodecs_rle": ImageCodecsRleDecoder,
+            "imagecodecs_rle": ImageCodecsRleDecoder,
             "pydicom": PydicomDecoder,
         }
         if config.settings.prefered_decoder is not None:

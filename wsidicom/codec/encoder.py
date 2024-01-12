@@ -466,12 +466,6 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
     def supports_settings(cls, settings: Settings) -> bool:
         if not isinstance(settings, Jpeg2kSettings):
             return False
-        if (
-            settings.level < 1 or settings.level > 1000
-        ) and settings.channels == Channels.YBR:
-            # jpeg2k_encode does not enable mct for lossless compression.
-            # Remove this when https://github.com/cgohlke/imagecodecs/issues/88 is fixed.
-            return False
         return True
 
 

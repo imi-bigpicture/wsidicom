@@ -33,11 +33,11 @@ try:
         jpeg2k_decode,
         jpeg8_decode,
         jpegls_decode,
-        packbits_decode,
         jpeg2k_encode,
         jpeg8_encode,
         jpegls_encode,
         packbits_encode,
+        dicomrle_decode,
     )
 
     IMAGE_CODECS_AVAILABLE = True
@@ -50,8 +50,8 @@ except ImportError:
     jpeg2k_decode = None
     jpeg8_decode = None
     jpegls_decode = None
-    packbits_decode = None
     jpeg2k_encode = None
     jpeg8_encode = None
     jpegls_encode = None
     packbits_encode = None
+    dicomrle_decode = None
