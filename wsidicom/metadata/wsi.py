@@ -14,7 +14,7 @@
 
 """Complete WSI model."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cached_property
 from typing import Optional, Sequence
 
@@ -105,15 +105,4 @@ class WsiMetadata:
             )
         else:
             merged_label = Label()
-        return cls(
-            study=volume.study,
-            series=volume.series,
-            patient=volume.patient,
-            equipment=volume.equipment,
-            optical_paths=volume.optical_paths,
-            slide=volume.slide,
-            label=merged_label,
-            image=volume.image,
-            frame_of_reference_uid=volume.frame_of_reference_uid,
-            dimension_organization_uids=volume.dimension_organization_uids,
-        )
+        return replace(volume, label=merged_label)
