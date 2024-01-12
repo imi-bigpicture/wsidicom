@@ -47,6 +47,11 @@ from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 
 
 @pytest.fixture()
+def valid_dicom():
+    yield True
+
+
+@pytest.fixture()
 def dicom_equipment(equipment: Equipment):
     dataset = Dataset()
     dataset.Manufacturer = equipment.manufacturer
@@ -57,7 +62,7 @@ def dicom_equipment(equipment: Equipment):
 
 
 @pytest.fixture()
-def dicom_image(image: Image):
+def dicom_image(image: Image, valid_dicom: bool):
     dataset = Dataset()
     dataset.AcquisitionDateTime = DT(image.acquisition_datetime)
     if image.focus_method is not None:
@@ -79,7 +84,7 @@ def dicom_image(image: Image):
         dataset.DistanceBetweenFocalPlanes = (
             image.extended_depth_of_field.distance_between_focal_planes
         )
-    else:
+    elif valid_dicom:
         dataset.ExtendedDepthOfField = "NO"
     if any(
         item is not None
