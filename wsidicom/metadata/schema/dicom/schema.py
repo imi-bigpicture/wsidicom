@@ -130,7 +130,7 @@ class ModuleDicomSchema(DicomSchema[LoadType]):
             return self.load_type()
 
 
-@dataclass
+@dataclass(frozen=True)
 class ItemField:
     name: Code
     value_types: Tuple[Type, ...]

@@ -27,7 +27,6 @@ from tests.metadata.dicom_schema.helpers import (
     create_processing_dataset,
     create_sampling_dataset,
     create_specimen_preparation_sequence,
-    create_staining_dataset,
 )
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,

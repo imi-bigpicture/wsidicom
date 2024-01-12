@@ -86,7 +86,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
             return None
 
 
-@dataclass
+@dataclass(frozen=True)
 class PixelMeasureDicomModel:
     pixel_spacing: Optional[SizeMm] = None
     focal_plane_spacing: Optional[float] = None

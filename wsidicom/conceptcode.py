@@ -24,7 +24,7 @@ ConceptCodeType = TypeVar("ConceptCodeType", bound="ConceptCode")
 CidConceptCodeType = TypeVar("CidConceptCodeType", bound="CidConceptCode")
 
 
-@dataclass
+@dataclass(frozen=True)
 class ConceptCode:
     """Help functions for handling SR codes.
     Provides functions for converting between Code and dicom dataset.

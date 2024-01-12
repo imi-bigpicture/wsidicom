@@ -82,7 +82,12 @@ class ImageCoordinateSystem:
             return self.orientation.apply_reverse_transform(offset)
         start = self.slide_to_image(slide.start)
         end = self.slide_to_image(slide.end)
-        return RegionMm(start, SizeMm(end.x - start.x, end.y - start.y))
+        start, end = (
+            PointMm(min(start.x, end.x), min(start.y, end.y)),
+            PointMm(max(start.x, end.x), max(start.y, end.y)),
+        )
+        size = SizeMm(end.x - start.x, end.y - start.y)
+        return RegionMm(start, size)
 
     def to_other_corrdinate_system(
         self, other: "ImageCoordinateSystem", image: GeometryType

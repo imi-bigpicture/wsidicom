@@ -60,7 +60,7 @@ from wsidicom.metadata.schema.dicom.sample.model import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class ParsedSpecimen:
     """Parsed specimen steps."""
 

@@ -28,7 +28,7 @@ from wsidicom.geometry import PointMm
 from wsidicom.metadata.image import FocusMethod
 
 
-@dataclass
+@dataclass(frozen=True)
 class Defaults:
     string = "Unknown"
     date_time = datetime.datetime(1, 1, 1)

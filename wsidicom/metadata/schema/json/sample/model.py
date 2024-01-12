@@ -59,7 +59,7 @@ class PreparationAction(Enum):
     STORAGE = "storage"
 
 
-@dataclass
+@dataclass(frozen=True)
 class SamplingConstraintJsonModel:
     """Simplified representation of a `Sampling` to use as sampling tree constraint,
     replacing the sampling with the identifier of the sampled specimen and the index of
@@ -98,7 +98,7 @@ class SamplingConstraintJsonModel:
         return specimen.samplings[self.sampling_step_index]
 
 
-@dataclass
+@dataclass(frozen=True)
 class SamplingJsonModel:
     """Simplified representation of a `Sampling`, replacing the sampled specimen with
     the idententifier and sampling constraints with simplified sampling constraints."""
@@ -172,7 +172,7 @@ class SamplingJsonModel:
         ]
 
 
-@dataclass
+@dataclass(frozen=True)
 class BaseSpecimenJsonModel:
     """Base json model for a specimen."""
 
@@ -200,7 +200,7 @@ class BaseSpecimenJsonModel:
         raise NotImplementedError()
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpecimenJsonModel(BaseSpecimenJsonModel):
     type: AnatomicPathologySpecimenTypesCode
     container: Optional[ContainerTypeCode]
@@ -231,7 +231,7 @@ class SpecimenJsonModel(BaseSpecimenJsonModel):
         return specimen
 
 
-@dataclass
+@dataclass(frozen=True)
 class SampleJsonModel(BaseSpecimenJsonModel):
     type: AnatomicPathologySpecimenTypesCode
     sampled_from: Sequence[SamplingConstraintJsonModel]
@@ -260,7 +260,7 @@ class SampleJsonModel(BaseSpecimenJsonModel):
         return sample
 
 
-@dataclass
+@dataclass(frozen=True)
 class SlideSampleJsonModel(BaseSpecimenJsonModel):
     anatomical_sites: Optional[Sequence[Code]] = None
     sampled_from: Optional[SamplingConstraintJsonModel] = None

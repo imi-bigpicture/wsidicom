@@ -14,11 +14,11 @@
 
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Iterable, Iterator, Tuple, Union, Sequence
 
 
-@dataclass
+@dataclass(frozen=True)
 class SizeMm:
     width: float
     height: float
@@ -62,7 +62,7 @@ class SizeMm:
             raise ValueError("input did not contain two values")
 
 
-@dataclass
+@dataclass(frozen=True)
 class PointMm:
     x: float
     y: float
@@ -124,7 +124,7 @@ class PointMm:
         return (self.x, self.y)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Size:
     width: int
     height: int
@@ -256,7 +256,7 @@ class Size:
         return self.width * self.height
 
 
-@dataclass
+@dataclass(frozen=True)
 class Point:
     x: int
     y: int
@@ -340,7 +340,7 @@ class Point:
             raise ValueError("input did not contain two values")
 
 
-@dataclass
+@dataclass(frozen=True)
 class Region:
     position: Point
     size: Size
@@ -438,8 +438,9 @@ class Region:
         """
         tile_region = Region(position=point * tile_size, size=tile_size)
         cropped_tile_region = self.crop(tile_region)
-        cropped_tile_region.position = cropped_tile_region.position % tile_size
-        return cropped_tile_region
+        return replace(
+            cropped_tile_region, position=cropped_tile_region.position % tile_size
+        )
 
     def zoom(self, zoom: float) -> "Region":
         """Return center-zoomed region.
@@ -460,20 +461,30 @@ class Region:
         return Region(new_start, self.size)
 
 
-@dataclass
+@dataclass(frozen=True)
 class RegionMm:
     position: PointMm
     size: SizeMm
 
-    def __init__(self, position: PointMm, size: SizeMm):
-        if size.width < 0:
-            size.width = -size.width
-            position.x -= size.width
-        if size.height < 0:
-            size.height = -size.height
-            position.y -= size.height
-        self.position = position
-        self.size = size
+    # def __init__(self, position: PointMm, size: SizeMm):
+    #     if size.width < 0:
+    #         size.width = -size.width
+    #         position.x -= size.width
+    #     if size.height < 0:
+    #         size.height = -size.height
+    #         position.y -= size.height
+    #     self.position = position
+    #     self.size = size
+
+    # @classmethod
+    # def create(cls, position: PointMm, size: SizeMm) -> "RegionMm":
+    #     if size.width < 0:
+    #         size.width = -size.width
+    #         position.x -= size.width
+    #     if size.height < 0:
+    #         size.height = -size.height
+    #         position.y -= size.height
+    #     return cls(position, size)
 
     @property
     def start(self) -> PointMm:
