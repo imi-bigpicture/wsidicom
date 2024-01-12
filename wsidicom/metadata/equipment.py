@@ -14,7 +14,7 @@
 
 """Equipment model."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional, Sequence
 
 
@@ -42,3 +42,10 @@ class Equipment:
     model_name: Optional[str] = None
     device_serial_number: Optional[str] = None
     software_versions: Optional[Sequence[str]] = None
+
+
+def remove_confidential(self) -> "Equipment":
+    return replace(
+        self,
+        device_serial_number=None,
+    )

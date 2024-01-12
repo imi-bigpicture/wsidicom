@@ -15,7 +15,7 @@
 """Image model."""
 
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Optional, Sequence, TypeVar
 
@@ -149,3 +149,9 @@ class Image:
     focal_plane_spacing: Optional[float] = None
     depth_of_field: Optional[float] = None
     lossy_compressions: Optional[Sequence[LossyCompression]] = None
+
+    def remove_confidential(self) -> "Image":
+        return replace(
+            self,
+            acquisition_datetime=None,
+        )

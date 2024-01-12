@@ -15,7 +15,7 @@
 """Patient model."""
 
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Optional, Sequence, Union
 
@@ -77,3 +77,14 @@ class Patient:
     sex: Optional[PatientSex] = None
     species_description: Optional[Union[str, Code]] = None
     de_identification: Optional[PatientDeIdentification] = None
+
+
+def remove_confidential(self) -> "Patient":
+    return replace(
+        self,
+        name=None,
+        identifier=None,
+        birth_date=None,
+        sex=None,
+        de_identification=replace(self.de_identification, identity_removed=True),
+    )

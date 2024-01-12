@@ -14,7 +14,7 @@
 
 """Label model."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import List, Optional
 
 
@@ -66,3 +66,6 @@ class Label:
             label_in_overview_image=label_in_overview_image,
             label_is_phi=label_is_phi,
         )
+
+    def remove_confidential(self) -> "Label":
+        return replace(self, text=None, barcode=None)

@@ -24,7 +24,6 @@ from wsidicom.metadata.sample import SlideSample, SpecimenIdentifier
 from wsidicom.metadata.schema.dicom.defaults import Defaults, defaults
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
-    DefaultingListDicomField,
     IssuerOfIdentifierDicomField,
     SingleCodeSequenceField,
     StringDicomField,
