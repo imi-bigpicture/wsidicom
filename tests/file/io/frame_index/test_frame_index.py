@@ -31,12 +31,12 @@ from wsidicom.file.io.frame_index.empty_bot import EmptyBot
 from wsidicom.file.io.frame_index.eot import Eot
 from wsidicom.file.io.frame_index.native_pixel_data_frame import NativePixelData
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
-from wsidicom.tags import (
-    PixelDataTag,
-    ExtendedOffsetTableTag,
-    ExtendedOffsetTableLengthsTag,
-)
 from wsidicom.geometry import Size
+from wsidicom.tags import (
+    ExtendedOffsetTableLengthsTag,
+    ExtendedOffsetTableTag,
+    PixelDataTag,
+)
 
 
 @pytest.fixture

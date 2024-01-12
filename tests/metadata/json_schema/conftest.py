@@ -12,9 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Optional, Union
-import pytest
 from pathlib import Path
+from typing import Any, Dict, Optional, Union
+
+import pytest
 
 from wsidicom.metadata.sample import (
     SpecimenIdentifier,

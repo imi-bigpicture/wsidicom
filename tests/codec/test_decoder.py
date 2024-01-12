@@ -40,9 +40,9 @@ from wsidicom.codec import (
     JpegSettings,
     NumpySettings,
     RleSettings,
+    Settings,
     Subsampling,
 )
-from wsidicom.codec import Settings
 from wsidicom.codec.decoder import (
     ImageCodecsDecoder,
     ImageCodecsRleDecoder,
@@ -340,60 +340,58 @@ class TestPylibjpegRleDecoder:
             assert band_rms == 0
 
 
-# @pytest.mark.unittest
-# class TestImagecodecsRleDecoder:
-#     @pytest.mark.parametrize(
-#         ["transfer_syntax", "expected_result"],
-#         [
-#             (ImplicitVRLittleEndian, False),
-#             (ExplicitVRBigEndian, False),
-#             (ExplicitVRLittleEndian, False),
-#             (DeflatedExplicitVRLittleEndian, False),
-#             (RLELossless, True),
-#             (JPEGBaseline8Bit, False),
-#             (JPEGExtended12Bit, False),
-#             (JPEGLosslessP14, False),
-#             (JPEGLosslessSV1, False),
-#             (JPEGLSLossless, False),
-#             (JPEGLSNearLossless, False),
-#             (JPEG2000Lossless, False),
-#             (JPEG2000, False),
-#         ],
-#     )
-#     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
-#         # Arrange
+@pytest.mark.unittest
+class TestImagecodecsRleDecoder:
+    @pytest.mark.parametrize(
+        ["transfer_syntax", "expected_result"],
+        [
+            (ImplicitVRLittleEndian, False),
+            (ExplicitVRBigEndian, False),
+            (ExplicitVRLittleEndian, False),
+            (DeflatedExplicitVRLittleEndian, False),
+            (RLELossless, True),
+            (JPEGBaseline8Bit, False),
+            (JPEGExtended12Bit, False),
+            (JPEGLosslessP14, False),
+            (JPEGLosslessSV1, False),
+            (JPEGLSLossless, False),
+            (JPEGLSNearLossless, False),
+            (JPEG2000Lossless, False),
+            (JPEG2000, False),
+        ],
+    )
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+        # Arrange
 
-#         # Act
-#         is_supported = ImageCodecsRleDecoder.is_supported(transfer_syntax, 3, 8)
+        # Act
+        is_supported = ImageCodecsRleDecoder.is_supported(transfer_syntax, 3, 8)
 
-#         # Assert
-#         assert is_supported == expected_result
+        # Assert
+        assert is_supported == expected_result
 
-#     @pytest.mark.parametrize(
-#         "settings",
-#         [
-#             RleSettings(8, Channels.GRAYSCALE),
-#             RleSettings(8, Channels.RGB),
-#             RleSettings(16, Channels.GRAYSCALE),
-#         ],
-#     )
-#     def test_decode(
-#         self, image: Image, encoded: bytes, settings: Settings
-#     ):
-#         # Arrange
-#         decoder = ImageCodecsRleDecoder(
-#             Size(image.width, image.height),
-#             1 if settings.channels == Channels.GRAYSCALE else 3,
-#             settings.bits
-#         )
+    @pytest.mark.parametrize(
+        "settings",
+        [
+            RleSettings(8, Channels.GRAYSCALE),
+            RleSettings(8, Channels.RGB),
+            RleSettings(16, Channels.GRAYSCALE),
+        ],
+    )
+    def test_decode(self, image: Image, encoded: bytes, settings: Settings):
+        # Arrange
+        decoder = ImageCodecsRleDecoder(
+            Size(image.width, image.height),
+            1 if settings.channels == Channels.GRAYSCALE else 3,
+            settings.bits,
+        )
 
-#         # Act
-#         decoded = decoder.decode(encoded)
+        # Act
+        decoded = decoder.decode(encoded)
 
-#         # Assert
-#         if settings.channels == Channels.GRAYSCALE:
-#             image = image.convert("L")
-#             decoded = decoded.convert("L")
-#         diff = ImageChops.difference(decoded, image)
-#         for band_rms in ImageStat.Stat(diff).rms:
-#             assert band_rms == 0
+        # Assert
+        if settings.channels == Channels.GRAYSCALE:
+            image = image.convert("L")
+            decoded = decoded.convert("L")
+        diff = ImageChops.difference(decoded, image)
+        for band_rms in ImageStat.Stat(diff).rms:
+            assert band_rms == 0

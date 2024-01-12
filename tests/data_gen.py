@@ -17,7 +17,7 @@ from pathlib import Path
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.encaps import encapsulate
 from pydicom.sequence import Sequence
-from pydicom.uid import generate_uid, UID
+from pydicom.uid import UID, generate_uid
 
 from wsidicom.file import OffsetTableType
 from wsidicom.instance import TileType

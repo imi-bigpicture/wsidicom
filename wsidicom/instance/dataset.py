@@ -18,19 +18,19 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
-from pydicom import dcmread
 
+from pydicom import dcmread
 from pydicom.dataset import Dataset
+from pydicom.multival import MultiValue
 from pydicom.sequence import Sequence as DicomSequence
+from pydicom.tag import BaseTag
 from pydicom.uid import (
     UID,
     generate_uid,
 )
-from pydicom.tag import BaseTag
 from pydicom.valuerep import DSfloat
-from pydicom.multival import MultiValue
-from wsidicom.codec import LossyCompressionIsoStandard
 
+from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomError,

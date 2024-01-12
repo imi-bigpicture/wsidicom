@@ -34,9 +34,9 @@ from wsidicom.conceptcode import (
     SpecimenCollectionProcedureCode,
     SpecimenEmbeddingMediaCode,
     SpecimenFixativesCode,
+    SpecimenPreparationStepsCode,
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
-    SpecimenPreparationStepsCode,
 )
 from wsidicom.config import settings
 from wsidicom.metadata.sample import (

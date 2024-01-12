@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from typing import Optional, Tuple, Union
+
 import pytest
 
 from wsidicom.metadata.sample import (

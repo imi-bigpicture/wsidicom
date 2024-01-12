@@ -15,6 +15,7 @@
 from typing import Any, Dict, Union
 
 from pydicom.sr.coding import Code
+
 from wsidicom.conceptcode import ConceptCode
 from wsidicom.metadata.optical_path import (
     ConstantLutSegment,

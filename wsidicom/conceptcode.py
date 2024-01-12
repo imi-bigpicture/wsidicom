@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, List, Dict, Optional, Type, TypeVar
+from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence

@@ -15,7 +15,7 @@
 import logging
 import math
 from dataclasses import dataclass, replace
-from typing import Callable, Iterable, Iterator, Tuple, Union, Sequence
+from typing import Callable, Iterable, Iterator, Sequence, Tuple, Union
 
 
 @dataclass(frozen=True)

@@ -14,11 +14,12 @@
 
 import datetime
 from typing import Optional, Union
-import marshmallow
 
+import marshmallow
 import pytest
 from pydicom import Dataset
 from pydicom.uid import UID
+
 from tests.metadata.dicom_schema.helpers import (
     assert_initial_common_preparation_step_items,
     assert_item_measurement_equals_value,
@@ -32,7 +33,6 @@ from tests.metadata.dicom_schema.helpers import (
     create_measurement_item,
     create_string_item,
 )
-from wsidicom.config import settings
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     ContainerTypeCode,
@@ -42,11 +42,12 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
     UnitCode,
 )
+from wsidicom.config import settings
 from wsidicom.metadata.sample import (
     LocalIssuerOfIdentifier,
     Measurement,
-    SpecimenIdentifier,
     SampleLocalization,
+    SpecimenIdentifier,
 )
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
@@ -63,8 +64,8 @@ from wsidicom.metadata.schema.dicom.sample.schema import (
     ProcessingDicomSchema,
     ReceivingDicomSchema,
     SampleCodes,
-    SamplingDicomSchema,
     SampleLocalizationDicomSchema,
+    SamplingDicomSchema,
     SpecimenDescriptionDicomSchema,
     StainingDicomSchema,
     StorageDicomSchema,

@@ -13,11 +13,10 @@
 #    limitations under the License.
 
 import os
-from pathlib import Path
-from hashlib import md5
 from ftplib import FTP
+from hashlib import md5
+from pathlib import Path
 from typing import Any, Dict
-
 
 FILESERVER = "medical.nema.org"
 FILESERVER_SLIDE_PATH = Path("MEDICAL/Dicom/DataSets/WG26")

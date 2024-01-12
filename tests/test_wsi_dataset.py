@@ -1,14 +1,14 @@
 from typing import Optional, Sequence, Union
-from pydicom import Dataset
 
 import pytest
-
-from wsidicom.instance.dataset import WsiDataset
+from pydicom import Dataset
 from pydicom.dataelem import DataElement
-from wsidicom.tags import LossyImageCompressionRatioTag
-from pydicom.uid import generate_uid, UID
-from wsidicom.instance import TileType
+from pydicom.uid import UID, generate_uid
+
 from wsidicom.geometry import SizeMm
+from wsidicom.instance import TileType
+from wsidicom.instance.dataset import WsiDataset
+from wsidicom.tags import LossyImageCompressionRatioTag
 
 
 @pytest.fixture

@@ -13,21 +13,22 @@
 #    limitations under the License.
 
 import io
-import numpy as np
 from typing import Sequence, Tuple
-from pydicom import Dataset
+
+import numpy as np
 import pytest
-from wsidicom.metadata.schema.dicom.optical_path import (
-    LutDicomParser,
-    LutDicomFormatter,
-)
+from pydicom import Dataset
 
 from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
     LinearLutSegment,
     Lut,
-    LutSegment,
     LutDataType,
+    LutSegment,
+)
+from wsidicom.metadata.schema.dicom.optical_path import (
+    LutDicomFormatter,
+    LutDicomParser,
 )
 
 

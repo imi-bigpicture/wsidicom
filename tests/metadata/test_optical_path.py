@@ -15,7 +15,6 @@
 import numpy as np
 import pytest
 
-
 from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
     DiscreteLutSegment,

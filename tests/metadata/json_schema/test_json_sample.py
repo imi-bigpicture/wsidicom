@@ -26,38 +26,38 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     UnitCode,
 )
-from wsidicom.metadata.schema.json.sample.model import (
-    SpecimenJsonModel,
-    SampleJsonModel,
-    SlideSampleJsonModel,
-)
-from wsidicom.metadata.schema.json.sample.schema import (
-    SpecimenJsonSchema,
-    PreparationAction,
-    PreparationStepJsonSchema,
-    SampleJsonSchema,
-    SamplingConstraintJsonModel,
-    SamplingConstraintJsonSchema,
-    SamplingJsonModel,
-    SlideSampleJsonSchema,
-    BaseSpecimenJsonSchema,
-    SampleLocalizationJsonSchema,
-)
 from wsidicom.metadata.sample import (
     Collection,
     Embedding,
-    Specimen,
     Fixation,
     Measurement,
     Processing,
     Receiving,
     Sample,
+    SampleLocalization,
     Sampling,
     SamplingLocation,
     SlideSample,
-    SampleLocalization,
+    Specimen,
     Storage,
     UnknownSampling,
+)
+from wsidicom.metadata.schema.json.sample.model import (
+    SampleJsonModel,
+    SlideSampleJsonModel,
+    SpecimenJsonModel,
+)
+from wsidicom.metadata.schema.json.sample.schema import (
+    BaseSpecimenJsonSchema,
+    PreparationAction,
+    PreparationStepJsonSchema,
+    SampleJsonSchema,
+    SampleLocalizationJsonSchema,
+    SamplingConstraintJsonModel,
+    SamplingConstraintJsonSchema,
+    SamplingJsonModel,
+    SlideSampleJsonSchema,
+    SpecimenJsonSchema,
 )
 
 

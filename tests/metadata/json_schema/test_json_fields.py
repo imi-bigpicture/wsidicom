@@ -21,21 +21,21 @@ from pydicom.uid import UID
 from tests.metadata.json_schema.helpers import assert_dict_equals_code
 from wsidicom.conceptcode import IlluminationColorCode, UnitCode
 from wsidicom.geometry import PointMm
+from wsidicom.metadata.sample import (
+    LocalIssuerOfIdentifier,
+    Measurement,
+    SpecimenIdentifier,
+    UniversalIssuerOfIdentifier,
+    UniversalIssuerType,
+)
 from wsidicom.metadata.schema.json.fields import (
     CodeJsonField,
     JsonFieldFactory,
+    MeasurementJsonField,
     PointMmJsonField,
     SpecimenIdentifierJsonField,
     StringOrCodeJsonField,
     UidJsonField,
-    MeasurementJsonField,
-)
-from wsidicom.metadata.sample import (
-    LocalIssuerOfIdentifier,
-    SpecimenIdentifier,
-    UniversalIssuerOfIdentifier,
-    UniversalIssuerType,
-    Measurement,
 )
 
 
