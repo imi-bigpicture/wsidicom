@@ -14,7 +14,6 @@
 
 from typing import Iterable, List, Optional, OrderedDict
 
-
 from wsidicom.errors import (
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
@@ -96,7 +95,7 @@ class Pyramid(Series[Level]):
             if pyramid_index:
                 return self._levels[index]
             return self[index]
-        except IndexError:
+        except (KeyError, IndexError):
             raise WsiDicomNotFoundError(f"Level index {index}", "pyramid")
 
     @property

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Missing KeyError in exception catch for Pyramid.get(), that made getting image data for non-existing levels (by downscaling) not work.
+
 ## [0.18.1] - 2023-11-12
 
 ### Fixed
