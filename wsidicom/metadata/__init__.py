@@ -42,7 +42,6 @@ from wsidicom.metadata.sample import (
     Processing,
     Receiving,
     Sample,
-    SampledSpecimen,
     SampleLocalization,
     Sampling,
     SamplingLocation,
