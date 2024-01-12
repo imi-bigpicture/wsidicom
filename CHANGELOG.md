@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Missing KeyError in exception catch for Pyramid.get(), that made getting image data for non-existing levels (by downscaling) not work.
 - Handle loading metadata if `ExtendedDepthOfField` not set.
+- Metadata for pyramid is now lazy loaded.
 
 ## [0.18.1] - 2023-11-12
 
