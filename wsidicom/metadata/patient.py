@@ -78,13 +78,14 @@ class Patient:
     species_description: Optional[Union[str, Code]] = None
     de_identification: Optional[PatientDeIdentification] = None
 
-
-def remove_confidential(self) -> "Patient":
-    return replace(
-        self,
-        name=None,
-        identifier=None,
-        birth_date=None,
-        sex=None,
-        de_identification=replace(self.de_identification, identity_removed=True),
-    )
+    def remove_confidential(self) -> "Patient":
+        return replace(
+            self,
+            name=None,
+            identifier=None,
+            birth_date=None,
+            sex=None,
+            de_identification=replace(self.de_identification, identity_removed=True)
+            if self.de_identification
+            else None,
+        )
