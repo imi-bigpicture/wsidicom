@@ -14,6 +14,7 @@
 
 import struct
 from io import BytesIO
+from typing import Sequence
 
 import pytest
 from pydicom.tag import ItemTag
@@ -22,16 +23,15 @@ from pydicom.uid import (
     JPEGBaseline8Bit,
 )
 
-from typing import Sequence
 from wsidicom.file.io.frame_index import BotWriter, EotWriter
 from wsidicom.file.io.frame_index.bot import Bot
 from wsidicom.file.io.frame_index.eot import Eot
+from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.tags import (
     ExtendedOffsetTableLengthsTag,
     ExtendedOffsetTableTag,
     PixelDataTag,
 )
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
 
 
 @pytest.fixture

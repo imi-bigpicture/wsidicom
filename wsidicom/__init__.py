@@ -47,8 +47,8 @@ from wsidicom.graphical_annotations import (
     PolylineAnnotationGroup,
 )
 from wsidicom.instance import ImageData, WsiDataset, WsiInstance
-from wsidicom.series import Labels, Pyramid, Overviews
+from wsidicom.series import Labels, Overviews, Pyramid
 from wsidicom.web import WsiDicomWebClient
 from wsidicom.wsidicom import WsiDicom
 
-__version__ = "0.17.0"
+__version__ = "0.18.0"

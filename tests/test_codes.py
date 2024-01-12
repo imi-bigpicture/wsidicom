@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Type
+from typing import Optional, Type
 
 import pytest
 
@@ -32,13 +32,20 @@ class TestWsiDicomCode:
             for code in code_class.cid.values()
         ),
     )
+    @pytest.mark.parametrize("case", [None, "lower", "upper"])
     def test_create_code_from_meaning(
-        self, code_class: Type[CidConceptCode], code: Code
+        self, code_class: Type[CidConceptCode], code: Code, case: Optional[str]
     ):
         # Arrange
+        if case == "lower":
+            meaning = code.meaning.lower()
+        elif case == "upper":
+            meaning = code.meaning.upper()
+        else:
+            meaning = code.meaning
 
         # Act
-        created_code = code_class(code.meaning)
+        created_code = code_class(meaning)
 
         # Assert
         assert code == created_code

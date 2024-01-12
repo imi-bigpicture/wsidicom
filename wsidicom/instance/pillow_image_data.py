@@ -25,8 +25,8 @@ from wsidicom.geometry import (
     Size,
     SizeMm,
 )
-from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 from wsidicom.instance.image_data import ImageData
+from wsidicom.metadata.image import ImageCoordinateSystem
 
 
 class PillowImageData(ImageData):

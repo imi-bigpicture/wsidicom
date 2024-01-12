@@ -53,7 +53,7 @@ class Target(metaclass=ABCMeta):
             Optional list indices (in present pyramids) to include.
         include_levels: Optional[Sequence[int]] = None
             Optional list indices (in present levels) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indicies can be used,
+            includes the two lowest levels. Negative indices can be used,
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
@@ -116,9 +116,9 @@ class Target(metaclass=ABCMeta):
             If to include missing levels (not in present_levels).
         include_indices: Optional[Sequence[int]] = None
             Optional list indices (in present levels) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indicies can be used,
+            includes the two lowest levels. Negative indices can be used,
             e.g. [-1, -2] includes the two highest levels. Default of None
-            will not limit the selection. An empty sequence will exluded all
+            will not limit the selection. An empty sequence will excluded all
             levels.
 
         Returns

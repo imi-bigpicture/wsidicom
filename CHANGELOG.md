@@ -7,8 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2023-11-12
+
 ### Added
 
+- Models for DICOM WSI metadata.
+- Serializers from DICOM WSI to and from DICOM and json.
 - Support for multiple pyramids within the same slide. A pyramid must have the same image coordinate system and extended depth of field (if any). Use the `pyramid`-parameter to set the pyramid in for example `read_region()`, or use `set_selected_pyramid()` to set the pyramid to use. By default the first detected pyramid is used.
 - RLE encoding using image codecs.
 - JPEG 2000 encoding of lossless YBR using image codecs.
@@ -16,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Levels with different extended depth of fields are no longer considered to be the same pyramid.
+
+### Removed
+
+- `OpticalManager`, replaced by new metadata model.
 
 ## [0.17.0] - 2023-12-10
 
@@ -40,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Refactored frame index reading (basic, extended, and no offset table and native pixel data) and table writing (basic and extended offset table).
-- Refactored methods for getting multiple tiles for `ImageData` to make it easier to implement more efficent methods.
+- Refactored methods for getting multiple tiles for `ImageData` to make it easier to implement more efficient methods.
 
 ## [0.15.2] - 2023-12-01
 
@@ -280,7 +288,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.17.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.18.0..HEAD
+[0.18.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.17.0..v0.18.0
 [0.17.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.16.0..v0.17.0
 [0.16.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.2..v0.16.0
 [0.15.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.1..v0.15.2

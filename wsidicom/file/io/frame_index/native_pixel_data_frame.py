@@ -16,7 +16,6 @@
 
 from typing import List, Tuple
 
-
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.wsidicom_io import WsiDicomIO

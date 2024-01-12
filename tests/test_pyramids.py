@@ -1,14 +1,14 @@
 from typing import List, Optional, Tuple
-from pydicom import Dataset
+
 import pytest
+from pydicom import Dataset
+from pydicom.uid import UID, generate_uid
+
 from wsidicom.geometry import Orientation, PointMm, Size, SizeMm
 from wsidicom.instance.dataset import ImageType, WsiDataset
-from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
-
 from wsidicom.instance.instance import WsiInstance
-from wsidicom.series import Pyramids
-from pydicom.uid import generate_uid, UID
-
+from wsidicom.metadata.image import ImageCoordinateSystem
+from wsidicom.series.pyramids import Pyramids
 from wsidicom.uid import SlideUids
 
 
@@ -166,7 +166,9 @@ class TestPyramids:
         # Arrange
         instances = [
             create_pyramid_instance(
-                ImageCoordinateSystem(instance_definition[0], instance_definition[1]),
+                ImageCoordinateSystem(
+                    instance_definition[0], instance_definition[1].rotation
+                ),
                 instance_definition[2],
                 study_instance_uid,
                 series_instance_uid,

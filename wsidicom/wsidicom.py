@@ -14,6 +14,7 @@
 
 import logging
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import (
     BinaryIO,
@@ -41,7 +42,7 @@ from wsidicom.file import OffsetTableType, WsiDicomFileSource, WsiDicomFileTarge
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
-from wsidicom.optical import OpticalManager
+from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -78,10 +79,6 @@ class WsiDicom:
         self._overviews = Overviews.open(source.overview_instances)
         self._annotations = list(source.annotation_instances)
         self._uids = self._validate_collection()
-
-        self.optical = OpticalManager.open(
-            [instance for series in self.collection for instance in series.instances]
-        )
 
     @classmethod
     def open(
@@ -258,6 +255,17 @@ class WsiDicom:
         ]
         collection.extend(pyramid for pyramid in self._pyramids)
         return [series for series in collection if series is not None]
+
+    @property
+    def metadata(self) -> WsiMetadata:
+        return self._create_metadata(self._selected_pyramid)
+
+    @property
+    def files(self) -> Optional[List[Path]]:
+        """Return opened files if source is file-based."""
+        if isinstance(self._source, WsiDicomFileSource):
+            return self._source.files
+        return None
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         string = self.__class__.__name__
@@ -814,3 +822,18 @@ class WsiDicom:
         """
         source = WsiDicomFileSource(path)
         return source.contains_levels
+
+    @lru_cache
+    def _create_metadata(self, pyramid_index: int) -> WsiMetadata:
+        if self.labels is not None:
+            label_metadata = self.labels.metadata
+        else:
+            label_metadata = None
+        if self.overviews is not None:
+            overview_metadata = self.overviews.metadata
+        else:
+            overview_metadata = None
+        pyramid = self.pyramids.get(pyramid_index)
+        return WsiMetadata.merge_image_types(
+            pyramid.metadata, label_metadata, overview_metadata
+        )

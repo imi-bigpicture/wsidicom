@@ -111,12 +111,12 @@ class TestWsiDicomAnnotation:
             input_dict: Dict = json.load(f)
             # Group annotations by type and type using key
 
-            @dataclass(unsafe_hash=True)
+            @dataclass(frozen=True)
             class Key:
                 annotation_type: type
                 type_code: AnnotationTypeCode
 
-            @dataclass(unsafe_hash=True)
+            @dataclass(frozen=True)
             class Value:
                 label: str
                 color: LabColor
@@ -142,7 +142,7 @@ class TestWsiDicomAnnotation:
                         geometries=[],
                     )
                     grouped_annotations[group_key] = group
-                group.geometries += geometries
+                group.geometries.extend(geometries)
 
             assert grouped_annotations != {}
 

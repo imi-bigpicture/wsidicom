@@ -19,9 +19,9 @@ from functools import cached_property
 from typing import List, Optional, Tuple
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.tags import PixelDataTag
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
+from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.tags import PixelDataTag
 
 
 class FrameIndex:

@@ -22,7 +22,9 @@ from wsidicom.errors import (
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level
 from wsidicom.group.level import BaseLevel
-from wsidicom.instance import ImageCoordinateSystem, ImageType, WsiInstance
+from wsidicom.instance import ImageType, WsiInstance
+from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.series.series import Series
 from wsidicom.stringprinting import list_pretty_str
 
@@ -60,6 +62,7 @@ class Pyramid(Series[Level]):
                 '"Volume" type'
             )
         self._mm_size = mm_size
+        self._metadata = WsiMetadataDicomSchema().load(self.datasets[0])
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._levels})"

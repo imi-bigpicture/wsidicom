@@ -86,7 +86,7 @@ class WsiDicomFileSource(Source):
                     stream.close()
             except Exception:
                 logging.error(
-                    f"Failed to open file {file.name} due to exception", exc_info=True
+                    f"Failed to open file {file} due to exception.", exc_info=True
                 )
         if len(self._levels) == 0:
             raise WsiDicomNotFoundError("Level files", str(files))
@@ -138,6 +138,15 @@ class WsiDicomFileSource(Source):
             self._overviews,
         ]
         return [reader for reader_list in reader_lists for reader in reader_list]
+
+    @property
+    def files(self) -> Optional[List[Path]]:
+        """Return the files in the source, if any."""
+        if all(reader.filepath is None for reader in self.readers):
+            return None
+        return [
+            reader.filepath for reader in self.readers if reader.filepath is not None
+        ]
 
     @property
     def is_ready_for_viewing(self) -> Optional[bool]:

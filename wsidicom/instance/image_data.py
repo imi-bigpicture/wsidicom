@@ -30,11 +30,11 @@ from PIL.Image import Image
 from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
+from wsidicom.config import settings
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
+from wsidicom.metadata.image import ImageCoordinateSystem
 from wsidicom.thread import ConditionalThreadPoolExecutor
-from wsidicom.config import settings
 
 
 class ImageData(metaclass=ABCMeta):
@@ -533,7 +533,7 @@ class ImageData(metaclass=ABCMeta):
     ) -> Iterator[Image]:
         """
         Return Pillow images for tiles. Implementations can override this with a more
-        efficent method for getting multiple tiles.
+        efficient method for getting multiple tiles.
 
         Parameters
         ----------
@@ -555,7 +555,7 @@ class ImageData(metaclass=ABCMeta):
         self, tiles: Iterable[Point], z: float, path: str
     ) -> Iterator[bytes]:
         """
-        Return bytes for tiles. Implementations can override this with a more efficent
+        Return bytes for tiles. Implementations can override this with a more efficient
         method for getting multiple tiles.
 
         Parameters

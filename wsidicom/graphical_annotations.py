@@ -60,7 +60,7 @@ from .geometry import PointMm, RegionMm, SizeMm
 from .uid import ANN_SOP_CLASS_UID, UID, SlideUids
 
 
-@dataclass
+@dataclass(frozen=True)
 class LabColor:
     l: int
     a: int

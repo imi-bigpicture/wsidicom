@@ -34,15 +34,16 @@ from pydicom.uid import (
 )
 
 from wsidicom.file.io import (
-    WsiDicomReader,
-    WsiDicomIO,
-    WsiDicomWriter,
     OffsetTableType,
+    WsiDicomIO,
+    WsiDicomReader,
+    WsiDicomWriter,
 )
 from wsidicom.file.io.wsidicom_writer import WsiDicomEncapsulatedWriter
 from wsidicom.geometry import Point, Size, SizeMm
-from wsidicom.instance import ImageCoordinateSystem, ImageData
+from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
+from wsidicom.metadata import ImageCoordinateSystem
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))

@@ -12,24 +12,25 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import io
 import logging
-from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
+from pydicom import dcmread
 from pydicom.dataset import Dataset
+from pydicom.multival import MultiValue
 from pydicom.sequence import Sequence as DicomSequence
+from pydicom.tag import BaseTag
 from pydicom.uid import (
     UID,
     generate_uid,
 )
-from pydicom.tag import BaseTag
 from pydicom.valuerep import DSfloat
-from pydicom.multival import MultiValue
-from wsidicom.codec.encoder import LossyCompressionIsoStandard
 
+from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomError,
@@ -660,8 +661,14 @@ class WsiDataset(Dataset):
             Copy of dataset set as tiled full.
 
         """
-
-        dataset = deepcopy(self)
+        # Workaround for deepcopy not working
+        # See https://github.com/pydicom/pydicom/issues/1816
+        with io.BytesIO() as buffer:
+            self.is_implicit_VR = False
+            self.is_little_endian = True
+            self.save_as(buffer)
+            buffer.seek(0)
+            dataset = WsiDataset(dcmread(buffer, force=True))
         dataset.DimensionOrganizationType = "TILED_FULL"
         # Make a new Shared functional group sequence and Pixel measure
         # sequence if not in dataset, otherwise update the Pixel measure
@@ -669,6 +676,7 @@ class WsiDataset(Dataset):
         shared_functional_group = getattr(
             dataset, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()])
         )
+
         plane_position_slide = Dataset()
         plane_position_slide.ZOffsetInSlideCoordinateSystem = DSfloat(
             focal_planes[0], True
@@ -691,7 +699,7 @@ class WsiDataset(Dataset):
             self._get_spacing_between_slices_for_focal_planes(focal_planes), True
         )
 
-        if dataset.slice_thickness is not None:
+        if self.slice_thickness is not None:
             pixel_measure[0].SliceThickness = DSfloat(dataset.slice_thickness, True)
 
         shared_functional_group[0].PixelMeasuresSequence = pixel_measure
@@ -716,7 +724,7 @@ class WsiDataset(Dataset):
     @classmethod
     def create_instance_dataset(
         cls,
-        base_dataset: Dataset,
+        dataset: Dataset,
         image_type: ImageType,
         image_data: ImageData,
         pyramid_index: Optional[int] = None,
@@ -737,7 +745,6 @@ class WsiDataset(Dataset):
         WsiDataset
             Dataset for instance.
         """
-        dataset = deepcopy(base_dataset)
         if image_type == ImageType.VOLUME and pyramid_index == 0:
             resampled = "NONE"
         else:
@@ -759,6 +766,7 @@ class WsiDataset(Dataset):
             pixel_measure_sequence.SpacingBetweenSlices = DSfloat(0.0, True)
             # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
             # Height, Depth. Depth must not be 0. Default to 0.5 microns
+            slice_thickness = 0.0005
             pixel_measure_sequence.SliceThickness = DSfloat(0.0005, True)
             shared_functional_group_sequence.PixelMeasuresSequence = DicomSequence(
                 [pixel_measure_sequence]
@@ -773,7 +781,7 @@ class WsiDataset(Dataset):
                 image_data.image_size.height * image_data.pixel_spacing.height
             )
             # SliceThickness is in mm, ImagedVolumeDepth in um
-            dataset.ImagedVolumeDepth = pixel_measure_sequence.SliceThickness * 1000
+            dataset.ImagedVolumeDepth = DSfloat(slice_thickness * 1000, True)
             # DICOM 2022a part 3 IODs - C.8.12.9 Whole Slide Microscopy Image
             # Frame Type Macro. Analogous to ImageType and shared by all
             # frames so clone
@@ -784,12 +792,18 @@ class WsiDataset(Dataset):
             ) = DicomSequence([wsi_frame_type_item])
 
         if image_data.image_coordinate_system is not None:
-            dataset.ImageOrientationSlide = list(
-                image_data.image_coordinate_system.image_orientation_slide
+            dataset.ImageOrientationSlide = [
+                DSfloat(value, True)
+                for value in image_data.image_coordinate_system.orientation.values
+            ]
+            offset_item = Dataset()
+            offset_item.XOffsetInSlideCoordinateSystem = DSfloat(
+                image_data.image_coordinate_system.origin.x, True
             )
-            dataset.TotalPixelMatrixOriginSequence = (
-                image_data.image_coordinate_system.total_pixel_matrix_origin_sequence
+            offset_item.YOffsetInSlideCoordinateSystem = DSfloat(
+                image_data.image_coordinate_system.origin.y, True
             )
+            dataset.TotalPixelMatrixOriginSequence = DicomSequence([offset_item])
 
         dataset.DimensionOrganizationType = "TILED_FULL"
         dataset.TotalPixelMatrixColumns = image_data.image_size.width
