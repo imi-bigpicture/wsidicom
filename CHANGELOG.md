@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Support for multiple pyramids within the same slide. A pyramid must have the same image coordinate system and extended depth of field (if any). Use the `pyramid`-parameter to set the pyramid in for example `read_region()`, or use `set_selected_pyramid()` to set the pyramid to use.
+- Support for multiple pyramids within the same slide. A pyramid must have the same image coordinate system and extended depth of field (if any). Use the `pyramid`-parameter to set the pyramid in for example `read_region()`, or use `set_selected_pyramid()` to set the pyramid to use. By default the first detected pyramid is used.
 
 ### Changed
 
