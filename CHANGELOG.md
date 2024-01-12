@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2023-11-12
+
 ### Added
 
 - Models for DICOM WSI metadata.
@@ -286,7 +288,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.17.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.18.0..HEAD
+[0.18.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.17.0..v0.18.0
 [0.17.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.16.0..v0.17.0
 [0.16.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.2..v0.16.0
 [0.15.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.15.1..v0.15.2
