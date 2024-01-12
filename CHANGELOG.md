@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Models for DICOM WSI metadata.
 - Serializers from DICOM WSI to and from DICOM and json.
 - Support for multiple pyramids within the same slide. A pyramid must have the same image coordinate system and extended depth of field (if any). Use the `pyramid`-parameter to set the pyramid in for example `read_region()`, or use `set_selected_pyramid()` to set the pyramid to use. By default the first detected pyramid is used.
+- RLE encoding using image codecs.
+- JPEG 2000 encoding of lossless YBR using image codecs.
 
 ### Changed
 
