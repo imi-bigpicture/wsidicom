@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Iterable, Optional
 
 
 def str_indent(indent: int = 0) -> str:
@@ -29,16 +29,16 @@ def str_indent(indent: int = 0) -> str:
         string with whitespaces
 
     """
-    return ' ' * 2 * indent
+    return " " * 2 * indent
 
 
 def list_pretty_str(
-    items: Sequence[Any],
+    items: Iterable[Any],
     indent: int = 0,
     depth: Optional[int] = None,
     pre_new_lines: int = 0,
     list_new_lines: int = 1,
-    space: bool = False
+    space: bool = False,
 ) -> str:
     """Returns a pretty-printed string items
     String is indented and new lines are added before the list
@@ -66,16 +66,14 @@ def list_pretty_str(
         Pretty-printed string of items
 
     """
-    delimiter = '\n'
+    delimiter = "\n"
     if space:
-        delimiter = ' '
-    return (
-        delimiter * pre_new_lines
-        + (delimiter * list_new_lines).join(
-            [str_indent(indent) + f'[{i}]: '
-             + item.pretty_str(indent+1, depth)
-             for i, item in enumerate(items)]
-         )
+        delimiter = " "
+    return delimiter * pre_new_lines + (delimiter * list_new_lines).join(
+        [
+            str_indent(indent) + f"[{i}]: " + item.pretty_str(indent + 1, depth)
+            for i, item in enumerate(items)
+        ]
     )
 
 
@@ -85,7 +83,7 @@ def dict_pretty_str(
     depth: Optional[int] = None,
     pre_new_lines: int = 0,
     list_new_lines: int = 1,
-    space: bool = False
+    space: bool = False,
 ) -> str:
     """Returns a pretty-printed string items
     String is indented and new lines are added before the list
@@ -113,14 +111,12 @@ def dict_pretty_str(
         Pretty-printed string of items
 
     """
-    delimiter = '\n'
+    delimiter = "\n"
     if space:
-        delimiter = ' '
-    return (
-        delimiter * pre_new_lines
-        + (delimiter * list_new_lines).join(
-            [str_indent(indent) + f'[{i}]: '
-             + item.pretty_str(indent+1, depth)
-             for i, item in enumerate(items.values())]
-         )
+        delimiter = " "
+    return delimiter * pre_new_lines + (delimiter * list_new_lines).join(
+        [
+            str_indent(indent) + f"[{i}]: " + item.pretty_str(indent + 1, depth)
+            for i, item in enumerate(items.values())
+        ]
     )

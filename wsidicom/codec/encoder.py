@@ -98,7 +98,7 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
             Image to encode.
 
         Returns
-        ----------
+        -------
         bytes
             Encoded image.
         """
@@ -179,7 +179,7 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
             Settings for the encoder.
 
         Returns
-        ----------
+        -------
         Encoder[SettingsType]
             Encoder for settings.
         """
@@ -200,7 +200,7 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
             Settings for the encoder.
 
         Returns
-        ----------
+        -------
         Encoder[SettingsType]
             Encoder for settings.
         """
@@ -221,7 +221,7 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
             Settings for the encoder.
 
         Returns
-        ----------
+        -------
         Optional[Type[Encoder[SettingsType]]]
             Encoder for settings, or None if no encoder is available.
         """

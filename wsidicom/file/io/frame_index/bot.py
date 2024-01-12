@@ -57,7 +57,7 @@ class Bot(OffsetTable):
         """Read basic table offset (BOT). Returns None if BOT is empty.
 
         Returns
-        ----------
+        -------
         Optional[bytes]
             BOT in bytes.
         """

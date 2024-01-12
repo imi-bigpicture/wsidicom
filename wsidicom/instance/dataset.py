@@ -205,7 +205,7 @@ class WsiDataset(Dataset):
         """Return UIDs from dataset.
 
         Returns
-        ----------
+        -------
         FileUids
             Found UIDs from dataset.
         """
@@ -230,7 +230,7 @@ class WsiDataset(Dataset):
         in concatenated instance.
 
         Returns
-        ----------
+        -------
         int
             Concatenation offset in number of frames.
         """
@@ -255,7 +255,7 @@ class WsiDataset(Dataset):
         is undetermined.
 
         Returns
-        ----------
+        -------
         TileType
             Tiling type
         """
@@ -281,7 +281,7 @@ class WsiDataset(Dataset):
         """Return Pixel measure dataset from dataset if found.
 
         Returns
-        ----------
+        -------
         Optional[Dataset]
             Found Pixel measure dataset.
         """
@@ -307,7 +307,7 @@ class WsiDataset(Dataset):
             Pydicom dataset
 
         Returns
-        ----------
+        -------
         SizeMm
             The pixel spacing in mm/pixel.
         """
@@ -334,7 +334,7 @@ class WsiDataset(Dataset):
         shared functional group sequence.
 
         Returns
-        ----------
+        -------
         DicomSequence
             Per frame or shared functional group sequence.
         """
@@ -374,7 +374,7 @@ class WsiDataset(Dataset):
         """Read total pixel size from dataset.
 
         Returns
-        ----------
+        -------
         Size
             The image size
         """
@@ -417,7 +417,7 @@ class WsiDataset(Dataset):
         """Read mm size from dataset.
 
         Returns
-        ----------
+        -------
         SizeMm
             The size of the image in mm
         """
@@ -439,7 +439,7 @@ class WsiDataset(Dataset):
         """Read tile size from from dataset.
 
         Returns
-        ----------
+        -------
         Size
             The tile size
         """
@@ -475,7 +475,7 @@ class WsiDataset(Dataset):
         """Return slice thickness spacing from pixel measure dataset.
 
         Returns
-        ----------
+        -------
         Optional[float]
             Slice thickess or None if unknown.
         """
@@ -492,7 +492,7 @@ class WsiDataset(Dataset):
         """Return wsi flavour from wsi type tuple.
 
         Returns
-        ----------
+        -------
         ImageType
             Wsi flavour.
         """
@@ -511,7 +511,7 @@ class WsiDataset(Dataset):
             Pydicom dataset to check if is a WSI dataset.
 
         Returns
-        ----------
+        -------
         Optional[ImageType]
             WSI image flavor
         """
@@ -574,7 +574,7 @@ class WsiDataset(Dataset):
             Dataset to check.
 
         Returns
-        ----------
+        -------
         bool
             True if same instance.
         """
@@ -620,7 +620,7 @@ class WsiDataset(Dataset):
             Tag to get values for.
 
         Returns
-        ----------
+        -------
         List[Any]
             List of values.
         """
@@ -655,7 +655,7 @@ class WsiDataset(Dataset):
             Optionally scale data.
 
         Returns
-        ----------
+        -------
         WsiDataset
             Copy of dataset set as tiled full.
 
@@ -733,7 +733,7 @@ class WsiDataset(Dataset):
             Image data to create dataset for.
 
         Returns
-        ----------
+        -------
         WsiDataset
             Dataset for instance.
         """
@@ -841,7 +841,7 @@ class WsiDataset(Dataset):
             Optional other dataset to get attribute from.
 
         Returns
-        ----------
+        -------
         Optional[Any]
             Value of attribute, or None.
         """
@@ -858,7 +858,7 @@ class WsiDataset(Dataset):
         distance between focal planes) from dataset.
 
         Returns
-        ----------
+        -------
         Tuple[bool, Optional[int], Optional[float]]
             If extended depth of field is used, and if used number of focal
             planes and distance between focal planes.
@@ -889,7 +889,7 @@ class WsiDataset(Dataset):
             Focal planes to calculate spacing for.
 
         Returns
-        ----------
+        -------
         float
             Spacing between focal planes.
 
@@ -918,7 +918,7 @@ class WsiDataset(Dataset):
         """Return wsi flavour from wsi type tuple.
 
         Returns
-        ----------
+        -------
         str
             Wsi flavour.
         """

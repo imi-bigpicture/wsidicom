@@ -565,7 +565,6 @@ class TestWsiDicomIO:
         io = WsiDicomIO(buffer)
         dataset = Dataset()
         dataset.add(DataElement(LossyImageCompressionRatioTag, "DS", original_values))
-        print(dataset.LossyImageCompressionRatio)
         io.write_dataset(dataset, datetime.datetime.now())
 
         # Act

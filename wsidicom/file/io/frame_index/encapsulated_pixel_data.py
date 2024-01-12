@@ -35,7 +35,7 @@ class EncapsulatedPixelData(FrameIndex):
         is empty.
 
         Returns
-        ----------
+        -------
         Optional[int]
             BOT length.
         """

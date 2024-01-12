@@ -64,7 +64,7 @@ class Codec:
             Possible transfer syntaxes to check for support.
 
         Returns
-        ----------
+        -------
         Iterable[UID]
             Supported transfer syntaxes for the given parameters.
         """
@@ -113,7 +113,7 @@ class Codec:
             Photometric interpretation of the image.
 
         Returns
-        ----------
+        -------
         Codec
             Codec for the given parameters.
         """
@@ -153,7 +153,7 @@ class Codec:
             Photometric interpretation of the image.
 
         Returns
-        ----------
+        -------
         bool
             True if codec supports the given parameters.
         """

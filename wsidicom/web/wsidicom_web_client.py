@@ -97,7 +97,7 @@ class WsiDicomWebClient:
             Series UIDs in the study.
 
         Returns
-        ----------
+        -------
         Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
             Iterator of series and instance uid and optionally available transfer syntax
              uids for WSI instances in the study and series.
@@ -118,7 +118,7 @@ class WsiDicomWebClient:
             Series UIDs in the study.
 
         Returns
-        ----------
+        -------
         Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
             Iterator of series and instance uid and optionally available transfer syntax
             uids for Annotation instances in the study and series.
@@ -141,7 +141,7 @@ class WsiDicomWebClient:
             Instance UID of the instance.
 
         Returns
-        ----------
+        -------
         Dataset
             Instance metadata.
         """
@@ -175,7 +175,7 @@ class WsiDicomWebClient:
             Transfer syntax of the to get frames.
 
         Returns
-        ----------
+        -------
         Iterator[bytes]
             Iterator of frames.
         """
@@ -204,7 +204,7 @@ class WsiDicomWebClient:
             Transfer syntax to check.
 
         Returns
-        ----------
+        -------
         bool
             True if transfer syntax is supported, False otherwise.
         """
@@ -239,7 +239,7 @@ class WsiDicomWebClient:
             SOP Class UID of the instances.
 
         Returns
-        ----------
+        -------
         Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
             Iterator of series and instance uid and optionally available transfer syntax
             uids for instances in the study and series.
@@ -280,7 +280,7 @@ class WsiDicomWebClient:
             Response from server for an instance.
 
         Returns
-        ----------
+        -------
         Tuple[UID, UID, Optional[Set[UID]]]
             Series and instance uid and optionally available transfer syntax
             uids for instances in response.
@@ -308,7 +308,7 @@ class WsiDicomWebClient:
             Response from server.
 
         Returns
-        ----------
+        -------
         UID
             SOP Class UID from response.
         """
@@ -324,7 +324,7 @@ class WsiDicomWebClient:
             Transfer syntax to convert.
 
         Returns
-        ----------
+        -------
         Tuple[str, str]
             Media type and transfer syntax.
         """

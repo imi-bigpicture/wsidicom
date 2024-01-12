@@ -58,7 +58,7 @@ class Eot(OffsetTable):
         positionend to extended offset table.
 
         Returns
-        ----------
+        -------
         bytes
             EOT in bytes.
         """
@@ -77,7 +77,7 @@ class Eot(OffsetTable):
         """Read the length of the extended table offset (EOT).
 
         Returns
-        ----------
+        -------
         int
             EOT length.
         """

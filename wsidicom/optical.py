@@ -72,7 +72,7 @@ class Lut:
             Image mode to produce lookup table for.
 
         Returns
-        ----------
+        -------
         np.ndarray
             Lookup table ordered by rgb, rgb ...
         """
@@ -91,7 +91,7 @@ class Lut:
            Dataset to insert into.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset with object inserted.
 
@@ -113,7 +113,7 @@ class Lut:
         """Return 2D representation of the lookup table.
 
         Returns
-        ----------
+        -------
         np.ndarray
             Lookup table ordered by color x entry
         """
@@ -240,7 +240,7 @@ class OpticalFilter(metaclass=ABCMeta):
            Optical path sequence item.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset with object inserted.
 
@@ -272,7 +272,7 @@ class LightPathFilter(OpticalFilter):
            Optical path sequence item.
 
         Returns
-        ----------
+        -------
         LightPathFilter
             Object containing light path filter conditions for optical path.
 
@@ -303,7 +303,7 @@ class ImagePathFilter(OpticalFilter):
            Optical path sequence item.
 
         Returns
-        ----------
+        -------
         ImagePathFilter
             Object containing image path filter conditions for optical path.
 
@@ -348,7 +348,7 @@ class Illumination:
            Optical path sequence item.
 
         Returns
-        ----------
+        -------
         Illumination
             Object containing illumination conditions for optical path.
 
@@ -369,7 +369,7 @@ class Illumination:
            Optical path sequence item.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset with object inserted.
 
@@ -405,7 +405,7 @@ class Lenses:
            Optical path sequence item.
 
         Returns
-        ----------
+        -------
         Lenses
             Object containing lense conditions for optical path.
 
@@ -426,7 +426,7 @@ class Lenses:
            Optical path sequence item.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset with object inserted.
 
@@ -537,7 +537,7 @@ class OpticalPath:
             Photometric interprentation for parent dataset.
 
         Returns
-        ----------
+        -------
         OpticalPath
             New optical path item
         """
@@ -587,7 +587,7 @@ class OpticalManager:
             List of WsiDicom instances to parse
 
         Returns
-        ----------
+        -------
         OpticalManager
             OpticalManager for the found OpticalPaths
         """
@@ -615,7 +615,7 @@ class OpticalManager:
            DICOM dataset.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset with object inserted.
 
@@ -645,7 +645,7 @@ class OpticalManager:
             The identifier of the LUT to apply
 
         Returns
-        ----------
+        -------
         Image
             Image with LUT applied.
         """

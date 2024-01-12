@@ -84,7 +84,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
             Optical path.
 
         Returns
-        ----------
+        -------
         Iterator[Image]
             Tiles as Images.
         """
@@ -115,7 +115,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
             Optical path.
 
         Returns
-        ----------
+        -------
         Iterator[Image]
             Tiles as Images.
         """

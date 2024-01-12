@@ -53,7 +53,7 @@ class SparseTilePlane:
             Position in plane to get the frame index from
 
         Returns
-        ----------
+        -------
         int
             Frame index
         """
@@ -128,7 +128,7 @@ class SparseTileIndex(TileIndex):
             ID of optical path to get.
 
         Returns
-        ----------
+        -------
         int
             Frame index.
         """
@@ -143,7 +143,7 @@ class SparseTileIndex(TileIndex):
         """Return list of focal planes defined in planes.
 
         Returns
-        ----------
+        -------
         List[float]
             Focal planes, specified in um.
         """
@@ -161,7 +161,7 @@ class SparseTileIndex(TileIndex):
            List of datasets to read planes from.
 
         Returns
-        ----------
+        -------
         Dict[Tuple[float, str], SparseTilePlane]
             Dict of planes with focal plane and optical identifier as key.
         """

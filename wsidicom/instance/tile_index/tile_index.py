@@ -102,7 +102,7 @@ class TileIndex(metaclass=ABCMeta):
            List of datasets.
 
         Returns
-        ----------
+        -------
         int
             Total frame count.
 
@@ -124,7 +124,7 @@ class TileIndex(metaclass=ABCMeta):
            List of datasets.
 
         Returns
-        ----------
+        -------
         List[str]
             Optical identifiers.
 
@@ -149,7 +149,7 @@ class TileIndex(metaclass=ABCMeta):
             Optical path sequence.
 
         Returns
-        ----------
+        -------
         List[str]
             List of optical path identifiers.
         """
@@ -173,7 +173,7 @@ class TileIndex(metaclass=ABCMeta):
             Pydicom frame sequence.
 
         Returns
-        ----------
+        -------
         Point, float
             The frame xy coordinate and z coordinate
         """

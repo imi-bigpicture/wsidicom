@@ -19,7 +19,7 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
-from wsidicom.series import Labels, Levels, Overviews
+from wsidicom.series import Labels, Overviews, Pyramids
 
 """A Target enables creating new instances."""
 
@@ -33,6 +33,7 @@ class Target(metaclass=ABCMeta):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
+        include_pyramids: Optional[Sequence[int]] = None,
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
@@ -48,6 +49,8 @@ class Target(metaclass=ABCMeta):
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
+        include_pyramids: Optional[Sequence[int]] = None
+            Optional list indices (in present pyramids) to include.
         include_levels: Optional[Sequence[int]] = None
             Optional list indices (in present levels) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indicies can be used,
@@ -58,6 +61,7 @@ class Target(metaclass=ABCMeta):
         self._uid_generator = uid_generator
         self._workers = workers
         self._chunk_size = chunk_size
+        self._include_pyramids = include_pyramids
         self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
         self._instance_number = 0
@@ -68,8 +72,8 @@ class Target(metaclass=ABCMeta):
         self.__enter__()
 
     @abstractmethod
-    def save_levels(self, levels: Levels) -> None:
-        """Should save the levels to the target."""
+    def save_pyramids(self, pyramids: Pyramids) -> None:
+        """Should save the pyramids to the target."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -118,7 +122,7 @@ class Target(metaclass=ABCMeta):
             levels.
 
         Returns
-        ----------
+        -------
         bool
             True if level should be included.
         """

@@ -212,7 +212,7 @@ class WsiDicomWebSource(Source):
             Transfer syntaxes to try in order of preference.
 
         Returns
-        ----------
+        -------
         Optional[UID]
             Transfer syntax to use for image data, or None if no supported transfer
             syntax was found.

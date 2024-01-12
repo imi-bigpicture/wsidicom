@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import math
-from typing import Iterable, List, Optional, Sequence, cast
+from typing import Iterable, Optional
 
 from PIL.Image import Image
 
@@ -31,7 +31,7 @@ class Level(Group):
     different focal planes and/or optical paths.
     """
 
-    def __init__(self, instances: Sequence[WsiInstance], base_pixel_spacing: SizeMm):
+    def __init__(self, instances: Iterable[WsiInstance], base_pixel_spacing: SizeMm):
         """Create a level from list of WsiInstances. Assign the pyramid level
         index from pixel spacing of base level.
 
@@ -93,35 +93,7 @@ class Level(Group):
             raise WsiDicomNoResolutionError()
         return self._pixel_spacing
 
-    @classmethod
-    def open(
-        cls,
-        instances: Iterable[WsiInstance],
-    ) -> List["Level"]:
-        """Return list of levels created wsi files.
-
-        Parameters
-        ----------
-        files: Iterable[WsiInstance]
-            Instances to create levels from.
-
-        Returns
-        ----------
-        List[Level]
-            List of created levels.
-
-        """
-        levels: List["Level"] = []
-        instances_grouped_by_level = cls._group_instances(instances)
-        base_group = list(instances_grouped_by_level.values())[0]
-        base_pixel_spacing = base_group[0].pixel_spacing
-        if base_pixel_spacing is None:
-            raise WsiDicomNoResolutionError()
-        for level in instances_grouped_by_level.values():
-            levels.append(cls(level, base_pixel_spacing))
-        return levels
-
-    def matches(self, other_level: "Group") -> bool:
+    def matches(self, other_level: "Level") -> bool:
         """Check if level matches other level. If strict common Uids should
         match. Wsi type and tile size should always match.
 
@@ -131,11 +103,10 @@ class Level(Group):
             Other level to match against.
 
         Returns
-        ----------
+        -------
         bool
             True if other level matches.
         """
-        other_level = cast(Level, other_level)
         return (
             self.uids.matches(other_level.uids)
             and other_level.image_type == self.image_type
@@ -146,7 +117,7 @@ class Level(Group):
         """Return lowest level that produces a single pixel sized image.
 
         Returns
-        ----------
+        -------
         int
             Relative level where the pixel size becomes 1x1.
         """
@@ -156,7 +127,7 @@ class Level(Group):
         """Return lowest level that produces a single tile sized image.
 
         Returns
-        ----------
+        -------
         int
             Relative level where the pixel size becomes a single tile size.
         """
@@ -192,7 +163,7 @@ class Level(Group):
             Optical path
 
         Returns
-        ----------
+        -------
         Image
             A tile image
         """
@@ -232,7 +203,7 @@ class Level(Group):
             Optical path
 
         Returns
-        ----------
+        -------
         bytes
             A transfer syntax encoded tile
         """
@@ -248,7 +219,7 @@ class Level(Group):
         level_to -- index of level to scale to
 
         Returns
-        ----------
+        -------
         int
             Scaling factor between this level and given level
         """
@@ -265,7 +236,7 @@ class Level(Group):
             The pixel spacing of the base level
 
         Returns
-        ----------
+        -------
         int
             The pyramid order of the level
         """
@@ -280,3 +251,18 @@ class Level(Group):
                 f"{self.pixel_spacing}.",
             )
         return level
+
+
+class BaseLevel(Level):
+    def __init__(self, instances: Iterable[WsiInstance]):
+        """Create a base level from list of WsiInstances.
+
+        Parameters
+        ----------
+        instances: Sequence[WsiInstance]
+            Instances to build the level.
+        """
+        pixel_spacing = next(iter(instances)).pixel_spacing
+        if pixel_spacing is None:
+            raise WsiDicomNoResolutionError()
+        super().__init__(instances, pixel_spacing)

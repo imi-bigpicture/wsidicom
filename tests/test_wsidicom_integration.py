@@ -182,7 +182,7 @@ class TestWsiDicomIntegration:
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
-        levels_count = len(wsi.levels)
+        levels_count = len(wsi.pyramids[0])
 
         # Assert
         assert levels_count == expected_level_count

@@ -28,7 +28,7 @@ __all__ = [
     "WsiDataset",
     "WsiInstance",
     "Labels",
-    "Levels",
+    "Pyramid",
     "Overviews",
     "WsiDicomWebClient",
     "WsiDicom",
@@ -47,7 +47,7 @@ from wsidicom.graphical_annotations import (
     PolylineAnnotationGroup,
 )
 from wsidicom.instance import ImageData, WsiDataset, WsiInstance
-from wsidicom.series import Labels, Levels, Overviews
+from wsidicom.series import Labels, Pyramid, Overviews
 from wsidicom.web import WsiDicomWebClient
 from wsidicom.wsidicom import WsiDicom
 

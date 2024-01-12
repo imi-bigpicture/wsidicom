@@ -128,7 +128,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         Image
             Tile as Pillow Image.
         """
@@ -149,7 +149,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         bytes
             Tile as bytes.
         """
@@ -266,7 +266,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         Iterator[Image]
             Tiles as Images.
         """
@@ -297,7 +297,7 @@ class ImageData(metaclass=ABCMeta):
             Encoder to use for re-encoding. If None do not re-encode tiles.
 
         Returns
-        ----------
+        -------
         Iterator[Image]
             Tiles as Images.
         """
@@ -333,7 +333,7 @@ class ImageData(metaclass=ABCMeta):
             likely already used in a threading context.
 
         Returns
-        ----------
+        -------
         Image
             Scaled tiled as Pillow image.
         """
@@ -382,7 +382,7 @@ class ImageData(metaclass=ABCMeta):
 
 
         Returns
-        ----------
+        -------
         Image
             Tile image.
         """
@@ -413,7 +413,7 @@ class ImageData(metaclass=ABCMeta):
             Scale to use for downscaling.
 
         Returns
-        ----------
+        -------
         bytes
             Scaled tile as bytes.
         """
@@ -437,7 +437,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         bytes
             Tile image as bytes.
         """
@@ -464,7 +464,7 @@ class ImageData(metaclass=ABCMeta):
             Number of threads to use for read.
 
         Returns
-        ----------
+        -------
         Image
             Stitched image
         """
@@ -517,7 +517,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         bool
             True if tile region is inside image and z coordinate and optical path
             exists.
@@ -545,7 +545,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         Iterator[Image]
             Iterator of tiles as Images.
         """
@@ -568,7 +568,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
 
         Returns
-        ----------
+        -------
         Iterator[bytes]
             Iterator of tiles as bytes.
         """
@@ -669,7 +669,7 @@ class ImageData(metaclass=ABCMeta):
             The photomoetric interpretation of the dataset
 
         Returns
-        ----------
+        -------
         Union[int, Tuple[int, int, int]]
             Grey level or RGB color,
 
@@ -684,7 +684,7 @@ class ImageData(metaclass=ABCMeta):
         """Create blank tile for instance.
 
         Returns
-        ----------
+        -------
         Image
             Blank tile image
         """
@@ -707,7 +707,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path identifier of tiles to get
 
         Returns
-        ----------
+        -------
         Region
             Region of tiles for stitching image
         """

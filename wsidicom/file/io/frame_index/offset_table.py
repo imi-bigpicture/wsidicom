@@ -49,7 +49,7 @@ class OffsetTable(EncapsulatedPixelData):
             Position of first frame item in pixel data.
 
         Returns
-        ----------
+        -------
         List[Tuple[int, int]]
             A list with frame positions and frame lengths.
         """
