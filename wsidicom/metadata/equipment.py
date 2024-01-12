@@ -43,9 +43,8 @@ class Equipment:
     device_serial_number: Optional[str] = None
     software_versions: Optional[Sequence[str]] = None
 
-
-def remove_confidential(self) -> "Equipment":
-    return replace(
-        self,
-        device_serial_number=None,
-    )
+    def remove_confidential(self) -> "Equipment":
+        return replace(
+            self,
+            device_serial_number=None,
+        )
