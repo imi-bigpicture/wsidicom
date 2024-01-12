@@ -184,7 +184,7 @@ class WsiDicomFileSource(Source):
             Path to DICOMDIR file.
 
         Returns
-        ----------
+        -------
         WsiDicomFileSource
             Source for files in DICOMDIR.
         """
@@ -214,7 +214,7 @@ class WsiDicomFileSource(Source):
             Files or directory to list.
 
         Returns
-        ----------
+        -------
         Iterable[Tuple[BinaryIO, Optional[Path]]]:
             Iterable files to open.
         """
@@ -250,7 +250,7 @@ class WsiDicomFileSource(Source):
            List of files.
 
         Returns
-        ----------
+        -------
         WsiDataset
             Base layer dataset.
         """
@@ -296,7 +296,7 @@ class WsiDicomFileSource(Source):
             Tile size to match against (for level instances).
 
         Returns
-        ----------
+        -------
         Iterable[WsiInstancece]
             Iterable of created instances.
         """
@@ -329,7 +329,7 @@ class WsiDicomFileSource(Source):
             Tile size to check against.
 
         Returns
-        ----------
+        -------
         List[WsiDicomReader]
             List of matching wsi dicom files.
         """
@@ -357,7 +357,7 @@ class WsiDicomFileSource(Source):
             Files to group into instances
 
         Returns
-        ----------
+        -------
         Dict[str, List[WsiDicomReader]]
             Files grouped by instance, with instance identifier as key.
         """

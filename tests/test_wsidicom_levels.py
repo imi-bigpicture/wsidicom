@@ -26,7 +26,7 @@ from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 class TestWsiDicomLevels:
     def test_mm_to_pixel(self, wsi: WsiDicom):
         # Arrange
-        wsi_level = wsi.levels.get_level(0)
+        wsi_level = wsi.pyramids[0].get(0)
         mm_region = RegionMm(position=PointMm(0, 0), size=SizeMm(1, 1))
         new_size = int(1 / 0.1242353)
 
@@ -40,7 +40,7 @@ class TestWsiDicomLevels:
     def test_find_closest_level(self, wsi: WsiDicom):
         # Arrange
         # Act
-        closest_level = wsi.levels.get_closest_by_level(2)
+        closest_level = wsi.pyramids[0].get_closest_by_level(2)
 
         # Assert
         assert closest_level.level == 0
@@ -48,7 +48,7 @@ class TestWsiDicomLevels:
     def test_find_closest_pixel_spacing(self, wsi: WsiDicom):
         # Arrange
         # Act
-        closest_level = wsi.levels.get_closest_by_pixel_spacing(SizeMm(0.5, 0.5))
+        closest_level = wsi.pyramids[0].get_closest_by_pixel_spacing(SizeMm(0.5, 0.5))
 
         # Assert
         assert closest_level.level == 0
@@ -56,14 +56,14 @@ class TestWsiDicomLevels:
     def test_find_closest_size(self, wsi: WsiDicom):
         # Arrange
         # Act
-        closest_level = wsi.levels.get_closest_by_size(Size(100, 100))
+        closest_level = wsi.pyramids[0].get_closest_by_size(Size(100, 100))
 
         # Assert
         assert closest_level.level == 0
 
     def test_calculate_scale(self, wsi: WsiDicom):
         # Arrange
-        wsi_level = wsi.levels.get_level(0)
+        wsi_level = wsi.pyramids[0].get(0)
 
         # Act
         scale = wsi_level.calculate_scale(5)
@@ -73,7 +73,7 @@ class TestWsiDicomLevels:
 
     def test_get_frame_number(self, wsi: WsiDicom):
         # Arrange
-        base_level = wsi.levels.get_level(0)
+        base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
         image_data = instance._image_data
         assert isinstance(image_data, WsiDicomFileImageData)
@@ -86,7 +86,7 @@ class TestWsiDicomLevels:
 
     def test_get_blank_color(self, wsi: WsiDicom):
         # Arrange
-        base_level = wsi.levels.get_level(0)
+        base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
         image_data = instance.image_data
 
@@ -98,7 +98,7 @@ class TestWsiDicomLevels:
 
     def test_get_file_frame_in_range(self, wsi: WsiDicom):
         # Arrange
-        base_level = wsi.levels.get_level(0)
+        base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
         image_data = instance._image_data
         assert isinstance(image_data, WsiDicomFileImageData)
@@ -111,7 +111,7 @@ class TestWsiDicomLevels:
 
     def test_get_file_frame_out_of_range_throws(self, wsi: WsiDicom):
         # Arrange
-        base_level = wsi.levels.get_level(0)
+        base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
         image_data = instance._image_data
         assert isinstance(image_data, WsiDicomFileImageData)
@@ -133,7 +133,7 @@ class TestWsiDicomLevels:
         self, wsi: WsiDicom, region: Region, z: float, path: str, expected_result: bool
     ):
         # Arrange
-        base_level = wsi.levels.get_level(0)
+        base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
         image_data = instance._image_data
 
@@ -164,7 +164,7 @@ class TestWsiDicomLevels:
         self, wsi: WsiDicom, region: Region, expected_result: Region
     ):
         # Arrange
-        base_level = wsi.levels.get_level(0)
+        base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
 
         # Act
@@ -185,7 +185,7 @@ class TestWsiDicomLevels:
         self, wsi: WsiDicom, region: Region, expected_size: Size
     ):
         # Arrange
-        base_level = wsi.levels.get_level(0)
+        base_level = wsi.pyramids[0].get(0)
         image_size = base_level.size
 
         # Act
@@ -204,7 +204,7 @@ class TestWsiDicomLevels:
     def test_valid_pixel(self, wsi: WsiDicom, region: Region, expected_result: bool):
         # Arrange
         # 154x290
-        wsi_level = wsi.levels.get_level(0)
+        wsi_level = wsi.pyramids[0].get(0)
 
         # Act
         valid = wsi_level.valid_pixels(region)
@@ -216,7 +216,7 @@ class TestWsiDicomLevels:
     def test_valid_level(self, wsi: WsiDicom, level: int, expected_result: bool):
         # Arrange
         # Act
-        valid = wsi.levels.valid_level(level)
+        valid = wsi.pyramids[0].valid_level(level)
 
         # Assert
         assert valid == expected_result
@@ -228,7 +228,7 @@ class TestWsiDicomLevels:
         self, wsi: WsiDicom, z: Optional[float], path: Optional[str]
     ):
         # Arrange
-        wsi_level = wsi.levels.get_level(0)
+        wsi_level = wsi.pyramids[0].get(0)
 
         # Act
         instance = wsi_level.get_instance(z, path)
@@ -238,13 +238,15 @@ class TestWsiDicomLevels:
 
     def test_lowest_single_tile_level(self, wsi: WsiDicom):
         # Arrange
-        tile_size = wsi.tile_size
+        tile_size = wsi.pyramids[0].tile_size
 
         # Act
-        lowest_single_tile_level = wsi.levels.lowest_single_tile_level
+        lowest_single_tile_level = wsi.pyramids[0].lowest_single_tile_level
 
         # Assert
-        assert tile_size.all_greater_than(wsi.size // (2**lowest_single_tile_level))
+        assert tile_size.all_greater_than(
+            wsi.pyramids[0].size // (2**lowest_single_tile_level)
+        )
         assert tile_size.any_less_than(
-            wsi.size // (2 ** (lowest_single_tile_level - 1))
+            wsi.pyramids[0].size // (2 ** (lowest_single_tile_level - 1))
         )

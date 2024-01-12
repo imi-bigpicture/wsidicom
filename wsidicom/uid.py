@@ -82,7 +82,7 @@ class FileUids:
         own instance uid or, if not none, the concnatenation uid.
 
         Returns
-        ----------
+        -------
         UID
             Identifier uid for the instance the file belongs to.
         """
@@ -100,7 +100,7 @@ class FileUids:
             File uids to match to.
 
         Returns
-        ----------
+        -------
         bool
             True if concatenation is matching.
         """

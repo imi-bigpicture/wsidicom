@@ -196,7 +196,7 @@ class WsiInstance:
             Base dataset to include.
 
         Returns
-        ----------
+        -------
         WsiInstance
             Created label WsiInstance.
         """
@@ -222,7 +222,7 @@ class WsiInstance:
             Type of instance to create.
 
         Returns
-        ----------
+        -------
         WsiInstance
             Created WsiInstance.
         """
@@ -264,7 +264,7 @@ class WsiInstance:
         Returns the matching file uid.
 
         Returns
-        ----------
+        -------
         Tuple[UID, SlideUids]
             Instance identifier uid and base uids
         """
@@ -288,7 +288,7 @@ class WsiInstance:
             Instance to check.
 
         Returns
-        ----------
+        -------
         bool
             True if instances are of same group.
 

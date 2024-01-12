@@ -451,13 +451,14 @@ poetry run pytest -m integration
 
 A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of different classes, starting from bottom:
 
-- *WsiDicomFile*, represents a WSI DICOM file, used for accessing WsiDicomFileImageData and WsiDataset.
-- *WsiDicomFileImageData*, represents the image data in one or several WSI DICOM files.
-- *WsiDataset*, represents the image metadata in one or several WSI DICOM files.
+- *WsiDicomReader*, represents a WSI DICOM file reader, used for accessing WsiDicomFileImageData and WsiDataset.
+- *WsiDicomFileImageData*, represents the image data in one or several (in case of concatenation) WSI DICOM files.
+- *WsiDataset*, represents the image metadata in one or several (in case of concatenation) WSI DICOM files.
 - *WsiInstance*, represents image data and image metadata.
 - *Level*, represents a group of instances with the same image size, i.e. of the same level.
-- *Levels*, represents a group of levels, i.e. the pyrimidal structure.
-- *WsiDicom*, represents a collection of levels, labels and overviews.
+- *Pyramid*, represents a group of levels, i.e. the pyrimidal structure.
+- *Pyramids*, represents a collection of pyramids, each with different image coordate system or extended depth of field.
+- *WsiDicom*, represents a collection of pyramids, labels and overviews.
 
 Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions. For DICOMWeb the WsiDicomFile\* classes are replaced with WsiDicomWeb\* classes.
 

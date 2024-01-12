@@ -32,7 +32,8 @@ from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
-from wsidicom.series import Labels, Levels, Overviews
+from wsidicom.pyramids import Pyramids
+from wsidicom.series import Labels, Overviews, Pyramid
 from wsidicom.target import Target
 
 
@@ -46,6 +47,7 @@ class WsiDicomFileTarget(Target):
         workers: int,
         chunk_size: int,
         offset_table: Optional[OffsetTableType] = None,
+        include_pyramids: Optional[Sequence[int]] = None,
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
@@ -66,9 +68,11 @@ class WsiDicomFileTarget(Target):
             size also depends on minimun_chunk_size from image_data.
         offset_table: OffsetTableType
             Offset table to use.
+        include_pyramids: Optional[Sequence[int]] = None
+            Optional list indices (in present pyramids) to include.
         include_levels: Optional[Sequence[int]] = None
-            Optional list indices (in present levels) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indices can be used,
+            Optional list indices (in all pyramids) to include, e.g. [0, 1]
+            includes the two lowest levels. Negative indicies can be used,
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
@@ -84,6 +88,7 @@ class WsiDicomFileTarget(Target):
             uid_generator,
             workers,
             chunk_size,
+            include_pyramids,
             include_levels,
             add_missing_levels,
             transcoding,
@@ -94,27 +99,50 @@ class WsiDicomFileTarget(Target):
         """Return filepaths for created files."""
         return self._filepaths
 
-    def save_levels(self, levels: Levels):
-        """Save levels to target."""
+    def save_pyramids(self, pyramids: Pyramids):
+        if self._include_pyramids is not None:
+            pyramids_to_save = [pyramids[index] for index in self._include_pyramids]
+        else:
+            pyramids_to_save = pyramids
+        for pyramid in pyramids_to_save:
+            self._save_pyramid(pyramid)
+
+    def save_labels(self, labels: Labels):
+        """Save labels to target."""
+        for label in labels:
+            self._save_group(label, 1)
+
+    def save_overviews(self, overviews: Overviews):
+        """Save overviews to target."""
+        for overview in overviews:
+            self._save_group(overview, 1)
+
+    def close(self) -> None:
+        """Close any opened level files."""
+        for file in self._opened_files:
+            file.close()
+
+    def _save_pyramid(self, pyramid: Pyramid):
+        """Save pyramid to target."""
         # Collection of new pyramid levels.
         new_levels: List[Level] = []
-        highest_level_in_file = levels.levels[-1]
-        lowest_single_tile_level = levels.lowest_single_tile_level
+        highest_level_in_file = pyramid.pyramid_indices[-1]
+        lowest_single_tile_level = pyramid.lowest_single_tile_level
         highest_level = max(highest_level_in_file, lowest_single_tile_level)
         for pyramid_level in range(highest_level + 1):
             if not self._is_included_level(
                 pyramid_level,
-                levels.levels,
+                pyramid.pyramid_indices,
                 self._add_missing_levels,
                 self._include_levels,
             ):
                 continue
-            if pyramid_level in levels.levels:
-                level = levels.get_level(pyramid_level)
+            if pyramid_level in pyramid.pyramid_indices:
+                level = pyramid.get(pyramid_level)
                 self._save_group(level, 1)
             elif self._add_missing_levels:
                 # Create scaled level from closest level, prefer from original levels
-                closest_level = levels.get_closest_by_level(pyramid_level)
+                closest_level = pyramid.get_closest_by_level(pyramid_level)
                 closest_new_level = next(
                     (
                         level
@@ -129,25 +157,10 @@ class WsiDicomFileTarget(Target):
                 scale = int(2 ** (pyramid_level - closest_level.level))
                 new_level = self._save_and_open_level(
                     closest_level,
-                    levels.pixel_spacing,
+                    pyramid.pixel_spacing,
                     scale,
                 )
                 new_levels.append(new_level)
-
-    def save_labels(self, labels: Labels):
-        """Save labels to target."""
-        for label in labels.groups:
-            self._save_group(label, 1)
-
-    def save_overviews(self, overviews: Overviews):
-        """Save overviews to target."""
-        for overview in overviews.groups:
-            self._save_group(overview, 1)
-
-    def close(self) -> None:
-        """Close any opened level files."""
-        for file in self._opened_files:
-            file.close()
 
     def _save_and_open_level(
         self,
@@ -243,7 +256,7 @@ class WsiDicomFileTarget(Target):
         Group instances by properties that can't differ in a DICOM-file.
 
         Returns
-        ----------
+        -------
         List[List[WsiInstance]]
             Instances grouped by common properties.
         """
@@ -277,7 +290,7 @@ class WsiDicomFileTarget(Target):
             sort.
 
         Returns
-        ----------
+        -------
         Dict[Tuple[str, float], ImageData]:
             ImageData sorted by optical path and focal plane.
         """
