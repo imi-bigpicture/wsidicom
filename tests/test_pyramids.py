@@ -6,7 +6,7 @@ from wsidicom.instance.dataset import ImageType, WsiDataset
 from wsidicom.instance.image_coordinate_system import ImageCoordinateSystem
 
 from wsidicom.instance.instance import WsiInstance
-from wsidicom.pyramids import Pyramids
+from wsidicom.series import Pyramids
 from pydicom.uid import generate_uid, UID
 
 from wsidicom.uid import SlideUids

@@ -32,8 +32,7 @@ from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
-from wsidicom.pyramids import Pyramids
-from wsidicom.series import Labels, Overviews, Pyramid
+from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.target import Target
 
 

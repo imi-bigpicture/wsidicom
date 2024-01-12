@@ -19,8 +19,7 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
-from wsidicom.pyramids import Pyramids
-from wsidicom.series import Labels, Overviews
+from wsidicom.series import Labels, Overviews, Pyramids
 
 """A Target enables creating new instances."""
 

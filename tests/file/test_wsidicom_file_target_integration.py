@@ -24,8 +24,7 @@ from wsidicom import WsiDicom
 from wsidicom.codec import Jpeg2kSettings, JpegSettings, Settings
 from wsidicom.codec.encoder import Encoder
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
-from wsidicom.pyramids import Pyramids
-from wsidicom.series.pyramid import Pyramid
+from wsidicom.series import Pyramid, Pyramids
 
 
 @pytest.mark.integration
