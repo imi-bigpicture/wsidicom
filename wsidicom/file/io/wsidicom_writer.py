@@ -103,7 +103,7 @@ class WsiDicomWriter:
             Offset table to use.
 
         Returns
-        ----------
+        -------
         WsiDicomWriter
             WsiDicomWriter for file.
         """
@@ -253,7 +253,7 @@ class WsiDicomWriter:
             Scale factor (1 = No scaling).
 
         Returns
-        ----------
+        -------
         List[int]
             List of frame position (position of ItemTag), relative to start of
             file.
@@ -288,7 +288,7 @@ class WsiDicomWriter:
             Scaling factor (1 = no scaling).
 
         Returns
-        ----------
+        -------
         Iterator[Iterator[Point]]
             Chunked tile positions
         """
@@ -328,7 +328,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
             Offset table to use.
 
         Returns
-        ----------
+        -------
         WsiDicomEncapsulatedWriter
             WsiDicomEncapsulatedWriter for file.
         """
@@ -356,7 +356,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
             List of frame positions in copy_from, relative to start of file.
 
         Returns
-        ----------
+        -------
         List[int]
             List of frame position relative to start of new file.
         """
@@ -457,7 +457,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
             Number of frames to reserve space for in BOT or EOT.
 
         Returns
-        ----------
+        -------
         Tuple[int, Optional[OffsetTableWriter]]:
             Start of pixel data (after BOT) and optional offset table writer.
         """
@@ -549,7 +549,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
             List of frame positions in current file, relative to start of file.
 
         Returns
-        ----------
+        -------
         List[int]
             List of frame position relative to start of new file.
         """
@@ -613,7 +613,7 @@ class WsiDicomNativeWriter(WsiDicomWriter):
             Offset table to use.
 
         Returns
-        ----------
+        -------
         WsiDicomNativeWriter
             WsiDicomNativeWriter for file.
         """

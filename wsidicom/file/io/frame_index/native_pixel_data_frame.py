@@ -55,7 +55,7 @@ class NativePixelData(FrameIndex):
             Offset to first frame in pixel data.
 
         Returns
-        ----------
+        -------
         List[Tuple[int, int]]
             A list with frame positions and frame lengths.
         """

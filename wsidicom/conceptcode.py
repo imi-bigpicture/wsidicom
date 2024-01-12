@@ -69,7 +69,7 @@ class ConceptCode:
         """Codes code into DICOM dataset.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset of code.
 
@@ -91,7 +91,7 @@ class ConceptCode:
            Dataset to insert into.
 
         Returns
-        ----------
+        -------
         Dataset
             Dataset with object inserted.
 
@@ -117,7 +117,7 @@ class ConceptCode:
             Datasete containing code sequence.
 
         Returns
-        ----------
+        -------
         Optional[List[ConceptCodeType]
             Codes created from sequence in dataset.
 
@@ -149,7 +149,7 @@ class SingleConceptCode(ConceptCode):
             The dataset for creating the code.
 
         Returns
-        ----------
+        -------
         Optional[ConceptCodeType]
             Concept code created from value.
 
@@ -174,7 +174,7 @@ class MultipleConceptCode(ConceptCode):
             The dataset for creating the code.
 
         Returns
-        ----------
+        -------
         List[ConceptCodeType]
             Concept codes created from dataset.
 
@@ -219,7 +219,7 @@ class CidConceptCode(ConceptCode):
             Code meaning to get.
 
         Returns
-        ----------
+        -------
         ConceptCode
             Code created from CID and meaning.
 
@@ -235,7 +235,7 @@ class CidConceptCode(ConceptCode):
         """Return possible meanings for concept.
 
         Returns
-        ----------
+        -------
         List[str]
             Possible meanings for concept.
 
@@ -288,7 +288,7 @@ class UnitCode(SingleConceptCode):
             Code meaning.
 
         Returns
-        ----------
+        -------
         ConceptCode
             Code created from meaning.
 
@@ -300,7 +300,7 @@ class UnitCode(SingleConceptCode):
         """Return possible meanings for concept.
 
         Returns
-        ----------
+        -------
         List[str]
             Possible meanings for concept.
 

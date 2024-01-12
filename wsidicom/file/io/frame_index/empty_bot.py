@@ -40,7 +40,7 @@ class EmptyBot(EncapsulatedPixelData):
         The position of item data and the item length is stored.
 
         Returns
-        ----------
+        -------
         list[tuple[int, int]]
             A list with frame positions and frame lengths
         """

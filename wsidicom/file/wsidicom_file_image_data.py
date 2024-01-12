@@ -93,7 +93,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
              Frame index to get
 
         Returns
-        ----------
+        -------
         WsiDicomFile
             File containing the frame
         """
@@ -115,7 +115,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
              Frame index to get
 
         Returns
-        ----------
+        -------
         bytes
             The frame in bytes
         """

@@ -65,7 +65,7 @@ class Decoder(metaclass=ABCMeta):
             Encoded frame.
 
         Returns
-        ----------
+        -------
         PIL.Image
             Pillow Image.
         """
@@ -76,7 +76,7 @@ class Decoder(metaclass=ABCMeta):
         """Return true if decoder is available.
 
         Returns
-        ----------
+        -------
         bool
             True if decoder is available.
         """
@@ -99,7 +99,7 @@ class Decoder(metaclass=ABCMeta):
             Number of bits per sample.
 
         Returns
-        ----------
+        -------
         bool
             True if decoder supports transfer syntax.
 
@@ -131,7 +131,7 @@ class Decoder(metaclass=ABCMeta):
             Photometric interpretation.
 
         Returns
-        ----------
+        -------
         Decoder
             Decoder for transfer syntax.
 
@@ -182,7 +182,7 @@ class Decoder(metaclass=ABCMeta):
             Number of bits per sample.
 
         Returns
-        ----------
+        -------
         Optional[Type[Decoder]]
             Decoder class. None if no decoder supports transfer syntax.
 
@@ -273,7 +273,7 @@ class NumpyBasedDecoder(Decoder):
             Encoded frame.
 
         Returns
-        ----------
+        -------
         np.ndarray
             Numpy array of decoded image."""
         raise NotImplementedError()
@@ -432,7 +432,7 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
             Transfer syntax.
 
         Returns
-        ----------
+        -------
         Optional[Callable[[bytes], np.ndarray]]
             Decoder. None if no decoder supports transfer syntax.
         """
