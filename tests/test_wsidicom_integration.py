@@ -22,6 +22,7 @@ from PIL import Image as Pillow
 
 from tests.conftest import WsiInputType, WsiTestDefinitions
 from wsidicom import WsiDicom
+from wsidicom.series.pyramid import Pyramid
 
 
 @pytest.mark.integration
@@ -242,3 +243,37 @@ class TestWsiDicomIntegration:
         with WsiDicom.open(tmp_path) as wsi:
             read_label = wsi.read_label()
         assert np.array_equal(np.array(read_label), np.array(label))
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_levels_returns_selected_pyramid(
+        self,
+        wsi_name: Path,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+
+        # Act
+        levels = wsi.levels
+
+        # Assert
+        assert isinstance(levels, Pyramid)
+        assert levels == wsi.pyramids[wsi.selected_pyramid]
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_pyramid_returns_selected_pyramid(
+        self,
+        wsi_name: Path,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+
+        # Act
+        pyramid = wsi.pyramid
+
+        # Assert
+        assert isinstance(pyramid, Pyramid)
+        assert pyramid == wsi.pyramids[wsi.selected_pyramid]
