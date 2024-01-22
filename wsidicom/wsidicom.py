@@ -233,9 +233,14 @@ class WsiDicom:
         raise WsiDicomNotFoundError("pyramids", str(self))
 
     @property
+    def pyramid(self) -> Pyramid:
+        """Return contained pyramid for selected pyramid."""
+        return self.pyramids[self.selected_pyramid]
+
+    @property
     def levels(self) -> Pyramid:
         """Return contained levels for selected pyramid."""
-        return self.pyramids[self.selected_pyramid]
+        return self.pyramid
 
     @property
     def labels(self) -> Optional[Labels]:
