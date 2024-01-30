@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import copy
 from http import HTTPStatus
 import logging
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
@@ -253,7 +254,7 @@ class WsiDicomWebClient:
             return (
                 self._get_uids_from_response(instance, series_uid)
                 for series_uid in series_uids
-                for instance in self._client.search_for_instances(
+                for instance in self._search_for_instances(
                     study_uid,
                     series_uid,
                     search_filters={SOP_CLASS_UID: sop_class_uid},
@@ -261,7 +262,7 @@ class WsiDicomWebClient:
             )
         return (
             self._get_uids_from_response(instance)
-            for instance in self._client.search_for_instances(
+            for instance in self._search_for_instances(
                 study_uid,
                 fields=["AvailableTransferSyntaxUID"],
                 search_filters={
@@ -270,6 +271,60 @@ class WsiDicomWebClient:
                 },
             )
         )
+
+    def _search_for_instances(self, *args, **kwargs):
+        # Try performing a regular search_for_instances(). If there is an error,
+        # check if it is a Google Healthcare API error that we can fix. If so,
+        # fix it and make the request again.
+        try:
+            yield from self._client.search_for_instances(*args, **kwargs)
+        except HTTPError as e:
+            if e.response.status_code != 400:
+                # Not a Google Healthcare API error. Propagate the exception
+                raise
+
+            # Check if it was a google healthcare API error
+            google_healthcare_api_errors = (
+                'unknown/unsupported QIDO attribute: AvailableTransferSyntaxUID',
+                # Sometimes, this says "SOPClassUID is not a supported instance or study...",
+                # and sometimes, it says "SOPClassUID is not a supported instance or series..."
+                # Just catch the first part with "instance"
+                'SOPClassUID is not a supported instance',
+            )
+            if not any(x in e.response.text for x in google_healthcare_api_errors):
+                # Not a Google Healthcare API error. Propagate the exception
+                raise
+
+            # It was a Google Healthcare API error.
+            # Fix the request and perform it again.
+
+            # Perform a deepcopy so that the caller's arguments are not modified.
+            # We assume that `fields` and `search_filters` are kwargs, not args.
+            kwargs = copy.deepcopy(kwargs)
+
+            # Remove the AvailableTransferSyntaxUID, if present, as google
+            # healthcare API does not support this.
+            if 'AvailableTransferSyntaxUID' in kwargs.get('fields', []):
+                kwargs['fields'].remove('AvailableTransferSyntaxUID')
+
+            # Perform manual filtering for SOP_CLASS_UID, if present.
+            # Google Healthcare API doesn't support this as a search filter
+            # (even though it definitely should).
+            if SOP_CLASS_UID not in kwargs.get('search_filters', {}):
+                # We only needed to remove the AvailableTransferSyntaxUID.
+                # Try the search again.
+                yield from self._client.search_for_instances(*args, **kwargs)
+                return
+
+            # Perform the manual filtering for SOP_CLASS_UID
+            sop_class_uid = kwargs['search_filters'].pop(SOP_CLASS_UID)
+            if SOP_CLASS_UID not in kwargs.get('fields', []):
+                # Make sure we get the SOP_CLASS_UID so we can manually filter
+                kwargs.setdefault('fields', []).append(SOP_CLASS_UID)
+
+            for result in self._client.search_for_instances(*args, **kwargs):
+                if result[SOP_CLASS_UID]['Value'][0] == sop_class_uid:
+                    yield result
 
     @staticmethod
     def _get_uids_from_response(
