@@ -18,8 +18,11 @@ import io
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import BinaryIO, Dict, Iterable, List, Optional, Union
+from typing import BinaryIO, Dict, Iterable, List, Optional, Tuple, Union
 
+from fsspec.core import url_to_fs
+from fsspec.implementations.local import LocalFileSystem
+from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from pydicom import dcmread
 from pydicom.errors import InvalidDicomError
 from pydicom.fileset import FileSet
@@ -195,17 +198,23 @@ class WsiDicomFileSource(Source):
         files = [file.path for file in fileset]
         return cls(files)
 
-    @staticmethod
-    def _open_file(file: Union[Path, BinaryIO]) -> WsiDicomIO:
+    @classmethod
+    def _open_file(cls, file: Union[str, Path, BinaryIO]) -> WsiDicomIO:
         """Open stream if file is path. Return stream and optional filepath."""
         if isinstance(file, Path):
             return WsiDicomIO.open(file, "rb")
+        if isinstance(file, str):
+            filesystem, path = cls._open_fsspec(file)
+            stream = filesystem.open(path, "rb")
+            # assert isinstance(stream, AbstractBufferedFile)
+            return WsiDicomIO(stream, owned=True)
         return WsiDicomIO(file)
 
-    @staticmethod
+    @classmethod
     def _list_input_files(
+        cls,
         files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
-    ) -> Iterable[Union[Path, BinaryIO]]:
+    ) -> Iterable[Union[Path, str, BinaryIO]]:
         """List input files. Iterate directory content if directory.
 
         Parameters
@@ -218,15 +227,16 @@ class WsiDicomFileSource(Source):
         Iterable[Tuple[BinaryIO, Optional[Path]]]:
             Iterable files to open.
         """
-
         if isinstance(files, (str, Path)):
-            # Path to single file or folder with files.
-            single_path = Path(files)
-            if single_path.is_dir():
-                return (file for file in single_path.iterdir() if file.is_file())
-            if single_path.is_file():
-                return [single_path]
-            raise ValueError(f"File in path {single_path} was not a file or directory.")
+            return cls._open_path(files)
+
+        # if isinstance(files, Path):
+        #     # Path to single file or folder with files.
+        #     if files.is_dir():
+        #         return (file for file in files.iterdir() if file.is_file())
+        #     if files.is_file():
+        #         return [files]
+        #     raise ValueError(f"File in path {files} was not a file or directory.")
 
         if isinstance(files, BinaryIO):
             # Single stream.
@@ -234,10 +244,10 @@ class WsiDicomFileSource(Source):
 
         # Multiple paths or streams.
         return (
-            Path(file) if isinstance(file, str) else file
+            file
             for file in files
-            if isinstance(file, io.IOBase)
-            or (isinstance(file, (str, Path)) and Path(file).is_file())
+            # if isinstance(file, io.IOBase)
+            # or (isinstance(file, (str, Path)) and Path(file).is_file())
         )
 
     @staticmethod
@@ -365,3 +375,19 @@ class WsiDicomFileSource(Source):
         for file in files:
             grouped_files[file.uids.identifier].append(file)
         return grouped_files
+
+    @classmethod
+    def _open_path(cls, path: Union[str, Path]) -> Iterable[str]:
+        """Open file using fsspec."""
+        filesystem, path = cls._open_fsspec(str(path))
+        if filesystem.isdir(path):
+            return (file for file in filesystem.ls(path) if filesystem.isfile(file))
+        if filesystem.isfile(path):
+            return [path]
+        raise ValueError(f"File in path {path} was not a file or directory.")
+
+    @staticmethod
+    def _open_fsspec(path: str) -> Tuple[AbstractFileSystem, str]:
+        """Open file using fsspec."""
+        filesystem, path = url_to_fs(path)
+        return filesystem, path

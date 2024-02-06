@@ -18,8 +18,9 @@ import struct
 from datetime import datetime
 from pathlib import Path
 from struct import pack
-from typing import Any, BinaryIO, Callable, Dict, Literal, Optional, Union
+from typing import Any, BinaryIO, Callable, Dict, Literal, Optional, Union, cast
 
+from fsspec.spec import AbstractBufferedFile
 from pydicom.dataelem import DataElement_from_raw, RawDataElement
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.filebase import DicomIO
@@ -43,7 +44,7 @@ class WsiDicomIO(DicomIO):
 
     def __init__(
         self,
-        stream: BinaryIO,
+        stream: Union[BinaryIO, AbstractBufferedFile],
         little_endian: bool = True,
         implicit_vr: bool = False,
         filepath: Optional[Path] = None,
@@ -66,7 +67,7 @@ class WsiDicomIO(DicomIO):
             If the stream should be closed by this instance.
         """
         stream.seek(0)
-        self._stream = stream
+        self._stream = cast(BinaryIO, stream)
         self._filepath = filepath
         self._owned = owned
         super().__init__(stream)
