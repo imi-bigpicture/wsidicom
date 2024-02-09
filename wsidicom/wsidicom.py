@@ -167,12 +167,6 @@ class WsiDicom:
         WsiDicom
             WsiDicom created from WSI DICOM files in DICOMDIR.
         """
-        if isinstance(path, str):
-            path = Path(path)
-        if path.is_dir():
-            path = path.joinpath("DICOMDIR")
-        if not path.is_file() or not path.exists():
-            raise FileNotFoundError(f"DICOMDIR file {path} not found.")
         source = WsiDicomFileSource.open_dicomdir(path)
         return cls(source, True)
 

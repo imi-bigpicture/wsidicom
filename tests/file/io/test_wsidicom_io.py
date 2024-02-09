@@ -187,7 +187,7 @@ class TestWsiDicomIO:
         io = WsiDicomIO(buffer_with_file_meta)
 
         # Act
-        uid = io.read_media_storage_sop_class_uid()
+        uid = io.media_storage_sop_class_uid
 
         # Assert
         assert uid == file_meta_dataset.MediaStorageSOPClassUID
@@ -209,7 +209,7 @@ class TestWsiDicomIO:
         io = WsiDicomIO(buffer_with_file_meta)
 
         # Act
-        meta_info = io.read_file_meta_info()
+        meta_info = io.file_meta_info
 
         # Assert
         assert meta_info == file_meta_dataset

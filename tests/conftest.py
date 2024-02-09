@@ -54,6 +54,28 @@ class WsiTestDefinitions:
         )
 
     @classmethod
+    def folders_and_counts(cls) -> Iterable[Tuple[Path, int, bool, bool]]:
+        return (
+            (
+                SLIDE_FOLDER.joinpath(wsi_name, wsi_definition["path"]),
+                wsi_definition["levels"],
+                wsi_definition["label"],
+                wsi_definition["overview"],
+            )
+            for wsi_name, wsi_definition in cls.test_definitions.items()
+        )
+
+    @classmethod
+    def folders_and_instance_counts(cls) -> Iterable[Tuple[Path, int]]:
+        return (
+            (
+                SLIDE_FOLDER.joinpath(wsi_name, wsi_definition["path"]),
+                wsi_definition["instances"],
+            )
+            for wsi_name, wsi_definition in cls.test_definitions.items()
+        )
+
+    @classmethod
     def wsi_names(cls, tiling: Optional[str] = None) -> Iterable[str]:
         return (
             key
@@ -117,10 +139,15 @@ class WsiTestDefinitions:
 
 
 @pytest.fixture()
-def wsi(tmp_path: Path):
+def wsi_file(tmp_path: Path):
     test_file_path = tmp_path.joinpath("test_im.dcm")
     create_layer_file(test_file_path)
-    with WsiDicom.open(tmp_path) as wsi:
+    yield test_file_path
+
+
+@pytest.fixture()
+def wsi(wsi_file: Path):
+    with WsiDicom.open(wsi_file) as wsi:
         yield wsi
 
 

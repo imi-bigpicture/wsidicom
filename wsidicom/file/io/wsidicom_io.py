@@ -16,6 +16,7 @@
 
 import struct
 from datetime import datetime
+from functools import cached_property
 from pathlib import Path
 from struct import pack
 from typing import Any, BinaryIO, Callable, Dict, Literal, Optional, Union, cast
@@ -23,6 +24,7 @@ from typing import Any, BinaryIO, Callable, Dict, Literal, Optional, Union, cast
 from fsspec.spec import AbstractBufferedFile
 from pydicom.dataelem import DataElement_from_raw, RawDataElement
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
+from pydicom.errors import InvalidDicomError
 from pydicom.filebase import DicomIO
 from pydicom.filereader import (
     _read_file_meta_info,
@@ -48,6 +50,7 @@ class WsiDicomIO(DicomIO):
         little_endian: bool = True,
         implicit_vr: bool = False,
         filepath: Optional[Path] = None,
+        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]] = "rb",
         owned: bool = False,
     ):
         """
@@ -66,8 +69,9 @@ class WsiDicomIO(DicomIO):
         owned: bool = False
             If the stream should be closed by this instance.
         """
-        stream.seek(0)
         self._stream = cast(BinaryIO, stream)
+        if "r" in mode and not self._is_dicom():
+            raise WsiDicomFileError(str(filepath), "is not a DICOM file or stream.")
         self._filepath = filepath
         self._owned = owned
         super().__init__(stream)
@@ -95,7 +99,7 @@ class WsiDicomIO(DicomIO):
         ----------
         filepath: Path
             Path to file.
-        mode: Union[Literal["rb"], Literal["w+b"]]
+        Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
             Mode to open file in.
         little_endian: bool = True
             If to set the stream to little endian.
@@ -108,7 +112,9 @@ class WsiDicomIO(DicomIO):
             Instance of WsiDicomIO.
         """
         stream = open(filepath, mode)
-        return cls(stream, little_endian, implicit_vr, filepath=filepath, owned=True)
+        return cls(
+            stream, little_endian, implicit_vr, filepath=filepath, mode=mode, owned=True
+        )
 
     @property
     def owned(self) -> bool:
@@ -141,17 +147,23 @@ class WsiDicomIO(DicomIO):
     def parent_read(self):
         return self._stream.read
 
-    def read_media_storage_sop_class_uid(self) -> UID:
+    @property
+    def media_storage_sop_class_uid(self) -> UID:
         """Read Media Storage SOP Class UID from file meta info."""
-        metadata = self.read_file_meta_info()
-        self.seek(0)
-        return metadata.MediaStorageSOPClassUID
+        return self.file_meta_info.MediaStorageSOPClassUID
 
-    def read_file_meta_info(self) -> FileMetaDataset:
+    @cached_property
+    def file_meta_info(self) -> FileMetaDataset:
         """Read file meta info from stream."""
         self.seek(0)
-        read_preamble(self._stream, False)
-        return _read_file_meta_info(self._stream)
+        try:
+            read_preamble(self._stream, False)
+            file_meta_info = _read_file_meta_info(self._stream)
+        except InvalidDicomError:
+            raise WsiDicomFileError(str(self), "is not a DICOM file or stream.")
+        finally:
+            self.seek(0)
+        return file_meta_info
 
     def read_dataset(self, force: bool = False) -> Dataset:
         """Read dataset, excluding EOT and PixelData from stream."""
@@ -357,3 +369,10 @@ class WsiDicomIO(DicomIO):
             if self.tell() > element_value_position + length:
                 raise ValueError("Updated element is longer than original.")
         self.seek(rewind)
+
+    def _is_dicom(self) -> bool:
+        self.seek(0)
+        self.read(128)  # preamble
+        is_dicom = self.read(4) == b"DICM"
+        self.seek(0)
+        return is_dicom

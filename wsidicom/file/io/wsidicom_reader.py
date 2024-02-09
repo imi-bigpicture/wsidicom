@@ -19,12 +19,11 @@ from functools import cached_property
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from pydicom.errors import InvalidDicomError
 from pydicom.tag import Tag
 from pydicom.uid import UID
 
 from wsidicom.codec import Codec
-from wsidicom.errors import WsiDicomFileError, WsiDicomNotSupportedError
+from wsidicom.errors import WsiDicomNotSupportedError
 from wsidicom.file.io.frame_index import (
     Bot,
     EmptyBot,
@@ -54,11 +53,7 @@ class WsiDicomReader:
         """
         self._lock = threading.Lock()
         self._stream = stream
-        try:
-            file_meta = self._stream.read_file_meta_info()
-        except InvalidDicomError:
-            raise WsiDicomFileError(str(stream), "is not a DICOM file or stream.")
-        self._transfer_syntax_uid = UID(file_meta.TransferSyntaxUID)
+        self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
         self._stream.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._stream.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
         dataset = self._stream.read_dataset()
