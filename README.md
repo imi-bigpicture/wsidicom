@@ -50,6 +50,7 @@ Please note that this is an early release and the API is not frozen yet. Functio
   - JPEGLosslessSV1
   - JPEGLSLossless
   - JPEGLSNearLossless
+  - RLELossless
 
 - With pylibjpeg-rle RLELossless is additionally supported.
 
