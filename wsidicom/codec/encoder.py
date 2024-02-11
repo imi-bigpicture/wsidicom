@@ -608,8 +608,8 @@ class PyJpegLsEncoder(Encoder[JpegLsSettings]):
             Settings for the encoder.
         """
         if settings.channels != Channels.GRAYSCALE:
+            # pylibjpeg-ls 1.1.0 does not handle interleaving correctly
             raise ValueError(f"Unsupported channels: {settings.channels}.")
-        print(settings.channels)
         super().__init__(settings)
 
     @property
