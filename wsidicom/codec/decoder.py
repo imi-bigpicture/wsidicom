@@ -55,6 +55,7 @@ from wsidicom.codec.optionals import (
 )
 from wsidicom.codec.rle import RleCodec
 from wsidicom.geometry import Size
+from wsidicom.uid import HTJPEG2000, HTJPEG2000Lossless, HTJPEG2000RPCLLossless
 
 
 class Decoder(metaclass=ABCMeta):
@@ -166,6 +167,10 @@ class Decoder(metaclass=ABCMeta):
                 bits_stored=bits,
                 photometric_interpretation=photometric_interpretation,
             )
+        elif decoder == PyJpegLsDecoder:
+            return PyJpegLsDecoder()
+        elif decoder == PyLibJpegOpenJpegDecoder:
+            return PyLibJpegOpenJpegDecoder()
         raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
 
     @classmethod
@@ -197,9 +202,9 @@ class Decoder(metaclass=ABCMeta):
             "imagecodecs": ImageCodecsDecoder,
             "pylibjpeg_rle": PylibjpegRleDecoder,
             "imagecodecs_rle": ImageCodecsRleDecoder,
-            "pydicom": PydicomDecoder,
             "pylibjpeg_ls": PyJpegLsDecoder,
             "pylibjpeg_openjpeg": PyLibJpegOpenJpegDecoder,
+            "pydicom": PydicomDecoder,
         }
         if config.settings.prefered_decoder is not None:
             if config.settings.prefered_decoder not in decoders:
@@ -548,4 +553,10 @@ class PyLibJpegOpenJpegDecoder(NumpyBasedDecoder):
     ) -> bool:
         if not cls.is_available():
             return False
-        return transfer_syntax in [JPEG2000, JPEG2000Lossless]
+        return transfer_syntax in [
+            JPEG2000,
+            JPEG2000Lossless,
+            HTJPEG2000,
+            HTJPEG2000Lossless,
+            HTJPEG2000RPCLLossless,
+        ]

@@ -57,6 +57,7 @@ from wsidicom.codec.settings import (
     Settings,
     Subsampling,
 )
+from wsidicom.uid import HTJPEG2000
 
 SettingsType = TypeVar("SettingsType", bound=Settings)
 
@@ -65,6 +66,7 @@ class LossyCompressionIsoStandard(Enum):
     JPEG_LOSSY = "ISO_10918_1"
     JPEG_LS_NEAR_LOSSLESS = "ISO_14495_1"
     JPEG_2000_IRREVERSIBLE = "ISO_15444_1"
+    HT_JPEG_2000_IRREVERSIBLE = "ISO_15444_15"
 
     @classmethod
     def transfer_syntax_to_iso(
@@ -76,6 +78,8 @@ class LossyCompressionIsoStandard(Enum):
             return cls.JPEG_LS_NEAR_LOSSLESS
         elif transfer_syntax == JPEG2000:
             return cls.JPEG_2000_IRREVERSIBLE
+        elif transfer_syntax == HTJPEG2000:
+            return cls.HT_JPEG_2000_IRREVERSIBLE
         return None
 
 
