@@ -3,10 +3,12 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import pytest
 from dicomweb_client import DICOMwebClient
+from pydicom import Dataset
 from pydicom.uid import UID, generate_uid
 from pytest_mock import MockerFixture
 from requests import HTTPError, Response
 
+from tests.data_gen import create_main_dataset
 from wsidicom.uid import WSI_SOP_CLASS_UID
 from wsidicom.web.wsidicom_web_client import (
     SERIES_INSTANCE_UID,
@@ -49,18 +51,24 @@ def include_other_sop_classes():
 
 
 @pytest.fixture()
-def client(
+def instance_metadata():
+    yield create_main_dataset()
+
+
+@pytest.fixture()
+def dicom_web_client(
     study_instance_uid: UID,
     series_instance_uid: UID,
     sop_instance_uid: UID,
     throws_on_include_field: Optional[Dict[str, str]],
     throws_on_search_filter: Optional[Dict[str, str]],
     include_other_sop_classes: bool,
+    instance_metadata: Dataset,
     mocker: MockerFixture,
 ):
-    client = WsiDicomWebClient(DICOMwebClient("http://localhost"))
     fixture_study_instance_uid = study_instance_uid
     fixture_series_instance_uid = series_instance_uid
+    client = DICOMwebClient("http://localhost")
 
     def raise_error(status_code: HTTPStatus, message: str):
         response = Response()
@@ -108,8 +116,18 @@ def client(
         }
         return [wsi_instance, other_instance]
 
-    client._client.search_for_instances = mocker.MagicMock(
-        client._client.search_for_instances, search_for_instances
+    def retrieve_instance_metadata(
+        study_instance_uid: str,
+        series_instance_uid: str,
+        sop_instance_uid: str,
+    ) -> Dict[str, dict]:
+        return instance_metadata.to_json_dict()
+
+    client.search_for_instances = mocker.MagicMock(
+        client.search_for_instances, search_for_instances
+    )
+    client.retrieve_instance_metadata = mocker.MagicMock(
+        client.retrieve_instance_metadata, retrieve_instance_metadata
     )
     yield client
 
@@ -130,18 +148,19 @@ class TestWsiDicomWebClient:
     )
     def test_get_wsi_instances(
         self,
-        client: WsiDicomWebClient,
+        dicom_web_client: DICOMwebClient,
         study_instance_uid: UID,
         series_instance_uid: UID,
     ):
         # Arrange
+        client = WsiDicomWebClient(dicom_web_client)
 
         # Act
         instances = client.get_wsi_instances(study_instance_uid, [series_instance_uid])
 
         # Assert
         assert len(list(instances)) == 1
-        assert client._client.search_for_instances.called
+        assert dicom_web_client.search_for_instances.called
 
     @pytest.mark.parametrize(
         "throws_on_search_filter",
@@ -150,15 +169,37 @@ class TestWsiDicomWebClient:
     @pytest.mark.parametrize("include_other_sop_classes", [False, True])
     def test_get_wsi_instances_raise_on_search_filter_is_not_handled(
         self,
-        client: WsiDicomWebClient,
+        dicom_web_client: DICOMwebClient,
         study_instance_uid: UID,
         series_instance_uid: UID,
     ):
         # Arrange
+        client = WsiDicomWebClient(dicom_web_client)
 
         # Act and Assert
         with pytest.raises(HTTPError):
             list(client.get_wsi_instances(study_instance_uid, [series_instance_uid]))
 
         # Assert
-        assert client._client.search_for_instances.called
+        assert dicom_web_client.search_for_instances.called
+
+    def test_get_instance(
+        self,
+        dicom_web_client: DICOMwebClient,
+        study_instance_uid: UID,
+        series_instance_uid: UID,
+        sop_instance_uid: UID,
+        instance_metadata: Dataset,
+    ):
+        # Arrange
+        client = WsiDicomWebClient(dicom_web_client)
+
+        # Act
+        instance = client.get_instance(
+            study_instance_uid, series_instance_uid, sop_instance_uid
+        )
+
+        # Assert
+        assert instance == instance_metadata
+        assert dicom_web_client.retrieve_instance_metadata.called
+        assert dicom_web_client.retrieve_instance_metadata.call_count == 1
