@@ -29,7 +29,10 @@ from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
 SOP_CLASS_UID = "00080016"
 SOP_INSTANCE_UID = "00080018"
 SERIES_INSTANCE_UID = "0020000E"
+MODALITY = "00080060"
 AVAILABLE_SOP_TRANSFER_SYNTAX_UID = "00083002"
+WSI_MODALITY = "SM"
+ANNOTATION_MODALITY = "ANN"
 
 
 class WsiDicomWebClient:
@@ -100,7 +103,9 @@ class WsiDicomWebClient:
             Iterator of series and instance uid and optionally available transfer syntax
              uids for WSI instances in the study and series.
         """
-        return self._get_intances(study_uid, series_uids, WSI_SOP_CLASS_UID)
+        return self._get_intances(
+            study_uid, series_uids, WSI_SOP_CLASS_UID, WSI_MODALITY
+        )
 
     def get_annotation_instances(
         self, study_uid: UID, series_uids: Iterable[UID]
@@ -121,7 +126,9 @@ class WsiDicomWebClient:
             Iterator of series and instance uid and optionally available transfer syntax
             uids for Annotation instances in the study and series.
         """
-        return self._get_intances(study_uid, series_uids, ANN_SOP_CLASS_UID)
+        return self._get_intances(
+            study_uid, series_uids, ANN_SOP_CLASS_UID, ANNOTATION_MODALITY
+        )
 
     def get_instance(
         self, study_uid: UID, series_uid: UID, instance_uid: UID
@@ -225,7 +232,11 @@ class WsiDicomWebClient:
         return True
 
     def _get_intances(
-        self, study_uid: UID, series_uids: Iterable[UID], sop_class_uid
+        self,
+        study_uid: UID,
+        series_uids: Iterable[UID],
+        sop_class_uid: UID,
+        modality: str,
     ) -> Iterator[Tuple[UID, UID, Optional[Set[UID]]]]:
         """Get series, instance, and optionally available transfer syntax uids for
         instances of SOP class in study.
@@ -254,7 +265,7 @@ class WsiDicomWebClient:
                 for instance in self._client.search_for_instances(
                     study_uid,
                     series_uid,
-                    search_filters={SOP_CLASS_UID: sop_class_uid},
+                    search_filters={SOP_CLASS_UID: sop_class_uid, MODALITY: modality},
                 )
             )
         return (
@@ -265,6 +276,7 @@ class WsiDicomWebClient:
                 search_filters={
                     SOP_CLASS_UID: sop_class_uid,
                     SERIES_INSTANCE_UID: series_uids,
+                    MODALITY: modality,
                 },
             )
         )
