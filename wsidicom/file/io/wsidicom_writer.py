@@ -25,6 +25,7 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    Union,
 )
 
 from pydicom.encaps import itemize_frame
@@ -41,6 +42,7 @@ from wsidicom.file.io.frame_index import (
     OffsetTableWriter,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
@@ -89,7 +91,7 @@ class WsiDicomWriter:
 
     @classmethod
     def open(
-        cls, file: Path, transfer_syntax: UID, offset_table: OffsetTableType
+        cls, file: Union[str, Path], transfer_syntax: UID, offset_table: OffsetTableType
     ) -> "WsiDicomWriter":
         """Open file in path as WsiDicomWriter.
 
@@ -107,7 +109,7 @@ class WsiDicomWriter:
         WsiDicomWriter
             WsiDicomWriter for file.
         """
-        stream = WsiDicomIO.open(file, "w+b")
+        stream = WsiDicomStreamOpener().open_for_writing(file, "w+b")
         if transfer_syntax.is_encapsulated:
             writer = WsiDicomEncapsulatedWriter
         else:

@@ -29,6 +29,7 @@ from typing import (
 
 from pydicom.fileset import FileSet
 from pydicom.uid import UID, MediaStorageDirectoryStorage
+from upath import UPath
 
 from wsidicom.errors import (
     WsiDicomNotFoundError,
@@ -67,8 +68,8 @@ class WsiDicomFileSource(Source):
         self._labels: List[WsiDicomReader] = []
         self._overviews: List[WsiDicomReader] = []
         self._annotations: List[WsiDicomIO] = []
-        for stream in WsiDicomStreamOpener([WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID]).open(
-            files
+        for stream in WsiDicomStreamOpener().open(
+            files, [WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID]
         ):
             try:
                 if stream.media_storage_sop_class_uid == WSI_SOP_CLASS_UID:
@@ -152,7 +153,7 @@ class WsiDicomFileSource(Source):
         return [reader for reader_list in reader_lists for reader in reader_list]
 
     @property
-    def files(self) -> Optional[List[Path]]:
+    def files(self) -> Optional[List[UPath]]:
         """Return the files in the source, if any."""
         if all(reader.filepath is None for reader in self.readers):
             return None
@@ -207,7 +208,7 @@ class WsiDicomFileSource(Source):
             Source for files in DICOMDIR.
         """
         files: List[str] = []
-        for stream in WsiDicomStreamOpener([MediaStorageDirectoryStorage]).open(path):
+        for stream in WsiDicomStreamOpener().open(path, MediaStorageDirectoryStorage):
             dicomdir = stream.read_dataset()
             fileset = FileSet(dicomdir)
             files.extend(file.path for file in fileset)

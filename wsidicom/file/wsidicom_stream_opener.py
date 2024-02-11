@@ -21,6 +21,7 @@ from typing import (
     Dict,
     Iterable,
     Iterator,
+    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -30,6 +31,7 @@ from typing import (
 from fsspec.core import url_to_fs
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from pydicom.uid import UID
+from upath import UPath
 
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 
@@ -37,21 +39,36 @@ from wsidicom.file.io.wsidicom_io import WsiDicomIO
 class WsiDicomStreamOpener:
     def __init__(
         self,
-        sop_class_uids: Optional[Sequence[UID]] = None,
         storage_kwargs: Optional[Dict[str, Any]] = None,
     ):
         """Create a WsiDicomStreamOpener.
 
         Parameters
         ----------
-        sop_class_uids: Optional[Sequence[UID]] = None
-            SOP class uids to filter on.
         storage_kwargs: Optional[Dict[str, Any]] = None
             Keyword arguments for opening the file.
         """
 
-        self._sop_class_uids = sop_class_uids
         self._storage_kwargs = storage_kwargs or {}
+
+    def open_for_writing(
+        self, path: Union[str, Path], mode: Union[Literal["r+b"], Literal["w+b"]]
+    ) -> WsiDicomIO:
+        """Open a stream for writing.
+
+        Parameters
+        ----------
+        path: Union[str, Path]
+            Path to open.
+
+        Returns
+        -------
+        WsiDicomIO
+            Opened WsiDicomIO instance.
+        """
+        fs, path = self._open_filesystem(path)
+        stream = self._open_stream(fs, path, mode)
+        return WsiDicomIO(stream, owned=True, filepath=UPath(path))
 
     def open(
         self,
@@ -62,6 +79,7 @@ class WsiDicomStreamOpener:
             AbstractBufferedFile,
             Iterable[Union[str, Path, BinaryIO, AbstractBufferedFile]],
         ],
+        sop_class_uids: Optional[Union[UID, Sequence[UID]]] = None,
     ) -> Iterator[WsiDicomIO]:
         """Open DICOM streams in paths and return WsiDicomIO instances.
 
@@ -75,27 +93,36 @@ class WsiDicomStreamOpener:
             Iterable[Union[str, Path, BinaryIO, AbstractBufferedFile]],
         ]
             Folder, single file, or sequence of files to open.
+        sop_class_uids: Optional[Union[UID, Sequence[UID]]] = None,
+            SOP class uids to filter on.
 
         Returns
         -------
         Iterator[WsiDicomIO]
             Opened WsiDicomIO instances.
         """
+        if isinstance(sop_class_uids, UID):
+            sop_class_uids = [sop_class_uids]
         if isinstance(files, (str, Path, BinaryIO, AbstractBufferedFile)):
             files = [files]
         streams: Sequence[Tuple[Union[BinaryIO, AbstractBufferedFile], bool]] = []
         for file in files:
             if isinstance(file, (str, Path)):
-                streams.extend((stream, True) for stream in self._open_streams(file))
+                streams.extend(
+                    (stream, True) for stream in self._open_streams(file, "rb")
+                )
             else:
                 streams.append((file, False))
         for stream, owned in streams:
             try:
-                path = getattr(stream, "path", None)
+                if hasattr(stream, "path"):
+                    path = UPath(getattr(stream, "path"))
+                else:
+                    path = None
                 dicom_io = WsiDicomIO(stream, owned=owned, filepath=path)
-                if (
-                    self._sop_class_uids is None
-                    or dicom_io.media_storage_sop_class_uid in self._sop_class_uids
+                if dicom_io.is_dicom and (
+                    sop_class_uids is None
+                    or dicom_io.media_storage_sop_class_uid in sop_class_uids
                 ):
                     yield dicom_io
                 else:
@@ -104,7 +131,9 @@ class WsiDicomStreamOpener:
                 stream.close()
 
     def _open_streams(
-        self, path: Union[str, Path]
+        self,
+        path: Union[str, Path],
+        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
     ) -> Iterator[Union[BinaryIO, AbstractBufferedFile]]:
         """Open streams from path. If path is a directory, open all files in directory.
 
@@ -112,6 +141,8 @@ class WsiDicomStreamOpener:
         ----------
         path: Union[str, Path]
             Path to open.
+        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]]
+            Mode to open in.
 
         Returns
         -------
@@ -126,7 +157,7 @@ class WsiDicomStreamOpener:
         else:
             return
         for file in files:
-            yield self._open_stream(fs, file)
+            yield self._open_stream(fs, file, mode)
 
     def _open_filesystem(
         self, path: Union[str, Path]
@@ -146,7 +177,12 @@ class WsiDicomStreamOpener:
         fs, path = url_to_fs(str(path), **self._storage_kwargs or {})
         return fs, path  # type: ignore
 
-    def _open_stream(self, fs: AbstractFileSystem, path: str) -> AbstractBufferedFile:
+    def _open_stream(
+        self,
+        fs: AbstractFileSystem,
+        path: str,
+        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
+    ) -> AbstractBufferedFile:
         """Open stream from path.
 
         Parameters
@@ -155,10 +191,12 @@ class WsiDicomStreamOpener:
             Filesystem to open from.
         path: str
             Path to open.
+        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]]
+            Mode to open in.
 
         Returns
         -------
         AbstractBufferedFile
             Opened stream.
         """
-        return fs.open(path, "rb", **self._storage_kwargs or {})  # type: ignore
+        return fs.open(path, mode, **self._storage_kwargs or {})  # type: ignore

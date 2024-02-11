@@ -36,6 +36,7 @@ from pydicom.filewriter import write_dataset, write_file_meta_info, writers
 from pydicom.tag import BaseTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 from pydicom.valuerep import VR
+from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.tags import ExtendedOffsetTableTag
@@ -49,8 +50,7 @@ class WsiDicomIO(DicomIO):
         stream: Union[BinaryIO, AbstractBufferedFile],
         little_endian: bool = True,
         implicit_vr: bool = False,
-        filepath: Optional[Path] = None,
-        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]] = "rb",
+        filepath: Optional[UPath] = None,
         owned: bool = False,
     ):
         """
@@ -64,14 +64,13 @@ class WsiDicomIO(DicomIO):
             If to set the stream to little endian.
         implicit_vr: bool = False
             If to set the stream to implicit VR.
-        filepath: Optional[Path] = None
+        filepath: Optional[UPath] = None,
             Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
         """
         self._stream = cast(BinaryIO, stream)
-        if "r" in mode and not self._is_dicom():
-            raise WsiDicomFileError(str(filepath), "is not a DICOM file or stream.")
+        self._stream.seek(0)
         self._filepath = filepath
         self._owned = owned
         super().__init__(stream)
@@ -97,7 +96,7 @@ class WsiDicomIO(DicomIO):
 
         Parameters
         ----------
-        filepath: Path
+        filepath: UPath
             Path to file.
         Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
             Mode to open file in.
@@ -113,7 +112,7 @@ class WsiDicomIO(DicomIO):
         """
         stream = open(filepath, mode)
         return cls(
-            stream, little_endian, implicit_vr, filepath=filepath, mode=mode, owned=True
+            stream, little_endian, implicit_vr, filepath=UPath(filepath), owned=True
         )
 
     @property
@@ -127,7 +126,7 @@ class WsiDicomIO(DicomIO):
         return self._stream.closed
 
     @property
-    def filepath(self) -> Optional[Path]:
+    def filepath(self) -> Optional[UPath]:
         """Return filepath, if opened from file."""
         return self._filepath
 
@@ -146,6 +145,15 @@ class WsiDicomIO(DicomIO):
     @property
     def parent_read(self):
         return self._stream.read
+
+    @property
+    def is_dicom(self):
+        rewind = self.tell()
+        self.seek(0)
+        self.read(128)  # preamble
+        is_dicom = self.read(4) == b"DICM"
+        self.seek(rewind)
+        return is_dicom
 
     @property
     def media_storage_sop_class_uid(self) -> UID:
@@ -369,10 +377,3 @@ class WsiDicomIO(DicomIO):
             if self.tell() > element_value_position + length:
                 raise ValueError("Updated element is longer than original.")
         self.seek(rewind)
-
-    def _is_dicom(self) -> bool:
-        self.seek(0)
-        self.read(128)  # preamble
-        is_dicom = self.read(4) == b"DICM"
-        self.seek(0)
-        return is_dicom

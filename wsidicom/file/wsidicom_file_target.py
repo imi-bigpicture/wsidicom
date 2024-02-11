@@ -29,11 +29,13 @@ from wsidicom.file.io import (
     WsiDicomWriter,
 )
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
+from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.target import Target
+from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
 class WsiDicomFileTarget(Target):
@@ -241,7 +243,10 @@ class WsiDicomFileTarget(Target):
         return filepaths
 
     def _open_files(self, filepaths: Iterable[Path]) -> List[WsiInstance]:
-        readers = [WsiDicomReader.open(filepath) for filepath in filepaths]
+        readers = [
+            WsiDicomReader(stream)
+            for stream in WsiDicomStreamOpener().open(filepaths, WSI_SOP_CLASS_UID)
+        ]
         self._opened_files.extend(readers)
         return [
             WsiInstance(

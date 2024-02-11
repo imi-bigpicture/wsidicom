@@ -29,6 +29,7 @@ from typing import (
 
 from PIL.Image import Image
 from pydicom.uid import UID, generate_uid
+from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
@@ -265,7 +266,7 @@ class WsiDicom:
         return self._create_metadata(self._selected_pyramid)
 
     @property
-    def files(self) -> Optional[List[Path]]:
+    def files(self) -> Optional[List[UPath]]:
         """Return opened files if source is file-based."""
         if isinstance(self._source, WsiDicomFileSource):
             return self._source.files

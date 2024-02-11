@@ -31,7 +31,7 @@ class TestWsiDicomStreamOpener:
         wsi_folder, instances_count = wsi_folder_and_counts
 
         # Act
-        streams = list(WsiDicomStreamOpener([WSI_SOP_CLASS_UID]).open(wsi_folder))
+        streams = list(WsiDicomStreamOpener().open(wsi_folder, WSI_SOP_CLASS_UID))
         for stream in streams:
             stream.close()
 
@@ -47,7 +47,7 @@ class TestWsiDicomStreamOpener:
         files = list(wsi_folder.iterdir())
 
         # Act
-        streams = list(WsiDicomStreamOpener([WSI_SOP_CLASS_UID]).open(files))
+        streams = list(WsiDicomStreamOpener().open(files, WSI_SOP_CLASS_UID))
         for stream in streams:
             stream.close()
 
@@ -63,7 +63,7 @@ class TestWsiDicomStreamOpener:
         files = [open(file, "rb") for file in wsi_folder.iterdir() if file.is_file()]
 
         # Act
-        streams = list(WsiDicomStreamOpener([WSI_SOP_CLASS_UID]).open(files))
+        streams = list(WsiDicomStreamOpener().open(files, WSI_SOP_CLASS_UID))
         for stream in streams:
             stream.close()
 

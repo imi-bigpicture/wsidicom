@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 
 from pydicom.tag import Tag
 from pydicom.uid import UID
+from upath import UPath
 
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotSupportedError
@@ -127,7 +128,7 @@ class WsiDicomReader:
         return self.dataset.frame_count
 
     @property
-    def filepath(self) -> Optional[Path]:
+    def filepath(self) -> Optional[UPath]:
         """Return filename if stream is file."""
         return self._stream.filepath
 

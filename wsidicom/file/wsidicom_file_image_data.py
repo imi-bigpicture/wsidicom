@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import List, OrderedDict, Sequence, Union
 
 from pydicom.uid import UID
+from upath import UPath
 
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotFoundError
@@ -68,7 +69,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         return f"{type(self).__name__} of files {self._readers.values()}"
 
     @property
-    def files(self) -> List[Path]:
+    def files(self) -> List[UPath]:
         return [
             reader.filepath
             for reader in self._readers.values()
