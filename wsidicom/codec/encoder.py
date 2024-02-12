@@ -611,9 +611,10 @@ class PyJpegLsEncoder(Encoder[JpegLsSettings]):
         settings: JpegLsSettings
             Settings for the encoder.
         """
-        if settings.channels != Channels.GRAYSCALE:
-            # pylibjpeg-ls 1.1.0 does not handle interleaving correctly
-            raise ValueError(f"Unsupported channels: {settings.channels}.")
+        if settings.channels == Channels.GRAYSCALE:
+            self._interleave_mode = 0
+        else:
+            self._interleave_mode = 2
         super().__init__(settings)
 
     @property
@@ -626,6 +627,7 @@ class PyJpegLsEncoder(Encoder[JpegLsSettings]):
         return pylibjpeg_ls_encode(
             np.asarray(image),
             lossy_error=self.settings.level,
+            interleave_mode=self._interleave_mode,
         )
 
     @classmethod
@@ -634,10 +636,7 @@ class PyJpegLsEncoder(Encoder[JpegLsSettings]):
 
     @classmethod
     def supports_settings(cls, settings: Settings) -> bool:
-        return (
-            isinstance(settings, JpegLsSettings)
-            and settings.channels == Channels.GRAYSCALE
-        )
+        return isinstance(settings, JpegLsSettings)
 
 
 class PyLibJpegOpenJpegEncoder(Encoder[Jpeg2kSettings]):
