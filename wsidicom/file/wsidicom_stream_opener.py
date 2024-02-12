@@ -136,12 +136,18 @@ class WsiDicomStreamOpener:
             Opened streams.
         """
         fs, path = self._open_filesystem(path)
-        if fs.isdir(path):
-            files = (file for file in fs.ls(path) if fs.isfile(file))
-        elif fs.isfile(path):
+        if fs.isdir(str(path)):
+            files = (
+                UPath(file) for file in fs.ls(path, detail=False) if fs.isfile(file)
+            )
+        elif fs.isfile(str(path)):
             files = [path]
         else:
-            return
+            files = (
+                UPath(file)
+                for file in fs.glob(str(path))
+                if isinstance(file, str) and fs.isfile(file)
+            )
         for file in files:
             yield self._open_stream(fs, file, mode)
 
