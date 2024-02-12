@@ -239,7 +239,14 @@ class Decoder(metaclass=ABCMeta):
 class PillowDecoder(Decoder):
     """Decoder that uses Pillow to decode images."""
 
-    _supported_transfer_syntaxes = [JPEGBaseline8Bit, JPEG2000, JPEG2000Lossless]
+    _supported_transfer_syntaxes = [
+        JPEGBaseline8Bit,
+        JPEG2000,
+        JPEG2000Lossless,
+        HTJPEG2000,
+        HTJPEG2000Lossless,
+        HTJPEG2000RPCLLossless,
+    ]
 
     def decode(self, frame: bytes) -> Image:
         image = Pillow.open(io.BytesIO(frame))

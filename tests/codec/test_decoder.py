@@ -79,9 +79,9 @@ class TestPillowDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, True),
             (JPEG2000, True),
-            (HTJPEG2000Lossless, False),
-            (HTJPEG2000, False),
-            (HTJPEG2000RPCLLossless, False),
+            (HTJPEG2000Lossless, True),
+            (HTJPEG2000, True),
+            (HTJPEG2000RPCLLossless, True),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
