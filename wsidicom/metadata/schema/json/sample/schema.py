@@ -33,6 +33,26 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
 )
+from wsidicom.metadata.sample import (
+    BaseSpecimen,
+    Collection,
+    Embedding,
+    Fixation,
+    PreparationStep,
+    Processing,
+    Receiving,
+    Sample,
+    SampledSpecimen,
+    SampleLocalization,
+    Sampling,
+    SamplingLocation,
+    SlideSample,
+    Specimen,
+    SpecimenIdentifier,
+    Staining,
+    Storage,
+    UnknownSampling,
+)
 from wsidicom.metadata.schema.common import DataclassLoadingSchema, LoadingSchema
 from wsidicom.metadata.schema.json.fields import (
     CodeJsonField,
@@ -42,35 +62,15 @@ from wsidicom.metadata.schema.json.fields import (
     UidJsonField,
 )
 from wsidicom.metadata.schema.json.sample.model import (
-    SpecimenJsonModel,
+    BaseSpecimenJsonModel,
     PreparationAction,
     SampleJsonModel,
     SamplingConstraintJsonModel,
     SamplingJsonModel,
     SlideSampleJsonModel,
-    BaseSpecimenJsonModel,
+    SpecimenJsonModel,
 )
 from wsidicom.metadata.schema.json.sample.parser import SpecimenJsonParser
-from wsidicom.metadata.sample import (
-    Collection,
-    Embedding,
-    Specimen,
-    Fixation,
-    PreparationStep,
-    Processing,
-    Receiving,
-    Sample,
-    SampledSpecimen,
-    Sampling,
-    SamplingLocation,
-    SlideSample,
-    BaseSpecimen,
-    SpecimenIdentifier,
-    SampleLocalization,
-    Staining,
-    Storage,
-    UnknownSampling,
-)
 
 
 class SamplingLocationJsonSchema(LoadingSchema[SamplingLocation]):
@@ -173,19 +173,6 @@ class FixationJsonSchema(DataclassLoadingSchema[Fixation]):
         return Fixation
 
 
-class StainingJsonSchema(DataclassLoadingSchema[Staining]):
-    action = fields.Constant(PreparationAction.STAINING.value, dump_only=True)
-    substances = fields.List(
-        JsonFieldFactory.concept_code(SpecimenStainsCode)(), allow_none=True
-    )
-    date_time = fields.DateTime(allow_none=True)
-    description = fields.String(allow_none=True)
-
-    @property
-    def load_type(self) -> Type[Staining]:
-        return Staining
-
-
 class ReceivingJsonSchema(DataclassLoadingSchema[Receiving]):
     action = fields.Constant(PreparationAction.RECEIVING.value, dump_only=True)
     date_time = fields.DateTime(allow_none=True)
@@ -228,7 +215,6 @@ class PreparationStepJsonSchema(Schema):
         PreparationAction.PROCESSING: ProcessingJsonSchema,
         PreparationAction.EMBEDDING: EmbeddingJsonSchema,
         PreparationAction.FIXATION: FixationJsonSchema,
-        PreparationAction.STAINING: StainingJsonSchema,
         PreparationAction.RECEIVING: ReceivingJsonSchema,
         PreparationAction.STORAGE: StorageJsonSchema,
     }
@@ -268,6 +254,18 @@ class PreparationStepJsonSchema(Schema):
         """Select a schema and dump the step using the schema."""
         schema = self._type_to_schema_mapping[type(step)]
         return schema().dump(step, many=False)
+
+
+class StainingJsonSchema(DataclassLoadingSchema[Staining]):
+    substances = fields.List(
+        JsonFieldFactory.concept_code(SpecimenStainsCode)(), allow_none=True
+    )
+    date_time = fields.DateTime(allow_none=True)
+    description = fields.String(allow_none=True)
+
+    @property
+    def load_type(self) -> Type[Staining]:
+        return Staining
 
 
 class SpecimenJsonSchema(LoadingSchema[Specimen]):
