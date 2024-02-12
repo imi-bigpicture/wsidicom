@@ -98,7 +98,7 @@ class WsiDicomFileTarget(Target):
         """
         self._output_path = UPath(output_path)
         self._offset_table = offset_table
-        self._filepaths: List[Path] = []
+        self._filepaths: List[UPath] = []
         self._opened_files: List[WsiDicomReader] = []
         self._file_options = file_options
         super().__init__(
@@ -112,7 +112,7 @@ class WsiDicomFileTarget(Target):
         )
 
     @property
-    def filepaths(self) -> List[Path]:
+    def filepaths(self) -> List[UPath]:
         """Return filepaths for created files."""
         return self._filepaths
 

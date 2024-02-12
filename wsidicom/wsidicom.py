@@ -95,7 +95,8 @@ class WsiDicom:
         ----------
         path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
             Files to open. Can be a path for a single file, a list of paths for multiple
-            files, or a path to a folder containing files.
+            files, or a path to a folder containing files. Path can be local or an URL
+            supported by fsspec.
         file_options: Optional[Dict[str, Any]] = None
             Optional options for when opening files.
 
@@ -116,7 +117,8 @@ class WsiDicom:
         Parameters
         ----------
         path: UPath
-            Path to DICOMDIR file or directory with a DICOMDIR file.
+            Path to DICOMDIR file or directory with a DICOMDIR file. Path can be local
+            or an URL supported by fsspec.
         file_options: Optional[Dict[str, Any]] = None
             Optional options for when opening files.
 
@@ -215,7 +217,7 @@ class WsiDicom:
         label: Optional[Union[Image, Union[str, Path, UPath]]] = None,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
         file_options: Optional[Dict[str, Any]] = None,
-    ) -> List[Path]:
+    ) -> List[UPath]:
         """
         Save wsi as DICOM-files in path. Instances for the same pyramid
         level will be combined when possible to one file (e.g. not split
@@ -227,7 +229,7 @@ class WsiDicom:
         ----------
         output_path: Union[str, Path, UPath]
             Output folder to write files to. Should preferably be an dedicated folder
-            for the wsi.
+            for the wsi. Path can be local or an URL supported by fsspec.
         uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
             Function that can generate unique identifiers.
         workers: Optional[int] = None
@@ -262,7 +264,7 @@ class WsiDicom:
 
         Returns
         -------
-        List[Path]
+        List[UPath]
             List of paths of created files.
         """
         if workers is None:
@@ -318,8 +320,9 @@ class WsiDicom:
         Parameters
         ----------
         path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
-            Files to open. Can be a path or stream for a single file, a list of paths or
-            streams for multiple files, or a path to a folder containing files.
+            Files to open. Can be a path for a single file, a list of paths for multiple
+            files, or a path to a folder containing files. Path can be local or an URL
+            supported by fsspec.
         file_options: Optional[Dict[str, Any]] = None
             Optional options for when opening files.
 
@@ -341,8 +344,10 @@ class WsiDicom:
 
         Parameters
         ----------
-        path: Union[str, Iterable[str], Path, Iterable[Path]]
-            Path to files to test.
+        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+            Path to files to test. Path can be local or an URL supported by fsspec.
+        file_options: Optional[Dict[str, Any]] = None
+            Optional options for when opening files.
 
         Returns
             True if files in path have one level that can be read with WsiDicom.
