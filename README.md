@@ -39,6 +39,9 @@ Please note that this is an early release and the API is not frozen yet. Functio
   - JPEGBaseline8Bit
   - JPEG2000
   - JPEG2000Lossless
+  - HTJPEG2000
+  - HTJPEG2000Lossless
+  - HTJPEG2000RPCLLossless
   - ImplicitVRLittleEndian
   - ExplicitVRLittleEndian
   - ExplicitVRBigEndian
@@ -53,6 +56,8 @@ Please note that this is an early release and the API is not frozen yet. Functio
   - RLELossless
 
 - With pylibjpeg-rle RLELossless is additionally supported.
+
+- With pyjpegls JPEGLSLossless and JPEGLSNearLossless is additionally supported.
 
 - Optical path identifiers needs to be unique across instances.
 
