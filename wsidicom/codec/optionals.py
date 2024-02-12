@@ -30,14 +30,14 @@ try:
         JPEG2K,
         JPEG8,
         JPEGLS,
+        dicomrle_decode,
         jpeg2k_decode,
-        jpeg8_decode,
-        jpegls_decode,
         jpeg2k_encode,
+        jpeg8_decode,
         jpeg8_encode,
+        jpegls_decode,
         jpegls_encode,
         packbits_encode,
-        dicomrle_decode,
     )
 
     IMAGE_CODECS_AVAILABLE = True
@@ -55,3 +55,26 @@ except ImportError:
     jpegls_encode = None
     packbits_encode = None
     dicomrle_decode = None
+
+try:
+    from jpeg_ls import decode as pylibjpeg_ls_decode
+    from jpeg_ls import encode_array as pylibjpeg_ls_encode
+
+    PYLIBJPEGLS_AVAILABLE = True
+
+except ImportError:
+    pylibjpeg_ls_decode = None
+    pylibjpeg_ls_encode = None
+    PYLIBJPEGLS_AVAILABLE = False
+
+
+try:
+    from openjpeg.utils import decode as pylibjpeg_openjpeg_decode
+    from openjpeg.utils import encode as pylibjpeg_openjpeg_encode
+
+    PYLIBJPEGOPENJPEG_AVAILABLE = True
+
+except ImportError:
+    pylibjpeg_openjpeg_decode = None
+    pylibjpeg_openjpeg_encode = None
+    PYLIBJPEGOPENJPEG_AVAILABLE = False

@@ -48,9 +48,17 @@ from wsidicom.codec.decoder import (
     ImageCodecsRleDecoder,
     PillowDecoder,
     PydicomDecoder,
+    PyJpegLsDecoder,
+    PyLibJpegOpenJpegDecoder,
     PylibjpegRleDecoder,
 )
+from wsidicom.codec.optionals import (
+    IMAGE_CODECS_AVAILABLE,
+    PYLIBJPEGLS_AVAILABLE,
+    PYLIBJPEGOPENJPEG_AVAILABLE,
+)
 from wsidicom.geometry import Size
+from wsidicom.uid import HTJPEG2000, HTJPEG2000Lossless, HTJPEG2000RPCLLossless
 
 
 @pytest.mark.unittest
@@ -71,6 +79,9 @@ class TestPillowDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, True),
             (JPEG2000, True),
+            (HTJPEG2000Lossless, True),
+            (HTJPEG2000, True),
+            (HTJPEG2000RPCLLossless, True),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -140,10 +151,13 @@ class TestPydicomDecoder:
             (JPEGExtended12Bit, True),
             (JPEGLosslessP14, False),
             (JPEGLosslessSV1, False),
-            (JPEGLSLossless, False),
-            (JPEGLSNearLossless, False),
+            (JPEGLSLossless, PYLIBJPEGLS_AVAILABLE),
+            (JPEGLSNearLossless, PYLIBJPEGLS_AVAILABLE),
             (JPEG2000Lossless, True),
             (JPEG2000, True),
+            (HTJPEG2000Lossless, False),
+            (HTJPEG2000, False),
+            (HTJPEG2000RPCLLossless, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -203,14 +217,17 @@ class TestImageCodecsDecoder:
             (ExplicitVRLittleEndian, False),
             (DeflatedExplicitVRLittleEndian, False),
             (RLELossless, False),
-            (JPEGBaseline8Bit, ImageCodecsDecoder.is_available()),
-            (JPEGExtended12Bit, ImageCodecsDecoder.is_available()),
-            (JPEGLosslessP14, ImageCodecsDecoder.is_available()),
-            (JPEGLosslessSV1, ImageCodecsDecoder.is_available()),
-            (JPEGLSLossless, ImageCodecsDecoder.is_available()),
-            (JPEGLSNearLossless, ImageCodecsDecoder.is_available()),
-            (JPEG2000Lossless, ImageCodecsDecoder.is_available()),
-            (JPEG2000, ImageCodecsDecoder.is_available()),
+            (JPEGBaseline8Bit, IMAGE_CODECS_AVAILABLE),
+            (JPEGExtended12Bit, IMAGE_CODECS_AVAILABLE),
+            (JPEGLosslessP14, IMAGE_CODECS_AVAILABLE),
+            (JPEGLosslessSV1, IMAGE_CODECS_AVAILABLE),
+            (JPEGLSLossless, IMAGE_CODECS_AVAILABLE),
+            (JPEGLSNearLossless, IMAGE_CODECS_AVAILABLE),
+            (JPEG2000Lossless, IMAGE_CODECS_AVAILABLE),
+            (JPEG2000, IMAGE_CODECS_AVAILABLE),
+            (HTJPEG2000Lossless, IMAGE_CODECS_AVAILABLE),
+            (HTJPEG2000, IMAGE_CODECS_AVAILABLE),
+            (HTJPEG2000RPCLLossless, IMAGE_CODECS_AVAILABLE),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -298,6 +315,9 @@ class TestPylibjpegRleDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, False),
             (JPEG2000, False),
+            (HTJPEG2000Lossless, False),
+            (HTJPEG2000, False),
+            (HTJPEG2000RPCLLossless, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -358,6 +378,9 @@ class TestImagecodecsRleDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, False),
             (JPEG2000, False),
+            (HTJPEG2000Lossless, False),
+            (HTJPEG2000, False),
+            (HTJPEG2000RPCLLossless, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -395,3 +418,121 @@ class TestImagecodecsRleDecoder:
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:
             assert band_rms == 0
+
+
+@pytest.mark.unittest
+class TestPyJpegLsDecoder:
+    @pytest.mark.parametrize(
+        ["transfer_syntax", "expected_result"],
+        [
+            (JPEGLSLossless, PyJpegLsDecoder.is_available()),
+            (JPEGLSNearLossless, PyJpegLsDecoder.is_available()),
+        ],
+    )
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+        # Arrange
+
+        # Act
+        is_supported = PyJpegLsDecoder.is_supported(transfer_syntax, 3, 8)
+
+        # Assert
+        assert is_supported == expected_result
+
+    @pytest.mark.skipif(
+        not PyJpegLsDecoder.is_available(), reason="PyJpegLs codecs not available"
+    )
+    @pytest.mark.parametrize(
+        ["settings", "allowed_rms"],
+        [
+            (JpegLsSettings(0, 8, Channels.GRAYSCALE), 0),
+            (JpegLsSettings(0, 8, Channels.RGB), 0),
+            (JpegLsSettings(0, 16, Channels.GRAYSCALE), 0),
+            (JpegLsSettings(1, 8, Channels.GRAYSCALE), 1),
+            (JpegLsSettings(1, 8, Channels.RGB), 1),
+            (JpegLsSettings(1, 16, Channels.GRAYSCALE), 1),
+        ],
+    )
+    def test_decode(
+        self,
+        image: Image,
+        encoded: bytes,
+        settings: Settings,
+        allowed_rms: float,
+    ):
+        # Arrange
+        decoder = PyJpegLsDecoder()
+        if not decoder.is_available():
+            pytest.skip("PypegLs is not available")
+
+        # Act
+        decoded = decoder.decode(encoded)
+
+        # Assert
+        if settings.channels == Channels.GRAYSCALE:
+            image = image.convert("L")
+            decoded = decoded.convert("L")
+        diff = ImageChops.difference(decoded, image)
+        for band_rms in ImageStat.Stat(diff).rms:
+            assert band_rms <= allowed_rms
+
+
+@pytest.mark.unittest
+class TestPyLibJpegOpenJpegDecoder:
+    @pytest.mark.parametrize(
+        ["transfer_syntax", "expected_result"],
+        [
+            (JPEG2000Lossless, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (JPEG2000, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJPEG2000Lossless, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJPEG2000, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJPEG2000RPCLLossless, PYLIBJPEGOPENJPEG_AVAILABLE),
+        ],
+    )
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+        # Arrange
+
+        # Act
+        is_supported = PyLibJpegOpenJpegDecoder.is_supported(transfer_syntax, 3, 8)
+
+        # Assert
+        assert is_supported == expected_result
+
+    @pytest.mark.skipif(
+        not PyLibJpegOpenJpegDecoder.is_available(),
+        reason="OpenJpeg codecs not available",
+    )
+    @pytest.mark.parametrize(
+        ["settings", "allowed_rms"],
+        [
+            (Jpeg2kSettings(80, 8, Channels.GRAYSCALE), 1),
+            (Jpeg2kSettings(80, 8, Channels.YBR), 1),
+            (Jpeg2kSettings(80, 8, Channels.RGB), 1),
+            (Jpeg2kSettings(80, 16, Channels.GRAYSCALE), 1),
+            (Jpeg2kSettings(0, 8, Channels.GRAYSCALE), 0),
+            (Jpeg2kSettings(0, 8, Channels.YBR), 0),
+            (Jpeg2kSettings(0, 8, Channels.RGB), 0),
+            (Jpeg2kSettings(0, 16, Channels.GRAYSCALE), 0),
+        ],
+    )
+    def test_decode(
+        self,
+        image: Image,
+        encoded: bytes,
+        settings: Settings,
+        allowed_rms: float,
+    ):
+        # Arrange
+        decoder = PyLibJpegOpenJpegDecoder()
+        if not decoder.is_available():
+            pytest.skip("OpenJpeg is not available")
+
+        # Act
+        decoded = decoder.decode(encoded)
+
+        # Assert
+        if settings.channels == Channels.GRAYSCALE:
+            image = image.convert("L")
+            decoded = decoded.convert("L")
+        diff = ImageChops.difference(decoded, image)
+        for band_rms in ImageStat.Stat(diff).rms:
+            assert band_rms <= allowed_rms

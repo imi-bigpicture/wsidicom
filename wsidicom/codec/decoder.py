@@ -38,20 +38,24 @@ from pydicom.uid import (
 )
 
 from wsidicom import config
-from wsidicom.codec.rle import RleCodec
-from wsidicom.geometry import Size
-
 from wsidicom.codec.optionals import (
+    IMAGE_CODECS_AVAILABLE,
     JPEG2K,
     JPEG8,
     JPEGLS,
+    PYLIBJPEGLS_AVAILABLE,
+    PYLIBJPEGOPENJPEG_AVAILABLE,
+    PYLIBJPEGRLE_AVAILABLE,
     jpeg2k_decode,
     jpeg8_decode,
     jpegls_decode,
-    IMAGE_CODECS_AVAILABLE,
-    PYLIBJPEGRLE_AVAILABLE,
+    pylibjpeg_ls_decode,
+    pylibjpeg_openjpeg_decode,
     rle_decode_frame,
 )
+from wsidicom.codec.rle import RleCodec
+from wsidicom.geometry import Size
+from wsidicom.uid import HTJPEG2000, HTJPEG2000Lossless, HTJPEG2000RPCLLossless
 
 
 class Decoder(metaclass=ABCMeta):
@@ -163,6 +167,10 @@ class Decoder(metaclass=ABCMeta):
                 bits_stored=bits,
                 photometric_interpretation=photometric_interpretation,
             )
+        elif decoder == PyJpegLsDecoder:
+            return PyJpegLsDecoder()
+        elif decoder == PyLibJpegOpenJpegDecoder:
+            return PyLibJpegOpenJpegDecoder()
         raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}")
 
     @classmethod
@@ -194,6 +202,8 @@ class Decoder(metaclass=ABCMeta):
             "imagecodecs": ImageCodecsDecoder,
             "pylibjpeg_rle": PylibjpegRleDecoder,
             "imagecodecs_rle": ImageCodecsRleDecoder,
+            "pylibjpeg_ls": PyJpegLsDecoder,
+            "pylibjpeg_openjpeg": PyLibJpegOpenJpegDecoder,
             "pydicom": PydicomDecoder,
         }
         if config.settings.prefered_decoder is not None:
@@ -229,7 +239,14 @@ class Decoder(metaclass=ABCMeta):
 class PillowDecoder(Decoder):
     """Decoder that uses Pillow to decode images."""
 
-    _supported_transfer_syntaxes = [JPEGBaseline8Bit, JPEG2000, JPEG2000Lossless]
+    _supported_transfer_syntaxes = [
+        JPEGBaseline8Bit,
+        JPEG2000,
+        JPEG2000Lossless,
+        HTJPEG2000,
+        HTJPEG2000Lossless,
+        HTJPEG2000RPCLLossless,
+    ]
 
     def decode(self, frame: bytes) -> Image:
         image = Pillow.open(io.BytesIO(frame))
@@ -384,6 +401,9 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
         JPEGLSNearLossless: (jpegls_decode, JPEGLS),
         JPEG2000Lossless: (jpeg2k_decode, JPEG2K),
         JPEG2000: (jpeg2k_decode, JPEG2K),
+        HTJPEG2000: (jpeg2k_decode, JPEG2K),
+        HTJPEG2000Lossless: (jpeg2k_decode, JPEG2K),
+        HTJPEG2000RPCLLossless: (jpeg2k_decode, JPEG2K),
     }
 
     def __init__(self, transfer_syntax: UID) -> None:
@@ -502,3 +522,51 @@ class PylibjpegRleDecoder(RleDecoder):
         if self._samples_per_pixel == 3:
             decoded = decoded.transpose((1, 2, 0))
         return decoded
+
+
+class PyJpegLsDecoder(NumpyBasedDecoder):
+    """Decoder that uses pyjpegls to decode images."""
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return PYLIBJPEGLS_AVAILABLE
+
+    def _decode(self, frame: bytes) -> np.ndarray:
+        if not self.is_available():
+            raise RuntimeError("Pylibjpeg not available.")
+        return pylibjpeg_ls_decode(np.frombuffer(frame, dtype=np.uint8))
+
+    @classmethod
+    def is_supported(
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
+    ) -> bool:
+        if not cls.is_available():
+            return False
+        return transfer_syntax in [JPEGLSNearLossless, JPEGLSLossless]
+
+
+class PyLibJpegOpenJpegDecoder(NumpyBasedDecoder):
+    """Decoder that uses pylibjpeg-openjpeg to decode images."""
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return PYLIBJPEGOPENJPEG_AVAILABLE
+
+    def _decode(self, frame: bytes) -> np.ndarray:
+        if not self.is_available():
+            raise RuntimeError("Pylibjpeg-openjpeg not available.")
+        return pylibjpeg_openjpeg_decode(frame)
+
+    @classmethod
+    def is_supported(
+        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
+    ) -> bool:
+        if not cls.is_available():
+            return False
+        return transfer_syntax in [
+            JPEG2000,
+            JPEG2000Lossless,
+            HTJPEG2000,
+            HTJPEG2000Lossless,
+            HTJPEG2000RPCLLossless,
+        ]
