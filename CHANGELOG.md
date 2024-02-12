@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Support for opening files using [fsspec](https://filesystem-spec.readthedocs.io/).
+- Support for decoding HT-JPEG2000 using Pillow, imagecodecs and/or pylibjpeg-openjpeg .
+- Optional codec pyjpegls for JPEG-LS support.
+
+### Fixed
+
+- Handling of non-conformat DICOM Web responses.
 
 ## [0.18.3] - 2024-01-22
 

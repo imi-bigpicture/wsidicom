@@ -85,9 +85,9 @@ class WsiDicomWebSource(Source):
         self._label_instances: List[WsiInstance] = []
         self._overview_instances: List[WsiInstance] = []
         self._annotation_instances: List[AnnotationInstance] = []
-        detected_transfer_syntaxes_by_image_type: Dict[
-            ImageType, Set[UID]
-        ] = defaultdict(set)
+        detected_transfer_syntaxes_by_image_type: Dict[ImageType, Set[UID]] = (
+            defaultdict(set)
+        )
 
         def create_instance(
             uids: Tuple[UID, UID, UID, Optional[Set[UID]]]
