@@ -16,10 +16,14 @@
 
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Sequence, Union
+
 from pydicom.uid import (
     JPEG2000,
     UID,
+    ExplicitVRBigEndian,
+    ExplicitVRLittleEndian,
+    ImplicitVRLittleEndian,
     JPEG2000Lossless,
     JPEGBaseline8Bit,
     JPEGExtended12Bit,
@@ -27,9 +31,6 @@ from pydicom.uid import (
     JPEGLosslessSV1,
     JPEGLSLossless,
     JPEGLSNearLossless,
-    ExplicitVRLittleEndian,
-    ExplicitVRBigEndian,
-    ImplicitVRLittleEndian,
     RLELossless,
 )
 
@@ -205,7 +206,7 @@ class Settings(metaclass=ABCMeta):
         if transfer_syntax in jpeg_2000_transfer_syntaxes:
             if transfer_syntax == JPEG2000:
                 return Jpeg2kSettings(bits=bits, channels=channels)
-            return Jpeg2kSettings(level=0, bits=bits, channels=channels)
+            return Jpeg2kSettings(levels=0, bits=bits, channels=channels)
         if transfer_syntax == RLELossless:
             return RleSettings(bits=bits, channels=channels)
         if transfer_syntax in uncompressed_transfer_syntaxes:
@@ -382,38 +383,43 @@ class JpegLsSettings(Settings):
 
 class Jpeg2kSettings(Settings):
     def __init__(
-        self, level: int = 80, bits: int = 8, channels: Channels = Channels.YBR
+        self,
+        levels: Union[int, Sequence[int]] = 80,
+        bits: int = 8,
+        channels: Channels = Channels.YBR,
     ):
         """
         Initialize JPEG 2000 encoding settings.
 
         Parameters:
         ----------
-            level: int = 80
-                JPEG 2000 compression level in dB. Set to < 1 or > 1000 for lossless.
+            levels: Union[float, Sequence[float]] = 80.0
+                JPEG 2000 compression levels in dB. Set to 0.
             bits: int = 8
                 Number of bits per pixel.
             channels: Channels = Channels.YBR
                 Color channels in encoded image.
         """
-        self._level = level
+        if isinstance(levels, int):
+            levels = [levels]
+        self._levels = levels
         super().__init__(bits, channels)
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(level={self.level}, bits={self.bits}, "
+            f"{self.__class__.__name__}(levels={self.levels}, bits={self.bits}, "
             f"channels={self.channels})"
         )
 
     @property
-    def level(self) -> int:
+    def levels(self) -> Sequence[int]:
         """Return level."""
-        return self._level
+        return self._levels
 
     @property
     def lossless(self) -> bool:
         """Return True if lossless, else False."""
-        return self.level < 1 or self.level > 1000
+        return self.levels[-1] == 0
 
     @property
     def transfer_syntax(self) -> UID:
