@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Handling of non-conformat DICOM Web responses.
+
 ## [0.18.3] - 2024-01-22
 
 ### Fixed
