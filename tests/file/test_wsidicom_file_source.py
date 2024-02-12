@@ -32,7 +32,7 @@ class TestWsiDicomFileSource:
         wsi_folder, level_count, label, overview = wsi_folder_and_counts
 
         # Act
-        with WsiDicomFileSource(wsi_folder) as source:
+        with WsiDicomFileSource.open(wsi_folder) as source:
             instances = list(source.level_instances)
             label_instances = list(source.label_instances)
             overview_instances = list(source.overview_instances)

@@ -49,28 +49,19 @@ from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
 class WsiDicomFileSource(Source):
     """Source reading WSI DICOM file instances."""
 
-    def __init__(
-        self,
-        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
-        storage_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> None:
+    def __init__(self, streams: Iterable[WsiDicomIO]) -> None:
         """Create a WsiDicomFileSource.
 
         Parameters
         ----------
-        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
-            Files to open. Can be a path or stream for a single file, a list of paths or
-            streams for multiple files, or a path to a folder containing files.
-        storage_kwargs: Optional[Dict[str, Any]] = None
-            Keyword arguments for opening files.
+        streams: Iterable[WsiDicomIO]
+            Opened streams to read from.
         """
         self._levels: List[WsiDicomReader] = []
         self._labels: List[WsiDicomReader] = []
         self._overviews: List[WsiDicomReader] = []
         self._annotations: List[WsiDicomIO] = []
-        for stream in WsiDicomStreamOpener().open(
-            files, [WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID]
-        ):
+        for stream in streams:
             try:
                 if stream.media_storage_sop_class_uid == WSI_SOP_CLASS_UID:
                     try:
@@ -91,10 +82,9 @@ class WsiDicomFileSource(Source):
                 logging.error(
                     f"Failed to open file {stream} due to exception.", exc_info=True
                 )
-                if stream.owned:
-                    stream.close()
+                stream.close()
         if len(self._levels) == 0:
-            raise WsiDicomNotFoundError("Level files", str(files))
+            raise WsiDicomNotFoundError("Level files", "provided files")
         self._base_dataset = self._get_base_dataset(self._levels)
         self._slide_uids = self._base_dataset.uids.slide
         self._base_tile_size = self._base_dataset.tile_size
@@ -128,19 +118,6 @@ class WsiDicomFileSource(Source):
             AnnotationInstance.open_dataset(file.read_dataset())
             for file in self._annotations
         )
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
-
-    def close(self) -> None:
-        """Close all opened readers in the source. Does not close provided streams."""
-        for reader in self.readers:
-            reader.close()
-        for annotation in self._annotations:
-            annotation.close()
 
     @property
     def readers(self) -> List[WsiDicomReader]:
@@ -188,18 +165,36 @@ class WsiDicomFileSource(Source):
         return len(self._levels) > 0
 
     @classmethod
+    def open(
+        cls,
+        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
+        file_options: Optional[Dict[str, Any]] = None,
+    ) -> "WsiDicomFileSource":
+        streams = WsiDicomStreamOpener(file_options).open(
+            files, [WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID]
+        )
+        return cls(streams)
+
+    @classmethod
+    def open_streams(
+        cls,
+        streams: Iterable[BinaryIO],
+    ) -> "WsiDicomFileSource":
+        return cls((WsiDicomIO(stream) for stream in streams))
+
+    @classmethod
     def open_dicomdir(
         cls,
-        path: Union[str, Path],
-        storage_kwargs: Optional[Dict[str, Any]] = None,
-    ):
+        path: Union[str, Path, UPath],
+        file_options: Optional[Dict[str, Any]] = None,
+    ) -> "WsiDicomFileSource":
         """Open a DICOMDIR file and return a WsiDicomFileSource for contained files.
 
         Parameters
         ----------
-        path: Union[str, Path]
+        path: Union[str, Path, UPath]
             Path to DICOMDIR file.
-        storage_kwargs: Optional[Dict[str, Any]] = None
+        file_options: Optional[Dict[str, Any]] = None
             Keyword arguments for opening files.
 
         Returns
@@ -213,7 +208,20 @@ class WsiDicomFileSource(Source):
             fileset = FileSet(dicomdir)
             files.extend(file.path for file in fileset)
             stream.close()
-        return cls(files, storage_kwargs=storage_kwargs)
+        return cls.open(files, file_options=file_options)
+
+    def close(self) -> None:
+        """Close all opened readers in the source. Does not close provided streams."""
+        for reader in self.readers:
+            reader.close()
+        for annotation in self._annotations:
+            annotation.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
 
     @staticmethod
     def _get_base_dataset(files: Iterable[WsiDicomReader]) -> WsiDataset:

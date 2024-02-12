@@ -17,8 +17,10 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from typing import (
+    Any,
     BinaryIO,
     Callable,
+    Dict,
     Iterable,
     List,
     Optional,
@@ -67,8 +69,6 @@ class WsiDicom:
         ----------
         source: Source
             A source providing instances for the wsi to open.
-        label: Optional[Union[Image, str, Path]] = None
-            Optional label image to use instead of label found in source.
         source_owned: bool = False
             If source should be closed by this instance if used in a context manager.
         """
@@ -84,7 +84,54 @@ class WsiDicom:
     @classmethod
     def open(
         cls,
-        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
+        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
+        file_options: Optional[Dict[str, Any]] = None,
+    ) -> "WsiDicom":
+        """Open valid WSI DICOM files in path and return a WsiDicom object.
+
+        Non-valid files are ignored.
+
+        Parameters
+        ----------
+        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+            Files to open. Can be a path for a single file, a list of paths for multiple
+            files, or a path to a folder containing files.
+        file_options: Optional[Dict[str, Any]] = None
+            Optional options for when opening files.
+
+        Returns
+        -------
+        WsiDicom
+            WsiDicom created from WSI DICOM files in path.
+        """
+        source = WsiDicomFileSource.open(path, file_options)
+        return cls(source, True)
+
+    @classmethod
+    def open_dicomdir(
+        cls, path: UPath, file_options: Optional[Dict[str, Any]] = None
+    ) -> "WsiDicom":
+        """Open WSI DICOM files in DICOMDIR and return a WsiDicom object.
+
+        Parameters
+        ----------
+        path: UPath
+            Path to DICOMDIR file or directory with a DICOMDIR file.
+        file_options: Optional[Dict[str, Any]] = None
+            Optional options for when opening files.
+
+        Returns
+        -------
+        WsiDicom
+            WsiDicom created from WSI DICOM files in DICOMDIR.
+        """
+        source = WsiDicomFileSource.open_dicomdir(path, file_options)
+        return cls(source, True)
+
+    @classmethod
+    def open_streams(
+        cls,
+        streams: Iterable[BinaryIO],
     ) -> "WsiDicom":
         """Open valid WSI DICOM files in path or stream and return a WsiDicom object.
 
@@ -93,17 +140,16 @@ class WsiDicom:
 
         Parameters
         ----------
-        files: Union[str, Path, BinaryIO, Iterable[Union[str, Path, BinaryIO]]],
-            Files to open. Can be a path or stream for a single file, a list of paths or
-            streams for multiple files, or a path to a folder containing files.
+        streams: Iterable[BinaryIO],
+            Streams to open.
 
         Returns
         -------
         WsiDicom
             WsiDicom created from WSI DICOM files in path.
         """
-        source = WsiDicomFileSource(files)
-        return cls(source, True)
+        source = WsiDicomFileSource.open_streams(streams)
+        return cls(source, False)
 
     @classmethod
     def open_web(
@@ -154,37 +200,155 @@ class WsiDicom:
         )
         return cls(source, True)
 
-    @classmethod
-    def open_dicomdir(cls, path: Union[str, Path]) -> "WsiDicom":
-        """Open WSI DICOM files in DICOMDIR and return a WsiDicom object.
+    def save(
+        self,
+        output_path: Union[str, Path, UPath],
+        uid_generator: Callable[..., UID] = generate_uid,
+        workers: Optional[int] = None,
+        chunk_size: Optional[int] = None,
+        offset_table: Optional[Union["str", OffsetTableType]] = None,
+        include_pyramids: Optional[Sequence[int]] = None,
+        include_levels: Optional[Sequence[int]] = None,
+        include_labels: bool = True,
+        include_overviews: bool = True,
+        add_missing_levels: bool = False,
+        label: Optional[Union[Image, Union[str, Path, UPath]]] = None,
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        file_options: Optional[Dict[str, Any]] = None,
+    ) -> List[Path]:
+        """
+        Save wsi as DICOM-files in path. Instances for the same pyramid
+        level will be combined when possible to one file (e.g. not split
+        for optical paths or focal planes). If instances are sparse tiled they
+        will be converted to full tiled by inserting blank tiles. All instance uids will
+        be changed.
 
         Parameters
         ----------
-        path: Union[str, Path]
-            Path to DICOMDIR file or directory with a DICOMDIR file.
+        output_path: Union[str, Path, UPath]
+            Output folder to write files to. Should preferably be an dedicated folder
+            for the wsi.
+        uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
+            Function that can generate unique identifiers.
+        workers: Optional[int] = None
+            Maximum number of thread workers to use.
+        chunk_size: Optional[int] = None
+            Chunk size (number of tiles) to process at a time. Actual chunk
+            size also depends on minimun_chunk_size from image_data.
+        offset_table: Optional[Union["str", OffsetTableType]] = None,
+            Offset table to use, defined either by string (`empty`, `bot`, `eot`, or
+            `none`) or `OffsetTableType` enum. Default to None, which will use
+            `bot` for encapsulated  syntaxes and `none` for non-encapsulated transfer
+            syntaxes.
+        include_pyramids: Optional[Sequence[int]] = None
+            Optional list of indices (in present pyramids) to include.
+        include_levels: Optional[Sequence[int]] = None
+            Optional list of indices (in all pyramids) to include, e.g. [0, 1]
+            includes the two lowest levels. Negative indicies can be used,
+            e.g. [-1, -2] includes the two highest levels.
+        include_labels: bool = True
+            If to include label series.
+        include_overviews: bool = True
+            If to include overview series.
+        add_missing_levels: bool = False
+            If to add missing dyadic levels up to the single tile level.
+        label: Optional[Union[Image, Union[str, Path, UPath]]] = None
+            Optional label image to use instead of present label (if any).
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+            Optional settings or encoder for transcoding image data. If None, image data
+            will be copied as is.
+        file_options: Optional[Dict[str, Any]] = None
+            Optional options for saving files to output path.
 
         Returns
         -------
-        WsiDicom
-            WsiDicom created from WSI DICOM files in DICOMDIR.
+        List[Path]
+            List of paths of created files.
         """
-        source = WsiDicomFileSource.open_dicomdir(path)
-        return cls(source, True)
+        if workers is None:
+            cpus = os.cpu_count()
+            if cpus is None:
+                workers = 1
+            else:
+                workers = cpus
+        if chunk_size is None:
+            chunk_size = 16
+        if isinstance(offset_table, str):
+            offset_table = OffsetTableType.from_string(offset_table)
+        with WsiDicomFileTarget(
+            output_path,
+            uid_generator,
+            workers,
+            chunk_size,
+            offset_table,
+            include_pyramids,
+            include_levels,
+            add_missing_levels,
+            transcoding,
+            file_options,
+        ) as target:
+            target.save_pyramids(self.pyramids)
+            if include_overviews and self.overviews is not None:
+                target.save_overviews(self.overviews)
+            if include_labels:
+                if label is not None:
+                    label_instances = [
+                        WsiInstance.create_label(
+                            label,
+                            self._source.base_dataset,
+                        )
+                    ]
+                    labels = Labels.open(label_instances)
+                else:
+                    labels = self.labels
+                if labels is not None:
+                    target.save_labels(labels)
+            return target.filepaths
 
-    def __enter__(self):
-        return self
+    @classmethod
+    def is_ready_for_viewing(
+        cls,
+        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
+        file_options: Optional[Dict[str, Any]] = None,
+    ) -> Optional[bool]:
+        """
+        Return true if files in path are formatted for fast viewing, i.e.
+        have TILED_FULL tile arrangement and have an offset table.
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        Parameters
+        ----------
+        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+            Files to open. Can be a path or stream for a single file, a list of paths or
+            streams for multiple files, or a path to a folder containing files.
+        file_options: Optional[Dict[str, Any]] = None
+            Optional options for when opening files.
 
-    def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}({self.pyramids}, {self.labels}"
-            f"{self.overviews}, {self.annotations})"
-        )
+        Returns
+            True if files in path are formatted for fast viewing, None if no DICOM WSI
+            files are in the path.
+        """
+        source = WsiDicomFileSource.open(path, file_options)
+        return source.is_ready_for_viewing
 
-    def __str__(self) -> str:
-        return self.pretty_str()
+    @classmethod
+    def is_supported(
+        cls,
+        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
+        file_options: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Return true if files in path have at least one level that can be read with
+        WsiDicom.
+
+        Parameters
+        ----------
+        path: Union[str, Iterable[str], Path, Iterable[Path]]
+            Path to files to test.
+
+        Returns
+            True if files in path have one level that can be read with WsiDicom.
+        """
+        source = WsiDicomFileSource.open(path, file_options)
+        return source.contains_levels
 
     @property
     def size(self) -> Size:
@@ -646,110 +810,6 @@ class WsiDicom:
         if self._source_owned:
             self._source.close()
 
-    def save(
-        self,
-        output_path: Union[str, Path],
-        uid_generator: Callable[..., UID] = generate_uid,
-        workers: Optional[int] = None,
-        chunk_size: Optional[int] = None,
-        offset_table: Optional[Union["str", OffsetTableType]] = None,
-        include_pyramids: Optional[Sequence[int]] = None,
-        include_levels: Optional[Sequence[int]] = None,
-        include_labels: bool = True,
-        include_overviews: bool = True,
-        add_missing_levels: bool = False,
-        label: Optional[Union[Image, str, Path]] = None,
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
-    ) -> List[Path]:
-        """
-        Save wsi as DICOM-files in path. Instances for the same pyramid
-        level will be combined when possible to one file (e.g. not split
-        for optical paths or focal planes). If instances are sparse tiled they
-        will be converted to full tiled by inserting blank tiles. All instance uids will
-        be changed.
-
-        Parameters
-        ----------
-        output_path: Union[str, Path]
-            Output folder to write files to. Should preferably be an dedicated folder
-            for the wsi.
-        uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
-            Function that can generate unique identifiers.
-        workers: Optional[int] = None
-            Maximum number of thread workers to use.
-        chunk_size: Optional[int] = None
-            Chunk size (number of tiles) to process at a time. Actual chunk
-            size also depends on minimun_chunk_size from image_data.
-        offset_table: Optional[Union["str", OffsetTableType]] = None,
-            Offset table to use, defined either by string (`empty`, `bot`, `eot`, or
-            `none`) or `OffsetTableType` enum. Default to None, which will use
-            `bot` for encapsulated  syntaxes and `none` for non-encapsulated transfer
-            syntaxes.
-        include_pyramids: Optional[Sequence[int]] = None
-            Optional list of indices (in present pyramids) to include.
-        include_levels: Optional[Sequence[int]] = None
-            Optional list of indices (in all pyramids) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indicies can be used,
-            e.g. [-1, -2] includes the two highest levels.
-        include_labels: bool = True
-            If to include label series.
-        include_overviews: bool = True
-            If to include overview series.
-        add_missing_levels: bool = False
-            If to add missing dyadic levels up to the single tile level.
-        label: Optional[Union[Image, str, Path]] = None
-            Optional label image to use instead of present label (if any).
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
-            Optional settings or encoder for transcoding image data. If None, image data
-            will be copied as is.
-
-        Returns
-        -------
-        List[Path]
-            List of paths of created files.
-        """
-        if workers is None:
-            cpus = os.cpu_count()
-            if cpus is None:
-                workers = 1
-            else:
-                workers = cpus
-        if chunk_size is None:
-            chunk_size = 16
-        if isinstance(output_path, str):
-            output_path = Path(output_path)
-        os.makedirs(output_path, exist_ok=True)
-        if isinstance(offset_table, str):
-            offset_table = OffsetTableType.from_string(offset_table)
-        with WsiDicomFileTarget(
-            output_path,
-            uid_generator,
-            workers,
-            chunk_size,
-            offset_table,
-            include_pyramids,
-            include_levels,
-            add_missing_levels,
-            transcoding,
-        ) as target:
-            target.save_pyramids(self.pyramids)
-            if include_overviews and self.overviews is not None:
-                target.save_overviews(self.overviews)
-            if include_labels:
-                if label is not None:
-                    label_instances = [
-                        WsiInstance.create_label(
-                            label,
-                            self._source.base_dataset,
-                        )
-                    ]
-                    labels = Labels.open(label_instances)
-                else:
-                    labels = self.labels
-                if labels is not None:
-                    target.save_labels(labels)
-            return target.filepaths
-
     def _validate_collection(self) -> SlideUids:
         """
         Check that no files or instance in collection is duplicate, and, if
@@ -790,43 +850,20 @@ class WsiDicom:
                     logging.warning("Annotations uids does not match.")
         return slide_uids
 
-    @classmethod
-    def is_ready_for_viewing(
-        cls, path: Union[str, Iterable[str], Path, Iterable[Path]]
-    ) -> Optional[bool]:
-        """
-        Return true if files in path are formatted for fast viewing, i.e.
-        have TILED_FULL tile arrangement and have an offset table.
+    def __enter__(self):
+        return self
 
-        Parameters
-        ----------
-        path: Union[str, Iterable[str], Path, Iterable[Path]]
-            Path to files to test.
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
-        Returns
-            True if files in path are formatted for fast viewing, None if no DICOM WSI
-            files are in the path.
-        """
-        source = WsiDicomFileSource(path)
-        return source.is_ready_for_viewing
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}({self.pyramids}, {self.labels}"
+            f"{self.overviews}, {self.annotations})"
+        )
 
-    @classmethod
-    def is_supported(
-        cls, path: Union[str, Iterable[str], Path, Iterable[Path]]
-    ) -> bool:
-        """Return true if files in path have at least one level that can be read with
-        WsiDicom.
-
-        Parameters
-        ----------
-        path: Union[str, Iterable[str], Path, Iterable[Path]]
-            Path to files to test.
-
-        Returns
-            True if files in path have one level that can be read with WsiDicom.
-        """
-        source = WsiDicomFileSource(path)
-        return source.contains_levels
+    def __str__(self) -> str:
+        return self.pretty_str()
 
     @lru_cache
     def _create_metadata(self, pyramid_index: int) -> WsiMetadata:

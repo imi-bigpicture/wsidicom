@@ -22,6 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import pytest
 from dicomweb_client import DICOMfileClient
 from pydicom.uid import JPEGBaseline8Bit
+from upath import UPath
 
 from tests.data_gen import create_layer_file
 from wsidicom import WsiDicom
@@ -163,7 +164,7 @@ def wsi_factory():
         wsi_name: str, input_type: WsiInputType = WsiInputType.FILE
     ) -> WsiDicom:
         test_definition = WsiTestDefinitions.test_definitions[wsi_name]
-        folder = Path(SLIDE_FOLDER).joinpath(wsi_name, test_definition["path"])
+        folder = UPath(SLIDE_FOLDER).joinpath(wsi_name, test_definition["path"])
         if (input_type, folder) in wsis:
             return wsis[(input_type, folder)]
         if not folder.exists():
@@ -183,7 +184,7 @@ def wsi_factory():
             )
         elif input_type == WsiInputType.STREAM:
             streams = [open(file, "rb") for file in folder.iterdir() if file.is_file()]
-            wsi = WsiDicom.open(streams)
+            wsi = WsiDicom.open_streams(streams)
         else:
             raise NotImplementedError()
         wsis[(input_type, folder)] = wsi

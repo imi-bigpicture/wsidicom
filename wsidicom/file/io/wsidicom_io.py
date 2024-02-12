@@ -50,7 +50,7 @@ class WsiDicomIO(DicomIO):
         stream: Union[BinaryIO, AbstractBufferedFile],
         little_endian: bool = True,
         implicit_vr: bool = False,
-        filepath: Optional[UPath] = None,
+        filepath: Optional[Union[str, Path, UPath]] = None,
         owned: bool = False,
     ):
         """
@@ -64,14 +64,14 @@ class WsiDicomIO(DicomIO):
             If to set the stream to little endian.
         implicit_vr: bool = False
             If to set the stream to implicit VR.
-        filepath: Optional[UPath] = None,
+        filepath: Optional[Union[str, Path, UPath]] = None,
             Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
         """
         self._stream = cast(BinaryIO, stream)
         self._stream.seek(0)
-        self._filepath = filepath
+        self._filepath = UPath(filepath) if filepath else None
         self._owned = owned
         super().__init__(stream)
         self.is_little_endian = little_endian

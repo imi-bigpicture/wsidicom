@@ -32,7 +32,6 @@ from pydicom.uid import (
     JPEGBaseline8Bit,
     generate_uid,
 )
-from upath import UPath
 
 from wsidicom.file.io import (
     OffsetTableType,
@@ -96,7 +95,7 @@ class WsiDicomTestReader(WsiDicomReader):
     ) -> "WsiDicomTestReader":
         stream = WsiDicomIO(
             open(filepath, "rb"),
-            filepath=UPath(filepath),
+            filepath=filepath,
             owned=True,
         )
         return cls(

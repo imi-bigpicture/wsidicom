@@ -18,6 +18,7 @@ from typing import Optional, Union
 from PIL import Image as Pillow
 from PIL.Image import Image
 from pydicom.uid import UID, JPEGBaseline8Bit
+from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.geometry import (
@@ -40,8 +41,8 @@ class PillowImageData(ImageData):
         super().__init__(encoder)
 
     @classmethod
-    def from_file(cls, file: Union[str, Path]) -> "PillowImageData":
-        image = Pillow.open(file)
+    def from_file(cls, file: Union[str, Path, UPath]) -> "PillowImageData":
+        image = Pillow.open(UPath(file).open("rb"))
         return cls(image)
 
     @property

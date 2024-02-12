@@ -18,6 +18,7 @@ from abc import abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import (
+    Any,
     Dict,
     Iterable,
     Iterator,
@@ -32,6 +33,7 @@ from pydicom.encaps import itemize_frame
 from pydicom.tag import ItemTag, SequenceDelimiterTag
 from pydicom.uid import UID
 from pydicom.valuerep import DSfloat
+from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomBotOverflow
@@ -91,25 +93,31 @@ class WsiDicomWriter:
 
     @classmethod
     def open(
-        cls, file: Union[str, Path], transfer_syntax: UID, offset_table: OffsetTableType
+        cls,
+        file: Union[str, Path, UPath],
+        transfer_syntax: UID,
+        offset_table: OffsetTableType,
+        file_options: Optional[Dict[str, Any]] = None,
     ) -> "WsiDicomWriter":
         """Open file in path as WsiDicomWriter.
 
         Parameters
         ----------
-        file: Path
+        file: Union[str, Path, UPath]
             Path to file.
         transfer_syntax: UID
             Transfer syntax to use.
         offset_table: OffsetTableType
             Offset table to use.
+        file_options: Optional[Dict[str, Any]] = None
+            Keyword arguments for opening files.
 
         Returns
         -------
         WsiDicomWriter
             WsiDicomWriter for file.
         """
-        stream = WsiDicomStreamOpener().open_for_writing(file, "w+b")
+        stream = WsiDicomStreamOpener(file_options).open_for_writing(file, "w+b")
         if transfer_syntax.is_encapsulated:
             writer = WsiDicomEncapsulatedWriter
         else:

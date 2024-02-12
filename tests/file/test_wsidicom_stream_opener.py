@@ -53,19 +53,3 @@ class TestWsiDicomStreamOpener:
 
         # Assert
         assert len(streams) == instances_count
-
-    @pytest.mark.parametrize(
-        "wsi_folder_and_counts", WsiTestDefinitions.folders_and_instance_counts()
-    )
-    def test_open_streams(self, wsi_folder_and_counts: Tuple[Path, int]):
-        # Arrange
-        wsi_folder, instances_count = wsi_folder_and_counts
-        files = [open(file, "rb") for file in wsi_folder.iterdir() if file.is_file()]
-
-        # Act
-        streams = list(WsiDicomStreamOpener().open(files, WSI_SOP_CLASS_UID))
-        for stream in streams:
-            stream.close()
-
-        # Assert
-        assert len(streams) == instances_count
