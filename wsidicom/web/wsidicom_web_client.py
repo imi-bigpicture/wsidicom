@@ -12,17 +12,14 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import copy
-from http import HTTPStatus
 import logging
+from http import HTTPStatus
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
 
 from dicomweb_client.api import DICOMfileClient, DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
 from pydicom import Dataset
-from pydicom.uid import (
-    UID,
-)
+from pydicom.uid import UID
 from requests import HTTPError, Session
 from requests.auth import AuthBase
 
@@ -32,7 +29,10 @@ from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
 SOP_CLASS_UID = "00080016"
 SOP_INSTANCE_UID = "00080018"
 SERIES_INSTANCE_UID = "0020000E"
+MODALITY = "00080060"
 AVAILABLE_SOP_TRANSFER_SYNTAX_UID = "00083002"
+WSI_MODALITY = "SM"
+ANNOTATION_MODALITY = "ANN"
 
 
 class WsiDicomWebClient:
@@ -103,7 +103,9 @@ class WsiDicomWebClient:
             Iterator of series and instance uid and optionally available transfer syntax
              uids for WSI instances in the study and series.
         """
-        return self._get_intances(study_uid, series_uids, WSI_SOP_CLASS_UID)
+        return self._get_intances(
+            study_uid, series_uids, WSI_SOP_CLASS_UID, WSI_MODALITY
+        )
 
     def get_annotation_instances(
         self, study_uid: UID, series_uids: Iterable[UID]
@@ -124,7 +126,9 @@ class WsiDicomWebClient:
             Iterator of series and instance uid and optionally available transfer syntax
             uids for Annotation instances in the study and series.
         """
-        return self._get_intances(study_uid, series_uids, ANN_SOP_CLASS_UID)
+        return self._get_intances(
+            study_uid, series_uids, ANN_SOP_CLASS_UID, ANNOTATION_MODALITY
+        )
 
     def get_instance(
         self, study_uid: UID, series_uid: UID, instance_uid: UID
@@ -228,7 +232,11 @@ class WsiDicomWebClient:
         return True
 
     def _get_intances(
-        self, study_uid: UID, series_uids: Iterable[UID], sop_class_uid
+        self,
+        study_uid: UID,
+        series_uids: Iterable[UID],
+        sop_class_uid: UID,
+        modality: str,
     ) -> Iterator[Tuple[UID, UID, Optional[Set[UID]]]]:
         """Get series, instance, and optionally available transfer syntax uids for
         instances of SOP class in study.
@@ -254,10 +262,10 @@ class WsiDicomWebClient:
             return (
                 self._get_uids_from_response(instance, series_uid)
                 for series_uid in series_uids
-                for instance in self._search_for_instances(
+                for instance in self._client.search_for_instances(
                     study_uid,
                     series_uid,
-                    search_filters={SOP_CLASS_UID: sop_class_uid},
+                    search_filters={SOP_CLASS_UID: sop_class_uid, MODALITY: modality},
                 )
             )
         return (
@@ -268,63 +276,105 @@ class WsiDicomWebClient:
                 search_filters={
                     SOP_CLASS_UID: sop_class_uid,
                     SERIES_INSTANCE_UID: series_uids,
+                    MODALITY: modality,
                 },
             )
         )
 
-    def _search_for_instances(self, *args, **kwargs):
-        # Try performing a regular search_for_instances(). If there is an error,
-        # check if it is a Google Healthcare API error that we can fix. If so,
-        # fix it and make the request again.
+    def _search_for_instances(
+        self, study_uid: UID, fields: List[str], search_filters: Dict[str, Any]
+    ) -> Iterator[Dict[str, Dict[Any, Any]]]:
+        """Search for instances in study.
+
+        Catches known errors in server DICOMweb implementation and tries to fix them.
+
+        Parameters
+        ----------
+        study_uid: UID
+            Study UID of the study.
+        fields: List[str]
+            Fields to include in the response.
+        search_filters: Dict[str, Any]
+            Search filters to use.
+
+        Returns
+        -------
+        Iterator[Dict[str, Dict[Any, Any]]]
+            Iterator of instance metadata.
+        """
+        # Errors that can be fixed by removing the offending filter and filtering
+        # the results.
+        known_search_filter_errors = {
+            HTTPStatus.BAD_REQUEST: {
+                "SOPClassUID is not a supported instance": SOP_CLASS_UID
+            }
+        }
+        # Errors that can be fixed by removing the offending field. Should only
+        # be used if the offending field is not required.
+        known_field_errors = {
+            HTTPStatus.BAD_REQUEST: {
+                "unknown/unsupported QIDO attribute: AvailableTransferSyntaxUID": "AvailableTransferSyntaxUID"
+            }
+        }
         try:
-            yield from self._client.search_for_instances(*args, **kwargs)
-        except HTTPError as e:
-            if e.response.status_code != 400:
-                # Not a Google Healthcare API error. Propagate the exception
-                raise
-
-            # Check if it was a google healthcare API error
-            google_healthcare_api_errors = (
-                'unknown/unsupported QIDO attribute: AvailableTransferSyntaxUID',
-                # Sometimes, this says "SOPClassUID is not a supported instance or study...",
-                # and sometimes, it says "SOPClassUID is not a supported instance or series..."
-                # Just catch the first part with "instance"
-                'SOPClassUID is not a supported instance',
+            return iter(
+                self._client.search_for_instances(
+                    study_uid,
+                    fields=fields,
+                    search_filters=search_filters,
+                )
             )
-            if not any(x in e.response.text for x in google_healthcare_api_errors):
-                # Not a Google Healthcare API error. Propagate the exception
-                raise
+        except HTTPError as exception:
+            status_code = HTTPStatus(exception.response.status_code)
+            error_message = exception.response.text
+            logging.debug(
+                f"Got error code: {status_code} message: {error_message} when searching for instances."
+            )
+            # If search filter error remove offending filter and filter the results.
+            try:
+                filter_key = next(
+                    filter_key
+                    for error_key, filter_key in known_search_filter_errors[
+                        status_code
+                    ].items()
+                    if status_code in known_search_filter_errors
+                    if error_key in error_message
+                )
+                logging.debug(f"Removing filter {filter_key} from search filters.")
+                filter_value = search_filters.pop(filter_key)
+                instances = self._search_for_instances(
+                    study_uid,
+                    fields=fields,
+                    search_filters=search_filters,
+                )
+                # Filter out instances with the removed search filter.
+                return (
+                    instance
+                    for instance in instances
+                    if instance[filter_key]["Value"][0] == filter_value
+                )
+            except StopIteration:
+                pass
 
-            # It was a Google Healthcare API error.
-            # Fix the request and perform it again.
-
-            # Perform a deepcopy so that the caller's arguments are not modified.
-            # We assume that `fields` and `search_filters` are kwargs, not args.
-            kwargs = copy.deepcopy(kwargs)
-
-            # Remove the AvailableTransferSyntaxUID, if present, as google
-            # healthcare API does not support this.
-            if 'AvailableTransferSyntaxUID' in kwargs.get('fields', []):
-                kwargs['fields'].remove('AvailableTransferSyntaxUID')
-
-            # Perform manual filtering for SOP_CLASS_UID, if present.
-            # Google Healthcare API doesn't support this as a search filter
-            # (even though it definitely should).
-            if SOP_CLASS_UID not in kwargs.get('search_filters', {}):
-                # We only needed to remove the AvailableTransferSyntaxUID.
-                # Try the search again.
-                yield from self._client.search_for_instances(*args, **kwargs)
-                return
-
-            # Perform the manual filtering for SOP_CLASS_UID
-            sop_class_uid = kwargs['search_filters'].pop(SOP_CLASS_UID)
-            if SOP_CLASS_UID not in kwargs.get('fields', []):
-                # Make sure we get the SOP_CLASS_UID so we can manually filter
-                kwargs.setdefault('fields', []).append(SOP_CLASS_UID)
-
-            for result in self._client.search_for_instances(*args, **kwargs):
-                if result[SOP_CLASS_UID]['Value'][0] == sop_class_uid:
-                    yield result
+            # If a field error remove offending field.
+            try:
+                field_key = next(
+                    field_key
+                    for error_key, field_key in known_field_errors[status_code].items()
+                    if status_code in known_search_filter_errors
+                    if error_key in error_message
+                )
+                logging.debug(f"Removing field {field_key} from fields.")
+                fields.remove(field_key)
+                return self._search_for_instances(
+                    study_uid,
+                    fields=fields,
+                    search_filters=search_filters,
+                )
+            except StopIteration:
+                pass
+            # Not a known error. Propagate the exception.
+            raise
 
     @staticmethod
     def _get_uids_from_response(
@@ -347,13 +397,17 @@ class WsiDicomWebClient:
             AVAILABLE_SOP_TRANSFER_SYNTAX_UID, None
         )
         return (
-            series_uid
-            if series_uid is not None
-            else UID(response[SERIES_INSTANCE_UID]["Value"][0]),
+            (
+                series_uid
+                if series_uid is not None
+                else UID(response[SERIES_INSTANCE_UID]["Value"][0])
+            ),
             UID(response[SOP_INSTANCE_UID]["Value"][0]),
-            set(available_transfer_syntaxes["Value"])
-            if available_transfer_syntaxes
-            else None,
+            (
+                set(available_transfer_syntaxes["Value"])
+                if available_transfer_syntaxes
+                else None
+            ),
         )
 
     @staticmethod
