@@ -394,6 +394,9 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
         JPEGLSNearLossless: (jpegls_decode, JPEGLS),
         JPEG2000Lossless: (jpeg2k_decode, JPEG2K),
         JPEG2000: (jpeg2k_decode, JPEG2K),
+        HTJPEG2000: (jpeg2k_decode, JPEG2K),
+        HTJPEG2000Lossless: (jpeg2k_decode, JPEG2K),
+        HTJPEG2000RPCLLossless: (jpeg2k_decode, JPEG2K),
     }
 
     def __init__(self, transfer_syntax: UID) -> None:

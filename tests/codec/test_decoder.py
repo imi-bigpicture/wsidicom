@@ -52,7 +52,13 @@ from wsidicom.codec.decoder import (
     PyLibJpegOpenJpegDecoder,
     PylibjpegRleDecoder,
 )
+from wsidicom.codec.optionals import (
+    IMAGE_CODECS_AVAILABLE,
+    PYLIBJPEGLS_AVAILABLE,
+    PYLIBJPEGOPENJPEG_AVAILABLE,
+)
 from wsidicom.geometry import Size
+from wsidicom.uid import HTJPEG2000, HTJPEG2000Lossless, HTJPEG2000RPCLLossless
 
 
 @pytest.mark.unittest
@@ -73,6 +79,9 @@ class TestPillowDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, True),
             (JPEG2000, True),
+            (HTJPEG2000Lossless, False),
+            (HTJPEG2000, False),
+            (HTJPEG2000RPCLLossless, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -130,7 +139,6 @@ class TestPillowDecoder:
 
 @pytest.mark.unittest
 class TestPydicomDecoder:
-    # Assumes that pylibjpeg-libjpeg is not installed
     @pytest.mark.parametrize(
         ["transfer_syntax", "expected_result"],
         [
@@ -143,10 +151,13 @@ class TestPydicomDecoder:
             (JPEGExtended12Bit, True),
             (JPEGLosslessP14, False),
             (JPEGLosslessSV1, False),
-            (JPEGLSLossless, True),
-            (JPEGLSNearLossless, True),
+            (JPEGLSLossless, PYLIBJPEGLS_AVAILABLE),
+            (JPEGLSNearLossless, PYLIBJPEGLS_AVAILABLE),
             (JPEG2000Lossless, True),
             (JPEG2000, True),
+            (HTJPEG2000Lossless, False),
+            (HTJPEG2000, False),
+            (HTJPEG2000RPCLLossless, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -206,14 +217,17 @@ class TestImageCodecsDecoder:
             (ExplicitVRLittleEndian, False),
             (DeflatedExplicitVRLittleEndian, False),
             (RLELossless, False),
-            (JPEGBaseline8Bit, ImageCodecsDecoder.is_available()),
-            (JPEGExtended12Bit, ImageCodecsDecoder.is_available()),
-            (JPEGLosslessP14, ImageCodecsDecoder.is_available()),
-            (JPEGLosslessSV1, ImageCodecsDecoder.is_available()),
-            (JPEGLSLossless, ImageCodecsDecoder.is_available()),
-            (JPEGLSNearLossless, ImageCodecsDecoder.is_available()),
-            (JPEG2000Lossless, ImageCodecsDecoder.is_available()),
-            (JPEG2000, ImageCodecsDecoder.is_available()),
+            (JPEGBaseline8Bit, IMAGE_CODECS_AVAILABLE),
+            (JPEGExtended12Bit, IMAGE_CODECS_AVAILABLE),
+            (JPEGLosslessP14, IMAGE_CODECS_AVAILABLE),
+            (JPEGLosslessSV1, IMAGE_CODECS_AVAILABLE),
+            (JPEGLSLossless, IMAGE_CODECS_AVAILABLE),
+            (JPEGLSNearLossless, IMAGE_CODECS_AVAILABLE),
+            (JPEG2000Lossless, IMAGE_CODECS_AVAILABLE),
+            (JPEG2000, IMAGE_CODECS_AVAILABLE),
+            (HTJPEG2000Lossless, IMAGE_CODECS_AVAILABLE),
+            (HTJPEG2000, IMAGE_CODECS_AVAILABLE),
+            (HTJPEG2000RPCLLossless, IMAGE_CODECS_AVAILABLE),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -301,6 +315,9 @@ class TestPylibjpegRleDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, False),
             (JPEG2000, False),
+            (HTJPEG2000Lossless, False),
+            (HTJPEG2000, False),
+            (HTJPEG2000RPCLLossless, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -361,6 +378,9 @@ class TestImagecodecsRleDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, False),
             (JPEG2000, False),
+            (HTJPEG2000Lossless, False),
+            (HTJPEG2000, False),
+            (HTJPEG2000RPCLLossless, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -461,8 +481,11 @@ class TestPyLibJpegOpenJpegDecoder:
     @pytest.mark.parametrize(
         ["transfer_syntax", "expected_result"],
         [
-            (JPEG2000Lossless, ImageCodecsDecoder.is_available()),
-            (JPEG2000, ImageCodecsDecoder.is_available()),
+            (JPEG2000Lossless, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (JPEG2000, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJPEG2000Lossless, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJPEG2000, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJPEG2000RPCLLossless, PYLIBJPEGOPENJPEG_AVAILABLE),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
