@@ -58,7 +58,7 @@ except ImportError:
 
 try:
     from jpeg_ls import decode as pylibjpeg_ls_decode
-    from jpeg_ls import encode_to_buffer as pylibjpeg_ls_encode
+    from jpeg_ls import encode_array as pylibjpeg_ls_encode
 
     PYLIBJPEGLS_AVAILABLE = True
 
