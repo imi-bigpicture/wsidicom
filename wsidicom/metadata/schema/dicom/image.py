@@ -82,7 +82,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
     def load(self, dataset: Dataset, **kwargs) -> Optional[ImageCoordinateSystem]:
         try:
             return super().load(dataset, **kwargs)
-        except TypeError:
+        except (TypeError, AttributeError):
             return None
 
 
@@ -209,9 +209,9 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
                 focal_plane_spacing=image.focal_plane_spacing,
                 depth_of_field=image.depth_of_field,
             ),
-            "lossy_compressions": image.lossy_compressions
-            if image.lossy_compressions
-            else [],
+            "lossy_compressions": (
+                image.lossy_compressions if image.lossy_compressions else []
+            ),
         }
 
     @post_load

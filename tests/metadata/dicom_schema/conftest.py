@@ -76,6 +76,11 @@ def dicom_image(image: Image, valid_dicom: bool):
         origin.YOffsetInSlideCoordinateSystem = image.image_coordinate_system.origin.y
 
         dataset.TotalPixelMatrixOriginSequence = [origin]
+    elif not valid_dicom:
+        dataset.ImageOrientationSlide = []
+        empty_origin = Dataset()
+        dataset.TotalPixelMatrixOriginSequence = [empty_origin]
+
     if image.extended_depth_of_field is not None:
         dataset.ExtendedDepthOfField = "YES"
         dataset.NumberOfFocalPlanes = (
