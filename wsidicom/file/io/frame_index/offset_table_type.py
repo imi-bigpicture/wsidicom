@@ -22,6 +22,7 @@ class OffsetTableType(Enum):
     EMPTY = "empty"
     BASIC = "BOT"
     EXTENDED = "EOT"
+    TIFF = "TIFF"
 
     @classmethod
     def from_string(cls, offset_table: str) -> "OffsetTableType":
@@ -34,4 +35,6 @@ class OffsetTableType(Enum):
             return OffsetTableType.EXTENDED
         if offset_table.strip().lower() == "bot":
             return OffsetTableType.BASIC
+        if offset_table.strip().lower() == "tiff":
+            return OffsetTableType.TIFF
         raise ValueError(f"Unknown offset table type: {offset_table}")

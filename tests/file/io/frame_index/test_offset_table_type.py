@@ -28,6 +28,8 @@ from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
         ("empty", OffsetTableType.EMPTY),
         ("NONE", OffsetTableType.NONE),
         ("none", OffsetTableType.NONE),
+        ("TIFF", OffsetTableType.TIFF),
+        ("tiff", OffsetTableType.TIFF),
     ],
 )
 class TestOffsetTableType:

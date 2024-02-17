@@ -34,6 +34,10 @@ from wsidicom.file.io.frame_index import (
     NativePixelData,
     OffsetTableType,
 )
+from wsidicom.file.io.frame_index.tiff_table import (
+    EmptyTiffFrameTagsException,
+    TiffTable,
+)
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import ImageType, WsiDataset
 from wsidicom.tags import ExtendedOffsetTableTag
@@ -186,6 +190,11 @@ class WsiDicomReader:
         try:
             return Bot(self._stream, self._pixel_data_position, self.frame_count)
         except EmptyBotException:
+            pass
+
+        try:
+            return TiffTable(self._stream, self._pixel_data_position, self.frame_count)
+        except EmptyTiffFrameTagsException:
             self._stream.seek(self._pixel_data_position)
             return EmptyBot(self._stream, self._pixel_data_position, self.frame_count)
 

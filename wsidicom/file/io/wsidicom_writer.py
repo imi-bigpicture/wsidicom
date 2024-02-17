@@ -453,7 +453,11 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         return transfer_syntax.is_encapsulated
 
     def supports_offset_table(self, offset_table: OffsetTableType) -> bool:
-        return offset_table is not OffsetTableType.NONE
+        return offset_table in (
+            OffsetTableType.EMPTY,
+            OffsetTableType.BASIC,
+            OffsetTableType.EXTENDED,
+        )
 
     def _write_pixel_data_start(
         self,
