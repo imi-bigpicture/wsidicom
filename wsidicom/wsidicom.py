@@ -839,14 +839,11 @@ class WsiDicom:
 
         WsiInstance.check_duplicate_instance(instances, self)
 
-        try:
-            slide_uids = next(
-                series.uids for series in self.collection if series.uids is not None
-            )
-        except StopIteration as exception:
-            raise WsiDicomNotFoundError("Valid series", "in collection") from exception
+        slide_uids = self.levels.uids
+        if slide_uids is None:
+            raise WsiDicomNotFoundError("Valid levels", str(self))
         for series in self.collection:
-            if series.uids is not None and series.uids != slide_uids:
+            if series.uids is not None and not series.uids.matches(slide_uids):
                 raise WsiDicomMatchError(str(series), str(self))
 
         if self.annotations != []:
