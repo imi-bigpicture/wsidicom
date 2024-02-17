@@ -7,15 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2024-02-14
+
+### Fixed
+
+- Correct handling of missing image coordinate system when loading metadata.
+
+## [0.19.0] - 2024-02-12
+
 ### Added
 
-- Support for opening files using [fsspec](https://filesystem-spec.readthedocs.io/).
-- Support for decoding HT-JPEG2000 using Pillow, imagecodecs and/or pylibjpeg-openjpeg .
+- Support for decoding HT-JPEG2000 using Pillow, imagecodecs and/or pylibjpeg-openjpeg.
 - Optional codec pyjpegls for JPEG-LS support.
 
 ### Fixed
 
-- Handling of non-conformat DICOM Web responses.
+- Handling of non-conformant DICOM Web responses.
 
 ## [0.18.3] - 2024-01-22
 
@@ -318,7 +325,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.18.3..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.19.1..HEAD
+[0.19.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.19.0..v0.19.1
+[0.19.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.18.3..v0.19.0
 [0.18.3]: https://github.com/imi-bigpicture/wsidicom/compare/v0.18.2..v0.18.3
 [0.18.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.18.1..v0.18.2
 [0.18.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.18.0..v0.18.1
