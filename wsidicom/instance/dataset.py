@@ -862,7 +862,7 @@ class WsiDataset(Dataset):
         if dataset is None:
             dataset = self
         value = getattr(dataset, name, None)
-        if value is None:
+        if value is None and name in WSI_ATTRIBUTES:
             return WSI_ATTRIBUTES[name].get_default(self.image_type)
         return value
 
