@@ -26,7 +26,7 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 ## Requirements
 
-*wsidicom* uses pydicom, numpy, Pillow, and dicomweb-client. Imagecodecs and pylibjpeg-rle can be installed as optionals to support additional transfer syntaxes.
+*wsidicom* uses pydicom, numpy, Pillow, marshmallow, fsspec, universal-pathlib, and dicomweb-client. Imagecodecs, pylibjpeg-rle, pyjpegls, and pylibjpeg-openjpeg can be installed as optionals to support additional transfer syntaxes.
 
 ## Limitations
 
@@ -72,7 +72,9 @@ from wsidicom import WsiDicom
 slide = WsiDicom.open("path_to_folder")
 ```
 
-***Load a WSI dataset from remote url.***
+The `files` argument accepts either a path to a folder with DICOM WSI-files or a sequence of paths to DICOM WSI-files.
+
+***Load a WSI dataset from remote url using [fsspec](https://filesystem-spec.readthedocs.io).***
 
 ```python
 from wsidicom import WsiDicom
@@ -115,9 +117,7 @@ slide = WsiDicom.open_web(
 )
 ```
 
-Alternatively, if you have already created an instance of
-`dicomweb_client.DICOMwebClient`, that may be used to create the
-`WsiDicomWebClient` like so:
+Alternatively, if you have already created an instance of `dicomweb_client.DICOMwebClient`, that may be used to create the `WsiDicomWebClient` like so:
 
 ```python
 dicomweb_client = DICOMwebClient("url")
