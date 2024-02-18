@@ -62,7 +62,7 @@ from .uid import ANN_SOP_CLASS_UID, UID, SlideUids
 
 @dataclass(frozen=True)
 class LabColor:
-    l: int
+    l: int  # noqa: E741
     a: int
     b: int
 

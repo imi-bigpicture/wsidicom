@@ -16,3 +16,5 @@
 
 from wsidicom.group.group import Group
 from wsidicom.group.level import Level
+
+__all__ = ["Group", "Level"]

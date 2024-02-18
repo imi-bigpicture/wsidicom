@@ -42,7 +42,7 @@ class PillowImageData(ImageData):
 
     @classmethod
     def from_file(cls, file: Union[str, Path, UPath]) -> "PillowImageData":
-        image = Pillow.open(UPath(file).open("rb"))
+        image = Pillow.open(UPath(file).open("rb"))  # type: ignore
         return cls(image)
 
     @property

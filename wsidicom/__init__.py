@@ -12,6 +12,26 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from wsidicom.config import settings
+from wsidicom.graphical_annotations import (
+    Annotation,
+    AnnotationGroup,
+    AnnotationInstance,
+    Measurement,
+    Point,
+    PointAnnotationGroup,
+    Polygon,
+    PolygonAnnotationGroup,
+    Polyline,
+    PolylineAnnotationGroup,
+)
+from wsidicom.instance import ImageData, WsiDataset, WsiInstance
+from wsidicom.series import Labels, Overviews, Pyramid
+from wsidicom.web import WsiDicomWebClient
+from wsidicom.wsidicom import WsiDicom
+
+__version__ = "0.19.1"
+
 __all__ = [
     "settings",
     "Annotation",
@@ -33,22 +53,3 @@ __all__ = [
     "WsiDicomWebClient",
     "WsiDicom",
 ]
-from wsidicom.config import settings
-from wsidicom.graphical_annotations import (
-    Annotation,
-    AnnotationGroup,
-    AnnotationInstance,
-    Measurement,
-    Point,
-    PointAnnotationGroup,
-    Polygon,
-    PolygonAnnotationGroup,
-    Polyline,
-    PolylineAnnotationGroup,
-)
-from wsidicom.instance import ImageData, WsiDataset, WsiInstance
-from wsidicom.series import Labels, Overviews, Pyramid
-from wsidicom.web import WsiDicomWebClient
-from wsidicom.wsidicom import WsiDicom
-
-__version__ = "0.19.1"
