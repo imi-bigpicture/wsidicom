@@ -848,7 +848,7 @@ class WsiDicom:
 
         if self.annotations != []:
             for annotation in self.annotations:
-                if annotation.slide_uids != slide_uids:
+                if not annotation.slide_uids.matches(slide_uids):
                     logging.warning("Annotations uids does not match.")
         return slide_uids
 

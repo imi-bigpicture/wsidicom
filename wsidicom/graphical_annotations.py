@@ -1669,10 +1669,12 @@ class AnnotationInstance:
                 frame_of_reference_uid,
             )
         else:
-            if slide_uids != SlideUids(
-                dataset.StudyInstanceUID,
-                dataset.SeriesInstanceUID,
-                frame_of_reference_uid,
+            if not slide_uids.matches(
+                SlideUids(
+                    dataset.StudyInstanceUID,
+                    dataset.SeriesInstanceUID,
+                    frame_of_reference_uid,
+                )
             ):
                 raise ValueError("Base uids should match")
         for annotation_ds in dataset.AnnotationGroupSequence:
