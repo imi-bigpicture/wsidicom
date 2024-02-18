@@ -84,16 +84,16 @@ class WsiDicom:
     @classmethod
     def open(
         cls,
-        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
+        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
         file_options: Optional[Dict[str, Any]] = None,
     ) -> "WsiDicom":
-        """Open valid WSI DICOM files in path and return a WsiDicom object.
+        """Open valid WSI DICOM files and return a WsiDicom object.
 
         Non-valid files are ignored.
 
         Parameters
         ----------
-        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
             Files to open. Can be a path for a single file, a list of paths for multiple
             files, or a path to a folder containing files. Path can be local or an URL
             supported by fsspec.
@@ -105,7 +105,7 @@ class WsiDicom:
         WsiDicom
             WsiDicom created from WSI DICOM files in path.
         """
-        source = WsiDicomFileSource.open(path, file_options)
+        source = WsiDicomFileSource.open(files, file_options)
         return cls(source, True)
 
     @classmethod
@@ -310,7 +310,7 @@ class WsiDicom:
     @classmethod
     def is_ready_for_viewing(
         cls,
-        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
+        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
         file_options: Optional[Dict[str, Any]] = None,
     ) -> Optional[bool]:
         """
@@ -319,7 +319,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
             Files to open. Can be a path for a single file, a list of paths for multiple
             files, or a path to a folder containing files. Path can be local or an URL
             supported by fsspec.
@@ -330,13 +330,13 @@ class WsiDicom:
             True if files in path are formatted for fast viewing, None if no DICOM WSI
             files are in the path.
         """
-        source = WsiDicomFileSource.open(path, file_options)
+        source = WsiDicomFileSource.open(files, file_options)
         return source.is_ready_for_viewing
 
     @classmethod
     def is_supported(
         cls,
-        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
+        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
         file_options: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Return true if files in path have at least one level that can be read with
@@ -344,7 +344,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        path: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
             Path to files to test. Path can be local or an URL supported by fsspec.
         file_options: Optional[Dict[str, Any]] = None
             Optional options for when opening files.
@@ -352,7 +352,7 @@ class WsiDicom:
         Returns
             True if files in path have one level that can be read with WsiDicom.
         """
-        source = WsiDicomFileSource.open(path, file_options)
+        source = WsiDicomFileSource.open(files, file_options)
         return source.contains_levels
 
     @property
