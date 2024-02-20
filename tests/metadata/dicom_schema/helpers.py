@@ -673,12 +673,12 @@ def create_specimen_preparation_sequence(
             method=specimen_sampling_method,
             parent_specimen_identifier=specimen_id,
             parent_specimen_type=specimen_type,
-            location_reference=sampling_location.reference
-            if sampling_location is not None
-            else None,
-            location_description=sampling_location.description
-            if sampling_location is not None
-            else None,
+            location_reference=(
+                sampling_location.reference if sampling_location is not None else None
+            ),
+            location_description=(
+                sampling_location.description if sampling_location is not None else None
+            ),
             location_x=sampling_location.x if sampling_location is not None else None,
             location_y=sampling_location.y if sampling_location is not None else None,
             location_z=sampling_location.z if sampling_location is not None else None,

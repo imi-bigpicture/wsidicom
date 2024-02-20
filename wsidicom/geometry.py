@@ -568,7 +568,10 @@ class Orientation:
     @staticmethod
     def _create_transform(
         orientation: Tuple[float, float, float, float, float, float]
-    ) -> Tuple[Tuple[float, float], Tuple[float, float],]:
+    ) -> Tuple[
+        Tuple[float, float],
+        Tuple[float, float],
+    ]:
         return (
             (orientation[0], orientation[3]),
             (orientation[1], orientation[4]),
@@ -580,7 +583,10 @@ class Orientation:
             Tuple[float, float],
             Tuple[float, float],
         ]
-    ) -> Tuple[Tuple[float, float], Tuple[float, float],]:
+    ) -> Tuple[
+        Tuple[float, float],
+        Tuple[float, float],
+    ]:
         determinant = 1 / (
             transform[0][0] * transform[1][1] - transform[0][1] * transform[1][0]
         )

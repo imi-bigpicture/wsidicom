@@ -81,9 +81,11 @@ class SpecimenDicomFormatter:
             issuer_of_identifier=issuer,
             uid=sample_uid,
             steps=list(sample_preparation_steps),
-            anatomical_sites=list(slide_sample.anatomical_sites)
-            if slide_sample.anatomical_sites is not None
-            else [],
+            anatomical_sites=(
+                list(slide_sample.anatomical_sites)
+                if slide_sample.anatomical_sites is not None
+                else []
+            ),
             short_description=slide_sample.short_description,
             detailed_description=slide_sample.detailed_description,
             localization=slide_sample.localization,
