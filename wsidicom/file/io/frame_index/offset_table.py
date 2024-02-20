@@ -77,7 +77,10 @@ class OffsetTable(EncapsulatedPixelData):
             if length <= 0 or length % 2:
                 raise WsiDicomFileError(
                     str(self._file),
-                    f"Invalid frame length {length} for frame {index // bytes_per_item}",
+                    (
+                        f"Invalid frame length {length} "
+                        f"for frame {index // bytes_per_item}"
+                    ),
                 )
             positions.append((pixels_start + offset, length))
             this_offset = next_offset

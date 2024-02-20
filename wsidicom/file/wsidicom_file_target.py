@@ -218,7 +218,8 @@ class WsiDicomFileTarget(Target):
                     != instances[0].image_data.samples_per_pixel
                 ):
                     raise ValueError(
-                        "Transcode settings must match image data bits and photometric interpretation."
+                        "Transcode settings must match image data bits and "
+                        "photometric interpretation."
                     )
                 transfer_syntax = self._transcoder.transfer_syntax
                 dataset.PhotometricInterpretation = (

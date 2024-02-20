@@ -94,7 +94,8 @@ class FrameIndex:
         if expected_length is not None and length != expected_length:
             raise WsiDicomFileError(
                 str(self._file),
-                f"Expected {expected_length} length when reading Pixel data, got {length}.",
+                f"Expected {expected_length} length when reading Pixel data, "
+                f"got {length}.",
             )
         elif expected_length is None and length != 0xFFFFFFFF:
             raise WsiDicomFileError(

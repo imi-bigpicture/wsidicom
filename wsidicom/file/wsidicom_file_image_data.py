@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 from functools import lru_cache
-from pathlib import Path
 from typing import List, OrderedDict, Sequence, Union
 
 from pydicom.uid import UID

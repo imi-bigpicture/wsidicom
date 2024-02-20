@@ -12,7 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module with metadata models and schemas for serialization to and from DICOM and json."""
+"""Module with metadata models and schemas for serialization to and from DICOM or
+json."""
 
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import (

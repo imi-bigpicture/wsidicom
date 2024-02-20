@@ -678,9 +678,9 @@ class TestWsiDicomAnnotation:
     def annotation_to_sectra(
         annotation: Annotation,
     ) -> Tuple[str, List[Dict[str, float]]]:
-        if type(annotation.geometry) == Polyline:
+        if isinstance(annotation.geometry, Polyline):
             geometry_type = "Polyline"
-        elif type(annotation.geometry) == Polygon:
+        elif isinstance(annotation.geometry, Polygon):
             geometry_type = "Area"
         else:
             raise NotImplementedError()
@@ -701,10 +701,10 @@ class TestWsiDicomAnnotation:
 
     @staticmethod
     def annotation_to_shapely(annotation: Annotation):
-        if type(annotation.geometry) == Point:
+        if isinstance(annotation.geometry, Point):
             return ShapelyPoint(annotation.geometry.to_coords())
-        elif type(annotation.geometry) == Polyline:
+        elif isinstance(annotation.geometry, Polyline):
             return ShapelyLineString(annotation.geometry.to_coords())
-        elif type(annotation.geometry) == Polygon:
+        elif isinstance(annotation.geometry, Polygon):
             return ShapelyPolygon(annotation.geometry.to_coords())
         raise NotImplementedError(annotation)
