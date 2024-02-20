@@ -23,9 +23,9 @@ FILESERVER_SLIDE_PATH = Path("MEDICAL/Dicom/DataSets/WG26")
 
 SLIDES: Dict[str, Dict[str, Any]] = {
     "FULL_WITH_BOT": {
-        "name": r"Histech^Samantha [1229631]",
-        "parentpath": r"WG26Demo2020_PV",
-        "subpath": r"20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
+        "name": "Histech^Samantha [1229631]",
+        "parentpath": "WG26Demo2020_PV",
+        "subpath": "20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
         "files": {
             "2.25.173648596820938096199028939965251554503.dcm": "865538d55fce37ae6d91d85aebe29029",  # NOQA
             "2.25.181487944453580109633363498147571426374.dcm": "7ff4acf3c71572236ce968e06e79d8db",  # NOQA
@@ -43,9 +43,9 @@ SLIDES: Dict[str, Dict[str, Any]] = {
         },
     },
     "SPARSE_NO_BOT": {
-        "name": r"MoticWangjie^Professer [100001]",
-        "parentpath": r"WG26Demo2019_PV",
-        "subpath": r"20190903 102029 [200001]\Series 000 [SM]",
+        "name": "MoticWangjie^Professer [100001]",
+        "parentpath": "WG26Demo2019_PV",
+        "subpath": "20190903 102029 [200001]/Series 000 [SM]",
         "files": {
             "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753444.778.dcm": "4463e99bea080b14591f0665a6e84559",  # NOQA
             "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753447.783.dcm": "0b48b76e46c754fc75b13d6fbf682a19",  # NOQA
@@ -72,19 +72,18 @@ def download_file(ftp: FTP, file: str, filename: Path):
 
 
 def get_slide_dir() -> Path:
-    DEFAULT_DIR = "tests/testdata"
-    SLIDE_DIR = "slides"
-    test_data_path = os.environ.get("DICOM_TESTDIR")
-    if test_data_path is None:
-        test_data_dir = Path(DEFAULT_DIR)
+    testdata_folder = os.environ.get("WSIDICOM_TESTDIR")
+    DEFAULT_SLIDE_FOLDER = "tests/testdata/slides"
+    if testdata_folder is None:
+        slide_folder = Path(DEFAULT_SLIDE_FOLDER)
         print(
-            "Env 'DICOM_TESTDIR' not set, downloading to default folder "
-            f"{test_data_dir}."
+            "Env 'WSIDICOM_TESTDIR' not set, downloading to default folder "
+            f"{slide_folder}."
         )
     else:
-        test_data_dir = Path(test_data_path)
-        print(f"Downloading to {test_data_dir}")
-    return test_data_dir.joinpath(SLIDE_DIR)
+        slide_folder = Path(testdata_folder).joinpath("slides")
+        print(f"Downloading to {slide_folder}")
+    return slide_folder
 
 
 def get_or_check_slide(slide_dir: Path, slide: Dict[str, Any], ftp: FTP):
@@ -98,12 +97,12 @@ def get_or_check_slide(slide_dir: Path, slide: Dict[str, Any], ftp: FTP):
         file_path = path.joinpath(file)
         if not file_path.exists():
             print(
-                f"{file} not found, downloading from "
+                f"{file_path} not found, downloading from "
                 f"{ftp_path.joinpath(file).as_posix()}"
             )
             download_file(ftp, file, file_path)
         else:
-            print(f"{file} found, skipping download")
+            print(f"{file_path} found, skipping download")
         check_checksum(file_path, checksum)
 
 
