@@ -30,7 +30,7 @@ from wsidicom.series import Labels, Overviews, Pyramid
 from wsidicom.web import WsiDicomWebClient
 from wsidicom.wsidicom import WsiDicom
 
-__version__ = "0.19.1"
+__version__ = "0.20.0"
 
 __all__ = [
     "settings",
