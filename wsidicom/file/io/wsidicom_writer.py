@@ -18,6 +18,7 @@ from abc import abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import (
+    Any,
     Dict,
     Iterable,
     Iterator,
@@ -25,12 +26,14 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
+    Union,
 )
 
 from pydicom.encaps import itemize_frame
 from pydicom.tag import ItemTag, SequenceDelimiterTag
 from pydicom.uid import UID
 from pydicom.valuerep import DSfloat
+from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.errors import WsiDicomBotOverflow
@@ -41,6 +44,7 @@ from wsidicom.file.io.frame_index import (
     OffsetTableWriter,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
@@ -89,25 +93,31 @@ class WsiDicomWriter:
 
     @classmethod
     def open(
-        cls, file: Path, transfer_syntax: UID, offset_table: OffsetTableType
+        cls,
+        file: Union[str, Path, UPath],
+        transfer_syntax: UID,
+        offset_table: OffsetTableType,
+        file_options: Optional[Dict[str, Any]] = None,
     ) -> "WsiDicomWriter":
         """Open file in path as WsiDicomWriter.
 
         Parameters
         ----------
-        file: Path
+        file: Union[str, Path, UPath]
             Path to file.
         transfer_syntax: UID
             Transfer syntax to use.
         offset_table: OffsetTableType
             Offset table to use.
+        file_options: Optional[Dict[str, Any]] = None
+            Keyword arguments for opening files.
 
         Returns
         -------
         WsiDicomWriter
             WsiDicomWriter for file.
         """
-        stream = WsiDicomIO.open(file, "w+b")
+        stream = WsiDicomStreamOpener(file_options).open_for_writing(file, "w+b")
         if transfer_syntax.is_encapsulated:
             writer = WsiDicomEncapsulatedWriter
         else:
@@ -443,7 +453,11 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         return transfer_syntax.is_encapsulated
 
     def supports_offset_table(self, offset_table: OffsetTableType) -> bool:
-        return offset_table is not OffsetTableType.NONE
+        return offset_table in (
+            OffsetTableType.EMPTY,
+            OffsetTableType.BASIC,
+            OffsetTableType.EXTENDED,
+        )
 
     def _write_pixel_data_start(
         self,

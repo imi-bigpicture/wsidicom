@@ -16,3 +16,5 @@ from wsidicom.metadata.schema.json.sample.schema import (
     BaseSpecimenJsonSchema,
     StainingJsonSchema,
 )
+
+__all__ = ["BaseSpecimenJsonSchema", "StainingJsonSchema"]

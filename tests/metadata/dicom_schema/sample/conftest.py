@@ -196,12 +196,12 @@ def sampling_dicom(
         issuer_of_parent_specimen_identifier=parent_issuer,
         parent_specimen_type=sampling.specimen_type,
         processing=processing_method,
-        location_reference=sampling.location.reference
-        if sampling.location is not None
-        else None,
-        location_description=sampling.location.description
-        if sampling.location is not None
-        else None,
+        location_reference=(
+            sampling.location.reference if sampling.location is not None else None
+        ),
+        location_description=(
+            sampling.location.description if sampling.location is not None else None
+        ),
         location_x=sampling.location.x if sampling.location is not None else None,
         location_y=sampling.location.y if sampling.location is not None else None,
         location_z=sampling.location.z if sampling.location is not None else None,

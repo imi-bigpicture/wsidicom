@@ -673,12 +673,12 @@ def create_specimen_preparation_sequence(
             method=specimen_sampling_method,
             parent_specimen_identifier=specimen_id,
             parent_specimen_type=specimen_type,
-            location_reference=sampling_location.reference
-            if sampling_location is not None
-            else None,
-            location_description=sampling_location.description
-            if sampling_location is not None
-            else None,
+            location_reference=(
+                sampling_location.reference if sampling_location is not None else None
+            ),
+            location_description=(
+                sampling_location.description if sampling_location is not None else None
+            ),
             location_x=sampling_location.x if sampling_location is not None else None,
             location_y=sampling_location.y if sampling_location is not None else None,
             location_z=sampling_location.z if sampling_location is not None else None,
@@ -876,7 +876,7 @@ def create_processing_type_item(step: SpecimenPreparationStepDicomModel):
     if isinstance(step, CollectionDicomModel):
         processing_type_code = SampleCodes.specimen_collection
     elif isinstance(step, SamplingDicomModel):
-        processing_type_code = SampleCodes.sampling_method
+        processing_type_code = SampleCodes.sampling_of_tissue_specimen
     elif isinstance(step, ProcessingDicomModel):
         processing_type_code = SampleCodes.sample_processing
     elif isinstance(step, StainingDicomModel):

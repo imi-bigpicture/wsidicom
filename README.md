@@ -26,7 +26,7 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 ## Requirements
 
-*wsidicom* uses pydicom, numpy, Pillow, and dicomweb-client. Imagecodecs and pylibjpeg-rle can be installed as optionals to support additional transfer syntaxes.
+*wsidicom* uses pydicom, numpy, Pillow, marshmallow, fsspec, universal-pathlib, and dicomweb-client. Imagecodecs, pylibjpeg-rle, pyjpegls, and pylibjpeg-openjpeg can be installed as optionals to support additional transfer syntaxes.
 
 ## Limitations
 
@@ -69,7 +69,16 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 ```python
 from wsidicom import WsiDicom
-slide = WsiDicom.open(path_to_folder)
+slide = WsiDicom.open("path_to_folder")
+```
+
+The `files` argument accepts either a path to a folder with DICOM WSI-files or a sequence of paths to DICOM WSI-files.
+
+***Load a WSI dataset from remote url using [fsspec](https://filesystem-spec.readthedocs.io).***
+
+```python
+from wsidicom import WsiDicom
+slide = WsiDicom.open("s3://bucket/key", file_options={"s3": "anon": True})
 ```
 
 ***Or load a WSI dataset from opened streams.***
@@ -77,7 +86,7 @@ slide = WsiDicom.open(path_to_folder)
 ```python
 from wsidicom import WsiDicom
 
-slide = WsiDicom.open([file_stream_1, file_stream_2, ... ])
+slide = WsiDicom.open_streams([file_stream_1, file_stream_2, ... ])
 ```
 
 ***Or load a WSI dataset from a DICOMDIR.***
@@ -85,7 +94,7 @@ slide = WsiDicom.open([file_stream_1, file_stream_2, ... ])
 ```python
 from wsidicom import WsiDicom
 
-slide = WsiDicom.open_dicomdir(path_to_dicom_dir)
+slide = WsiDicom.open_dicomdir("path_to_dicom_dir")
 ```
 
 ***Or load a WSI dataset from DICOMWeb.***
@@ -108,13 +117,11 @@ slide = WsiDicom.open_web(
 )
 ```
 
-Alternatively, if you have already created an instance of
-`dicomweb_client.DICOMwebClient`, that may be used to create the
-`WsiDicomWebClient` like so:
+Alternatively, if you have already created an instance of `dicomweb_client.DICOMwebClient`, that may be used to create the `WsiDicomWebClient` like so:
 
 ```python
-dw_client = DICOMwebClient(url)
-client = WsiDicomWebClient(dw_client)
+dicomweb_client = DICOMwebClient("url")
+client = WsiDicomWebClient(dicomweb_client)
 ```
 
 Then proceed to call `WsiDicom.open_web()` with this as in the first example.
@@ -123,7 +130,7 @@ Then proceed to call `WsiDicom.open_web()` with this as in the first example.
 
 ```python
 from wsidicom import WsiDicom
-with WsiDicom.open(path_to_folder) as slide:
+with WsiDicom.open("path_to_folder") as slide:
     ...
 ```
 
@@ -200,7 +207,7 @@ The WsiDicom API is similar to OpenSlide, but with some important differences:
 Conversion between OpenSlide `location` and `level` parameters to WsiDicom can be performed:
 
 ```python
-with WsiDicom.open(test_wsi) as wsi:
+with WsiDicom.open("path_to_folder") as wsi:
     level = wsi.levels[openslide_level_index]
     x = openslide_x // 2**(level.level)
     y = openslide_y // 2**(level.level)
@@ -212,7 +219,7 @@ with WsiDicom.open(test_wsi) as wsi:
 WsiDicom parses the DICOM metadata in the opened image into easy-to-use dataclasses, see `wsidicom\metadata`.
 
 ```python
-with WsiDicom.open(path_to_folder) as wsi:
+with WsiDicom.open("path_to_folder") as wsi:
     metadata = wsi.metadata
 ```
 
@@ -233,7 +240,7 @@ with the [VL Whole Slide Microscopy Image CIOD](https://dicom.innolitics.com/cio
 Note that not all DICOM attributes are represented in the defined metadata model. Instead the full ´pydicom´ Datasets can be accessed per level, for example:
 
 ```python
-with WsiDicom.open(path_to_folder) as wsi:
+with WsiDicom.open("path_to_folder") as wsi:
     wsi.levels.base_level.datasets[0]
 ```
 
@@ -300,7 +307,7 @@ The metadata can be exported to json:
 ```python
 from wsidicom.metadata.schema.json import WsiMetadataJsonSchema
 
-with WsiDicom.open(path_to_folder) as wsi:
+with WsiDicom.open("path_to_folder") as wsi:
     metadata = wsi.metadata
 
 schema = WsiMetadataJsonSchema()
@@ -325,8 +332,8 @@ An opened WsiDicom instance can be saved to a new path using the save()-method. 
 By default frames are copied as-is, i.e. without re-compression.
 
 ```python
-with WsiDicom.open(path_to_folder) as slide:
-    slide.save(path_to_output)
+with WsiDicom.open("path_to_folder") as slide:
+    slide.save("path_to_output")
 ```
 
 The output folder must already exists. Be careful to specify a unique folder folder to avoid mixing files from different images.
@@ -336,8 +343,8 @@ Optionally frames can be transcoded, either by a encoder setting or an encoder:
 ```python
 from wsidicom.codec import JpegSettings
 
-with WsiDicom.open(path_to_folder) as slide:
-    slide.save(path_to_output, transcoding=JpegSettings())
+with WsiDicom.open("path_to_folder") as slide:
+    slide.save("path_to_output", transcoding=JpegSettings())
 ```
 
 ## Settings
@@ -369,7 +376,7 @@ Codes that are defined in the 222-draft can be created using the create(source, 
 
 ```python
 from wsidicom import WsiDicom
-slide = WsiDicom.open(path_to_folder)
+slide = WsiDicom.open("path_to_folder")
 ```
 
 ***Create a point annotation at x=10.0, y=20.0 mm.***
@@ -420,7 +427,7 @@ annotations.save('path_to_dicom_dir/annotation.dcm')
 ***Reopen the slide and access the annotation instance.***
 
 ```python
-slide = WsiDicom.open(path_to_folder)
+slide = WsiDicom.open("path_to_folder")
 annotations = slide.annotations
 ```
 
@@ -471,7 +478,7 @@ Labels and overviews are structured similarly to levels, but with somewhat diffe
 A Source is used to create WsiInstances, either from files (*WsiDicomFileSource*) or DICOMWeb (*WsiDicomWebSource*), and can be used to to Initiate a *WsiDicom* object. A source is easiest created with the open() and open_web() helper functions, e.g.:
 
 ```python
-slide = WsiDicom.open(path_to_folder)
+slide = WsiDicom.open("path_to_folder")
 ```
 
 ## Code structure

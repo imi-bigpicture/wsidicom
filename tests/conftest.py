@@ -22,6 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import pytest
 from dicomweb_client import DICOMfileClient
 from pydicom.uid import JPEGBaseline8Bit
+from upath import UPath
 
 from tests.data_gen import create_layer_file
 from wsidicom import WsiDicom
@@ -51,6 +52,28 @@ class WsiTestDefinitions:
         return (
             SLIDE_FOLDER.joinpath(wsi_name, path)
             for wsi_name, path in cls._get_parameter("path")
+        )
+
+    @classmethod
+    def folders_and_counts(cls) -> Iterable[Tuple[Path, int, bool, bool]]:
+        return (
+            (
+                SLIDE_FOLDER.joinpath(wsi_name, wsi_definition["path"]),
+                wsi_definition["levels"],
+                wsi_definition["label"],
+                wsi_definition["overview"],
+            )
+            for wsi_name, wsi_definition in cls.test_definitions.items()
+        )
+
+    @classmethod
+    def folders_and_instance_counts(cls) -> Iterable[Tuple[Path, int]]:
+        return (
+            (
+                SLIDE_FOLDER.joinpath(wsi_name, wsi_definition["path"]),
+                wsi_definition["instances"],
+            )
+            for wsi_name, wsi_definition in cls.test_definitions.items()
         )
 
     @classmethod
@@ -117,10 +140,15 @@ class WsiTestDefinitions:
 
 
 @pytest.fixture()
-def wsi(tmp_path: Path):
+def wsi_file(tmp_path: Path):
     test_file_path = tmp_path.joinpath("test_im.dcm")
     create_layer_file(test_file_path)
-    with WsiDicom.open(tmp_path) as wsi:
+    yield test_file_path
+
+
+@pytest.fixture()
+def wsi(wsi_file: Path):
+    with WsiDicom.open(wsi_file) as wsi:
         yield wsi
 
 
@@ -136,7 +164,7 @@ def wsi_factory():
         wsi_name: str, input_type: WsiInputType = WsiInputType.FILE
     ) -> WsiDicom:
         test_definition = WsiTestDefinitions.test_definitions[wsi_name]
-        folder = Path(SLIDE_FOLDER).joinpath(wsi_name, test_definition["path"])
+        folder = UPath(SLIDE_FOLDER).joinpath(wsi_name, test_definition["path"])
         if (input_type, folder) in wsis:
             return wsis[(input_type, folder)]
         if not folder.exists():
@@ -156,7 +184,7 @@ def wsi_factory():
             )
         elif input_type == WsiInputType.STREAM:
             streams = [open(file, "rb") for file in folder.iterdir() if file.is_file()]
-            wsi = WsiDicom.open(streams)
+            wsi = WsiDicom.open_streams(streams)
         else:
             raise NotImplementedError()
         wsis[(input_type, folder)] = wsi

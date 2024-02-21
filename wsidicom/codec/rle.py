@@ -19,15 +19,16 @@ from struct import pack
 from typing import List, Sequence
 
 import numpy as np
+
 from wsidicom.codec.optionals import (
-    packbits_encode,
     IMAGE_CODECS_AVAILABLE,
     dicomrle_decode,
+    packbits_encode,
 )
 
 
 class RleCodec:
-    """Codec for encoding and decoding DICOM RLE data with imagecodecs PackBits codec."""
+    """Codec for encoding and decoding DICOM RLE data with imagecodecs PackBits."""
 
     _bits_to_compnents_per_channel = {
         8: 1,

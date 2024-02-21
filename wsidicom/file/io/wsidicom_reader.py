@@ -19,12 +19,12 @@ from functools import cached_property
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from pydicom.errors import InvalidDicomError
 from pydicom.tag import Tag
 from pydicom.uid import UID
+from upath import UPath
 
 from wsidicom.codec import Codec
-from wsidicom.errors import WsiDicomFileError, WsiDicomNotSupportedError
+from wsidicom.errors import WsiDicomNotSupportedError
 from wsidicom.file.io.frame_index import (
     Bot,
     EmptyBot,
@@ -33,6 +33,10 @@ from wsidicom.file.io.frame_index import (
     FrameIndex,
     NativePixelData,
     OffsetTableType,
+)
+from wsidicom.file.io.frame_index.tiff_table import (
+    EmptyTiffFrameTagsException,
+    TiffTable,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import ImageType, WsiDataset
@@ -54,11 +58,7 @@ class WsiDicomReader:
         """
         self._lock = threading.Lock()
         self._stream = stream
-        try:
-            file_meta = self._stream.read_file_meta_info()
-        except InvalidDicomError:
-            raise WsiDicomFileError(str(stream), "is not a DICOM file or stream.")
-        self._transfer_syntax_uid = UID(file_meta.TransferSyntaxUID)
+        self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
         self._stream.is_little_endian = self._transfer_syntax_uid.is_little_endian
         self._stream.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
         dataset = self._stream.read_dataset()
@@ -132,7 +132,7 @@ class WsiDicomReader:
         return self.dataset.frame_count
 
     @property
-    def filepath(self) -> Optional[Path]:
+    def filepath(self) -> Optional[UPath]:
         """Return filename if stream is file."""
         return self._stream.filepath
 
@@ -190,6 +190,11 @@ class WsiDicomReader:
         try:
             return Bot(self._stream, self._pixel_data_position, self.frame_count)
         except EmptyBotException:
+            pass
+
+        try:
+            return TiffTable(self._stream, self._pixel_data_position, self.frame_count)
+        except EmptyTiffFrameTagsException:
             self._stream.seek(self._pixel_data_position)
             return EmptyBot(self._stream, self._pixel_data_position, self.frame_count)
 

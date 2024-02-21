@@ -423,7 +423,7 @@ class TestSampleDicom:
             assert_next_item_equals_code(
                 step_item_iterator,
                 SampleCodes.processing_type,
-                SampleCodes.sampling_method,
+                SampleCodes.sampling_of_tissue_specimen,
             )
             assert_next_item_equals_code(
                 step_item_iterator,
@@ -511,7 +511,7 @@ class TestSampleDicom:
             assert_next_item_equals_code(
                 step_item_iterator,
                 SampleCodes.processing_type,
-                SampleCodes.sampling_method,
+                SampleCodes.sampling_of_tissue_specimen,
             )
             assert_next_item_equals_code(
                 step_item_iterator, SampleCodes.sampling_method, block_sampling_method

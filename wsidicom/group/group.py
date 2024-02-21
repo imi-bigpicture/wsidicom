@@ -321,7 +321,8 @@ class Group:
         if slide_origin:
             if self.image_coordinate_system is None:
                 raise ValueError(
-                    "Can't map to slide region as image coordinate system is not defined."
+                    "Can't map to slide region as image coordinate "
+                    "system is not defined."
                 )
             to_coordinate_system = self.image_coordinate_system
             region = to_coordinate_system.slide_to_image(region)

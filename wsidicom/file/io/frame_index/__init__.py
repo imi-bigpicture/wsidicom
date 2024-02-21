@@ -24,3 +24,16 @@ from wsidicom.file.io.frame_index.offset_table_writer import (
     EotWriter,
     OffsetTableWriter,
 )
+
+__all__ = [
+    "Bot",
+    "EmptyBot",
+    "Eot",
+    "FrameIndex",
+    "NativePixelData",
+    "OffsetTableType",
+    "BotWriter",
+    "EotWriter",
+    "OffsetTableWriter",
+    "EmptyBotException",
+]

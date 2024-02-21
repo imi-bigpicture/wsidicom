@@ -18,6 +18,7 @@ from typing import List, Optional, Sequence, Tuple, Union
 from PIL.Image import Image
 from pydicom import Dataset
 from pydicom.uid import UID
+from upath import UPath
 
 from wsidicom.errors import WsiDicomError, WsiDicomUidDuplicateError
 from wsidicom.geometry import Size, SizeMm
@@ -184,13 +185,13 @@ class WsiInstance:
 
     @classmethod
     def create_label(
-        cls, image: Union[Image, str, Path], base_dataset: Dataset
+        cls, image: Union[Image, Union[str, Path, UPath]], base_dataset: Dataset
     ) -> "WsiInstance":
         """Create a label WsiInstance.
 
         Parameters
         ----------
-        image: Union[Image, str, Path]
+        image: Union[Image, Union[str, Path, UPath]]
             Image or path to image.
         base_dataset: Dataset
             Base dataset to include.

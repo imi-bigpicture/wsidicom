@@ -14,8 +14,18 @@
 
 """Module for handling instance level objects."""
 
-from wsidicom.instance.instance import WsiInstance
-from wsidicom.instance.dataset import WsiDataset, ImageType, TileType
+from wsidicom.instance.dataset import ImageType, TileType, WsiDataset
 from wsidicom.instance.image_data import ImageData
-from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
+from wsidicom.instance.instance import WsiInstance
 from wsidicom.instance.pillow_image_data import PillowImageData
+from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
+
+__all__ = [
+    "WsiInstance",
+    "WsiDataset",
+    "ImageType",
+    "TileType",
+    "ImageData",
+    "WsiDicomImageData",
+    "PillowImageData",
+]
