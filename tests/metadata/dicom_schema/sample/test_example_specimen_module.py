@@ -317,7 +317,7 @@ class TestExampleSpecimenModule:
                 ),
                 create_code_item(SampleCodes.specimen_type, block_type),
                 create_code_item(
-                    SampleCodes.processing_type, SampleCodes.sampling_method
+                    SampleCodes.processing_type, SampleCodes.sampling_of_tissue_specimen
                 ),
                 create_string_item(
                     SampleCodes.processing_description, block_sampling_description
@@ -686,7 +686,7 @@ class TestExampleSpecimenModule:
         assert_next_item_equals_code(
             step_item_iterator,
             SampleCodes.processing_type,
-            SampleCodes.sampling_method,
+            SampleCodes.sampling_of_tissue_specimen,
         )
         assert_next_item_equals_string(
             step_item_iterator,

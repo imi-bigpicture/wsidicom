@@ -876,7 +876,7 @@ def create_processing_type_item(step: SpecimenPreparationStepDicomModel):
     if isinstance(step, CollectionDicomModel):
         processing_type_code = SampleCodes.specimen_collection
     elif isinstance(step, SamplingDicomModel):
-        processing_type_code = SampleCodes.sampling_method
+        processing_type_code = SampleCodes.sampling_of_tissue_specimen
     elif isinstance(step, ProcessingDicomModel):
         processing_type_code = SampleCodes.sample_processing
     elif isinstance(step, StainingDicomModel):

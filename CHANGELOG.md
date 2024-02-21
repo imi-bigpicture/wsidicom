@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Matching of slide uids between groups when validating opened instances.
 - Handling of missing dataset values if no default value.
+- Wrong concept name used when serializing and deserializing DICOM specimen samplings.
 
 ## [0.19.1] - 2024-02-14
 
