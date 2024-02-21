@@ -25,13 +25,15 @@ from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 
 
 class EmptyBot(EncapsulatedPixelData):
+    """Frame index parsed from reading the sequence of pixel data delimeters."""
+
     @property
     def offset_table_type(self) -> OffsetTableType:
         return OffsetTableType.EMPTY
 
     def _get_index(self) -> List[Tuple[int, int]]:
-        """Get frame positions and length from sequence of frames that ends
-        with a tag not equal to ItemTag.
+        """Get frame positions and length from sequence of frames that ends with a tag
+        not equal to ItemTag.
 
         Each frame contains:
         item tag (4 bytes)

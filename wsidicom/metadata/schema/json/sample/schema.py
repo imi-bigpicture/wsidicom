@@ -371,7 +371,8 @@ class BaseSpecimenJsonSchema(Schema):
     def _get_samplings(
         cls, sample: SampledSpecimen
     ) -> Dict[Union[str, SpecimenIdentifier], BaseSpecimen]:
-        """Return a dictionary containing this specimen and all recursive sampled specimens."""
+        """Return a dictionary containing this specimen and all recursive sampled
+        specimens."""
         samplings: Dict[Union[str, SpecimenIdentifier], BaseSpecimen] = {
             sample.identifier: sample
         }

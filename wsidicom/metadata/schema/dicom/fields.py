@@ -598,7 +598,9 @@ class NestedDatasetDicomField(fields.Nested, Generic[ValueType]):
         nested_value = getattr(value[0], self._nested_data_key, None)
         if nested_value is None:
             return None
-        return super()._deserialize(nested_value[0], attr, data, **kwargs)  # type: ignore
+        return super()._deserialize(
+            nested_value[0], attr, data, **kwargs
+        )  # type: ignore
 
 
 class ContentItemDicomField(fields.Field, Generic[ValueType]):

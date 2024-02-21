@@ -12,7 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module with metadata models and schemas for serialization to and from DICOM and json."""
+"""Module with metadata models and schemas for serialization to and from DICOM or
+json."""
 
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import (
@@ -58,3 +59,46 @@ from wsidicom.metadata.series import Series
 from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study
 from wsidicom.metadata.wsi import WsiMetadata
+
+__all__ = [
+    "Equipment",
+    "ExtendedDepthOfField",
+    "FocusMethod",
+    "Image",
+    "ImageCoordinateSystem",
+    "Label",
+    "ConstantLutSegment",
+    "DiscreteLutSegment",
+    "ImagePathFilter",
+    "LightPathFilter",
+    "LinearLutSegment",
+    "Lut",
+    "Objectives",
+    "OpticalPath",
+    "Patient",
+    "PatientDeIdentification",
+    "PatientSex",
+    "Collection",
+    "Embedding",
+    "Fixation",
+    "LocalIssuerOfIdentifier",
+    "Measurement",
+    "Processing",
+    "Receiving",
+    "Sample",
+    "SampleLocalization",
+    "Sampling",
+    "SamplingLocation",
+    "SlideSample",
+    "Specimen",
+    "SpecimenIdentifier",
+    "Staining",
+    "Storage",
+    "UniversalIssuerOfIdentifier",
+    "UniversalIssuerType",
+    "UnknownSampling",
+    "Series",
+    "Slide",
+    "Study",
+    "WsiMetadata",
+]

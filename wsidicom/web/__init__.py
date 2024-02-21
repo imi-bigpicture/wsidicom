@@ -16,3 +16,5 @@
 
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 from wsidicom.web.wsidicom_web_source import WsiDicomWebSource
+
+__all__ = ["WsiDicomWebClient", "WsiDicomWebSource"]

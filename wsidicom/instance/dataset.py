@@ -268,7 +268,8 @@ class WsiDataset(Dataset):
             # If no per frame functional sequence we can't make a sparse tile index.
             return TileType.SPARSE
         if self.image_type == ImageType.LABEL:
-            # Labels are expected to only have one frame and can be treated as tiled full.
+            # Labels are expected to only have one frame and can be treated as tiled
+            # full.
             return TileType.FULL
         number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
         number_of_optical_paths = getattr(self, "NumberOfOpticalPaths", 1)
@@ -862,7 +863,7 @@ class WsiDataset(Dataset):
         if dataset is None:
             dataset = self
         value = getattr(dataset, name, None)
-        if value is None:
+        if value is None and name in WSI_ATTRIBUTES:
             return WSI_ATTRIBUTES[name].get_default(self.image_type)
         return value
 

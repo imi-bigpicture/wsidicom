@@ -23,3 +23,15 @@ from wsidicom.metadata.schema.dicom.series import SeriesDicomSchema
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 from wsidicom.metadata.schema.dicom.study import StudyDicomSchema
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
+
+__all__ = [
+    "EquipmentDicomSchema",
+    "ImageDicomSchema",
+    "LabelDicomSchema",
+    "OpticalPathDicomSchema",
+    "PatientDicomSchema",
+    "SeriesDicomSchema",
+    "SlideDicomSchema",
+    "StudyDicomSchema",
+    "WsiMetadataDicomSchema",
+]

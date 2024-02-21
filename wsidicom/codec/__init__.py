@@ -28,3 +28,20 @@ from wsidicom.codec.settings import (
     Settings,
     Subsampling,
 )
+
+__all__ = [
+    "Codec",
+    "Decoder",
+    "Encoder",
+    "LossyCompressionIsoStandard",
+    "determine_media_type",
+    "Channels",
+    "Jpeg2kSettings",
+    "JpegLosslessSettings",
+    "JpegLsSettings",
+    "JpegSettings",
+    "NumpySettings",
+    "RleSettings",
+    "Settings",
+    "Subsampling",
+]

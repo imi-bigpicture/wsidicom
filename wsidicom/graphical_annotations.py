@@ -62,7 +62,7 @@ from .uid import ANN_SOP_CLASS_UID, UID, SlideUids
 
 @dataclass(frozen=True)
 class LabColor:
-    l: int
+    l: int  # noqa: E741
     a: int
     b: int
 
@@ -1669,10 +1669,12 @@ class AnnotationInstance:
                 frame_of_reference_uid,
             )
         else:
-            if slide_uids != SlideUids(
-                dataset.StudyInstanceUID,
-                dataset.SeriesInstanceUID,
-                frame_of_reference_uid,
+            if not slide_uids.matches(
+                SlideUids(
+                    dataset.StudyInstanceUID,
+                    dataset.SeriesInstanceUID,
+                    frame_of_reference_uid,
+                )
             ):
                 raise ValueError("Base uids should match")
         for annotation_ds in dataset.AnnotationGroupSequence:

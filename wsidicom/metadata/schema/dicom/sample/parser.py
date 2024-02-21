@@ -806,9 +806,11 @@ class SpecimenDicomParser:
         return Sample(
             identifier=identifier.simplify(),
             type=specimen_type,
-            sampled_from=[parsed_specimen.sampling]
-            if parsed_specimen.sampling is not None
-            else [],
+            sampled_from=(
+                [parsed_specimen.sampling]
+                if parsed_specimen.sampling is not None
+                else []
+            ),
             steps=parsed_specimen.preparation_steps,
             container=parsed_specimen.container,
         )

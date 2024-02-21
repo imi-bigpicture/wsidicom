@@ -27,7 +27,7 @@ class PatientSex(Enum):
 
     F = "female"
     M = "male"
-    O = "other"
+    O = "other"  # noqa: E741
 
 
 @dataclass(frozen=True)
@@ -85,7 +85,9 @@ class Patient:
             identifier=None,
             birth_date=None,
             sex=None,
-            de_identification=replace(self.de_identification, identity_removed=True)
-            if self.de_identification
-            else None,
+            de_identification=(
+                replace(self.de_identification, identity_removed=True)
+                if self.de_identification
+                else None
+            ),
         )

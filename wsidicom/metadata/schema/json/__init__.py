@@ -23,3 +23,15 @@ from wsidicom.metadata.schema.json.series import SeriesJsonSchema
 from wsidicom.metadata.schema.json.slide import SlideJsonSchema
 from wsidicom.metadata.schema.json.study import StudyJsonSchema
 from wsidicom.metadata.schema.json.wsi import WsiMetadataJsonSchema
+
+__all__ = [
+    "EquipmentJsonSchema",
+    "ImageJsonSchema",
+    "LabelJsonSchema",
+    "OpticalPathJsonSchema",
+    "PatientJsonSchema",
+    "SeriesJsonSchema",
+    "SlideJsonSchema",
+    "StudyJsonSchema",
+    "WsiMetadataJsonSchema",
+]

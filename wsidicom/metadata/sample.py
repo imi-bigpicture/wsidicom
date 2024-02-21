@@ -631,7 +631,8 @@ class Specimen(BaseSpecimen):
         description: Optional[str] = None,
         location: Optional[SamplingLocation] = None,
     ) -> BaseSampling:
-        """Create a sampling from the specimen that can be used to create a new sample."""
+        """Create a sampling from the specimen that can be used to create a new
+        sample."""
         if method is None or self.type is None:
             sampling = UnknownSampling(
                 specimen=self,
@@ -687,7 +688,8 @@ class Sample(SampledSpecimen):
         sampling_constraints: Optional[Sequence[BaseSampling]] = None,
         location: Optional[SamplingLocation] = None,
     ) -> BaseSampling:
-        """Create a sampling from the specimen that can be used to create a new sample."""
+        """Create a sampling from the specimen that can be used to create a new
+        sample."""
         self._check_sampling_constraints_in_sampling_tree(sampling_constraints)
         if sampling_constraints is not None:
             for sampling_constraint in sampling_constraints:

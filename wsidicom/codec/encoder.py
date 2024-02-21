@@ -296,7 +296,9 @@ class PillowEncoder(Encoder[Union[JpegSettings, Jpeg2kSettings]]):
         if not isinstance(image, Image):
             image = Pillow.fromarray(image)
         with io.BytesIO() as buffer:
-            image.save(buffer, format=self._format, **self._pillow_settings)  # type: ignore
+            image.save(
+                buffer, format=self._format, **self._pillow_settings  # type: ignore
+            )
             return buffer.getvalue()
 
     @classmethod

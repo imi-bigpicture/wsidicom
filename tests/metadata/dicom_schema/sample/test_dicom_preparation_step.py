@@ -194,7 +194,10 @@ class TestPreparationStepDicomSchema:
         assert isinstance(serialized, list)
         item_iterator = iter(serialized)
         assert_initial_common_preparation_step_items(
-            item_iterator, sampling_dicom, identifier, SampleCodes.sampling_method
+            item_iterator,
+            sampling_dicom,
+            identifier,
+            SampleCodes.sampling_of_tissue_specimen,
         )
         # Next item should be method
         assert_next_item_equals_code(

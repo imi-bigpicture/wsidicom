@@ -607,7 +607,8 @@ class ImageData(metaclass=ABCMeta):
         path: str
             Optical path.
         paste_method: Callable[[Image, Point, Image], None]
-            Method that accepts a image, a tile point and tile to paste and returns None.
+            Method that accepts a image, a tile point and tile to paste and returns
+            None.
         threads: int
             Number of workers to use.
         """

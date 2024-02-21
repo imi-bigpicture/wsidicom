@@ -16,3 +16,5 @@
 
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
+
+__all__ = ["FullTileIndex", "SparseTileIndex"]

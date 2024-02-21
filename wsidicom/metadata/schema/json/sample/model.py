@@ -276,9 +276,11 @@ class SlideSampleJsonModel(BaseSpecimenJsonModel):
         sample = SlideSample(
             identifier=self.identifier,
             anatomical_sites=self.anatomical_sites,
-            sampled_from=self.sampled_from.from_json_model(specimens)
-            if self.sampled_from
-            else None,
+            sampled_from=(
+                self.sampled_from.from_json_model(specimens)
+                if self.sampled_from
+                else None
+            ),
             uid=self.uid,
             localization=self.localization,
             short_description=self.short_description,

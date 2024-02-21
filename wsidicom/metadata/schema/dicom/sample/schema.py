@@ -78,7 +78,7 @@ class SampleCodes:
     identifier: Code = codes.DCM.SpecimenIdentifier  # type: ignore
     issuer_of_identifier: Code = codes.DCM.IssuerOfSpecimenIdentifier  # type: ignore
     processing_type: Code = codes.DCM.ProcessingType  # type: ignore
-    sampling_method: Code = codes.SCT.SamplingOfTissueSpecimen  # type: ignore
+    sampling_method: Code = codes.DCM.SamplingMethod  # type: ignore
     datetime_of_processing: Code = codes.DCM.DatetimeOfProcessing  # type: ignore
     processing_description: Code = codes.DCM.ProcessingStepDescription  # type: ignore
     parent_specimen_identifier: Code = codes.DCM.ParentSpecimenIdentifier  # type: ignore
@@ -86,6 +86,7 @@ class SampleCodes:
     parent_specimen_type: Code = codes.DCM.ParentSpecimenType  # type: ignore
     specimen_type: Code = codes.SCT.SpecimenType  # type: ignore
     specimen_collection: Code = codes.SCT.SpecimenCollection  # type: ignore
+    sampling_of_tissue_specimen: Code = codes.SCT.SamplingOfTissueSpecimen  # type: ignore
     sample_processing: Code = codes.SCT.SpecimenProcessing  # type: ignore
     staining: Code = codes.SCT.Staining  # type: ignore
     using_substance: Code = codes.SCT.UsingSubstance  # type: ignore
@@ -186,7 +187,7 @@ class BasePreparationStepDicomSchema(ItemSequenceDicomSchema[LoadType]):
 class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
     processing_type = CodeItemDicomField(
         load_type=SpecimenPreparationProcedureCode,
-        dump_default=SampleCodes.sampling_method,
+        dump_default=SampleCodes.sampling_of_tissue_specimen,
         dump_only=True,
     )
     method = CodeItemDicomField(SpecimenSamplingProcedureCode)
@@ -382,7 +383,7 @@ class PreparationStepDicomField(fields.Field):
 
     """Mapping key in serialized step to schema. Keys are CID 8111 codes."""
     _processing_type_to_schema_mapping: Dict[Code, Type[ItemSequenceDicomSchema]] = {
-        SampleCodes.sampling_method: SamplingDicomSchema,
+        SampleCodes.sampling_of_tissue_specimen: SamplingDicomSchema,
         SampleCodes.specimen_collection: CollectionDicomSchema,
         SampleCodes.sample_processing: ProcessingDicomSchema,
         SampleCodes.staining: StainingDicomSchema,
@@ -455,7 +456,7 @@ class PreparationStepDicomField(fields.Field):
             loaded = schema().load(sequence, many=False)
         except ValidationError as exception:
             error = "Failed to load processing step due to validation error."
-            if settings._ignore_specimen_preparation_step_on_validation_error:
+            if settings.ignore_specimen_preparation_step_on_validation_error:
                 logging.warning(error, exc_info=True)
                 return None
             raise ValidationError(

@@ -328,7 +328,8 @@ class WsiDicomWebClient:
             status_code = HTTPStatus(exception.response.status_code)
             error_message = exception.response.text
             logging.debug(
-                f"Got error code: {status_code} message: {error_message} when searching for instances."
+                f"Got error code: {status_code} message: {error_message} "
+                "when searching for instances."
             )
             # If search filter error remove offending filter and filter the results.
             try:

@@ -16,10 +16,22 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 from pydicom.uid import UID
 from pydicom.valuerep import MAX_VALUE_LEN
+from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
@@ -29,11 +41,13 @@ from wsidicom.file.io import (
     WsiDicomWriter,
 )
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
+from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.target import Target
+from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
 class WsiDicomFileTarget(Target):
@@ -41,7 +55,7 @@ class WsiDicomFileTarget(Target):
 
     def __init__(
         self,
-        output_path: Path,
+        output_path: Union[str, Path, UPath],
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
@@ -50,13 +64,14 @@ class WsiDicomFileTarget(Target):
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        file_options: Optional[Dict[str, Any]] = None,
     ):
         """
         Create a WsiDicomFileTarget.
 
         Parameters
         ----------
-        output_path: Path
+        output_path: Union[str, Path, UPath]
             Folder path to save files to.
         uid_generator: Callable[..., UID]
             Uid generator to use.
@@ -78,11 +93,14 @@ class WsiDicomFileTarget(Target):
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
+        file_options: Optional[Dict[str, Any]] = None
+            Keyword arguments for saving files to output path.
         """
-        self._output_path = output_path
+        self._output_path = UPath(output_path)
         self._offset_table = offset_table
-        self._filepaths: List[Path] = []
+        self._filepaths: List[UPath] = []
         self._opened_files: List[WsiDicomReader] = []
+        self._file_options = file_options
         super().__init__(
             uid_generator,
             workers,
@@ -94,7 +112,7 @@ class WsiDicomFileTarget(Target):
         )
 
     @property
-    def filepaths(self) -> List[Path]:
+    def filepaths(self) -> List[UPath]:
         """Return filepaths for created files."""
         return self._filepaths
 
@@ -176,11 +194,11 @@ class WsiDicomFileTarget(Target):
         self,
         group: Group,
         scale: int,
-    ) -> List[Path]:
+    ) -> List[UPath]:
         """Save group to target."""
         if not isinstance(scale, int) or scale < 1:
             raise ValueError(f"Scale must be positive integer, got {scale}.")
-        filepaths: List[Path] = []
+        filepaths: List[UPath] = []
         for instances in self._group_instances_to_file(group):
             uid = self._uid_generator()
             filepath = self._output_path.joinpath(uid + ".dcm")
@@ -200,7 +218,8 @@ class WsiDicomFileTarget(Target):
                     != instances[0].image_data.samples_per_pixel
                 ):
                     raise ValueError(
-                        "Transcode settings must match image data bits and photometric interpretation."
+                        "Transcode settings must match image data bits and "
+                        "photometric interpretation."
                     )
                 transfer_syntax = self._transcoder.transfer_syntax
                 dataset.PhotometricInterpretation = (
@@ -224,7 +243,9 @@ class WsiDicomFileTarget(Target):
                 offset_table = OffsetTableType.BASIC
             else:
                 offset_table = OffsetTableType.NONE
-            with WsiDicomWriter.open(filepath, transfer_syntax, offset_table) as writer:
+            with WsiDicomWriter.open(
+                filepath, transfer_syntax, offset_table, self._file_options
+            ) as writer:
                 writer.write(
                     uid,
                     dataset,
@@ -240,8 +261,13 @@ class WsiDicomFileTarget(Target):
         self._filepaths.extend(filepaths)
         return filepaths
 
-    def _open_files(self, filepaths: Iterable[Path]) -> List[WsiInstance]:
-        readers = [WsiDicomReader.open(filepath) for filepath in filepaths]
+    def _open_files(self, filepaths: Iterable[UPath]) -> List[WsiInstance]:
+        readers = [
+            WsiDicomReader(stream)
+            for stream in WsiDicomStreamOpener(self._file_options).open(
+                filepaths, WSI_SOP_CLASS_UID
+            )
+        ]
         self._opened_files.extend(readers)
         return [
             WsiInstance(
