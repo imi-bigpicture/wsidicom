@@ -293,7 +293,6 @@ sftp = ["paramiko"]
 smb = ["smbprotocol"]
 ssh = ["paramiko"]
 tqdm = ["tqdm"]
-=======
 
 [[package]]
 name = "idna"
