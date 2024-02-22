@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2024-02-22
+
+### Fixed
+
+- Changed default for parameter `source_owned` in `__init__` of `WsiDicom` to be True, to by default close opened file handles.
+
 ## [0.20.0] - 2024-02-21
 
 ### Added
