@@ -59,7 +59,7 @@ class WsiDicom:
     def __init__(
         self,
         source: Source,
-        source_owned: bool = False,
+        source_owned: bool = True,
     ):
         """Hold WSI DICOM levels, labels and overviews.
 
@@ -69,7 +69,7 @@ class WsiDicom:
         ----------
         source: Source
             A source providing instances for the wsi to open.
-        source_owned: bool = False
+        source_owned: bool = True
             If source should be closed by this instance if used in a context manager.
         """
         self._selected_pyramid = 0
