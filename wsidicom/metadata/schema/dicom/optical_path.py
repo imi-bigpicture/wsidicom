@@ -567,10 +567,7 @@ class LightPathFilterDicomSchema(FilterDicomSchema[LightPathFilter]):
     )
     low_pass = fields.Integer(load_only=True, allow_none=True)
     high_pass = fields.Integer(load_only=True, allow_none=True)
-    filter_band = fields.List(
-        fields.Integer(),
-        data_key="LightPathFilterPassBand",
-    )
+    filter_band = fields.List(fields.Integer(), data_key="LightPathFilterPassBand")
 
     @property
     def load_type(self) -> Type[LightPathFilter]:
@@ -588,10 +585,7 @@ class ImagePathFilterDicomSchema(FilterDicomSchema[ImagePathFilter]):
     )
     low_pass = fields.Integer(load_only=True, allow_none=True)
     high_pass = fields.Integer(load_only=True, allow_none=True)
-    filter_band = fields.List(
-        fields.Integer(),
-        data_key="ImagePathFilterPassBand",
-    )
+    filter_band = fields.List(fields.Integer(), data_key="ImagePathFilterPassBand")
 
     @property
     def load_type(self) -> Type[ImagePathFilter]:

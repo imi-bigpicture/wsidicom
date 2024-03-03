@@ -313,48 +313,6 @@ class FlattenOnDumpNestedDicomField(fields.Nested):
         return super()._serialize(nested_obj, attr, obj, **kwargs)
 
 
-class FlattenOnLoadNestedDicomField(fields.Nested):
-    """Field that flattens the nested loaded item into the parent item on load.
-
-    On dump the nested fields are deflatten from the parent dataset to a nested dataset.
-    """
-
-    def __init__(self, nested: Schema, **kwargs):
-        self._nested = nested
-        super().__init__(nested=nested, **kwargs)
-
-    @property
-    def nested_schema(self) -> Schema:
-        return self._nested
-
-    def de_flatten(self, dataset: Dataset) -> Optional[Dataset]:
-        """Create new dataset containing the attributes defined in nested schema."""
-        nested = Dataset()
-        for nested_field in self.nested_schema.fields.values():
-            if nested_field.dump_only:
-                continue
-            if isinstance(nested_field, FlattenOnDumpNestedDicomField):
-                de_flatten_nested_field = nested_field.de_flatten(dataset)
-                if de_flatten_nested_field is not None:
-                    nested.update(de_flatten_nested_field)
-            elif nested_field.data_key is not None and nested_field.data_key in dataset:
-                nested_value = dataset.get(nested_field.data_key)
-                setattr(nested, nested_field.data_key, nested_value)
-        if len(nested) == 0:
-            return None
-        return nested
-
-    def flatten(self, data: Dict[str, Any]):
-        """Insert attributes from nested dataset into data."""
-        key = self.name
-        if self.data_key is not None:
-            key = self.data_key
-        nested = data.pop(key, None)
-        if isinstance(nested, Dataset):
-            for nested_key, nested_value in nested.items():
-                data[nested_key] = nested_value  # type: ignore
-
-
 class FloatDicomField(fields.Float):
     def _serialize(self, value: float, attr: Optional[str], obj: Any, **kwargs):
         return DSfloat(value)
@@ -495,7 +453,7 @@ class UidDatasetDicomField(UidDicomField):
         return super()._deserialize(nested_value, attr, data, **kwargs)
 
 
-class PatientNameDicomField(fields.String):
+class PersonNameDicomField(fields.String):
     def _deserialize(self, value: PersonName, attr, data, **kwargs) -> str:
         return str(value)
 

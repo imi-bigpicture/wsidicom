@@ -13,9 +13,10 @@
 #    limitations under the License.
 
 import datetime
-from typing import Optional, Union
+from typing import Optional, Type, Union
 
 import pytest
+from marshmallow import fields
 from pydicom import Dataset
 from pydicom import config as pydicom_config
 from pydicom.sr.coding import Code
@@ -38,12 +39,30 @@ from wsidicom.metadata.schema.dicom.fields import (
     CodeDicomField,
     CodeItemDicomField,
     DateTimeItemDicomField,
+    FlattenOnDumpNestedDicomField,
     IssuerOfIdentifierDicomField,
     MeasurementtemDicomField,
     StringDicomField,
     StringItemDicomField,
     StringOrCodeItemDicomField,
 )
+from wsidicom.metadata.schema.dicom.schema import DicomSchema
+
+
+class ChildFlattenOnDumpSchema(DicomSchema):
+    value = fields.String(data_key="PatientID")
+
+    @property
+    def load_type(self) -> Type[dict]:
+        return dict
+
+
+class ParentFlattenOnDumpSchema(DicomSchema):
+    nested = FlattenOnDumpNestedDicomField(ChildFlattenOnDumpSchema())
+
+    @property
+    def load_type(self) -> Type[dict]:
+        return dict
 
 
 class TestDicomFields:
@@ -340,3 +359,28 @@ class TestDicomFields:
         # Assert
         assert isinstance(deserialized, Code)
         assert deserialized == code
+
+    def test_flatten_on_dump_nested_dicom_field_load(self):
+        # Arrange
+        schema = ParentFlattenOnDumpSchema()
+
+        dataset = Dataset()
+        dataset.PatientID = "patient id"
+
+        # Act
+        deserialized = schema.load(dataset)
+
+        # Assert
+        assert deserialized["nested"]["value"] == "patient id"
+
+    def test_flatten_on_dump_nested_dicom_field_dump(self):
+        # Arrange
+        schema = ParentFlattenOnDumpSchema()
+
+        data = {"nested": {"value": "patient id"}}
+
+        # Act
+        serialized = schema.dump(data)
+
+        # Assert
+        assert serialized["PatientID"].value == "patient id"

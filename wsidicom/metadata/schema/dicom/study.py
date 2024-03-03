@@ -22,7 +22,7 @@ from wsidicom.metadata.schema.dicom.fields import (
     DateDicomField,
     DefaultingNoneDicomField,
     DefaultingTagDicomField,
-    PatientNameDicomField,
+    PersonNameDicomField,
     StringDicomField,
     TimeDicomField,
     UidDicomField,
@@ -52,7 +52,7 @@ class StudyDicomSchema(ModuleDicomSchema[Study]):
         allow_none=True,
     )
     referring_physician_name = DefaultingNoneDicomField(
-        PatientNameDicomField(), data_key="ReferringPhysicianName", allow_none=True
+        PersonNameDicomField(), data_key="ReferringPhysicianName", allow_none=True
     )
 
     @property

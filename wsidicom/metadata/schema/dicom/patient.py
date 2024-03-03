@@ -30,7 +30,7 @@ from wsidicom.metadata.schema.dicom.fields import (
     EnumDicomField,
     FlattenOnDumpNestedDicomField,
     ListDicomField,
-    PatientNameDicomField,
+    PersonNameDicomField,
     SingleCodeSequenceField,
     StringDicomField,
 )
@@ -42,7 +42,9 @@ from wsidicom.metadata.schema.dicom.schema import (
 
 class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
     identity_removed = BooleanDicomField(data_key="PatientIdentityRemoved")
-    method_strings = ListDicomField(fields.String(), data_key="DeidentificationMethod")
+    method_strings = ListDicomField(
+        StringDicomField(VR.LO), data_key="DeidentificationMethod"
+    )
     method_codes = fields.List(
         CodeDicomField(Code), data_key="DeidentificationMethodCodeSequence"
     )
@@ -76,7 +78,7 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
 
 class PatientDicomSchema(ModuleDicomSchema[Patient]):
     name = DefaultingNoneDicomField(
-        PatientNameDicomField(), data_key="PatientName", load_default=None
+        PersonNameDicomField(), data_key="PatientName", load_default=None
     )
     identifier = DefaultingNoneDicomField(
         StringDicomField(value_representation=VR.LO),
