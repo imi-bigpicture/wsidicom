@@ -31,7 +31,7 @@ from typing import (
     Union,
 )
 
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, post_dump, post_load, pre_dump, pre_load
 from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
 from pydicom import config as pydicom_config
@@ -81,6 +81,8 @@ class StringDicomField(StringLikeDicomField):
         super().__init__(**kwargs)
 
     def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs):
+        if value is None:
+            return None
         valid, error = validate_vr_length(self._value_representation, value)
         if (
             not valid
@@ -353,49 +355,75 @@ class FlattenOnLoadNestedDicomField(fields.Nested):
                 data[nested_key] = nested_value  # type: ignore
 
 
-CodeType = TypeVar("CodeType", Code, ConceptCode)
-
-
 class FloatDicomField(fields.Float):
     def _serialize(self, value: float, attr: Optional[str], obj: Any, **kwargs):
         return DSfloat(value)
 
 
-class CodeDicomField(fields.Field, Generic[CodeType]):
+CodeType = TypeVar("CodeType", Code, ConceptCode)
+
+
+class CodeDicomSchema(Schema):
+    """Schema for a DICOM `code sequence`."""
+
+    value = StringDicomField(VR.SH, data_key="CodeValue")
+    scheme_designator = StringDicomField(VR.SH, data_key="CodingSchemeDesignator")
+    meaning = StringDicomField(VR.LO, data_key="CodeMeaning")
+    scheme_version = StringDicomField(
+        VR.SH, data_key="CodingSchemeVersion", allow_none=True
+    )
+
     def __init__(self, load_type: Type[CodeType], **kwargs) -> None:
         self._load_type = load_type
         super().__init__(**kwargs)
 
-    def _serialize(
-        self, value: Optional[CodeType], attr: Optional[str], obj: Any, **kwargs
-    ):
-        if value is None:
-            return self.dump_default
-        dataset = Dataset()
-        dataset.CodeValue = value.value
-        dataset.CodingSchemeDesignator = value.scheme_designator
-        dataset.CodeMeaning = value.meaning
-        if value.scheme_version is not None and value.scheme_version != "":
-            dataset.CodingSchemeVersion = value.scheme_version
+    @pre_dump
+    def pre_dump(self, code: Optional[Code] = None, **kwargs):
+        if code is None:
+            return None
+        data = {
+            "value": code.value,
+            "scheme_designator": code.scheme_designator,
+            "meaning": code.meaning,
+        }
+        if code.scheme_version is not None and code.scheme_version != "":
+            data["scheme_version"] = code.scheme_version
+        return data
 
+    @post_dump
+    def post_dump(self, data: Dict[str, Any], **kwargs):
+        dataset = Dataset()
+        for data_key in (
+            field.data_key
+            for field in self.fields.values()
+            if field.data_key is not None and field.data_key in data
+        ):
+            setattr(dataset, data_key, data.get(data_key))
         return dataset
 
-    def _deserialize(
-        self,
-        value: Dataset,
-        attr: Optional[str],
-        data: Optional[Dict[str, Any]],
-        **kwargs,
-    ):
-        version = value.get("CodingSchemeVersion", None)
-        if version == "":
-            version = None
-        return self._load_type(
-            value=value.CodeValue,
-            scheme_designator=value.CodingSchemeDesignator,
-            meaning=value.CodeMeaning,
-            scheme_version=version,
-        )
+    @pre_load
+    def pre_load(self, dataset: Dataset, **kwargs):
+        return {
+            data_key: dataset.get(data_key)
+            for data_key in (
+                field.data_key
+                for field in self.fields.values()
+                if field.data_key is not None
+            )
+            if dataset.get(data_key) not in (None, "")
+        }
+
+    @post_load
+    def post_load(self, data: Dict[str, Any], **kwargs):
+        print("post_load", data)
+        return self._load_type(**data)
+
+
+class CodeDicomField(fields.Nested, Generic[CodeType]):
+    """Field for a DICOM `code sequence`."""
+
+    def __init__(self, load_type: Type[CodeType], **kwargs) -> None:
+        super().__init__(nested=CodeDicomSchema(load_type), **kwargs)
 
 
 class SingleCodeSequenceField(CodeDicomField):

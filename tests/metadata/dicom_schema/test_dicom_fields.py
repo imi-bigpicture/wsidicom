@@ -35,6 +35,7 @@ from wsidicom.metadata.sample import (
     UniversalIssuerType,
 )
 from wsidicom.metadata.schema.dicom.fields import (
+    CodeDicomField,
     CodeItemDicomField,
     DateTimeItemDicomField,
     IssuerOfIdentifierDicomField,
@@ -86,7 +87,7 @@ class TestDicomFields:
         assert deserialized.scheme_designator == "DCM"
         assert deserialized.meaning == "Test Code"
 
-    def test_test_code_content_item_dicom_field_serialize(self):
+    def test_text_content_item_dicom_field_serialize(self):
         # Arrange
         value = "test"
         field = StringItemDicomField()
@@ -302,3 +303,40 @@ class TestDicomFields:
 
         # Assert
         assert serialized == value[:maximum_allowed_length]
+
+    @pytest.mark.parametrize("code_version", [None, "version"])
+    def test_code_field_serialize(self, code_version: Optional[str]):
+        # Arrange
+        code = Code("code", "scheme", "meaning", code_version)
+        field = CodeDicomField(Code)
+
+        # Act
+        serialized = field.serialize("attribute", {"attribute": code})
+
+        # Assert
+        assert serialized["CodeValue"].value == code.value
+        assert serialized["CodingSchemeDesignator"].value == code.scheme_designator
+        assert serialized["CodeMeaning"].value == code.meaning
+        if code.scheme_version is not None:
+            assert serialized["CodingSchemeVersion"].value == code.scheme_version
+        else:
+            assert "CodingSchemeVersion" not in serialized
+
+    @pytest.mark.parametrize("code_version", [None, "version"])
+    def test_code_field_deserialize(self, code_version: Optional[str]):
+        # Arrange
+        code = Code("code", "scheme", "meaning", code_version)
+        dataset = Dataset()
+        dataset.CodeValue = code.value
+        dataset.CodingSchemeDesignator = code.scheme_designator
+        dataset.CodeMeaning = code.meaning
+        if code_version is not None:
+            dataset.CodingSchemeVersion = code_version
+        field = CodeDicomField(Code)
+
+        # Act
+        deserialized = field.deserialize(dataset)
+
+        # Assert
+        assert isinstance(deserialized, Code)
+        assert deserialized == code
