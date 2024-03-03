@@ -14,9 +14,9 @@
 
 """DICOM schema for Optical path model."""
 
-from dataclasses import replace
 import io
 import struct
+from dataclasses import replace
 from enum import Enum
 from typing import (
     Any,
@@ -33,6 +33,7 @@ import numpy as np
 from marshmallow import fields, post_load, pre_dump
 from pydicom import Dataset
 from pydicom.sr.coding import Code
+from pydicom.valuerep import VR
 
 from wsidicom.conceptcode import (
     IlluminationCode,
@@ -614,12 +615,14 @@ class ObjectivesSchema(DicomSchema[Objectives]):
 
 class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
     identifier = DefaultingDicomField(
-        StringDicomField(),
+        StringDicomField(value_representation=VR.SH),
         data_key="OpticalPathIdentifier",
         load_default=None,
         dump_default=Defaults.optical_path_identifier,
     )
-    description = StringDicomField(data_key="OpticalPathDescription", load_default=None)
+    description = StringDicomField(
+        value_representation=VR.ST, data_key="OpticalPathDescription", load_default=None
+    )
     illumination_types = DefaultingDicomField(
         fields.List(CodeDicomField(IlluminationCode)),
         data_key="IlluminationTypeCodeSequence",

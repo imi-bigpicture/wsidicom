@@ -14,6 +14,8 @@
 
 """Frame index for EOT, parsing the positions from the EOT."""
 
+from venv import logger
+
 from pydicom.tag import Tag
 
 from wsidicom.errors import WsiDicomFileError
@@ -50,7 +52,11 @@ class Eot(OffsetTable):
         self._validate_pixel_data_start()
         bot_length = self._read_bot_length()
         if bot_length is not None:
-            raise WsiDicomFileError(str(self._file), "Expected empty BOT")
+            logger.warning(
+                "BOT table was not empty in file with EOT table. The BOT table will be ignored."
+            )
+            # raise WsiDicomFileError(str(self._file), "Expected empty BOT")
+            self._file.seek(bot_length, 1)
         return self._file.tell()
 
     def _read_table(self) -> bytes:

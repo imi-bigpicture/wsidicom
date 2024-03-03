@@ -16,6 +16,8 @@
 
 from typing import Type
 
+from pydicom.valuerep import VR
+
 from wsidicom.metadata.schema.dicom.fields import (
     DateDicomField,
     DefaultingNoneDicomField,
@@ -34,7 +36,9 @@ class StudyDicomSchema(ModuleDicomSchema[Study]):
         UidDicomField(), tag="default_uid", data_key="StudyInstanceUID", allow_none=True
     )
     identifier = DefaultingNoneDicomField(
-        StringDicomField(), data_key="StudyID", allow_none=True
+        StringDicomField(value_representation=VR.ST),
+        data_key="StudyID",
+        allow_none=True,
     )
     date = DefaultingNoneDicomField(
         DateDicomField(), data_key="StudyDate", allow_none=True
@@ -43,7 +47,9 @@ class StudyDicomSchema(ModuleDicomSchema[Study]):
         TimeDicomField(), data_key="StudyTime", allow_none=True
     )
     accession_number = DefaultingNoneDicomField(
-        StringDicomField(), data_key="AccessionNumber", allow_none=True
+        StringDicomField(value_representation=VR.ST),
+        data_key="AccessionNumber",
+        allow_none=True,
     )
     referring_physician_name = DefaultingNoneDicomField(
         PatientNameDicomField(), data_key="ReferringPhysicianName", allow_none=True

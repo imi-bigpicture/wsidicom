@@ -29,6 +29,7 @@ from marshmallow import ValidationError, fields, post_load
 from pydicom import Dataset
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
+from pydicom.valuerep import VR
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
@@ -55,6 +56,7 @@ from wsidicom.metadata.schema.dicom.fields import (
     StringDicomField,
     StringItemDicomField,
     StringOrCodeItemDicomField,
+    UidDicomField,
 )
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
@@ -476,8 +478,10 @@ class PreparationStepDicomField(fields.Field):
 
 
 class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel]):
-    identifier = StringDicomField(data_key="SpecimenIdentifier")
-    uid = StringDicomField(data_key="SpecimenUID")
+    identifier = StringDicomField(
+        value_representation=VR.LO, data_key="SpecimenIdentifier"
+    )
+    uid = UidDicomField(data_key="SpecimenUID")
     localization = fields.Nested(
         SampleLocalizationDicomSchema(),
         data_key="SpecimenLocalizationContentItemSequence",
@@ -507,10 +511,12 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
         dump_only=True,
     )
     short_description = StringDicomField(
-        data_key="SpecimenShortDescription", allow_none=True
+        value_representation=VR.LO, data_key="SpecimenShortDescription", allow_none=True
     )
     detailed_description = StringDicomField(
-        data_key="SpecimenDetailedDescription", allow_none=True
+        value_representation=VR.UT,
+        data_key="SpecimenDetailedDescription",
+        allow_none=True,
     )
 
     @property

@@ -15,6 +15,7 @@
 """DICOM fields for attribute serialization."""
 
 import datetime
+import logging
 import math
 from abc import abstractmethod
 from typing import (
@@ -33,11 +34,23 @@ from typing import (
 from marshmallow import Schema, fields
 from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
+from pydicom import config as pydicom_config
 from pydicom.multival import MultiValue
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
-from pydicom.valuerep import DA, DT, TM, DSfloat, PersonName
+from pydicom.valuerep import (
+    DA,
+    DT,
+    MAX_VALUE_LEN,
+    STR_VR,
+    TM,
+    VR,
+    DSfloat,
+    PersonName,
+    validate_vr_length,
+)
 
+from wsidicom import config
 from wsidicom.conceptcode import ConceptCode, UnitCode
 from wsidicom.geometry import Orientation, PointMm, SizeMm
 from wsidicom.metadata.sample import (
@@ -59,7 +72,29 @@ class StringLikeDicomField(fields.Field):
 
 
 class StringDicomField(StringLikeDicomField):
-    pass
+    def __init__(self, value_representation: VR, **kwargs):
+        if value_representation not in STR_VR:
+            raise ValueError(
+                f"Value representation {value_representation} is not a string."
+            )
+        self._value_representation = value_representation
+        super().__init__(**kwargs)
+
+    def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs):
+        valid, error = validate_vr_length(self._value_representation, value)
+        if (
+            not valid
+            and pydicom_config.settings.writing_validation_mode == pydicom_config.RAISE
+            and config.settings.truncate_long_dicom_strings_on_validation_error
+        ):
+            maximum_allowed_legth = MAX_VALUE_LEN[self._value_representation]
+            logging.warning(
+                f"Truncating long DICOM string {value} of value representation "
+                f"{self._value_representation} with maximum allowed length "
+                f"{maximum_allowed_legth} to {value[: maximum_allowed_legth]}."
+            )
+            value = value[:maximum_allowed_legth]
+        return super()._serialize(value, attr, obj, **kwargs)
 
 
 class EnumDicomField(fields.Enum):
@@ -399,7 +434,10 @@ class FloatOrCodeDicomField(fields.Field, Generic[CodeType]):
         return self._code_field.deserialize(value, attr, data, **kwargs)
 
 
-class UidDicomField(fields.Field):
+class UidDicomField(StringDicomField):
+    def __init__(self, **kwargs):
+        super().__init__(value_representation=VR.UI, **kwargs)
+
     def _deserialize(self, value: Any, attr, data, **kwargs):
         if value is None or value == "":
             return None

@@ -19,6 +19,7 @@ from typing import Any, Dict, Type
 
 from marshmallow import fields, post_load, pre_dump
 from pydicom.sr.coding import Code
+from pydicom.valuerep import VR
 
 from wsidicom.metadata.patient import Patient, PatientDeIdentification, PatientSex
 from wsidicom.metadata.schema.dicom.fields import (
@@ -78,7 +79,9 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
         PatientNameDicomField(), data_key="PatientName", load_default=None
     )
     identifier = DefaultingNoneDicomField(
-        StringDicomField(), data_key="PatientID", load_default=None
+        StringDicomField(value_representation=VR.LO),
+        data_key="PatientID",
+        load_default=None,
     )
     birth_date = DefaultingNoneDicomField(
         DateDicomField(), data_key="PatientBirthDate", load_default=None
@@ -87,7 +90,9 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
         EnumDicomField(PatientSex), data_key="PatientSex", load_default=None
     )
     species_description_string = StringDicomField(
-        data_key="PatientSpeciesDescription", allow_none=True
+        value_representation=VR.LO,
+        data_key="PatientSpeciesDescription",
+        allow_none=True,
     )
     species_description_code = SingleCodeSequenceField(
         Code, data_key="PatientSpeciesCodeSequence", allow_none=True

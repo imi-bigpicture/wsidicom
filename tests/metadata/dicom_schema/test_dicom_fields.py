@@ -17,13 +17,15 @@ from typing import Optional, Union
 
 import pytest
 from pydicom import Dataset
+from pydicom import config as pydicom_config
 from pydicom.sr.coding import Code
-from pydicom.valuerep import DSfloat
+from pydicom.valuerep import MAX_VALUE_LEN, STR_VR, VR, DSfloat
 
 from tests.metadata.dicom_schema.helpers import (
     assert_dicom_issuer_of_identifier_equals_issuer_of_identifier,
     create_code_dataset,
 )
+from wsidicom import config
 from wsidicom.conceptcode import UnitCode
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
@@ -37,6 +39,7 @@ from wsidicom.metadata.schema.dicom.fields import (
     DateTimeItemDicomField,
     IssuerOfIdentifierDicomField,
     MeasurementtemDicomField,
+    StringDicomField,
     StringItemDicomField,
     StringOrCodeItemDicomField,
 )
@@ -267,3 +270,35 @@ class TestDicomFields:
             item = serialized[0]
             assert isinstance(item, Dataset)
             assert_dicom_issuer_of_identifier_equals_issuer_of_identifier(item, issuer)
+
+    @pytest.mark.parametrize("value_representation", STR_VR)
+    def test_string_field_serialize(self, value_representation: VR):
+        # Arrange
+        length = MAX_VALUE_LEN.get(value_representation.name, 10)
+        value = "A" * length
+        field = StringDicomField(value_representation)
+
+        # Act
+
+        serialized = field.serialize("attribute", {"attribute": value})
+
+        # Assert
+        assert serialized == value
+
+    @pytest.mark.parametrize("value_representation", (VR(vr) for vr in MAX_VALUE_LEN))
+    def test_string_field_serialize_truncate_long_strings(
+        self, value_representation: VR
+    ):
+        # Arrange
+        pydicom_config.settings.writing_validation_mode = pydicom_config.RAISE
+        config.settings.truncate_long_dicom_strings_on_validation_error = True
+        maximum_allowed_length = MAX_VALUE_LEN[value_representation.name]
+        length = maximum_allowed_length + 1
+        value = "A" * length
+        field = StringDicomField(value_representation)
+
+        # Act
+        serialized = field.serialize("attribute", {"attribute": value})
+
+        # Assert
+        assert serialized == value[:maximum_allowed_length]
