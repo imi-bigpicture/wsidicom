@@ -665,27 +665,6 @@ class StringItemDicomField(ContentItemDicomField[str]):
         return dataset.TextValue
 
 
-class StringOrCodeItemDicomField(ContentItemDicomField[Union[str, Code]]):
-    def __init__(self, load_type: Type[CodeType], **kwargs) -> None:
-        self._string_field = StringItemDicomField()
-        self._code_field = CodeItemDicomField(load_type)
-        super().__init__(**kwargs)
-
-    def _serialize(
-        self, value: Optional[Union[str, Code]], attr: str, obj: Any, **kwargs
-    ) -> Optional[Dataset]:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            return self._string_field._serialize(value, attr, obj, **kwargs)
-        return self._code_field._serialize(value, attr, obj, **kwargs)
-
-    def _deserialize(self, dataset: Dataset, attr: str, obj: Any, **kwargs):
-        if dataset.ValueType == "TEXT" or hasattr(dataset, "TextValue"):
-            return self._string_field.deserialize(dataset, attr, obj, **kwargs)
-        return self._code_field.deserialize(dataset, attr, obj, **kwargs)
-
-
 class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime]):
     def _serialize(
         self,

@@ -38,7 +38,6 @@ from wsidicom.metadata.schema.dicom.fields import (
     IssuerOfIdentifierDicomField,
     MeasurementtemDicomField,
     StringItemDicomField,
-    StringOrCodeItemDicomField,
 )
 
 
@@ -187,57 +186,6 @@ class TestDicomFields:
         assert isinstance(deserialized, Measurement)
         assert deserialized.value == value
         assert deserialized.unit == unit
-
-    @pytest.mark.parametrize("value", ["test", Code("1234", "DCM", "Test Code")])
-    def test_string_or_code_item_dicom_field_serialize(self, value: Union[str, Code]):
-        # Arrange
-        field = StringOrCodeItemDicomField(Code)
-
-        # Act
-        serialized = field.serialize("attribute", {"attribute": value})
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert "ValueType" in serialized
-        if isinstance(value, str):
-            assert serialized.ValueType == "TEXT"
-            assert "TextValue" in serialized
-            assert serialized.TextValue == value
-        else:
-            assert serialized.ValueType == "CODE"
-            assert "ConceptCodeSequence" in serialized
-            assert serialized.ConceptCodeSequence[0].CodeValue == value.value
-            assert (
-                serialized.ConceptCodeSequence[0].CodingSchemeDesignator
-                == value.scheme_designator
-            )
-            assert serialized.ConceptCodeSequence[0].CodeMeaning == value.meaning
-
-    @pytest.mark.parametrize("value", ["test", Code("1234", "DCM", "Test Code")])
-    def test_string_or_code_item_dicom_field_deserialize(self, value: Union[str, Code]):
-        # Arrange
-        dataset = Dataset()
-        if isinstance(value, str):
-            dataset.ValueType = "TEXT"
-            dataset.TextValue = value
-        else:
-            dataset.ValueType = "CODE"
-            code_dataset = Dataset()
-            code_dataset.CodeValue = value.value
-            code_dataset.CodingSchemeDesignator = value.scheme_designator
-            code_dataset.CodeMeaning = value.meaning
-            dataset.ConceptCodeSequence = [code_dataset]
-        field = StringOrCodeItemDicomField(Code)
-
-        # Act
-        deserialized = field.deserialize(dataset, "attribute")
-
-        # Assert
-        if isinstance(value, str):
-            assert isinstance(deserialized, str)
-        else:
-            assert isinstance(deserialized, Code)
-        assert deserialized == value
 
     @pytest.mark.parametrize(
         "issuer",

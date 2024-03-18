@@ -22,7 +22,9 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Sequence,
     Type,
+    Union,
 )
 
 from marshmallow import ValidationError, fields, post_load
@@ -54,7 +56,6 @@ from wsidicom.metadata.schema.dicom.fields import (
     SingleCodeSequenceField,
     StringDicomField,
     StringItemDicomField,
-    StringOrCodeItemDicomField,
 )
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
@@ -308,13 +309,38 @@ class ProcessingDicomSchema(BasePreparationStepDicomSchema[ProcessingDicomModel]
         return ProcessingDicomModel
 
 
+class SubstanceItemDicomField(fields.Field):
+    _code_list_field = fields.List(CodeItemDicomField(SpecimenStainsCode))
+    _string_field = StringItemDicomField()
+
+    def _serialize(
+        self,
+        value: Optional[Union[str, Sequence[SpecimenStainsCode]]],
+        attr,
+        obj,
+        **kwargs,
+    ):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return [self._string_field._serialize(value, attr, obj, **kwargs)]
+        return self._code_list_field._serialize(value, attr, obj, **kwargs)
+
+    def _deserialize(self, datasets: Sequence[Dataset], attr, obj, **kwargs):
+        first_value = datasets[0]
+
+        if first_value.ValueType == "TEXT" or hasattr(first_value, "TextValue"):
+            return self._string_field.deserialize(first_value, attr, obj, **kwargs)
+        return self._code_list_field.deserialize(datasets, attr, obj, **kwargs)
+
+
 class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
     processing_type = CodeItemDicomField(
         load_type=SpecimenPreparationProcedureCode,
         dump_default=SampleCodes.staining,
         dump_only=True,
     )
-    substances = fields.List(StringOrCodeItemDicomField(SpecimenStainsCode))
+    substances = SubstanceItemDicomField()
 
     @property
     def load_type(self):

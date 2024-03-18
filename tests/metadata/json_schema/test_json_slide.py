@@ -42,6 +42,16 @@ class TestSlideJsonSchema:
             ),
         ],
     )
+    @pytest.mark.parametrize(
+        "substances",
+        [
+            "HE",
+            [
+                SpecimenStainsCode("hematoxylin stain"),
+                SpecimenStainsCode("water soluble eosin stain"),
+            ],
+        ],
+    )
     def test_slide_serialize(self, slide: Slide):
         # Arrange
         assert slide.samples is not None
@@ -70,11 +80,14 @@ class TestSlideJsonSchema:
         if slide.stainings is not None:
             for index, staining in enumerate(slide.stainings):
                 dumped_staining = dumped["stainings"][index]
-                for stain_index, stain in enumerate(staining.substances):
-                    assert isinstance(stain, SpecimenStainsCode)
-                    assert_dict_equals_code(
-                        dumped_staining["substances"][stain_index], stain
-                    )
+                if isinstance(staining.substances, str):
+                    assert dumped_staining["substances"] == staining.substances
+                else:
+                    for stain_index, stain in enumerate(staining.substances):
+                        assert isinstance(stain, SpecimenStainsCode)
+                        assert_dict_equals_code(
+                            dumped_staining["substances"][stain_index], stain
+                        )
         else:
             assert "stainings" not in dumped
 
