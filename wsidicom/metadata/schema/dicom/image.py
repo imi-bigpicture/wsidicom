@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional, Sequence, Type
 
 from marshmallow import fields, post_load, pre_dump
 from pydicom.dataset import Dataset
+from pydicom.valuerep import VR
 
 from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.geometry import SizeMm
@@ -106,7 +107,7 @@ class PixelMeasureDicomSchema(DicomSchema[PixelMeasureDicomModel]):
 
 
 class LossyCompressionDicomSchema:
-    method = StringDicomField()
+    method = StringDicomField(VR.CS)
     ratio = FloatDicomField()
 
 

@@ -120,10 +120,7 @@ def assert_dicom_code_dataset_equals_code(
     if expected_code.scheme_version is not None:
         assert code_dataset.CodingSchemeVersion == expected_code.scheme_version
     else:
-        assert (
-            "CodingSchemeVersion" not in code_dataset
-            or code_dataset.CodingSchemeVersion is None
-        )
+        assert "CodingSchemeVersion" not in code_dataset
 
 
 def assert_dicom_code_sequence_equals_codes(
@@ -602,12 +599,17 @@ def create_staining_dataset(
 ):
     dataset = Dataset()
     items = create_initial_common_preparation_step_items(staining_dicom, identifier)
-    for substance in staining_dicom.substances:
+    if isinstance(staining_dicom.substances, str):
         items.append(
-            create_code_item(SampleCodes.using_substance, substance)
-            if isinstance(substance, SpecimenStainsCode)
-            else create_string_item(SampleCodes.using_substance, substance)
+            create_string_item(SampleCodes.using_substance, staining_dicom.substances)
         )
+    else:
+        for substance in staining_dicom.substances:
+            items.append(
+                create_code_item(SampleCodes.using_substance, substance)
+                if isinstance(substance, SpecimenStainsCode)
+                else create_string_item(SampleCodes.using_substance, substance)
+            )
     items.extend(create_final_common_preparation_step_items(staining_dicom))
     dataset.SpecimenPreparationStepContentItemSequence = items
     return dataset
@@ -647,7 +649,7 @@ def create_specimen_preparation_sequence(
     block_sampling_method: SpecimenSamplingProcedureCode,
     block_type: AnatomicPathologySpecimenTypesCode,
     sampling_location: SamplingLocation,
-    stains: Sequence[SpecimenStainsCode],
+    stains: Union[str, Sequence[SpecimenStainsCode]],
     specimen_container: Optional[ContainerTypeCode] = None,
     block_container: Optional[ContainerTypeCode] = None,
 ):
@@ -706,7 +708,7 @@ def create_specimen_preparation_sequence(
     staining = create_staining_dataset(
         StainingDicomModel(
             identifier=slide_sample_id,
-            substances=list(stains),
+            substances=stains,
         ),
         identifier=slide_sample_id,
     )
@@ -831,7 +833,8 @@ def create_code_dataset(code: Union[Code, ConceptCode]):
     dataset.CodeValue = code.value
     dataset.CodingSchemeDesignator = code.scheme_designator
     dataset.CodeMeaning = code.meaning
-    dataset.CodingSchemeVersion = code.scheme_version
+    if code.scheme_version is not None and code.scheme_version != "":
+        dataset.CodingSchemeVersion = code.scheme_version
     return dataset
 
 

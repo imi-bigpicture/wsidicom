@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Union
 
 import pytest
 from pydicom import Dataset
@@ -105,6 +105,16 @@ class TestSampleDicom:
     @pytest.mark.parametrize(
         "block_container", [None, ContainerTypeCode("Tissue cassette")]
     )
+    @pytest.mark.parametrize(
+        "substances",
+        [
+            "HE",
+            [
+                SpecimenStainsCode("hematoxylin stain"),
+                SpecimenStainsCode("water soluble eosin stain"),
+            ],
+        ],
+    )
     def test_slide_sample_from_dataset(
         self,
         slide_sample_ids: Sequence[str],
@@ -121,7 +131,7 @@ class TestSampleDicom:
         sample_localization: SampleLocalization,
         sampling_location: SamplingLocation,
         primary_anatomic_structures: Sequence[Code],
-        stains: Sequence[SpecimenStainsCode],
+        substances: Union[str, Sequence[SpecimenStainsCode]],
         short_description: Optional[str],
         detailed_description: Optional[str],
         specimen_container: Optional[ContainerTypeCode],
@@ -145,7 +155,7 @@ class TestSampleDicom:
                 block_sampling_method,
                 block_type,
                 sampling_location,
-                stains,
+                substances,
                 specimen_container,
                 block_container,
             )
@@ -173,6 +183,9 @@ class TestSampleDicom:
         # Assert
         assert slide_samples is not None
         assert stainings is not None
+        for staining in stainings:
+            assert isinstance(staining, Staining)
+            assert staining.substances == substances
         assert len(slide_samples) == len(slide_sample_ids)
         for slide_sample_index, slide_sample in enumerate(slide_samples):
             assert isinstance(slide_sample, SlideSample)
@@ -246,6 +259,16 @@ class TestSampleDicom:
     @pytest.mark.parametrize(
         "block_container", [None, ContainerTypeCode("Tissue cassette")]
     )
+    @pytest.mark.parametrize(
+        "substances",
+        [
+            "HE",
+            [
+                SpecimenStainsCode("hematoxylin stain"),
+                SpecimenStainsCode("water soluble eosin stain"),
+            ],
+        ],
+    )
     def test_slide_sample_to_dataset(
         self,
         slide_sample_ids: Sequence[str],
@@ -262,7 +285,7 @@ class TestSampleDicom:
         sample_localization: SampleLocalization,
         sampling_location: SamplingLocation,
         primary_anatomic_structures: Sequence[Code],
-        stains: Sequence[SpecimenStainsCode],
+        substances: Union[str, Sequence[SpecimenStainsCode]],
         short_description: Optional[str],
         detailed_description: Optional[str],
         specimen_container: Optional[ContainerTypeCode],
@@ -308,7 +331,7 @@ class TestSampleDicom:
                 detailed_description=detailed_description,
             )
             slide_samples.append(slide_sample)
-        staining = Staining(stains)
+        staining = Staining(substances)
 
         schema = SpecimenDescriptionDicomSchema()
 
@@ -545,10 +568,15 @@ class TestSampleDicom:
                 SampleCodes.processing_type,
                 SampleCodes.staining,
             )
-            for stain in stains:
-                assert_next_item_equals_code(
-                    step_item_iterator, SampleCodes.using_substance, stain
+            if isinstance(substances, str):
+                assert_next_item_equals_string(
+                    step_item_iterator, SampleCodes.using_substance, substances
                 )
+            else:
+                for substance in substances:
+                    assert_next_item_equals_code(
+                        step_item_iterator, SampleCodes.using_substance, substance
+                    )
             assert next(step_item_iterator, None) is None
 
     def test_sampling_from_not_defined_specimen(

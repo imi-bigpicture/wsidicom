@@ -197,7 +197,8 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
         name_dataset.CodeValue = name.value
         name_dataset.CodingSchemeDesignator = name.scheme_designator
         name_dataset.CodeMeaning = name.meaning
-        name_dataset.CodingSchemeVersion = name.scheme_version
+        if name.scheme_version is not None and name.scheme_version != "":
+            name_dataset.CodingSchemeVersion = name.scheme_version
         item.ConceptNameCodeSequence = [name_dataset]
         return item
 

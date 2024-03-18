@@ -345,12 +345,21 @@ def processing(
 
 
 @pytest.fixture()
-def staining(date_time: datetime.datetime, description: str):
+def substances():
+    yield [
+        SpecimenStainsCode("hematoxylin stain"),
+        SpecimenStainsCode("water soluble eosin stain"),
+    ]
+
+
+@pytest.fixture()
+def staining(
+    substances: Union[str, Sequence[SpecimenStainsCode]],
+    date_time: datetime.datetime,
+    description: str,
+):
     yield Staining(
-        [
-            SpecimenStainsCode("hematoxylin stain"),
-            SpecimenStainsCode("water soluble eosin stain"),
-        ],
+        substances,
         date_time=date_time,
         description=description,
     )
@@ -421,7 +430,7 @@ def slide_sample(sample: Sample):
 
 
 @pytest.fixture()
-def slide(slide_identifier: Union[str, SpecimenIdentifier]):
+def slide(slide_identifier: Union[str, SpecimenIdentifier], staining: Staining):
     part_1 = Specimen(
         "part 1",
         Collection(
@@ -503,18 +512,8 @@ def slide(slide_identifier: Union[str, SpecimenIdentifier]):
         SampleLocalization(description="right"),
     )
 
-    stainings = [
-        Staining(
-            [
-                SpecimenStainsCode("hematoxylin stain"),
-                SpecimenStainsCode("water soluble eosin stain"),
-            ],
-            date_time=datetime.datetime(2023, 8, 5),
-        ),
-    ]
-
     yield Slide(
-        identifier=slide_identifier, stainings=stainings, samples=[sample_1, sample_2]
+        identifier=slide_identifier, stainings=[staining], samples=[sample_1, sample_2]
     )
 
 

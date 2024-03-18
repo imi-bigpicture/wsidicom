@@ -17,6 +17,7 @@ from typing import (
     Dict,
     Iterable,
     List,
+    Sequence,
     Type,
     Union,
 )
@@ -256,10 +257,28 @@ class PreparationStepJsonSchema(Schema):
         return schema().dump(step, many=False)
 
 
-class StainingJsonSchema(DataclassLoadingSchema[Staining]):
-    substances = fields.List(
+class SubstanceJsonField(fields.Field):
+    _code_list_field = fields.List(
         JsonFieldFactory.concept_code(SpecimenStainsCode)(), allow_none=True
     )
+
+    def _serialize(
+        self, value: Union[str, Sequence[SpecimenStainsCode]], attr, obj, **kwargs
+    ):
+        if isinstance(value, str):
+            return value
+        return self._code_list_field._serialize(value, attr, obj, **kwargs)
+
+    def _deserialize(
+        self, value: Union[str, List[Dict[str, Any]]], attr, data, **kwargs
+    ):
+        if isinstance(value, str):
+            return value
+        return self._code_list_field._deserialize(value, attr, data, **kwargs)
+
+
+class StainingJsonSchema(DataclassLoadingSchema[Staining]):
+    substances = SubstanceJsonField(allow_none=True)
     date_time = fields.DateTime(allow_none=True)
     description = fields.String(allow_none=True)
 

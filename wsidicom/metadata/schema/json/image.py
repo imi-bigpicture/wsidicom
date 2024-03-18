@@ -64,9 +64,9 @@ class ImageJsonSchema(LoadingSchema[Image]):
     image_coordinate_system = fields.Nested(
         ImageCoordinateSystemJsonSchema(), allow_none=True
     )
-    pixel_spacing = SizeMmJsonField()
-    focal_plane_spacing = fields.Float()
-    depth_of_field = fields.Float()
+    pixel_spacing = SizeMmJsonField(allow_none=True)
+    focal_plane_spacing = fields.Float(allow_none=True)
+    depth_of_field = fields.Float(allow_none=True)
     lossy_compressions = fields.List(
         fields.Nested(LossyCompressionJsonSchema()), allow_none=True
     )

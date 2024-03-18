@@ -416,17 +416,17 @@ class Staining(PreparationStep):
 
     Parameters
     ----------
-    substances: Sequence[Union[str, SpecimenStainsCode]]
-        The substances used for staining. See
+    substances: Union[str, Sequence[SpecimenStainsCode]]
+        The substances used for staining. Either a single string or a list of codes. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8112.html
-        pr SpecimenStainsCode.meanings` for allowed stain codes.
+        or SpecimenStainsCode.meanings` for allowed stain codes.
     date_time: Optional[datetime.datetime] = None
         Optional date and time when the staining was performed.
     description: Optional[str] = None
         Optional description of the staining.
     """
 
-    substances: Sequence[Union[str, SpecimenStainsCode]]
+    substances: Union[str, Sequence[SpecimenStainsCode]]
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None
 
