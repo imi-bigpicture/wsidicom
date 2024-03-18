@@ -15,6 +15,7 @@
 """DICOM fields for attribute serialization."""
 
 import datetime
+import logging
 import math
 from abc import abstractmethod
 from typing import (
@@ -30,14 +31,26 @@ from typing import (
     Union,
 )
 
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, post_dump, post_load, pre_dump, pre_load
 from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
+from pydicom import config as pydicom_config
 from pydicom.multival import MultiValue
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
-from pydicom.valuerep import DA, DT, TM, DSfloat, PersonName
+from pydicom.valuerep import (
+    DA,
+    DT,
+    MAX_VALUE_LEN,
+    STR_VR,
+    TM,
+    VR,
+    DSfloat,
+    PersonName,
+    validate_vr_length,
+)
 
+from wsidicom import config
 from wsidicom.conceptcode import ConceptCode, UnitCode
 from wsidicom.geometry import Orientation, PointMm, SizeMm
 from wsidicom.metadata.sample import (
@@ -59,7 +72,31 @@ class StringLikeDicomField(fields.Field):
 
 
 class StringDicomField(StringLikeDicomField):
-    pass
+    def __init__(self, value_representation: VR, **kwargs):
+        if value_representation not in STR_VR:
+            raise ValueError(
+                f"Value representation {value_representation} is not a string."
+            )
+        self._value_representation = value_representation
+        super().__init__(**kwargs)
+
+    def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs):
+        if value is None:
+            return None
+        valid, error = validate_vr_length(self._value_representation, value)
+        if (
+            not valid
+            and pydicom_config.settings.writing_validation_mode == pydicom_config.RAISE
+            and config.settings.truncate_long_dicom_strings_on_validation_error
+        ):
+            maximum_allowed_legth = MAX_VALUE_LEN[self._value_representation]
+            logging.warning(
+                f"Truncating long DICOM string {value} of value representation "
+                f"{self._value_representation} with maximum allowed length "
+                f"{maximum_allowed_legth} to {value[: maximum_allowed_legth]}."
+            )
+            value = value[:maximum_allowed_legth]
+        return super()._serialize(value, attr, obj, **kwargs)
 
 
 class EnumDicomField(fields.Enum):
@@ -276,91 +313,75 @@ class FlattenOnDumpNestedDicomField(fields.Nested):
         return super()._serialize(nested_obj, attr, obj, **kwargs)
 
 
-class FlattenOnLoadNestedDicomField(fields.Nested):
-    """Field that flattens the nested loaded item into the parent item on load.
-
-    On dump the nested fields are deflatten from the parent dataset to a nested dataset.
-    """
-
-    def __init__(self, nested: Schema, **kwargs):
-        self._nested = nested
-        super().__init__(nested=nested, **kwargs)
-
-    @property
-    def nested_schema(self) -> Schema:
-        return self._nested
-
-    def de_flatten(self, dataset: Dataset) -> Optional[Dataset]:
-        """Create new dataset containing the attributes defined in nested schema."""
-        nested = Dataset()
-        for nested_field in self.nested_schema.fields.values():
-            if nested_field.dump_only:
-                continue
-            if isinstance(nested_field, FlattenOnDumpNestedDicomField):
-                de_flatten_nested_field = nested_field.de_flatten(dataset)
-                if de_flatten_nested_field is not None:
-                    nested.update(de_flatten_nested_field)
-            elif nested_field.data_key is not None and nested_field.data_key in dataset:
-                nested_value = dataset.get(nested_field.data_key)
-                setattr(nested, nested_field.data_key, nested_value)
-        if len(nested) == 0:
-            return None
-        return nested
-
-    def flatten(self, data: Dict[str, Any]):
-        """Insert attributes from nested dataset into data."""
-        key = self.name
-        if self.data_key is not None:
-            key = self.data_key
-        nested = data.pop(key, None)
-        if isinstance(nested, Dataset):
-            for nested_key, nested_value in nested.items():
-                data[nested_key] = nested_value  # type: ignore
-
-
-CodeType = TypeVar("CodeType", Code, ConceptCode)
-
-
 class FloatDicomField(fields.Float):
     def _serialize(self, value: float, attr: Optional[str], obj: Any, **kwargs):
         return DSfloat(value)
 
 
-class CodeDicomField(fields.Field, Generic[CodeType]):
+CodeType = TypeVar("CodeType", Code, ConceptCode)
+
+
+class CodeDicomSchema(Schema):
+    """Schema for a DICOM `code sequence`."""
+
+    value = StringDicomField(VR.SH, data_key="CodeValue")
+    scheme_designator = StringDicomField(VR.SH, data_key="CodingSchemeDesignator")
+    meaning = StringDicomField(VR.LO, data_key="CodeMeaning")
+    scheme_version = StringDicomField(
+        VR.SH, data_key="CodingSchemeVersion", allow_none=True
+    )
+
     def __init__(self, load_type: Type[CodeType], **kwargs) -> None:
         self._load_type = load_type
         super().__init__(**kwargs)
 
-    def _serialize(
-        self, value: Optional[CodeType], attr: Optional[str], obj: Any, **kwargs
-    ):
-        if value is None:
-            return self.dump_default
-        dataset = Dataset()
-        dataset.CodeValue = value.value
-        dataset.CodingSchemeDesignator = value.scheme_designator
-        dataset.CodeMeaning = value.meaning
-        if value.scheme_version is not None and value.scheme_version != "":
-            dataset.CodingSchemeVersion = value.scheme_version
+    @pre_dump
+    def pre_dump(self, code: Optional[Code] = None, **kwargs):
+        if code is None:
+            return None
+        data = {
+            "value": code.value,
+            "scheme_designator": code.scheme_designator,
+            "meaning": code.meaning,
+        }
+        if code.scheme_version is not None and code.scheme_version != "":
+            data["scheme_version"] = code.scheme_version
+        return data
 
+    @post_dump
+    def post_dump(self, data: Dict[str, Any], **kwargs):
+        dataset = Dataset()
+        for data_key in (
+            field.data_key
+            for field in self.fields.values()
+            if field.data_key is not None and field.data_key in data
+        ):
+            setattr(dataset, data_key, data.get(data_key))
         return dataset
 
-    def _deserialize(
-        self,
-        value: Dataset,
-        attr: Optional[str],
-        data: Optional[Dict[str, Any]],
-        **kwargs,
-    ):
-        version = value.get("CodingSchemeVersion", None)
-        if version == "":
-            version = None
-        return self._load_type(
-            value=value.CodeValue,
-            scheme_designator=value.CodingSchemeDesignator,
-            meaning=value.CodeMeaning,
-            scheme_version=version,
-        )
+    @pre_load
+    def pre_load(self, dataset: Dataset, **kwargs):
+        return {
+            data_key: dataset.get(data_key)
+            for data_key in (
+                field.data_key
+                for field in self.fields.values()
+                if field.data_key is not None
+            )
+            if dataset.get(data_key) not in (None, "")
+        }
+
+    @post_load
+    def post_load(self, data: Dict[str, Any], **kwargs):
+        print("post_load", data)
+        return self._load_type(**data)
+
+
+class CodeDicomField(fields.Nested, Generic[CodeType]):
+    """Field for a DICOM `code sequence`."""
+
+    def __init__(self, load_type: Type[CodeType], **kwargs) -> None:
+        super().__init__(nested=CodeDicomSchema(load_type), **kwargs)
 
 
 class SingleCodeSequenceField(CodeDicomField):
@@ -399,7 +420,10 @@ class FloatOrCodeDicomField(fields.Field, Generic[CodeType]):
         return self._code_field.deserialize(value, attr, data, **kwargs)
 
 
-class UidDicomField(fields.Field):
+class UidDicomField(StringDicomField):
+    def __init__(self, **kwargs):
+        super().__init__(value_representation=VR.UI, **kwargs)
+
     def _deserialize(self, value: Any, attr, data, **kwargs):
         if value is None or value == "":
             return None
@@ -429,7 +453,7 @@ class UidDatasetDicomField(UidDicomField):
         return super()._deserialize(nested_value, attr, data, **kwargs)
 
 
-class PatientNameDicomField(fields.String):
+class PersonNameDicomField(fields.String):
     def _deserialize(self, value: PersonName, attr, data, **kwargs) -> str:
         return str(value)
 

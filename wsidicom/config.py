@@ -31,6 +31,7 @@ class Settings:
         self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
         self._strict_specimen_identifier_check = True
         self._ignore_specimen_preparation_step_on_validation_error = True
+        self._truncate_long_dicom_strings = False
 
     @property
     def strict_uid_check(self) -> bool:
@@ -109,6 +110,16 @@ class Settings:
     @ignore_specimen_preparation_step_on_validation_error.setter
     def ignore_specimen_preparation_step_on_validation_error(self, value: bool) -> None:
         self._ignore_specimen_preparation_step_on_validation_error = value
+
+    @property
+    def truncate_long_dicom_strings_on_validation_error(self) -> bool:
+        """If long DICOM strings should be truncated. This is only used if
+        `pydicom.settings.writing_validation_mode` is set to `pydicom.config.RAISE`."""
+        return self._truncate_long_dicom_strings
+
+    @truncate_long_dicom_strings_on_validation_error.setter
+    def truncate_long_dicom_strings_on_validation_error(self, value: bool) -> None:
+        self._truncate_long_dicom_strings = value
 
 
 settings = Settings()
