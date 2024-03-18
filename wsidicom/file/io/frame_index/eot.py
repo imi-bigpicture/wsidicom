@@ -55,7 +55,6 @@ class Eot(OffsetTable):
             logger.warning(
                 "BOT table was not empty in file with EOT table. The BOT table will be ignored."
             )
-            # raise WsiDicomFileError(str(self._file), "Expected empty BOT")
             self._file.seek(bot_length, 1)
         return self._file.tell()
 
