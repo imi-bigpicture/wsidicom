@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed staining substances to be either a single string or a list of codes instead of a list of strings or codes.
+- Corrected staining substances to be either a single string or a list of codes instead of a list of strings or codes.
 - Added `allow_none` for json metadata fields where it was missing.
+- Do not add empty `CodingSchemeVersion` to concept code name.
 
 ## [0.20.1] - 2024-02-22
 

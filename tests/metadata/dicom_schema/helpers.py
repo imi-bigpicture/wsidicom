@@ -120,10 +120,7 @@ def assert_dicom_code_dataset_equals_code(
     if expected_code.scheme_version is not None:
         assert code_dataset.CodingSchemeVersion == expected_code.scheme_version
     else:
-        assert (
-            "CodingSchemeVersion" not in code_dataset
-            or code_dataset.CodingSchemeVersion is None
-        )
+        assert "CodingSchemeVersion" not in code_dataset
 
 
 def assert_dicom_code_sequence_equals_codes(
@@ -836,7 +833,8 @@ def create_code_dataset(code: Union[Code, ConceptCode]):
     dataset.CodeValue = code.value
     dataset.CodingSchemeDesignator = code.scheme_designator
     dataset.CodeMeaning = code.meaning
-    dataset.CodingSchemeVersion = code.scheme_version
+    if code.scheme_version is not None and code.scheme_version != "":
+        dataset.CodingSchemeVersion = code.scheme_version
     return dataset
 
 
