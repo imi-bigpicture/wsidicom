@@ -22,13 +22,16 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Sequence,
     Type,
+    Union,
 )
 
 from marshmallow import ValidationError, fields, post_load
 from pydicom import Dataset
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
+from pydicom.valuerep import VR
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
@@ -54,7 +57,7 @@ from wsidicom.metadata.schema.dicom.fields import (
     SingleCodeSequenceField,
     StringDicomField,
     StringItemDicomField,
-    StringOrCodeItemDicomField,
+    UidDicomField,
 )
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
@@ -308,13 +311,38 @@ class ProcessingDicomSchema(BasePreparationStepDicomSchema[ProcessingDicomModel]
         return ProcessingDicomModel
 
 
+class SubstanceItemDicomField(fields.Field):
+    _code_list_field = fields.List(CodeItemDicomField(SpecimenStainsCode))
+    _string_field = StringItemDicomField()
+
+    def _serialize(
+        self,
+        value: Optional[Union[str, Sequence[SpecimenStainsCode]]],
+        attr,
+        obj,
+        **kwargs,
+    ):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return [self._string_field._serialize(value, attr, obj, **kwargs)]
+        return self._code_list_field._serialize(value, attr, obj, **kwargs)
+
+    def _deserialize(self, datasets: Sequence[Dataset], attr, obj, **kwargs):
+        first_value = datasets[0]
+
+        if first_value.ValueType == "TEXT" or hasattr(first_value, "TextValue"):
+            return self._string_field.deserialize(first_value, attr, obj, **kwargs)
+        return self._code_list_field.deserialize(datasets, attr, obj, **kwargs)
+
+
 class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
     processing_type = CodeItemDicomField(
         load_type=SpecimenPreparationProcedureCode,
         dump_default=SampleCodes.staining,
         dump_only=True,
     )
-    substances = fields.List(StringOrCodeItemDicomField(SpecimenStainsCode))
+    substances = SubstanceItemDicomField()
 
     @property
     def load_type(self):
@@ -476,8 +504,10 @@ class PreparationStepDicomField(fields.Field):
 
 
 class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel]):
-    identifier = StringDicomField(data_key="SpecimenIdentifier")
-    uid = StringDicomField(data_key="SpecimenUID")
+    identifier = StringDicomField(
+        value_representation=VR.LO, data_key="SpecimenIdentifier"
+    )
+    uid = UidDicomField(data_key="SpecimenUID")
     localization = fields.Nested(
         SampleLocalizationDicomSchema(),
         data_key="SpecimenLocalizationContentItemSequence",
@@ -507,10 +537,12 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
         dump_only=True,
     )
     short_description = StringDicomField(
-        data_key="SpecimenShortDescription", allow_none=True
+        value_representation=VR.LO, data_key="SpecimenShortDescription", allow_none=True
     )
     detailed_description = StringDicomField(
-        data_key="SpecimenDetailedDescription", allow_none=True
+        value_representation=VR.UT,
+        data_key="SpecimenDetailedDescription",
+        allow_none=True,
     )
 
     @property

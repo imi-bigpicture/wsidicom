@@ -168,7 +168,7 @@ class ImagePathFilterJsonSchema(LoadingSchema[ImagePathFilter]):
 class ObjectivesJsonSchema(LoadingSchema[Objectives]):
     """Set of lens conditions for optical path"""
 
-    lenses = fields.List(JsonFieldFactory.concept_code(LenseCode))
+    lenses = fields.List(JsonFieldFactory.concept_code(LenseCode), allow_none=True)
     condenser_power = fields.Float(allow_none=True)
     objective_power = fields.Float(allow_none=True)
     objective_numerical_aperture = fields.Float(allow_none=True)
@@ -184,7 +184,7 @@ class OpticalPathJsonSchema(Schema):
     identifier = fields.String(allow_none=True)
     description = fields.String(allow_none=True)
     illumination_types = fields.List(
-        JsonFieldFactory.concept_code(IlluminationCode)(allow_none=True)
+        JsonFieldFactory.concept_code(IlluminationCode)(), allow_none=True
     )
     illumination = JsonFieldFactory.float_or_concept_code(IlluminationColorCode)(
         allow_none=True

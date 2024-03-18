@@ -442,7 +442,7 @@ class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
 @dataclass
 class StainingDicomModel(SpecimenPreparationStepDicomModel):
     identifier: str
-    substances: Sequence[Union[str, SpecimenStainsCode]]
+    substances: Union[str, Sequence[SpecimenStainsCode]]
     issuer_of_identifier: Optional[str] = None
     date_time: Optional[datetime.datetime] = None
     description: Optional[str] = None

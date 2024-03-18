@@ -18,6 +18,7 @@ import logging
 from typing import Any, Dict, Type
 
 from marshmallow import fields, post_dump, post_load, pre_dump
+from pydicom.valuerep import VR
 
 from wsidicom.conceptcode import ContainerTypeCode
 from wsidicom.metadata.sample import SlideSample, SpecimenIdentifier
@@ -39,7 +40,7 @@ from wsidicom.metadata.slide import Slide
 
 class SlideDicomSchema(ModuleDicomSchema[Slide]):
     identifier = DefaultingDicomField(
-        StringDicomField(),
+        StringDicomField(value_representation=VR.LO),
         dump_default=Defaults.string,
         data_key="ContainerIdentifier",
         allow_none=True,

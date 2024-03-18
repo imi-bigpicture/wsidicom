@@ -13,17 +13,20 @@
 #    limitations under the License.
 
 import datetime
-from typing import Optional, Union
+from typing import Optional, Type
 
 import pytest
+from marshmallow import fields
 from pydicom import Dataset
+from pydicom import config as pydicom_config
 from pydicom.sr.coding import Code
-from pydicom.valuerep import DSfloat
+from pydicom.valuerep import MAX_VALUE_LEN, STR_VR, VR, DSfloat
 
 from tests.metadata.dicom_schema.helpers import (
     assert_dicom_issuer_of_identifier_equals_issuer_of_identifier,
     create_code_dataset,
 )
+from wsidicom import config
 from wsidicom.conceptcode import UnitCode
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
@@ -33,13 +36,32 @@ from wsidicom.metadata.sample import (
     UniversalIssuerType,
 )
 from wsidicom.metadata.schema.dicom.fields import (
+    CodeDicomField,
     CodeItemDicomField,
     DateTimeItemDicomField,
+    FlattenOnDumpNestedDicomField,
     IssuerOfIdentifierDicomField,
     MeasurementtemDicomField,
+    StringDicomField,
     StringItemDicomField,
-    StringOrCodeItemDicomField,
 )
+from wsidicom.metadata.schema.dicom.schema import DicomSchema
+
+
+class ChildFlattenOnDumpSchema(DicomSchema):
+    value = fields.String(data_key="PatientID")
+
+    @property
+    def load_type(self) -> Type[dict]:
+        return dict
+
+
+class ParentFlattenOnDumpSchema(DicomSchema):
+    nested = FlattenOnDumpNestedDicomField(ChildFlattenOnDumpSchema())
+
+    @property
+    def load_type(self) -> Type[dict]:
+        return dict
 
 
 class TestDicomFields:
@@ -83,7 +105,7 @@ class TestDicomFields:
         assert deserialized.scheme_designator == "DCM"
         assert deserialized.meaning == "Test Code"
 
-    def test_test_code_content_item_dicom_field_serialize(self):
+    def test_text_content_item_dicom_field_serialize(self):
         # Arrange
         value = "test"
         field = StringItemDicomField()
@@ -188,57 +210,6 @@ class TestDicomFields:
         assert deserialized.value == value
         assert deserialized.unit == unit
 
-    @pytest.mark.parametrize("value", ["test", Code("1234", "DCM", "Test Code")])
-    def test_string_or_code_item_dicom_field_serialize(self, value: Union[str, Code]):
-        # Arrange
-        field = StringOrCodeItemDicomField(Code)
-
-        # Act
-        serialized = field.serialize("attribute", {"attribute": value})
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert "ValueType" in serialized
-        if isinstance(value, str):
-            assert serialized.ValueType == "TEXT"
-            assert "TextValue" in serialized
-            assert serialized.TextValue == value
-        else:
-            assert serialized.ValueType == "CODE"
-            assert "ConceptCodeSequence" in serialized
-            assert serialized.ConceptCodeSequence[0].CodeValue == value.value
-            assert (
-                serialized.ConceptCodeSequence[0].CodingSchemeDesignator
-                == value.scheme_designator
-            )
-            assert serialized.ConceptCodeSequence[0].CodeMeaning == value.meaning
-
-    @pytest.mark.parametrize("value", ["test", Code("1234", "DCM", "Test Code")])
-    def test_string_or_code_item_dicom_field_deserialize(self, value: Union[str, Code]):
-        # Arrange
-        dataset = Dataset()
-        if isinstance(value, str):
-            dataset.ValueType = "TEXT"
-            dataset.TextValue = value
-        else:
-            dataset.ValueType = "CODE"
-            code_dataset = Dataset()
-            code_dataset.CodeValue = value.value
-            code_dataset.CodingSchemeDesignator = value.scheme_designator
-            code_dataset.CodeMeaning = value.meaning
-            dataset.ConceptCodeSequence = [code_dataset]
-        field = StringOrCodeItemDicomField(Code)
-
-        # Act
-        deserialized = field.deserialize(dataset, "attribute")
-
-        # Assert
-        if isinstance(value, str):
-            assert isinstance(deserialized, str)
-        else:
-            assert isinstance(deserialized, Code)
-        assert deserialized == value
-
     @pytest.mark.parametrize(
         "issuer",
         [
@@ -267,3 +238,97 @@ class TestDicomFields:
             item = serialized[0]
             assert isinstance(item, Dataset)
             assert_dicom_issuer_of_identifier_equals_issuer_of_identifier(item, issuer)
+
+    @pytest.mark.parametrize("value_representation", STR_VR)
+    def test_string_field_serialize(self, value_representation: VR):
+        # Arrange
+        length = MAX_VALUE_LEN.get(value_representation.name, 10)
+        value = "A" * length
+        field = StringDicomField(value_representation)
+
+        # Act
+
+        serialized = field.serialize("attribute", {"attribute": value})
+
+        # Assert
+        assert serialized == value
+
+    @pytest.mark.parametrize("value_representation", (VR(vr) for vr in MAX_VALUE_LEN))
+    def test_string_field_serialize_truncate_long_strings(
+        self, value_representation: VR
+    ):
+        # Arrange
+        pydicom_config.settings.writing_validation_mode = pydicom_config.RAISE
+        config.settings.truncate_long_dicom_strings_on_validation_error = True
+        maximum_allowed_length = MAX_VALUE_LEN[value_representation.name]
+        length = maximum_allowed_length + 1
+        value = "A" * length
+        field = StringDicomField(value_representation)
+
+        # Act
+        serialized = field.serialize("attribute", {"attribute": value})
+
+        # Assert
+        assert serialized == value[:maximum_allowed_length]
+
+    @pytest.mark.parametrize("code_version", [None, "version"])
+    def test_code_field_serialize(self, code_version: Optional[str]):
+        # Arrange
+        code = Code("code", "scheme", "meaning", code_version)
+        field = CodeDicomField(Code)
+
+        # Act
+        serialized = field.serialize("attribute", {"attribute": code})
+
+        # Assert
+        assert serialized["CodeValue"].value == code.value
+        assert serialized["CodingSchemeDesignator"].value == code.scheme_designator
+        assert serialized["CodeMeaning"].value == code.meaning
+        if code.scheme_version is not None:
+            assert serialized["CodingSchemeVersion"].value == code.scheme_version
+        else:
+            assert "CodingSchemeVersion" not in serialized
+
+    @pytest.mark.parametrize("code_version", [None, "version"])
+    def test_code_field_deserialize(self, code_version: Optional[str]):
+        # Arrange
+        code = Code("code", "scheme", "meaning", code_version)
+        dataset = Dataset()
+        dataset.CodeValue = code.value
+        dataset.CodingSchemeDesignator = code.scheme_designator
+        dataset.CodeMeaning = code.meaning
+        if code_version is not None:
+            dataset.CodingSchemeVersion = code_version
+        field = CodeDicomField(Code)
+
+        # Act
+        deserialized = field.deserialize(dataset)
+
+        # Assert
+        assert isinstance(deserialized, Code)
+        assert deserialized == code
+
+    def test_flatten_on_dump_nested_dicom_field_load(self):
+        # Arrange
+        schema = ParentFlattenOnDumpSchema()
+
+        dataset = Dataset()
+        dataset.PatientID = "patient id"
+
+        # Act
+        deserialized = schema.load(dataset)
+
+        # Assert
+        assert deserialized["nested"]["value"] == "patient id"
+
+    def test_flatten_on_dump_nested_dicom_field_dump(self):
+        # Arrange
+        schema = ParentFlattenOnDumpSchema()
+
+        data = {"nested": {"value": "patient id"}}
+
+        # Act
+        serialized = schema.dump(data)
+
+        # Assert
+        assert serialized["PatientID"].value == "patient id"

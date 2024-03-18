@@ -17,6 +17,7 @@
 from typing import Any, Dict, Type
 
 from marshmallow import fields, post_dump, post_load, pre_dump
+from pydicom.valuerep import VR
 
 from wsidicom.instance import ImageType
 from wsidicom.metadata.label import Label
@@ -30,10 +31,16 @@ from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 
 class LabelDicomSchema(ModuleDicomSchema[Label]):
     text = DefaultingDicomField(
-        StringDicomField(), data_key="LabelText", allow_none=True, dump_default=None
+        StringDicomField(VR.UT),
+        data_key="LabelText",
+        allow_none=True,
+        dump_default=None,
     )
     barcode = DefaultingDicomField(
-        StringDicomField(), data_key="BarcodeValue", allow_none=True, dump_default=None
+        StringDicomField(VR.LO),
+        data_key="BarcodeValue",
+        allow_none=True,
+        dump_default=None,
     )
 
     label_in_volume_image = BooleanDicomField(load_only=True, allow_none=True)
@@ -45,7 +52,9 @@ class LabelDicomSchema(ModuleDicomSchema[Label]):
     specimen_label_in_image = BooleanDicomField(
         data_key="SpecimenLabelInImage", load_default=False
     )
-    image_type = fields.List(StringDicomField(), load_only=True, data_key="ImageType")
+    image_type = fields.List(
+        StringDicomField(VR.CS), load_only=True, data_key="ImageType"
+    )
 
     @property
     def load_type(self) -> Type[Label]:

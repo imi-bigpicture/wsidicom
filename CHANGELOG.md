@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.2] - 2024-02-22
+
+### Fixed
+
+- Fixed handling of string values longer than allowed by value representation.
+- Corrected staining substances to be either a single string or a list of codes instead of a list of strings or codes.
+- Added `allow_none` for json metadata fields where it was missing.
+- Do not add empty `CodingSchemeVersion` to concept code name.
+
 ## [0.20.1] - 2024-02-22
 
 ### Fixed
@@ -344,7 +353,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.20.1..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.20.2..HEAD
+[0.20.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.1..v0.20.2
 [0.20.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.0..v0.20.1
 [0.20.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.19.1..v0.20.0
 [0.19.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.19.0..v0.19.1
