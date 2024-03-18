@@ -57,7 +57,6 @@ from wsidicom.metadata.schema.dicom.fields import (
     SingleCodeSequenceField,
     StringDicomField,
     StringItemDicomField,
-    StringOrCodeItemDicomField,
     UidDicomField,
 )
 from wsidicom.metadata.schema.dicom.sample.model import (
