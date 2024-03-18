@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import datetime
-from typing import Optional, Type, Union
+from typing import Optional, Type
 
 import pytest
 from marshmallow import fields
