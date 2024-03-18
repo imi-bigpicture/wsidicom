@@ -80,7 +80,7 @@ class StringDicomField(StringLikeDicomField):
         self._value_representation = value_representation
         super().__init__(**kwargs)
 
-    def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs):
+    def _serialize(self, value: Any, attr: Optional[str], obj: Any, **kwargs):
         if value is None:
             return None
         valid, error = validate_vr_length(self._value_representation, value)
