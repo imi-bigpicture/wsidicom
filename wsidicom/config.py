@@ -114,7 +114,8 @@ class Settings:
     @property
     def truncate_long_dicom_strings_on_validation_error(self) -> bool:
         """If long DICOM strings should be truncated. This is only used if
-        `pydicom.settings.writing_validation_mode` is set to `pydicom.config.RAISE`."""
+        `pydicom.settings.writing_validation_mode` is set to `pydicom.config.RAISE`. If
+        set to `True` long strings will be truncated if needed to pass validation."""
         return self._truncate_long_dicom_strings
 
     @truncate_long_dicom_strings_on_validation_error.setter
