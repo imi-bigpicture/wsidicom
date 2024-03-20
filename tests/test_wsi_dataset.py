@@ -5,7 +5,6 @@ from pydicom import Dataset
 from pydicom.dataelem import DataElement
 from pydicom.uid import UID, generate_uid
 
-from tests.file.io.test_wsidicom_writer import WsiDicomTestImageData
 from wsidicom.geometry import SizeMm
 from wsidicom.instance import ImageData, TileType
 from wsidicom.instance.dataset import ImageType, WsiDataset
