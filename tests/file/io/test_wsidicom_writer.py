@@ -14,8 +14,6 @@
 
 import math
 import os
-import random
-import sys
 from pathlib import Path
 from typing import List, Optional, OrderedDict, Sequence
 
@@ -153,66 +151,6 @@ class WsiDicomTestImageData(ImageData):
 
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         return self._data[tile.x + tile.y * self.tiled_size.width]
-
-
-@pytest.fixture()
-def tiled_size():
-    yield Size(2, 2)
-
-
-@pytest.fixture()
-def frame_count(tiled_size: Size):
-    yield tiled_size.area
-
-
-@pytest.fixture()
-def rng():
-    SEED = 0
-    yield random.Random(SEED)
-
-
-@pytest.fixture()
-def bits():
-    yield 8
-
-
-@pytest.fixture
-def samples_per_pixel():
-    yield 3
-
-
-@pytest.fixture
-def tile_size():
-    yield Size(10, 10)
-
-
-@pytest.fixture()
-def frames(
-    rng: random.Random,
-    transfer_syntax: UID,
-    frame_count: int,
-    bits: int,
-    samples_per_pixel: int,
-    tile_size: Size,
-):
-    if not transfer_syntax.is_encapsulated:
-        min_frame_length = bits * tile_size.area * samples_per_pixel // 8
-        max_frame_length = min_frame_length
-    else:
-        min_frame_length = 2
-        max_frame_length = 100
-    lengths = [
-        rng.randint(min_frame_length, max_frame_length) for i in range(frame_count)
-    ]
-    yield [
-        rng.getrandbits(length * 8).to_bytes(length, sys.byteorder)
-        for length in lengths
-    ]
-
-
-@pytest.fixture()
-def image_data(frames: List[bytes], tiled_size: Size):
-    yield WsiDicomTestImageData(frames, tiled_size)
 
 
 @pytest.fixture()
