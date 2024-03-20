@@ -209,7 +209,11 @@ class WsiInstance:
 
     @classmethod
     def create_instance(
-        cls, image_data: ImageData, base_dataset: Dataset, image_type: ImageType
+        cls,
+        image_data: ImageData,
+        base_dataset: Dataset,
+        image_type: ImageType,
+        pyramid_index: Optional[int] = None,
     ) -> "WsiInstance":
         """Create WsiInstance from ImageData.
 
@@ -221,6 +225,8 @@ class WsiInstance:
             Base dataset to include.
         image_type: ImageType
             Type of instance to create.
+        pyramid_index: Optional[int] = None
+            Pyramid index. of image data, if volume image.
 
         Returns
         -------
@@ -228,7 +234,7 @@ class WsiInstance:
             Created WsiInstance.
         """
         instance_dataset = WsiDataset.create_instance_dataset(
-            base_dataset, image_type, image_data
+            base_dataset, image_type, image_data, pyramid_index
         )
 
         return cls(instance_dataset, image_data)

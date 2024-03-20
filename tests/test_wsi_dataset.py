@@ -6,8 +6,8 @@ from pydicom.dataelem import DataElement
 from pydicom.uid import UID, generate_uid
 
 from wsidicom.geometry import SizeMm
-from wsidicom.instance import TileType
-from wsidicom.instance.dataset import WsiDataset
+from wsidicom.instance import ImageData, TileType
+from wsidicom.instance.dataset import ImageType, WsiDataset
 from wsidicom.tags import LossyImageCompressionRatioTag
 
 
@@ -265,3 +265,30 @@ class TestWsiDataset:
 
         # Assert
         assert read_spacing_between_slices == spacing_between_slices
+
+    @pytest.mark.parametrize(
+        ["image_type", "pyramid_index", "expected_image_type"],
+        [
+            (ImageType.VOLUME, 0, ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]),
+            (ImageType.VOLUME, 1, ["ORIGINAL", "PRIMARY", "VOLUME", "RESAMPLED"]),
+            (ImageType.LABEL, None, ["ORIGINAL", "PRIMARY", "LABEL", "NONE"]),
+            (ImageType.OVERVIEW, None, ["ORIGINAL", "PRIMARY", "OVERVIEW", "NONE"]),
+        ],
+    )
+    def test_create_instance_dataset(
+        self,
+        image_data: ImageData,
+        image_type: ImageType,
+        pyramid_index: Optional[int],
+        expected_image_type: Sequence[str],
+    ):
+        # Arrange
+        dataset = Dataset()
+
+        # Act
+        instance_dataset = WsiDataset.create_instance_dataset(
+            dataset, image_type, image_data, pyramid_index
+        )
+
+        # Assert
+        assert instance_dataset.ImageType == expected_image_type

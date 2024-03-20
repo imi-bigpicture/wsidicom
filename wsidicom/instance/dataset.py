@@ -740,16 +740,21 @@ class WsiDataset(Dataset):
             Type of instance ('VOLUME', 'LABEL', 'OVERVIEW)
         image_data:
             Image data to create dataset for.
+        pyramid_index: Optional[int] = None
+            Pyramid index. of image data, if volume image.
 
         Returns
         -------
         WsiDataset
             Dataset for instance.
         """
-        if image_type == ImageType.VOLUME and pyramid_index == 0:
-            resampled = "NONE"
-        else:
-            resampled = "RESAMPLED"
+        resampled = "NONE"
+        if image_type == ImageType.VOLUME:
+            if pyramid_index is None:
+                raise ValueError("Pyramid index must be set for volume image.")
+            if pyramid_index > 0:
+                resampled = "RESAMPLED"
+
         dataset.ImageType = ["ORIGINAL", "PRIMARY", image_type.value, resampled]
         dataset.SOPInstanceUID = generate_uid(prefix=None)
         shared_functional_group_sequence = Dataset()
