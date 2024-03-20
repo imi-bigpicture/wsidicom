@@ -14,6 +14,8 @@
 
 import json
 import os
+import random
+import sys
 from enum import Enum
 from io import BufferedReader
 from pathlib import Path
@@ -21,12 +23,14 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pytest
 from dicomweb_client import DICOMfileClient
-from pydicom.uid import JPEGBaseline8Bit
+from pydicom.uid import UID, JPEGBaseline8Bit
 from upath import UPath
 
 from tests.data_gen import create_layer_file
+from tests.file.io.test_wsidicom_writer import WsiDicomTestImageData
 from wsidicom import WsiDicom
 from wsidicom.config import settings
+from wsidicom.geometry import Size
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
@@ -195,3 +199,68 @@ def wsi_factory():
         wsi.close()
     for stream in streams:
         stream.close()
+
+
+@pytest.fixture()
+def tiled_size():
+    yield Size(2, 2)
+
+
+@pytest.fixture()
+def frame_count(tiled_size: Size):
+    yield tiled_size.area
+
+
+@pytest.fixture()
+def rng():
+    SEED = 0
+    yield random.Random(SEED)
+
+
+@pytest.fixture()
+def bits():
+    yield 8
+
+
+@pytest.fixture
+def samples_per_pixel():
+    yield 3
+
+
+@pytest.fixture
+def tile_size():
+    yield Size(10, 10)
+
+
+@pytest.fixture()
+def transfer_syntax():
+    yield JPEGBaseline8Bit
+
+
+@pytest.fixture()
+def frames(
+    rng: random.Random,
+    transfer_syntax: UID,
+    frame_count: int,
+    bits: int,
+    samples_per_pixel: int,
+    tile_size: Size,
+):
+    if not transfer_syntax.is_encapsulated:
+        min_frame_length = bits * tile_size.area * samples_per_pixel // 8
+        max_frame_length = min_frame_length
+    else:
+        min_frame_length = 2
+        max_frame_length = 100
+    lengths = [
+        rng.randint(min_frame_length, max_frame_length) for i in range(frame_count)
+    ]
+    yield [
+        rng.getrandbits(length * 8).to_bytes(length, sys.byteorder)
+        for length in lengths
+    ]
+
+
+@pytest.fixture()
+def image_data(frames: List[bytes], tiled_size: Size):
+    yield WsiDicomTestImageData(frames, tiled_size)
