@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Error when calculating downscaled image size causing `save()` with `add_missing_levels` to fail.
+
 ## [0.20.3] - 2024-03-20
 
 ### Fixed
