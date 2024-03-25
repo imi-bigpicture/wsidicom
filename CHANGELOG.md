@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Error when calculating downscaled image size causing `save()` with `add_missing_levels` to fail.
+- Missing sort when creating new pyramid levels, causing new levels to be created from a to high resolution level.
 
 ## [0.20.3] - 2024-03-20
 
