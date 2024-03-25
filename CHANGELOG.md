@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.4] - 2024-03-25
+
+### Fixed
+
+- Error when calculating downscaled image size causing `save()` with `add_missing_levels` to fail.
+- Missing sort when creating new pyramid levels, causing new levels to be created from a to high resolution level.
+
 ## [0.20.3] - 2024-03-20
 
 ### Fixed
@@ -359,7 +366,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.20.3..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.20.4..HEAD
+[0.20.4]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.3..v0.20.4
 [0.20.3]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.2..v0.20.3
 [0.20.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.1..v0.20.2
 [0.20.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.0..v0.20.1

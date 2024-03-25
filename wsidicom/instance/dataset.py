@@ -14,6 +14,7 @@
 
 import io
 import logging
+import math
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
@@ -710,6 +711,12 @@ class WsiDataset(Dataset):
         if "PerFrameFunctionalGroupsSequence" in dataset:
             del dataset["PerFrameFunctionalGroupsSequence"]
 
+        dataset.TotalPixelMatrixColumns = max(
+            math.ceil(dataset.TotalPixelMatrixColumns / scale), 1
+        )
+        dataset.TotalPixelMatrixRows = max(
+            math.ceil(dataset.TotalPixelMatrixRows / scale), 1
+        )
         dataset.TotalPixelMatrixFocalPlanes = len(focal_planes)
         dataset.NumberOfOpticalPaths = len(optical_paths)
         dataset.NumberOfFrames = (
@@ -717,9 +724,7 @@ class WsiDataset(Dataset):
             * len(focal_planes)
             * len(optical_paths)
         )
-        scaled_size = dataset.image_size.ceil_div(scale)
-        dataset.TotalPixelMatrixColumns = max(scaled_size.width, 1)
-        dataset.TotalPixelMatrixRows = max(scaled_size.height, 1)
+
         return dataset
 
     @classmethod

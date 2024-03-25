@@ -163,7 +163,9 @@ class WsiDicomFileTarget(Target):
                 closest_new_level = next(
                     (
                         level
-                        for level in new_levels
+                        for level in sorted(
+                            new_levels, key=lambda x: x.level, reverse=True
+                        )
                         if level.level < pyramid_level
                         and level.level > closest_level.level
                     ),
