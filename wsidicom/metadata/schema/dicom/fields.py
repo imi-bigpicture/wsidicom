@@ -373,7 +373,6 @@ class CodeDicomSchema(Schema):
 
     @post_load
     def post_load(self, data: Dict[str, Any], **kwargs):
-        print("post_load", data)
         return self._load_type(**data)
 
 
