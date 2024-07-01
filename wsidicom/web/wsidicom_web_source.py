@@ -161,10 +161,12 @@ class WsiDicomWebSource(Source):
                     key=lambda instance: instance.dataset.image_size.width,
                 )
             )
+
         except StopIteration:
             WsiDicomNotFoundError(
                 "No level instances found", f"{study_uid}, {series_uids}"
             )
+        self._base_tile_size = self._base_dataset.tile_size
 
     @property
     def base_dataset(self) -> WsiDataset:
@@ -174,6 +176,12 @@ class WsiDicomWebSource(Source):
     @property
     def level_instances(self) -> List[WsiInstance]:
         """The level instances parsed from the source."""
+        if settings.strict_tile_size_check:
+            return [
+                level
+                for level in self._level_instances
+                if level.dataset.tile_size == self._base_tile_size
+            ]
         return self._level_instances
 
     @property
