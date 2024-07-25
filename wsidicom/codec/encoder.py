@@ -183,12 +183,16 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
 
         Parameters
         ----------
-        settings: SettingsType
-            Settings for the encoder.
+        transfer_syntax: UID
+            Transfer syntax UID.
+        bits: int
+            Number of bits per sample.
+        photometric_interpretation: str
+            Photometric interpretation.
 
         Returns
         -------
-        Encoder[SettingsType]
+        Encoder
             Encoder for settings.
         """
         settings = Settings.create(
@@ -199,17 +203,17 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         return cls.create_for_settings(settings)
 
     @classmethod
-    def create_for_settings(cls, settings: SettingsType) -> "Encoder[SettingsType]":
+    def create_for_settings(cls, settings: Settings) -> "Encoder":
         """Create an encoder using settings.
 
         Parameters
         ----------
-        settings: SettingsType
+        settings: Settings
             Settings for the encoder.
 
         Returns
         -------
-        Encoder[SettingsType]
+        Encoder
             Encoder for settings.
         """
         encoder = cls._select_encoder(settings)
@@ -219,18 +223,18 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
 
     @staticmethod
     def _select_encoder(
-        settings: SettingsType,
-    ) -> Optional["Type[Encoder[SettingsType]]"]:
+        settings: Settings,
+    ) -> Optional["Type[Encoder]"]:
         """Select encoder for settings.
 
         Parameters
         ----------
-        settings: SettingsType
+        settings: Settings
             Settings for the encoder.
 
         Returns
         -------
-        Optional[Type[Encoder[SettingsType]]]
+        Optional[Type[Encoder]]
             Encoder for settings, or None if no encoder is available.
         """
         # Sort encoders by preference
