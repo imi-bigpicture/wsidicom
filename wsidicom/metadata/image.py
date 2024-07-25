@@ -69,6 +69,20 @@ class ImageCoordinateSystem:
         return Orientation.from_rotation(self.rotation)
 
     def image_to_slide(self, image: GeometryType) -> GeometryType:
+        """Translate a geometry (PointMm or RegionMm) from image coordinate system
+        (origin at image top-left corner) to slide coordinate system (origin at
+        slide corner).
+
+        Parameters
+        ----------
+        image : GeometryType
+            The geometry to translate.
+
+        Returns
+        -------
+        GeometryType
+            The translate geometry.
+        """
         if isinstance(image, PointMm):
             offset = self.orientation.apply_transform(image)
             return self.origin + offset
@@ -77,6 +91,20 @@ class ImageCoordinateSystem:
         return RegionMm(start, SizeMm(end.x - start.x, end.y - start.y))
 
     def slide_to_image(self, slide: GeometryType) -> GeometryType:
+        """Translate a geometry (PointMm or RegionMm) from slide coordinate system
+        (origin at slide corner) to image coordinate system (origin at image top-left
+        corner).
+
+        Parameters
+        ----------
+        slide : GeometryType
+            The geometry to translate.
+
+        Returns
+        -------
+        GeometryType
+            The translate geometry.
+        """
         if isinstance(slide, PointMm):
             offset = slide - self.origin
             return self.orientation.apply_reverse_transform(offset)
@@ -89,9 +117,24 @@ class ImageCoordinateSystem:
         size = SizeMm(end.x - start.x, end.y - start.y)
         return RegionMm(start, size)
 
-    def to_other_corrdinate_system(
+    def to_other_coordinate_system(
         self, other: "ImageCoordinateSystem", image: GeometryType
     ) -> GeometryType:
+        """Translate a geometry (PointMm or RegionMm) from this image coordinate system
+        to another image coordinate system.
+
+        Parameters
+        ----------
+        other : ImageCoordinateSystem
+            The target image coordinate system.
+        image : GeometryType
+            The geometry to translate.
+
+        Returns
+        -------
+        GeometryType
+            The translate geometry.
+        """
         slide = self.image_to_slide(image)
         return other.slide_to_image(slide)
 
