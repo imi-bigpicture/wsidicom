@@ -49,7 +49,7 @@ Please note that this is an early release and the API is not frozen yet. Functio
 - With imagecodecs, the following transfer syntaxes are additionally supported:
 
   - JPEGExtended12Bit
-  - JPEGLosslessP14
+  - JPEGLossless
   - JPEGLosslessSV1
   - JPEGLSLossless
   - JPEGLSNearLossless
