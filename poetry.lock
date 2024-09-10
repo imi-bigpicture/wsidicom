@@ -612,17 +612,21 @@ files = [
 
 [[package]]
 name = "pydicom"
-version = "2.4.4"
+version = "3.0.0"
 description = "A pure Python package for reading and writing DICOM data"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.10"
 files = [
-    {file = "pydicom-2.4.4-py3-none-any.whl", hash = "sha256:f9f8e19b78525be57aa6384484298833e4d06ac1d6226c79459131ddb0bd7c42"},
-    {file = "pydicom-2.4.4.tar.gz", hash = "sha256:90b4801d851ce65be3df520e16bbfa3d6c767cf2a3a3b1c18f6780e6b670b87a"},
+    {file = "pydicom-3.0.0-py3-none-any.whl", hash = "sha256:7b1435dc7427a3d172685a9406ff1a75eb2d7651d236d0d99abd4953a1100922"},
+    {file = "pydicom-3.0.0.tar.gz", hash = "sha256:003aeb025bbd20fc029f71eb286cf8772cc924d8de2baaec184c2caa513502df"},
 ]
 
 [package.extras]
-docs = ["matplotlib", "numpy", "numpydoc", "pillow", "sphinx", "sphinx-copybutton", "sphinx-gallery", "sphinx_rtd_theme", "sphinxcontrib-napoleon"]
+basic = ["numpy", "types-pydicom"]
+dev = ["black (==24.8.0)", "mypy (==1.11.2)", "pre-commit", "pydicom-data", "pytest", "pytest-cov", "ruff (==0.6.3)", "types-requests"]
+docs = ["matplotlib", "numpy", "numpydoc", "pillow", "sphinx", "sphinx-copybutton", "sphinx-gallery", "sphinx_rtd_theme", "sphinxcontrib-jquery", "sphinxcontrib-napoleon"]
+gpl-license = ["pylibjpeg[libjpeg]"]
+pixeldata = ["numpy", "pillow", "pyjpegls", "pylibjpeg[openjpeg]", "pylibjpeg[rle]", "python-gdcm"]
 
 [[package]]
 name = "pyflakes"
@@ -957,13 +961,13 @@ tests = ["mypy (>=1.10.0)", "packaging", "pylint (>=2.17.4)", "pytest (>=8)", "p
 
 [[package]]
 name = "urllib3"
-version = "2.2.3"
+version = "2.2.2"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "urllib3-2.2.3-py3-none-any.whl", hash = "sha256:ca899ca043dcb1bafa3e262d73aa25c465bfb49e0bd9dd5d59f1d0acba2f8fac"},
-    {file = "urllib3-2.2.3.tar.gz", hash = "sha256:e7d814a81dad81e6caf2ec9fdedb284ecc9c73076b62654547cc64ccdcae26e9"},
+    {file = "urllib3-2.2.2-py3-none-any.whl", hash = "sha256:a448b2f64d686155468037e1ace9f2d2199776e17f0a46610480d311f73e3472"},
+    {file = "urllib3-2.2.2.tar.gz", hash = "sha256:dd505485549a7a552833da5e6063639d0d177c04f23bc3864e41e5dc5f612168"},
 ]
 
 [package.extras]
@@ -1051,5 +1055,5 @@ pylibjpeg-rle = ["pylibjpeg-rle"]
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.9"
-content-hash = "37e4579c07610edade44ab7b951e6e9c8c75550d9680d59679456dde9d633b19"
+python-versions = "^3.10"
+content-hash = "34935bca8870955b477c72c3385e94ce0846fd4bace1cbdd440db365db4f27a9"

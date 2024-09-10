@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 numpy = "^1.22.0"
 pydicom = ">=2.1.0,<3.0.0"
 Pillow = ">=9.1.1"
