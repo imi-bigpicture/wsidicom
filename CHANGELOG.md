@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.21.0] - 2024-09-10
+
+### Added
+
+- Support for pydicom 3.0. This requires Pyhton >3.10.
+
+### Removed
+
+- Support for Python 3.9.
+
+### Fixed
+
+- Missing support for using fsspec in some methods.
+
 ## [0.20.6] - 2024-09-12
 
 ### Fixed
@@ -378,7 +393,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.20.6..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.21.0..HEAD
+[0.21.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.6..v0.21.0
 [0.20.6]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.5..v0.20.6
 [0.20.5]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.4..v0.20.5
 [0.20.4]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.3..v0.20.4
