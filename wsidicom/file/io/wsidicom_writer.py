@@ -80,8 +80,6 @@ class WsiDicomWriter:
                 f"Offset table not supported for writer of type {type(self)}."
             )
         self._file = file
-        self._file.is_implicit_VR = transfer_syntax.is_implicit_VR
-        self._file.is_little_endian = transfer_syntax.is_little_endian
         self._transfer_syntax = transfer_syntax
         self._offset_table = offset_table
 
@@ -117,7 +115,9 @@ class WsiDicomWriter:
         WsiDicomWriter
             WsiDicomWriter for file.
         """
-        stream = WsiDicomStreamOpener(file_options).open_for_writing(file, "w+b")
+        stream = WsiDicomStreamOpener(file_options).open_for_writing(
+            file, "w+b", transfer_syntax
+        )
         if transfer_syntax.is_encapsulated:
             writer = WsiDicomEncapsulatedWriter
         else:
@@ -342,7 +342,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         WsiDicomEncapsulatedWriter
             WsiDicomEncapsulatedWriter for file.
         """
-        stream = WsiDicomIO.open(file, "w+b")
+        stream = WsiDicomIO.open(file, "w+b", transfer_syntax)
         return cls(stream, transfer_syntax, offset_table)
 
     def copy(
@@ -491,7 +491,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
             or self._offset_table == OffsetTableType.EXTENDED
         ):
             self._file.write_tag(ItemTag)
-            self._file.write_leUL(0)
+            self._file.write_UL(0)
 
         pixel_data_start = self._file.tell()
 
@@ -539,7 +539,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
     def _write_pixel_data_end_tag(self) -> None:
         """Writes tags ending pixel data."""
         self._file.write_tag(SequenceDelimiterTag)
-        self._file.write_leUL(0)
+        self._file.write_UL(0)
 
     def _rewrite_as_table(
         self,
@@ -631,7 +631,7 @@ class WsiDicomNativeWriter(WsiDicomWriter):
         WsiDicomNativeWriter
             WsiDicomNativeWriter for file.
         """
-        stream = WsiDicomIO.open(file, "w+b")
+        stream = WsiDicomIO.open(file, "w+b", transfer_syntax)
         return cls(stream, transfer_syntax, offset_table)
 
     def _write_pixel_data(

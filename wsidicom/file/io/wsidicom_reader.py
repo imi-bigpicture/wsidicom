@@ -59,8 +59,6 @@ class WsiDicomReader:
         self._lock = threading.Lock()
         self._stream = stream
         self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
-        self._stream.is_little_endian = self._transfer_syntax_uid.is_little_endian
-        self._stream.is_implicit_VR = self._transfer_syntax_uid.is_implicit_VR
         dataset = self._stream.read_dataset()
         self._pixel_data_position = self._stream.tell()
 
