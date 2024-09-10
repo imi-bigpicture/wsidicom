@@ -16,7 +16,6 @@
 
 import threading
 from functools import cached_property
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 from pydicom.tag import Tag
@@ -152,23 +151,6 @@ class WsiDicomReader:
         with self._lock:
             self._stream.seek(frame_position, 0)
             return self._stream.read(frame_length)
-
-    @classmethod
-    def open(cls, file: Path) -> "WsiDicomReader":
-        """Open file in path as WsiDicomFileReader.
-
-        Parameters
-        ----------
-        file: Path
-            Path to file.
-
-        Returns
-        -------
-        WsiDicomFileReader
-            WsiDicomFileReader for file.
-        """
-        stream = WsiDicomIO.open(file, "rb")
-        return cls(stream)
 
     def _get_frame_index(self) -> FrameIndex:
         """Create frame index for stream."""

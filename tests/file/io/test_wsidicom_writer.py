@@ -37,7 +37,10 @@ from wsidicom.file.io import (
     WsiDicomReader,
     WsiDicomWriter,
 )
-from wsidicom.file.io.wsidicom_writer import WsiDicomEncapsulatedWriter
+from wsidicom.file.io.wsidicom_writer import (
+    WsiDicomEncapsulatedWriter,
+    WsiDicomNativeWriter,
+)
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
@@ -286,9 +289,7 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(transfer_syntax))
 
         # Act
-        with WsiDicomWriter.open(
-            filepath, transfer_syntax, OffsetTableType.NONE
-        ) as writer:
+        with WsiDicomNativeWriter.open(filepath, transfer_syntax) as writer:
             writer._write_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
                 WsiDataset(dataset),
@@ -322,14 +323,15 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(
+        with WsiDicomEncapsulatedWriter.open(
             filepath, JPEGBaseline8Bit, OffsetTableType.BASIC
         ) as writer:
-            assert isinstance(writer, WsiDicomEncapsulatedWriter)
             writer._write_pixel_data_end_tag()
 
         # Assert
-        with WsiDicomIO.open(filepath, "rb", JPEGBaseline8Bit) as read_file:
+        with WsiDicomIO(
+            open(filepath, "rb"), JPEGBaseline8Bit, filepath, True
+        ) as read_file:
             tag = read_file.read_tag()
             assert tag == SequenceDelimiterTag
             length = read_file.read_tag_length(True)
@@ -354,7 +356,9 @@ class TestWsiDicomWriter:
                 chunk_size=10,
             )
 
-        with WsiDicomIO.open(filepath, "rb", JPEGBaseline8Bit) as read_file:
+        with WsiDicomIO(
+            open(filepath, "rb"), JPEGBaseline8Bit, filepath, True
+        ) as read_file:
             for position in positions:
                 read_file.seek(position)
                 tag = read_file.read_tag()
@@ -402,7 +406,9 @@ class TestWsiDicomWriter:
             )
 
         # Assert
-        with WsiDicomReader.open(filepath) as read_file:
+        with WsiDicomReader(
+            WsiDicomIO(open(filepath, "rb"), transfer_syntax, filepath, True)
+        ) as read_file:
             for index, frame in enumerate(frames):
                 read_frame = read_file.read_frame(index)
                 # Stored frame can be up to one byte longer

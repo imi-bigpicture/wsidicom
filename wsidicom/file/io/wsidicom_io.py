@@ -19,7 +19,7 @@ from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from struct import pack
-from typing import Any, BinaryIO, Callable, Dict, Literal, Optional, Union, cast
+from typing import Any, BinaryIO, Callable, Dict, Optional, Union, cast
 
 from fsspec.spec import AbstractBufferedFile
 from pydicom.dataelem import RawDataElement, convert_raw_data_element
@@ -75,7 +75,6 @@ class WsiDicomIO:
         self._dicom_io = DicomIO(self._stream)
         if transfer_syntax is None:
             transfer_syntax = UID(self.file_meta_info.TransferSyntaxUID)
-
         self._dicom_io.is_little_endian = transfer_syntax.is_little_endian
         self._dicom_io.is_implicit_VR = transfer_syntax.is_implicit_VR
         self.__enter__()
@@ -85,39 +84,6 @@ class WsiDicomIO:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-
-    @classmethod
-    def open(
-        cls,
-        filepath: Path,
-        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
-        transfer_syntax: Optional[UID] = None,
-    ) -> "WsiDicomIO":
-        """Open a file and return a WsiDicomIO instance.
-
-        Parameters
-        ----------
-        filepath: UPath
-            Path to file.
-        Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
-            Mode to open file in.
-        transfer_syntax: Optional[UID] = None
-            Transfer syntax to use.
-
-        Returns
-        -------
-        WsiDicomIO
-            Instance of WsiDicomIO.
-        """
-        if mode == "w+b" and transfer_syntax is None:
-            raise ValueError("Transfer syntax must be provided when writing.")
-        stream = open(filepath, mode)
-        return cls(
-            stream,
-            transfer_syntax=transfer_syntax,
-            filepath=UPath(filepath),
-            owned=True,
-        )
 
     @property
     def owned(self) -> bool:
@@ -205,6 +171,10 @@ class WsiDicomIO:
             specific_tags=None,
         )
 
+    def read_tag(self) -> BaseTag:
+        """Read tag from stream."""
+        return Tag(self._dicom_io.read_tag())
+
     def read_tag_length(self, long: bool) -> int:
         """Read tag length."""
         if not long and not self._dicom_io.is_implicit_VR:
@@ -287,10 +257,6 @@ class WsiDicomIO:
             format = ">Q"
         self.write(pack(format, value))
 
-    def read_tag(self) -> BaseTag:
-        """Read tag from stream."""
-        return Tag(self._dicom_io.read_tag())
-
     def write_tag(self, tag: BaseTag):
         """Write tag to stream.
 
@@ -328,12 +294,6 @@ class WsiDicomIO:
             Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
 
         """
-        # if self.is_little_endian:
-        #     write_ul = self.write_leUL
-        #     write_us = self.write_leUS
-        # else:
-        #     write_ul = self.write_beUL
-        #     write_us = self.write_beUS
         self._dicom_io.write_tag(Tag(tag))
         if not self._dicom_io.is_implicit_VR:
             self.write(bytes(value_representation, "iso8859"))

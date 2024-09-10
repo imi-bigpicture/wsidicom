@@ -115,14 +115,11 @@ class WsiDicomWriter:
         WsiDicomWriter
             WsiDicomWriter for file.
         """
-        stream = WsiDicomStreamOpener(file_options).open_for_writing(
-            file, "w+b", transfer_syntax
-        )
         if transfer_syntax.is_encapsulated:
-            writer = WsiDicomEncapsulatedWriter
-        else:
-            writer = WsiDicomNativeWriter
-        return writer(stream, transfer_syntax, offset_table)
+            return WsiDicomEncapsulatedWriter.open(
+                file, transfer_syntax, offset_table, file_options
+            )
+        return WsiDicomNativeWriter.open(file, transfer_syntax, file_options)
 
     def write(
         self,
@@ -232,6 +229,30 @@ class WsiDicomWriter:
     def close(self, force: Optional[bool] = False) -> None:
         self._file.close(force)
 
+    @staticmethod
+    def _open_stream(
+        file: Union[str, Path, UPath],
+        transfer_syntax: UID,
+        file_options: Optional[Dict[str, Any]] = None,
+    ):
+        """Open file in path as WsiDicomIO.
+
+        Parameters
+        ----------
+        file: Union[str, Path, UPath]
+            Path to file.
+        file_options: Optional[Dict[str, Any]] = None
+            Keyword arguments for opening files.
+
+        Returns
+        -------
+        WsiDicomEncapsulatedWriter
+            WsiDicomEncapsulatedWriter for file.
+        """
+        return WsiDicomStreamOpener(file_options).open_for_writing(
+            file, "w+b", transfer_syntax
+        )
+
     def _write_tiles(
         self,
         image_data: ImageData,
@@ -322,27 +343,43 @@ class WsiDicomWriter:
 
 
 class WsiDicomEncapsulatedWriter(WsiDicomWriter):
+    def __init__(
+        self,
+        file: WsiDicomIO,
+        transfer_syntax: UID,
+        offset_table: OffsetTableType,
+        file_options: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(file, transfer_syntax, offset_table)
+        self._file_options = file_options
+
     @classmethod
     def open(
-        cls, file: Path, transfer_syntax: UID, offset_table: OffsetTableType
+        cls,
+        file: Union[str, Path, UPath],
+        transfer_syntax: UID,
+        offset_table: OffsetTableType,
+        file_options: Optional[Dict[str, Any]] = None,
     ) -> "WsiDicomEncapsulatedWriter":
         """Open file in path as WsiDicomEncapsulatedWriter.
 
         Parameters
         ----------
-        file: Path
+        file: Union[str, Path, UPath]
             Path to file.
         transfer_syntax: UID
             Transfer syntax to use.
         offset_table: OffsetTableType
             Offset table to use.
+        file_options: Optional[Dict[str, Any]] = None
+            Keyword arguments for opening files.
 
         Returns
         -------
         WsiDicomEncapsulatedWriter
             WsiDicomEncapsulatedWriter for file.
         """
-        stream = WsiDicomIO.open(file, "w+b", transfer_syntax)
+        stream = cls._open_stream(file, transfer_syntax, file_options)
         return cls(stream, transfer_syntax, offset_table)
 
     def copy(
@@ -567,11 +604,13 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         List[int]
             List of frame position relative to start of new file.
         """
-        if self._file.filepath is None:
+        file_path = self._file.filepath
+        if file_path is None:
             raise ValueError("Cannot rewrite file without filepath.")
-        temp_file_path = self._file.filepath.with_suffix(".tmp")
+
+        temp_file_path = file_path.with_suffix(".tmp")
         with WsiDicomEncapsulatedWriter.open(
-            temp_file_path, self._transfer_syntax, offset_table
+            temp_file_path, self._transfer_syntax, offset_table, self._file_options
         ) as writer:
             frame_positions = writer.copy(
                 self._file,
@@ -580,8 +619,8 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
                 frame_positions,
             )
         self._file.close()
-        os.replace(temp_file_path, self._file.filepath)
-        self._file = WsiDicomIO.open(self._file.filepath, "r+b")
+        os.replace(temp_file_path, file_path)
+        self._file = next(WsiDicomStreamOpener(self._file_options).open([file_path]))
         return frame_positions
 
     @staticmethod
@@ -611,28 +650,34 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
 
 
 class WsiDicomNativeWriter(WsiDicomWriter):
+    def __init__(self, file: WsiDicomIO, transfer_syntax: UID):
+        super().__init__(file, transfer_syntax, OffsetTableType.NONE)
+
     @classmethod
     def open(
-        cls, file: Path, transfer_syntax: UID, offset_table: OffsetTableType
+        cls,
+        file: Union[str, Path, UPath],
+        transfer_syntax: UID,
+        file_options: Optional[Dict[str, Any]] = None,
     ) -> "WsiDicomNativeWriter":
         """Open file in path as WsiDicomNativeWriter.
 
         Parameters
         ----------
-        file: Path
+        file: Union[str, Path, UPath]
             Path to file.
         transfer_syntax: UID
             Transfer syntax to use.
-        offset_table: OffsetTableType
-            Offset table to use.
+        file_options: Optional[Dict[str, Any]] = None
+            Keyword arguments for opening files.
 
         Returns
         -------
         WsiDicomNativeWriter
             WsiDicomNativeWriter for file.
         """
-        stream = WsiDicomIO.open(file, "w+b", transfer_syntax)
-        return cls(stream, transfer_syntax, offset_table)
+        stream = cls._open_stream(file, transfer_syntax, file_options)
+        return cls(stream, transfer_syntax)
 
     def _write_pixel_data(
         self,

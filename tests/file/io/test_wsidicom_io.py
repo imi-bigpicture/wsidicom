@@ -112,28 +112,6 @@ class TestWsiDicomIO:
             ExplicitVRLittleEndian,
         ],
     )
-    def test_open(self, temp_path: Path, transfer_syntax: UID):
-        # Arrange
-
-        # Act
-        io = WsiDicomIO.open(temp_path, "w+b", transfer_syntax)
-
-        # Assert
-        assert io.owned
-        assert io.filepath == temp_path
-        assert io.is_little_endian == transfer_syntax.is_little_endian
-        assert io.is_implicit_VR == transfer_syntax.is_implicit_VR
-        io.close()
-
-    @pytest.mark.parametrize(
-        "transfer_syntax",
-        [
-            JPEGBaseline8Bit,
-            ImplicitVRLittleEndian,
-            ExplicitVRBigEndian,
-            ExplicitVRLittleEndian,
-        ],
-    )
     @pytest.mark.parametrize("owned", [True, False])
     def test_init(self, buffer: BinaryIO, transfer_syntax: UID, owned: bool):
         # Arrange
