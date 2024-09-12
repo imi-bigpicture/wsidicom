@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import io
 import logging
 import math
 from copy import deepcopy
@@ -21,7 +20,6 @@ from enum import Enum, IntEnum, auto
 from functools import cached_property
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
-from pydicom import dcmread
 from pydicom.dataset import Dataset
 from pydicom.multival import MultiValue
 from pydicom.sequence import Sequence as DicomSequence
