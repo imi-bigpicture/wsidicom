@@ -293,6 +293,4 @@ def create_layer_file(
     file_meta: FileMetaDataset = create_meta_dataset(),
 ):
     dataset.file_meta = file_meta
-    dataset.is_implicit_VR = False
-    dataset.is_little_endian = True
-    dataset.save_as(filename, write_like_original=False)
+    dataset.save_as(filename, enforce_file_format=True)

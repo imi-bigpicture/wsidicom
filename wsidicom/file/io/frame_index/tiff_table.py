@@ -42,7 +42,7 @@ class TiffTable(EmptyBot):
         max_image_pixels_restore = Pillow.MAX_IMAGE_PIXELS
         Pillow.MAX_IMAGE_PIXELS = None
         try:
-            image = Pillow.open(self._file)
+            image = Pillow.open(self._file.stream)
             tags: Optional[Dict[int, Any]] = getattr(image, "tag_v2", None)
             if tags is None:
                 raise EmptyTiffFrameTagsException("File does not contain tiff tags.")

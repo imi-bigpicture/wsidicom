@@ -23,6 +23,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pytest
 from dicomweb_client import DICOMfileClient
+from pydicom.misc import is_dicom
 from pydicom.uid import UID, JPEGBaseline8Bit
 from upath import UPath
 
@@ -187,7 +188,11 @@ def wsi_factory():
                 JPEGBaseline8Bit,
             )
         elif input_type == WsiInputType.STREAM:
-            streams = [open(file, "rb") for file in folder.iterdir() if file.is_file()]
+            streams = [
+                open(file, "rb")
+                for file in folder.iterdir()
+                if file.is_file() and is_dicom(file)
+            ]
             wsi = WsiDicom.open_streams(streams)
         else:
             raise NotImplementedError()

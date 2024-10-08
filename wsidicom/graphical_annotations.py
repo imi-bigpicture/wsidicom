@@ -1572,8 +1572,6 @@ class AnnotationInstance:
             Write DICOM file with implicit value representation
         """
         ds = Dataset()
-        ds.is_little_endian = little_endian
-        ds.is_implicit_VR = implicit_vr
         bulk_sequence = DicomSequence()
         for index, annotation_group in enumerate(self.groups):
             if isinstance(annotation_group, AnnotationGroup):

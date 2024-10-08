@@ -96,6 +96,7 @@ class WsiDicomStreamOpener:
         self,
         path: Union[str, Path, UPath],
         mode: Union[Literal["r+b"], Literal["w+b"]],
+        transfer_syntax: UID,
     ) -> WsiDicomIO:
         """Open a stream for writing.
 
@@ -105,6 +106,8 @@ class WsiDicomStreamOpener:
             Path to open.
         mode: Union[Literal["r+b"], Literal["w+b"]]
             Mode to open in.
+        transfer_syntax: UID
+            Transfer syntax to use.
 
         Returns
         -------
@@ -114,7 +117,9 @@ class WsiDicomStreamOpener:
         fs, path = self._open_filesystem(str(path))
         fs.makedirs(UPath(path).parent, exist_ok=True)
         stream = self._open_stream(fs, path, mode)
-        return WsiDicomIO(stream, owned=True, filepath=UPath(path))
+        return WsiDicomIO(
+            stream, transfer_syntax=transfer_syntax, filepath=UPath(path), owned=True
+        )
 
     def _open_streams(
         self,

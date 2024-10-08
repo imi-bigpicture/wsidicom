@@ -46,9 +46,7 @@ def transfer_syntax():
 
 @pytest.fixture
 def buffer(transfer_syntax: UID):
-    with WsiDicomIO(
-        BytesIO(), transfer_syntax.is_little_endian, transfer_syntax.is_implicit_VR
-    ) as buffer:
+    with WsiDicomIO(BytesIO(), transfer_syntax=transfer_syntax) as buffer:
         yield buffer
 
 
@@ -99,7 +97,7 @@ class TestFrameIndex:
         bot_start = buffer.tell()
         buffer.write(encapsulated)
         buffer.write_tag(SequenceDelimiterTag)
-        buffer.write_leUL(0)
+        buffer.write_UL(0)
         expected_frame_index: List[Tuple[int, int]] = [
             ((bot_start + EMPTY_BOT + index * ITEM_LENGTH), FRAME_LENGTH)
             for index in range(len(tiles))
@@ -123,7 +121,7 @@ class TestFrameIndex:
         bot_start = buffer.tell()
         buffer.write(encapsulated)
         buffer.write_tag(SequenceDelimiterTag)
-        buffer.write_leUL(0)
+        buffer.write_UL(0)
         expected_frame_index: List[Tuple[int, int]] = [
             ((bot_start + BOT + index * ITEM_LENGTH), FRAME_LENGTH)
             for index in range(len(tiles))
@@ -164,7 +162,7 @@ class TestFrameIndex:
         bot_start = buffer.tell()
         buffer.write(encapsulated)
         buffer.write_tag(SequenceDelimiterTag)
-        buffer.write_leUL(0)
+        buffer.write_UL(0)
         expected_frame_index: List[Tuple[int, int]] = [
             ((bot_start + EMPTY_BOT + index * ITEM_LENGTH), FRAME_LENGTH)
             for index in range(len(tiles))

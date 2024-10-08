@@ -78,9 +78,9 @@ class BotWriter(OffsetTableWriter):
         BYTES_PER_ITEM = 4
         tag_lengths = BYTES_PER_ITEM * number_of_frames
         self._file.write_tag(ItemTag)
-        self._file.write_leUL(tag_lengths)
+        self._file.write_UL(tag_lengths)
         for _ in range(number_of_frames):
-            self._file.write_leUL(0)
+            self._file.write_UL(0)
 
     def write(
         self,
@@ -103,7 +103,7 @@ class BotWriter(OffsetTableWriter):
         )
 
         for frame_position in frame_positions:  # Write BOT
-            self._file.write_leUL(frame_position - pixel_data_start)
+            self._file.write_UL(frame_position - pixel_data_start)
 
 
 class EotWriter(OffsetTableWriter):

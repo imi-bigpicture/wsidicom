@@ -41,9 +41,7 @@ def transfer_syntax():
 
 @pytest.fixture
 def buffer(transfer_syntax: UID):
-    with WsiDicomIO(
-        BytesIO(), transfer_syntax.is_little_endian, transfer_syntax.is_implicit_VR
-    ) as buffer:
+    with WsiDicomIO(BytesIO(), transfer_syntax=transfer_syntax) as buffer:
         yield buffer
 
 
@@ -124,7 +122,7 @@ class TestOffsetTableWriter:
         writer.reserve(len(positions))
         buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
         buffer.write_tag(ItemTag)
-        buffer.write_leUL(0)
+        buffer.write_UL(0)
 
         # Act
         writer.write(0, positions, 600)

@@ -27,7 +27,7 @@ from pydicom.uid import (
     JPEG2000Lossless,
     JPEGBaseline8Bit,
     JPEGExtended12Bit,
-    JPEGLosslessP14,
+    JPEGLossless,
     JPEGLosslessSV1,
     JPEGLSLossless,
     JPEGLSNearLossless,
@@ -176,7 +176,7 @@ class Settings(metaclass=ABCMeta):
             JPEGExtended12Bit,
         ]
         jpeg_lossless_transfer_syntaxes = [
-            JPEGLosslessP14,
+            JPEGLossless,
             JPEGLosslessSV1,
         ]
         jpeg_ls_transfer_syntaxes = [
@@ -321,7 +321,7 @@ class JpegLosslessSettings(Settings):
     def transfer_syntax(self) -> UID:
         if self.predictor is None:
             return JPEGLosslessSV1
-        return JPEGLosslessP14
+        return JPEGLossless
 
     @property
     def photometric_interpretation(self) -> str:

@@ -30,7 +30,7 @@ from pydicom.uid import (
     JPEG2000Lossless,
     JPEGBaseline8Bit,
     JPEGExtended12Bit,
-    JPEGLosslessP14,
+    JPEGLossless,
     JPEGLosslessSV1,
     JPEGLSLossless,
     JPEGLSNearLossless,
@@ -395,7 +395,7 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
     _supported_transfer_syntaxes = {
         JPEGBaseline8Bit: (jpeg8_decode, JPEG8),
         JPEGExtended12Bit: (jpeg8_decode, JPEG8),
-        JPEGLosslessP14: (jpeg8_decode, JPEG8),
+        JPEGLossless: (jpeg8_decode, JPEG8),
         JPEGLosslessSV1: (jpeg8_decode, JPEG8),
         JPEGLSLossless: (jpegls_decode, JPEGLS),
         JPEGLSNearLossless: (jpegls_decode, JPEGLS),

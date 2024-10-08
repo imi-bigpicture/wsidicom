@@ -87,9 +87,9 @@ class OffsetTable(EncapsulatedPixelData):
 
         # Go to last frame in pixel data and read the length of the frame
         self._file.seek(pixels_start + this_offset)
-        if self._file.read_le_tag() != ItemTag:
+        if self._file.read_tag() != ItemTag:
             raise WsiDicomFileError(str(self._file), "Expected ItemTag in PixelData")
-        length: int = self._file.read_leUL()
+        length: int = self._file.read_UL()
         if length <= 0 or length % 2:
             raise WsiDicomFileError(str(self._file), "Invalid frame length")
         offset = this_offset + TAG_BYTES + LENGTH_BYTES

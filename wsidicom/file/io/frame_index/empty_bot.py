@@ -52,9 +52,9 @@ class EmptyBot(EncapsulatedPixelData):
         positions: List[Tuple[int, int]] = []
         frame_position = self._file.tell()
         # Read items until sequence delimiter
-        while self._file.read_le_tag() == ItemTag:
+        while self._file.read_tag() == ItemTag:
             # Read item length
-            length: int = self._file.read_leUL()
+            length: int = self._file.read_UL()
             if length == 0 or length % 2:
                 raise WsiDicomFileError(str(self._file), "Invalid frame length")
             positions.append((frame_position + TAG_BYTES + LENGTH_BYTES, length))

@@ -22,7 +22,7 @@ from pydicom.uid import (
     ExplicitVRLittleEndian,
     JPEG2000Lossless,
     JPEGBaseline8Bit,
-    JPEGLosslessP14,
+    JPEGLossless,
     JPEGLosslessSV1,
     JPEGLSLossless,
     JPEGLSNearLossless,
@@ -49,7 +49,7 @@ PREFERED_WEB_TRANSFER_SYNTAXES = [
     JPEGLSNearLossless,
     JPEGLSLossless,
     JPEGLosslessSV1,
-    JPEGLosslessP14,
+    JPEGLossless,
     RLELossless,
     ExplicitVRLittleEndian,
 ]
