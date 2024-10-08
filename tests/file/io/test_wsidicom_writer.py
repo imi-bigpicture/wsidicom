@@ -37,7 +37,10 @@ from wsidicom.file.io import (
     WsiDicomReader,
     WsiDicomWriter,
 )
-from wsidicom.file.io.wsidicom_writer import WsiDicomEncapsulatedWriter
+from wsidicom.file.io.wsidicom_writer import (
+    WsiDicomEncapsulatedWriter,
+    WsiDicomNativeWriter,
+)
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
@@ -60,8 +63,6 @@ class WsiDicomTestReader(WsiDicomReader):
         samples_per_pixel: int,
     ):
         self._stream = stream
-        self._stream.is_little_endian = transfer_syntax.is_little_endian
-        self._stream.is_implicit_VR = transfer_syntax.is_implicit_VR
         self._frame_count = frame_count
         self._pixel_data_position = 0
         self._owned = True
@@ -93,6 +94,7 @@ class WsiDicomTestReader(WsiDicomReader):
     ) -> "WsiDicomTestReader":
         stream = WsiDicomIO(
             open(filepath, "rb"),
+            transfer_syntax=transfer_syntax,
             filepath=filepath,
             owned=True,
         )
@@ -287,11 +289,7 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath(str(transfer_syntax))
 
         # Act
-        with WsiDicomWriter.open(
-            filepath, transfer_syntax, OffsetTableType.NONE
-        ) as writer:
-            writer._file.is_implicit_VR = transfer_syntax.is_implicit_VR
-            writer._file.is_little_endian = transfer_syntax.is_little_endian
+        with WsiDicomNativeWriter.open(filepath, transfer_syntax) as writer:
             writer._write_pixel_data(
                 {(image_data.default_path, image_data.default_z): image_data},
                 WsiDataset(dataset),
@@ -325,20 +323,16 @@ class TestWsiDicomWriter:
         filepath = tmp_path.joinpath("1.dcm")
 
         # Act
-        with WsiDicomWriter.open(
+        with WsiDicomEncapsulatedWriter.open(
             filepath, JPEGBaseline8Bit, OffsetTableType.BASIC
         ) as writer:
-            assert isinstance(writer, WsiDicomEncapsulatedWriter)
             writer._write_pixel_data_end_tag()
 
         # Assert
-        with WsiDicomIO.open(
-            filepath,
-            "rb",
-            JPEGBaseline8Bit.is_little_endian,
-            JPEGBaseline8Bit.is_implicit_VR,
+        with WsiDicomIO(
+            open(filepath, "rb"), JPEGBaseline8Bit, filepath, True
         ) as read_file:
-            tag = read_file.read_le_tag()
+            tag = read_file.read_tag()
             assert tag == SequenceDelimiterTag
             length = read_file.read_tag_length(True)
             assert length == 0
@@ -362,15 +356,12 @@ class TestWsiDicomWriter:
                 chunk_size=10,
             )
 
-        with WsiDicomIO.open(
-            filepath,
-            "rb",
-            JPEGBaseline8Bit.is_little_endian,
-            JPEGBaseline8Bit.is_implicit_VR,
+        with WsiDicomIO(
+            open(filepath, "rb"), JPEGBaseline8Bit, filepath, True
         ) as read_file:
             for position in positions:
                 read_file.seek(position)
-                tag = read_file.read_le_tag()
+                tag = read_file.read_tag()
                 assert tag == ItemTag
 
     @pytest.mark.parametrize(
@@ -398,8 +389,6 @@ class TestWsiDicomWriter:
 
         # Act
         with WsiDicomWriter.open(filepath, transfer_syntax, table_type) as writer:
-            writer._file.is_implicit_VR = transfer_syntax.is_implicit_VR
-            writer._file.is_little_endian = transfer_syntax.is_little_endian
             writer.write(
                 generate_uid(),
                 WsiDataset(dataset),
@@ -417,7 +406,9 @@ class TestWsiDicomWriter:
             )
 
         # Assert
-        with WsiDicomReader.open(filepath) as read_file:
+        with WsiDicomReader(
+            WsiDicomIO(open(filepath, "rb"), transfer_syntax, filepath, True)
+        ) as read_file:
             for index, frame in enumerate(frames):
                 read_frame = read_file.read_frame(index)
                 # Stored frame can be up to one byte longer

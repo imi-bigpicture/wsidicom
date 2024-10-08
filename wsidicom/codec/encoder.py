@@ -22,8 +22,8 @@ from typing import Dict, Generic, Optional, Tuple, Type, TypeVar, Union
 import numpy as np
 from PIL import Image as Pillow
 from PIL.Image import Image
-from pydicom import Dataset
-from pydicom.pixel_data_handlers.util import pixel_dtype
+from pydicom import Dataset, FileMetaDataset
+from pydicom.pixels.utils import pixel_dtype
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -503,7 +503,8 @@ class NumpyEncoder(Encoder[NumpySettings]):
         dataset = Dataset()
         dataset.BitsAllocated = settings.allocated_bits
         dataset.PixelRepresentation = 0
-        dataset.is_little_endian = settings.little_endian
+        dataset.file_meta = FileMetaDataset()
+        dataset.file_meta.TransferSyntaxUID = settings.transfer_syntax
         self._dtype = pixel_dtype(dataset)
         super().__init__(settings)
 

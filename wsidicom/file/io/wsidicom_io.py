@@ -19,10 +19,10 @@ from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from struct import pack
-from typing import Any, BinaryIO, Callable, Dict, Literal, Optional, Union, cast
+from typing import Any, BinaryIO, Callable, Dict, Optional, Union, cast
 
 from fsspec.spec import AbstractBufferedFile
-from pydicom.dataelem import DataElement_from_raw, RawDataElement
+from pydicom.dataelem import RawDataElement, convert_raw_data_element
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.errors import InvalidDicomError
 from pydicom.filebase import DicomIO
@@ -42,14 +42,13 @@ from wsidicom.errors import WsiDicomFileError
 from wsidicom.tags import ExtendedOffsetTableTag
 
 
-class WsiDicomIO(DicomIO):
+class WsiDicomIO:
     """Class for reading or writing DICOM WSI to stream."""
 
     def __init__(
         self,
         stream: Union[BinaryIO, AbstractBufferedFile],
-        little_endian: bool = True,
-        implicit_vr: bool = False,
+        transfer_syntax: Optional[UID] = None,
         filepath: Optional[Union[str, Path, UPath]] = None,
         owned: bool = False,
     ):
@@ -73,9 +72,11 @@ class WsiDicomIO(DicomIO):
         self._stream.seek(0)
         self._filepath = UPath(filepath) if filepath else None
         self._owned = owned
-        super().__init__(stream)
-        self.is_little_endian = little_endian
-        self.is_implicit_VR = implicit_vr
+        self._dicom_io = DicomIO(self._stream)
+        if transfer_syntax is None:
+            transfer_syntax = UID(self.file_meta_info.TransferSyntaxUID)
+        self._dicom_io.is_little_endian = transfer_syntax.is_little_endian
+        self._dicom_io.is_implicit_VR = transfer_syntax.is_implicit_VR
         self.__enter__()
 
     def __enter__(self):
@@ -83,37 +84,6 @@ class WsiDicomIO(DicomIO):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-
-    @classmethod
-    def open(
-        cls,
-        filepath: Path,
-        mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
-        little_endian: bool = True,
-        implicit_vr: bool = False,
-    ) -> "WsiDicomIO":
-        """Open a file and return a WsiDicomIO instance.
-
-        Parameters
-        ----------
-        filepath: UPath
-            Path to file.
-        Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
-            Mode to open file in.
-        little_endian: bool = True
-            If to set the stream to little endian.
-        implicit_vr: bool = False
-            If to set the stream to implicit VR.
-
-        Returns
-        -------
-        WsiDicomIO
-            Instance of WsiDicomIO.
-        """
-        stream = open(filepath, mode)
-        return cls(
-            stream, little_endian, implicit_vr, filepath=UPath(filepath), owned=True
-        )
 
     @property
     def owned(self) -> bool:
@@ -147,11 +117,23 @@ class WsiDicomIO(DicomIO):
         return self._stream.read
 
     @property
+    def is_little_endian(self):
+        return self._dicom_io.is_little_endian
+
+    @property
+    def is_implicit_VR(self):
+        return self._dicom_io.is_implicit_VR
+
+    @property
+    def stream(self):
+        return self._stream
+
+    @property
     def is_dicom(self):
         rewind = self.tell()
         self.seek(0)
-        self.read(128)  # preamble
-        is_dicom = self.read(4) == b"DICM"
+        self.stream.read(128)  # preamble
+        is_dicom = self.stream.read(4) == b"DICM"
         self.seek(rewind)
         return is_dicom
 
@@ -189,17 +171,32 @@ class WsiDicomIO(DicomIO):
             specific_tags=None,
         )
 
+    def read_tag(self) -> BaseTag:
+        """Read tag from stream."""
+        return Tag(self._dicom_io.read_tag())
+
     def read_tag_length(self, long: bool) -> int:
         """Read tag length."""
-        if not long and not self.is_implicit_VR:
-            return self.read_US()
-        return self.read_UL()
+        if not long and not self._dicom_io.is_implicit_VR:
+            return self._dicom_io.read_US()
+        return self._dicom_io.read_UL()
 
     def read_tag_vr(self) -> Optional[bytes]:
         """Read tag VR if implicit VR."""
-        if not self.is_implicit_VR:
-            vr = self.read(4, need_exact_length=True)
+        if not self._dicom_io.is_implicit_VR:
+            vr = self.stream.read(4)
             return vr[0:2]
+
+    def read_UL(self) -> int:
+        """Read unsigned long integer (32 bits)."""
+        return self._dicom_io.read_UL()
+
+    def read(self, size: int, need_exact_length: bool = False) -> bytes:
+        """Read bytes from stream."""
+        data = self._stream.read(size)
+        if need_exact_length and len(data) != size:
+            raise EOFError()
+        return data
 
     def check_tag_and_length(
         self, tag: BaseTag, length: int, with_vr: bool, long: bool
@@ -219,13 +216,13 @@ class WsiDicomIO(DicomIO):
 
         """
         try:
-            read_tag = self.read_tag()
+            read_tag = self._dicom_io.read_tag()
             if tag != read_tag:
                 raise WsiDicomFileError(
                     str(self), f"Found tag {read_tag} expected {tag}."
                 )
             if with_vr:
-                if self.is_implicit_VR:
+                if self._dicom_io.is_implicit_VR:
                     raise WsiDicomFileError(str(self), "Expected VR, but implicit VR.")
                 self.read_tag_vr()
             read_length = self.read_tag_length(long)
@@ -242,7 +239,7 @@ class WsiDicomIO(DicomIO):
         """
         TAG_BYTES = 4
         self.seek(-TAG_BYTES, 1)
-        if self.read_le_tag() != SequenceDelimiterTag:
+        if self._dicom_io.read_tag() != SequenceDelimiterTag:
             raise WsiDicomFileError(str(self), "No sequence delimiter tag")
 
     def write_unsigned_long_long(self, value: int):
@@ -254,11 +251,33 @@ class WsiDicomIO(DicomIO):
             Value to write.
 
         """
-        if self.is_little_endian:
+        if self._dicom_io.is_little_endian:
             format = "<Q"
         else:
             format = ">Q"
         self.write(pack(format, value))
+
+    def write_tag(self, tag: BaseTag):
+        """Write tag to stream.
+
+        Parameters
+        ----------
+        tag: BaseTag
+            Tag to write.
+
+        """
+        self._dicom_io.write_tag(tag)
+
+    def write_UL(self, value: int):
+        """Write unsigned long integer (32 bits).
+
+        Parameters
+        ----------
+        value: int
+            Value to write.
+
+        """
+        self._dicom_io.write_UL(value)
 
     def write_tag_of_vr_and_length(
         self, tag: BaseTag, value_representation: str, length: Optional[int] = None
@@ -275,20 +294,14 @@ class WsiDicomIO(DicomIO):
             Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
 
         """
-        if self.is_little_endian:
-            write_ul = self.write_leUL
-            write_us = self.write_leUS
-        else:
-            write_ul = self.write_beUL
-            write_us = self.write_beUS
-        self.write_tag(Tag(tag))
-        if not self.is_implicit_VR:
+        self._dicom_io.write_tag(Tag(tag))
+        if not self._dicom_io.is_implicit_VR:
             self.write(bytes(value_representation, "iso8859"))
-            write_us(0)
+            self._dicom_io.write_US(0)
         if length is not None:
-            write_ul(length)
+            self._dicom_io.write_UL(length)
         else:
-            write_ul(0xFFFFFFFF)
+            self._dicom_io.write_UL(0xFFFFFFFF)
 
     def write_preamble(self):
         """Write DICOM preamble."""
@@ -315,7 +328,7 @@ class WsiDicomIO(DicomIO):
         meta.MediaStorageSOPInstanceUID = instance_uid
         meta.MediaStorageSOPClassUID = sop_class_uid
         validate_file_meta(meta)
-        write_file_meta_info(self, meta)
+        write_file_meta_info(self._dicom_io, meta)
 
     def write_dataset(self, dataset: Dataset, content_datetime: datetime):
         """Write dataset to stream.
@@ -328,7 +341,7 @@ class WsiDicomIO(DicomIO):
         """
         dataset.ContentDate = datetime.date(content_datetime).strftime("%Y%m%d")
         dataset.ContentTime = datetime.time(content_datetime).strftime("%H%M%S.%f")
-        write_dataset(self, dataset)
+        write_dataset(self._dicom_io, dataset)
 
     def close(self, force: Optional[bool] = False) -> None:
         """Close stream if owned by instance or forced."""
@@ -367,7 +380,7 @@ class WsiDicomIO(DicomIO):
             element_value_position = element.value_tell
             length = element.length
             if isinstance(element, RawDataElement):
-                element = DataElement_from_raw(element)
+                element = convert_raw_data_element(element)
             element.value = update[BaseTag(element.tag)]
             self.seek(element_value_position)
             writer, param = writers[VR(element.VR)]

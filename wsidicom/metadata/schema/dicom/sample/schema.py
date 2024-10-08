@@ -445,38 +445,21 @@ class PreparationStepDicomField(fields.Field):
         self, sequence: Iterable[Dataset]
     ) -> Optional[SpecimenPreparationStepDicomModel]:
         """Select a schema and load and return step using the schema."""
-
-        def compare_codes(code: Code, other: Code) -> bool:
-            # Code comparision do mapping from SRT to SCT codes, but if the code is not
-            # in the mapping it will raise KeyError.
-            # See https://github.com/pydicom/pydicom/issues/1994
-            try:
-                return code == other
-            except KeyError:
-                return False
-
         try:
             try:
                 processing_type: Code = next(
                     dataset_to_code(item.ConceptCodeSequence[0])
                     for item in sequence
-                    if compare_codes(
-                        dataset_to_code(item.ConceptNameCodeSequence[0]),
-                        SampleCodes.processing_type,
-                    )
+                    if dataset_to_code(item.ConceptNameCodeSequence[0])
+                    == SampleCodes.processing_type
                 )
             except StopIteration:
                 raise ValidationError(
                     "Failed to load processing step due to missing processing type."
                 )
             try:
-                # Iterate over schemas as code comparison can map SRT to SCT codes
-                schema = next(
-                    schema
-                    for name, schema in self._processing_type_to_schema_mapping.items()
-                    if compare_codes(name, processing_type)
-                )
-            except StopIteration:
+                schema = self._processing_type_to_schema_mapping[processing_type]
+            except KeyError:
                 raise ValidationError(
                     "Failed to load processing step due to unknown "
                     f"processing type {processing_type}."

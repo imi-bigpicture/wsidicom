@@ -12,15 +12,14 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import io
 import logging
 import math
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from functools import cached_property
 from typing import Any, List, Optional, Sequence, Tuple, Union, cast
 
-from pydicom import dcmread
 from pydicom.dataset import Dataset
 from pydicom.multival import MultiValue
 from pydicom.sequence import Sequence as DicomSequence
@@ -663,14 +662,7 @@ class WsiDataset(Dataset):
             Copy of dataset set as tiled full.
 
         """
-        # Workaround for deepcopy not working
-        # See https://github.com/pydicom/pydicom/issues/1816
-        with io.BytesIO() as buffer:
-            self.is_implicit_VR = False
-            self.is_little_endian = True
-            self.save_as(buffer)
-            buffer.seek(0)
-            dataset = WsiDataset(dcmread(buffer, force=True))
+        dataset = deepcopy(self)
         dataset.DimensionOrganizationType = "TILED_FULL"
         # Make a new Shared functional group sequence and Pixel measure
         # sequence if not in dataset, otherwise update the Pixel measure
