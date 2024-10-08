@@ -316,7 +316,7 @@ all = ["flake8 (>=7.1.1)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2
 name = "imagecodecs"
 version = "2024.6.1"
 description = "Image transformation, compression, and decompression codecs"
-optional = false
+optional = true
 python-versions = ">=3.9"
 files = [
     {file = "imagecodecs-2024.6.1-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:369816eaddfe6e9d8d1faa6794341c89f3494fef846c9b5d834f77dc7583bfdf"},
@@ -1051,7 +1051,7 @@ files = [
 ]
 
 [extras]
-imagecodecs = []
+imagecodecs = ["imagecodecs"]
 pyjpegls = ["pyjpegls"]
 pylibjpeg-openjpeg = ["pylibjpeg-openjpeg"]
 pylibjpeg-rle = ["pylibjpeg-rle"]
@@ -1059,4 +1059,4 @@ pylibjpeg-rle = ["pylibjpeg-rle"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "0c675ce06279b0ba1f6cd83a3fce148f4516c30199d167155d380908fa8023db"
+content-hash = "cadaa89eafd547471d94010f42e5c0e35322c5d5b9e5f467062b3fa83eec91fd"
