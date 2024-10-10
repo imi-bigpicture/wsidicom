@@ -19,7 +19,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-numpy = "^1.22.0"
+numpy = ">=1.22.0"
 pydicom = ">=3.0.0"
 Pillow = ">=9.1.1"
 dicomweb-client = "^0.59.1"
