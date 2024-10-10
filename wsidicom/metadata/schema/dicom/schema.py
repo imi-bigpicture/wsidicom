@@ -90,7 +90,10 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
                 # Remove empty non-defaulting fields
                 data.pop(field.data_key)
         dataset = Dataset()
-        dataset.update(data)  # type: ignore
+        try:
+            dataset.update(data)  # type: ignore
+        except Exception as e:
+            raise Exception(f"Failed to update dataset with {data.keys()}.") from e
         return dataset
 
     @pre_load
