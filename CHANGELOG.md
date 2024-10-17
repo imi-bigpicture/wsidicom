@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1] - 2024-10-17
+
+### Fixed
+
+- Restricted imagecodecs to exclude version 2024.9.22 due failing bug when encoding jpeg.
+
 ## [0.21.0] - 2024-10-08
 
 ### Added
