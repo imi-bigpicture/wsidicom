@@ -1088,4 +1088,4 @@ pylibjpeg-rle = ["pylibjpeg-rle"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "b996d44699589f2a04f979e01d85688f200e3e1f7d9ae2a3a83c0fa8dff6240c"
+content-hash = "e388fa9989539e038bfca49bb136b06d50fb7bf010b2c5e8547b8de1e9de7975"
