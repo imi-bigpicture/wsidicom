@@ -1144,9 +1144,9 @@ class AnnotationGroup(Generic[GeometryType]):
         # annotation has one and only one measurement.
         if not self._measurements_is_one_to_one(code, unit):
             indices = self.create_measurement_indices(code, unit)
-            measurements_ds.AnnotationIndexList = indices
+            measurements_ds.AnnotationIndexList = indices.tobytes()
         values = self._create_measurement_values(code, unit)
-        measurements_ds.FloatingPointValues = values
+        measurements_ds.FloatingPointValues = values.tobytes()
         measurement_value_sequence = DicomSequence([measurements_ds])
         return measurement_value_sequence
 
@@ -1234,9 +1234,9 @@ class AnnotationGroup(Generic[GeometryType]):
             The Annotation Group Sequence with inserted coordinates.
         """
         if self._is_double:
-            ds.DoublePointCoordinatesData = self.point_coordinates_data
+            ds.DoublePointCoordinatesData = self.point_coordinates_data.tobytes()
         else:
-            ds.PointCoordinatesData = self.point_coordinates_data
+            ds.PointCoordinatesData = self.point_coordinates_data.tobytes()
         return ds
 
     def _set_measurement_sequence_in_ds(self, ds: Dataset) -> Dataset:
@@ -1282,6 +1282,7 @@ class AnnotationGroup(Generic[GeometryType]):
         ds.AnnotationGroupLabel = self.label
         if self.description is not None:
             ds.AnnotationGroupDescription = self.description
+
         ds = self.category_code.insert_into_ds(ds)
         ds = self.type_code.insert_into_ds(ds)
         ds = self._set_coordinates_data_in_ds(ds)
@@ -1493,7 +1494,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
             Dataset containing the group.
         """
         ds = super().to_ds(group_number)
-        ds.LongPrimitivePointIndexList = self.point_index_list
+        ds.LongPrimitivePointIndexList = self.point_index_list.tobytes()
         return ds
 
 

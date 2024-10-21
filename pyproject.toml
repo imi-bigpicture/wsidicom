@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wsidicom"
-version = "0.21.1"
+version = "0.21.2"
 description = "Tools for handling DICOM based whole scan images"
 authors = ["Erik O Gabrielsson <erik.o.gabrielsson@sectra.com>"]
 license = "Apache-2.0"
@@ -19,10 +19,10 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-numpy = "^1.22.0"
+numpy = ">=1.22.0"
 pydicom = ">=3.0.0"
 Pillow = ">=9.1.1"
-dicomweb-client = "^0.59.1"
+dicomweb-client = "^0.59.2"
 marshmallow = "^3.20.1"
 imagecodecs = { version = "^2024.1.1, !=2024.9.22", optional = true }
 pylibjpeg-rle = { version = "^1.3.0", optional = true }
