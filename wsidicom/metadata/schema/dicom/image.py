@@ -68,7 +68,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
     origin = OffsetInSlideCoordinateSystemField(
         data_key="TotalPixelMatrixOriginSequence",
         allow_none=False,
-        dump_default=Defaults.image_coordinate_system_origin,
+        dump_default=(Defaults.image_coordinate_system_origin, 0.0),
     )
     rotation = ImageOrientationSlideField(
         data_key="ImageOrientationSlide",
@@ -85,6 +85,31 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
             return super().load(dataset, **kwargs)
         except (TypeError, AttributeError):
             return None
+
+    @post_load
+    def post_load(self, data: Dict[str, Any], **kwargs) -> ImageCoordinateSystem:
+        """Post load hook to handle separation of xy and z offset."""
+        origin = data.pop("origin")
+        return super().post_load(
+            {
+                "origin": origin[0],
+                "rotation": data["rotation"],
+                "z_offset": origin[1],
+            }
+        )
+
+    @pre_dump
+    def pre_dump(
+        self, image_coordinate_system: ImageCoordinateSystem, **kwargs
+    ) -> Dict[str, Any]:
+        """Pre dump hook to handle combining of xy and z offset."""
+        return {
+            "origin": (
+                image_coordinate_system.origin,
+                image_coordinate_system.z_offset,
+            ),
+            "rotation": image_coordinate_system.rotation,
+        }
 
 
 @dataclass(frozen=True)

@@ -172,6 +172,11 @@ def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
         assert dicom_image.ImageOrientationSlide == list(
             image.image_coordinate_system.orientation.values
         )
+        if image.image_coordinate_system.z_offset is not None:
+            assert (
+                dicom_image.ZOffsetInSlideCoordinateSystem
+                == image.image_coordinate_system.z_offset
+            )
     if any(
         item is not None
         for item in [

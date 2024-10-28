@@ -74,6 +74,10 @@ def dicom_image(image: Image, valid_dicom: bool):
         origin = Dataset()
         origin.XOffsetInSlideCoordinateSystem = image.image_coordinate_system.origin.x
         origin.YOffsetInSlideCoordinateSystem = image.image_coordinate_system.origin.y
+        if image.image_coordinate_system.z_offset is not None:
+            origin.ZOffsetInSlideCoordinateSystem = (
+                image.image_coordinate_system.z_offset
+            )
 
         dataset.TotalPixelMatrixOriginSequence = [origin]
     elif not valid_dicom:

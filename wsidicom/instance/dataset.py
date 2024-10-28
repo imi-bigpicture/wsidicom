@@ -671,14 +671,6 @@ class WsiDataset(Dataset):
             dataset, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()])
         )
 
-        plane_position_slide = Dataset()
-        plane_position_slide.ZOffsetInSlideCoordinateSystem = DSfloat(
-            focal_planes[0], True
-        )
-        shared_functional_group[0].PlanePositionSlideSequence = DicomSequence(
-            [plane_position_slide]
-        )
-
         pixel_measure = getattr(
             shared_functional_group[0],
             "PixelMeasuresSequence",

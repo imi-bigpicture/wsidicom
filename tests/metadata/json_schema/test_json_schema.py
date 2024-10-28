@@ -181,6 +181,14 @@ class TestJsonSchema:
                 dumped["image_coordinate_system"]["rotation"]
                 == image.image_coordinate_system.rotation
             )
+            if image.image_coordinate_system.z_offset is None:
+                assert dumped["image_coordinate_system"]["z_offset"] is None
+            else:
+                assert (
+                    dumped["image_coordinate_system"]["z_offset"]
+                    == image.image_coordinate_system.z_offset
+                )
+
         if image.pixel_spacing is None:
             assert dumped["pixel_spacing"] is None
         else:
@@ -216,6 +224,7 @@ class TestJsonSchema:
             "image_coordinate_system": {
                 "origin": {"x": 20.0, "y": 30.0},
                 "rotation": 90.0,
+                "z_offset": 1.0,
             },
             "pixel_spacing": {"width": 0.01, "height": 0.01},
             "focal_plane_spacing": 0.001,
@@ -260,6 +269,10 @@ class TestJsonSchema:
         assert (
             loaded.image_coordinate_system.rotation
             == dumped["image_coordinate_system"]["rotation"]
+        )
+        assert (
+            loaded.image_coordinate_system.z_offset
+            == dumped["image_coordinate_system"]["z_offset"]
         )
         assert loaded.pixel_spacing.width == dumped["pixel_spacing"]["width"]
         assert loaded.pixel_spacing.height == dumped["pixel_spacing"]["height"]
