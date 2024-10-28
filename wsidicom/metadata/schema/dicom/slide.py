@@ -17,7 +17,7 @@
 import logging
 from typing import Any, Dict, Type
 
-from marshmallow import fields, post_dump, post_load, pre_dump
+from marshmallow import fields, post_load, pre_dump
 from pydicom.valuerep import VR
 
 from wsidicom.conceptcode import ContainerTypeCode
@@ -88,11 +88,6 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
             "issuer_of_identifier": issuer_of_identifier,
             "samples": dicom_samples,
         }
-
-    @post_dump
-    def post_dump(self, data: Dict[str, Any], **kwargs):
-        data["ContainerComponentSequence"] = []
-        return super().post_dump(data, **kwargs)
 
     @post_load
     def post_load(self, data: Dict[str, Any], **kwargs):

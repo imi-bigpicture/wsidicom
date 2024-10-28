@@ -48,6 +48,8 @@ from wsidicom.metadata.schema.json import (
     SeriesJsonSchema,
     StudyJsonSchema,
 )
+from wsidicom.metadata.schema.json.wsi import WsiMetadataJsonSchema
+from wsidicom.metadata.wsi import WsiMetadata
 
 
 class TestJsonSchema:
@@ -181,6 +183,14 @@ class TestJsonSchema:
                 dumped["image_coordinate_system"]["rotation"]
                 == image.image_coordinate_system.rotation
             )
+            if image.image_coordinate_system.z_offset is None:
+                assert dumped["image_coordinate_system"]["z_offset"] is None
+            else:
+                assert (
+                    dumped["image_coordinate_system"]["z_offset"]
+                    == image.image_coordinate_system.z_offset
+                )
+
         if image.pixel_spacing is None:
             assert dumped["pixel_spacing"] is None
         else:
@@ -216,6 +226,7 @@ class TestJsonSchema:
             "image_coordinate_system": {
                 "origin": {"x": 20.0, "y": 30.0},
                 "rotation": 90.0,
+                "z_offset": 1.0,
             },
             "pixel_spacing": {"width": 0.01, "height": 0.01},
             "focal_plane_spacing": 0.001,
@@ -260,6 +271,10 @@ class TestJsonSchema:
         assert (
             loaded.image_coordinate_system.rotation
             == dumped["image_coordinate_system"]["rotation"]
+        )
+        assert (
+            loaded.image_coordinate_system.z_offset
+            == dumped["image_coordinate_system"]["z_offset"]
         )
         assert loaded.pixel_spacing.width == dumped["pixel_spacing"]["width"]
         assert loaded.pixel_spacing.height == dumped["pixel_spacing"]["height"]
@@ -709,3 +724,23 @@ class TestJsonSchema:
         assert loaded.time == time.fromisoformat(dumped["time"])
         assert loaded.accession_number == dumped["accession_number"]
         assert loaded.referring_physician_name == dumped["referring_physician_name"]
+
+    def test_metadata_serialize(
+        self,
+        wsi_metadata: WsiMetadata,
+    ):
+        # Arrange
+
+        # Act
+        dumped = WsiMetadataJsonSchema().dump(wsi_metadata)
+
+        # Assert
+        assert isinstance(dumped, dict)
+        assert "study" in dumped
+        assert "series" in dumped
+        assert "patient" in dumped
+        assert "equipment" in dumped
+        assert "optical_paths" in dumped
+        assert "slide" in dumped
+        assert "label" in dumped
+        assert "image" in dumped

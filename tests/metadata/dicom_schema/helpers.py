@@ -172,6 +172,13 @@ def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
         assert dicom_image.ImageOrientationSlide == list(
             image.image_coordinate_system.orientation.values
         )
+        if image.image_coordinate_system.z_offset is not None:
+            assert (
+                dicom_image.TotalPixelMatrixOriginSequence[
+                    0
+                ].ZOffsetInSlideCoordinateSystem
+                == image.image_coordinate_system.z_offset
+            )
     if any(
         item is not None
         for item in [
@@ -762,7 +769,7 @@ def create_description_dataset(
             issuer_of_identifier_dataset
         ]
 
-    if primary_anatomic_structures is not None:
+    if primary_anatomic_structures is not None and len(primary_anatomic_structures) > 0:
         description.PrimaryAnatomicStructureSequence = [
             create_code_dataset(item) for item in primary_anatomic_structures
         ]

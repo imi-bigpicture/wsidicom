@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.3] - 2024-10-28
+
+### Fixed
+
+- Missing `WholeSlideMicroscopyImageFrameTypeSequence` in produced DICOM dataset for some image types.
+- Do not insert empty `ContainerComponentSequence` and `PrimaryAnatomicStructureSequence` into produced DICOM dataset.
+- Only insert `SpacingBetweenSlices` into produced DICOM dataset if multiple focal planes.
+- Prefer use of `ZOffsetInSlideCoordinateSystem` in main DICOM dataset to attribute in `SharedFunctionalGroupsSequence`/`PlanePositionSlideSequence`.
+
 ## [0.21.2] - 2024-10-21
 
 ### Fixed
@@ -405,7 +414,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/0.21.2..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.3..HEAD
+[0.21.3]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.2..v0.21.3
 [0.21.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.1..v0.21.2
 [0.21.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.0..v0.21.1
 [0.21.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.20.6..v0.21.0

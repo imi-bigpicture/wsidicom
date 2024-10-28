@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from datetime import datetime
 
 import pytest
 from pydicom import Dataset
@@ -24,7 +23,6 @@ from tests.metadata.dicom_schema.helpers import (
     code_to_code_dataset,
 )
 from wsidicom.conceptcode import IlluminationColorCode
-from wsidicom.geometry import PointMm
 from wsidicom.instance import ImageType
 from wsidicom.metadata import (
     Equipment,
@@ -36,11 +34,6 @@ from wsidicom.metadata import (
     Slide,
     Study,
     WsiMetadata,
-)
-from wsidicom.metadata.image import (
-    ExtendedDepthOfField,
-    FocusMethod,
-    ImageCoordinateSystem,
 )
 from wsidicom.metadata.schema.dicom.optical_path import LutDicomFormatter
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
@@ -74,6 +67,10 @@ def dicom_image(image: Image, valid_dicom: bool):
         origin = Dataset()
         origin.XOffsetInSlideCoordinateSystem = image.image_coordinate_system.origin.x
         origin.YOffsetInSlideCoordinateSystem = image.image_coordinate_system.origin.y
+        if image.image_coordinate_system.z_offset is not None:
+            origin.ZOffsetInSlideCoordinateSystem = (
+                image.image_coordinate_system.z_offset
+            )
 
         dataset.TotalPixelMatrixOriginSequence = [origin]
     elif not valid_dicom:
@@ -313,48 +310,3 @@ def dicom_wsi_metadata(
     dataset.DimensionOrganizationSequence = dimension_organization_sequence
     dataset.FrameOfReferenceUID = wsi_metadata.default_frame_of_reference_uid
     yield dataset
-
-
-@pytest.fixture()
-def illumination():
-    yield IlluminationColorCode("Full Spectrum")
-
-
-@pytest.fixture()
-def acquisition_datetime():
-    yield datetime(2023, 8, 5)
-
-
-@pytest.fixture()
-def focus_method():
-    yield FocusMethod.AUTO
-
-
-@pytest.fixture()
-def extended_depth_of_field():
-    yield ExtendedDepthOfField(5, 0.5)
-
-
-@pytest.fixture()
-def image_coordinate_system():
-    yield ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0)
-
-
-@pytest.fixture()
-def pixel_spacing():
-    yield None
-
-
-@pytest.fixture()
-def focal_plane_spacing():
-    yield None
-
-
-@pytest.fixture()
-def depth_of_field():
-    yield None
-
-
-@pytest.fixture()
-def image_type():
-    yield ImageType.VOLUME
