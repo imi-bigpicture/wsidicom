@@ -174,7 +174,9 @@ def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
         )
         if image.image_coordinate_system.z_offset is not None:
             assert (
-                dicom_image.ZOffsetInSlideCoordinateSystem
+                dicom_image.TotalPixelMatrixOriginSequence[
+                    0
+                ].ZOffsetInSlideCoordinateSystem
                 == image.image_coordinate_system.z_offset
             )
     if any(
