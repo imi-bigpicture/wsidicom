@@ -37,7 +37,6 @@ from wsidicom.metadata import (
     Patient,
     PatientSex,
     Series,
-    Slide,
     Study,
 )
 from wsidicom.metadata.schema.json import (
