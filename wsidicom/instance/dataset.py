@@ -770,7 +770,7 @@ class WsiDataset(Dataset):
             # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
             # Height, Depth. Depth must not be 0. Default to 0.5 microns
             slice_thickness = 0.0005
-            pixel_measure_sequence.SliceThickness = DSfloat(0.0005, True)
+            pixel_measure_sequence.SliceThickness = DSfloat(slice_thickness, True)
             shared_functional_group_sequence.PixelMeasuresSequence = DicomSequence(
                 [pixel_measure_sequence]
             )
@@ -899,7 +899,7 @@ class WsiDataset(Dataset):
     @staticmethod
     def _get_spacing_between_slices_for_focal_planes(
         focal_planes: Sequence[float],
-    ) -> float:
+    ) -> Optional[float]:
         """Return spacing between slices in mm for focal planes (defined in
         um). Spacing must be the same between all focal planes for TILED_FULL
         arrangement.
@@ -911,12 +911,12 @@ class WsiDataset(Dataset):
 
         Returns
         -------
-        float
-            Spacing between focal planes.
+        Optional[float]
+            Spacing between focal planes, or None if only one focal plane.
 
         """
         if len(focal_planes) == 1:
-            return 0.0
+            return None
         spacing: Optional[float] = None
         sorted_focal_planes = sorted(focal_planes)
         for index in range(len(sorted_focal_planes) - 1):
