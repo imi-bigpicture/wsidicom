@@ -777,14 +777,18 @@ class WsiDataset(Dataset):
             )
             # SliceThickness is in mm, ImagedVolumeDepth in um
             dataset.ImagedVolumeDepth = DSfloat(slice_thickness * 1000, True)
-            # DICOM 2022a part 3 IODs - C.8.12.9 Whole Slide Microscopy Image
-            # Frame Type Macro. Analogous to ImageType and shared by all
-            # frames so clone
-            wsi_frame_type_item = Dataset()
-            wsi_frame_type_item.FrameType = dataset.ImageType
-            (
-                shared_functional_group_sequence.WholeSlideMicroscopyImageFrameTypeSequence
-            ) = DicomSequence([wsi_frame_type_item])
+
+        # DICOM 2022a part 3 IODs - C.8.12.9 Whole Slide Microscopy Image Frame Type
+        # Macro. Analogous to ImageType and shared by all frames so clone
+        wsi_frame_type_item = Dataset()
+        wsi_frame_type_item.FrameType = dataset.ImageType
+        (
+            shared_functional_group_sequence.WholeSlideMicroscopyImageFrameTypeSequence
+        ) = DicomSequence([wsi_frame_type_item])
+        print("set wsi frame type", wsi_frame_type_item.FrameType)
+        dataset.SharedFunctionalGroupsSequence = DicomSequence(
+            [shared_functional_group_sequence]
+        )
 
         if image_data.image_coordinate_system is not None:
             dataset.ImageOrientationSlide = [
