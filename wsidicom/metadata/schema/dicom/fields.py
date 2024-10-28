@@ -34,6 +34,7 @@ from typing import (
 from marshmallow import Schema, fields, post_dump, post_load, pre_dump, pre_load
 from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
+from pydicom import Sequence as DicomSequence
 from pydicom import config as pydicom_config
 from pydicom.multival import MultiValue
 from pydicom.sr.coding import Code
@@ -270,7 +271,7 @@ class ListDicomField(fields.List):
     def _deserialize(
         self, value: Union[Any, List[Any]], attr, data, **kwargs
     ) -> List[Any]:
-        if not isinstance(value, MultiValue):
+        if not isinstance(value, (MultiValue, DicomSequence)):
             value = [value]
         return super()._deserialize(value, attr, data, **kwargs)
 

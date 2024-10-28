@@ -767,7 +767,7 @@ def create_description_dataset(
             issuer_of_identifier_dataset
         ]
 
-    if primary_anatomic_structures is not None:
+    if primary_anatomic_structures is not None and len(primary_anatomic_structures) > 0:
         description.PrimaryAnatomicStructureSequence = [
             create_code_dataset(item) for item in primary_anatomic_structures
         ]
