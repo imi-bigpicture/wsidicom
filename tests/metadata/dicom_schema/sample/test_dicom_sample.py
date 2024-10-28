@@ -115,6 +115,9 @@ class TestSampleDicom:
             ],
         ],
     )
+    @pytest.mark.parametrize(
+        "primary_anatomic_structures", ([], [Code("value", "schema", "meaning")])
+    )
     def test_slide_sample_from_dataset(
         self,
         slide_sample_ids: Sequence[str],
@@ -269,6 +272,9 @@ class TestSampleDicom:
             ],
         ],
     )
+    @pytest.mark.parametrize(
+        "primary_anatomic_structures", ([], [Code("value", "schema", "meaning")])
+    )
     def test_slide_sample_to_dataset(
         self,
         slide_sample_ids: Sequence[str],
@@ -361,26 +367,29 @@ class TestSampleDicom:
                 assert description.SpecimenDetailedDescription == detailed_description
             else:
                 assert "SpecimenDetailedDescription" not in description
-            assert len(description.PrimaryAnatomicStructureSequence) == len(
-                primary_anatomic_structures
-            )
-            for index, primary_anatomic_structure in enumerate(
-                primary_anatomic_structures
-            ):
-                assert (
-                    description.PrimaryAnatomicStructureSequence[index].CodeValue
-                    == primary_anatomic_structure.value
+            if len(primary_anatomic_structures) > 0:
+                assert len(description.PrimaryAnatomicStructureSequence) == len(
+                    primary_anatomic_structures
                 )
-                assert (
-                    description.PrimaryAnatomicStructureSequence[
-                        index
-                    ].CodingSchemeDesignator
-                    == primary_anatomic_structure.scheme_designator
-                )
-                assert (
-                    description.PrimaryAnatomicStructureSequence[index].CodeMeaning
-                    == primary_anatomic_structure.meaning
-                )
+                for index, primary_anatomic_structure in enumerate(
+                    primary_anatomic_structures
+                ):
+                    assert (
+                        description.PrimaryAnatomicStructureSequence[index].CodeValue
+                        == primary_anatomic_structure.value
+                    )
+                    assert (
+                        description.PrimaryAnatomicStructureSequence[
+                            index
+                        ].CodingSchemeDesignator
+                        == primary_anatomic_structure.scheme_designator
+                    )
+                    assert (
+                        description.PrimaryAnatomicStructureSequence[index].CodeMeaning
+                        == primary_anatomic_structure.meaning
+                    )
+            else:
+                assert "PrimaryAnatomicStructureSequence" not in description
 
             step_iterator = iter(description.SpecimenPreparationSequence)
 

@@ -40,6 +40,7 @@ class ExtendedDepthOfFieldJsonSchema(LoadingSchema[ExtendedDepthOfField]):
 class ImageCoordinateSystemJsonSchema(LoadingSchema[ImageCoordinateSystem]):
     origin = PointMmJsonField()
     rotation = fields.Float()
+    z_offset = fields.Float(allow_none=True)
 
     @property
     def load_type(self):

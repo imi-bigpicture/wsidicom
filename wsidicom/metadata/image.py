@@ -59,10 +59,13 @@ class ImageCoordinateSystem:
         The position of the top left pixel in the slide coorindate system.
     rotation : float
         The rotation of the image in degrees in the slide coordinate system.
+    z_offset : Optional[float]
+        The z offset of the image in the slide coordinate system.
     """
 
     origin: PointMm
     rotation: float
+    z_offset: Optional[float] = None
 
     @property
     def orientation(self) -> Orientation:

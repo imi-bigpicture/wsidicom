@@ -671,14 +671,6 @@ class WsiDataset(Dataset):
             dataset, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()])
         )
 
-        plane_position_slide = Dataset()
-        plane_position_slide.ZOffsetInSlideCoordinateSystem = DSfloat(
-            focal_planes[0], True
-        )
-        shared_functional_group[0].PlanePositionSlideSequence = DicomSequence(
-            [plane_position_slide]
-        )
-
         pixel_measure = getattr(
             shared_functional_group[0],
             "PixelMeasuresSequence",
@@ -689,9 +681,11 @@ class WsiDataset(Dataset):
                 DSfloat(dataset.pixel_spacing.height * scale, True),
                 DSfloat(dataset.pixel_spacing.width * scale, True),
             ]
-        pixel_measure[0].SpacingBetweenSlices = DSfloat(
-            self._get_spacing_between_slices_for_focal_planes(focal_planes), True
+        focal_plane_spacing = self._get_spacing_between_slices_for_focal_planes(
+            focal_planes
         )
+        if focal_plane_spacing is not None:
+            pixel_measure[0].SpacingBetweenSlices = DSfloat(focal_plane_spacing, True)
 
         if self.slice_thickness is not None:
             pixel_measure[0].SliceThickness = DSfloat(dataset.slice_thickness, True)
@@ -766,11 +760,17 @@ class WsiDataset(Dataset):
                 DSfloat(image_data.pixel_spacing.height, True),
                 DSfloat(image_data.pixel_spacing.width, True),
             ]
-            pixel_measure_sequence.SpacingBetweenSlices = DSfloat(0.0, True)
+            focal_plane_spacing = cls._get_spacing_between_slices_for_focal_planes(
+                image_data.focal_planes
+            )
+            if focal_plane_spacing is not None:
+                pixel_measure_sequence.SpacingBetweenSlices = DSfloat(
+                    focal_plane_spacing, True
+                )
             # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
             # Height, Depth. Depth must not be 0. Default to 0.5 microns
             slice_thickness = 0.0005
-            pixel_measure_sequence.SliceThickness = DSfloat(0.0005, True)
+            pixel_measure_sequence.SliceThickness = DSfloat(slice_thickness, True)
             shared_functional_group_sequence.PixelMeasuresSequence = DicomSequence(
                 [pixel_measure_sequence]
             )
@@ -785,14 +785,18 @@ class WsiDataset(Dataset):
             )
             # SliceThickness is in mm, ImagedVolumeDepth in um
             dataset.ImagedVolumeDepth = DSfloat(slice_thickness * 1000, True)
-            # DICOM 2022a part 3 IODs - C.8.12.9 Whole Slide Microscopy Image
-            # Frame Type Macro. Analogous to ImageType and shared by all
-            # frames so clone
-            wsi_frame_type_item = Dataset()
-            wsi_frame_type_item.FrameType = dataset.ImageType
-            (
-                shared_functional_group_sequence.WholeSlideMicroscopyImageFrameTypeSequence
-            ) = DicomSequence([wsi_frame_type_item])
+
+        # DICOM 2022a part 3 IODs - C.8.12.9 Whole Slide Microscopy Image Frame Type
+        # Macro. Analogous to ImageType and shared by all frames so clone
+        wsi_frame_type_item = Dataset()
+        wsi_frame_type_item.FrameType = dataset.ImageType
+        (
+            shared_functional_group_sequence.WholeSlideMicroscopyImageFrameTypeSequence
+        ) = DicomSequence([wsi_frame_type_item])
+        print("set wsi frame type", wsi_frame_type_item.FrameType)
+        dataset.SharedFunctionalGroupsSequence = DicomSequence(
+            [shared_functional_group_sequence]
+        )
 
         if image_data.image_coordinate_system is not None:
             dataset.ImageOrientationSlide = [
@@ -895,7 +899,7 @@ class WsiDataset(Dataset):
     @staticmethod
     def _get_spacing_between_slices_for_focal_planes(
         focal_planes: Sequence[float],
-    ) -> float:
+    ) -> Optional[float]:
         """Return spacing between slices in mm for focal planes (defined in
         um). Spacing must be the same between all focal planes for TILED_FULL
         arrangement.
@@ -907,12 +911,12 @@ class WsiDataset(Dataset):
 
         Returns
         -------
-        float
-            Spacing between focal planes.
+        Optional[float]
+            Spacing between focal planes, or None if only one focal plane.
 
         """
         if len(focal_planes) == 1:
-            return 0.0
+            return None
         spacing: Optional[float] = None
         sorted_focal_planes = sorted(focal_planes)
         for index in range(len(sorted_focal_planes) - 1):

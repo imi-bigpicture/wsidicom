@@ -53,6 +53,7 @@ from wsidicom.metadata.schema.dicom.fields import (
     CodeItemDicomField,
     DateTimeItemDicomField,
     IssuerOfIdentifierDicomField,
+    ListDicomField,
     MeasurementtemDicomField,
     SingleCodeSequenceField,
     StringDicomField,
@@ -508,7 +509,7 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
         data_key="SpecimenPreparationSequence",
         load_default=[],
     )
-    anatomical_sites = fields.List(
+    anatomical_sites = ListDicomField(
         CodeDicomField(Code),
         data_key="PrimaryAnatomicStructureSequence",
         load_default=[],

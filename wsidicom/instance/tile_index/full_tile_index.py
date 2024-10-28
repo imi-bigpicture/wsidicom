@@ -113,15 +113,21 @@ class FullTileIndex(TileIndex):
                 raise ValueError(
                     "Slice spacing must be non-zero if multiple focal planes."
                 )
-
-            try:
-                z_offset = (
+            z_offset_getters = (
+                lambda: dataset.ZOffsetInSlideCoordinateSystem,
+                lambda: (
                     dataset.SharedFunctionalGroupsSequence[0]
                     .PlanePositionSlideSequence[0]
                     .ZOffsetInSlideCoordinateSystem
-                )
-            except AttributeError:
-                z_offset = 0
+                ),
+                lambda: 0,
+            )
+            for z_offset_getter in z_offset_getters:
+                try:
+                    z_offset = z_offset_getter()
+                    break
+                except AttributeError:
+                    pass
 
             for plane in range(number_of_focal_planes):
                 z = z_offset + round(plane * slice_spacing * MM_TO_MICRON, DECIMALS)

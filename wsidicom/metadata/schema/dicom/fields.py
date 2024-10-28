@@ -34,6 +34,7 @@ from typing import (
 from marshmallow import Schema, fields, post_dump, post_load, pre_dump, pre_load
 from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
+from pydicom import Sequence as DicomSequence
 from pydicom import config as pydicom_config
 from pydicom.multival import MultiValue
 from pydicom.sr.coding import Code
@@ -190,16 +191,27 @@ class BooleanDicomField(fields.Boolean):
 
 class OffsetInSlideCoordinateSystemField(fields.Field):
     def _serialize(
-        self, origin: Optional[PointMm], attr: Optional[str], obj: Any, **kwargs
+        self,
+        origin: Optional[Tuple[PointMm, Optional[float]]],
+        attr: Optional[str],
+        obj: Any,
+        **kwargs,
     ):
         if origin is None:
             if self.dump_default is None:
                 return None
-            assert isinstance(self.dump_default, PointMm)
-            origin = self.dump_default
+            xy_origin = self.dump_default[0]
+            z_origin = self.dump_default[1]
+            assert isinstance(xy_origin, PointMm)
+            assert z_origin is None or isinstance(z_origin, float)
+        else:
+            xy_origin = origin[0]
+            z_origin = origin[1]
         origin_element = Dataset()
-        origin_element.XOffsetInSlideCoordinateSystem = DSfloat(origin.x, True)
-        origin_element.YOffsetInSlideCoordinateSystem = DSfloat(origin.y, True)
+        origin_element.XOffsetInSlideCoordinateSystem = DSfloat(xy_origin.x, True)
+        origin_element.YOffsetInSlideCoordinateSystem = DSfloat(xy_origin.y, True)
+        if z_origin is not None:
+            origin_element.ZOffsetInSlideCoordinateSystem = DSfloat(z_origin, True)
         return [origin_element]
 
     def _deserialize(
@@ -208,11 +220,11 @@ class OffsetInSlideCoordinateSystemField(fields.Field):
         attr: Optional[str],
         data: Optional[Dict[str, Any]],
         **kwargs,
-    ) -> PointMm:
+    ) -> Tuple[PointMm, Optional[float]]:
         return PointMm(
             x=value[0].XOffsetInSlideCoordinateSystem,
             y=value[0].YOffsetInSlideCoordinateSystem,
-        )
+        ), value[0].get("ZOffsetInSlideCoordinateSystem", None)
 
 
 class ImageOrientationSlideField(fields.Field):
@@ -259,7 +271,7 @@ class ListDicomField(fields.List):
     def _deserialize(
         self, value: Union[Any, List[Any]], attr, data, **kwargs
     ) -> List[Any]:
-        if not isinstance(value, MultiValue):
+        if not isinstance(value, (MultiValue, DicomSequence)):
             value = [value]
         return super()._deserialize(value, attr, data, **kwargs)
 
