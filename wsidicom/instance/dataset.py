@@ -681,9 +681,11 @@ class WsiDataset(Dataset):
                 DSfloat(dataset.pixel_spacing.height * scale, True),
                 DSfloat(dataset.pixel_spacing.width * scale, True),
             ]
-        pixel_measure[0].SpacingBetweenSlices = DSfloat(
-            self._get_spacing_between_slices_for_focal_planes(focal_planes), True
+        focal_plane_spacing = self._get_spacing_between_slices_for_focal_planes(
+            focal_planes
         )
+        if focal_plane_spacing is not None:
+            pixel_measure[0].SpacingBetweenSlices = DSfloat(focal_plane_spacing, True)
 
         if self.slice_thickness is not None:
             pixel_measure[0].SliceThickness = DSfloat(dataset.slice_thickness, True)
@@ -758,7 +760,13 @@ class WsiDataset(Dataset):
                 DSfloat(image_data.pixel_spacing.height, True),
                 DSfloat(image_data.pixel_spacing.width, True),
             ]
-            pixel_measure_sequence.SpacingBetweenSlices = DSfloat(0.0, True)
+            focal_plane_spacing = cls._get_spacing_between_slices_for_focal_planes(
+                image_data.focal_planes
+            )
+            if focal_plane_spacing is not None:
+                pixel_measure_sequence.SpacingBetweenSlices = DSfloat(
+                    focal_plane_spacing, True
+                )
             # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
             # Height, Depth. Depth must not be 0. Default to 0.5 microns
             slice_thickness = 0.0005
