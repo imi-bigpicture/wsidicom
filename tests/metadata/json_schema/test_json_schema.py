@@ -37,6 +37,7 @@ from wsidicom.metadata import (
     Patient,
     PatientSex,
     Series,
+    Slide,
     Study,
 )
 from wsidicom.metadata.schema.json import (
@@ -48,6 +49,8 @@ from wsidicom.metadata.schema.json import (
     SeriesJsonSchema,
     StudyJsonSchema,
 )
+from wsidicom.metadata.schema.json.wsi import WsiMetadataJsonSchema
+from wsidicom.metadata.wsi import WsiMetadata
 
 
 class TestJsonSchema:
@@ -722,3 +725,23 @@ class TestJsonSchema:
         assert loaded.time == time.fromisoformat(dumped["time"])
         assert loaded.accession_number == dumped["accession_number"]
         assert loaded.referring_physician_name == dumped["referring_physician_name"]
+
+    def test_metadata_serialize(
+        self,
+        wsi_metadata: WsiMetadata,
+    ):
+        # Arrange
+
+        # Act
+        dumped = WsiMetadataJsonSchema().dump(wsi_metadata)
+
+        # Assert
+        assert isinstance(dumped, dict)
+        assert "study" in dumped
+        assert "series" in dumped
+        assert "patient" in dumped
+        assert "equipment" in dumped
+        assert "optical_paths" in dumped
+        assert "slide" in dumped
+        assert "label" in dumped
+        assert "image" in dumped

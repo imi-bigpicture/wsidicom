@@ -36,7 +36,8 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
 )
-from wsidicom.geometry import SizeMm
+from wsidicom.geometry import PointMm, SizeMm
+from wsidicom.instance.dataset import ImageType
 from wsidicom.metadata import (
     Equipment,
     ExtendedDepthOfField,
@@ -534,6 +535,51 @@ def study():
         "accession number",
         "referring physician name",
     )
+
+
+@pytest.fixture()
+def illumination():
+    yield IlluminationColorCode("Full Spectrum")
+
+
+@pytest.fixture()
+def acquisition_datetime():
+    yield datetime.datetime(2023, 8, 5)
+
+
+@pytest.fixture()
+def focus_method():
+    yield FocusMethod.AUTO
+
+
+@pytest.fixture()
+def extended_depth_of_field():
+    yield ExtendedDepthOfField(5, 0.5)
+
+
+@pytest.fixture()
+def image_coordinate_system():
+    yield ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0)
+
+
+@pytest.fixture()
+def pixel_spacing():
+    yield None
+
+
+@pytest.fixture()
+def focal_plane_spacing():
+    yield None
+
+
+@pytest.fixture()
+def depth_of_field():
+    yield None
+
+
+@pytest.fixture()
+def image_type():
+    yield ImageType.VOLUME
 
 
 @pytest.fixture()
