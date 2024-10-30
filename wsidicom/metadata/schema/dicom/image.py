@@ -83,7 +83,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
     def load(self, dataset: Dataset, **kwargs) -> Optional[ImageCoordinateSystem]:
         try:
             return super().load(dataset, **kwargs)
-        except (TypeError, AttributeError):
+        except (TypeError, AttributeError, KeyError, IndexError):
             return None
 
     @post_load
@@ -91,9 +91,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
         self, data: Dict[str, Any], **kwargs
     ) -> Optional[ImageCoordinateSystem]:
         """Post load hook to handle separation of xy and z offset."""
-        origin: Optional[Tuple[ImageCoordinateSystem, float]] = data.pop("origin", None)
-        if origin is None:
-            return None
+        origin: Tuple[ImageCoordinateSystem, float] = data.pop("origin")
         return super().post_load(
             {"origin": (origin[0]), "rotation": data["rotation"], "z_offset": origin[1]}
         )
