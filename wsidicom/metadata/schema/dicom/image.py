@@ -15,7 +15,7 @@
 """DICOM schema for Image model."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Type
+from typing import Any, Dict, Optional, Sequence, Tuple, Type
 
 from marshmallow import fields, post_load, pre_dump
 from pydicom.dataset import Dataset
@@ -87,15 +87,15 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
             return None
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs) -> ImageCoordinateSystem:
+    def post_load(
+        self, data: Dict[str, Any], **kwargs
+    ) -> Optional[ImageCoordinateSystem]:
         """Post load hook to handle separation of xy and z offset."""
-        origin = data.pop("origin")
+        origin: Optional[Tuple[ImageCoordinateSystem, float]] = data.pop("origin", None)
+        if origin is None:
+            return None
         return super().post_load(
-            {
-                "origin": origin[0],
-                "rotation": data["rotation"],
-                "z_offset": origin[1],
-            }
+            {"origin": (origin[0]), "rotation": data["rotation"], "z_offset": origin[1]}
         )
 
     @pre_dump
