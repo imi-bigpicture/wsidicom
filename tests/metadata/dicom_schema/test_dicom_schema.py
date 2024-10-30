@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from datetime import datetime
+from typing import Optional
 
 import pytest
 from pydicom import Dataset
@@ -36,7 +37,7 @@ from wsidicom.conceptcode import (
     LenseCode,
     LightPathFilterCode,
 )
-from wsidicom.geometry import PointMm, SizeMm
+from wsidicom.geometry import Orientation, PointMm, SizeMm
 from wsidicom.instance import ImageType
 from wsidicom.metadata import (
     Equipment,
@@ -65,7 +66,10 @@ from wsidicom.metadata.sample import (
 )
 from wsidicom.metadata.schema.dicom.defaults import Defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
-from wsidicom.metadata.schema.dicom.image import ImageDicomSchema
+from wsidicom.metadata.schema.dicom.image import (
+    ImageCoordinateSystemDicomSchema,
+    ImageDicomSchema,
+)
 from wsidicom.metadata.schema.dicom.label import LabelDicomSchema
 from wsidicom.metadata.schema.dicom.optical_path import (
     OpticalPathDicomSchema,
@@ -796,3 +800,38 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(deserialized, WsiMetadata)
+
+    @pytest.mark.parametrize("origin", [PointMm(20.0, 30.0), None])
+    @pytest.mark.parametrize("orientation", [Orientation.from_rotation(90), None])
+    @pytest.mark.parametrize("z_offset", [1.0, None])
+    def test_deserialize_image_coordinate_system(
+        self,
+        origin: Optional[PointMm],
+        orientation: Optional[Orientation],
+        z_offset: Optional[float],
+    ):
+        # Arrange
+        dataset = Dataset()
+        origin_dataset = Dataset()
+        if origin is not None:
+            origin_dataset.XOffsetInSlideCoordinateSystem = origin.x
+            origin_dataset.YOffsetInSlideCoordinateSystem = origin.y
+        if z_offset is not None:
+            origin_dataset.ZOffsetInSlideCoordinateSystem = z_offset
+        if len(origin_dataset) > 0:
+            dataset.TotalPixelMatrixOriginSequence = [origin_dataset]
+        if orientation is not None:
+            dataset.ImageOrientationSlide = list(orientation.values)
+
+        schema = ImageCoordinateSystemDicomSchema()
+        # Act
+        deserialized = schema.load(dataset)
+
+        # Assert
+        if origin is not None and orientation is not None:
+            assert isinstance(deserialized, ImageCoordinateSystem)
+            assert deserialized.origin == origin
+            assert deserialized.rotation == orientation.rotation
+            assert deserialized.z_offset == z_offset
+        else:
+            assert deserialized is None
