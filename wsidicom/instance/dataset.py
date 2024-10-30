@@ -793,7 +793,6 @@ class WsiDataset(Dataset):
         (
             shared_functional_group_sequence.WholeSlideMicroscopyImageFrameTypeSequence
         ) = DicomSequence([wsi_frame_type_item])
-        print("set wsi frame type", wsi_frame_type_item.FrameType)
         dataset.SharedFunctionalGroupsSequence = DicomSequence(
             [shared_functional_group_sequence]
         )
