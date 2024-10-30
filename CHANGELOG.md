@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.4] - 2024-10-30
+
+### Fixed
+
+- Loading of files with missing TotalPixelMatrixOriginSequence.
+
 ## [0.21.3] - 2024-10-28
 
 ### Fixed
@@ -414,7 +420,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.3..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.4..HEAD
+[0.21.4]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.3..v0.21.4
 [0.21.3]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.2..v0.21.3
 [0.21.2]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.1..v0.21.2
 [0.21.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.0..v0.21.1
