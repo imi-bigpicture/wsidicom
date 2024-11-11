@@ -23,12 +23,11 @@ from wsidicom.conceptcode import (
     IlluminationCode,
     IlluminationColorCode,
 )
-from wsidicom.geometry import PointMm
-
+from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.metadata.image import FocusMethod
 
 
-@dataclass(frozen=True)
+@dataclass
 class Defaults:
     string = "Unknown"
     date_time = datetime.datetime(1, 1, 1)
@@ -39,8 +38,9 @@ class Defaults:
     slide_component_type = ContainerComponentTypeCode("Microscope slide cover slip")
     slide_material = "GLASS"
     focus_method = FocusMethod.AUTO
-    image_coordinate_system_origin = PointMm(0, 0)
-    image_coordinate_system_rotation = 0
+    # image_coordinate_system_origin = PointMm(0, 0)
+    slide_without_label_size = SizeMm(25, 50)
+    image_coordinate_system_rotation: float = 0
 
 
 defaults = Defaults()
