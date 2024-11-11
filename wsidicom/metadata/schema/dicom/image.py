@@ -64,7 +64,7 @@ class ExtendedDepthOfFieldDicomSchema(DicomSchema[ExtendedDepthOfField]):
         return ExtendedDepthOfField
 
 
-class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
+class ImageCoordinateSystemDicomSchema(DicomSchema[Optional[ImageCoordinateSystem]]):
     origin = OffsetInSlideCoordinateSystemField(
         data_key="TotalPixelMatrixOriginSequence",
         allow_none=False,
@@ -98,9 +98,11 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem]):
 
     @pre_dump
     def pre_dump(
-        self, image_coordinate_system: ImageCoordinateSystem, **kwargs
+        self, image_coordinate_system: Optional[ImageCoordinateSystem], **kwargs
     ) -> Dict[str, Any]:
         """Pre dump hook to handle combining of xy and z offset."""
+        if image_coordinate_system is None:
+            return {"origin": None, "rotation": None}
         return {
             "origin": (
                 image_coordinate_system.origin,

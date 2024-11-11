@@ -234,7 +234,7 @@ class ImageOrientationSlideField(fields.Field):
         if rotation is None:
             if self.dump_default is None:
                 return None
-            assert isinstance(self.dump_default, float)
+            assert isinstance(self.dump_default, (int, float))
             rotation = self.dump_default
         x = round(math.sin(rotation * math.pi / 180), 8)
         y = round(math.cos(rotation * math.pi / 180), 8)
