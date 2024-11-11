@@ -22,7 +22,7 @@ from pydicom.dataset import Dataset
 from pydicom.valuerep import VR
 
 from wsidicom.codec import LossyCompressionIsoStandard
-from wsidicom.geometry import SizeMm
+from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.metadata.image import (
     ExtendedDepthOfField,
     FocusMethod,
@@ -30,7 +30,7 @@ from wsidicom.metadata.image import (
     ImageCoordinateSystem,
     LossyCompression,
 )
-from wsidicom.metadata.schema.dicom.defaults import Defaults
+from wsidicom.metadata.schema.dicom.defaults import Defaults, defaults
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
     DateTimeDicomField,
@@ -66,14 +66,10 @@ class ExtendedDepthOfFieldDicomSchema(DicomSchema[ExtendedDepthOfField]):
 
 class ImageCoordinateSystemDicomSchema(DicomSchema[Optional[ImageCoordinateSystem]]):
     origin = OffsetInSlideCoordinateSystemField(
-        data_key="TotalPixelMatrixOriginSequence",
-        allow_none=False,
-        dump_default=(Defaults.image_coordinate_system_origin, 0.0),
+        data_key="TotalPixelMatrixOriginSequence", allow_none=False
     )
     rotation = ImageOrientationSlideField(
-        data_key="ImageOrientationSlide",
-        allow_none=False,
-        dump_default=Defaults.image_coordinate_system_rotation,
+        data_key="ImageOrientationSlide", allow_none=False
     )
 
     @property
@@ -102,7 +98,23 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[Optional[ImageCoordinateSyste
     ) -> Dict[str, Any]:
         """Pre dump hook to handle combining of xy and z offset."""
         if image_coordinate_system is None:
-            return {"origin": None, "rotation": None}
+            image_size = self.context.get("image_size", None)
+            if image_size is not None:
+                assert isinstance(image_size, SizeMm)
+                image_coordinate_system = ImageCoordinateSystem.from_middle_of_slide(
+                    slide_middle=PointMm(
+                        defaults.slide_without_label_size.width / 2,
+                        defaults.slide_without_label_size.height / 2,
+                    ),
+                    image_size=image_size,
+                    rotation=defaults.image_coordinate_system_rotation,
+                    z_offset=0,
+                )
+            else:
+                image_coordinate_system = ImageCoordinateSystem(
+                    origin=PointMm(0, 0),
+                    rotation=0,
+                )
         return {
             "origin": (
                 image_coordinate_system.origin,

@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional
 
 import pytest
 from pydicom import Dataset
@@ -64,7 +64,7 @@ from wsidicom.metadata.sample import (
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
 )
-from wsidicom.metadata.schema.dicom.defaults import Defaults
+from wsidicom.metadata.schema.dicom.defaults import Defaults, defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.image import (
     ImageCoordinateSystemDicomSchema,
@@ -839,7 +839,9 @@ class TestDicomSchema:
             image_coordinate_system.orientation.values
         )
 
-    def test_serialize_empty_image_coordinate_system(self):
+    def test_serialize_empty_image_coordinate_system_without_image_size_in_context(
+        self,
+    ):
         # Arrange
 
         image_coordinate_system = None
@@ -856,18 +858,57 @@ class TestDicomSchema:
         )
         total_pixel_matrix_origin = serialized.TotalPixelMatrixOriginSequence[0]
 
-        assert (
-            total_pixel_matrix_origin.XOffsetInSlideCoordinateSystem
-            == Defaults.image_coordinate_system_origin.x
-        )
-        assert (
-            total_pixel_matrix_origin.YOffsetInSlideCoordinateSystem
-            == Defaults.image_coordinate_system_origin.y
-        )
+        assert total_pixel_matrix_origin.XOffsetInSlideCoordinateSystem == 0
+        assert total_pixel_matrix_origin.YOffsetInSlideCoordinateSystem == 0
         assert "ImageOrientationSlide" in serialized
         assert len(serialized.ImageOrientationSlide) == 6
         assert serialized.ImageOrientationSlide == list(
             Orientation.from_rotation(Defaults.image_coordinate_system_rotation).values
+        )
+
+    @pytest.mark.parametrize(
+        ["image_mm_size", "rotation", "expected_result"],
+        [
+            [SizeMm(20, 10), 0, PointMm(7.5, 15)],
+            [SizeMm(20, 10), 90, PointMm(22.5, 20)],
+            [SizeMm(20, 10), 180, PointMm(17.5, 35)],
+            [SizeMm(20, 10), 270, PointMm(2.5, 30)],
+        ],
+    )
+    def test_serialize_empty_image_coordinate_system_with_image_size_in_context(
+        self,
+        image_mm_size: SizeMm,
+        rotation: float,
+        expected_result: PointMm,
+    ):
+        # Arrange
+        image_coordinate_system = None
+        defaults.image_coordinate_system_rotation = rotation
+        schema = ImageCoordinateSystemDicomSchema(context={"image_size": image_mm_size})
+
+        # Act
+        serialized = schema.dump(image_coordinate_system)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert (
+            "TotalPixelMatrixOriginSequence" in serialized
+            and len(serialized.TotalPixelMatrixOriginSequence) == 1
+        )
+        total_pixel_matrix_origin = serialized.TotalPixelMatrixOriginSequence[0]
+
+        assert (
+            total_pixel_matrix_origin.XOffsetInSlideCoordinateSystem
+            == expected_result.x
+        )
+        assert (
+            total_pixel_matrix_origin.YOffsetInSlideCoordinateSystem
+            == expected_result.y
+        )
+        assert "ImageOrientationSlide" in serialized
+        assert len(serialized.ImageOrientationSlide) == 6
+        assert serialized.ImageOrientationSlide == list(
+            Orientation.from_rotation(rotation).values
         )
 
     @pytest.mark.parametrize("origin", [PointMm(20.0, 30.0), None])

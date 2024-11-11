@@ -141,6 +141,46 @@ class ImageCoordinateSystem:
         slide = self.image_to_slide(image)
         return other.slide_to_image(slide)
 
+    @classmethod
+    def from_middle_of_slide(
+        cls,
+        slide_middle: PointMm,
+        image_size: SizeMm,
+        rotation: float,
+        z_offset: Optional[float],
+    ) -> "ImageCoordinateSystem":
+        """Create an image coordinate system that places the image in the middle of the
+        slide.
+
+        Parameters
+        ----------
+        slide_middle : PointMm
+            The middle of the slide.
+        image_size : SizeMm
+            The size of the image.
+        rotation : float
+            The rotation of the image in degrees.
+        z_offset : Optional[float]
+            The z offset of the image.
+
+        Returns
+        -------
+        ImageCoordinateSystem
+            The image coordinate system.
+        """
+        middle_of_slide_system = ImageCoordinateSystem(
+            origin=slide_middle,
+            rotation=rotation,
+        )
+        image_coordinate_system_origin = middle_of_slide_system.image_to_slide(
+            -PointMm(image_size.width / 2, image_size.height / 2)
+        )
+        return ImageCoordinateSystem(
+            origin=image_coordinate_system_origin,
+            rotation=rotation,
+            z_offset=z_offset,
+        )
+
 
 @dataclass(frozen=True)
 class LossyCompression:
