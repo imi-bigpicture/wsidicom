@@ -19,7 +19,7 @@ from typing import Type
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.equipment import Equipment
-from wsidicom.metadata.schema.dicom.defaults import Defaults
+from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
     ListDicomField,
@@ -31,25 +31,25 @@ from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 class EquipmentDicomSchema(ModuleDicomSchema[Equipment]):
     manufacturer = DefaultingDicomField(
         StringDicomField(VR.LO),
-        dump_default=Defaults.string,
+        dump_default=defaults.string,
         load_default=None,
         data_key="Manufacturer",
     )
     model_name = DefaultingDicomField(
         StringDicomField(VR.LO),
-        dump_default=Defaults.string,
+        dump_default=defaults.string,
         load_default=None,
         data_key="ManufacturerModelName",
     )
     device_serial_number = DefaultingDicomField(
         StringDicomField(VR.LO),
-        dump_default=Defaults.string,
+        dump_default=defaults.string,
         load_default=None,
         data_key="DeviceSerialNumber",
     )
     software_versions = DefaultingDicomField(
         ListDicomField(StringDicomField(VR.LO)),
-        dump_default=[Defaults.string],
+        dump_default=[defaults.string],
         load_default=None,
         data_key="SoftwareVersions",
     )
