@@ -52,7 +52,7 @@ from wsidicom.metadata.sample import (
     SpecimenIdentifier,
     UniversalIssuerOfIdentifier,
 )
-from wsidicom.metadata.schema.dicom.defaults import Defaults
+from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.optical_path import LutDicomParser
 from wsidicom.metadata.schema.dicom.sample.model import (
     CollectionDicomModel,
@@ -254,7 +254,7 @@ def assert_dicom_optical_path_equals_optical_path(
         assert dicom_optical_path.OpticalPathIdentifier == optical_path.identifier
     else:
         assert (
-            dicom_optical_path.OpticalPathIdentifier == Defaults.optical_path_identifier
+            dicom_optical_path.OpticalPathIdentifier == defaults.optical_path_identifier
         )
     if optical_path.description is not None:
         assert dicom_optical_path.OpticalPathDescription == optical_path.description
@@ -268,7 +268,7 @@ def assert_dicom_optical_path_equals_optical_path(
     else:
         assert_dicom_code_dataset_equals_code(
             dicom_optical_path.IlluminationTypeCodeSequence[0],
-            Defaults.illumination_type,
+            defaults.illumination_type,
         )
     if isinstance(optical_path.illumination, float):
         assert dicom_optical_path.IlluminationWaveLength == optical_path.illumination
@@ -280,7 +280,7 @@ def assert_dicom_optical_path_equals_optical_path(
     else:
         assert_dicom_code_dataset_equals_code(
             dicom_optical_path.IlluminationColorCodeSequence[0],
-            Defaults.illumination,
+            defaults.illumination,
         )
     if optical_path.light_path_filter is not None:
         assert (

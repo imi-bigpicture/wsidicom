@@ -30,7 +30,7 @@ from wsidicom.metadata.image import (
     ImageCoordinateSystem,
     LossyCompression,
 )
-from wsidicom.metadata.schema.dicom.defaults import Defaults, defaults
+from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
     DateTimeDicomField,
@@ -96,24 +96,29 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[Optional[ImageCoordinateSyste
     def pre_dump(
         self, image_coordinate_system: Optional[ImageCoordinateSystem], **kwargs
     ) -> Dict[str, Any]:
-        """Pre dump hook to handle combining of xy and z offset."""
+        """Pre dump hook to handle default dump value if value is None."""
         if image_coordinate_system is None:
             image_size = self.context.get("image_size", None)
             if image_size is not None:
+                # Based on image size place image in the middle of the slide
                 assert isinstance(image_size, SizeMm)
                 image_coordinate_system = ImageCoordinateSystem.from_middle_of_slide(
                     slide_middle=PointMm(
-                        defaults.slide_without_label_size.width / 2,
-                        defaults.slide_without_label_size.height / 2,
+                        defaults.slide_size_without_label.width / 2,
+                        defaults.slide_size_without_label.height / 2,
                     ),
                     image_size=image_size,
                     rotation=defaults.image_coordinate_system_rotation,
-                    z_offset=0,
+                    z_offset=None,
                 )
             else:
+                # Place the image with the origin right below the the label.
                 image_coordinate_system = ImageCoordinateSystem(
-                    origin=PointMm(0, 0),
-                    rotation=0,
+                    origin=PointMm(
+                        defaults.slide_size_without_label.width,
+                        defaults.slide_size_without_label.height,
+                    ),
+                    rotation=180,
                 )
         return {
             "origin": (
@@ -197,13 +202,13 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
     acquisition_datetime = DefaultingDicomField(
         DateTimeDicomField(),
         data_key="AcquisitionDateTime",
-        dump_default=Defaults.date_time,
+        dump_default=defaults.date_time,
         load_default=None,
     )
     focus_method = DefaultingDicomField(
         fields.Enum(FocusMethod),
         data_key="FocusMethod",
-        dump_default=Defaults.focus_method,
+        dump_default=defaults.focus_method,
         load_default=None,
     )
     extended_depth_of_field_bool = BooleanDicomField(

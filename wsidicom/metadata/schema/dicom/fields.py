@@ -61,7 +61,6 @@ from wsidicom.metadata.sample import (
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
 )
-from wsidicom.metadata.schema.dicom.defaults import Defaults
 
 
 class StringLikeDicomField(fields.Field):

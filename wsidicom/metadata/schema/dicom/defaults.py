@@ -15,7 +15,6 @@
 """Module with default values for DICOM serialization."""
 
 import datetime
-from dataclasses import dataclass
 
 from wsidicom.conceptcode import (
     ContainerComponentTypeCode,
@@ -23,11 +22,10 @@ from wsidicom.conceptcode import (
     IlluminationCode,
     IlluminationColorCode,
 )
-from wsidicom.geometry import PointMm, SizeMm
+from wsidicom.geometry import SizeMm
 from wsidicom.metadata.image import FocusMethod
 
 
-@dataclass
 class Defaults:
     string = "Unknown"
     date_time = datetime.datetime.fromtimestamp(0, datetime.timezone.utc)
@@ -38,9 +36,8 @@ class Defaults:
     slide_component_type = ContainerComponentTypeCode("Microscope slide cover slip")
     slide_material = "GLASS"
     focus_method = FocusMethod.AUTO
-    # image_coordinate_system_origin = PointMm(0, 0)
-    slide_without_label_size = SizeMm(25, 50)
-    image_coordinate_system_rotation: float = 0
+    slide_size_without_label = SizeMm(25, 50)
+    image_coordinate_system_rotation: float = 180
 
 
 defaults = Defaults()

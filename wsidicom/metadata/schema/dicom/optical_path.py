@@ -55,7 +55,7 @@ from wsidicom.metadata.optical_path import (
     OpticalFilter,
     OpticalPath,
 )
-from wsidicom.metadata.schema.dicom.defaults import Defaults
+from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
     CodeDicomField,
     DefaultingDicomField,
@@ -612,7 +612,7 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
         StringDicomField(value_representation=VR.SH),
         data_key="OpticalPathIdentifier",
         load_default=None,
-        dump_default=Defaults.optical_path_identifier,
+        dump_default=defaults.optical_path_identifier,
     )
     description = StringDicomField(
         value_representation=VR.ST, data_key="OpticalPathDescription", load_default=None
@@ -620,7 +620,7 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
     illumination_types = DefaultingDicomField(
         fields.List(CodeDicomField(IlluminationCode)),
         data_key="IlluminationTypeCodeSequence",
-        dump_default=[Defaults.illumination_type],
+        dump_default=[defaults.illumination_type],
     )
     illumination_wavelength = fields.Integer(
         data_key="IlluminationWaveLength", load_default=None
@@ -664,7 +664,7 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
         if isinstance(optical_path.illumination, Code):
             fields["illumination_color_code"] = optical_path.illumination
         else:
-            fields["illumination_color_code"] = Defaults.illumination
+            fields["illumination_color_code"] = defaults.illumination
         return fields
 
     @post_load

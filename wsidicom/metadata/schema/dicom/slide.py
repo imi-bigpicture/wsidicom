@@ -22,7 +22,7 @@ from pydicom.valuerep import VR
 
 from wsidicom.conceptcode import ContainerTypeCode
 from wsidicom.metadata.sample import SlideSample, SpecimenIdentifier
-from wsidicom.metadata.schema.dicom.defaults import Defaults, defaults
+from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
     IssuerOfIdentifierDicomField,
@@ -41,7 +41,7 @@ from wsidicom.metadata.slide import Slide
 class SlideDicomSchema(ModuleDicomSchema[Slide]):
     identifier = DefaultingDicomField(
         StringDicomField(value_representation=VR.LO),
-        dump_default=Defaults.string,
+        dump_default=defaults.string,
         data_key="ContainerIdentifier",
         allow_none=True,
     )
@@ -59,7 +59,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         ContainerTypeCode,
         data_key="ContainerTypeCodeSequence",
         dump_only=True,
-        dump_default=Defaults.slide_container_type,
+        dump_default=defaults.slide_container_type,
     )
 
     @property

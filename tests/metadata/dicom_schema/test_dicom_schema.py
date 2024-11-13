@@ -64,7 +64,7 @@ from wsidicom.metadata.sample import (
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
 )
-from wsidicom.metadata.schema.dicom.defaults import Defaults, defaults
+from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.image import (
     ImageCoordinateSystemDicomSchema,
@@ -111,10 +111,10 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(serialized, Dataset)
-        assert serialized.Manufacturer == Defaults.string
-        assert serialized.ManufacturerModelName == Defaults.string
-        assert serialized.DeviceSerialNumber == Defaults.string
-        assert serialized.SoftwareVersions == Defaults.string
+        assert serialized.Manufacturer == defaults.string
+        assert serialized.ManufacturerModelName == defaults.string
+        assert serialized.DeviceSerialNumber == defaults.string
+        assert serialized.SoftwareVersions == defaults.string
 
     @pytest.mark.parametrize(
         ["manufacturer", "model_name", "serial_number", "versions"],
@@ -197,8 +197,8 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(serialized, Dataset)
-        assert serialized.AcquisitionDateTime == Defaults.date_time
-        assert serialized.FocusMethod == Defaults.focus_method.name
+        assert serialized.AcquisitionDateTime == defaults.date_time
+        assert serialized.FocusMethod == defaults.focus_method.name
         assert serialized.ExtendedDepthOfField == "NO"
         assert "LossyImageCompressionMethod" not in serialized
         assert "LossyImageCompressionRatio" not in serialized
@@ -347,12 +347,12 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert "OpticalPathIdentifier" in serialized
         assert_dicom_code_sequence_equals_codes(
-            serialized.IlluminationTypeCodeSequence, [Defaults.illumination_type]
+            serialized.IlluminationTypeCodeSequence, [defaults.illumination_type]
         )
         assert "OpticalPathDescription" not in serialized
         assert "IlluminationWaveLength" not in serialized
         assert_dicom_code_dataset_equals_code(
-            serialized.IlluminationColorCodeSequence[0], Defaults.illumination
+            serialized.IlluminationColorCodeSequence[0], defaults.illumination
         )
         assert "LensesCodeSequence" not in serialized
         assert "CondenserLensPower" not in serialized
@@ -539,7 +539,7 @@ class TestDicomSchema:
         if slide.samples is not None:
             expected_samples = slide.samples
         else:
-            expected_samples = [SlideSample(identifier=Defaults.string)]
+            expected_samples = [SlideSample(identifier=defaults.string)]
 
         # Act
         serialized = schema.dump(slide)
@@ -547,7 +547,7 @@ class TestDicomSchema:
         # Assert
         assert isinstance(serialized, Dataset)
         if slide.identifier is None:
-            assert serialized.ContainerIdentifier == Defaults.string
+            assert serialized.ContainerIdentifier == defaults.string
         elif isinstance(slide.identifier, str):
             assert serialized.ContainerIdentifier == slide.identifier
         else:
@@ -560,7 +560,7 @@ class TestDicomSchema:
                     slide.identifier.issuer,
                 )
         assert_dicom_code_dataset_equals_code(
-            serialized.ContainerTypeCodeSequence[0], Defaults.slide_container_type
+            serialized.ContainerTypeCodeSequence[0], defaults.slide_container_type
         )
         assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
         for specimen_description, sample in zip(
@@ -573,16 +573,16 @@ class TestDicomSchema:
         # Arrange
         slide = Slide()
         schema = SlideDicomSchema()
-        expected_samples = [SlideSample(identifier=Defaults.string)]
+        expected_samples = [SlideSample(identifier=defaults.string)]
 
         # Act
         serialized = schema.dump(slide)
 
         # Assert
         assert isinstance(serialized, Dataset)
-        assert serialized.ContainerIdentifier == Defaults.string
+        assert serialized.ContainerIdentifier == defaults.string
         assert_dicom_code_dataset_equals_code(
-            serialized.ContainerTypeCodeSequence[0], Defaults.slide_container_type
+            serialized.ContainerTypeCodeSequence[0], defaults.slide_container_type
         )
         assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
         for specimen_description, sample in zip(
@@ -858,12 +858,18 @@ class TestDicomSchema:
         )
         total_pixel_matrix_origin = serialized.TotalPixelMatrixOriginSequence[0]
 
-        assert total_pixel_matrix_origin.XOffsetInSlideCoordinateSystem == 0
-        assert total_pixel_matrix_origin.YOffsetInSlideCoordinateSystem == 0
+        assert (
+            total_pixel_matrix_origin.XOffsetInSlideCoordinateSystem
+            == defaults.slide_size_without_label.width
+        )
+        assert (
+            total_pixel_matrix_origin.YOffsetInSlideCoordinateSystem
+            == defaults.slide_size_without_label.height
+        )
         assert "ImageOrientationSlide" in serialized
         assert len(serialized.ImageOrientationSlide) == 6
         assert serialized.ImageOrientationSlide == list(
-            Orientation.from_rotation(Defaults.image_coordinate_system_rotation).values
+            Orientation.from_rotation(180).values
         )
 
     @pytest.mark.parametrize(
@@ -873,6 +879,10 @@ class TestDicomSchema:
             [SizeMm(20, 10), 90, PointMm(22.5, 20)],
             [SizeMm(20, 10), 180, PointMm(17.5, 35)],
             [SizeMm(20, 10), 270, PointMm(2.5, 30)],
+            [SizeMm(50, 25), 0, PointMm(0, 0)],
+            [SizeMm(25, 50), 90, PointMm(25, 0)],
+            [SizeMm(50, 25), 180, PointMm(25, 50)],
+            [SizeMm(25, 50), 270, PointMm(0, 50)],
         ],
     )
     def test_serialize_empty_image_coordinate_system_with_image_size_in_context(
