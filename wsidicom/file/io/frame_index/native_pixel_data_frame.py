@@ -14,6 +14,7 @@
 
 """Class for reading frame positions from non-encapsulated data."""
 
+import math
 from typing import List, Tuple
 
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
@@ -70,9 +71,13 @@ class NativePixelData(FrameIndex):
 
         """
         expected_length = (
-            self._tile_size.area
-            * self._samples_per_pixel
-            * (self._bits // 8)
-            * self._frame_count
+            math.ceil(
+                self._tile_size.area
+                * self._samples_per_pixel
+                * (self._bits // 8)
+                * self._frame_count
+                / 2
+            )
+            * 2
         )
         super()._validate_pixel_data_start(expected_length)
