@@ -214,7 +214,11 @@ class WsiDicomWebClient:
             True if transfer syntax is supported, False otherwise.
         """
         try:
-            self.get_frames(study_uid, series_uid, instance_uid, [1], transfer_syntax)
+            next(
+                self.get_frames(
+                    study_uid, series_uid, instance_uid, [1], transfer_syntax
+                )
+            )
         except HTTPError as exception:
             if (
                 exception.response is not None
