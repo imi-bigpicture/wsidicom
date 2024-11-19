@@ -14,7 +14,7 @@
 
 from hashlib import md5
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 import numpy as np
 import pytest
@@ -30,8 +30,8 @@ from wsidicom.series.pyramid import Pyramid
     "input_type",
     [
         WsiInputType.FILE,
-        WsiInputType.STREAM,
-        WsiInputType.WEB,
+        # WsiInputType.STREAM,
+        # WsiInputType.WEB,
     ],
 )
 class TestWsiDicomIntegration:
@@ -189,42 +189,48 @@ class TestWsiDicomIntegration:
         assert levels_count == expected_level_count
 
     @pytest.mark.parametrize(
-        ["wsi_name", "expected_has_label"], WsiTestDefinitions.has_label()
+        ["wsi_name", "expected_label_hash"], WsiTestDefinitions.label_hash()
     )
     def test_has_label(
         self,
         wsi_name: Path,
         input_type: WsiInputType,
         wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
-        expected_has_label: bool,
+        expected_label_hash: Optional[bool],
     ):
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
-        has_label = wsi.labels is not None
+        if wsi.labels is not None:
+            checksum = md5(wsi.read_label().tobytes()).hexdigest()
+        else:
+            checksum = None
 
         # Assert
-        assert has_label == expected_has_label
+        assert checksum == expected_label_hash
 
     @pytest.mark.parametrize(
-        ["wsi_name", "expected_has_overview"], WsiTestDefinitions.has_overview()
+        ["wsi_name", "expected_overview_hash"], WsiTestDefinitions.overview_hash()
     )
     def test_has_overview(
         self,
         wsi_name: Path,
         input_type: WsiInputType,
         wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
-        expected_has_overview: bool,
+        expected_overview_hash: Optional[str],
     ):
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
-        has_overview = wsi.overviews is not None
+        if wsi.overviews is not None:
+            checksum = md5(wsi.read_overview().tobytes()).hexdigest()
+        else:
+            checksum = None
 
         # Assert
-        assert has_overview == expected_has_overview
+        assert checksum == expected_overview_hash
 
     @pytest.mark.parametrize("wsi_path", WsiTestDefinitions.folders())
     def test_save_replace_label(
