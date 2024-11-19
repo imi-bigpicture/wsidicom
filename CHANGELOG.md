@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Default to placing the image at the middle of the slide if no `TotalPixelMatrixOriginSequence` is set when producing DICOM metadata .
+- Use Unix epoch as default datetime when producing DICOM metadata.
+
+### Fixed
+
+- Parsing of native pixel data with padded lenght.
+- Check for supported transfer syntax when DICOMWeb client returns an iterable of frames.
+- Fix for order of transfer syntax to check.
+
 ## [0.21.4] - 2024-10-30
 
 ### Fixed
