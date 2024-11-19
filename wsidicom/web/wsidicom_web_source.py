@@ -250,6 +250,7 @@ class WsiDicomWebSource(Source):
         sorted_transfer_syntaxes = sorted(
             supported_transfer_syntaxes,
             key=lambda transfer_syntax: transfer_syntax in detected_transfer_syntaxes,
+            reverse=True,
         )
 
         return next(
