@@ -617,7 +617,7 @@
         "study_instance_uid": "1.3.6.1.4.1.36533.198105154197118787424114551732359412216366",
         "series_instance_uid": "1.3.6.1.4.1.36533.811454139167246642501471411651085384157105",
         "instances": 6,
-        "levels": 1,
+        "levels": 3,
         "label": "692c84fcb25130abcb65169ec4f4d37f",
         "overview": "2274f918d7ca4b3f0951de77d1c48d04",
         "tiled": "sparse",
