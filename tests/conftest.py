@@ -24,7 +24,12 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import pytest
 from dicomweb_client import DICOMfileClient
 from pydicom.misc import is_dicom
-from pydicom.uid import UID, JPEGBaseline8Bit
+from pydicom.uid import (
+    JPEG2000,
+    UID,
+    ExplicitVRLittleEndian,
+    JPEGBaseline8Bit,
+)
 from upath import UPath
 
 from tests.data_gen import create_layer_file
@@ -54,31 +59,28 @@ class WsiTestDefinitions:
 
     @classmethod
     def folders(cls) -> Iterable[Path]:
-        return (
-            SLIDE_FOLDER.joinpath(wsi_name, path)
-            for wsi_name, path in cls._get_parameter("path")
-        )
+        return (SLIDE_FOLDER.joinpath(path) for _, path in cls._get_parameter("path"))
 
     @classmethod
     def folders_and_counts(cls) -> Iterable[Tuple[Path, int, bool, bool]]:
         return (
             (
-                SLIDE_FOLDER.joinpath(wsi_name, wsi_definition["path"]),
+                SLIDE_FOLDER.joinpath(wsi_definition["path"]),
                 wsi_definition["levels"],
                 wsi_definition["label"],
                 wsi_definition["overview"],
             )
-            for wsi_name, wsi_definition in cls.test_definitions.items()
+            for wsi_definition in cls.test_definitions.values()
         )
 
     @classmethod
     def folders_and_instance_counts(cls) -> Iterable[Tuple[Path, int]]:
         return (
             (
-                SLIDE_FOLDER.joinpath(wsi_name, wsi_definition["path"]),
+                SLIDE_FOLDER.joinpath(wsi_definition["path"]),
                 wsi_definition["instances"],
             )
-            for wsi_name, wsi_definition in cls.test_definitions.items()
+            for wsi_definition in cls.test_definitions.values()
         )
 
     @classmethod
@@ -118,11 +120,11 @@ class WsiTestDefinitions:
         return cls._get_parameter("levels")
 
     @classmethod
-    def has_label(cls) -> Iterable[Tuple[str, bool]]:
+    def label_hash(cls) -> Iterable[Tuple[str, Optional[str]]]:
         return cls._get_parameter("label")
 
     @classmethod
-    def has_overview(cls) -> Iterable[Tuple[str, bool]]:
+    def overview_hash(cls) -> Iterable[Tuple[str, Optional[str]]]:
         return cls._get_parameter("overview")
 
     @classmethod
@@ -169,7 +171,7 @@ def wsi_factory():
         wsi_name: str, input_type: WsiInputType = WsiInputType.FILE
     ) -> WsiDicom:
         test_definition = WsiTestDefinitions.test_definitions[wsi_name]
-        folder = UPath(SLIDE_FOLDER).joinpath(wsi_name, test_definition["path"])
+        folder = UPath(SLIDE_FOLDER).joinpath(test_definition["path"])
         if (input_type, folder) in wsis:
             return wsis[(input_type, folder)]
         if not folder.exists():
@@ -185,7 +187,7 @@ def wsi_factory():
                 client,
                 test_definition["study_instance_uid"],
                 test_definition["series_instance_uid"],
-                JPEGBaseline8Bit,
+                [JPEGBaseline8Bit, JPEG2000, ExplicitVRLittleEndian],
             )
         elif input_type == WsiInputType.STREAM:
             streams = [

@@ -1,12 +1,12 @@
 {
     "Histech^Samantha [1229631]": {
-        "path": "20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
+        "path": "WG26Demo2020_PV/Histech^Samantha [1229631]/20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
         "study_instance_uid": "2.25.292315917905782003007355414279734624434",
         "series_instance_uid": "2.25.240842844665571684955379851385752717044",
         "instances": 13,
         "levels": 10,
-        "label": true,
-        "overview": true,
+        "label": "991552d66ac9b3a82ce61d4af47824e6",
+        "overview": "06147bec99dc9d6852f281f317fbb96c",
         "tiled": "full",
         "read_region": [
             {
@@ -185,13 +185,13 @@
         ]
     },
     "MoticWangjie^Professer [100001]": {
-        "path": "20190903 102029 [200001]/Series 000 [SM]",
+        "path": "WG26Demo2019_PV/MoticWangjie^Professer [100001]/20190903 102029 [200001]/Series 000 [SM]",
         "study_instance_uid": "1.2.276.0.7230010.3.1.2.1145362585.2096.1567753444.779",
         "series_instance_uid": "1.2.276.0.7230010.3.1.3.1145362585.2096.1567753444.780",
         "instances": 8,
         "levels": 8,
-        "label": false,
-        "overview": false,
+        "label": null,
+        "overview": null,
         "tiled": "sparse",
         "read_region": [
             {
@@ -368,5 +368,264 @@
                 "md5": "8ff6df7578e4851706498ca8d58edee6"
             }
         ]
+    },
+    "3DHisthech-1": {
+        "path": "3DHISTECH-1",
+        "study_instance_uid": "2.25.229657274315044610913259338298080404914",
+        "series_instance_uid": "2.25.136442225281759786635460287190404012567",
+        "instances": 14,
+        "levels": 10,
+        "label": "f93c9845d9c7454125a55230a8202a9a",
+        "overview": "aa1d544afebabd89a30c46de332cb11a",
+        "tiled": "sparse",
+        "read_region": [
+            {
+                "location": {
+                    "x": 500,
+                    "y": 560
+                },
+                "level": 4,
+                "size": {
+                    "width": 800,
+                    "height": 1000
+                },
+                "md5": "2c105179178c7acad6c095f08fc324dc"
+            }
+        ],
+        "read_region_mm": [
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "level": 4,
+                "size": {
+                    "width": 0.8,
+                    "height": 1
+                },
+                "md5": "e54b4cdfe07226e6a14cbca49a096889"
+            }
+        ],
+        "read_region_mpp": [
+            {
+                "location": {
+                    "x": 4,
+                    "y": 3
+                },
+                "mpp": 0.5,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.3
+                },
+                "md5": "a3f7c25200d7b7911a8a5ea3c31e9e84"
+            }
+        ],
+        "read_tile": [
+            {
+                "location": {
+                    "x": 10,
+                    "y": 9
+                },
+                "level": 2,
+                "md5": "0e6bd28e0cc47396401eb21226c7ecfc"
+            }
+        ],
+        "read_encoded_tile": [
+            {
+                "location": {
+                    "x": 10,
+                    "y": 9
+                },
+                "level": 2,
+                "md5": "545d859e3b2a0ff112fa5967cc66f257"
+            }
+        ],
+        "read_thumbnail": [
+            {
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "5cca2964e0b14466081d4149f360306e"
+            }
+        ]
+    },
+    "CMU-1-JP2K-33005": {
+        "path": "CMU-1-JP2K-33005",
+        "study_instance_uid": "1.3.6.1.4.1.5962.99.1.3073559704.535924898.1686700772504.5.0",
+        "series_instance_uid": "1.3.6.1.4.1.5962.99.1.3073559704.535924898.1686700772504.4.0",
+        "instances": 6,
+        "levels": 3,
+        "label": "6634ad9dbe8c8f074266e21ef8eb6c12",
+        "overview": "3d792eb3441c58c5d881cb0cf21a397e",
+        "tiled": "sparse",
+        "read_region": [
+            {
+                "location": {
+                    "x": 200,
+                    "y": 3000
+                },
+                "level": 3,
+                "size": {
+                    "width": 400,
+                    "height": 600
+                },
+                "md5": "535ef36080dd62ec36d2e619becb519a"
+            }
+        ],
+        "read_region_mm": [
+            {
+                "location": {
+                    "x": 6,
+                    "y": 10
+                },
+                "level": 5,
+                "size": {
+                    "width": 5,
+                    "height": 4
+                },
+                "md5": "a78c5104a7ed97278f75b564f2d9a79c"
+            }
+        ],
+        "read_region_mpp": [
+            {
+                "location": {
+                    "x": 6,
+                    "y": 10
+                },
+                "mpp": 10,
+                "size": {
+                    "width": 5,
+                    "height": 4
+                },
+                "md5": "da9155fdfc4b7862f52d1c93fd307be8"
+            }
+        ],
+        "read_tile": [
+            {
+                "location": {
+                    "x": 10,
+                    "y": 9
+                },
+                "level": 2,
+                "md5": "20e9287303d438c54972939ce3736f6e"
+            }
+        ],
+        "read_encoded_tile": [
+            {
+                "location": {
+                    "x": 10,
+                    "y": 9
+                },
+                "level": 2,
+                "md5": "9e075e45f4cc4c9eba914d0b574c18d4"
+            }
+        ],
+        "read_thumbnail": [
+            {
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "e9ab4d977293f7739aee97e9ee615cbd"
+            }
+        ]
+    },
+    "JP2K-33003-1": {
+        "path": "JP2K-33003-1",
+        "study_instance_uid": "1.3.6.1.4.1.5962.99.1.3073532328.211211830.1686700745128.5.0",
+        "series_instance_uid": "1.3.6.1.4.1.5962.99.1.3073532328.211211830.1686700745128.4.0",
+        "instances": 6,
+        "levels": 3,
+        "label": "5a9a991e350f4fe29af08b7e3bcc56df",
+        "overview": "c3d8f41772dd26a19121f4f87d9f520c",
+        "tiled": "sparse",
+        "read_region": [
+            {
+                "location": {
+                    "x": 700,
+                    "y": 800
+                },
+                "level": 2,
+                "size": {
+                    "width": 300,
+                    "height": 400
+                },
+                "md5": "2d52ac974430b0a2d9e44646bd83e1f8"
+            }
+        ],
+        "read_region_mm": [
+            {
+                "location": {
+                    "x": 2,
+                    "y": 0.5
+                },
+                "level": 2,
+                "size": {
+                    "width": 0.3,
+                    "height": 0.4
+                },
+                "md5": "1d9a4e85f3da11d03d46d438bd155981"
+            }
+        ],
+        "read_region_mpp": [
+            {
+                "location": {
+                    "x": 2,
+                    "y": 0.5
+                },
+                "mpp": 1.1,
+                "size": {
+                    "width": 0.3,
+                    "height": 0.4
+                },
+                "md5": "ca45815d5f29b6503d93d480b38b0634"
+            }
+        ],
+        "read_tile": [
+            {
+                "location": {
+                    "x": 3,
+                    "y": 4
+                },
+                "level": 2,
+                "md5": "07107f09d92c235a80cb057ad6fb9e04"
+            }
+        ],
+        "read_encoded_tile": [
+            {
+                "location": {
+                    "x": 3,
+                    "y": 4
+                },
+                "level": 2,
+                "md5": "3b7b9f20f4ef2169b3756909430159bc"
+            }
+        ],
+        "read_thumbnail": [
+            {
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "e523be62bcdbf7d41d0c53912d120e9a"
+            }
+        ]
+    },
+    "Leica-4": {
+        "path": "Leica-4",
+        "study_instance_uid": "1.3.6.1.4.1.36533.198105154197118787424114551732359412216366",
+        "series_instance_uid": "1.3.6.1.4.1.36533.811454139167246642501471411651085384157105",
+        "instances": 6,
+        "levels": 1,
+        "label": "692c84fcb25130abcb65169ec4f4d37f",
+        "overview": "2274f918d7ca4b3f0951de77d1c48d04",
+        "tiled": "sparse",
+        "read_region": [],
+        "read_region_mm": [],
+        "read_region_mpp": [],
+        "read_tile": [],
+        "read_encoded_tile": [],
+        "read_thumbnail": []
     }
 }
