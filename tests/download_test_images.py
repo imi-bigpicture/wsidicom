@@ -234,9 +234,9 @@ def get_slide_dir() -> Path:
             f"{test_dir_folder}."
         )
     else:
-        slide_folder = Path(testdata_folder)
-        print(f"Downloading to {slide_folder}")
-    return slide_folder
+        test_dir_folder = Path(testdata_folder)
+        print(f"Downloading to {test_dir_folder}")
+    return test_dir_folder
 
 
 def check_checksum(file_path: Path, checksum: str):
