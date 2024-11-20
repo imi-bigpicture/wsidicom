@@ -1,5 +1,6 @@
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Tuple
+from wsidicom.config import settings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.instance.instance import WsiInstance
 from wsidicom.series.pyramid import Pyramid
@@ -109,6 +110,36 @@ class Pyramids:
                 )
             else:
                 ext_depth_of_field = None
+
+            def _cs_matches(cs_a, cs_b):
+                return (
+                    (cs_a[0] - cs_b[0]) ** 2 + (cs_a[1] - cs_b[1]) ** 2
+                ) <= settings.pyramids_origin_threshold**2 and cs_a[2] == cs_b[2]
+
+            match = next(
+                (
+                    (image_cs, ext_dof)
+                    for (image_cs, ext_dof), group in grouped_instances.items()
+                    if (
+                        all(
+                            _cs_matches(
+                                (
+                                    inst.image_coordinate_system.origin.x,
+                                    inst.image_coordinate_system.origin.y,
+                                    inst.image_coordinate_system.rotation,
+                                ),
+                                image_coordinate_system,
+                            )
+                            for inst in group
+                        )
+                        and ext_depth_of_field == ext_dof
+                    )
+                ),
+                None,
+            )
+            if match is not None:
+                image_coordinate_system, ext_depth_of_field = match
+
             grouped_instances[image_coordinate_system, ext_depth_of_field].append(
                 instance
             )
