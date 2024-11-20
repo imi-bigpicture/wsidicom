@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parsing of native pixel data with padded lenght.
 - Check for supported transfer syntax when DICOMWeb client returns an iterable of frames.
 - Fix for order of transfer syntax to check.
+- Use `ImageType` `DERIVED` instead of `ORIGINAL` when saving resampled volume instances.
 
 ## [0.21.4] - 2024-10-30
 
