@@ -621,11 +621,73 @@
         "label": "692c84fcb25130abcb65169ec4f4d37f",
         "overview": "2274f918d7ca4b3f0951de77d1c48d04",
         "tiled": "sparse",
-        "read_region": [],
-        "read_region_mm": [],
-        "read_region_mpp": [],
-        "read_tile": [],
-        "read_encoded_tile": [],
-        "read_thumbnail": []
+        "read_region": [
+            {
+                "location": {
+                    "x": 800,
+                    "y": 500
+                },
+                "level": 4,
+                "size": {
+                    "width": 200,
+                    "height": 300
+                },
+                "md5": "de274a86b15ed4fca984f6619c6e5547"
+            }],
+        "read_region_mm": [
+            {
+                "location": {
+                    "x": 21.0,
+                    "y": 10.0
+                },
+                "level": 2,
+                "size": {
+                    "width": 1.0,
+                    "height": 2.0
+                },
+                "md5": "ec4e7d038f1de1021fcb3e0027f0105b"
+            }],
+        "read_region_mpp": [
+            {
+                "location": {
+                    "x": 21.0,
+                    "y": 10.0
+                },
+                "mpp": 8.0,
+                "size": {
+                    "width": 1.0,
+                    "height": 2.0
+                },
+                "md5": "439021d08a2e2fb755b1b65519eb2836"
+            }],
+        "read_tile": [
+            {
+                "location": {
+                    "x": 16,
+                    "y": 8
+                },
+                "level": 2,
+                "md5": "81e1da2f3e629e95f67aabb9dca67174"
+            }
+        ],
+        "read_encoded_tile": [
+            {
+                "location": {
+                    "x": 16,
+                    "y": 8
+                },
+                "level": 2,
+                "md5": "077ca7ea325beefc43ad7b057f1dd8ce"
+            }
+        ],
+        "read_thumbnail": [
+            {
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "3a4d79e664225e1ea9b80c4e647f6b2c"
+            }
+        ]
     }
 }
