@@ -746,7 +746,13 @@ class WsiDataset(Dataset):
             if pyramid_index > 0:
                 resampled = "RESAMPLED"
 
-        dataset.ImageType = ["ORIGINAL", "PRIMARY", image_type.value, resampled]
+        original_or_derived = "ORIGINAL" if resampled == "NONE" else "DERIVED"
+        dataset.ImageType = [
+            original_or_derived,
+            "PRIMARY",
+            image_type.value,
+            resampled,
+        ]
         dataset.SOPInstanceUID = generate_uid(prefix=None)
         shared_functional_group_sequence = Dataset()
         if image_data.pixel_spacing is None:

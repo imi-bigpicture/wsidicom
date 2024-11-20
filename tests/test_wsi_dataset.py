@@ -270,7 +270,7 @@ class TestWsiDataset:
         ["image_type", "pyramid_index", "expected_image_type"],
         [
             (ImageType.VOLUME, 0, ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]),
-            (ImageType.VOLUME, 1, ["ORIGINAL", "PRIMARY", "VOLUME", "RESAMPLED"]),
+            (ImageType.VOLUME, 1, ["DERIVED", "PRIMARY", "VOLUME", "RESAMPLED"]),
             (ImageType.LABEL, None, ["ORIGINAL", "PRIMARY", "LABEL", "NONE"]),
             (ImageType.OVERVIEW, None, ["ORIGINAL", "PRIMARY", "OVERVIEW", "NONE"]),
         ],
