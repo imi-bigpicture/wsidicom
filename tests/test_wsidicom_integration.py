@@ -30,8 +30,8 @@ from wsidicom.series.pyramid import Pyramid
     "input_type",
     [
         WsiInputType.FILE,
-        # WsiInputType.STREAM,
-        # WsiInputType.WEB,
+        WsiInputType.STREAM,
+        WsiInputType.WEB,
     ],
 )
 class TestWsiDicomIntegration:
