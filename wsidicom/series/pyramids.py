@@ -92,7 +92,9 @@ class Pyramids:
             Tuple[Optional[Tuple[float, float, float]], Optional[Tuple[int, float]]],
             List[WsiInstance],
         ] = defaultdict(list)
-        for instance in instances:
+        for instance in sorted(
+            instances, key=lambda x: x.size.to_tuple(), reverse=True
+        ):
             if instance.image_coordinate_system is not None:
                 image_coordinate_system = (
                     instance.image_coordinate_system.origin.x,
