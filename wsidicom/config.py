@@ -26,6 +26,7 @@ class Settings:
         self._strict_uid_check = False
         self._strict_attribute_check = False
         self._focal_plane_distance_threshold = 0.000001
+        self._pyramids_origin_threshold = 0.1
         self._prefered_decoder: Optional[str] = None
         self._open_web_theads: Optional[int] = None
         self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
@@ -62,6 +63,17 @@ class Settings:
     @focal_plane_distance_threshold.setter
     def focal_plane_distance_threshold(self, value: float) -> None:
         self._focal_plane_distance_threshold = value
+
+    @property
+    def pyramids_origin_threshold(self) -> float:
+        """Threshold in mm for the distance between origins of instances
+        to group them into the same pyramid. Default is 1 mm.
+        """
+        return self._pyramids_origin_threshold
+
+    @pyramids_origin_threshold.setter
+    def pyramids_origin_threshold(self, value: float) -> None:
+        self._pyramids_origin_threshold = value
 
     @property
     def prefered_decoder(self) -> Optional[str]:
