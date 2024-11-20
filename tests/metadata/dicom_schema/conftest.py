@@ -139,7 +139,7 @@ def dicom_overview_label(label: Label):
 
 def create_dicom_label(label: Label, image_type: ImageType):
     dataset = Dataset()
-    dataset.ImageType = ["ORIGINAL", "PRIMIARY", image_type.value]
+    dataset.ImageType = ["ORIGINAL", "PRIMARY", image_type.value]
     if image_type == ImageType.LABEL:
         dataset.LabelText = label.text
         dataset.BarcodeValue = label.barcode
