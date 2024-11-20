@@ -151,6 +151,13 @@ class TestPyramids:
                 ],
                 2,
             ],
+            [
+                [
+                    (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), None),
+                    (PointMm(0.001, 0.001), Orientation((0, -1, 0, 1, 0, 0)), None),
+                ],
+                1,
+            ],
         ],
     )
     def test_open_number_of_created_pyramids(
