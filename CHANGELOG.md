@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Default to placing the image at the middle of the slide if no `TotalPixelMatrixOriginSequence` is set when producing DICOM metadata .
 - Use Unix epoch as default datetime when producing DICOM metadata.
+- Group instances to pyramids with a configurable threshold to allow small differences in `TotalPixelMatrixOriginSequence`.
 
 ### Fixed
 
