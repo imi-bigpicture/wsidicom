@@ -111,34 +111,26 @@ class Pyramids:
             else:
                 ext_depth_of_field = None
 
-            def _cs_matches(cs_a, cs_b):
-                return (
-                    (cs_a[0] - cs_b[0]) ** 2 + (cs_a[1] - cs_b[1]) ** 2
-                ) <= settings.pyramids_origin_threshold**2 and cs_a[2] == cs_b[2]
-
-            match = next(
-                (
-                    (image_cs, ext_dof)
-                    for (image_cs, ext_dof), group in grouped_instances.items()
-                    if (
-                        all(
-                            _cs_matches(
-                                (
-                                    inst.image_coordinate_system.origin.x,
-                                    inst.image_coordinate_system.origin.y,
-                                    inst.image_coordinate_system.rotation,
-                                ),
-                                image_coordinate_system,
+            if instance.image_coordinate_system is not None:
+                existing_group_match = next(
+                    (
+                        (image_cs, ext_dof)
+                        for (image_cs, ext_dof), group in grouped_instances.items()
+                        if (
+                            all(
+                                instance.image_coordinate_system.origin_and_rotation_match(
+                                    inst.image_coordinate_system,
+                                    origin_threshold=settings.pyramids_origin_threshold,
+                                )
+                                for inst in group
                             )
-                            for inst in group
+                            and ext_depth_of_field == ext_dof
                         )
-                        and ext_depth_of_field == ext_dof
-                    )
-                ),
-                None,
-            )
-            if match is not None:
-                image_coordinate_system, ext_depth_of_field = match
+                    ),
+                    None,
+                )
+                if existing_group_match is not None:
+                    image_coordinate_system, ext_depth_of_field = existing_group_match
 
             grouped_instances[image_coordinate_system, ext_depth_of_field].append(
                 instance
