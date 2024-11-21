@@ -14,8 +14,9 @@
 
 import math
 import os
+import threading
 from pathlib import Path
-from typing import List, Optional, OrderedDict, Sequence
+from typing import List, Optional, OrderedDict, Sequence, Tuple
 
 import pytest
 from PIL.Image import Image
@@ -37,6 +38,7 @@ from wsidicom.file.io import (
     WsiDicomReader,
     WsiDicomWriter,
 )
+from wsidicom.file.io.frame_index.parser import FrameIndexParser
 from wsidicom.file.io.wsidicom_writer import (
     WsiDicomEncapsulatedWriter,
     WsiDicomNativeWriter,
@@ -75,8 +77,10 @@ class WsiDicomTestReader(WsiDicomReader):
         dataset.SamplesPerPixel = samples_per_pixel
         dataset.NumberOfFrames = frame_count
         dataset.ImageType = ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]
-
         self._dataset = WsiDataset(dataset)
+        self._frame_index_parser: Optional[FrameIndexParser] = None
+        self._frame_index: Optional[List[Tuple[int, int]]] = None
+        self._lock = threading.Lock()
 
     @property
     def frame_count(self) -> int:
@@ -250,7 +254,7 @@ class TestWsiDicomWriter:
             filepath, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
         ) as reader:
             read_table_type = reader.offset_table_type
-            read_frame_positions = reader.frame_index.index
+            read_frame_positions = reader.frame_index
         TAG_BYTES = 4
         LENGTH_BYTES = 4
         frame_offsets = [
@@ -305,7 +309,7 @@ class TestWsiDicomWriter:
             filepath, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
         ) as read_file:
             read_table_type = read_file.offset_table_type
-            read_frame_positions = read_file.frame_index.index
+            read_frame_positions = read_file.frame_index
         assert read_table_type == OffsetTableType.NONE
         if transfer_syntax == ImplicitVRLittleEndian:
             offset = 8

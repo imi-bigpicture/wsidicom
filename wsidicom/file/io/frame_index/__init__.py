@@ -13,27 +13,32 @@
 #    limitations under the License.
 
 
-from wsidicom.file.io.frame_index.bot import Bot, EmptyBotException
-from wsidicom.file.io.frame_index.empty_bot import EmptyBot
-from wsidicom.file.io.frame_index.eot import Eot
-from wsidicom.file.io.frame_index.frame_index import FrameIndex
-from wsidicom.file.io.frame_index.native_pixel_data_frame import NativePixelData
+from wsidicom.file.io.frame_index.basic import (
+    BasicOffsetTableFrameIndexParser,
+    EmptyBasicTableOffsetException,
+)
+from wsidicom.file.io.frame_index.extended import ExtendedOffsetFrameIndexParser
+from wsidicom.file.io.frame_index.native_pixel_data import (
+    NativePixelDataFrameIndexParser,
+)
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.frame_index.offset_table_writer import (
     BotWriter,
     EotWriter,
     OffsetTableWriter,
 )
+from wsidicom.file.io.frame_index.parser import FrameIndexParser
+from wsidicom.file.io.frame_index.pixel_data import PixelDataFrameIndexParser
 
 __all__ = [
-    "Bot",
-    "EmptyBot",
-    "Eot",
-    "FrameIndex",
-    "NativePixelData",
+    "BasicOffsetTableFrameIndexParser",
+    "PixelDataFrameIndexParser",
+    "ExtendedOffsetFrameIndexParser",
+    "FrameIndexParser",
+    "NativePixelDataFrameIndexParser",
     "OffsetTableType",
     "BotWriter",
     "EotWriter",
     "OffsetTableWriter",
-    "EmptyBotException",
+    "EmptyBasicTableOffsetException",
 ]

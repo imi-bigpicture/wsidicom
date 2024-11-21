@@ -85,6 +85,9 @@ class WsiDicomIO:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
+    def __str__(self) -> str:
+        return f"{type(self).__name__}({self._filepath})"
+
     @property
     def owned(self) -> bool:
         """Return True if the stream is owned by this instance."""

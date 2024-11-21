@@ -19,10 +19,10 @@ from typing import Optional
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.frame_index.frame_index import FrameIndex
+from wsidicom.file.io.frame_index.parser import FrameIndexParser
 
 
-class EncapsulatedPixelData(FrameIndex):
+class EncapsulatedPixelDataFrameIndexParser(FrameIndexParser):
     def _validate_pixel_data_start(self):
         """Check that pixel data tag is present and that the tag length is
         set as undefined. Raises WsiDicomFileError otherwise.

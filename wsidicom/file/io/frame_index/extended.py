@@ -19,12 +19,12 @@ from venv import logger
 from pydicom.tag import Tag
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.frame_index.offset_table import OffsetTable
+from wsidicom.file.io.frame_index.offset_table import OffsetTableFrameIndexParser
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
 
 
-class Eot(OffsetTable):
+class ExtendedOffsetFrameIndexParser(OffsetTableFrameIndexParser):
     @property
     def offset_table_type(self) -> OffsetTableType:
         return OffsetTableType.EXTENDED

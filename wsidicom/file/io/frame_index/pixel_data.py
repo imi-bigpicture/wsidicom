@@ -19,12 +19,14 @@ from typing import List, Tuple
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.frame_index.bot import EmptyBotException
-from wsidicom.file.io.frame_index.encapsulated_pixel_data import EncapsulatedPixelData
+from wsidicom.file.io.frame_index.basic import EmptyBasicTableOffsetException
+from wsidicom.file.io.frame_index.encapsulated_pixel_data import (
+    EncapsulatedPixelDataFrameIndexParser,
+)
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 
 
-class EmptyBot(EncapsulatedPixelData):
+class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
     """Frame index parsed from reading the sequence of pixel data delimeters."""
 
     @property
@@ -68,5 +70,5 @@ class EmptyBot(EncapsulatedPixelData):
         self._validate_pixel_data_start()
         bot_length = self._read_bot_length()
         if bot_length is not None:
-            raise EmptyBotException()
+            raise EmptyBasicTableOffsetException()
         return self._file.tell()
