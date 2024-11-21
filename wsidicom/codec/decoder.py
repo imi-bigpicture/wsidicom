@@ -198,8 +198,8 @@ class Decoder(metaclass=ABCMeta):
             # Pillow only supports 8 bit color images
             return None
         decoders: Dict[str, Type[Decoder]] = {
-            "pillow": PillowDecoder,
             "imagecodecs": ImageCodecsDecoder,
+            "pillow": PillowDecoder,
             "pylibjpeg_rle": PylibjpegRleDecoder,
             "imagecodecs_rle": ImageCodecsRleDecoder,
             "pylibjpeg_ls": PyJpegLsDecoder,

@@ -538,7 +538,7 @@ class WsiDicom:
         level = self.pyramids.get(pyramid).get_closest_by_size(thumbnail_size)
         region = Region(position=Point(0, 0), size=level.size)
         image = level.get_region(region, z, path)
-        image.thumbnail((size), resample=settings.pillow_resampling_filter)
+        image.thumbnail(size, resample=settings.pillow_resampling_filter)
         return image
 
     def read_region(
