@@ -17,6 +17,7 @@
 import datetime
 from dataclasses import dataclass, replace
 from enum import Enum
+from math import sqrt
 from typing import Optional, Sequence, TypeVar
 
 from wsidicom.codec import LossyCompressionIsoStandard
@@ -180,6 +181,17 @@ class ImageCoordinateSystem:
             rotation=rotation,
             z_offset=z_offset,
         )
+
+    def origin_and_rotation_match(
+        self, other: "ImageCoordinateSystem", origin_threshold: float
+    ) -> bool:
+        if self.rotation != other.rotation:
+            return False
+        origin_distance = sqrt(
+            (self.origin.x - other.origin.x) ** 2
+            + (self.origin.y - other.origin.y) ** 2
+        )
+        return origin_distance <= origin_threshold
 
 
 @dataclass(frozen=True)
