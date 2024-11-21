@@ -54,7 +54,7 @@ class WsiDicomReader:
         stream: WsiDicomIO
             File to open.
         """
-        self._lock = threading.RLock()
+        self._lock = threading.Lock()
         self._stream = stream
         self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
         dataset = self._stream.read_dataset()

@@ -14,6 +14,7 @@
 
 import math
 import os
+import threading
 from pathlib import Path
 from typing import List, Optional, OrderedDict, Sequence, Tuple
 
@@ -79,6 +80,7 @@ class WsiDicomTestReader(WsiDicomReader):
         self._dataset = WsiDataset(dataset)
         self._frame_index_parser: Optional[FrameIndexParser] = None
         self._frame_index: Optional[List[Tuple[int, int]]] = None
+        self._lock = threading.Lock()
 
     @property
     def frame_count(self) -> int:
