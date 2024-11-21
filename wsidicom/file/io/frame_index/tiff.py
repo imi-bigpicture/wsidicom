@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional
 from PIL import Image as Pillow
 from PIL import UnidentifiedImageError
 
-from wsidicom.file.io.frame_index.empty_bot import EmptyBot
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
+from wsidicom.file.io.frame_index.pixel_data import PixelDataFrameIndexParser
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 
 
@@ -20,7 +20,7 @@ class TiffTags(Enum):
     TILEBYTECOUNTS = 325
 
 
-class TiffTable(EmptyBot):
+class TiffFrameIndexParser(PixelDataFrameIndexParser):
     """Frame index for TIFF, parsing the index from `TileOffsets`and TileByteCounts`
     if present. Only works with `DICOM-TIFF dual files."""
 

@@ -21,10 +21,12 @@ from typing import List, Tuple
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.frame_index.encapsulated_pixel_data import EncapsulatedPixelData
+from wsidicom.file.io.frame_index.encapsulated_pixel_data import (
+    EncapsulatedPixelDataFrameIndexParser,
+)
 
 
-class OffsetTable(EncapsulatedPixelData):
+class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
     @property
     @abstractmethod
     def bytes_per_item(self) -> int:

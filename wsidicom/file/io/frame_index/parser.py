@@ -15,7 +15,6 @@
 """Index for frame positions and length in image data."""
 
 from abc import abstractmethod
-from functools import cached_property
 from typing import List, Optional, Tuple
 
 from wsidicom.errors import WsiDicomFileError
@@ -24,7 +23,7 @@ from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.tags import PixelDataTag
 
 
-class FrameIndex:
+class FrameIndexParser:
     def __init__(self, file: WsiDicomIO, pixel_data_start: int, frame_count: int):
         self._file = file
         self._frame_count = frame_count
@@ -32,9 +31,7 @@ class FrameIndex:
         self._file.seek(self._pixel_data_start)
         self._pixels_start = self._get_pixels_start()
 
-    @cached_property
-    def index(self) -> List[Tuple[int, int]]:
-        """Return a list of frame positions and lengths."""
+    def parse_frame_index(self) -> List[Tuple[int, int]]:
         self._file.seek(self._pixel_data_start)
         index = self._get_index()
         self._validate_frame_index(index)
