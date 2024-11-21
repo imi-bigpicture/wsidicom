@@ -16,17 +16,17 @@
 
 from typing import List, Optional, Tuple
 
-from wsidicom.file.io.frame_index.offset_table import OffsetTable
+from wsidicom.file.io.frame_index.offset_table import OffsetTableFrameIndexParser
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 
 
-class EmptyBotException(Exception):
+class EmptyBasicTableOffsetException(Exception):
     """Exception raised when BOT was empty."""
 
     pass
 
 
-class Bot(OffsetTable):
+class BasicOffsetTableFrameIndexParser(OffsetTableFrameIndexParser):
     @property
     def offset_table_type(self) -> OffsetTableType:
         return OffsetTableType.BASIC
@@ -51,7 +51,7 @@ class Bot(OffsetTable):
         self._validate_pixel_data_start()
         bot_length = self._read_bot_length()
         if bot_length is None:
-            raise EmptyBotException()
+            raise EmptyBasicTableOffsetException()
         return self._file.tell()
 
     def _read_table(self) -> Optional[bytes]:
@@ -64,5 +64,5 @@ class Bot(OffsetTable):
         """
         bot_length = self._read_bot_length()
         if bot_length is None:
-            raise EmptyBotException()
+            raise EmptyBasicTableOffsetException()
         return self._file.read(bot_length, need_exact_length=True)

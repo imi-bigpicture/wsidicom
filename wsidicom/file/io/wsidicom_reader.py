@@ -15,7 +15,6 @@
 """Module for reading DICOM WSI files."""
 
 import threading
-from functools import cached_property
 from typing import List, Optional, Tuple
 
 from pydicom.tag import Tag
@@ -25,17 +24,17 @@ from upath import UPath
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotSupportedError
 from wsidicom.file.io.frame_index import (
-    Bot,
-    EmptyBot,
-    EmptyBotException,
-    Eot,
-    FrameIndex,
-    NativePixelData,
+    BasicOffsetTableFrameIndexParser,
+    EmptyBasicTableOffsetException,
+    ExtendedOffsetFrameIndexParser,
+    FrameIndexParser,
+    NativePixelDataFrameIndexParser,
     OffsetTableType,
+    PixelDataFrameIndexParser,
 )
-from wsidicom.file.io.frame_index.tiff_table import (
+from wsidicom.file.io.frame_index.tiff import (
     EmptyTiffFrameTagsException,
-    TiffTable,
+    TiffFrameIndexParser,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import ImageType, WsiDataset
@@ -55,7 +54,7 @@ class WsiDicomReader:
         stream: WsiDicomIO
             File to open.
         """
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._stream = stream
         self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
         dataset = self._stream.read_dataset()
@@ -78,6 +77,8 @@ class WsiDicomReader:
             raise WsiDicomNotSupportedError(
                 f"Non-supported transfer syntax {self.transfer_syntax}"
             )
+        self._frame_index_parser: Optional[FrameIndexParser] = None
+        self._frame_index: Optional[List[Tuple[int, int]]] = None
 
     def __enter__(self):
         return self
@@ -88,11 +89,12 @@ class WsiDicomReader:
     @property
     def offset_table_type(self) -> OffsetTableType:
         """Return type of the offset table, or None if not present."""
-        return self.frame_index.offset_table_type
+        if self._frame_index_parser is None:
+            with self._lock:
+                if self._frame_index_parser is None:
+                    self._frame_index_parser = self._get_frame_index_parser()
 
-    @cached_property
-    def frame_index(self) -> FrameIndex:
-        return self._get_frame_index()
+        return self._frame_index_parser.offset_table_type
 
     @property
     def dataset(self) -> WsiDataset:
@@ -119,9 +121,15 @@ class WsiDicomReader:
         return self.dataset.frame_offset
 
     @property
-    def frame_positions(self) -> List[Tuple[int, int]]:
+    def frame_index(self) -> List[Tuple[int, int]]:
         """Return frame positions and lengths."""
-        return self.frame_index.index
+        if self._frame_index is None:
+            with self._lock:
+                if self._frame_index_parser is None:
+                    self._frame_index_parser = self._get_frame_index_parser()
+                if self._frame_index is None:
+                    self._frame_index = self._frame_index_parser.parse_frame_index()
+        return self._frame_index
 
     @property
     def frame_count(self) -> int:
@@ -147,16 +155,16 @@ class WsiDicomReader:
             The frame as bytes
         """
         frame_index -= self.frame_offset
-        frame_position, frame_length = self.frame_positions[frame_index]
+        frame_position, frame_length = self.frame_index[frame_index]
         with self._lock:
             self._stream.seek(frame_position, 0)
             return self._stream.read(frame_length)
 
-    def _get_frame_index(self) -> FrameIndex:
+    def _get_frame_index_parser(self) -> FrameIndexParser:
         """Create frame index for stream."""
         self._stream.seek(self._pixel_data_position)
         if not self.transfer_syntax.is_encapsulated:
-            return NativePixelData(
+            return NativePixelDataFrameIndexParser(
                 self._stream,
                 self._pixel_data_position,
                 self._dataset.frame_count,
@@ -166,17 +174,25 @@ class WsiDicomReader:
             )
         pixel_data_or_eot_tag = Tag(self._stream.read_tag())
         if pixel_data_or_eot_tag == ExtendedOffsetTableTag:
-            return Eot(self._stream, self._pixel_data_position, self.frame_count)
+            return ExtendedOffsetFrameIndexParser(
+                self._stream, self._pixel_data_position, self.frame_count
+            )
         try:
-            return Bot(self._stream, self._pixel_data_position, self.frame_count)
-        except EmptyBotException:
+            return BasicOffsetTableFrameIndexParser(
+                self._stream, self._pixel_data_position, self.frame_count
+            )
+        except EmptyBasicTableOffsetException:
             pass
 
         try:
-            return TiffTable(self._stream, self._pixel_data_position, self.frame_count)
+            return TiffFrameIndexParser(
+                self._stream, self._pixel_data_position, self.frame_count
+            )
         except EmptyTiffFrameTagsException:
             self._stream.seek(self._pixel_data_position)
-            return EmptyBot(self._stream, self._pixel_data_position, self.frame_count)
+            return PixelDataFrameIndexParser(
+                self._stream, self._pixel_data_position, self.frame_count
+            )
 
     def close(self, force: Optional[bool] = False) -> None:
         """Close stream."""

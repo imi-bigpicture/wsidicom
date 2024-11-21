@@ -24,8 +24,8 @@ from pydicom.uid import (
 )
 
 from wsidicom.file.io.frame_index import BotWriter, EotWriter
-from wsidicom.file.io.frame_index.bot import Bot
-from wsidicom.file.io.frame_index.eot import Eot
+from wsidicom.file.io.frame_index.basic import BasicOffsetTableFrameIndexParser
+from wsidicom.file.io.frame_index.extended import ExtendedOffsetFrameIndexParser
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.tags import (
     ExtendedOffsetTableLengthsTag,
@@ -113,7 +113,7 @@ class TestOffsetTableWriter:
 
         # Assert
         buffer.seek(0)
-        Bot(buffer, 0, len(positions))
+        BasicOffsetTableFrameIndexParser(buffer, 0, len(positions))
 
     def test_write_eot(self, buffer: WsiDicomIO, positions: Sequence[int]):
         # Arrange
@@ -129,7 +129,7 @@ class TestOffsetTableWriter:
 
         # Assert
         buffer.seek(0)
-        Eot(buffer, 0, len(positions))
+        ExtendedOffsetFrameIndexParser(buffer, 0, len(positions))
 
     @staticmethod
     def assertEndOfFile(file: WsiDicomIO):

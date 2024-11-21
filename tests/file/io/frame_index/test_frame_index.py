@@ -26,10 +26,12 @@ from pydicom.uid import (
     JPEGBaseline8Bit,
 )
 
-from wsidicom.file.io.frame_index.bot import Bot
-from wsidicom.file.io.frame_index.empty_bot import EmptyBot
-from wsidicom.file.io.frame_index.eot import Eot
-from wsidicom.file.io.frame_index.native_pixel_data_frame import NativePixelData
+from wsidicom.file.io.frame_index.basic import BasicOffsetTableFrameIndexParser
+from wsidicom.file.io.frame_index.extended import ExtendedOffsetFrameIndexParser
+from wsidicom.file.io.frame_index.native_pixel_data import (
+    NativePixelDataFrameIndexParser,
+)
+from wsidicom.file.io.frame_index.pixel_data import PixelDataFrameIndexParser
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.geometry import Size
 from wsidicom.tags import (
@@ -60,13 +62,13 @@ def tiles(bits: int):
     ]
 
 
-class TestFrameIndex:
+class TestFrameIndexParser:
     @pytest.mark.parametrize(
         "transfer_syntax",
         [ImplicitVRLittleEndian, ExplicitVRLittleEndian, ExplicitVRBigEndian],
     )
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_read_native_pixel_data(
+    def test_read_native_pixel_data_offset_table_frame_positions(
         self, buffer: WsiDicomIO, tiles: List[bytes], transfer_syntax: UID, bits: int
     ):
         # Arrange
@@ -79,13 +81,16 @@ class TestFrameIndex:
             buffer.write(tile)
 
         # Act
-        frame_index = NativePixelData(buffer, 0, len(tiles), Size(1, 1), 1, bits)
+        parser = NativePixelDataFrameIndexParser(
+            buffer, 0, len(tiles), Size(1, 1), 1, bits
+        )
+        frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index.index == expected_frame_index
+        assert frame_index == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_empty_bot(self, buffer: WsiDicomIO, tiles: List[bytes]):
+    def test_pixel_data_offset_table(self, buffer: WsiDicomIO, tiles: List[bytes]):
         # Arrange
         EMPTY_BOT = 16
         ITEM_TAG_AND_LENGTH = 8
@@ -104,13 +109,14 @@ class TestFrameIndex:
         ]
 
         # Act
-        frame_index = EmptyBot(buffer, 0, len(tiles))
+        parser = PixelDataFrameIndexParser(buffer, 0, len(tiles))
+        frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index.index == expected_frame_index
+        assert frame_index == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_bot(self, buffer: WsiDicomIO, tiles: List[bytes]):
+    def test_basic_offset_table(self, buffer: WsiDicomIO, tiles: List[bytes]):
         # Arrange
         BOT = 16 + len(tiles) * 4
         ITEM_TAG_AND_LENGTH = 8
@@ -128,13 +134,14 @@ class TestFrameIndex:
         ]
 
         # Act
-        frame_index = Bot(buffer, 0, len(tiles))
+        parser = BasicOffsetTableFrameIndexParser(buffer, 0, len(tiles))
+        frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index.index == expected_frame_index
+        assert frame_index == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_eot(self, buffer: WsiDicomIO, tiles: List[bytes]):
+    def test_extended_offset_table(self, buffer: WsiDicomIO, tiles: List[bytes]):
         # Arrange
         EMPTY_BOT = 16
         ITEM_TAG_AND_LENGTH = 8
@@ -169,7 +176,8 @@ class TestFrameIndex:
         ]
 
         # Act
-        frame_index = Eot(buffer, 0, len(tiles))
+        parser = ExtendedOffsetFrameIndexParser(buffer, 0, len(tiles))
+        frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index.index == expected_frame_index
+        assert frame_index == expected_frame_index
