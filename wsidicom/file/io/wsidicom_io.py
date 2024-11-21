@@ -86,7 +86,7 @@ class WsiDicomIO:
         self.close()
 
     def __str__(self) -> str:
-        return f"{type(self).__name__}({self._stream.name})"
+        return f"{type(self).__name__}({self._filepath})"
 
     @property
     def owned(self) -> bool:

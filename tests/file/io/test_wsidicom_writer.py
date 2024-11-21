@@ -305,7 +305,7 @@ class TestWsiDicomWriter:
             filepath, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
         ) as read_file:
             read_table_type = read_file.offset_table_type
-            read_frame_positions = read_file.frame_index.index
+            read_frame_positions = read_file.frame_index
         assert read_table_type == OffsetTableType.NONE
         if transfer_syntax == ImplicitVRLittleEndian:
             offset = 8
