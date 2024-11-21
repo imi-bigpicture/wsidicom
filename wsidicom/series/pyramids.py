@@ -1,5 +1,6 @@
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Tuple
+from wsidicom.config import settings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.instance.instance import WsiInstance
 from wsidicom.series.pyramid import Pyramid
@@ -91,7 +92,9 @@ class Pyramids:
             Tuple[Optional[Tuple[float, float, float]], Optional[Tuple[int, float]]],
             List[WsiInstance],
         ] = defaultdict(list)
-        for instance in instances:
+        for instance in sorted(
+            instances, key=lambda x: x.size.to_tuple(), reverse=True
+        ):
             if instance.image_coordinate_system is not None:
                 image_coordinate_system = (
                     instance.image_coordinate_system.origin.x,
@@ -109,6 +112,28 @@ class Pyramids:
                 )
             else:
                 ext_depth_of_field = None
+
+            if instance.image_coordinate_system is not None:
+                existing_group_match = next(
+                    (
+                        (image_cs, ext_dof)
+                        for (image_cs, ext_dof), group in grouped_instances.items()
+                        if (
+                            all(
+                                instance.image_coordinate_system.origin_and_rotation_match(
+                                    inst.image_coordinate_system,
+                                    origin_threshold=settings.pyramids_origin_threshold,
+                                )
+                                for inst in group
+                            )
+                            and ext_depth_of_field == ext_dof
+                        )
+                    ),
+                    None,
+                )
+                if existing_group_match is not None:
+                    image_coordinate_system, ext_depth_of_field = existing_group_match
+
             grouped_instances[image_coordinate_system, ext_depth_of_field].append(
                 instance
             )
