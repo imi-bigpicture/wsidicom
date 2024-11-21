@@ -254,7 +254,7 @@ class TestWsiDicomWriter:
             filepath, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
         ) as reader:
             read_table_type = reader.offset_table_type
-            read_frame_positions = reader.frame_index.index
+            read_frame_positions = reader.frame_index
         TAG_BYTES = 4
         LENGTH_BYTES = 4
         frame_offsets = [
