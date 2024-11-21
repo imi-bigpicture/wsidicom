@@ -15,7 +15,7 @@
 import math
 import os
 from pathlib import Path
-from typing import List, Optional, OrderedDict, Sequence
+from typing import List, Optional, OrderedDict, Sequence, Tuple
 
 import pytest
 from PIL.Image import Image
@@ -37,6 +37,7 @@ from wsidicom.file.io import (
     WsiDicomReader,
     WsiDicomWriter,
 )
+from wsidicom.file.io.frame_index.parser import FrameIndexParser
 from wsidicom.file.io.wsidicom_writer import (
     WsiDicomEncapsulatedWriter,
     WsiDicomNativeWriter,
@@ -75,8 +76,9 @@ class WsiDicomTestReader(WsiDicomReader):
         dataset.SamplesPerPixel = samples_per_pixel
         dataset.NumberOfFrames = frame_count
         dataset.ImageType = ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]
-
         self._dataset = WsiDataset(dataset)
+        self._frame_index_parser: Optional[FrameIndexParser] = None
+        self._frame_index: Optional[List[Tuple[int, int]]] = None
 
     @property
     def frame_count(self) -> int:
