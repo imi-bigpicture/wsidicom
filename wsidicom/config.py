@@ -24,7 +24,7 @@ class Settings:
 
     def __init__(self) -> None:
         self._strict_uid_check = False
-        self._strict_level_size_check = True
+        self._strict_tile_size_check = True
         self._strict_attribute_check = False
         self._strict_specimen_identifier_check = True
         self._focal_plane_distance_threshold = 0.000001
@@ -70,11 +70,11 @@ class Settings:
     def strict_tile_size_check(self) -> bool:
         """If tile size need to match for levels. If `False` the tile size accross
         levels are allowed to be non-uniform."""
-        return self._strict_level_size_check
+        return self._strict_tile_size_check
 
     @strict_tile_size_check.setter
     def strict_tile_size_check(self, value: bool) -> None:
-        self._strict_level_size_check = value
+        self._strict_tile_size_check = value
 
     @property
     def focal_plane_distance_threshold(self) -> float:

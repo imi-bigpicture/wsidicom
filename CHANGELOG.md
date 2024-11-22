@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Cache for compressed and decompressed tiles.
+- Setting `strict_tile_size_check`, defaulting to `True`, to enable parsing of levels with  different tile size.
 
 ### Changed
 
