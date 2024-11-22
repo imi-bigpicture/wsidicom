@@ -57,6 +57,7 @@ class WsiDicomFileSource(Source):
         streams: Iterable[WsiDicomIO]
             Opened streams to read from.
         """
+        super().__init__()
         self._levels: List[WsiDicomReader] = []
         self._labels: List[WsiDicomReader] = []
         self._overviews: List[WsiDicomReader] = []
@@ -244,9 +245,8 @@ class WsiDicomFileSource(Source):
             )
         )
 
-    @classmethod
     def _create_instances(
-        cls,
+        self,
         files: Iterable[WsiDicomReader],
         series_uids: SlideUids,
         series_tile_size: Optional[Size] = None,
@@ -271,12 +271,14 @@ class WsiDicomFileSource(Source):
         Iterable[WsiInstancece]
             Iterable of created instances.
         """
-        filtered_files = cls._filter_files(files, series_uids, series_tile_size)
-        files_grouped_by_instance = cls._group_files(filtered_files)
+        filtered_files = self._filter_files(files, series_uids, series_tile_size)
+        files_grouped_by_instance = self._group_files(filtered_files)
         return (
             WsiInstance(
                 [file.dataset for file in instance_files],
-                WsiDicomFileImageData(instance_files),
+                WsiDicomFileImageData(
+                    instance_files, self._decoded_frame_cache, self._encoded_frame_cache
+                ),
             )
             for instance_files in files_grouped_by_instance.values()
         )

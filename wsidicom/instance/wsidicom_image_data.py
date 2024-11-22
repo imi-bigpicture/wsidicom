@@ -18,6 +18,7 @@ from typing import Iterator, List, Optional, Sequence
 
 from PIL.Image import Image
 
+from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
 from wsidicom.codec import Codec, Decoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
@@ -26,14 +27,22 @@ from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex
-from wsidicom.metadata.schema.dicom.image import ImageCoordinateSystemDicomSchema
 from wsidicom.metadata.image import ImageCoordinateSystem
+from wsidicom.metadata.schema.dicom.image import ImageCoordinateSystemDicomSchema
 
 
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
-    def __init__(self, datasets: Sequence[WsiDataset], codec: Codec):
+    def __init__(
+        self,
+        datasets: Sequence[WsiDataset],
+        codec: Codec,
+        decoded_frame_cache: DecodedFrameCache,
+        encoded_frame_cache: EncodedFrameCache,
+    ):
         self._datasets = datasets
         self._decoder = codec.decoder
+        self._decoded_frame_cache = decoded_frame_cache
+        self._encoded_frame_cache = encoded_frame_cache
         super().__init__(codec.encoder)
 
     @abstractmethod
@@ -54,6 +63,9 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
 
     def _get_tile_frames(self, frame_indices: Sequence[int]) -> Iterator[bytes]:
         return (self._get_tile_frame(frame_index) for frame_index in frame_indices)
+
+    def _get_decoded_tile_frame(self, frame_index: int) -> Image:
+        return self.decoder.decode(self._get_tile_frame(frame_index))
 
     @cached_property
     def tiles(self) -> TileIndex:
@@ -141,7 +153,10 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:
             return self.blank_encoded_tile
-        return self._get_tile_frame(frame_index)
+
+        return self._encoded_frame_cache.get_tile_frame(
+            id(self), frame_index, self._get_tile_frame
+        )
 
     def _get_decoded_tile(self, tile: Point, z: float, path: str) -> Image:
         """
@@ -164,8 +179,9 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:
             return self.blank_tile
-        frame = self._get_tile_frame(frame_index)
-        return self.decoder.decode(frame)
+        return self._decoded_frame_cache.get_tile_frame(
+            id(self), frame_index, self._get_decoded_tile_frame
+        )
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """

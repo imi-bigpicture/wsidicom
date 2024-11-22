@@ -18,6 +18,7 @@ from typing import List, OrderedDict, Sequence, Union
 from pydicom.uid import UID
 from upath import UPath
 
+from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.io import WsiDicomReader
@@ -32,7 +33,10 @@ class WsiDicomFileImageData(WsiDicomImageData):
     """
 
     def __init__(
-        self, readers: Union[WsiDicomReader, Sequence[WsiDicomReader]]
+        self,
+        readers: Union[WsiDicomReader, Sequence[WsiDicomReader]],
+        decoded_frame_cache: DecodedFrameCache,
+        encoded_frame_cache: EncodedFrameCache,
     ) -> None:
         """
         Create WsiDicomFileImageData from frame data from readers.
@@ -59,7 +63,12 @@ class WsiDicomFileImageData(WsiDicomImageData):
             dataset.tile_size,
             dataset.photometric_interpretation,
         )
-        super().__init__([file.dataset for file in self._readers.values()], codec)
+        super().__init__(
+            [file.dataset for file in self._readers.values()],
+            codec,
+            decoded_frame_cache,
+            encoded_frame_cache,
+        )
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._readers.values()})"

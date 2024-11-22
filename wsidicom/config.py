@@ -33,6 +33,8 @@ class Settings:
         self._strict_specimen_identifier_check = True
         self._ignore_specimen_preparation_step_on_validation_error = True
         self._truncate_long_dicom_strings = False
+        self._decoded_frame_cache_size = 1000
+        self._encoded_frame_cache_size = 1000
 
     @property
     def strict_uid_check(self) -> bool:
@@ -133,6 +135,24 @@ class Settings:
     @truncate_long_dicom_strings_on_validation_error.setter
     def truncate_long_dicom_strings_on_validation_error(self, value: bool) -> None:
         self._truncate_long_dicom_strings = value
+
+    @property
+    def decoded_frame_cache_size(self) -> int:
+        """Size of the decoded frame cache."""
+        return self._decoded_frame_cache_size
+
+    @decoded_frame_cache_size.setter
+    def decoded_frame_cache_size(self, value: int) -> None:
+        self._decoded_frame_cache_size = value
+
+    @property
+    def encoded_frame_cache_size(self) -> int:
+        """Size of the encoded frame cache."""
+        return self._encoded_frame_cache_size
+
+    @encoded_frame_cache_size.setter
+    def encoded_frame_cache_size(self, value: int) -> None:
+        self._encoded_frame_cache_size = value
 
 
 settings = Settings()

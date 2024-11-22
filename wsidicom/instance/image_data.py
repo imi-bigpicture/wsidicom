@@ -250,28 +250,6 @@ class ImageData(metaclass=ABCMeta):
     def encoder(self) -> Encoder:
         return self._encoder
 
-    def get_decoded_tiles(
-        self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[Image]:
-        """
-        Return Pillow images for tiles.
-
-        Parameters
-        ----------
-        tiles: Iterable[Point]
-            Tiles to get.
-        z: float
-            Z coordinate.
-        path: str
-            Optical path.
-
-        Returns
-        -------
-        Iterator[Image]
-            Tiles as Images.
-        """
-        return self._get_decoded_tiles(tiles, z, path)
-
     def get_encoded_tiles(
         self,
         tiles: Iterable[Point],
@@ -392,7 +370,7 @@ class ImageData(metaclass=ABCMeta):
     def get_tiles(self, tiles: Iterable[Point], z: float, path: str) -> Iterator[Image]:
         return (
             self._crop_tile(tile_point, tile)
-            for tile_point, tile in zip(tiles, self.get_decoded_tiles(tiles, z, path))
+            for tile_point, tile in zip(tiles, self._get_decoded_tiles(tiles, z, path))
         )
 
     def get_scaled_encoded_tile(
@@ -446,7 +424,7 @@ class ImageData(metaclass=ABCMeta):
         if cropped_tile_region.size == self.tile_size:
             return self._get_encoded_tile(tile, z, path)
         image = self._get_decoded_tile(tile, z, path)
-        image.crop(box=cropped_tile_region.box_from_origin)
+        image = image.crop(box=cropped_tile_region.box_from_origin)
         return self.encoder.encode(image)
 
     def stitch_tiles(self, region: Region, path: str, z: float, threads: int) -> Image:
@@ -579,7 +557,7 @@ class ImageData(metaclass=ABCMeta):
         # Check if tile is an edge tile that should be cropped
         if tile_crop.size != self.tile_size:
             return tile.crop(box=tile_crop.box)
-        return tile
+        return tile.copy()
 
     def _paste_tiles(
         self,
@@ -616,7 +594,7 @@ class ImageData(metaclass=ABCMeta):
         def thread_paste(tile_points: Iterable[Point]) -> None:
             tile_points = list(tile_points)
             for tile_point, tile in zip(
-                tile_points, self.get_decoded_tiles(tile_points, z, path)
+                tile_points, self._get_decoded_tiles(tile_points, z, path)
             ):
                 paste_method(image, tile_point, tile)
 

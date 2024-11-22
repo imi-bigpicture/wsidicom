@@ -80,7 +80,7 @@ class WsiDicomWebSource(Source):
             UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
 
         """
-
+        super().__init__()
         self._level_instances: List[WsiInstance] = []
         self._label_instances: List[WsiInstance] = []
         self._overview_instances: List[WsiInstance] = []
@@ -114,7 +114,13 @@ class WsiDicomWebSource(Source):
             detected_transfer_syntaxes_by_image_type[dataset.image_type].add(
                 transfer_syntax
             )
-            image_data = WsiDicomWebImageData(client, dataset, transfer_syntax)
+            image_data = WsiDicomWebImageData(
+                client,
+                dataset,
+                transfer_syntax,
+                self._decoded_frame_cache,
+                self._encoded_frame_cache,
+            )
             return WsiInstance(dataset, image_data)
 
         instance_uids = (

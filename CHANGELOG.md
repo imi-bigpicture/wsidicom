@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Cache for compressed and decompressed tiles.
+
 ### Changed
 
 - Default to placing the image at the middle of the slide if no `TotalPixelMatrixOriginSequence` is set when producing DICOM metadata .
