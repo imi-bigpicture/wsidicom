@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import platform
 from hashlib import md5
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -19,6 +20,7 @@ from typing import Any, Callable, Dict, Optional
 import numpy as np
 import pytest
 from PIL import Image as Pillow
+from pydicom.uid import JPEG2000, UID
 
 from tests.conftest import WsiInputType, WsiTestDefinitions
 from wsidicom import WsiDicom
@@ -35,15 +37,19 @@ from wsidicom.series.pyramid import Pyramid
     ],
 )
 class TestWsiDicomIntegration:
-    @pytest.mark.parametrize(["wsi_name", "region"], WsiTestDefinitions.read_region())
+    @pytest.mark.parametrize(
+        ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_region()
+    )
     def test_read_region(
         self,
-        wsi_name: Path,
+        wsi_name: str,
+        transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: Dict[str, Any],
     ):
         # Arrange
+        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -58,16 +64,18 @@ class TestWsiDicomIntegration:
         assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(
-        ["wsi_name", "region"], WsiTestDefinitions.read_region_mm()
+        ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_region_mm()
     )
     def test_read_region_mm(
         self,
-        wsi_name: Path,
+        wsi_name: str,
+        transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: Dict[str, Any],
     ):
         # Arrange
+        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -82,16 +90,18 @@ class TestWsiDicomIntegration:
         assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(
-        ["wsi_name", "region"], WsiTestDefinitions.read_region_mpp()
+        ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_region_mpp()
     )
     def test_read_region_mpp(
         self,
-        wsi_name: Path,
+        wsi_name: str,
+        transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: Dict[str, Any],
     ):
         # Arrange
+        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -105,15 +115,19 @@ class TestWsiDicomIntegration:
         checksum = md5(im.tobytes()).hexdigest()
         assert checksum == region["md5"], (region, checksum)
 
-    @pytest.mark.parametrize(["wsi_name", "region"], WsiTestDefinitions.read_tile())
+    @pytest.mark.parametrize(
+        ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_tile()
+    )
     def test_read_tile(
         self,
-        wsi_name: Path,
+        wsi_name: str,
+        transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: Dict[str, Any],
     ):
         # Arrange
+        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -127,16 +141,19 @@ class TestWsiDicomIntegration:
         assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(
-        ["wsi_name", "region"], WsiTestDefinitions.read_encoded_tile()
+        ["wsi_name", "transfer_syntax", "region"],
+        WsiTestDefinitions.read_encoded_tile(),
     )
     def test_read_encoded_tile(
         self,
-        wsi_name: Path,
+        wsi_name: str,
+        transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: Dict[str, Any],
     ):
         # Arrange
+        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -150,16 +167,18 @@ class TestWsiDicomIntegration:
         assert checksum == region["md5"], (region, checksum)
 
     @pytest.mark.parametrize(
-        ["wsi_name", "region"], WsiTestDefinitions.read_thumbnail()
+        ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_thumbnail()
     )
     def test_read_thumbnail(
         self,
-        wsi_name: Path,
+        wsi_name: str,
+        transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: Dict[str, Any],
     ):
         # Arrange
+        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -174,9 +193,9 @@ class TestWsiDicomIntegration:
     )
     def test_number_of_levels(
         self,
-        wsi_name: Path,
+        wsi_name: str,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         expected_level_count: int,
     ):
         # Arrange
@@ -189,16 +208,19 @@ class TestWsiDicomIntegration:
         assert levels_count == expected_level_count
 
     @pytest.mark.parametrize(
-        ["wsi_name", "expected_label_hash"], WsiTestDefinitions.label_hash()
+        ["wsi_name", "transfer_syntax", "expected_label_hash"],
+        WsiTestDefinitions.label_hash(),
     )
-    def test_has_label(
+    def test_read_label(
         self,
-        wsi_name: Path,
+        wsi_name: str,
+        transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         expected_label_hash: Optional[bool],
     ):
         # Arrange
+        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -211,16 +233,19 @@ class TestWsiDicomIntegration:
         assert checksum == expected_label_hash
 
     @pytest.mark.parametrize(
-        ["wsi_name", "expected_overview_hash"], WsiTestDefinitions.overview_hash()
+        ["wsi_name", "transfer_syntax", "expected_overview_hash"],
+        WsiTestDefinitions.overview_hash(),
     )
-    def test_has_overview(
+    def test_read_overview(
         self,
-        wsi_name: Path,
+        wsi_name: str,
+        transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         expected_overview_hash: Optional[str],
     ):
         # Arrange
+        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -253,9 +278,9 @@ class TestWsiDicomIntegration:
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_levels_returns_selected_pyramid(
         self,
-        wsi_name: Path,
+        wsi_name: str,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
     ):
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
@@ -270,9 +295,9 @@ class TestWsiDicomIntegration:
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_pyramid_returns_selected_pyramid(
         self,
-        wsi_name: Path,
+        wsi_name: str,
         input_type: WsiInputType,
-        wsi_factory: Callable[[Path, WsiInputType], WsiDicom],
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
     ):
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
@@ -283,3 +308,8 @@ class TestWsiDicomIntegration:
         # Assert
         assert isinstance(pyramid, Pyramid)
         assert pyramid == wsi.pyramids[wsi.selected_pyramid]
+
+    def _skip_lossy_jpeg2000_tests_on_macos(self, transfer_syntax: UID):
+        """Lossy Jpeg2000 does not produce same output on macOS."""
+        if platform.system() == "Darwin" and transfer_syntax == JPEG2000:
+            pytest.skip("Lossy JPEG2000 does not produce same output on macOS.")
