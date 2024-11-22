@@ -17,6 +17,7 @@ from typing import Iterable, Iterator
 from PIL.Image import Image
 from pydicom.uid import UID
 
+from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
 from wsidicom.codec import Codec
 from wsidicom.geometry import Point
 from wsidicom.instance import WsiDataset, WsiDicomImageData
@@ -35,6 +36,8 @@ class WsiDicomWebImageData(WsiDicomImageData):
         client: WsiDicomWebClient,
         dataset: WsiDataset,
         transfer_syntax: UID,
+        decoded_frame_cache: DecodedFrameCache,
+        encoded_frame_cache: EncodedFrameCache,
     ):
         """
         Create WsiDicomWebImageData from  dataset and provided client.
@@ -61,7 +64,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
             dataset.tile_size,
             dataset.photometric_interpretation,
         )
-        super().__init__([dataset], codec)
+        super().__init__([dataset], codec, decoded_frame_cache, encoded_frame_cache)
 
     @property
     def transfer_syntax(self) -> UID:
@@ -89,15 +92,17 @@ class WsiDicomWebImageData(WsiDicomImageData):
             Tiles as Images.
         """
         frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
-
-        frames = self._get_tile_frames(
-            frame_index for frame_index in frame_indices if frame_index != -1
+        frames = self._decoded_frame_cache.get_tile_frames(
+            id(self),
+            [frame_index for frame_index in frame_indices if frame_index != -1],
+            self._get_decoded_tile_frames,
         )
+
         for frame_index in frame_indices:
             if frame_index == -1:
                 yield self.blank_tile
-            frame = next(frames)
-            yield self.decoder.decode(frame)
+            else:
+                yield next(frames)
 
     def _get_encoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
@@ -120,14 +125,16 @@ class WsiDicomWebImageData(WsiDicomImageData):
             Tiles as Images.
         """
         frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
-
-        frames = self._get_tile_frames(
-            frame_index for frame_index in frame_indices if frame_index != -1
+        frames = self._encoded_frame_cache.get_tile_frames(
+            id(self),
+            [frame_index for frame_index in frame_indices if frame_index != -1],
+            self._get_tile_frames,
         )
         for frame_index in frame_indices:
             if frame_index == -1:
                 yield self.blank_encoded_tile
-            return next(frames)
+            else:
+                yield next(frames)
 
     def _get_tile_frame(self, frame_index: int) -> bytes:
         # First frame for DICOM web is 1.
@@ -150,3 +157,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
             [frame_index + 1 for frame_index in frame_indices],
             self._transfer_syntax,
         )
+
+    def _get_decoded_tile_frames(self, frame_indices: Iterable[int]) -> Iterator[Image]:
+        for frame in self._get_tile_frames(frame_indices):
+            yield self.decoder.decode(frame)
