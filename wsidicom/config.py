@@ -24,13 +24,14 @@ class Settings:
 
     def __init__(self) -> None:
         self._strict_uid_check = False
+        self._strict_tile_size_check = True
         self._strict_attribute_check = False
+        self._strict_specimen_identifier_check = True
         self._focal_plane_distance_threshold = 0.000001
         self._pyramids_origin_threshold = 0.02
         self._prefered_decoder: Optional[str] = None
         self._open_web_theads: Optional[int] = None
         self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
-        self._strict_specimen_identifier_check = True
         self._ignore_specimen_preparation_step_on_validation_error = True
         self._truncate_long_dicom_strings = False
         self._decoded_frame_cache_size = 1000
@@ -53,6 +54,27 @@ class Settings:
     @strict_attribute_check.setter
     def strict_attribute_check(self, value: bool) -> None:
         self._strict_attribute_check = value
+
+    @property
+    def strict_specimen_identifier_check(self) -> bool:
+        """If `True` the issuer of two specimen identifiers needs to match or both be
+        None for the identifiers to match. If `False` the identifiers will match also if
+        either issuer is None. Either way the identifier needs to match."""
+        return self._strict_specimen_identifier_check
+
+    @strict_specimen_identifier_check.setter
+    def strict_specimen_identifier_check(self, value: bool) -> None:
+        self._strict_specimen_identifier_check = value
+
+    @property
+    def strict_tile_size_check(self) -> bool:
+        """If tile size need to match for levels. If `False` the tile size accross
+        levels are allowed to be non-uniform."""
+        return self._strict_tile_size_check
+
+    @strict_tile_size_check.setter
+    def strict_tile_size_check(self, value: bool) -> None:
+        self._strict_tile_size_check = value
 
     @property
     def focal_plane_distance_threshold(self) -> float:
@@ -103,17 +125,6 @@ class Settings:
     @pillow_resampling_filter.setter
     def pillow_resampling_filter(self, value: Pillow.Resampling) -> None:
         self._pillow_resampling_filter = value
-
-    @property
-    def strict_specimen_identifier_check(self) -> bool:
-        """If `True` the issuer of two specimen identifiers needs to match or both be
-        None for the identifiers to match. If `False` the identifiers will match also if
-        either issuer is None. Either way the identifier needs to match."""
-        return self._strict_specimen_identifier_check
-
-    @strict_specimen_identifier_check.setter
-    def strict_specimen_identifier_check(self, value: bool) -> None:
-        self._strict_specimen_identifier_check = value
 
     @property
     def ignore_specimen_preparation_step_on_validation_error(self) -> bool:

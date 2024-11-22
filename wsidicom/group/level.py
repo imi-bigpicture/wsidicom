@@ -17,12 +17,12 @@ from typing import Iterable, Optional
 
 from PIL.Image import Image
 
+from wsidicom import settings
 from wsidicom.errors import WsiDicomNoResolutionError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Group
 from wsidicom.instance import WsiInstance
 from wsidicom.stringprinting import dict_pretty_str
-from wsidicom import settings
 
 
 class Level(Group):
@@ -110,7 +110,10 @@ class Level(Group):
         return (
             self.uids.matches(other_level.uids)
             and other_level.image_type == self.image_type
-            and other_level.tile_size == self.tile_size
+            and (
+                not settings.strict_tile_size_check
+                or other_level.tile_size == self.tile_size
+            )
         )
 
     def get_highest_level(self) -> int:
