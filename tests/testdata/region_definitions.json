@@ -467,7 +467,7 @@
         "levels": 3,
         "label": "6634ad9dbe8c8f074266e21ef8eb6c12",
         "overview": "3d792eb3441c58c5d881cb0cf21a397e",
-        "level_transfer_syntax": " 1.2.840.10008.1.2.4.91",
+        "level_transfer_syntax": "1.2.840.10008.1.2.4.91",
         "label_transfer_syntax": "1.2.840.10008.1.2.1",
         "overview_transfer_syntax": "1.2.840.10008.1.2.1",
         "tiled": "sparse",
@@ -552,7 +552,7 @@
         "label": "5a9a991e350f4fe29af08b7e3bcc56df",
         "overview": "c3d8f41772dd26a19121f4f87d9f520c",
         "tiled": "sparse",
-        "level_transfer_syntax": " 1.2.840.10008.1.2.4.91",
+        "level_transfer_syntax": "1.2.840.10008.1.2.4.91",
         "label_transfer_syntax": "1.2.840.10008.1.2.1",
         "overview_transfer_syntax": "1.2.840.10008.1.2.1",
         "read_region": [
