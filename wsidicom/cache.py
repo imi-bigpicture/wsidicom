@@ -48,6 +48,7 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
 
 class FrameCache(Generic[CacheItemType]):
     def __init__(self, size: int):
+        self._size = size
         self._lru_cache = LRU[Tuple[int, int], CacheItemType](size)
 
     def get_tile_frame(
@@ -56,6 +57,8 @@ class FrameCache(Generic[CacheItemType]):
         frame_index: int,
         frame_getter: Callable[[int], CacheItemType],
     ) -> CacheItemType:
+        if self._size < 1:
+            return frame_getter(frame_index)
         frame = self._lru_cache.get((image_data_id, frame_index))
         if frame is None:
             frame = frame_getter(frame_index)
@@ -68,6 +71,8 @@ class FrameCache(Generic[CacheItemType]):
         frame_indices: Sequence[int],
         frames_getter: Callable[[Iterable[int]], Iterator[CacheItemType]],
     ) -> Iterator[CacheItemType]:
+        if self._size < 1:
+            return frames_getter(frame_indices)
         cached_frames = {
             frame_index: frame
             for (frame_index, frame) in (
