@@ -31,6 +31,7 @@ from pydicom.fileset import FileSet
 from pydicom.uid import UID, MediaStorageDirectoryStorage
 from upath import UPath
 
+from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomNotFoundError,
     WsiDicomNotSupportedError,
@@ -99,7 +100,9 @@ class WsiDicomFileSource(Source):
     def level_instances(self) -> Iterable[WsiInstance]:
         """The level instances parsed from the source."""
         return self._create_instances(
-            self._levels, self._slide_uids, self._base_tile_size
+            self._levels,
+            self._slide_uids,
+            self._base_tile_size if settings.strict_tile_size_check else None,
         )
 
     @property
