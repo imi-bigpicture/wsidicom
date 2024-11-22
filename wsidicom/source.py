@@ -15,6 +15,8 @@
 from abc import ABCMeta, abstractmethod
 from typing import Iterable
 
+from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
+from wsidicom.config import settings
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
 
@@ -29,6 +31,10 @@ class Source(metaclass=ABCMeta):
     A source should be initiated with a path or similar, and parse the content into
     instances.
     """
+
+    def __init__(self):
+        self._decoded_frame_cache = DecodedFrameCache(settings.decoded_frame_cache_size)
+        self._encoded_frame_cache = EncodedFrameCache(settings.encoded_frame_cache_size)
 
     def __enter__(self):
         return self
@@ -70,3 +76,8 @@ class Source(metaclass=ABCMeta):
     def close(self) -> None:
         """Close any opened resources (such as files)."""
         raise NotImplementedError()
+
+    def clear_cache(self) -> None:
+        """Clear the frame caches."""
+        self._decoded_frame_cache.clear()
+        self._encoded_frame_cache.clear()

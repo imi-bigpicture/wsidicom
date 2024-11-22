@@ -815,6 +815,10 @@ class WsiDicom:
         if self._source_owned:
             self._source.close()
 
+    def clear_cache(self):
+        """Clear cache of encoded and decoded tiles."""
+        self._source.clear_cache()
+
     def _validate_collection(self) -> SlideUids:
         """
         Check that no files or instance in collection is duplicate, and, if

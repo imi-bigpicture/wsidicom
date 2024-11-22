@@ -33,8 +33,10 @@ from pydicom.uid import UID
 from pydicom.valuerep import MAX_VALUE_LEN
 from upath import UPath
 
+from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.config import settings
 from wsidicom.file.io import (
     OffsetTableType,
     WsiDicomReader,
@@ -101,6 +103,8 @@ class WsiDicomFileTarget(Target):
         self._filepaths: List[UPath] = []
         self._opened_files: List[WsiDicomReader] = []
         self._file_options = file_options
+        self._decoded_frame_cache = DecodedFrameCache(settings.decoded_frame_cache_size)
+        self._encoded_frame_cache = EncodedFrameCache(settings.encoded_frame_cache_size)
         super().__init__(
             uid_generator,
             workers,
@@ -273,7 +277,10 @@ class WsiDicomFileTarget(Target):
         self._opened_files.extend(readers)
         return [
             WsiInstance(
-                [reader.dataset for reader in readers], WsiDicomFileImageData(readers)
+                [reader.dataset for reader in readers],
+                WsiDicomFileImageData(
+                    readers, self._decoded_frame_cache, self._encoded_frame_cache
+                ),
             )
         ]
 
