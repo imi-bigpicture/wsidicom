@@ -92,47 +92,76 @@ class WsiTestDefinitions:
         )
 
     @classmethod
-    def read_region(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_dict("read_region")
+    def read_region(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+        return cls._get_test_values_and_transfer_syntax(
+            "read_region", "level_transfer_syntax"
+        )
 
     @classmethod
-    def read_region_mm(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_dict("read_region_mm")
+    def read_region_mm(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+        return cls._get_test_values_and_transfer_syntax(
+            "read_region_mm", "level_transfer_syntax"
+        )
 
     @classmethod
-    def read_region_mpp(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_dict("read_region_mpp")
+    def read_region_mpp(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+        return cls._get_test_values_and_transfer_syntax(
+            "read_region_mpp", "level_transfer_syntax"
+        )
 
     @classmethod
-    def read_tile(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_dict("read_tile")
+    def read_tile(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+        return cls._get_test_values_and_transfer_syntax(
+            "read_tile", "level_transfer_syntax"
+        )
 
     @classmethod
-    def read_encoded_tile(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_dict("read_encoded_tile")
+    def read_encoded_tile(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+        return cls._get_test_values_and_transfer_syntax(
+            "read_encoded_tile", "level_transfer_syntax"
+        )
 
     @classmethod
-    def read_thumbnail(cls) -> Iterable[Tuple[str, Dict[str, Any]]]:
-        return cls._get_dict("read_thumbnail")
+    def read_thumbnail(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+        return cls._get_test_values_and_transfer_syntax(
+            "read_thumbnail", "level_transfer_syntax"
+        )
 
     @classmethod
     def levels(cls) -> Iterable[Tuple[str, int]]:
         return cls._get_parameter("levels")
 
     @classmethod
-    def label_hash(cls) -> Iterable[Tuple[str, Optional[str]]]:
-        return cls._get_parameter("label")
+    def label_hash(cls) -> Iterable[Tuple[str, UID, Optional[str]]]:
+        return cls._get_parameter_and_transfer_syntax("label", "label_transfer_syntax")
 
     @classmethod
-    def overview_hash(cls) -> Iterable[Tuple[str, Optional[str]]]:
-        return cls._get_parameter("overview")
+    def overview_hash(cls) -> Iterable[Tuple[str, UID, Optional[str]]]:
+        return cls._get_parameter_and_transfer_syntax(
+            "overview", "overview_transfer_syntax"
+        )
 
     @classmethod
-    def _get_dict(cls, region_name: str) -> Iterable[Tuple[str, Dict[str, Any]]]:
+    def _get_test_values_and_transfer_syntax(
+        cls, test_value_name: str, transfer_syntax_name: str
+    ) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
         return [
-            (wsi_name, region)
+            (wsi_name, UID(wsi_definition[transfer_syntax_name]), region)
             for wsi_name, wsi_definition in cls.test_definitions.items()
-            for region in wsi_definition[region_name]
+            for region in wsi_definition[test_value_name]
+        ]
+
+    @classmethod
+    def _get_parameter_and_transfer_syntax(
+        cls, parameter_name: str, transfer_syntax_name: str
+    ) -> Iterable[Tuple[str, UID, Any]]:
+        return [
+            (
+                wsi_name,
+                UID(wsi_definition[transfer_syntax_name]),
+                wsi_definition[parameter_name],
+            )
+            for wsi_name, wsi_definition in cls.test_definitions.items()
         ]
 
     @classmethod
