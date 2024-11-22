@@ -819,6 +819,10 @@ class WsiDicom:
         """Clear cache of encoded and decoded tiles."""
         self._source.clear_cache()
 
+    def resize_cache(self, size: int):
+        """Resize cache of encoded and decoded tiles."""
+        self._source.resize_cache(size)
+
     def _validate_collection(self) -> SlideUids:
         """
         Check that no files or instance in collection is duplicate, and, if

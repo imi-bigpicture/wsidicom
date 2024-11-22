@@ -28,6 +28,10 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
         self._cache: Dict[CacheKeyType, CacheItemType] = {}
         self._maxsize = maxsize
 
+    @property
+    def maxsize(self) -> int:
+        return self._maxsize
+
     def get(self, key: CacheKeyType) -> Optional[CacheItemType]:
         with self._lock:
             item = self._cache.pop(key, None)
@@ -45,6 +49,13 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
         with self._lock:
             self._cache.clear()
 
+    def resize(self, maxsize: int) -> None:
+        with self._lock:
+            self._maxsize = maxsize
+            if len(self._cache) > maxsize:
+                for _ in range(len(self._cache) - maxsize):
+                    self._cache.pop(next(iter(self._cache)))
+
 
 class FrameCache(Generic[CacheItemType]):
     def __init__(self, size: int):
@@ -57,7 +68,7 @@ class FrameCache(Generic[CacheItemType]):
         frame_index: int,
         frame_getter: Callable[[int], CacheItemType],
     ) -> CacheItemType:
-        if self._size < 1:
+        if self._lru_cache.maxsize < 1:
             return frame_getter(frame_index)
         frame = self._lru_cache.get((image_data_id, frame_index))
         if frame is None:
@@ -71,7 +82,7 @@ class FrameCache(Generic[CacheItemType]):
         frame_indices: Sequence[int],
         frames_getter: Callable[[Iterable[int]], Iterator[CacheItemType]],
     ) -> Iterator[CacheItemType]:
-        if self._size < 1:
+        if self._lru_cache.maxsize < 1:
             return frames_getter(frame_indices)
         cached_frames = {
             frame_index: frame
@@ -95,6 +106,9 @@ class FrameCache(Generic[CacheItemType]):
 
     def clear(self) -> None:
         self._lru_cache.clear()
+
+    def resize(self, size: int) -> None:
+        self._lru_cache.resize(size)
 
 
 EncodedFrameCache = FrameCache[bytes]

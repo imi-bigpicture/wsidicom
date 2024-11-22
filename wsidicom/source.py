@@ -81,3 +81,8 @@ class Source(metaclass=ABCMeta):
         """Clear the frame caches."""
         self._decoded_frame_cache.clear()
         self._encoded_frame_cache.clear()
+
+    def resize_cache(self, size: int) -> None:
+        """Clear the frame caches."""
+        self._decoded_frame_cache.resize(size)
+        self._encoded_frame_cache.resize(size)
