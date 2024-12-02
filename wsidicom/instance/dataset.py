@@ -363,7 +363,7 @@ class WsiDataset(Dataset):
     @property
     def ext_depth_of_field_plane_distance(self) -> Optional[float]:
         """Return total focal depth used for extended depth of field."""
-        return self._ext_depth_of_field[0]
+        return self._ext_depth_of_field[2]
 
     @cached_property
     def focus_method(self) -> str:
