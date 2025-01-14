@@ -75,7 +75,7 @@ class WsiDicomStreamOpener:
         if isinstance(files, (str, Path, UPath)):
             files = [files]
         for file in files:
-            for stream in self._open_streams(str(file), "rb"):
+            for stream in self._open_streams(file, "rb"):
                 try:
                     if hasattr(stream, "path"):
                         path = UPath(getattr(stream, "path"))
@@ -123,14 +123,14 @@ class WsiDicomStreamOpener:
 
     def _open_streams(
         self,
-        path: str,
+        path: Union[str, Path, UPath],
         mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]],
     ) -> Iterator[Union[BinaryIO, AbstractBufferedFile]]:
         """Open streams from path. If path is a directory, open all files in directory.
 
         Parameters
         ----------
-        path: str
+        path: Union[str, Path, UPath],
             Path to open.
         mode: Union[Literal["rb"], Literal["r+b"], Literal["w+b"]]
             Mode to open in.
@@ -140,7 +140,10 @@ class WsiDicomStreamOpener:
         Iterator[Union[BinaryIO, AbstractBufferedFile]]
             Opened streams.
         """
-        fs, path = self._open_filesystem(path)
+        if isinstance(path, UPath):
+            fs, path = path.fs, path.path
+        else:
+            fs, path = self._open_filesystem(str(path))
         if fs.isdir(str(path)):
             files = (file for file in fs.ls(str(path), detail=False) if fs.isfile(file))
         elif fs.isfile(str(path)):
