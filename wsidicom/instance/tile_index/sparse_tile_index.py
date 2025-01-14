@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections import defaultdict
 from functools import cached_property
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
@@ -165,19 +166,13 @@ class SparseTileIndex(TileIndex):
         Dict[Tuple[float, str], SparseTilePlane]
             Dict of planes with focal plane and optical identifier as key.
         """
-        planes: Dict[Tuple[float, str], SparseTilePlane] = {}
-
+        planes: Dict[Tuple[float, str], SparseTilePlane] = defaultdict(
+            lambda: SparseTilePlane(self.tiled_size)
+        )
         for dataset in self._datasets:
             frame_sequence = dataset.frame_sequence
             for i, frame in enumerate(frame_sequence):
                 (tile, z) = self._read_frame_coordinates(frame)
                 identifier = dataset.read_optical_path_identifier(frame)
-
-                try:
-                    plane = planes[(z, identifier)]
-                except KeyError:
-                    plane = SparseTilePlane(self.tiled_size)
-                    planes[(z, identifier)] = plane
-                plane[tile] = i + dataset.frame_offset
-
+                planes[(z, identifier)][tile] = i + dataset.frame_offset
         return planes

@@ -41,6 +41,7 @@ from wsidicom.errors import (
 )
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.image_data import ImageData
+from wsidicom.tags import OpticalPathIdentificationSequenceTag, OpticalPathIdentifierTag
 from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
 
 
@@ -605,12 +606,22 @@ class WsiDataset(Dataset):
     def read_optical_path_identifier(self, frame: Dataset) -> str:
         """Return optical path identifier from frame, or from self if not
         found."""
+        optical_path_sequence = frame.get(
+            OpticalPathIdentificationSequenceTag, self.optical_path_sequence
+        )
+        if optical_path_sequence is None:
+            return "0"
         optical_sequence = getattr(
             frame, "OpticalPathIdentificationSequence", self.optical_path_sequence
         )
         if optical_sequence is None:
             return "0"
-        return getattr(optical_sequence[0], "OpticalPathIdentifier", "0")
+        optical_path_identifier = optical_sequence[0].get(
+            OpticalPathIdentifierTag, None
+        )
+        if optical_path_identifier is None:
+            return "0"
+        return optical_path_identifier.value
 
     def get_multi_value(self, tag: Union[str, BaseTag]) -> List[Any]:
         """Return values for tag as list of values. If tag is not found, return empty
