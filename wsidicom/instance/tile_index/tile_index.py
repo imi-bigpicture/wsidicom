@@ -20,6 +20,13 @@ from pydicom.sequence import Sequence as DicomSequence
 
 from wsidicom.geometry import Point, Size
 from wsidicom.instance.dataset import WsiDataset
+from wsidicom.tags import (
+    ColumnPositionInTotalImagePixelMatrixTag,
+    OpticalPathIdentifierTag,
+    PlanePositionSlideSequenceTag,
+    RowPositionInTotalImagePixelMatrixTag,
+    ZOffsetInSlideCoordinateSystemTag,
+)
 
 
 class TileIndex(metaclass=ABCMeta):
@@ -114,7 +121,7 @@ class TileIndex(metaclass=ABCMeta):
 
     @classmethod
     def _read_optical_paths_from_datasets(
-        cls, datasets: Sequence[Dataset]
+        cls, datasets: Sequence[WsiDataset]
     ) -> List[str]:
         """Return list of optical path identifiers from files.
 
@@ -157,7 +164,7 @@ class TileIndex(metaclass=ABCMeta):
             return ["0"]
         return list(
             {
-                str(optical_ds.OpticalPathIdentifier)
+                str(optical_ds[OpticalPathIdentifierTag].value)
                 for optical_ds in optical_path_sequence
             }
         )
@@ -178,10 +185,13 @@ class TileIndex(metaclass=ABCMeta):
             The frame xy coordinate and z coordinate
         """
         DECIMALS = 3
-        position = frame.PlanePositionSlideSequence[0]
-        y = int(position.RowPositionInTotalImagePixelMatrix) - 1
-        x = int(position.ColumnPositionInTotalImagePixelMatrix) - 1
-        z_offset = getattr(position, "ZOffsetInSlideCoordinateSystem", 0.0)
-        z = round(float(z_offset), DECIMALS)
+        position: Dataset = frame[PlanePositionSlideSequenceTag][0]
+        y = int(position[RowPositionInTotalImagePixelMatrixTag].value) - 1
+        x = int(position[ColumnPositionInTotalImagePixelMatrixTag].value) - 1
+        z_offset = position.get(ZOffsetInSlideCoordinateSystemTag, None)
+        if z_offset is None:
+            z = 0
+        else:
+            z = round(float(z_offset.value), DECIMALS)
         tile = Point(x=x, y=y) // self.tile_size
         return tile, z
