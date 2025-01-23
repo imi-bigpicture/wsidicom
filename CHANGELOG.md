@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Configuration `level_scale_tolerance` for setting the tolerance when assigning pyramid levels.
+
+### Changed
+
+- Changed to absolute tolerance instead of relative tolerance when determining if pyramid levels are dyadic to the base level.
+
 ## [0.22.0] - 2024-11-22
 
 ### Added
