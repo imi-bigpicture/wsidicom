@@ -17,7 +17,7 @@ from typing import Iterable, Optional
 
 from PIL.Image import Image
 
-from wsidicom import settings
+from wsidicom.config import settings
 from wsidicom.errors import WsiDicomNoResolutionError, WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Group
@@ -246,7 +246,7 @@ class Level(Group):
         float_level = math.log2(self.pixel_spacing.width / base_pixel_spacing.width)
         level = int(round(float_level))
         TOLERANCE = 1e-2
-        if not math.isclose(float_level, level, rel_tol=TOLERANCE):
+        if not math.isclose(float_level, level, abs_tol=settings.level_scale_tolerance):
             raise NotImplementedError(
                 f"Levels needs to be integer. Got {float_level} that is more than set"
                 f"tolerance {TOLERANCE} from the closest integer {level}. "

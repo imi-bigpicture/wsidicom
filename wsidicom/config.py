@@ -36,6 +36,7 @@ class Settings:
         self._truncate_long_dicom_strings = False
         self._decoded_frame_cache_size = 1000
         self._encoded_frame_cache_size = 1000
+        self._level_scale_tolerance = 1e-2
 
     @property
     def strict_uid_check(self) -> bool:
@@ -164,6 +165,15 @@ class Settings:
     @encoded_frame_cache_size.setter
     def encoded_frame_cache_size(self, value: int) -> None:
         self._encoded_frame_cache_size = value
+
+    @property
+    def level_scale_tolerance(self) -> float:
+        """Tolerance for level scale comparison. Default is 1e-2."""
+        return self._level_scale_tolerance
+
+    @level_scale_tolerance.setter
+    def level_scale_tolerance(self, value: float) -> None:
+        self._level_scale_tolerance = value
 
 
 settings = Settings()
