@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Use provided filesystem when opening files from UPath.
 - Changed to absolute tolerance instead of relative tolerance when determining if pyramid levels are dyadic to the base level.
+- Somewhat faster sequence parsing.
 
 ## [0.22.0] - 2024-11-22
 
