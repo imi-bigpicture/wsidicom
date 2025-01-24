@@ -129,6 +129,10 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             return None
 
     @property
+    def thread_safe(self) -> bool:
+        return True
+
+    @property
     def decoder(self) -> Decoder:
         return self._decoder
 

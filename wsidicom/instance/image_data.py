@@ -113,6 +113,12 @@ class ImageData(metaclass=ABCMeta):
         """Should return the image origin of the image data."""
         raise NotImplementedError()
 
+    @property
+    @abstractmethod
+    def thread_safe(self) -> bool:
+        """Should return True if the image data can be accessed by multiple threads."""
+        raise NotImplementedError()
+
     @abstractmethod
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         """

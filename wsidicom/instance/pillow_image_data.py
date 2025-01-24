@@ -81,6 +81,10 @@ class PillowImageData(ImageData):
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         return None
 
+    @property
+    def thread_safe(self) -> bool:
+        return True
+
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         if tile_point != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")

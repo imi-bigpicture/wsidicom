@@ -152,6 +152,10 @@ class WsiDicomTestImageData(ImageData):
     def lossy_compressed(self) -> bool:
         return False
 
+    @property
+    def thread_safe(self) -> bool:
+        return True
+
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         raise NotImplementedError()
 
