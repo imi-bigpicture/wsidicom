@@ -48,6 +48,7 @@ from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Group, Level
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
+from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
 from wsidicom.target import Target
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
@@ -233,10 +234,10 @@ class WsiDicomFileTarget(Target):
                 )
                 if self._transcoder.lossy_method:
                     dataset.LossyImageCompression = "01"
-                    ratios = dataset.get_multi_value("LossyImageCompressionRatio")
+                    ratios = dataset.get_multi_value(LossyImageCompressionRatioTag)
                     # Reserve space for new ratio
                     ratios.append(" " * MAX_VALUE_LEN["DS"])
-                    methods = dataset.get_multi_value("LossyImageCompressionMethod")
+                    methods = dataset.get_multi_value(LossyImageCompressionMethodTag)
                     methods.append(self._transcoder.lossy_method.value)
                     dataset.LossyImageCompressionRatio = ratios
                     dataset.LossyImageCompressionMethod = methods

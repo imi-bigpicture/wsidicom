@@ -623,13 +623,13 @@ class WsiDataset(Dataset):
             return "0"
         return optical_path_identifier.value
 
-    def get_multi_value(self, tag: Union[str, BaseTag]) -> List[Any]:
+    def get_multi_value(self, tag: BaseTag) -> List[Any]:
         """Return values for tag as list of values. If tag is not found, return empty
         list. If tag is not multi value, return list with one value.
 
         Parameters
         ----------
-        tag: Union[str, BaseTag]
+        tag: BaseTag
             Tag to get values for.
 
         Returns
