@@ -14,12 +14,12 @@
 
 from abc import ABCMeta, abstractmethod
 from functools import cached_property
-from typing import Iterator, List, Optional, Sequence
+from typing import Iterator, List, Optional, Sequence, Tuple
 
 from PIL.Image import Image
 
 from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
-from wsidicom.codec import Codec, Decoder
+from wsidicom.codec import Codec, Decoder, LossyCompressionIsoStandard
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
@@ -29,6 +29,7 @@ from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex
 from wsidicom.metadata.image import ImageCoordinateSystem
 from wsidicom.metadata.schema.dicom.image import ImageCoordinateSystemDicomSchema
+from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
 
 
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
@@ -115,9 +116,9 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         """Return samples per pixel (1 or 3)."""
         return self._datasets[0].samples_per_pixel
 
-    @property
-    def lossy_compressed(self) -> bool:
-        return self._datasets[0].lossy_compressed
+    # @property
+    # def lossy_compressed(self) -> bool:
+    #     return self._datasets[0].lossy_compressed
 
     @cached_property
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
@@ -127,6 +128,30 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             return schema.load(self._datasets[0])
         except TypeError:
             return None
+
+    @property
+    def thread_safe(self) -> bool:
+        return True
+
+    @property
+    def lossy_compression(
+        self,
+    ) -> Optional[List[Tuple[LossyCompressionIsoStandard, float]]]:
+        if not self._datasets[0].lossy_compressed:
+            return None
+        methods = [
+            LossyCompressionIsoStandard(value)
+            for value in self._datasets[0].get_multi_value(
+                LossyImageCompressionMethodTag
+            )
+        ]
+        ratios = [
+            float(value)
+            for value in self._datasets[0].get_multi_value(
+                LossyImageCompressionRatioTag
+            )
+        ]
+        return list(zip(methods, ratios))
 
     @property
     def decoder(self) -> Decoder:

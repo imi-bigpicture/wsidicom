@@ -30,7 +30,6 @@ from pydicom.uid import (
 )
 from pydicom.valuerep import DSfloat
 
-from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomError,
@@ -364,7 +363,7 @@ class WsiDataset(Dataset):
     @property
     def ext_depth_of_field_plane_distance(self) -> Optional[float]:
         """Return total focal depth used for extended depth of field."""
-        return self._ext_depth_of_field[0]
+        return self._ext_depth_of_field[2]
 
     @cached_property
     def focus_method(self) -> str:
@@ -623,13 +622,13 @@ class WsiDataset(Dataset):
             return "0"
         return optical_path_identifier.value
 
-    def get_multi_value(self, tag: Union[str, BaseTag]) -> List[Any]:
+    def get_multi_value(self, tag: BaseTag) -> List[Any]:
         """Return values for tag as list of values. If tag is not found, return empty
         list. If tag is not multi value, return list with one value.
 
         Parameters
         ----------
-        tag: Union[str, BaseTag]
+        tag: BaseTag
             Tag to get values for.
 
         Returns
@@ -840,18 +839,15 @@ class WsiDataset(Dataset):
         dataset.BitsStored = image_data.bits
         dataset.HighBit = image_data.bits - 1
         dataset.PixelRepresentation = 0
-        if image_data.lossy_compressed:
-            method = LossyCompressionIsoStandard.transfer_syntax_to_iso(
-                image_data.transfer_syntax
-            )
-            if method is None:
-                raise NotImplementedError(
-                    "Creating lossy compressed image with transfer syntax that is not "
-                    "lossy is not implemented."
-                )
+        if image_data.lossy_compression:
+            methods, ratios = zip(*image_data.lossy_compression)
             dataset.LossyImageCompression = "01"
-            dataset.LossyImageCompressionRatio = 1
-            dataset.LossyImageCompressionMethod = method.value
+            dataset.LossyImageCompressionRatio = [
+                DSfloat(ratio, auto_format=True) for ratio in ratios
+            ]
+            dataset.LossyImageCompressionMethod = [method.value for method in methods]
+        else:
+            dataset.LossyImageCompression = "00"
 
         dataset.PhotometricInterpretation = image_data.photometric_interpretation
         dataset.SamplesPerPixel = image_data.samples_per_pixel

@@ -15,6 +15,7 @@
 """Module implementing generic ImageData for accessing image data."""
 
 from abc import ABCMeta, abstractmethod
+from functools import cached_property
 from typing import (
     Callable,
     Iterable,
@@ -29,11 +30,11 @@ from PIL import Image as Pillow
 from PIL.Image import Image
 from pydicom.uid import UID
 
-from wsidicom.codec import Encoder
+from wsidicom.codec import Encoder, LossyCompressionIsoStandard
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.metadata.image import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem
 from wsidicom.thread import ConditionalThreadPoolExecutor
 
 
@@ -54,7 +55,6 @@ class ImageData(metaclass=ABCMeta):
 
     _default_z: Optional[float] = None
     _blank_tile: Optional[Image] = None
-    _encoded_blank_tile: Optional[bytes] = None
 
     def __init__(self, encoder: Encoder):
         self._encoder = encoder
@@ -103,14 +103,25 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def lossy_compressed(self) -> bool:
-        """Should return True if the image has been lossy compressed."""
+    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+        """Should return the image origin of the image data."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
-        """Should return the image origin of the image data."""
+    def thread_safe(self) -> bool:
+        """Should return True if the image data can be accessed by multiple threads."""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def lossy_compression(
+        self,
+    ) -> Optional[List[Tuple[LossyCompressionIsoStandard, float]]]:
+        """Should return None if the image has never been lossy compressed, otherwise a
+        list of tuples with the lossy compression method and ratio (30.0 means 30:1
+        compression) or an empty list if compression method is not in DICOM standard or
+        ratio is unknown."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -239,12 +250,10 @@ class ImageData(metaclass=ABCMeta):
             self._blank_tile = self._create_blank_tile()
         return self._blank_tile
 
-    @property
+    @cached_property
     def blank_encoded_tile(self) -> bytes:
         """Return encoded background tile."""
-        if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self.encoder.encode(self.blank_tile)
-        return self._encoded_blank_tile
+        return self.encoder.encode(self.blank_tile)
 
     @property
     def encoder(self) -> Encoder:

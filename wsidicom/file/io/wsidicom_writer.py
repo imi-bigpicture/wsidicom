@@ -297,6 +297,7 @@ class WsiDicomWriter:
                 image_data.get_encoded_tiles(tile_points, z, path, scale, transcoder)
             )
 
+        workers = workers if image_data.thread_safe else 1
         with ConditionalThreadPoolExecutor(max_workers=workers) as pool:
             return [
                 self._write_tile(tile)
