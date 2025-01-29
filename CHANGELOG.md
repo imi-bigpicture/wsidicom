@@ -7,15 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2025-01-29
+
 ### Added
 
 - Configuration `level_scale_tolerance` for setting the tolerance when assigning pyramid levels.
+- Added `ImageData` property `thread_safe` to indicate if image data can be accessed in multiple threads.
 
 ### Changed
 
 - Use provided filesystem when opening files from UPath.
 - Changed to absolute tolerance instead of relative tolerance when determining if pyramid levels are dyadic to the base level.
 - Somewhat faster sequence parsing.
+- Replaced `ImageData` abstract property `lossy_compressed`, returning a boolean, with `lossy_compression`, returning a list of compression methods and ratios.
+
+### Fixed
+
+- Returning proper value for WsiDataset property `ext_depth_of_field_plane_distance`.
 
 ## [0.22.0] - 2024-11-22
 
@@ -451,7 +459,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.22.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.23.0..HEAD
+[0.23.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.22.0..v0.23.0
 [0.22.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.4..v0.22.0
 [0.21.4]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.3..v0.21.4
 [0.21.3]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.2..v0.21.3
