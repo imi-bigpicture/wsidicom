@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from functools import cached_property
 from pathlib import Path
 from typing import Optional, Union
 
@@ -93,4 +94,8 @@ class PillowImageData(ImageData):
     def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         if tile != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
+        return self._encoded_image
+
+    @cached_property
+    def _encoded_image(self):
         return self.encoder.encode(self._image)

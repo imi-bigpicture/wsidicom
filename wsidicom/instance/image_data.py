@@ -15,6 +15,7 @@
 """Module implementing generic ImageData for accessing image data."""
 
 from abc import ABCMeta, abstractmethod
+from functools import cached_property
 from typing import (
     Callable,
     Iterable,
@@ -54,7 +55,6 @@ class ImageData(metaclass=ABCMeta):
 
     _default_z: Optional[float] = None
     _blank_tile: Optional[Image] = None
-    _encoded_blank_tile: Optional[bytes] = None
 
     def __init__(self, encoder: Encoder):
         self._encoder = encoder
@@ -245,12 +245,10 @@ class ImageData(metaclass=ABCMeta):
             self._blank_tile = self._create_blank_tile()
         return self._blank_tile
 
-    @property
+    @cached_property
     def blank_encoded_tile(self) -> bytes:
         """Return encoded background tile."""
-        if self._encoded_blank_tile is None:
-            self._encoded_blank_tile = self.encoder.encode(self.blank_tile)
-        return self._encoded_blank_tile
+        return self.encoder.encode(self.blank_tile)
 
     @property
     def encoder(self) -> Encoder:
