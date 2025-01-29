@@ -30,7 +30,6 @@ from pydicom.uid import (
 )
 from pydicom.valuerep import DSfloat
 
-from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomError,
@@ -840,18 +839,15 @@ class WsiDataset(Dataset):
         dataset.BitsStored = image_data.bits
         dataset.HighBit = image_data.bits - 1
         dataset.PixelRepresentation = 0
-        if image_data.lossy_compressed:
-            method = LossyCompressionIsoStandard.transfer_syntax_to_iso(
-                image_data.transfer_syntax
-            )
-            if method is None:
-                raise NotImplementedError(
-                    "Creating lossy compressed image with transfer syntax that is not "
-                    "lossy is not implemented."
-                )
+        if image_data.lossy_compression:
+            methods, ratios = zip(*image_data.lossy_compression)
             dataset.LossyImageCompression = "01"
-            dataset.LossyImageCompressionRatio = 1
-            dataset.LossyImageCompressionMethod = method.value
+            dataset.LossyImageCompressionRatio = [
+                DSfloat(ratio, auto_format=True) for ratio in ratios
+            ]
+            dataset.LossyImageCompressionMethod = [method.value for method in methods]
+        else:
+            dataset.LossyImageCompression = "00"
 
         dataset.PhotometricInterpretation = image_data.photometric_interpretation
         dataset.SamplesPerPixel = image_data.samples_per_pixel

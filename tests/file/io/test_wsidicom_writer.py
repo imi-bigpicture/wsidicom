@@ -32,6 +32,7 @@ from pydicom.uid import (
     generate_uid,
 )
 
+from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.file.io import (
     OffsetTableType,
     WsiDicomIO,
@@ -149,8 +150,10 @@ class WsiDicomTestImageData(ImageData):
         return None
 
     @property
-    def lossy_compressed(self) -> bool:
-        return False
+    def lossy_compression(
+        self,
+    ) -> Optional[List[Tuple[LossyCompressionIsoStandard, float]]]:
+        return None
 
     @property
     def thread_safe(self) -> bool:
