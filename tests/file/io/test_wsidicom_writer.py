@@ -32,7 +32,7 @@ from pydicom.uid import (
     generate_uid,
 )
 
-from wsidicom.codec import LossyCompressionIsoStandard
+from wsidicom.codec import Encoder, LossyCompressionIsoStandard
 from wsidicom.file.io import (
     OffsetTableType,
     WsiDicomIO,
@@ -153,6 +153,10 @@ class WsiDicomTestImageData(ImageData):
     def lossy_compression(
         self,
     ) -> Optional[List[Tuple[LossyCompressionIsoStandard, float]]]:
+        return None
+
+    @property
+    def transcoder(self) -> Optional[Encoder]:
         return None
 
     @property

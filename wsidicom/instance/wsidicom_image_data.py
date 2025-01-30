@@ -19,7 +19,7 @@ from typing import Iterator, List, Optional, Sequence, Tuple
 from PIL.Image import Image
 
 from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
-from wsidicom.codec import Codec, Decoder, LossyCompressionIsoStandard
+from wsidicom.codec import Codec, Decoder, Encoder, LossyCompressionIsoStandard
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
@@ -116,10 +116,6 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         """Return samples per pixel (1 or 3)."""
         return self._datasets[0].samples_per_pixel
 
-    # @property
-    # def lossy_compressed(self) -> bool:
-    #     return self._datasets[0].lossy_compressed
-
     @cached_property
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         """Return the image origin of the image data."""
@@ -152,6 +148,10 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             )
         ]
         return list(zip(methods, ratios))
+
+    @property
+    def transcoder(self) -> Optional[Encoder]:
+        return None
 
     @property
     def decoder(self) -> Decoder:
