@@ -223,29 +223,34 @@ class WsiDicomFileTarget(Target):
                 focal_planes, optical_paths, tiled_size, scale
             )
             if self._transcoder is not None:
+                transcoder = self._transcoder
+            elif instances[0].image_data.transcoder is not None:
+                transcoder = instances[0].image_data.transcoder
+            else:
+                transcoder = None
+            if transcoder is not None:
                 if (
-                    self._transcoder.bits != instances[0].image_data.bits
-                    or self._transcoder.samples_per_pixel
+                    transcoder.bits != instances[0].image_data.bits
+                    or transcoder.samples_per_pixel
                     != instances[0].image_data.samples_per_pixel
                 ):
                     raise ValueError(
                         "Transcode settings must match image data bits and "
                         "photometric interpretation."
                     )
-                transfer_syntax = self._transcoder.transfer_syntax
+                transfer_syntax = transcoder.transfer_syntax
                 dataset.PhotometricInterpretation = (
-                    self._transcoder.photometric_interpretation
+                    transcoder.photometric_interpretation
                 )
-                if self._transcoder.lossy_method:
+                if transcoder.lossy_method:
                     dataset.LossyImageCompression = "01"
                     ratios = dataset.get_multi_value(LossyImageCompressionRatioTag)
                     # Reserve space for new ratio
                     ratios.append(" " * MAX_VALUE_LEN["DS"])
                     methods = dataset.get_multi_value(LossyImageCompressionMethodTag)
-                    methods.append(self._transcoder.lossy_method.value)
+                    methods.append(transcoder.lossy_method.value)
                     dataset.LossyImageCompressionRatio = ratios
                     dataset.LossyImageCompressionMethod = methods
-
             else:
                 transfer_syntax = instances[0].image_data.transfer_syntax
             if self._offset_table is not None:
@@ -265,7 +270,7 @@ class WsiDicomFileTarget(Target):
                     self._chunk_size,
                     self._instance_number,
                     scale,
-                    self._transcoder,
+                    transcoder,
                 )
             filepaths.append(filepath)
             self._instance_number += 1
