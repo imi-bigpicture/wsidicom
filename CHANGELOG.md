@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2025-01-30
+
 ### Added
 
 - Support for using instances of `THUMBNAIL` image flavor. If found these are grouped together with the corresponding pyramid, and possible used as image data in `read_thumbnail`.
@@ -467,7 +469,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.23.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.24.0..HEAD
+[0.24.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.23.0..v0.24.0
 [0.23.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.22.0..v0.23.0
 [0.22.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.4..v0.22.0
 [0.21.4]: https://github.com/imi-bigpicture/wsidicom/compare/v0.21.3..v0.21.4
