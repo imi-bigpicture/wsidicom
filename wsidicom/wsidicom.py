@@ -44,6 +44,7 @@ from wsidicom.errors import (
 from wsidicom.file import OffsetTableType, WsiDicomFileSource, WsiDicomFileTarget
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
+from wsidicom.group.group import Group
 from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
@@ -511,6 +512,7 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None,
         pyramid: Optional[int] = None,
+        force_generate: bool = False,
     ) -> Image:
         """Read thumbnail image of the whole slide with dimensions no larger than given
         size.
@@ -526,6 +528,9 @@ class WsiDicom:
         pyramid: Optional[int] = None
             Pyramid to read thumbnail from. If `None` the index in `selected_pyramid` is
             used.
+        force_generate: bool = False
+            If to force generation of thumbnail from levels, even if thumbnail image is
+            present for levels.
 
         Returns
         -------
@@ -536,7 +541,8 @@ class WsiDicom:
             size = (size, size)
         thumbnail_size = Size.from_tuple(size)
         selected_pyramid = self.pyramids.get(pyramid or self.selected_pyramid)
-        if selected_pyramid.thumbnails is not None:
+        thumbnail: Optional[Group] = None
+        if not force_generate and selected_pyramid.thumbnails is not None:
             thumbnail = selected_pyramid.thumbnails.get_closest_by_size(thumbnail_size)
         if selected_pyramid.thumbnails is None or thumbnail is None:
             thumbnail = selected_pyramid.get_closest_by_size(thumbnail_size)
