@@ -20,10 +20,11 @@ from wsidicom.errors import (
 )
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level
+from wsidicom.group.group import Group
 from wsidicom.group.level import BaseLevel
 from wsidicom.instance import ImageType, WsiInstance
 from wsidicom.metadata import ImageCoordinateSystem
-from wsidicom.series.series import Series
+from wsidicom.series.series import Series, Thumbnails
 from wsidicom.stringprinting import list_pretty_str
 
 
@@ -32,13 +33,16 @@ class Pyramid(Series[Level]):
     forming a WSI pyramid. All levels in the pyramid must have the same image origin
     and extended depth of field."""
 
-    def __init__(self, levels: Iterable[Level]):
+    def __init__(self, levels: Iterable[Level], thumbnails: Iterable[Group]):
         """Holds a stack of levels.
 
         Parameters
         ----------
         levels: Iterable[Level]
-            List of levels to include in the pyramid.
+            List of levels to include in the pyramid, sorted by size.
+        thumbnails: Iterable[Group]
+            List of thumbnails to include in the pyramid, sorted by size.
+
         """
         self._levels = OrderedDict(
             (level.level, level)
@@ -60,6 +64,7 @@ class Pyramid(Series[Level]):
                 '"Volume" type'
             )
         self._mm_size = mm_size
+        self._thumbnails = Thumbnails(thumbnails)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._levels})"
@@ -116,30 +121,44 @@ class Pyramid(Series[Level]):
     def tile_size(self) -> Size:
         return self.base_level.tile_size
 
+    @property
+    def thumbnails(self) -> Optional[Thumbnails]:
+        return self._thumbnails
+
     @classmethod
-    def open(cls, instances: Iterable[WsiInstance]) -> "Pyramid":
+    def open(
+        cls,
+        level_instances: Iterable[WsiInstance],
+        thumbnail_instances: Iterable[WsiInstance],
+    ) -> "Pyramid":
         """Return pyramid created from wsi instances.
 
         Parameters
         ----------
         instances: Iterable[WsiInstance]
             Instances to create pyramid from.
+        thumbnails: Iterable[WsiInstance]
+            Instances to create thumbnails for pyramid from.
 
         Returns
         -------
         Pyramid
             Created pyramid.
         """
-        instances_grouped_by_size = cls._group_instances_by_size(instances)
-        base_level = BaseLevel(next(instances_grouped_by_size))
+        level_instances_grouped_by_size = cls._group_instances_by_size(level_instances)
+        base_level = BaseLevel(next(level_instances_grouped_by_size))
         levels: List[Level] = [base_level]
         levels.extend(
             [
                 Level(instances, base_level.pixel_spacing)
-                for instances in instances_grouped_by_size
+                for instances in level_instances_grouped_by_size
             ]
         )
-        return cls(levels)
+        thumbnails = (
+            Group(thumbnail_group)
+            for thumbnail_group in cls._group_instances_by_size(thumbnail_instances)
+        )
+        return cls(levels, thumbnails)
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         """Return string representation of pyramid."""
@@ -229,32 +248,6 @@ class Pyramid(Series[Level]):
                 closest = wsi_level
         if closest is None:
             raise WsiDicomNotFoundError(f"Level for {level}", "level series")
-        return closest
-
-    def get_closest_by_size(self, size: Size) -> Level:
-        """Search for level that by size is closest to and larger than the
-        given size.
-
-        Parameters
-        ----------
-        size: Size
-            The size to search for
-
-        Returns
-        -------
-        Level
-            The level with size closest to searched size
-        """
-        closest_size = self._levels[0].size
-        closest = None
-        for wsi_level in self._levels.values():
-            if (size.width <= wsi_level.size.width) and (
-                wsi_level.size.width <= closest_size.width
-            ):
-                closest_size = wsi_level.size
-                closest = wsi_level
-        if closest is None:
-            raise WsiDicomNotFoundError(f"Level for size {size}", "level series")
         return closest
 
     def get_closest_by_pixel_spacing(self, pixel_spacing: SizeMm) -> Level:

@@ -152,7 +152,7 @@ class TestWsiDicomFileTargetIntegration:
             if level.size.any_greater_than(wsi.pyramids[0].tile_size)
         ]
         expected_levels_count = len(levels_larger_than_tile_size) + 1
-        pyramid_missing_smallest_levels = Pyramid(levels_larger_than_tile_size)
+        pyramid_missing_smallest_levels = Pyramid(levels_larger_than_tile_size, [])
         pyramids = Pyramids([pyramid_missing_smallest_levels])
 
         # Act

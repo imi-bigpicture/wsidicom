@@ -187,6 +187,8 @@ class TestWsiDicomIntegration:
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
         assert checksum == region["md5"], (region, checksum)
+        assert im.size[0] <= region["size"]["width"]
+        assert im.size[1] <= region["size"]["height"]
 
     @pytest.mark.parametrize(
         ["wsi_name", "expected_level_count"], WsiTestDefinitions.levels()

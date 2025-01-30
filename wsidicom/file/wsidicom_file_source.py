@@ -62,6 +62,7 @@ class WsiDicomFileSource(Source):
         self._levels: List[WsiDicomReader] = []
         self._labels: List[WsiDicomReader] = []
         self._overviews: List[WsiDicomReader] = []
+        self._thumbnails: List[WsiDicomReader] = []
         self._annotations: List[WsiDicomIO] = []
         for stream in streams:
             try:
@@ -74,6 +75,8 @@ class WsiDicomFileSource(Source):
                             self._labels.append(reader)
                         elif reader.image_type == ImageType.OVERVIEW:
                             self._overviews.append(reader)
+                        elif reader.image_type == ImageType.THUMBNAIL:
+                            self._thumbnails.append(reader)
                     except WsiDicomNotSupportedError:
                         logging.info(f"Non-supported file {stream}.")
                         if stream.owned:
@@ -116,6 +119,11 @@ class WsiDicomFileSource(Source):
         return self._create_instances(self._overviews, self._slide_uids)
 
     @property
+    def thumbnail_instances(self) -> Iterable[WsiInstance]:
+        """The thumbnail instances parsed from the source."""
+        return self._create_instances(self._thumbnails, self._slide_uids)
+
+    @property
     def annotation_instances(self) -> Iterable[AnnotationInstance]:
         """The annotation instances parsed from the source."""
         return (
@@ -130,6 +138,7 @@ class WsiDicomFileSource(Source):
             self._levels,
             self._labels,
             self._overviews,
+            self._thumbnails,
         ]
         return [reader for reader_list in reader_lists for reader in reader_list]
 

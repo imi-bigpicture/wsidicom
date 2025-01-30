@@ -185,7 +185,7 @@ class TestPyramids:
         ]
 
         # Act
-        pyramids = Pyramids.open(instances)
+        pyramids = Pyramids.open(instances, [])
 
         # Assert
         assert len(pyramids) == expected_pyramid_count

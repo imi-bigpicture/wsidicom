@@ -183,8 +183,10 @@ class ImageCoordinateSystem:
         )
 
     def origin_and_rotation_match(
-        self, other: "ImageCoordinateSystem", origin_threshold: float
+        self, other: Optional["ImageCoordinateSystem"], origin_threshold: float
     ) -> bool:
+        if other is None:
+            return False
         if self.rotation != other.rotation:
             return False
         origin_distance = sqrt(

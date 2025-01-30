@@ -48,6 +48,7 @@ class ImageType(Enum):
     VOLUME = "VOLUME"
     LABEL = "LABEL"
     OVERVIEW = "OVERVIEW"
+    THUMBNAIL = "THUMBNAIL"
 
 
 class Requirement(IntEnum):

@@ -84,6 +84,7 @@ class WsiDicomWebSource(Source):
         self._level_instances: List[WsiInstance] = []
         self._label_instances: List[WsiInstance] = []
         self._overview_instances: List[WsiInstance] = []
+        self._thumbnail_instances: List[WsiInstance] = []
         self._annotation_instances: List[AnnotationInstance] = []
         detected_transfer_syntaxes_by_image_type: Dict[ImageType, Set[UID]] = (
             defaultdict(set)
@@ -147,6 +148,8 @@ class WsiDicomWebSource(Source):
                     self._label_instances.append(instance)
                 elif instance.image_type == ImageType.OVERVIEW:
                     self._overview_instances.append(instance)
+                elif instance.image_type == ImageType.THUMBNAIL:
+                    self._thumbnail_instances.append(instance)
             for annotation_instance in annotation_instances:
                 self._annotation_instances.append(
                     AnnotationInstance.open_dataset(annotation_instance)
@@ -193,6 +196,11 @@ class WsiDicomWebSource(Source):
     def overview_instances(self) -> List[WsiInstance]:
         """The overview instances parsed from the source."""
         return self._overview_instances
+
+    @property
+    def thumbnail_instances(self) -> List[WsiInstance]:
+        """The thumbnail instances parsed from the source."""
+        return self._thumbnail_instances
 
     @property
     def annotation_instances(self) -> List[AnnotationInstance]:

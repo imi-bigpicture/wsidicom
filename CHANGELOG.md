@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Support for using instances of `THUMBNAIL` image flavor. If found these are grouped together with the corresponding pyramid, and possible used as image data in `read_thumbnail`.
+
 ### Fixed
 
 - Setting of `LossyImageCompression`, `LossyImageCompressionRatio`, and `LossyImageCompressionMethod` when image data requires transcoding.

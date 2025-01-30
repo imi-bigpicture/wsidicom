@@ -68,6 +68,12 @@ class Source(metaclass=ABCMeta):
 
     @property
     @abstractmethod
+    def thumbnail_instances(self) -> Iterable[WsiInstance]:
+        """Return all thumbnail instances from the source."""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
     def annotation_instances(self) -> Iterable[AnnotationInstance]:
         """Return all annotation instances from the source."""
         raise NotImplementedError()

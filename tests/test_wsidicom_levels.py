@@ -59,7 +59,7 @@ class TestWsiDicomLevels:
         closest_level = wsi.pyramids[0].get_closest_by_size(Size(100, 100))
 
         # Assert
-        assert closest_level.level == 0
+        assert closest_level == wsi.pyramids[0].base_level
 
     def test_calculate_scale(self, wsi: WsiDicom):
         # Arrange
