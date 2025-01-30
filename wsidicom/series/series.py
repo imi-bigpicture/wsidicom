@@ -13,8 +13,8 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from functools import cached_property
 from collections import defaultdict
+from functools import cached_property
 from typing import (
     Dict,
     Generic,
@@ -26,7 +26,6 @@ from typing import (
     Type,
     TypeVar,
 )
-
 
 from wsidicom.errors import WsiDicomMatchError, WsiDicomNotFoundError
 from wsidicom.geometry import Size, SizeMm
@@ -150,6 +149,33 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
             return None
         return cls(groups)
 
+    def get_closest_by_size(self, size: Size) -> Optional[Group]:
+        """Search for group that by size is closest to and larger than the
+        given size.
+
+        Parameters
+        ----------
+        size: Size
+            The size to search for
+
+        Returns
+        -------
+        Optional[Group]
+            The group with size closest to searched size, or None if no group is
+            larger than or equal to the searched size.
+        """
+        if len(self._groups) == 0:
+            return None
+        closest_size = self._groups[0].size
+        closest = None
+        for wsi_level in self._groups:
+            if (size.width <= wsi_level.size.width) and (
+                wsi_level.size.width <= closest_size.width
+            ):
+                closest_size = wsi_level.size
+                closest = wsi_level
+        return closest
+
     @classmethod
     def _group_instances_by_size(
         cls, instances: Iterable[WsiInstance]
@@ -222,3 +248,11 @@ class Labels(Series[Group]):
     @property
     def image_type(self) -> ImageType:
         return ImageType.LABEL
+
+
+class Thumbnails(Series[Group]):
+    """Represents a series of Groups of the thumbnail wsi flavor."""
+
+    @property
+    def image_type(self) -> ImageType:
+        return ImageType.THUMBNAIL

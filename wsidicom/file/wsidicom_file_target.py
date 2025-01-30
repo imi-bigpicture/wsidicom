@@ -162,6 +162,7 @@ class WsiDicomFileTarget(Target):
             if pyramid_level in pyramid.pyramid_indices:
                 level = pyramid.get(pyramid_level)
                 self._save_group(level, 1)
+
             elif self._add_missing_levels:
                 # Create scaled level from closest level, prefer from original levels
                 closest_level = pyramid.get_closest_by_level(pyramid_level)
@@ -185,6 +186,9 @@ class WsiDicomFileTarget(Target):
                     scale,
                 )
                 new_levels.append(new_level)
+        if pyramid.thumbnails is not None:
+            for group in pyramid.thumbnails.groups:
+                self._save_group(group, 1)
 
     def _save_and_open_level(
         self,
