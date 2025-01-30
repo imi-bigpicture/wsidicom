@@ -124,6 +124,13 @@ class ImageData(metaclass=ABCMeta):
         ratio is unknown."""
         raise NotImplementedError()
 
+    @property
+    @abstractmethod
+    def transcoder(self) -> Optional[Encoder]:
+        """Return transcoder used for image data if image data can't read encoded data
+        directly. Return None if no transcoder is needed."""
+        raise NotImplementedError()
+
     @abstractmethod
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         """
