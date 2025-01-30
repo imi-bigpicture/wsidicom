@@ -138,6 +138,7 @@ class WsiDicomFileSource(Source):
             self._levels,
             self._labels,
             self._overviews,
+            self._thumbnails,
         ]
         return [reader for reader_list in reader_lists for reader in reader_list]
 
