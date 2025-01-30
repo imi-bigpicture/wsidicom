@@ -75,7 +75,9 @@ class WsiDicom:
         self._selected_pyramid = 0
         self._source = source
         self._source_owned = source_owned
-        self._pyramids = Pyramids.open(source.level_instances)
+        self._pyramids = Pyramids.open(
+            source.level_instances, source.thumbnail_instances
+        )
         self._labels = Labels.open(source.label_instances)
         self._overviews = Overviews.open(source.overview_instances)
         self._annotations = list(source.annotation_instances)
@@ -533,11 +535,17 @@ class WsiDicom:
         if isinstance(size, int):
             size = (size, size)
         thumbnail_size = Size.from_tuple(size)
-        if pyramid is None:
-            pyramid = self.selected_pyramid
-        level = self.pyramids.get(pyramid).get_closest_by_size(thumbnail_size)
-        region = Region(position=Point(0, 0), size=level.size)
-        image = level.get_region(region, z, path)
+        selected_pyramid = self.pyramids.get(pyramid or self.selected_pyramid)
+        if selected_pyramid.thumbnails is not None:
+            thumbnail = selected_pyramid.thumbnails.get_closest_by_size(thumbnail_size)
+        if selected_pyramid.thumbnails is None or thumbnail is None:
+            thumbnail = selected_pyramid.get_closest_by_size(thumbnail_size)
+        if thumbnail is None:
+            raise WsiDicomNotFoundError(
+                f"Image for generating thumbnail of size {thumbnail_size}", "levels"
+            )
+        region = Region(position=Point(0, 0), size=thumbnail.size)
+        image = thumbnail.get_region(region, z, path)
         image.thumbnail((size), resample=settings.pillow_resampling_filter)
         return image
 
