@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Metadata fields `comments` to `Image` and `description` to `Study`.
+
+### Changerd
+
+- Size restriction of frame cache changed from number of frames to byte size, with a default of 100 MB.
+
 ## [0.24.0] - 2025-01-30
 
 ### Added

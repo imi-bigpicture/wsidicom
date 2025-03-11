@@ -12,9 +12,20 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from abc import abstractmethod
 from collections.abc import Iterator
+from dataclasses import dataclass
 from threading import Lock
-from typing import Callable, Dict, Generic, Iterable, Optional, Sequence, Tuple, TypeVar
+from typing import (
+    Callable,
+    Dict,
+    Generic,
+    Iterable,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
 
 from PIL.Image import Image
 
@@ -22,11 +33,18 @@ CacheKeyType = TypeVar("CacheKeyType")
 CacheItemType = TypeVar("CacheItemType")
 
 
+@dataclass
+class CacheItem(Generic[CacheItemType]):
+    value: CacheItemType
+    size: int
+
+
 class LRU(Generic[CacheKeyType, CacheItemType]):
     def __init__(self, maxsize: int):
         self._lock = Lock()
-        self._cache: Dict[CacheKeyType, CacheItemType] = {}
+        self._cache: Dict[CacheKeyType, CacheItem[CacheItemType]] = {}
         self._maxsize = maxsize
+        self._size = 0
 
     @property
     def maxsize(self) -> int:
@@ -37,13 +55,14 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
             item = self._cache.pop(key, None)
             if item is not None:
                 self._cache[key] = item
-            return item
+            return item.value if item is not None else None
 
-    def put(self, key: CacheKeyType, value: CacheItemType) -> None:
+    def put(self, key: CacheKeyType, item: CacheItem[CacheItemType]) -> None:
         with self._lock:
-            self._cache[key] = value
-            if len(self._cache) > self._maxsize:
-                self._cache.pop(next(iter(self._cache)))
+            self._cache[key] = item
+            self._size += item.size
+            while self._size > self._maxsize:
+                self._size -= self._cache.pop(next(iter(self._cache))).size
 
     def clear(self) -> None:
         with self._lock:
@@ -52,9 +71,8 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
     def resize(self, maxsize: int) -> None:
         with self._lock:
             self._maxsize = maxsize
-            if len(self._cache) > maxsize:
-                for _ in range(len(self._cache) - maxsize):
-                    self._cache.pop(next(iter(self._cache)))
+            while self._size > maxsize:
+                self._size -= self._cache.pop(next(iter(self._cache))).size
 
 
 class FrameCache(Generic[CacheItemType]):
@@ -73,7 +91,9 @@ class FrameCache(Generic[CacheItemType]):
         frame = self._lru_cache.get((image_data_id, frame_index))
         if frame is None:
             frame = frame_getter(frame_index)
-            self._lru_cache.put((image_data_id, frame_index), frame)
+            self._lru_cache.put(
+                (image_data_id, frame_index), self._to_cache_item(frame)
+            )
         return frame
 
     def get_tile_frames(
@@ -101,7 +121,9 @@ class FrameCache(Generic[CacheItemType]):
             frame = cached_frames.get(frame_index)
             if frame is None:
                 frame = next(fetched_frames)
-                self._lru_cache.put((image_data_id, frame_index), frame)
+                self._lru_cache.put(
+                    (image_data_id, frame_index), self._to_cache_item(frame)
+                )
             yield frame
 
     def clear(self) -> None:
@@ -110,6 +132,27 @@ class FrameCache(Generic[CacheItemType]):
     def resize(self, size: int) -> None:
         self._lru_cache.resize(size)
 
+    @classmethod
+    @abstractmethod
+    def _to_cache_item(cls, value: CacheItemType) -> CacheItem[CacheItemType]:
+        pass
 
-EncodedFrameCache = FrameCache[bytes]
-DecodedFrameCache = FrameCache[Image]
+
+class EncodedFrameCache(FrameCache[bytes]):
+    @classmethod
+    def _to_cache_item(cls, value: bytes) -> CacheItem[bytes]:
+        return CacheItem(value, len(value))
+
+
+class DecodedFrameCache(FrameCache[Image]):
+    _mode_to_bytes = {
+        "L": 1,
+        "RGB": 3,
+        "I": 4,
+    }
+
+    @classmethod
+    def _to_cache_item(cls, value: Image) -> CacheItem[Image]:
+        return CacheItem(
+            value, value.size[0] * value.size[1] * cls._mode_to_bytes[value.mode]
+        )
