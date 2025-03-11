@@ -54,6 +54,9 @@ class StudyDicomSchema(ModuleDicomSchema[Study]):
     referring_physician_name = DefaultingNoneDicomField(
         PersonNameDicomField(), data_key="ReferringPhysicianName", allow_none=True
     )
+    description = StringDicomField(
+        value_representation=VR.LO, data_key="StudyDescription", allow_none=True
+    )
 
     @property
     def load_type(self) -> Type[Study]:
