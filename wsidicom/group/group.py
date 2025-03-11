@@ -429,7 +429,7 @@ class Group:
 
     @staticmethod
     def _get_frame_information(
-        data: Dict[Tuple[str, float], ImageData]
+        data: Dict[Tuple[str, float], ImageData],
     ) -> Tuple[List[float], List[str], Size]:
         """Return optical_paths, focal planes, and tiled size."""
         focal_planes_by_optical_path: Dict[str, Set[float]] = defaultdict(set)
