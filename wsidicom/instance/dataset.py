@@ -841,12 +841,14 @@ class WsiDataset(Dataset):
         dataset.HighBit = image_data.bits - 1
         dataset.PixelRepresentation = 0
         if image_data.lossy_compression:
-            methods, ratios = zip(*image_data.lossy_compression)
             dataset.LossyImageCompression = "01"
             dataset.LossyImageCompressionRatio = [
-                DSfloat(ratio, auto_format=True) for ratio in ratios
+                DSfloat(item.ratio, auto_format=True)
+                for item in image_data.lossy_compression
             ]
-            dataset.LossyImageCompressionMethod = [method.value for method in methods]
+            dataset.LossyImageCompressionMethod = [
+                item.method.value for item in image_data.lossy_compression
+            ]
         else:
             dataset.LossyImageCompression = "00"
 

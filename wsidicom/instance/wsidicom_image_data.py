@@ -14,7 +14,7 @@
 
 from abc import ABCMeta, abstractmethod
 from functools import cached_property
-from typing import Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, List, Optional, Sequence
 
 from PIL.Image import Image
 
@@ -27,7 +27,7 @@ from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex
-from wsidicom.metadata.image import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 from wsidicom.metadata.schema.dicom.image import ImageCoordinateSystemDicomSchema
 from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
 
@@ -130,9 +130,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return True
 
     @property
-    def lossy_compression(
-        self,
-    ) -> Optional[List[Tuple[LossyCompressionIsoStandard, float]]]:
+    def lossy_compression(self) -> Optional[List[LossyCompression]]:
         if not self._datasets[0].lossy_compressed:
             return None
         methods = [
@@ -147,7 +145,9 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
                 LossyImageCompressionRatioTag
             )
         ]
-        return list(zip(methods, ratios))
+        return list(
+            LossyCompression(method, ratio) for method, ratio in zip(methods, ratios)
+        )
 
     @property
     def transcoder(self) -> Optional[Encoder]:

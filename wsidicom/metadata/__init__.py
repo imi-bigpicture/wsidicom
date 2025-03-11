@@ -21,6 +21,7 @@ from wsidicom.metadata.image import (
     FocusMethod,
     Image,
     ImageCoordinateSystem,
+    LossyCompression,
 )
 from wsidicom.metadata.label import Label
 from wsidicom.metadata.optical_path import (
@@ -82,6 +83,7 @@ __all__ = [
     "Embedding",
     "Fixation",
     "LocalIssuerOfIdentifier",
+    "LossyCompression",
     "Measurement",
     "Processing",
     "Receiving",

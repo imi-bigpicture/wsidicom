@@ -32,7 +32,7 @@ from pydicom.uid import (
     generate_uid,
 )
 
-from wsidicom.codec import Encoder, LossyCompressionIsoStandard
+from wsidicom.codec import Encoder
 from wsidicom.file.io import (
     OffsetTableType,
     WsiDicomIO,
@@ -47,7 +47,7 @@ from wsidicom.file.io.wsidicom_writer import (
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
-from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 from wsidicom.uid import WSI_SOP_CLASS_UID
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
@@ -150,9 +150,7 @@ class WsiDicomTestImageData(ImageData):
         return None
 
     @property
-    def lossy_compression(
-        self,
-    ) -> Optional[List[Tuple[LossyCompressionIsoStandard, float]]]:
+    def lossy_compression(self) -> Optional[List[LossyCompression]]:
         return None
 
     @property

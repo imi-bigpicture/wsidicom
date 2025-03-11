@@ -14,7 +14,7 @@
 
 from functools import cached_property
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
 from PIL import Image as Pillow
 from PIL.Image import Image
@@ -28,7 +28,7 @@ from wsidicom.geometry import (
     SizeMm,
 )
 from wsidicom.instance.image_data import ImageData
-from wsidicom.metadata.image import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 
 
 class PillowImageData(ImageData):
@@ -83,9 +83,7 @@ class PillowImageData(ImageData):
         return True
 
     @property
-    def lossy_compression(
-        self,
-    ) -> Optional[List[Tuple[LossyCompressionIsoStandard, float]]]:
+    def lossy_compression(self) -> Optional[List[LossyCompression]]:
         iso = LossyCompressionIsoStandard.transfer_syntax_to_iso(self.transfer_syntax)
         if iso is None:
             return None
@@ -93,7 +91,7 @@ class PillowImageData(ImageData):
             self.image_size.area * self.samples_per_pixel * self.bits / 8
         )
         compressed_size = len(self._get_encoded_tile(Point(0, 0), 0, ""))
-        return [(iso, uncompressed_size / compressed_size)]
+        return [LossyCompression(iso, uncompressed_size / compressed_size)]
 
     @property
     def transcoder(self) -> Optional[Encoder]:
