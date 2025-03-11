@@ -1476,7 +1476,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
     @staticmethod
     @abstractmethod
     def _get_line_geometry_from_coords(
-        coordinates: Sequence[Tuple[float, float]]
+        coordinates: Sequence[Tuple[float, float]],
     ) -> GeometryType:
         raise NotImplementedError()
 

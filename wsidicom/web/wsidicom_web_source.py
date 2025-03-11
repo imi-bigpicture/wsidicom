@@ -91,7 +91,7 @@ class WsiDicomWebSource(Source):
         )
 
         def create_instance(
-            uids: Tuple[UID, UID, UID, Optional[Set[UID]]]
+            uids: Tuple[UID, UID, UID, Optional[Set[UID]]],
         ) -> Optional[WsiInstance]:
             study_uid, series_uid, instance_uid, available_transfer_syntaxes = uids
             dataset = client.get_instance(study_uid, series_uid, instance_uid)
