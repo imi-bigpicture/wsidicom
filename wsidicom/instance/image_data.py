@@ -30,11 +30,11 @@ from PIL import Image as Pillow
 from PIL.Image import Image
 from pydicom.uid import UID
 
-from wsidicom.codec import Encoder, LossyCompressionIsoStandard
+from wsidicom.codec import Encoder
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 from wsidicom.thread import ConditionalThreadPoolExecutor
 
 
@@ -117,11 +117,11 @@ class ImageData(metaclass=ABCMeta):
     @abstractmethod
     def lossy_compression(
         self,
-    ) -> Optional[List[Tuple[LossyCompressionIsoStandard, float]]]:
+    ) -> Optional[List[LossyCompression]]:
         """Should return None if the image has never been lossy compressed, otherwise a
-        list of tuples with the lossy compression method and ratio (30.0 means 30:1
-        compression) or an empty list if compression method is not in DICOM standard or
-        ratio is unknown."""
+        list of the lossy compression method and ratio (30.0 means 30:1  compression)
+        or an empty list if compression method is not in DICOM standard or ratio is
+        unknown."""
         raise NotImplementedError()
 
     @property
