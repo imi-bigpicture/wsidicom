@@ -34,8 +34,8 @@ class Settings:
         self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
         self._ignore_specimen_preparation_step_on_validation_error = True
         self._truncate_long_dicom_strings = False
-        self._decoded_frame_cache_size = 1000
-        self._encoded_frame_cache_size = 1000
+        self._decoded_frame_cache_size = 100 * 1024 * 1024
+        self._encoded_frame_cache_size = 100 * 1024 * 1024
         self._level_scale_tolerance = 1e-2
 
     @property
@@ -150,7 +150,7 @@ class Settings:
 
     @property
     def decoded_frame_cache_size(self) -> int:
-        """Size of the decoded frame cache."""
+        """Size of the decoded frame cache. Default is 100 MB."""
         return self._decoded_frame_cache_size
 
     @decoded_frame_cache_size.setter
@@ -159,7 +159,7 @@ class Settings:
 
     @property
     def encoded_frame_cache_size(self) -> int:
-        """Size of the encoded frame cache."""
+        """Size of the encoded frame cache. Default is 100 MB."""
         return self._encoded_frame_cache_size
 
     @encoded_frame_cache_size.setter
