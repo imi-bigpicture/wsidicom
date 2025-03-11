@@ -234,6 +234,9 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         allow_none=True,
         load_default=None,
     )
+    comments = StringDicomField(
+        value_representation=VR.LO, data_key="ImageComments", allow_none=True
+    )
 
     @property
     def load_type(self) -> Type[Image]:
@@ -255,6 +258,7 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
             "lossy_compressions": (
                 image.lossy_compressions if image.lossy_compressions else []
             ),
+            "comments": image.comments,
         }
 
     @post_load

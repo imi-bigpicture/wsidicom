@@ -45,6 +45,8 @@ class Study:
         The accession number of the study.
     referring_physician_name : Optional[str] = None
         The name of the referring physician.
+    description : Optional[str] = None
+        The description of the study.
     """
 
     uid: Optional[UID] = None
@@ -53,6 +55,7 @@ class Study:
     time: Optional[datetime.time] = None
     accession_number: Optional[str] = None
     referring_physician_name: Optional[str] = None
+    description: Optional[str] = None
 
     @cached_property
     def default_uid(self) -> UID:

@@ -124,6 +124,11 @@ def lossy_compressions():
 
 
 @pytest.fixture()
+def image_comments():
+    yield "comments"
+
+
+@pytest.fixture()
 def image(
     acquisition_datetime: Optional[datetime.datetime],
     focus_method: Optional[FocusMethod],
@@ -133,6 +138,7 @@ def image(
     focal_plane_spacing: Optional[float],
     depth_of_field: Optional[float],
     lossy_compressions: Optional[Sequence[LossyCompression]],
+    image_comments: Optional[str],
 ):
     yield Image(
         acquisition_datetime,
@@ -143,6 +149,7 @@ def image(
         focal_plane_spacing,
         depth_of_field,
         lossy_compressions,
+        image_comments,
     )
 
 
@@ -534,6 +541,7 @@ def study():
         datetime.time(12, 3),
         "accession number",
         "referring physician name",
+        "description",
     )
 
 

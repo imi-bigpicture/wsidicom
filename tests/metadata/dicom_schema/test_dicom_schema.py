@@ -203,6 +203,7 @@ class TestDicomSchema:
         assert "LossyImageCompressionMethod" not in serialized
         assert "LossyImageCompressionRatio" not in serialized
         assert serialized.LossyImageCompression == "00"
+        assert "ImageComments" not in serialized
 
     @pytest.mark.parametrize(
         [
@@ -214,6 +215,7 @@ class TestDicomSchema:
             "focal_plane_spacing",
             "depth_of_field",
             "lossy_compressions",
+            "image_comments",
         ],
         [
             [
@@ -225,6 +227,7 @@ class TestDicomSchema:
                 0.25,
                 2.5,
                 None,
+                "Comments",
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
@@ -240,8 +243,9 @@ class TestDicomSchema:
                         LossyCompressionIsoStandard.JPEG_2000_IRREVERSIBLE, 0.2
                     ),
                 ],
+                "Comments",
             ],
-            [None, None, None, None, None, None, None, None],
+            [None, None, None, None, None, None, None, None, None],
         ],
     )
     @pytest.mark.parametrize("valid_dicom", [True, False])
@@ -508,6 +512,7 @@ class TestDicomSchema:
         assert serialized.StudyTime is None
         assert serialized.AccessionNumber is None
         assert serialized.ReferringPhysicianName is None
+        assert "StudyDescription" not in serialized
 
     def test_deserialize_study(self, dicom_study: Dataset, study: Study):
         # Arrange

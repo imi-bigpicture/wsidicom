@@ -116,6 +116,7 @@ class TestJsonSchema:
             "pixel_spacing",
             "focal_plane_spacing",
             "depth_of_field",
+            "image_comments",
         ],
         [
             [
@@ -126,6 +127,7 @@ class TestJsonSchema:
                 SizeMm(0.01, 0.01),
                 0.001,
                 0.01,
+                "comments",
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
@@ -135,8 +137,9 @@ class TestJsonSchema:
                 SizeMm(0.02, 0.02),
                 0.002,
                 0.02,
+                "comments",
             ],
-            [None, None, None, None, None, None, None],
+            [None, None, None, None, None, None, None, None],
         ],
     )
     def test_image_serialize(self, image: Image):
@@ -213,6 +216,10 @@ class TestJsonSchema:
             ):
                 assert dumped_compression["method"] == expected_compression.method.value
                 assert dumped_compression["ratio"] == expected_compression.ratio
+        if image.comments is not None:
+            assert dumped["comments"] == image.comments
+        else:
+            assert "comments" in dumped
 
     def test_image_deserialize(self):
         # Arrange
@@ -238,6 +245,7 @@ class TestJsonSchema:
                     "ratio": 0.35,
                 },
             ],
+            "comments": "comments",
         }
 
         # Act
@@ -289,6 +297,7 @@ class TestJsonSchema:
                 dumped_compression["method"]
             )
             assert loaded_compression.ratio == dumped_compression["ratio"]
+        assert loaded.comments == dumped["comments"]
 
     def test_label_serialize(self, label: Label):
         # Arrange
@@ -701,6 +710,7 @@ class TestJsonSchema:
         dumped["time"] = study.time.isoformat()
         dumped["accession_number"] = study.accession_number
         dumped["referring_physician_name"] = study.referring_physician_name
+        dumped["description"] = study.description
 
     def test_study_deserialize(self):
         # Arrange
@@ -711,6 +721,7 @@ class TestJsonSchema:
             "time": "12:03:00",
             "accession_number": "accession number",
             "referring_physician_name": "referring physician name",
+            "description": "description",
         }
 
         # Act
@@ -724,6 +735,7 @@ class TestJsonSchema:
         assert loaded.time == time.fromisoformat(dumped["time"])
         assert loaded.accession_number == dumped["accession_number"]
         assert loaded.referring_physician_name == dumped["referring_physician_name"]
+        assert loaded.description == dumped["description"]
 
     def test_metadata_serialize(
         self,

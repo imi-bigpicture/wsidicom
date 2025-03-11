@@ -28,6 +28,7 @@ class StudyJsonSchema(LoadingSchema[Study]):
     time = fields.Time(allow_none=True)
     accession_number = fields.String(allow_none=True)
     referring_physician_name = fields.String(allow_none=True)
+    description = fields.String(allow_none=True)
 
     @property
     def load_type(self):

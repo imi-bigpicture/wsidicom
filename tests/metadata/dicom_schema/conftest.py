@@ -119,6 +119,8 @@ def dicom_image(image: Image, valid_dicom: bool):
         ]
     else:
         dataset.LossyImageCompression = "00"
+    if image.comments is not None:
+        dataset.ImageComments = image.comments
     yield dataset
 
 
@@ -272,6 +274,8 @@ def dicom_study(study: Study):
     dataset.StudyTime = study.time
     dataset.AccessionNumber = study.accession_number
     dataset.ReferringPhysicianName = study.referring_physician_name
+    if study.description is not None:
+        dataset.StudyDescription = study.description
     yield dataset
 
 

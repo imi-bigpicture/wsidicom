@@ -71,6 +71,7 @@ class ImageJsonSchema(LoadingSchema[Image]):
     lossy_compressions = fields.List(
         fields.Nested(LossyCompressionJsonSchema()), allow_none=True
     )
+    comments = fields.String(allow_none=True)
 
     @property
     def load_type(self):
