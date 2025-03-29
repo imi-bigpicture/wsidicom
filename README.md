@@ -389,10 +389,10 @@ point_annotation = Annotation(Point(10.0, 20.0))
 ***Create a point annotation with a measurement.***
 
 ```python
-from wsidicom import ConceptCode, Measurement
+from wsidicom import conceptcode, Measurement
 # A measurement is defined by a type code ('Area'), a value (25.0) and a unit code ('Pixels).
-area = ConceptCode.measurement('Area')
-pixels = ConceptCode.unit('Pixels')
+area = ConceptCode.MeasurementCode("Area")
+pixels = ConceptCode.UnitCode("Pixels")
 measurement = Measurement(area, 25.0, pixels)
 point_annotation_with_measurment = Annotation(Point(10.0, 20.0), [measurement])
 ```
@@ -405,8 +405,8 @@ from wsidicom import PointAnnotationGroup
 group = PointAnnotationGroup(
     annotations=[point_annotation, point_annotation_with_measurment],
     label='group label',
-    categorycode=ConceptCode.category('Tissue'),
-    typecode=ConceptCode.type('Nucleus'),
+    category_code=ConceptCode.AnnotationCategoryCode('Tissue'),
+    type_code=ConceptCode.AnnotationTypeCode('Nucleus'),
     description='description'
 )
 ```
