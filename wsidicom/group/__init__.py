@@ -14,7 +14,7 @@
 
 """Module for handling group of instances, such as a level."""
 
-from wsidicom.group.group import Group
+from wsidicom.group.group import Label, Overview, Thumbnail
 from wsidicom.group.level import Level
 
-__all__ = ["Group", "Level"]
+__all__ = ["Label", "Overview", "Thumbnail", "Level"]

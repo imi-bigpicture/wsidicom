@@ -45,7 +45,7 @@ from wsidicom.file.io import (
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.group import Group, Level
+from wsidicom.group import Label, Level, Overview, Thumbnail
 from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
@@ -203,7 +203,7 @@ class WsiDicomFileTarget(Target):
 
     def _save_group(
         self,
-        group: Group,
+        group: Union[Label, Level, Overview, Thumbnail],
         scale: int,
     ) -> List[UPath]:
         """Save group to target."""
@@ -295,7 +295,9 @@ class WsiDicomFileTarget(Target):
         ]
 
     @staticmethod
-    def _group_instances_to_file(group: Group) -> List[List[WsiInstance]]:
+    def _group_instances_to_file(
+        group: Union[Label, Level, Overview, Thumbnail],
+    ) -> List[List[WsiInstance]]:
         """
         Group instances by properties that can't differ in a DICOM-file.
 
