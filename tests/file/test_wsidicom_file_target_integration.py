@@ -42,7 +42,7 @@ class TestWsiDicomFileTargetIntegration:
         with WsiDicomFileTarget(
             tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, None, False
         ) as target:
-            target.save_pyramids(wsi.pyramids)
+            target.save_pyramids(wsi.pyramids, True)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
@@ -71,7 +71,7 @@ class TestWsiDicomFileTargetIntegration:
             include_levels,
             False,
         ) as target:
-            target.save_pyramids(wsi.pyramids)
+            target.save_pyramids(wsi.pyramids, True)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
@@ -102,7 +102,7 @@ class TestWsiDicomFileTargetIntegration:
             False,
             transcoder,
         ) as target:
-            target.save_pyramids(wsi.pyramids)
+            target.save_pyramids(wsi.pyramids, True)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
@@ -164,7 +164,7 @@ class TestWsiDicomFileTargetIntegration:
         with WsiDicomFileTarget(
             tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, None, True
         ) as target:
-            target.save_pyramids(pyramids)
+            target.save_pyramids(pyramids, True)
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:

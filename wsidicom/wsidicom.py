@@ -216,6 +216,7 @@ class WsiDicom:
         include_levels: Optional[Sequence[int]] = None,
         include_labels: bool = True,
         include_overviews: bool = True,
+        include_thumbnails: bool = True,
         add_missing_levels: bool = False,
         label: Optional[Union[Image, Union[str, Path, UPath]]] = None,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
@@ -255,6 +256,8 @@ class WsiDicom:
             If to include label series.
         include_overviews: bool = True
             If to include overview series.
+        include_thumbnails: bool = True
+            If to include thumbnail series.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
         label: Optional[Union[Image, Union[str, Path, UPath]]] = None
@@ -292,7 +295,7 @@ class WsiDicom:
             transcoding,
             file_options,
         ) as target:
-            target.save_pyramids(self.pyramids)
+            target.save_pyramids(self.pyramids, include_thumbnails)
             if include_overviews and self.overviews is not None:
                 target.save_overviews(self.overviews)
             if include_labels:

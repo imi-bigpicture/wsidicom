@@ -72,7 +72,7 @@ class Target(metaclass=ABCMeta):
         self.__enter__()
 
     @abstractmethod
-    def save_pyramids(self, pyramids: Pyramids) -> None:
+    def save_pyramids(self, pyramids: Pyramids, include_thumbnails: bool) -> None:
         """Should save the pyramids to the target."""
         raise NotImplementedError()
 

@@ -121,13 +121,13 @@ class WsiDicomFileTarget(Target):
         """Return filepaths for created files."""
         return self._filepaths
 
-    def save_pyramids(self, pyramids: Pyramids):
+    def save_pyramids(self, pyramids: Pyramids, include_thumbnails: bool):
         if self._include_pyramids is not None:
             pyramids_to_save = [pyramids[index] for index in self._include_pyramids]
         else:
             pyramids_to_save = pyramids
         for pyramid in pyramids_to_save:
-            self._save_pyramid(pyramid)
+            self._save_pyramid(pyramid, include_thumbnails)
 
     def save_labels(self, labels: Labels):
         """Save labels to target."""
@@ -144,7 +144,7 @@ class WsiDicomFileTarget(Target):
         for file in self._opened_files:
             file.close()
 
-    def _save_pyramid(self, pyramid: Pyramid):
+    def _save_pyramid(self, pyramid: Pyramid, include_thumbnails: bool):
         """Save pyramid to target."""
         # Collection of new pyramid levels.
         new_levels: List[Level] = []
@@ -186,7 +186,7 @@ class WsiDicomFileTarget(Target):
                     scale,
                 )
                 new_levels.append(new_level)
-        if pyramid.thumbnails is not None:
+        if include_thumbnails and pyramid.thumbnails is not None:
             for group in pyramid.thumbnails.groups:
                 self._save_group(group, 1)
 
