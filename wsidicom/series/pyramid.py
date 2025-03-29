@@ -19,8 +19,7 @@ from wsidicom.errors import (
     WsiDicomOutOfBoundsError,
 )
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.group import Level
-from wsidicom.group.group import Group
+from wsidicom.group import Level, Thumbnail
 from wsidicom.group.level import BaseLevel
 from wsidicom.instance import ImageType, WsiInstance
 from wsidicom.metadata import ImageCoordinateSystem
@@ -33,7 +32,7 @@ class Pyramid(Series[Level]):
     forming a WSI pyramid. All levels in the pyramid must have the same image origin
     and extended depth of field."""
 
-    def __init__(self, levels: Iterable[Level], thumbnails: Iterable[Group]):
+    def __init__(self, levels: Iterable[Level], thumbnails: Iterable[Thumbnail]):
         """Holds a stack of levels.
 
         Parameters
@@ -155,7 +154,7 @@ class Pyramid(Series[Level]):
             ]
         )
         thumbnails = (
-            Group(thumbnail_group)
+            Thumbnail(thumbnail_group)
             for thumbnail_group in cls._group_instances_by_size(thumbnail_instances)
         )
         return cls(levels, thumbnails)

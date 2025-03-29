@@ -38,7 +38,7 @@ from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
 
 
-class Group:
+class Instances:
     """Represents a group of instances having the same size, but possibly
     different z coordinate and/or optical path."""
 
@@ -149,7 +149,7 @@ class Group:
     def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
         return self.default_instance.image_coordinate_system
 
-    def matches(self, other_group: "Group") -> bool:
+    def matches(self, other_group: "Instances") -> bool:
         """Check if group matches other group. If strict common Uids should
         match. Wsi type should always match.
 
@@ -455,3 +455,25 @@ class Group:
             sorted(list(focal_planes_by_optical_path.keys())),
             tiled_size,
         )
+
+
+class Overview(Instances):
+    pass
+
+
+class Label(Instances):
+    pass
+
+
+class Thumbnail(Instances):
+    @property
+    def mpp(self) -> SizeMm:
+        if self.pixel_spacing is None:
+            raise WsiDicomNoResolutionError()
+        return self.pixel_spacing * 1000.0
+
+    @property
+    def pixel_spacing(self) -> SizeMm:
+        if self._pixel_spacing is None:
+            raise WsiDicomNoResolutionError()
+        return self._pixel_spacing

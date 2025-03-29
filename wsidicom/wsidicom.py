@@ -44,9 +44,9 @@ from wsidicom.errors import (
 from wsidicom.file import OffsetTableType, WsiDicomFileSource, WsiDicomFileTarget
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.group.group import Group
+from wsidicom.group import Level, Thumbnail
 from wsidicom.instance import WsiDataset, WsiInstance
-from wsidicom.metadata.wsi import WsiMetadata
+from wsidicom.metadata import WsiMetadata
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -541,7 +541,7 @@ class WsiDicom:
             size = (size, size)
         thumbnail_size = Size.from_tuple(size)
         selected_pyramid = self.pyramids.get(pyramid or self.selected_pyramid)
-        thumbnail: Optional[Group] = None
+        thumbnail: Optional[Union[Thumbnail, Level]] = None
         if not force_generate and selected_pyramid.thumbnails is not None:
             thumbnail = selected_pyramid.thumbnails.get_closest_by_size(thumbnail_size)
         if selected_pyramid.thumbnails is None or thumbnail is None:

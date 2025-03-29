@@ -29,20 +29,22 @@ from typing import (
 
 from wsidicom.errors import WsiDicomMatchError, WsiDicomNotFoundError
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.group import Group, Level
+from wsidicom.group import Label, Level, Overview, Thumbnail
 from wsidicom.instance import ImageType, WsiDataset, WsiInstance
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.wsi import WsiMetadata
 from wsidicom.uid import SlideUids
 
 SeriesType = TypeVar("SeriesType", bound="Series")
-GroupType = TypeVar("GroupType", Group, Level)
+GroupType = TypeVar("GroupType", Label, Level, Overview, Thumbnail)
 
 
 class Series(Generic[GroupType], metaclass=ABCMeta):
     """Represents a series of Groups with the same image flavor, e.g.
     pyramidal levels, labels, or overviews.
     """
+
+    _group_type: Type[GroupType]
 
     def __init__(self, groups: Iterable[GroupType]):
         """Create a Series from list of Groups.
@@ -144,12 +146,12 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
             Created series.
         """
         instances_grouped_by_size = cls._group_instances_by_size(instances)
-        groups = [Group(instances) for instances in instances_grouped_by_size]
+        groups = [cls._group_type(instances) for instances in instances_grouped_by_size]
         if len(groups) == 0:
             return None
         return cls(groups)
 
-    def get_closest_by_size(self, size: Size) -> Optional[Group]:
+    def get_closest_by_size(self, size: Size) -> Optional[GroupType]:
         """Search for group that by size is closest to and larger than the
         given size.
 
@@ -234,24 +236,30 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
             return None
 
 
-class Overviews(Series[Group]):
+class Overviews(Series[Overview]):
     """Represents a series of Groups of the overview wsi flavor."""
+
+    _group_type = Overview
 
     @property
     def image_type(self) -> ImageType:
         return ImageType.OVERVIEW
 
 
-class Labels(Series[Group]):
+class Labels(Series[Label]):
     """Represents a series of Groups of the label wsi flavor."""
+
+    _group_type = Label
 
     @property
     def image_type(self) -> ImageType:
         return ImageType.LABEL
 
 
-class Thumbnails(Series[Group]):
+class Thumbnails(Series[Thumbnail]):
     """Represents a series of Groups of the thumbnail wsi flavor."""
+
+    _group_type = Thumbnail
 
     @property
     def image_type(self) -> ImageType:
