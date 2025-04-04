@@ -35,7 +35,7 @@ class Label:
         The label barcode.
     label_in_volume_image : bool = False
         Whether the label is present in the volume image.
-    label_in_overview_image : bool = False
+    label_in_overview_image : bool = True
         Whether the label is present in the overview image.
     label_is_phi : bool = True
         Whether the label is personal health information.
@@ -44,7 +44,7 @@ class Label:
     text: Optional[str] = None
     barcode: Optional[str] = None
     label_in_volume_image: bool = False
-    label_in_overview_image: bool = False
+    label_in_overview_image: bool = True
     label_is_phi: bool = True
 
     @classmethod
