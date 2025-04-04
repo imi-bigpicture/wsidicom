@@ -70,7 +70,7 @@ class LabelDicomSchema(ModuleDicomSchema[Label]):
             or (image_type == ImageType.OVERVIEW and label.label_in_overview_image)
             or image_type == ImageType.LABEL
         ):
-            label_in_image = "True"
+            label_in_image = True
             contains_phi = label.label_is_phi
         attributes = {
             "text": label.text,
