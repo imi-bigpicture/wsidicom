@@ -63,6 +63,10 @@ class PillowImageData(ImageData):
         return None
 
     @property
+    def imaged_size(self) -> Optional[SizeMm]:
+        return None
+
+    @property
     def samples_per_pixel(self) -> int:
         return 3
 

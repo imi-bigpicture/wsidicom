@@ -85,6 +85,12 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     @abstractmethod
+    def imaged_size(self) -> Optional[SizeMm]:
+        """Return the imaged width and height of the slide in mm."""
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
     def samples_per_pixel(self) -> int:
         """Return number of samples per pixel (e.g. 3 for RGB)."""
         raise NotImplementedError()

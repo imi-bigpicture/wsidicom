@@ -102,6 +102,10 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return self._datasets[0].pixel_spacing
 
     @property
+    def imaged_size(self) -> Optional[SizeMm]:
+        return self._datasets[0].mm_size
+
+    @property
     def photometric_interpretation(self) -> str:
         """Return photometric interpretation."""
         return self._datasets[0].photometric_interpretation

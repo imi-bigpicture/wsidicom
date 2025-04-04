@@ -794,12 +794,16 @@ class WsiDataset(Dataset):
             dataset.SharedFunctionalGroupsSequence = DicomSequence(
                 [shared_functional_group_sequence]
             )
-            dataset.ImagedVolumeWidth = (
-                image_data.image_size.width * image_data.pixel_spacing.width
-            )
-            dataset.ImagedVolumeHeight = (
-                image_data.image_size.height * image_data.pixel_spacing.height
-            )
+            if image_data.imaged_size is None:
+                dataset.ImagedVolumeWidth = (
+                    image_data.image_size.width * image_data.pixel_spacing.width
+                )
+                dataset.ImagedVolumeHeight = (
+                    image_data.image_size.height * image_data.pixel_spacing.height
+                )
+            else:
+                dataset.ImagedVolumeWidth = image_data.imaged_size.width
+                dataset.ImagedVolumeHeight = image_data.imaged_size.height
             # SliceThickness is in mm, ImagedVolumeDepth in um
             dataset.ImagedVolumeDepth = DSfloat(slice_thickness * 1000, True)
 
