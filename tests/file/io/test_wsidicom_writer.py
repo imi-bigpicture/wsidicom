@@ -134,6 +134,10 @@ class WsiDicomTestImageData(ImageData):
         return SizeMm(1.0, 1.0)
 
     @property
+    def imaged_size(self) -> SizeMm:
+        return self.pixel_spacing * self._image_size
+
+    @property
     def samples_per_pixel(self) -> int:
         return 3
 

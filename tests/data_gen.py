@@ -293,4 +293,6 @@ def create_layer_file(
     file_meta: FileMetaDataset = create_meta_dataset(),
 ):
     dataset.file_meta = file_meta
-    dataset.save_as(filename, enforce_file_format=True)
+    dataset.save_as(
+        filename, enforce_file_format=True, implicit_vr=False, little_endian=True
+    )
