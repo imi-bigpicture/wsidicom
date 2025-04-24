@@ -290,6 +290,11 @@ class TestDicomSchema:
             assert serialized.BarcodeValue is None
             assert serialized.SpecimenLabelInImage == "YES"
             assert serialized.BurnedInAnnotation == "YES"
+        elif image_type == ImageType.OVERVIEW:
+            assert "LabelText" not in serialized
+            assert "BarcodeValue" not in serialized
+            assert serialized.SpecimenLabelInImage == "YES"
+            assert serialized.BurnedInAnnotation == "YES"
         else:
             assert "LabelText" not in serialized
             assert "BarcodeValue" not in serialized
