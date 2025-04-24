@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Changed default for `Label.label_in_overview_image` from `TFalse` to `True` to reflect the DICOM standard.
+- Use imaged size from image data when setting `ImagedVolumeWidth` and `ImagedVolumeHeight`in `WsiDataset.create_instance_dataset()` instead of deriving from image size and pixel spacing, in order to get same value for all levels.
+
 ## [0.26.0] - 2025-03-29
 
 ### Added
