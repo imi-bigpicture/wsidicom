@@ -1592,6 +1592,7 @@ class AnnotationInstance:
         ds.SeriesInstanceUID = self.slide_uids.series_instance
         ds.SOPInstanceUID = uid_generator()
         ds.SOPClassUID = ANN_SOP_CLASS_UID
+        ds.Modality = "ANN"
 
         meta_ds = FileMetaDataset()
         if little_endian and implicit_vr:
@@ -1645,6 +1646,15 @@ class AnnotationInstance:
         List[AnnotationGroup]
             Annotation groups read from dataset.
         """
+        if (
+            dataset.get("SOPClassUID", None) != ANN_SOP_CLASS_UID
+            or dataset.get("Modality", None) != "ANN"
+        ):
+            raise ValueError(
+                f"Dataset is not a valid annotation dataset. "
+                f"SOPClassUID: {dataset.get('SOPClassUID', None)}, "
+                f"Modality: {dataset.get('Modality', None)}"
+            )
         groups: List[AnnotationGroup] = []
         slide_uids: Optional[SlideUids] = None
 
