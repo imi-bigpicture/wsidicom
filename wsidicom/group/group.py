@@ -62,7 +62,7 @@ class Instances:
 
         self._size = base_instance.size
         self._pixel_spacing = base_instance.pixel_spacing
-        self._default_instance_uid: UID = base_instance.identifier
+        self._default_instance_uid = base_instance.identifier
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.instances.values()})"

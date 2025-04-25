@@ -18,7 +18,10 @@ from typing import Iterable, Optional
 from PIL.Image import Image
 
 from wsidicom.config import settings
-from wsidicom.errors import WsiDicomNoResolutionError, WsiDicomOutOfBoundsError
+from wsidicom.errors import (
+    WsiDicomNoResolutionError,
+    WsiDicomOutOfBoundsError,
+)
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Instances
 from wsidicom.instance import WsiInstance
