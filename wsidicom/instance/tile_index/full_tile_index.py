@@ -101,7 +101,7 @@ class FullTileIndex(TileIndex):
         focal_planes: Set[float] = set()
         for dataset in self._datasets:
             slice_spacing = dataset.spacing_between_slices
-            number_of_focal_planes = getattr(dataset, "TotalPixelMatrixFocalPlanes", 1)
+            number_of_focal_planes = dataset.number_of_focal_planes
             if slice_spacing is None:
                 if number_of_focal_planes == 1:
                     slice_spacing = 0.0
@@ -113,26 +113,13 @@ class FullTileIndex(TileIndex):
                 raise ValueError(
                     "Slice spacing must be non-zero if multiple focal planes."
                 )
-            z_offset_getters = (
-                lambda: dataset.ZOffsetInSlideCoordinateSystem,
-                lambda: (
-                    dataset.SharedFunctionalGroupsSequence[0]
-                    .PlanePositionSlideSequence[0]
-                    .ZOffsetInSlideCoordinateSystem
-                ),
-                lambda: 0,
-            )
-            for z_offset_getter in z_offset_getters:
-                try:
-                    z_offset = z_offset_getter()
-                    break
-                except AttributeError:
-                    pass
 
             for plane in range(number_of_focal_planes):
-                z = z_offset + round(plane * slice_spacing * MM_TO_MICRON, DECIMALS)
+                z = round(
+                    dataset.z_offset + plane * slice_spacing * MM_TO_MICRON, DECIMALS
+                )
                 focal_planes.add(z)
-        return sorted(list(focal_planes))
+        return sorted(focal_planes)
 
     @lru_cache
     def _get_optical_path_index(self, path: str) -> int:
