@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wsidicom"
-version = "0.27.0"
+version = "0.27.1"
 description = "Tools for handling DICOM based whole scan images"
 authors = ["Erik O Gabrielsson <erik.o.gabrielsson@sectra.com>"]
 license = "Apache-2.0"

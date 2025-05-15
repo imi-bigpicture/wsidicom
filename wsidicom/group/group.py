@@ -137,7 +137,7 @@ class Instances:
 
     @property
     def focal_planes(self) -> List[float]:
-        return list(
+        return sorted(
             {
                 focal_plane
                 for innstance in self.instances.values()

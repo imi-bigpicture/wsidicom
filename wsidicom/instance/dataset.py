@@ -473,6 +473,30 @@ class WsiDataset(Dataset):
         """Return optical path sequence from dataset."""
         return self._get_dicom_attribute("OpticalPathSequence")
 
+    @cached_property
+    def z_offset(self) -> float:
+        z_offset_getters = (
+            lambda: (
+                self.TotalPixelMatrixOriginSequence[0].ZOffsetInSlideCoordinateSystem
+            ),
+            lambda: (
+                self.SharedFunctionalGroupsSequence[0]
+                .PlanePositionSlideSequence[0]
+                .ZOffsetInSlideCoordinateSystem
+            ),
+        )
+        for z_offset_getter in z_offset_getters:
+            try:
+                return z_offset_getter()
+            except AttributeError:
+                pass
+        return 0.0
+
+    @property
+    def number_of_focal_planes(self) -> int:
+        """Return number of focal planes in image."""
+        return self.get("TotalPixelMatrixFocalPlanes", 1)
+
     @property
     def slice_thickness(self) -> Optional[float]:
         """Return slice thickness spacing from pixel measure dataset.
@@ -830,6 +854,10 @@ class WsiDataset(Dataset):
             offset_item.YOffsetInSlideCoordinateSystem = DSfloat(
                 image_data.image_coordinate_system.origin.y, True
             )
+            if image_data.image_coordinate_system.z_offset is not None:
+                offset_item.ZOffsetInSlideCoordinateSystem = DSfloat(
+                    image_data.image_coordinate_system.z_offset, True
+                )
             dataset.TotalPixelMatrixOriginSequence = DicomSequence([offset_item])
 
         dataset.DimensionOrganizationType = "TILED_FULL"
