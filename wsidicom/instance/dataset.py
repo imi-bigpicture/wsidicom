@@ -866,7 +866,9 @@ class WsiDataset(Dataset):
         dataset.Columns = image_data.tile_size.width
         dataset.Rows = image_data.tile_size.height
         dataset.NumberOfFrames = (
-            image_data.tiled_size.width * image_data.tiled_size.height
+            image_data.tiled_size.area
+            * len(image_data.focal_planes)
+            * len(image_data.optical_paths)
         )
         dataset.BitsAllocated = image_data.bits // 8 * 8
         dataset.BitsStored = image_data.bits
