@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from functools import lru_cache
-from typing import List, OrderedDict, Sequence, Union
+from typing import List, Sequence, Union
 
 from pydicom.uid import UID
 from upath import UPath
@@ -49,11 +49,9 @@ class WsiDicomFileImageData(WsiDicomImageData):
         if not isinstance(readers, Sequence):
             readers = [readers]
 
-        # Key is frame offset
-        self._readers = OrderedDict(
-            (file.frame_offset, file)
-            for file in sorted(readers, key=lambda file: file.frame_offset)
-        )
+        self._readers = [
+            file for file in sorted(readers, key=lambda file: file.frame_offset)
+        ]
         self._transfer_syntax = readers[0].transfer_syntax
         dataset = readers[0].dataset
         codec = Codec.create(
@@ -64,24 +62,22 @@ class WsiDicomFileImageData(WsiDicomImageData):
             dataset.photometric_interpretation,
         )
         super().__init__(
-            [file.dataset for file in self._readers.values()],
+            [file.dataset for file in self._readers],
             codec,
             decoded_frame_cache,
             encoded_frame_cache,
         )
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({self._readers.values()})"
+        return f"{type(self).__name__}({self._readers})"
 
     def __str__(self) -> str:
-        return f"{type(self).__name__} of files {self._readers.values()}"
+        return f"{type(self).__name__} of files {self._readers}"
 
     @property
     def files(self) -> List[UPath]:
         return [
-            reader.filepath
-            for reader in self._readers.values()
-            if reader.filepath is not None
+            reader.filepath for reader in self._readers if reader.filepath is not None
         ]
 
     @property
@@ -106,14 +102,15 @@ class WsiDicomFileImageData(WsiDicomImageData):
         WsiDicomFile
             File containing the frame
         """
-        for frame_offset, file in self._readers.items():
-            if (
-                frame_index < frame_offset + file.frame_count
-                and frame_index >= frame_offset
-            ):
-                return file
-
-        raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
+        try:
+            return next(
+                file
+                for file in self._readers
+                if frame_index >= file.frame_offset
+                and frame_index < file.frame_offset + file.frame_count
+            )
+        except StopIteration:
+            raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
 
     def _get_tile_frame(self, frame_index: int) -> bytes:
         """Return tile frame for frame index.
