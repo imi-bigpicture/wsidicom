@@ -46,7 +46,6 @@ class TileIndex(metaclass=ABCMeta):
         self._datasets = datasets
         self._image_size = datasets[0].image_size
         self._tile_size = datasets[0].tile_size
-        self._frame_count = self._read_frame_count_from_datasets(datasets)
         self._optical_paths = self._read_optical_paths_from_datasets(datasets)
         self._tiled_size = self.image_size.ceil_div(self.tile_size)
 
@@ -55,8 +54,7 @@ class TileIndex(metaclass=ABCMeta):
             f"{type(self).__name__} with image size {self.image_size}, "
             f"tile size {self.tile_size}, tiled size {self.tiled_size}, "
             f"optical paths {self.optical_paths}, "
-            f"focal planes {self.focal_planes}, "
-            f"and frame count {self.frame_count}"
+            f"focal planes {self.focal_planes}"
         )
 
     @property
@@ -79,11 +77,6 @@ class TileIndex(metaclass=ABCMeta):
     def tiled_size(self) -> Size:
         """Return size of tiling (columns x rows)."""
         return self._tiled_size
-
-    @property
-    def frame_count(self) -> int:
-        """Return total number of frames in index."""
-        return self._frame_count
 
     @property
     def optical_paths(self) -> List[str]:
