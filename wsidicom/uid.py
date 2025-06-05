@@ -15,10 +15,49 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from pydicom.uid import UID
+from pydicom.uid import (
+    UID,
+    AllTransferSyntaxes,
+    UID_dictionary,  # type: ignore[import-untyped]
+)
 
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomStrictRequirementError
+
+transfer_syntaxes_to_register = {
+    "1.2.840.10008.1.2.4.110": (
+        "JPEG XL Lossless",
+        "Transfer Syntax",
+        "",
+        "",
+        "JPEGXLLossless",
+    ),
+    "1.2.840.10008.1.2.4.111": (
+        "JPEG XL JPEG Recompression",
+        "Transfer Syntax",
+        "",
+        "",
+        "JPEGXLJPEGRecompression",
+    ),
+    "1.2.840.10008.1.2.4.112": (
+        "JPEG XL",
+        "Transfer Syntax",
+        "",
+        "",
+        "JPEGXL",
+    ),
+}
+for ts_uid, ts_info in transfer_syntaxes_to_register.items():
+    if ts_uid not in UID_dictionary:
+        UID_dictionary[ts_uid] = ts_info
+    if UID(ts_uid) not in AllTransferSyntaxes:
+        AllTransferSyntaxes.append(UID(ts_uid))
+
+JPEGXLLossless = UID("1.2.840.10008.1.2.4.110")
+
+JPEGXLJPEGRecompression = UID("1.2.840.10008.1.2.4.111")
+
+JPEGXL = UID("1.2.840.10008.1.2.4.112")
 
 
 @dataclass(frozen=True)
