@@ -40,6 +40,7 @@ from pydicom.uid import (
     JPEGLSLossless,
     JPEGLSNearLossless,
     RLELossless,
+    VLWholeSlideMicroscopyImageStorage,
     generate_uid,
 )
 
@@ -49,7 +50,6 @@ from wsidicom.tags import (
     LossyImageCompressionRatioTag,
     PixelDataTag,
 )
-from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
 @pytest.fixture
@@ -90,7 +90,7 @@ def transfer_syntax():
 
 @pytest.fixture
 def sop_class_uid():
-    yield WSI_SOP_CLASS_UID
+    yield VLWholeSlideMicroscopyImageStorage
 
 
 @pytest.fixture
@@ -507,7 +507,7 @@ class TestWsiDicomIO:
     def test_write_meta(self, buffer: BinaryIO, transfer_syntax: UID):
         # Arrange
         instance_uid = generate_uid()
-        class_uid = WSI_SOP_CLASS_UID
+        class_uid = VLWholeSlideMicroscopyImageStorage
         io = WsiDicomIO(buffer, transfer_syntax)
 
         # Act

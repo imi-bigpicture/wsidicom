@@ -19,12 +19,15 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Un
 from dicomweb_client.api import DICOMfileClient, DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
 from pydicom import Dataset
-from pydicom.uid import UID
+from pydicom.uid import (
+    UID,
+    MicroscopyBulkSimpleAnnotationsStorage,
+    VLWholeSlideMicroscopyImageStorage,
+)
 from requests import HTTPError, Session
 from requests.auth import AuthBase
 
 from wsidicom.codec import determine_media_type
-from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID
 
 SOP_CLASS_UID = "00080016"
 SOP_INSTANCE_UID = "00080018"
@@ -104,7 +107,7 @@ class WsiDicomWebClient:
              uids for WSI instances in the study and series.
         """
         return self._get_intances(
-            study_uid, series_uids, WSI_SOP_CLASS_UID, WSI_MODALITY
+            study_uid, series_uids, VLWholeSlideMicroscopyImageStorage, WSI_MODALITY
         )
 
     def get_annotation_instances(
@@ -127,7 +130,10 @@ class WsiDicomWebClient:
             uids for Annotation instances in the study and series.
         """
         return self._get_intances(
-            study_uid, series_uids, ANN_SOP_CLASS_UID, ANNOTATION_MODALITY
+            study_uid,
+            series_uids,
+            MicroscopyBulkSimpleAnnotationsStorage,
+            ANNOTATION_MODALITY,
         )
 
     def get_instance(

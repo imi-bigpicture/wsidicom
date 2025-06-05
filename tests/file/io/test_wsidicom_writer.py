@@ -29,6 +29,7 @@ from pydicom.uid import (
     ExplicitVRLittleEndian,
     ImplicitVRLittleEndian,
     JPEGBaseline8Bit,
+    VLWholeSlideMicroscopyImageStorage,
     generate_uid,
 )
 
@@ -48,7 +49,6 @@ from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
-from wsidicom.uid import WSI_SOP_CLASS_UID
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 
@@ -176,7 +176,7 @@ class WsiDicomTestImageData(ImageData):
 def dataset(image_data: ImageData, frame_count: int):
     assert image_data.pixel_spacing is not None
     dataset = Dataset()
-    dataset.SOPClassUID = WSI_SOP_CLASS_UID
+    dataset.SOPClassUID = VLWholeSlideMicroscopyImageStorage
     dataset.ImageType = ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]
     dataset.NumberOfFrames = frame_count
     dataset.SOPInstanceUID = generate_uid()

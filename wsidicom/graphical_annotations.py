@@ -42,9 +42,11 @@ from pydicom.filereader import dcmread
 from pydicom.filewriter import dcmwrite
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import (
+    UID,
     ExplicitVRBigEndian,
     ExplicitVRLittleEndian,
     ImplicitVRLittleEndian,
+    MicroscopyBulkSimpleAnnotationsStorage,
     generate_uid,
 )
 from pydicom.values import convert_numbers
@@ -55,9 +57,8 @@ from wsidicom.conceptcode import (
     MeasurementCode,
     UnitCode,
 )
-
-from .geometry import PointMm, RegionMm, SizeMm
-from .uid import ANN_SOP_CLASS_UID, UID, SlideUids
+from wsidicom.geometry import PointMm, RegionMm, SizeMm
+from wsidicom.uid import SlideUids
 
 
 @dataclass(frozen=True)
@@ -1591,7 +1592,7 @@ class AnnotationInstance:
         ds.StudyInstanceUID = self.slide_uids.study_instance
         ds.SeriesInstanceUID = self.slide_uids.series_instance
         ds.SOPInstanceUID = uid_generator()
-        ds.SOPClassUID = ANN_SOP_CLASS_UID
+        ds.SOPClassUID = MicroscopyBulkSimpleAnnotationsStorage
         ds.Modality = "ANN"
 
         meta_ds = FileMetaDataset()
@@ -1606,7 +1607,7 @@ class AnnotationInstance:
 
         meta_ds.TransferSyntaxUID = transfer_syntax
         meta_ds.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
-        meta_ds.MediaStorageSOPClassUID = ANN_SOP_CLASS_UID
+        meta_ds.MediaStorageSOPClassUID = MicroscopyBulkSimpleAnnotationsStorage
         meta_ds.FileMetaInformationGroupLength = 0  # Updated on write
         validate_file_meta(meta_ds)
         file_ds = FileDataset(
@@ -1647,7 +1648,7 @@ class AnnotationInstance:
             Annotation groups read from dataset.
         """
         if (
-            dataset.get("SOPClassUID", None) != ANN_SOP_CLASS_UID
+            dataset.get("SOPClassUID", None) != MicroscopyBulkSimpleAnnotationsStorage
             or dataset.get("Modality", None) != "ANN"
         ):
             raise ValueError(

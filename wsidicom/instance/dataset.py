@@ -26,6 +26,7 @@ from pydicom.sequence import Sequence as DicomSequence
 from pydicom.tag import BaseTag
 from pydicom.uid import (
     UID,
+    VLWholeSlideMicroscopyImageStorage,
     generate_uid,
 )
 from pydicom.valuerep import DSfloat
@@ -41,7 +42,7 @@ from wsidicom.errors import (
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.image_data import ImageData
 from wsidicom.tags import OpticalPathIdentificationSequenceTag, OpticalPathIdentifierTag
-from wsidicom.uid import WSI_SOP_CLASS_UID, FileUids, SlideUids
+from wsidicom.uid import FileUids, SlideUids
 
 
 class ImageType(Enum):
@@ -544,7 +545,7 @@ class WsiDataset(Dataset):
         """
 
         sop_class_uid: UID = getattr(dataset, "SOPClassUID")
-        if sop_class_uid != WSI_SOP_CLASS_UID:
+        if sop_class_uid != VLWholeSlideMicroscopyImageStorage:
             logging.debug(f"Non-wsi image, SOP class {sop_class_uid.name}.")
             return None
 

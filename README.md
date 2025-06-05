@@ -39,9 +39,9 @@ Please note that this is an early release and the API is not frozen yet. Functio
   - JPEGBaseline8Bit
   - JPEG2000
   - JPEG2000Lossless
-  - HTJPEG2000
-  - HTJPEG2000Lossless
-  - HTJPEG2000RPCLLossless
+  - HTJ2K
+  - HTJ2KLossless
+  - HTJ2KLosslessRPCL
   - ImplicitVRLittleEndian
   - ExplicitVRLittleEndian
   - ExplicitVRBigEndian

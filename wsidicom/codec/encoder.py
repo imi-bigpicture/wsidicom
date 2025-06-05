@@ -25,6 +25,7 @@ from PIL.Image import Image
 from pydicom import Dataset, FileMetaDataset
 from pydicom.pixels.utils import pixel_dtype
 from pydicom.uid import (
+    HTJ2K,
     JPEG2000,
     UID,
     JPEGBaseline8Bit,
@@ -57,7 +58,6 @@ from wsidicom.codec.settings import (
     Settings,
     Subsampling,
 )
-from wsidicom.uid import HTJPEG2000
 
 SettingsType = TypeVar("SettingsType", bound=Settings)
 
@@ -78,7 +78,7 @@ class LossyCompressionIsoStandard(Enum):
             return cls.JPEG_LS_NEAR_LOSSLESS
         elif transfer_syntax == JPEG2000:
             return cls.JPEG_2000_IRREVERSIBLE
-        elif transfer_syntax == HTJPEG2000:
+        elif transfer_syntax == HTJ2K:
             return cls.HT_JPEG_2000_IRREVERSIBLE
         return None
 

@@ -16,11 +16,14 @@ import pytest
 from PIL import ImageChops, ImageStat
 from PIL.Image import Image
 from pydicom.uid import (
+    HTJ2K,
     JPEG2000,
     UID,
     DeflatedExplicitVRLittleEndian,
     ExplicitVRBigEndian,
     ExplicitVRLittleEndian,
+    HTJ2KLossless,
+    HTJ2KLosslessRPCL,
     ImplicitVRLittleEndian,
     JPEG2000Lossless,
     JPEGBaseline8Bit,
@@ -58,7 +61,6 @@ from wsidicom.codec.optionals import (
     PYLIBJPEGOPENJPEG_AVAILABLE,
 )
 from wsidicom.geometry import Size
-from wsidicom.uid import HTJPEG2000, HTJPEG2000Lossless, HTJPEG2000RPCLLossless
 
 
 @pytest.mark.unittest
@@ -79,9 +81,9 @@ class TestPillowDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, True),
             (JPEG2000, True),
-            (HTJPEG2000Lossless, True),
-            (HTJPEG2000, True),
-            (HTJPEG2000RPCLLossless, True),
+            (HTJ2KLossless, True),
+            (HTJ2K, True),
+            (HTJ2KLosslessRPCL, True),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -155,9 +157,9 @@ class TestPydicomDecoder:
             (JPEGLSNearLossless, PYLIBJPEGLS_AVAILABLE),
             (JPEG2000Lossless, True),
             (JPEG2000, True),
-            (HTJPEG2000Lossless, False),
-            (HTJPEG2000, False),
-            (HTJPEG2000RPCLLossless, False),
+            (HTJ2KLossless, False),
+            (HTJ2K, False),
+            (HTJ2KLosslessRPCL, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -225,9 +227,9 @@ class TestImageCodecsDecoder:
             (JPEGLSNearLossless, IMAGE_CODECS_AVAILABLE),
             (JPEG2000Lossless, IMAGE_CODECS_AVAILABLE),
             (JPEG2000, IMAGE_CODECS_AVAILABLE),
-            (HTJPEG2000Lossless, IMAGE_CODECS_AVAILABLE),
-            (HTJPEG2000, IMAGE_CODECS_AVAILABLE),
-            (HTJPEG2000RPCLLossless, IMAGE_CODECS_AVAILABLE),
+            (HTJ2KLossless, IMAGE_CODECS_AVAILABLE),
+            (HTJ2K, IMAGE_CODECS_AVAILABLE),
+            (HTJ2KLosslessRPCL, IMAGE_CODECS_AVAILABLE),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -315,9 +317,9 @@ class TestPylibjpegRleDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, False),
             (JPEG2000, False),
-            (HTJPEG2000Lossless, False),
-            (HTJPEG2000, False),
-            (HTJPEG2000RPCLLossless, False),
+            (HTJ2KLossless, False),
+            (HTJ2K, False),
+            (HTJ2KLosslessRPCL, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -378,9 +380,9 @@ class TestImagecodecsRleDecoder:
             (JPEGLSNearLossless, False),
             (JPEG2000Lossless, False),
             (JPEG2000, False),
-            (HTJPEG2000Lossless, False),
-            (HTJPEG2000, False),
-            (HTJPEG2000RPCLLossless, False),
+            (HTJ2KLossless, False),
+            (HTJ2K, False),
+            (HTJ2KLosslessRPCL, False),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
@@ -483,9 +485,9 @@ class TestPyLibJpegOpenJpegDecoder:
         [
             (JPEG2000Lossless, PYLIBJPEGOPENJPEG_AVAILABLE),
             (JPEG2000, PYLIBJPEGOPENJPEG_AVAILABLE),
-            (HTJPEG2000Lossless, PYLIBJPEGOPENJPEG_AVAILABLE),
-            (HTJPEG2000, PYLIBJPEGOPENJPEG_AVAILABLE),
-            (HTJPEG2000RPCLLossless, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJ2KLossless, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJ2K, PYLIBJPEGOPENJPEG_AVAILABLE),
+            (HTJ2KLosslessRPCL, PYLIBJPEGOPENJPEG_AVAILABLE),
         ],
     )
     def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
