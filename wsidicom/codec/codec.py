@@ -18,10 +18,7 @@ from typing import Iterable, Optional, Union
 
 import numpy as np
 from PIL.Image import Image
-from pydicom.uid import (
-    UID,
-    AllTransferSyntaxes,
-)
+from pydicom.uid import UID, AllTransferSyntaxes
 
 from wsidicom.codec.decoder import Decoder
 from wsidicom.codec.encoder import Encoder

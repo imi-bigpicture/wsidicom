@@ -52,12 +52,17 @@ from wsidicom.codec.optionals import (
     jpeg2k_decode,
     jpeg8_decode,
     jpegls_decode,
+    jpegxl_decode,
     pylibjpeg_ls_decode,
     pylibjpeg_openjpeg_decode,
     rle_decode_frame,
 )
+from wsidicom.codec.optionals import (
+    JPEGXL as JPEGXLCodec,
+)
 from wsidicom.codec.rle import RleCodec
 from wsidicom.geometry import Size
+from wsidicom.uid import JPEGXL, JPEGXLJPEGRecompression, JPEGXLLossless
 
 
 class Decoder(metaclass=ABCMeta):
@@ -406,6 +411,9 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
         HTJ2K: (jpeg2k_decode, JPEG2K),
         HTJ2KLossless: (jpeg2k_decode, JPEG2K),
         HTJ2KLosslessRPCL: (jpeg2k_decode, JPEG2K),
+        JPEGXL: (jpegxl_decode, JPEGXLCodec),
+        JPEGXLJPEGRecompression: (jpegxl_decode, JPEGXLCodec),
+        JPEGXLLossless: (jpegxl_decode, JPEGXLCodec),
     }
 
     def __init__(self, transfer_syntax: UID) -> None:
