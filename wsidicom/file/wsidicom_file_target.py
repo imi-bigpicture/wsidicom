@@ -29,7 +29,7 @@ from typing import (
     Union,
 )
 
-from pydicom.uid import UID
+from pydicom.uid import UID, VLWholeSlideMicroscopyImageStorage
 from pydicom.valuerep import MAX_VALUE_LEN
 from upath import UPath
 
@@ -50,7 +50,6 @@ from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
 from wsidicom.target import Target
-from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
 class WsiDicomFileTarget(Target):
@@ -281,7 +280,7 @@ class WsiDicomFileTarget(Target):
         readers = [
             WsiDicomReader(stream)
             for stream in WsiDicomStreamOpener(self._file_options).open(
-                filepaths, WSI_SOP_CLASS_UID
+                filepaths, VLWholeSlideMicroscopyImageStorage
             )
         ]
         self._opened_files.extend(readers)

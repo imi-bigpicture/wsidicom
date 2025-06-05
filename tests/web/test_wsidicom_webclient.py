@@ -4,12 +4,11 @@ from typing import Any, Dict, List, Optional, Sequence
 import pytest
 from dicomweb_client import DICOMwebClient
 from pydicom import Dataset
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID, VLWholeSlideMicroscopyImageStorage, generate_uid
 from pytest_mock import MockerFixture
 from requests import HTTPError, Response
 
 from tests.data_gen import create_main_dataset
-from wsidicom.uid import WSI_SOP_CLASS_UID
 from wsidicom.web.wsidicom_web_client import (
     SERIES_INSTANCE_UID,
     SOP_CLASS_UID,
@@ -101,7 +100,7 @@ def dicom_web_client(
                 "Value": [fixture_series_instance_uid],
             },
             SOP_INSTANCE_UID: {"vr": "UI", "Value": [sop_instance_uid]},
-            SOP_CLASS_UID: {"vr": "UI", "Value": [WSI_SOP_CLASS_UID]},
+            SOP_CLASS_UID: {"vr": "UI", "Value": [VLWholeSlideMicroscopyImageStorage]},
         }
         if not include_other_sop_classes:
             return [wsi_instance]

@@ -16,10 +16,10 @@ from pathlib import Path
 from typing import Tuple
 
 import pytest
+from pydicom.uid import VLWholeSlideMicroscopyImageStorage
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
-from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
 class TestWsiDicomStreamOpener:
@@ -31,7 +31,9 @@ class TestWsiDicomStreamOpener:
         wsi_folder, instances_count = wsi_folder_and_counts
 
         # Act
-        streams = list(WsiDicomStreamOpener().open(wsi_folder, WSI_SOP_CLASS_UID))
+        streams = list(
+            WsiDicomStreamOpener().open(wsi_folder, VLWholeSlideMicroscopyImageStorage)
+        )
         for stream in streams:
             stream.close()
 
@@ -47,7 +49,9 @@ class TestWsiDicomStreamOpener:
         files = list(wsi_folder.iterdir())
 
         # Act
-        streams = list(WsiDicomStreamOpener().open(files, WSI_SOP_CLASS_UID))
+        streams = list(
+            WsiDicomStreamOpener().open(files, VLWholeSlideMicroscopyImageStorage)
+        )
         for stream in streams:
             stream.close()
 

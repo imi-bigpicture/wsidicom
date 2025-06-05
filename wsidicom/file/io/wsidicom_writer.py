@@ -31,7 +31,7 @@ from typing import (
 
 from pydicom.encaps import itemize_frame
 from pydicom.tag import ItemTag, SequenceDelimiterTag
-from pydicom.uid import UID
+from pydicom.uid import UID, VLWholeSlideMicroscopyImageStorage
 from pydicom.valuerep import DSfloat
 from upath import UPath
 
@@ -50,7 +50,6 @@ from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.tags import LossyImageCompressionRatioTag, PixelDataTag
 from wsidicom.thread import ConditionalThreadPoolExecutor
-from wsidicom.uid import WSI_SOP_CLASS_UID
 
 
 class WsiDicomWriter:
@@ -163,7 +162,9 @@ class WsiDicomWriter:
             if transcoder.transfer_syntax != self._transfer_syntax:
                 raise ValueError("Transcoder transfer syntax must match writer.")
         self._file.write_preamble()
-        self._file.write_file_meta_info(uid, WSI_SOP_CLASS_UID, self._transfer_syntax)
+        self._file.write_file_meta_info(
+            uid, VLWholeSlideMicroscopyImageStorage, self._transfer_syntax
+        )
         dataset.SOPInstanceUID = uid
         dataset.InstanceNumber = instance_number
         dataset_start = self._file.tell()

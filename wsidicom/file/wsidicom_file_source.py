@@ -28,7 +28,12 @@ from typing import (
 )
 
 from pydicom.fileset import FileSet
-from pydicom.uid import UID, MediaStorageDirectoryStorage
+from pydicom.uid import (
+    UID,
+    MediaStorageDirectoryStorage,
+    MicroscopyBulkSimpleAnnotationsStorage,
+    VLWholeSlideMicroscopyImageStorage,
+)
 from upath import UPath
 
 from wsidicom.config import settings
@@ -44,7 +49,7 @@ from wsidicom.geometry import Size
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import ImageType, TileType, WsiDataset, WsiInstance
 from wsidicom.source import Source
-from wsidicom.uid import ANN_SOP_CLASS_UID, WSI_SOP_CLASS_UID, SlideUids
+from wsidicom.uid import SlideUids
 
 
 class WsiDicomFileSource(Source):
@@ -66,7 +71,10 @@ class WsiDicomFileSource(Source):
         self._annotations: List[WsiDicomIO] = []
         for stream in streams:
             try:
-                if stream.media_storage_sop_class_uid == WSI_SOP_CLASS_UID:
+                if (
+                    stream.media_storage_sop_class_uid
+                    == VLWholeSlideMicroscopyImageStorage
+                ):
                     try:
                         reader = WsiDicomReader(stream)
                         if reader.image_type == ImageType.VOLUME:
@@ -81,7 +89,10 @@ class WsiDicomFileSource(Source):
                         logging.info(f"Non-supported file {stream}.")
                         if stream.owned:
                             stream.close()
-                elif stream.media_storage_sop_class_uid == ANN_SOP_CLASS_UID:
+                elif (
+                    stream.media_storage_sop_class_uid
+                    == MicroscopyBulkSimpleAnnotationsStorage
+                ):
                     self._annotations.append(stream)
             except Exception:
                 logging.error(
@@ -184,7 +195,11 @@ class WsiDicomFileSource(Source):
         file_options: Optional[Dict[str, Any]] = None,
     ) -> "WsiDicomFileSource":
         streams = WsiDicomStreamOpener(file_options).open(
-            files, [WSI_SOP_CLASS_UID, ANN_SOP_CLASS_UID]
+            files,
+            [
+                VLWholeSlideMicroscopyImageStorage,
+                MicroscopyBulkSimpleAnnotationsStorage,
+            ],
         )
         return cls(streams)
 

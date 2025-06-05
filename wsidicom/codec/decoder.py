@@ -25,8 +25,11 @@ from pydicom import config as pydicom_config
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.encaps import encapsulate
 from pydicom.uid import (
+    HTJ2K,
     JPEG2000,
     UID,
+    HTJ2KLossless,
+    HTJ2KLosslessRPCL,
     JPEG2000Lossless,
     JPEGBaseline8Bit,
     JPEGExtended12Bit,
@@ -55,7 +58,6 @@ from wsidicom.codec.optionals import (
 )
 from wsidicom.codec.rle import RleCodec
 from wsidicom.geometry import Size
-from wsidicom.uid import HTJPEG2000, HTJPEG2000Lossless, HTJPEG2000RPCLLossless
 
 
 class Decoder(metaclass=ABCMeta):
@@ -243,9 +245,9 @@ class PillowDecoder(Decoder):
         JPEGBaseline8Bit,
         JPEG2000,
         JPEG2000Lossless,
-        HTJPEG2000,
-        HTJPEG2000Lossless,
-        HTJPEG2000RPCLLossless,
+        HTJ2K,
+        HTJ2KLossless,
+        HTJ2KLosslessRPCL,
     ]
 
     def decode(self, frame: bytes) -> Image:
@@ -401,9 +403,9 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
         JPEGLSNearLossless: (jpegls_decode, JPEGLS),
         JPEG2000Lossless: (jpeg2k_decode, JPEG2K),
         JPEG2000: (jpeg2k_decode, JPEG2K),
-        HTJPEG2000: (jpeg2k_decode, JPEG2K),
-        HTJPEG2000Lossless: (jpeg2k_decode, JPEG2K),
-        HTJPEG2000RPCLLossless: (jpeg2k_decode, JPEG2K),
+        HTJ2K: (jpeg2k_decode, JPEG2K),
+        HTJ2KLossless: (jpeg2k_decode, JPEG2K),
+        HTJ2KLosslessRPCL: (jpeg2k_decode, JPEG2K),
     }
 
     def __init__(self, transfer_syntax: UID) -> None:
@@ -566,7 +568,7 @@ class PyLibJpegOpenJpegDecoder(NumpyBasedDecoder):
         return transfer_syntax in [
             JPEG2000,
             JPEG2000Lossless,
-            HTJPEG2000,
-            HTJPEG2000Lossless,
-            HTJPEG2000RPCLLossless,
+            HTJ2K,
+            HTJ2KLossless,
+            HTJ2KLosslessRPCL,
         ]
