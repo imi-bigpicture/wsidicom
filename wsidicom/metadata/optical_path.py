@@ -15,7 +15,7 @@
 """Optical path model."""
 
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Generic, Optional, Sequence, Type, TypeVar, Union
 
 import numpy as np
@@ -216,7 +216,7 @@ class OpticalFilter(Generic[OpticalFilterCodeType]):
 
     Parameters
     ----------
-    filters: Sequence[OpticalFilterCodeType] = []
+    filters: Optional[Sequence[OpticalFilterCodeType]] = None
         The filters used.
     nominal: Optional[float] = None
         The nominal value of the filter in nm.
@@ -226,7 +226,7 @@ class OpticalFilter(Generic[OpticalFilterCodeType]):
         The high pass value of the filter in nm.
     """
 
-    filters: Sequence[OpticalFilterCodeType] = field(default_factory=list)
+    filters: Optional[Sequence[OpticalFilterCodeType]] = None
     nominal: Optional[float] = None
     low_pass: Optional[float] = None
     high_pass: Optional[float] = None
@@ -237,7 +237,7 @@ class LightPathFilter(OpticalFilter[LightPathFilterCode]):
 
     Parameters
     ----------
-    filters: Sequence[LightPathFilterCode] = []
+    filters: Optional[Sequence[LightPathFilterCode]] = None
         The filters used. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8124.html
         or `LightPathFilterCode.meanings` for a list of valid codes.
@@ -255,7 +255,7 @@ class ImagePathFilter(OpticalFilter[ImagePathFilterCode]):
 
     Parameters
     ----------
-    filters: Sequence[ImagePathFilterCode] = []
+    filters: Optional[Sequence[ImagePathFilterCode]] = None
         The filters used. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8124.html
         or ImagePathFilterCode.meanings` for a list of valid codes.
@@ -274,7 +274,7 @@ class Objectives:
 
     Parameters
     ----------
-    lenses: Sequence[LenseCode] = []
+    lenses: Optional[Sequence[LenseCode]] = None
         Lenses used. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8121.html
         or `LensCode.meanings` for a list of valid codes.
@@ -286,7 +286,7 @@ class Objectives:
         The objective numerical aperture.
     """
 
-    lenses: Sequence[LenseCode] = field(default_factory=list)
+    lenses: Optional[Sequence[LenseCode]] = None
     condenser_power: Optional[float] = None
     objective_power: Optional[float] = None
     objective_numerical_aperture: Optional[float] = None
