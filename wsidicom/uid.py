@@ -24,22 +24,26 @@ from pydicom.uid import (
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomStrictRequirementError
 
+# JPEG XL Transfer Syntax UIDs not yet defined in pydicom
+jpeg_xl_lossless_uid = "1.2.840.10008.1.2.4.110"
+jpeg_xl_jpeg_recompression_uid = "1.2.840.10008.1.2.4.111"
+jpeg_xl_uid = "1.2.840.10008.1.2.4.112"
 transfer_syntaxes_to_register = {
-    "1.2.840.10008.1.2.4.110": (
+    jpeg_xl_lossless_uid: (
         "JPEG XL Lossless",
         "Transfer Syntax",
         "",
         "",
         "JPEGXLLossless",
     ),
-    "1.2.840.10008.1.2.4.111": (
+    jpeg_xl_jpeg_recompression_uid: (
         "JPEG XL JPEG Recompression",
         "Transfer Syntax",
         "",
         "",
         "JPEGXLJPEGRecompression",
     ),
-    "1.2.840.10008.1.2.4.112": (
+    jpeg_xl_uid: (
         "JPEG XL",
         "Transfer Syntax",
         "",
@@ -53,11 +57,11 @@ for ts_uid, ts_info in transfer_syntaxes_to_register.items():
     if UID(ts_uid) not in AllTransferSyntaxes:
         AllTransferSyntaxes.append(UID(ts_uid))
 
-JPEGXLLossless = UID("1.2.840.10008.1.2.4.110")
+JPEGXLLossless = UID(jpeg_xl_lossless_uid)
 
-JPEGXLJPEGRecompression = UID("1.2.840.10008.1.2.4.111")
+JPEGXLJPEGRecompression = UID(jpeg_xl_jpeg_recompression_uid)
 
-JPEGXL = UID("1.2.840.10008.1.2.4.112")
+JPEGXL = UID(jpeg_xl_uid)
 
 
 @dataclass(frozen=True)

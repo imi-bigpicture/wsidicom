@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Support for JPEG XL.
+
 ## [0.27.1] - 2025-05-15
 
 ### Fixed
