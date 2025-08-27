@@ -697,7 +697,7 @@ class WsiDicomNativeWriter(WsiDicomWriter):
             * (dataset.bits // 8)
             * dataset.frame_count
         )
-        self._file.write_tag_of_vr_and_length(PixelDataTag, "OB", length)
+        self._file.write_tag_of_vr_and_length(PixelDataTag, "OW", length)
         return [
             position
             for (path, z), image_data in sorted(data.items())

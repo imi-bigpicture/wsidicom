@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected `vr` for `PixelData` element from `OB` to `OW` when writing non-encapsulated pixel data.
+
 ## [0.27.1] - 2025-05-15
 
 ### Fixed
