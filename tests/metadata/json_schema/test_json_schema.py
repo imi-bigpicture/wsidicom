@@ -568,6 +568,7 @@ class TestJsonSchema:
         assert patient.sex is not None
         assert patient.de_identification is not None
         assert patient.de_identification.methods is not None
+        assert patient.comments is not None
         assert isinstance(dumped, dict)
         assert dumped["name"] == patient.name
         assert dumped["identifier"] == patient.identifier
@@ -594,6 +595,7 @@ class TestJsonSchema:
             )
         else:
             assert dumped["de_identification"]["methods"][0] == method
+        assert dumped["comments"] == patient.comments
 
     @pytest.mark.parametrize(
         "species_description",
@@ -617,7 +619,7 @@ class TestJsonSchema:
             },
         ],
     )
-    def test_patient_deidentification(
+    def test_patient_deserialization(
         self,
         species_description: Union[str, Dict[str, str]],
         method: Union[str, Dict[str, str]],
@@ -631,6 +633,7 @@ class TestJsonSchema:
             "de_identification": {
                 "identity_removed": True,
             },
+            "comments": "comments",
         }
         dumped["species_description"] = species_description
         dumped["de_identification"]["methods"] = [method]
@@ -668,6 +671,7 @@ class TestJsonSchema:
         else:
             assert loaded.de_identification.methods[0] == method
         assert loaded.de_identification is not None
+        assert loaded.comments == dumped["comments"]
 
     def test_series_serialize(self, series: Series):
         # Arrange
@@ -679,11 +683,15 @@ class TestJsonSchema:
         assert isinstance(dumped, dict)
         assert dumped["uid"] == str(series.uid)
         assert dumped["number"] == series.number
+        assert dumped["description"] == series.description
+        assert dumped["body_part_examined"] == series.body_part_examined
 
     def test_series_deserialize(self):
         dumped = {
             "uid": "1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423",
             "number": 1,
+            "description": "Description",
+            "body_part_examined": "Skin",
         }
 
         # Act
@@ -693,6 +701,8 @@ class TestJsonSchema:
         assert isinstance(loaded, Series)
         assert loaded.uid == UID(dumped["uid"])
         assert loaded.number == dumped["number"]
+        assert loaded.description == dumped["description"]
+        assert loaded.body_part_examined == dumped["body_part_examined"]
 
     def test_study_serialize(self, study: Study):
         # Arrange

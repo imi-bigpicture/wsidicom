@@ -102,6 +102,11 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
     de_identification = FlattenOnDumpNestedDicomField(
         PatientDeIdentificationDicomSchema(), allow_none=True
     )
+    comments = StringDicomField(
+        value_representation=VR.LT,
+        data_key="PatientComments",
+        allow_none=True,
+    )
 
     @property
     def load_type(self) -> Type[Patient]:
@@ -115,6 +120,7 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
             "birth_date": patient.birth_date,
             "sex": patient.sex,
             "de_identification": patient.de_identification,
+            "comments": patient.comments,
         }
 
         if isinstance(patient.species_description, str):
