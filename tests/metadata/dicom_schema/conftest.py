@@ -254,6 +254,8 @@ def dicom_patient(patient: Patient):
                 for method in patient.de_identification.methods
                 if isinstance(method, Code)
             ]
+    if patient.comments is not None:
+        dataset.PatientComments = patient.comments
     yield dataset
 
 
@@ -262,6 +264,10 @@ def dicom_series(series: Series):
     dataset = Dataset()
     dataset.SeriesInstanceUID = series.uid
     dataset.SeriesNumber = series.number
+    if series.description is not None:
+        dataset.SeriesDescription = series.description
+    if series.body_part_examined is not None:
+        dataset.BodyPartExamined = series.body_part_examined
     yield dataset
 
 

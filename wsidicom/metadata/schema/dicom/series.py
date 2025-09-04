@@ -17,10 +17,12 @@
 from typing import Type
 
 from marshmallow import fields
+from pydicom.valuerep import VR
 
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
     DefaultingTagDicomField,
+    StringDicomField,
     UidDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
@@ -33,6 +35,12 @@ class SeriesDicomSchema(ModuleDicomSchema[Series]):
     )
     number = DefaultingDicomField(
         fields.Integer(), dump_default=1, data_key="SeriesNumber", allow_none=True
+    )
+    description = StringDicomField(
+        value_representation=VR.LT, data_key="SeriesDescription", allow_none=True
+    )
+    body_part_examined = StringDicomField(
+        value_representation=VR.CS, data_key="BodyPartExamined", allow_none=True
     )
 
     @property

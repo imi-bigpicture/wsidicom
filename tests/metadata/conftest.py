@@ -241,6 +241,7 @@ def patient(request):
         PatientSex.O,
         species_description,
         patient_deidentification,
+        "comments",
     )
 
 
@@ -528,7 +529,10 @@ def slide(slide_identifier: Union[str, SpecimenIdentifier], staining: Staining):
 @pytest.fixture()
 def series():
     yield Series(
-        UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"), 1
+        UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
+        1,
+        "Description",
+        "Skin",
     )
 
 

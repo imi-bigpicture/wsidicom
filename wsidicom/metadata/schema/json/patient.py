@@ -39,6 +39,7 @@ class PatientJsonSchema(LoadingSchema[Patient]):
     de_identification = fields.Nested(
         PatientDeIdentificationJsonSchema(), allow_none=True
     )
+    comments = fields.String(allow_none=True)
 
     @property
     def load_type(self):

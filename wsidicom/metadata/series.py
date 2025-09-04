@@ -37,10 +37,16 @@ class Series:
         The series instance UID.
     number : Optional[int] = None
         The series number.
+    description : Optional[str] = None
+        The series description.
+    body_part_examined : Optional[str] = None
+        The body part examined.
     """
 
     uid: Optional[UID] = None
     number: Optional[int] = None
+    description: Optional[str] = None
+    body_part_examined: Optional[str] = None
 
     @cached_property
     def default_uid(self) -> UID:

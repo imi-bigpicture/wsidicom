@@ -24,6 +24,8 @@ from wsidicom.metadata.series import Series
 class SeriesJsonSchema(LoadingSchema[Series]):
     uid = UidJsonField(allow_none=True)
     number = fields.Integer(allow_none=True)
+    description = fields.String(allow_none=True)
+    body_part_examined = fields.String(allow_none=True)
 
     @property
     def load_type(self):

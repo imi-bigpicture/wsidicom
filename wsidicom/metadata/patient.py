@@ -69,6 +69,8 @@ class Patient:
         The species description of the patient.
     de_identification : Optional[PatientDeIdentification] = None
         The de-identification of the patient.
+    comments : Optional[str] = None
+        Comments about the patient.
     """
 
     name: Optional[str] = None
@@ -77,6 +79,7 @@ class Patient:
     sex: Optional[PatientSex] = None
     species_description: Optional[Union[str, Code]] = None
     de_identification: Optional[PatientDeIdentification] = None
+    comments: Optional[str] = None
 
     def remove_confidential(self) -> "Patient":
         return replace(
@@ -90,4 +93,5 @@ class Patient:
                 if self.de_identification
                 else None
             ),
+            comments=None,
         )

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Fields `description` and `body_part_examined` to `Series` metadata and `comments` to `Patient` metadata.
+
 ### Fixed
 
 - Corrected `vr` for `PixelData` element from `OB` to `OW` when writing non-encapsulated pixel data.
