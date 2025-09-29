@@ -241,12 +241,16 @@ class WsiDicomFileTarget(Target):
                 dataset.PhotometricInterpretation = (
                     transcoder.photometric_interpretation
                 )
+
                 if transcoder.lossy_method:
                     dataset.LossyImageCompression = "01"
                     ratios = dataset.get_multi_value(LossyImageCompressionRatioTag)
+                    methods = dataset.get_multi_value(LossyImageCompressionMethodTag)
+                    if scale != 1:
+                        ratios.clear()
+                        methods.clear()
                     # Reserve space for new ratio
                     ratios.append(" " * MAX_VALUE_LEN["DS"])
-                    methods = dataset.get_multi_value(LossyImageCompressionMethodTag)
                     methods.append(transcoder.lossy_method.value)
                     dataset.LossyImageCompressionRatio = ratios
                     dataset.LossyImageCompressionMethod = methods
