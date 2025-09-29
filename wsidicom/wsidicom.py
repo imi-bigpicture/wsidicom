@@ -47,6 +47,8 @@ from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level, Thumbnail
 from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.metadata import WsiMetadata
+from wsidicom.metadata.schema.dicom.label import LabelBaseDicomSchema
+from wsidicom.metadata.schema.dicom.wsi import BaseWsiMetadataDicomSchema
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -894,15 +896,29 @@ class WsiDicom:
 
     @lru_cache
     def _create_metadata(self, pyramid_index: int) -> WsiMetadata:
+        pyramid = self.pyramids.get(pyramid_index)
+
         if self.labels is not None:
             label_metadata = self.labels.metadata
         else:
-            label_metadata = None
+            label_metadata = LabelBaseDicomSchema().load(pyramid.datasets[0])
         if self.overviews is not None:
             overview_metadata = self.overviews.metadata
         else:
             overview_metadata = None
-        pyramid = self.pyramids.get(pyramid_index)
+        base = BaseWsiMetadataDicomSchema().load(pyramid.datasets[0])
+        return WsiMetadata(
+            study=base.study,
+            series=base.series,
+            patient=base.patient,
+            equipment=base.equipment,
+            slide=base.slide,
+            pyramid=pyramid.metadata,
+            label=label_metadata,
+            overview=overview_metadata,
+            frame_of_reference_uid=base.frame_of_reference_uid,
+            dimension_organization_uids=base.dimension_organization_uids,
+        )
         return WsiMetadata.merge_image_types(
             pyramid.metadata, label_metadata, overview_metadata
         )

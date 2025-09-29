@@ -39,42 +39,43 @@ from wsidicom.conceptcode import (
 from wsidicom.geometry import PointMm, SizeMm
 from wsidicom.instance.dataset import ImageType
 from wsidicom.metadata import (
+    Collection,
+    ConstantLutSegment,
+    Embedding,
     Equipment,
     ExtendedDepthOfField,
+    Fixation,
     FocusMethod,
     Image,
     ImageCoordinateSystem,
     ImagePathFilter,
     Label,
     LightPathFilter,
+    LinearLutSegment,
+    LossyCompression,
     Lut,
     Objectives,
     OpticalPath,
+    Overview,
     Patient,
     PatientDeIdentification,
     PatientSex,
-    Series,
-    Slide,
-    Study,
-    WsiMetadata,
-)
-from wsidicom.metadata.image import LossyCompression
-from wsidicom.metadata.optical_path import ConstantLutSegment, LinearLutSegment
-from wsidicom.metadata.sample import (
-    Collection,
-    Embedding,
-    Fixation,
     Processing,
+    Pyramid,
     Receiving,
     Sample,
     SampleLocalization,
     Sampling,
     SamplingLocation,
+    Series,
+    Slide,
     SlideSample,
     Specimen,
     SpecimenIdentifier,
     Staining,
     Storage,
+    Study,
+    WsiMetadata,
 )
 
 
@@ -129,6 +130,11 @@ def image_comments():
 
 
 @pytest.fixture()
+def image_contains_phi():
+    yield False
+
+
+@pytest.fixture()
 def image(
     acquisition_datetime: Optional[datetime.datetime],
     focus_method: Optional[FocusMethod],
@@ -138,7 +144,6 @@ def image(
     focal_plane_spacing: Optional[float],
     depth_of_field: Optional[float],
     lossy_compressions: Optional[Sequence[LossyCompression]],
-    image_comments: Optional[str],
 ):
     yield Image(
         acquisition_datetime,
@@ -149,13 +154,194 @@ def image(
         focal_plane_spacing,
         depth_of_field,
         lossy_compressions,
+    )
+
+
+@pytest.fixture()
+def pyramid_uid():
+    yield UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423")
+
+
+@pytest.fixture()
+def pyramid_description():
+    yield "pyramid description"
+
+
+@pytest.fixture()
+def pyramid_label():
+    yield "pyramid label"
+
+
+@pytest.fixture()
+def pyramid(
+    image: Image,
+    optical_path: OpticalPath,
+    pyramid_uid: UID,
+    pyramid_description: str,
+    pyramid_label: str,
+    image_contains_phi: bool,
+    image_comments: Optional[str],
+):
+    yield Pyramid(
+        image,
+        [optical_path],
+        pyramid_uid,
+        pyramid_description,
+        pyramid_label,
+        image_contains_phi,
         image_comments,
     )
 
 
 @pytest.fixture()
-def label():
-    yield Label("text", "barcode", True, True, False)
+def label_text():
+    yield "text"
+
+
+@pytest.fixture()
+def label_barcode():
+    yield "barcode"
+
+
+@pytest.fixture()
+def label_contains_phi():
+    yield True
+
+
+@pytest.fixture()
+def label_pixel_spacing():
+    yield None
+
+
+@pytest.fixture()
+def label_lossy_compressions():
+    yield [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 2)]
+
+
+@pytest.fixture()
+def label_image(
+    label_image_coordinate_system: Optional[ImageCoordinateSystem],
+    label_pixel_spacing: Optional[SizeMm],
+    label_lossy_compressions: Optional[Sequence[LossyCompression]],
+):
+    yield Image(
+        None,
+        None,
+        None,
+        label_image_coordinate_system,
+        label_pixel_spacing,
+        None,
+        None,
+        label_lossy_compressions,
+    )
+
+
+@pytest.fixture()
+def label_optical_path(
+    icc_profile: bytes,
+):
+    yield OpticalPath(
+        "identifier",
+        "description",
+        [IlluminationCode("Brightfield illumination")],
+        icc_profile=icc_profile,
+    )
+
+
+@pytest.fixture()
+def label_image_comments():
+    yield "comments"
+
+
+@pytest.fixture()
+def label(
+    label_text: Optional[str],
+    label_barcode: Optional[str],
+    label_contains_phi: bool,
+    label_image: Image,
+    label_optical_path: OpticalPath,
+    label_image_comments: Optional[str],
+):
+    yield Label(
+        label_text,
+        label_barcode,
+        label_image,
+        [label_optical_path],
+        label_contains_phi,
+        label_image_comments,
+    )
+
+
+@pytest.fixture()
+def overview_contains_phi():
+    yield True
+
+
+@pytest.fixture()
+def overview_pixel_spacing():
+    yield None
+
+
+@pytest.fixture()
+def overview_lossy_compressions():
+    yield [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 2)]
+
+
+@pytest.fixture()
+def overview_image_contains_slide_label():
+    yield True
+
+
+@pytest.fixture()
+def overview_image(
+    overview_image_coordinate_system: Optional[ImageCoordinateSystem],
+    overview_pixel_spacing: Optional[SizeMm],
+    overview_lossy_compressions: Optional[Sequence[LossyCompression]],
+):
+    yield Image(
+        None,
+        None,
+        None,
+        overview_image_coordinate_system,
+        overview_pixel_spacing,
+        None,
+        None,
+        overview_lossy_compressions,
+    )
+
+
+@pytest.fixture()
+def overview_optical_path(
+    icc_profile: bytes,
+):
+    yield OpticalPath(
+        "identifier",
+        "description",
+        [IlluminationCode("Brightfield illumination")],
+        icc_profile=icc_profile,
+    )
+
+
+@pytest.fixture()
+def overview_image_comments():
+    yield "comments"
+
+
+@pytest.fixture()
+def overview(
+    overview_contains_phi: bool,
+    overview_image_contains_slide_label: bool,
+    overview_image: Image,
+    overview_optical_path: OpticalPath,
+    overview_image_comments: Optional[str],
+):
+    yield Overview(
+        overview_image,
+        [overview_optical_path],
+        overview_image_contains_slide_label,
+        overview_contains_phi,
+        overview_image_comments,
+    )
 
 
 @pytest.fixture()
@@ -222,25 +408,33 @@ def optical_path(
     )
 
 
-@pytest.fixture(
-    params=[
-        ["specimen description", "method"],
-        [Code("value", "scheme", "meaning"), Code("value", "scheme", "meaning")],
-    ]
-)
-def patient(request):
-    species_description = request.param[0]
-    assert isinstance(species_description, (str, Code))
-    method = request.param[1]
-    assert isinstance(method, (str, Code))
-    patient_deidentification = PatientDeIdentification(True, [method])
+@pytest.fixture
+def species_description():
+    yield Code("value", "scheme", "meaning")
+
+
+@pytest.fixture
+def patient_deidentification_method():
+    yield Code("value", "scheme", "meaning")
+
+
+@pytest.fixture()
+def patient(
+    species_description: Union[str, Code],
+    patient_deidentification_method: Optional[Union[str, Code]],
+):
+
     yield Patient(
         "name",
         "identifier",
-        datetime.datetime(2023, 8, 5),
+        datetime.date(2023, 8, 5),
         PatientSex.O,
         species_description,
-        patient_deidentification,
+        (
+            PatientDeIdentification(True, [patient_deidentification_method])
+            if patient_deidentification_method
+            else None
+        ),
         "comments",
     )
 
@@ -532,7 +726,7 @@ def series():
         UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
         1,
         "Description",
-        "Skin",
+        "SKIN",
     )
 
 
@@ -571,7 +765,17 @@ def extended_depth_of_field():
 
 @pytest.fixture()
 def image_coordinate_system():
-    yield ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0)
+    yield ImageCoordinateSystem(PointMm(20.0, 30.0), 180)
+
+
+@pytest.fixture()
+def label_image_coordinate_system():
+    yield ImageCoordinateSystem(PointMm(25, 75), 180)
+
+
+@pytest.fixture()
+def overview_image_coordinate_system():
+    yield ImageCoordinateSystem(PointMm(25, 75), 180)
 
 
 @pytest.fixture()
@@ -600,18 +804,18 @@ def wsi_metadata(
     series: Series,
     patient: Patient,
     equipment: Equipment,
-    optical_path: OpticalPath,
     slide: Slide,
+    pyramid: Pyramid,
     label: Label,
-    image: Image,
+    overview: Overview,
 ):
     yield WsiMetadata(
         study=study,
         series=series,
         patient=patient,
         equipment=equipment,
-        optical_paths=[optical_path],
         slide=slide,
+        pyramid=pyramid,
         label=label,
-        image=image,
+        overview=overview,
     )

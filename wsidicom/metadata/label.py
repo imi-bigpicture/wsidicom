@@ -1,4 +1,4 @@
-#    Copyright 2023 SECTRA AB
+#    Copyright 2023, 2025 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -15,7 +15,10 @@
 """Label model."""
 
 from dataclasses import dataclass, replace
-from typing import List, Optional
+from typing import Optional, Sequence
+
+from wsidicom.metadata.image import Image
+from wsidicom.metadata.optical_path import OpticalPath
 
 
 @dataclass(frozen=True)
@@ -23,49 +26,34 @@ class Label:
     """
     Label metadata.
 
-    Corresponds to the `Required, Empty if Unknown` attributes in the Slide Label
-    module:
-    https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.8.12.8.html
-
     Parameters
     ----------
     text : Optional[str] = None
         The label text.
     barcode : Optional[str] = None
         The label barcode.
-    label_in_volume_image : bool = False
-        Whether the label is present in the volume image.
-    label_in_overview_image : bool = True
-        Whether the label is present in the overview image.
-    label_is_phi : bool = True
-        Whether the label is personal health information.
+    image : Optional[Image] = None
+        Technical metadata of the label image.
+    optical_paths : Optional[Sequence[OpticalPath]] = None
+        Metadata of the optical paths used to acquire the label image.
+    contains_phi : bool = True
+        Whether the label image contains personal health information.
+    comments: Optional[str] = None
+        Comments related to the label image.
     """
 
     text: Optional[str] = None
     barcode: Optional[str] = None
-    label_in_volume_image: bool = False
-    label_in_overview_image: bool = True
-    label_is_phi: bool = True
-
-    @classmethod
-    def merge_image_types(
-        cls, volume: "Label", label: Optional["Label"], overview: Optional["Label"]
-    ):
-        labels: List[Optional[Label]] = [label, volume, overview]
-        text = next((item.text for item in labels if item is not None), None)
-        barcode = next((item.barcode for item in labels if item is not None), None)
-        label_is_phi = any(item.label_is_phi for item in labels if item is not None)
-        if overview is None:
-            label_in_overview_image = False
-        else:
-            label_in_overview_image = overview.label_in_overview_image
-        return cls(
-            text=text,
-            barcode=barcode,
-            label_in_volume_image=volume.label_in_volume_image,
-            label_in_overview_image=label_in_overview_image,
-            label_is_phi=label_is_phi,
-        )
+    image: Optional[Image] = None
+    optical_paths: Optional[Sequence[OpticalPath]] = None
+    contains_phi: bool = True
+    comments: Optional[str] = None
 
     def remove_confidential(self) -> "Label":
-        return replace(self, text=None, barcode=None)
+        return replace(
+            self,
+            text=None,
+            barcode=None,
+            image=self.image.remove_confidential() if self.image else None,
+            comments=None,
+        )

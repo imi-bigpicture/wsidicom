@@ -33,16 +33,18 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
 )
-from wsidicom.instance import ImageType
+from wsidicom.geometry import SizeMm
 from wsidicom.metadata import (
     Equipment,
     Image,
     Label,
     OpticalPath,
+    Overview,
     Patient,
     Series,
     Study,
 )
+from wsidicom.metadata.image import ImageCoordinateSystem, LossyCompression
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
@@ -145,8 +147,13 @@ def assert_dicom_equipment_equals_equipment(
 
 
 def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
-    assert dicom_image.AcquisitionDateTime == image.acquisition_datetime
-    if image.focus_method is not None:
+    if image.acquisition_datetime is None:
+        assert dicom_image.AcquisitionDateTime == defaults.date_time
+    else:
+        assert dicom_image.AcquisitionDateTime == image.acquisition_datetime
+    if image.focus_method is None:
+        assert dicom_image.FocusMethod == defaults.focus_method.name
+    else:
         assert dicom_image.FocusMethod == image.focus_method.name
     if image.extended_depth_of_field is not None:
         assert dicom_image.ExtendedDepthOfField == bool_to_dicom_literal(True)
@@ -160,91 +167,115 @@ def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
         )
     else:
         assert dicom_image.ExtendedDepthOfField == bool_to_dicom_literal(False)
-    if image.image_coordinate_system is not None:
-        assert (
-            dicom_image.TotalPixelMatrixOriginSequence[0].XOffsetInSlideCoordinateSystem
-            == image.image_coordinate_system.origin.x
-        )
-        assert (
-            dicom_image.TotalPixelMatrixOriginSequence[0].YOffsetInSlideCoordinateSystem
-            == image.image_coordinate_system.origin.y
-        )
-        assert dicom_image.ImageOrientationSlide == list(
-            image.image_coordinate_system.orientation.values
-        )
-        if image.image_coordinate_system.z_offset is not None:
-            assert (
-                dicom_image.TotalPixelMatrixOriginSequence[
-                    0
-                ].ZOffsetInSlideCoordinateSystem
-                == image.image_coordinate_system.z_offset
-            )
-    if any(
-        item is not None
-        for item in [
-            image.pixel_spacing,
-            image.focal_plane_spacing,
-            image.depth_of_field,
-        ]
-    ):
-        assert "SharedFunctionalGroupsSequence" in dicom_image
-        shared_functional_group = dicom_image.SharedFunctionalGroupsSequence[0]
+    assert_dicom_image_coordinate_system_equals_image_coordinate_system(
+        dicom_image, image.image_coordinate_system
+    )
+    assert_dicom_pixel_spacing_equals_pixel_spacing(dicom_image, image.pixel_spacing)
+    assert_dicom_focal_plane_spacing_equals_pixel_spacing(
+        dicom_image, image.focal_plane_spacing
+    )
+    assert_dicom_depth_of_field_equals_depth_of_field(dicom_image, image.depth_of_field)
+    assert_dicom_lossy_compression_equals_lossy_compressions(
+        dicom_image, image.lossy_compressions
+    )
+
+
+def assert_dicom_label_equals_label(dicom_label: Dataset, label: Label):
+    assert dicom_label.LabelText == label.text
+    assert dicom_label.BarcodeValue == label.barcode
+
+
+def assert_dicom_overview_equals_overview(dicom_overview: Dataset, overview: Overview):
+    assert dicom_overview.SpecimenLabelInImage == bool_to_dicom_literal(
+        overview.contains_label
+    )
+
+
+def assert_dicom_pixel_spacing_equals_pixel_spacing(
+    dicom: Dataset, pixel_spacing: Optional[SizeMm]
+):
+    if pixel_spacing is not None:
+        assert "SharedFunctionalGroupsSequence" in dicom
+        shared_functional_group = dicom.SharedFunctionalGroupsSequence[0]
         assert "PixelMeasuresSequence" in shared_functional_group
         pixel_measures = shared_functional_group.PixelMeasuresSequence[0]
-        if image.pixel_spacing is not None:
-            assert pixel_measures.PixelSpacing == [
-                DSfloat(image.pixel_spacing.width),
-                DSfloat(image.pixel_spacing.height),
-            ]
-        if image.focal_plane_spacing is not None:
-            assert pixel_measures.SpacingBetweenSlices == DSfloat(
-                image.focal_plane_spacing
+        assert pixel_measures.PixelSpacing == [
+            DSfloat(pixel_spacing.width),
+            DSfloat(pixel_spacing.height),
+        ]
+
+
+def assert_dicom_focal_plane_spacing_equals_pixel_spacing(
+    dicom: Dataset, focal_plane_spacing: Optional[float]
+):
+    if focal_plane_spacing is not None:
+        assert "SharedFunctionalGroupsSequence" in dicom
+        shared_functional_group = dicom.SharedFunctionalGroupsSequence[0]
+        assert "PixelMeasuresSequence" in shared_functional_group
+        pixel_measures = shared_functional_group.PixelMeasuresSequence[0]
+        assert pixel_measures.SpacingBetweenSlices == DSfloat(focal_plane_spacing)
+
+
+def assert_dicom_depth_of_field_equals_depth_of_field(
+    dicom: Dataset, depth_of_field: Optional[float]
+):
+    if depth_of_field is not None:
+        assert "SharedFunctionalGroupsSequence" in dicom
+        shared_functional_group = dicom.SharedFunctionalGroupsSequence[0]
+        assert "PixelMeasuresSequence" in shared_functional_group
+        pixel_measures = shared_functional_group.PixelMeasuresSequence[0]
+        assert pixel_measures.SliceThickness == DSfloat(depth_of_field)
+
+
+def assert_dicom_image_coordinate_system_equals_image_coordinate_system(
+    dicom: Dataset, image_coordinate_system: Optional[ImageCoordinateSystem]
+):
+    if image_coordinate_system is not None:
+        assert (
+            dicom.TotalPixelMatrixOriginSequence[0].XOffsetInSlideCoordinateSystem
+            == image_coordinate_system.origin.x
+        )
+        assert (
+            dicom.TotalPixelMatrixOriginSequence[0].YOffsetInSlideCoordinateSystem
+            == image_coordinate_system.origin.y
+        )
+        assert dicom.ImageOrientationSlide == list(
+            image_coordinate_system.orientation.values
+        )
+        if image_coordinate_system.z_offset is not None:
+            assert (
+                dicom.TotalPixelMatrixOriginSequence[0].ZOffsetInSlideCoordinateSystem
+                == image_coordinate_system.z_offset
             )
-        if image.depth_of_field is not None:
-            assert pixel_measures.SliceThickness == DSfloat(image.depth_of_field)
-    if image.lossy_compressions is not None:
-        assert "LossyImageCompressionMethod" in dicom_image
-        assert "LossyImageCompressionRatio" in dicom_image
-        dicom_methods = dicom_image.LossyImageCompressionMethod
+
+
+def assert_dicom_lossy_compression_equals_lossy_compressions(
+    dicom: Dataset, lossy_compressions: Optional[Sequence[LossyCompression]]
+):
+    if lossy_compressions is not None:
+        assert "LossyImageCompressionMethod" in dicom
+        assert "LossyImageCompressionRatio" in dicom
+        dicom_methods = dicom.LossyImageCompressionMethod
         if isinstance(dicom_methods, str):
             dicom_methods = [dicom_methods]
-        dicom_ratios = dicom_image.LossyImageCompressionRatio
+        dicom_ratios = dicom.LossyImageCompressionRatio
         if isinstance(dicom_ratios, float):
             dicom_ratios = [dicom_ratios]
 
-        assert len(dicom_methods) == len(image.lossy_compressions)
-        assert len(dicom_ratios) == len(image.lossy_compressions)
+        assert len(dicom_methods) == len(lossy_compressions)
+        assert len(dicom_ratios) == len(lossy_compressions)
         for lossy_compression, dicom_method, dicom_ratio in zip(
-            image.lossy_compressions,
+            lossy_compressions,
             dicom_methods,
             dicom_ratios,
         ):
             assert lossy_compression.method.value == dicom_method
             assert lossy_compression.ratio == dicom_ratio
-        assert dicom_image.LossyImageCompression == "01"
+        assert dicom.LossyImageCompression == "01"
     else:
-        assert "LossyImageCompressionMethod" not in dicom_image
-        assert "LossyImageCompressionRatio" not in dicom_image
-        assert dicom_image.LossyImageCompression == "00"
-
-
-def assert_dicom_label_equals_label(
-    dicom_label: Dataset, label: Label, image_type: ImageType
-):
-    assert dicom_label.LabelText == label.text
-    assert dicom_label.BarcodeValue == label.barcode
-    if (
-        (image_type == ImageType.VOLUME and label.label_in_volume_image)
-        or (image_type == ImageType.OVERVIEW and label.label_in_overview_image)
-        or image_type == ImageType.LABEL
-    ):
-        assert dicom_label.SpecimenLabelInImage == bool_to_dicom_literal(True)
-        assert dicom_label.BurnedInAnnotation == bool_to_dicom_literal(
-            label.label_is_phi
-        )
-    else:
-        assert dicom_label.SpecimenLabelInImage == bool_to_dicom_literal(False)
-        assert dicom_label.BurnedInAnnotation == bool_to_dicom_literal(False)
+        assert "LossyImageCompressionMethod" not in dicom
+        assert "LossyImageCompressionRatio" not in dicom
+        assert dicom.LossyImageCompression == "00"
 
 
 def assert_dicom_optical_path_equals_optical_path(
@@ -291,10 +322,11 @@ def assert_dicom_optical_path_equals_optical_path(
             optical_path.light_path_filter.low_pass,
             optical_path.light_path_filter.high_pass,
         ]
-        assert_dicom_code_sequence_equals_codes(
-            dicom_optical_path.LightPathFilterTypeStackCodeSequence,
-            optical_path.light_path_filter.filters,
-        )
+        if optical_path.light_path_filter.filters is not None:
+            assert_dicom_code_sequence_equals_codes(
+                dicom_optical_path.LightPathFilterTypeStackCodeSequence,
+                optical_path.light_path_filter.filters,
+            )
     else:
         assert "LightPathFilterPassThroughWavelength" not in dicom_optical_path
         assert "LightPathFilterPassBand" not in dicom_optical_path
@@ -308,19 +340,21 @@ def assert_dicom_optical_path_equals_optical_path(
             optical_path.image_path_filter.low_pass,
             optical_path.image_path_filter.high_pass,
         ]
-        assert_dicom_code_sequence_equals_codes(
-            dicom_optical_path.ImagePathFilterTypeStackCodeSequence,
-            optical_path.image_path_filter.filters,
-        )
+        if optical_path.image_path_filter.filters is not None:
+            assert_dicom_code_sequence_equals_codes(
+                dicom_optical_path.ImagePathFilterTypeStackCodeSequence,
+                optical_path.image_path_filter.filters,
+            )
     else:
         assert "ImagePathFilterPassThroughWavelength" not in dicom_optical_path
         assert "ImagePathFilterPassBand" not in dicom_optical_path
         assert "ImagePathFilterTypeStackCodeSequence" not in dicom_optical_path
     if optical_path.objective is not None:
-        assert_dicom_code_sequence_equals_codes(
-            dicom_optical_path.LensesCodeSequence,
-            optical_path.objective.lenses,
-        )
+        if optical_path.objective.lenses is not None:
+            assert_dicom_code_sequence_equals_codes(
+                dicom_optical_path.LensesCodeSequence,
+                optical_path.objective.lenses,
+            )
         assert (
             dicom_optical_path.CondenserLensPower
             == optical_path.objective.condenser_power

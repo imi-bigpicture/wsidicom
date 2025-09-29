@@ -314,6 +314,7 @@ class FlattenOnDumpNestedDicomField(fields.Nested):
         key = self.name
         if self.data_key is not None:
             key = self.data_key
+        assert key is not None
         nested = data.pop(key, None)
         if isinstance(nested, Dataset):
             for nested_key, nested_value in nested.items():

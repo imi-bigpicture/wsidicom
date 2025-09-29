@@ -31,8 +31,9 @@ from wsidicom.errors import WsiDicomMatchError, WsiDicomNotFoundError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Label, Level, Overview, Thumbnail
 from wsidicom.instance import ImageType, WsiDataset, WsiInstance
-from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
-from wsidicom.metadata.wsi import WsiMetadata
+from wsidicom.metadata import Label as LabelMetadata
+from wsidicom.metadata import Overview as OverviewMetadata
+from wsidicom.metadata.schema.dicom import LabelDicomSchema, OverviewDicomSchema
 from wsidicom.uid import SlideUids
 
 SeriesType = TypeVar("SeriesType", bound="Series")
@@ -124,10 +125,6 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
         """Return contained instances"""
         series_instances = [series.instances.values() for series in self]
         return [instance for sublist in series_instances for instance in sublist]
-
-    @cached_property
-    def metadata(self) -> WsiMetadata:
-        return WsiMetadataDicomSchema().load(self.datasets[0])
 
     @classmethod
     def open(
@@ -245,6 +242,11 @@ class Overviews(Series[Overview]):
     def image_type(self) -> ImageType:
         return ImageType.OVERVIEW
 
+    @cached_property
+    def metadata(self) -> OverviewMetadata:
+        """Metadata of the overview series."""
+        return OverviewDicomSchema().load(self.datasets[0])
+
 
 class Labels(Series[Label]):
     """Represents a series of Groups of the label wsi flavor."""
@@ -254,6 +256,11 @@ class Labels(Series[Label]):
     @property
     def image_type(self) -> ImageType:
         return ImageType.LABEL
+
+    @cached_property
+    def metadata(self) -> LabelMetadata:
+        """Metadata of the label series."""
+        return LabelDicomSchema().load(self.datasets[0])
 
 
 class Thumbnails(Series[Thumbnail]):

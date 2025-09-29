@@ -37,6 +37,7 @@ class Defaults:
     slide_material = "GLASS"
     focus_method = FocusMethod.AUTO
     slide_size_without_label = SizeMm(25, 50)
+    slide_size_with_label = SizeMm(25, 75)
     image_coordinate_system_rotation: float = 180
 
 

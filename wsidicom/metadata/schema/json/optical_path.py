@@ -178,7 +178,7 @@ class ObjectivesJsonSchema(LoadingSchema[Objectives]):
         return Objectives
 
 
-class OpticalPathJsonSchema(Schema):
+class OpticalPathJsonSchema(LoadingSchema[OpticalPath]):
     """Optical path. Icc profile is not included but can be loaded from context."""
 
     identifier = fields.String(allow_none=True)
@@ -195,14 +195,6 @@ class OpticalPathJsonSchema(Schema):
     image_path_filter = fields.Nested(ImagePathFilterJsonSchema(), allow_none=True)
     objective = fields.Nested(ObjectivesJsonSchema(), allow_none=True)
 
-    @post_load
-    def load_to_object(self, data: Dict[str, Any], **kwargs):
-        icc_profile = self.context.get("icc_profile", None)
-        if icc_profile is not None:
-            if isinstance(icc_profile, bytes):
-                data["icc_profile"] = icc_profile
-            elif isinstance(icc_profile, dict):
-                identifier = data.get("identifier", None)
-                if identifier in icc_profile:
-                    data["icc_profile"] = icc_profile[identifier]
-        return OpticalPath(**data)
+    @property
+    def load_type(self) -> Type[OpticalPath]:
+        return OpticalPath
