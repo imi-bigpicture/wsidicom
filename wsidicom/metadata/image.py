@@ -217,10 +217,6 @@ class Image:
     """
     Image metadata.
 
-    Corresponds to the `Required, Empty if Unknown` attributes in the Slide Label
-    module:
-    https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.8.12.8.html
-
     Parameters
     ----------
     acquisition_datetime : Optional[datetime.datetime] = None
@@ -239,8 +235,6 @@ class Image:
         The depth of field of the image.
     lossy_compressions : Optional[Sequence[LossyCompression]] = None
         The lossy compressions method that has been applied to the image data.
-    comments : Optional[str] = None
-        Comments related to the image.
     """
 
     acquisition_datetime: Optional[datetime.datetime] = None
@@ -251,11 +245,9 @@ class Image:
     focal_plane_spacing: Optional[float] = None
     depth_of_field: Optional[float] = None
     lossy_compressions: Optional[Sequence[LossyCompression]] = None
-    comments: Optional[str] = None
 
     def remove_confidential(self) -> "Image":
         return replace(
             self,
             acquisition_datetime=None,
-            comments=None,
         )

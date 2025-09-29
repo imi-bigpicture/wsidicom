@@ -9,11 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Pyramid` and `Overview` metadata classes to describe pyramid and overview specific metadata.
+- Additional fields to `Label` metadata class to describe label instance metadata.
 - Fields `description` and `body_part_examined` to `Series` metadata and `comments` to `Patient` metadata.
+
+### Changed
+
+- Moved `image` and `optical_paths` from `WsiMetadata` to `Pyramid`. The same metadata is thus now located unter at `pyramid.image` and `pyramid.optical_paths`.
 
 ### Fixed
 
 - Corrected `vr` for `PixelData` element from `OB` to `OW` when writing non-encapsulated pixel data.
+- Reseting `LossyImageCompressionRatio` and `LossyImageCompressionMethod` when creating scaled image data.
 
 ## [0.27.1] - 2025-05-15
 

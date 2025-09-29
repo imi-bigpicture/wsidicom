@@ -18,7 +18,9 @@ from wsidicom.metadata.schema.json.equipment import EquipmentJsonSchema
 from wsidicom.metadata.schema.json.image import ImageJsonSchema
 from wsidicom.metadata.schema.json.label import LabelJsonSchema
 from wsidicom.metadata.schema.json.optical_path import OpticalPathJsonSchema
+from wsidicom.metadata.schema.json.overview import OverviewJsonSchema
 from wsidicom.metadata.schema.json.patient import PatientJsonSchema
+from wsidicom.metadata.schema.json.pyramid import PyramidJsonSchema
 from wsidicom.metadata.schema.json.series import SeriesJsonSchema
 from wsidicom.metadata.schema.json.slide import SlideJsonSchema
 from wsidicom.metadata.schema.json.study import StudyJsonSchema
@@ -29,7 +31,9 @@ __all__ = [
     "ImageJsonSchema",
     "LabelJsonSchema",
     "OpticalPathJsonSchema",
+    "OverviewJsonSchema",
     "PatientJsonSchema",
+    "PyramidJsonSchema",
     "SeriesJsonSchema",
     "SlideJsonSchema",
     "StudyJsonSchema",

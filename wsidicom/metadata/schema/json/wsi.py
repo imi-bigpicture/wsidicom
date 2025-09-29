@@ -20,13 +20,14 @@ from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import Image
 from wsidicom.metadata.label import Label
 from wsidicom.metadata.patient import Patient
+from wsidicom.metadata.pyramid import Pyramid
 from wsidicom.metadata.schema.common import LoadingSchema
 from wsidicom.metadata.schema.json.equipment import EquipmentJsonSchema
 from wsidicom.metadata.schema.json.fields import UidJsonField
-from wsidicom.metadata.schema.json.image import ImageJsonSchema
 from wsidicom.metadata.schema.json.label import LabelJsonSchema
-from wsidicom.metadata.schema.json.optical_path import OpticalPathJsonSchema
+from wsidicom.metadata.schema.json.overview import OverviewJsonSchema
 from wsidicom.metadata.schema.json.patient import PatientJsonSchema
+from wsidicom.metadata.schema.json.pyramid import PyramidJsonSchema
 from wsidicom.metadata.schema.json.series import SeriesJsonSchema
 from wsidicom.metadata.schema.json.slide import SlideJsonSchema
 from wsidicom.metadata.schema.json.study import StudyJsonSchema
@@ -41,10 +42,12 @@ class WsiMetadataJsonSchema(LoadingSchema[WsiMetadata]):
     series = fields.Nested(SeriesJsonSchema(), load_default=Series())
     patient = fields.Nested(PatientJsonSchema(), load_default=Patient())
     equipment = fields.Nested(EquipmentJsonSchema(), load_default=Equipment())
-    optical_paths = fields.List(fields.Nested(OpticalPathJsonSchema()), load_default=[])
     slide = fields.Nested(SlideJsonSchema(), load_default=Slide())
+    pyramid = fields.Nested(
+        PyramidJsonSchema(), load_default=Pyramid(image=Image(), optical_paths=[])
+    )
     label = fields.Nested(LabelJsonSchema(), load_default=Label())
-    image = fields.Nested(ImageJsonSchema(), load_default=Image())
+    overview = fields.Nested(OverviewJsonSchema(), load_default=None, allow_none=True)
     frame_of_reference_uid = UidJsonField(allow_none=True)
     dimension_organization_uids = fields.List(UidJsonField(), allow_none=True)
 

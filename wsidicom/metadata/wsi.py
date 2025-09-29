@@ -14,17 +14,17 @@
 
 """Complete WSI model."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional, Sequence
 
 from pydicom.uid import UID, generate_uid
 
 from wsidicom.metadata.equipment import Equipment
-from wsidicom.metadata.image import Image
 from wsidicom.metadata.label import Label
-from wsidicom.metadata.optical_path import OpticalPath
+from wsidicom.metadata.overview import Overview
 from wsidicom.metadata.patient import Patient
+from wsidicom.metadata.pyramid import Pyramid
 from wsidicom.metadata.series import Series
 from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study
@@ -44,14 +44,14 @@ class WsiMetadata:
         Metadata of the patient the related to the imaged slide.
     equipment: Equipment
         Metadata of the scanner equipment used to acquire the image.
-    optical_paths: Sequence[OpticalPath]
-        Metadata of the optical paths used to acquire the image.
     slide: Slide
         Metadata of the imaged slide.
+    pyramid: Pyramid
+        Metadata of the pyramid of the slide.
     label: Label
         Metadata of the label of the slide.
-    image: Image
-        Technical metadata of the image.
+    overview: Optional[Overview] = None
+        Metadata of the overview image of the slide, if present.
     frame_of_reference_uid: Optional[UID] = None
         The frame of reference uid of the image.
     dimension_organization_uids: Optional[Sequence[UID]] = None
@@ -62,10 +62,10 @@ class WsiMetadata:
     series: Series
     patient: Patient
     equipment: Equipment
-    optical_paths: Sequence[OpticalPath]
     slide: Slide
+    pyramid: Pyramid
     label: Label
-    image: Image
+    overview: Optional[Overview] = None
     frame_of_reference_uid: Optional[UID] = None
     dimension_organization_uids: Optional[Sequence[UID]] = None
 
@@ -82,27 +82,3 @@ class WsiMetadata:
         if self.dimension_organization_uids is not None:
             return self.dimension_organization_uids
         return [generate_uid()]
-
-    @classmethod
-    def merge_image_types(
-        cls,
-        volume: "WsiMetadata",
-        label: Optional["WsiMetadata"],
-        overview: Optional["WsiMetadata"],
-    ):
-        if volume.label is not None:
-            if label is not None:
-                label_label = label.label
-            else:
-                label_label = None
-            if overview is not None:
-                overview_label = overview.label
-            else:
-                overview_label = None
-
-            merged_label = Label.merge_image_types(
-                volume.label, label_label, overview_label
-            )
-        else:
-            merged_label = Label()
-        return replace(volume, label=merged_label)

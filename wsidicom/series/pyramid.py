@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from functools import cached_property
 from typing import Iterable, List, Optional, OrderedDict
 
 from wsidicom.errors import (
@@ -23,6 +24,8 @@ from wsidicom.group import Level, Thumbnail
 from wsidicom.group.level import BaseLevel
 from wsidicom.instance import ImageType, WsiInstance
 from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.metadata import Pyramid as PyramidMetadata
+from wsidicom.metadata.schema.dicom.pyramid import PyramidDicomSchema
 from wsidicom.series.series import Series, Thumbnails
 from wsidicom.stringprinting import list_pretty_str
 
@@ -123,6 +126,11 @@ class Pyramid(Series[Level]):
     @property
     def thumbnails(self) -> Optional[Thumbnails]:
         return self._thumbnails
+
+    @cached_property
+    def metadata(self) -> PyramidMetadata:
+        """Metadata of the pyramid series."""
+        return PyramidDicomSchema().load(self.base_level.default_instance.dataset)
 
     @classmethod
     def open(

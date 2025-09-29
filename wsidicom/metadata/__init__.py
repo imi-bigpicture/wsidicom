@@ -34,7 +34,9 @@ from wsidicom.metadata.optical_path import (
     Objectives,
     OpticalPath,
 )
+from wsidicom.metadata.overview import Overview
 from wsidicom.metadata.patient import Patient, PatientDeIdentification, PatientSex
+from wsidicom.metadata.pyramid import Pyramid
 from wsidicom.metadata.sample import (
     Collection,
     Embedding,
@@ -76,9 +78,11 @@ __all__ = [
     "Lut",
     "Objectives",
     "OpticalPath",
+    "Overview",
     "Patient",
     "PatientDeIdentification",
     "PatientSex",
+    "Pyramid",
     "Collection",
     "Embedding",
     "Fixation",

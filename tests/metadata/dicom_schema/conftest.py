@@ -29,7 +29,9 @@ from wsidicom.metadata import (
     Image,
     Label,
     OpticalPath,
+    Overview,
     Patient,
+    Pyramid,
     Series,
     Slide,
     Study,
@@ -55,8 +57,30 @@ def dicom_equipment(equipment: Equipment):
 
 
 @pytest.fixture()
-def dicom_image(image: Image, valid_dicom: bool):
+def dicom_pyramid(pyramid: Pyramid):
+    dataset = create_dicom_image(
+        pyramid.image, valid_dicom=True, image_type=ImageType.VOLUME
+    )
+    optical_datasets = [
+        create_dicom_optical_path(optical_path)
+        for optical_path in pyramid.optical_paths
+    ]
+    dataset.OpticalPathSequence = optical_datasets
+    if pyramid.uid is not None:
+        dataset.PyramidUID = pyramid.uid
+    if pyramid.description is not None:
+        dataset.PyramidDescription = pyramid.description
+    if pyramid.label is not None:
+        dataset.PyramidLabel = pyramid.label
+    dataset.BurnedInAnnotation = bool_to_dicom_literal(pyramid.contains_phi)
+    if pyramid.comments is not None:
+        dataset.ImageComments = pyramid.comments
+    yield dataset
+
+
+def create_dicom_image(image: Image, valid_dicom: bool, image_type: ImageType):
     dataset = Dataset()
+    dataset.ImageType = ["ORIGINAL", "PRIMARY", image_type.value, "DERIVED"]
     dataset.AcquisitionDateTime = DT(image.acquisition_datetime)
     if image.focus_method is not None:
         dataset.FocusMethod = image.focus_method.name
@@ -119,9 +143,12 @@ def dicom_image(image: Image, valid_dicom: bool):
         ]
     else:
         dataset.LossyImageCompression = "00"
-    if image.comments is not None:
-        dataset.ImageComments = image.comments
-    yield dataset
+    return dataset
+
+
+@pytest.fixture()
+def dicom_image(image: Image, valid_dicom: bool):
+    return create_dicom_image(image, valid_dicom, ImageType.VOLUME)
 
 
 @pytest.fixture()
@@ -142,32 +169,54 @@ def dicom_overview_label(label: Label):
 def create_dicom_label(label: Label, image_type: ImageType):
     dataset = Dataset()
     dataset.ImageType = ["ORIGINAL", "PRIMARY", image_type.value]
-    if image_type == ImageType.LABEL:
-        dataset.LabelText = label.text
-        dataset.BarcodeValue = label.barcode
-        dataset.SpecimenLabelInImage = bool_to_dicom_literal(True)
-        dataset.BurnedInAnnotation = bool_to_dicom_literal(label.label_is_phi)
-    elif image_type == ImageType.VOLUME:
-        dataset.SpecimenLabelInImage = bool_to_dicom_literal(
-            label.label_in_volume_image
+    dataset.LabelText = label.text
+    dataset.BarcodeValue = label.barcode
+    if image_type != ImageType.LABEL:
+        return dataset
+    dataset.ImageComments = label.comments
+    dataset.SpecimenLabelInImage = bool_to_dicom_literal(True)
+    dataset.BurnedInAnnotation = bool_to_dicom_literal(label.contains_phi)
+    if label.image is not None:
+        image_dataset = create_dicom_image(
+            label.image, valid_dicom=True, image_type=ImageType.LABEL
         )
-        dataset.BurnedInAnnotation = bool_to_dicom_literal(
-            label.label_is_phi and label.label_in_volume_image
-        )
-    elif image_type == ImageType.OVERVIEW:
-        dataset.SpecimenLabelInImage = bool_to_dicom_literal(
-            label.label_in_overview_image
-        )
-        dataset.BurnedInAnnotation = bool_to_dicom_literal(
-            label.label_is_phi and label.label_in_overview_image
-        )
-    else:
-        raise ValueError(f"Unknown image type {image_type}.")
+        dataset.update(image_dataset)
+    if label.optical_paths is not None:
+        optical_datasets = [
+            create_dicom_optical_path(optical_path)
+            for optical_path in label.optical_paths
+        ]
+        dataset.OpticalPathSequence = optical_datasets
+
     return dataset
 
 
 @pytest.fixture()
-def dicom_optical_path(optical_path: OpticalPath):
+def dicom_overview(overview: Overview):
+    return create_dicom_overview(overview)
+
+
+def create_dicom_overview(overview: Overview):
+    dataset = Dataset()
+    dataset.ImageType = ["ORIGINAL", "PRIMARY", ImageType.OVERVIEW.value]
+    dataset.ImageComments = overview.comments
+    dataset.SpecimenLabelInImage = bool_to_dicom_literal(overview.contains_label)
+    dataset.BurnedInAnnotation = bool_to_dicom_literal(overview.contains_phi)
+    image_dataset = create_dicom_image(
+        overview.image, valid_dicom=True, image_type=ImageType.OVERVIEW
+    )
+    optical_datasets = [
+        create_dicom_optical_path(optical_path)
+        for optical_path in overview.optical_paths
+    ]
+    dataset.OpticalPathSequence = optical_datasets
+
+    dataset.update(image_dataset)
+
+    return dataset
+
+
+def create_dicom_optical_path(optical_path: OpticalPath):
     dataset = Dataset()
     dataset.OpticalPathIdentifier = optical_path.identifier
     dataset.OpticalPathDescription = optical_path.description
@@ -189,9 +238,10 @@ def dicom_optical_path(optical_path: OpticalPath):
             optical_path.light_path_filter.low_pass,
             optical_path.light_path_filter.high_pass,
         ]
-        dataset.LightPathFilterTypeStackCodeSequence = [
-            filter.to_ds() for filter in optical_path.light_path_filter.filters
-        ]
+        if optical_path.light_path_filter.filters is not None:
+            dataset.LightPathFilterTypeStackCodeSequence = [
+                filter.to_ds() for filter in optical_path.light_path_filter.filters
+            ]
     if optical_path.image_path_filter is not None:
         dataset.ImagePathFilterPassThroughWavelength = (
             optical_path.image_path_filter.nominal
@@ -200,13 +250,15 @@ def dicom_optical_path(optical_path: OpticalPath):
             optical_path.image_path_filter.low_pass,
             optical_path.image_path_filter.high_pass,
         ]
-        dataset.ImagePathFilterTypeStackCodeSequence = [
-            filter.to_ds() for filter in optical_path.image_path_filter.filters
-        ]
+        if optical_path.image_path_filter.filters is not None:
+            dataset.ImagePathFilterTypeStackCodeSequence = [
+                filter.to_ds() for filter in optical_path.image_path_filter.filters
+            ]
     if optical_path.objective is not None:
-        dataset.LensesCodeSequence = [
-            lense.to_ds() for lense in optical_path.objective.lenses
-        ]
+        if optical_path.objective.lenses is not None:
+            dataset.LensesCodeSequence = [
+                lense.to_ds() for lense in optical_path.objective.lenses
+            ]
 
         dataset.CondenserLensPower = optical_path.objective.condenser_power
         dataset.ObjectiveLensPower = optical_path.objective.objective_power
@@ -220,7 +272,12 @@ def dicom_optical_path(optical_path: OpticalPath):
     if optical_path.icc_profile is not None:
         dataset.ICCProfile = optical_path.icc_profile
 
-    yield dataset
+    return dataset
+
+
+@pytest.fixture()
+def dicom_optical_path(optical_path: OpticalPath):
+    yield create_dicom_optical_path(optical_path)
 
 
 @pytest.fixture()
@@ -292,26 +349,22 @@ def dicom_slide(slide: Slide):
 
 
 @pytest.fixture()
-def dicom_wsi_metadata(
+def pyramid_dataset(
     wsi_metadata: WsiMetadata,
     dicom_equipment: Dataset,
-    dicom_image: Dataset,
-    dicom_label: Dataset,
+    dicom_pyramid: Dataset,
     dicom_slide: Dataset,
-    dicom_optical_path: Dataset,
     dicom_study: Dataset,
     dicom_series: Dataset,
     dicom_patient: Dataset,
 ):
     dataset = Dataset()
     dataset.update(dicom_equipment)
-    dataset.update(dicom_image)
-    dataset.update(dicom_label)
+    dataset.update(dicom_pyramid)
     dataset.update(dicom_slide)
     dataset.update(dicom_study)
     dataset.update(dicom_series)
     dataset.update(dicom_patient)
-    dataset.OpticalPathSequence = [dicom_optical_path]
     dimension_organization_sequence = []
     for uid in wsi_metadata.default_dimension_organization_uids:
         dimension_organization = Dataset()

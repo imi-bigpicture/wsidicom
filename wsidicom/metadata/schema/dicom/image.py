@@ -22,7 +22,7 @@ from pydicom.dataset import Dataset
 from pydicom.valuerep import VR
 
 from wsidicom.codec import LossyCompressionIsoStandard
-from wsidicom.geometry import PointMm, SizeMm
+from wsidicom.geometry import SizeMm
 from wsidicom.metadata.image import (
     ExtendedDepthOfField,
     FocusMethod,
@@ -98,28 +98,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[Optional[ImageCoordinateSyste
     ) -> Dict[str, Any]:
         """Pre dump hook to handle default dump value if value is None."""
         if image_coordinate_system is None:
-            image_size = self.context.get("image_size", None)
-            if image_size is not None:
-                # Based on image size place image in the middle of the slide
-                assert isinstance(image_size, SizeMm)
-                image_coordinate_system = ImageCoordinateSystem.from_middle_of_slide(
-                    slide_middle=PointMm(
-                        defaults.slide_size_without_label.width / 2,
-                        defaults.slide_size_without_label.height / 2,
-                    ),
-                    image_size=image_size,
-                    rotation=defaults.image_coordinate_system_rotation,
-                    z_offset=None,
-                )
-            else:
-                # Place the image with the origin right below the the label.
-                image_coordinate_system = ImageCoordinateSystem(
-                    origin=PointMm(
-                        defaults.slide_size_without_label.width,
-                        defaults.slide_size_without_label.height,
-                    ),
-                    rotation=180,
-                )
+            raise ValueError("Image coordinate system is None.")
         return {
             "origin": (
                 image_coordinate_system.origin,
@@ -221,7 +200,7 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
     )
     image_coordinate_system = FlattenOnDumpNestedDicomField(
         ImageCoordinateSystemDicomSchema(),
-        allow_none=True,
+        allow_none=False,
         load_default=None,
     )
     pixel_measure = NestedDatasetDicomField(
@@ -233,9 +212,6 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         LossyCompressionsDicomSchema(),
         allow_none=True,
         load_default=None,
-    )
-    comments = StringDicomField(
-        value_representation=VR.LO, data_key="ImageComments", allow_none=True
     )
 
     @property
@@ -258,7 +234,6 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
             "lossy_compressions": (
                 image.lossy_compressions if image.lossy_compressions else []
             ),
-            "comments": image.comments,
         }
 
     @post_load

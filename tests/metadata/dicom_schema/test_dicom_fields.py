@@ -281,6 +281,7 @@ class TestDicomFields:
         serialized = field.serialize("attribute", {"attribute": code})
 
         # Assert
+        assert isinstance(serialized, Dataset)
         assert serialized["CodeValue"].value == code.value
         assert serialized["CodingSchemeDesignator"].value == code.scheme_designator
         assert serialized["CodeMeaning"].value == code.meaning

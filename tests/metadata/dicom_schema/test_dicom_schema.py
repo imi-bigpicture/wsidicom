@@ -26,9 +26,11 @@ from tests.metadata.dicom_schema.helpers import (
     assert_dicom_issuer_of_identifier_equals_issuer_of_identifier,
     assert_dicom_label_equals_label,
     assert_dicom_optical_path_equals_optical_path,
+    assert_dicom_overview_equals_overview,
     assert_dicom_patient_equals_patient,
     assert_dicom_series_equals_series,
     assert_dicom_study_equals_study,
+    bool_to_dicom_literal,
 )
 from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.conceptcode import (
@@ -48,21 +50,21 @@ from wsidicom.metadata import (
     ImagePathFilter,
     Label,
     LightPathFilter,
+    LocalIssuerOfIdentifier,
+    LossyCompression,
     Objectives,
     OpticalPath,
+    Overview,
     Patient,
+    Pyramid,
     Series,
     Slide,
-    Study,
-    WsiMetadata,
-)
-from wsidicom.metadata.image import LossyCompression
-from wsidicom.metadata.sample import (
-    LocalIssuerOfIdentifier,
     SlideSample,
     SpecimenIdentifier,
+    Study,
     UniversalIssuerOfIdentifier,
     UniversalIssuerType,
+    WsiMetadata,
 )
 from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
@@ -70,10 +72,14 @@ from wsidicom.metadata.schema.dicom.image import (
     ImageCoordinateSystemDicomSchema,
     ImageDicomSchema,
 )
-from wsidicom.metadata.schema.dicom.label import LabelDicomSchema
+from wsidicom.metadata.schema.dicom.label import (
+    LabelDicomSchema,
+    LabelOnlyDicomSchema,
+)
 from wsidicom.metadata.schema.dicom.optical_path import (
     OpticalPathDicomSchema,
 )
+from wsidicom.metadata.schema.dicom.overview import OverviewDicomSchema
 from wsidicom.metadata.schema.dicom.patient import PatientDicomSchema
 from wsidicom.metadata.schema.dicom.series import SeriesDicomSchema
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
@@ -203,7 +209,6 @@ class TestDicomSchema:
         assert "LossyImageCompressionMethod" not in serialized
         assert "LossyImageCompressionRatio" not in serialized
         assert serialized.LossyImageCompression == "00"
-        assert "ImageComments" not in serialized
 
     @pytest.mark.parametrize(
         [
@@ -215,7 +220,6 @@ class TestDicomSchema:
             "focal_plane_spacing",
             "depth_of_field",
             "lossy_compressions",
-            "image_comments",
         ],
         [
             [
@@ -227,7 +231,6 @@ class TestDicomSchema:
                 0.25,
                 2.5,
                 None,
-                "Comments",
             ],
             [
                 datetime(2023, 8, 5, 12, 13, 14, 150),
@@ -243,9 +246,8 @@ class TestDicomSchema:
                         LossyCompressionIsoStandard.JPEG_2000_IRREVERSIBLE, 0.2
                     ),
                 ],
-                "Comments",
             ],
-            [None, None, None, None, None, None, None, None, None],
+            [None, None, None, None, None, None, None, None],
         ],
     )
     @pytest.mark.parametrize("valid_dicom", [True, False])
@@ -258,55 +260,78 @@ class TestDicomSchema:
         assert isinstance(deserialized, Image)
         assert deserialized == image
 
-    @pytest.mark.parametrize(
-        "image_type", [ImageType.LABEL, ImageType.OVERVIEW, ImageType.VOLUME]
-    )
-    def test_serialize_label(self, label: Label, image_type: ImageType):
+    def test_serialize_label_base(self, label: Label):
         # Arrange
-        schema = LabelDicomSchema(context={"image_type": image_type})
+        schema = LabelOnlyDicomSchema()
 
         # Act
         serialized = schema.dump(label)
 
         # Assert
         assert isinstance(serialized, Dataset)
-        assert_dicom_label_equals_label(serialized, label, image_type)
+        assert_dicom_label_equals_label(serialized, label)
+        assert "SpecimenLabelInImage" not in serialized
 
-    @pytest.mark.parametrize(
-        "image_type", [ImageType.LABEL, ImageType.OVERVIEW, ImageType.VOLUME]
-    )
-    def test_serialize_default_label(self, image_type: ImageType):
+    def test_serialize_label_image(self, label: Label):
+        # Arrange
+        schema = LabelDicomSchema()
+
+        # Act
+        serialized = schema.dump(label)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert_dicom_label_equals_label(serialized, label)
+        assert serialized.SpecimenLabelInImage == bool_to_dicom_literal(True)
+
+    def test_serialize_default_label_base(self):
         # Arrange
         label = Label()
-        schema = LabelDicomSchema(context={"image_type": image_type})
+        schema = LabelOnlyDicomSchema()
 
         # Act
         serialized = schema.dump(label)
 
         # Assert
         assert isinstance(serialized, Dataset)
-        if image_type == ImageType.LABEL:
-            assert serialized.LabelText is None
-            assert serialized.BarcodeValue is None
-            assert serialized.SpecimenLabelInImage == "YES"
-            assert serialized.BurnedInAnnotation == "YES"
-        elif image_type == ImageType.OVERVIEW:
-            assert "LabelText" not in serialized
-            assert "BarcodeValue" not in serialized
-            assert serialized.SpecimenLabelInImage == "YES"
-            assert serialized.BurnedInAnnotation == "YES"
-        else:
-            assert "LabelText" not in serialized
-            assert "BarcodeValue" not in serialized
-            assert serialized.SpecimenLabelInImage == "NO"
-            assert serialized.BurnedInAnnotation == "NO"
 
-    @pytest.mark.parametrize(
-        "image_type", [ImageType.LABEL, ImageType.OVERVIEW, ImageType.VOLUME]
-    )
-    def test_deserialize_label(
-        self, dicom_label: Dataset, label: Label, image_type: ImageType
-    ):
+        assert "LabelText" not in serialized
+        assert "BarcodeValue" not in serialized
+        assert "SpecimenLabelInImage" not in serialized
+        assert "BurnedInAnnotation" not in serialized
+
+    def test_serialize_default_label_image(self):
+        # Arrange
+        label = Label()
+        schema = LabelDicomSchema()
+
+        # Act
+        serialized = schema.dump(label)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert serialized.LabelText is None
+        assert serialized.BarcodeValue is None
+        assert serialized.SpecimenLabelInImage == "YES"
+        assert serialized.BurnedInAnnotation == "YES"
+
+    @pytest.mark.parametrize("image_type", [ImageType.OVERVIEW, ImageType.VOLUME])
+    def test_deserialize_label_base(self, dicom_label: Dataset, label: Label):
+        # Arrange
+        schema = LabelOnlyDicomSchema()
+
+        # Act
+        deserialized = schema.load(dicom_label)
+
+        # Assert
+        assert isinstance(deserialized, Label)
+        assert deserialized.text == label.text
+        assert deserialized.barcode == label.barcode
+        assert deserialized.image is None
+        assert deserialized.optical_paths is None
+
+    @pytest.mark.parametrize("image_type", [ImageType.LABEL])
+    def test_deserialize_label_image(self, dicom_label: Dataset, label: Label):
         # Arrange
         schema = LabelDicomSchema()
 
@@ -315,20 +340,58 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(deserialized, Label)
-        if image_type == ImageType.LABEL:
-            assert deserialized.text == label.text
-            assert deserialized.barcode == label.barcode
-            assert deserialized.label_is_phi == label.label_is_phi
-        elif image_type == ImageType.VOLUME:
-            assert deserialized.text is None
-            assert deserialized.barcode is None
-            assert deserialized.label_in_volume_image == label.label_in_volume_image
-            assert deserialized.label_is_phi == label.label_is_phi
-        elif image_type == ImageType.OVERVIEW:
-            assert deserialized.text is None
-            assert deserialized.barcode is None
-            assert deserialized.label_in_overview_image == label.label_in_overview_image
-            assert deserialized.label_is_phi == label.label_is_phi
+        assert deserialized == label
+
+    def test_serialize_overview(self, overview: Overview):
+        # Arrange
+        schema = OverviewDicomSchema()
+
+        # Act
+        serialized = schema.dump(overview)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert_dicom_overview_equals_overview(serialized, overview)
+
+    def test_serialize_default_overview(self):
+        # Arrange
+        overview = Overview(image=Image(), optical_paths=[OpticalPath()])
+        schema = OverviewDicomSchema()
+
+        # Act
+        serialized = schema.dump(overview)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        # if image_type == ImageType.LABEL:
+        #     assert serialized.LabelText is None
+        #     assert serialized.BarcodeValue is None
+        #     assert serialized.SpecimenLabelInImage == "YES"
+        #     assert serialized.BurnedInAnnotation == "YES"
+        # else:
+        #     assert "LabelText" not in serialized
+        #     assert "BarcodeValue" not in serialized
+        #     assert "SpecimenLabelInImage" not in serialized
+        #     assert "BurnedInAnnotation" not in serialized
+
+    def test_deserialize_overview(self, dicom_overview: Dataset, overview: Overview):
+        # Arrange
+        schema = OverviewDicomSchema()
+
+        # Act
+        deserialized = schema.load(dicom_overview)
+
+        # Assert
+        assert isinstance(deserialized, Overview)
+        # if image_type == ImageType.LABEL:
+        #     assert deserialized.text == label.text
+        #     assert deserialized.barcode == label.barcode
+        # elif image_type == ImageType.VOLUME:
+        #     assert deserialized.text is None
+        #     assert deserialized.barcode is None
+        # elif image_type == ImageType.OVERVIEW:
+        #     assert deserialized.text is None
+        #     assert deserialized.barcode is None
 
     @pytest.mark.parametrize(
         "illumination", [IlluminationColorCode("Full Spectrum"), 400.0]
@@ -666,37 +729,70 @@ class TestDicomSchema:
         self,
         wsi_metadata: WsiMetadata,
         equipment: Equipment,
-        image: Image,
+        pyramid: Pyramid,
         label: Label,
-        optical_path: OpticalPath,
+        overview: Overview,
         study: Study,
         series: Series,
         patient: Patient,
         image_type: ImageType,
     ):
         # Arrange
-        schema = WsiMetadataDicomSchema(context={"image_type": image_type})
+        schema = WsiMetadataDicomSchema()
 
         # Act
-        serialized = schema.dump(wsi_metadata)
+        serialized = schema.dump(
+            wsi_metadata, image_type=image_type, require_icc_profile=False
+        )
 
         # Assert
         assert isinstance(serialized, Dataset)
         assert_dicom_equipment_equals_equipment(serialized, equipment)
         assert_dicom_series_equals_series(serialized, series)
         assert_dicom_study_equals_study(serialized, study)
-        assert_dicom_image_equals_image(serialized, image)
-        assert_dicom_label_equals_label(serialized, label, image_type)
-        assert_dicom_optical_path_equals_optical_path(
-            serialized.OpticalPathSequence[0], optical_path
-        )
+        if image_type == ImageType.VOLUME:
+            assert_dicom_image_equals_image(serialized, pyramid.image)
+        elif image_type == ImageType.OVERVIEW:
+            assert_dicom_image_equals_image(serialized, overview.image)
+            assert_dicom_overview_equals_overview(serialized, overview)
+        elif image_type == ImageType.LABEL:
+            if label.image is None:
+                assert_dicom_image_equals_image(
+                    serialized,
+                    Image(
+                        acquisition_datetime=defaults.date_time,
+                        focus_method=defaults.focus_method,
+                    ),
+                )
+            else:
+                assert_dicom_image_equals_image(serialized, label.image)
+            if label.optical_paths is None:
+                assert len(serialized.OpticalPathSequence) == 1
+                assert_dicom_optical_path_equals_optical_path(
+                    serialized.OpticalPathSequence[0],
+                    OpticalPath(
+                        identifier=defaults.optical_path_identifier,
+                        illumination_types=[defaults.illumination_type],
+                    ),
+                )
+            else:
+                assert len(serialized.OpticalPathSequence) == len(label.optical_paths)
+                for dicom_optical_path, optical_path in zip(
+                    serialized.OpticalPathSequence, label.optical_paths
+                ):
+                    assert_dicom_optical_path_equals_optical_path(
+                        dicom_optical_path,
+                        optical_path,
+                    )
+        assert_dicom_label_equals_label(serialized, label)
         assert_dicom_patient_equals_patient(serialized, patient)
 
-    def test_serialize_wsi_metadata_with_empty_lists(
+    def test_serialize_wsi_metadata_without_uids(
         self,
         equipment: Equipment,
-        image: Image,
+        pyramid: Pyramid,
         label: Label,
+        overview: Overview,
         study: Study,
         series: Series,
         patient: Patient,
@@ -709,20 +805,19 @@ class TestDicomSchema:
             series=series,
             patient=patient,
             equipment=equipment,
-            optical_paths=[],
             slide=slide,
+            pyramid=pyramid,
             label=label,
-            image=image,
+            overview=overview,
         )
-        schema = WsiMetadataDicomSchema(context={"image_type": image_type})
+        schema = WsiMetadataDicomSchema()
 
         # Act
-        serialized = schema.dump(wsi_metadata)
+        serialized = schema.dump(
+            wsi_metadata, image_type=image_type, require_icc_profile=False
+        )
 
         # Assert
-        assert_dicom_optical_path_equals_optical_path(
-            serialized.OpticalPathSequence[0], OpticalPath()
-        )
         assert "DimensionOrganizationSequence" in serialized
         assert len(serialized.DimensionOrganizationSequence) == 1
         assert (
@@ -730,30 +825,32 @@ class TestDicomSchema:
             == wsi_metadata.default_dimension_organization_uids[0]
         )
 
-    def test_deserialize_wsi_metadata(
+    def test_deserialize_wsi_metadata_from_multiple_datasets(
         self,
         wsi_metadata: WsiMetadata,
         equipment: Equipment,
-        image: Image,
+        pyramid: Pyramid,
         label: Label,
-        optical_path: OpticalPath,
+        overview: Overview,
         study: Study,
         series: Series,
         patient: Patient,
-        image_type: ImageType,
-        dicom_wsi_metadata: Dataset,
+        pyramid_dataset: Dataset,
+        dicom_label_label: Dataset,
+        dicom_overview: Dataset,
     ):
         # Arrange
         schema = WsiMetadataDicomSchema()
 
         # Act
-        deserialized = schema.load(dicom_wsi_metadata)
+        deserialized = schema.load(pyramid_dataset, dicom_label_label, dicom_overview)
 
         # Assert
         assert isinstance(deserialized, WsiMetadata)
         assert deserialized.equipment == equipment
-        assert deserialized.image == image
-        assert deserialized.optical_paths[0] == optical_path
+        assert deserialized.pyramid == pyramid
+        assert deserialized.label == label
+        assert deserialized.overview == overview
         assert deserialized.study == study
         assert deserialized.series == series
         assert deserialized.patient == patient
@@ -765,38 +862,6 @@ class TestDicomSchema:
             deserialized.dimension_organization_uids
             == wsi_metadata.default_dimension_organization_uids
         )
-
-    def test_deserialize_wsi_metadata_from_multiple_datasets(
-        self,
-        wsi_metadata: WsiMetadata,
-        equipment: Equipment,
-        image: Image,
-        label: Label,
-        optical_path: OpticalPath,
-        study: Study,
-        series: Series,
-        patient: Patient,
-        image_type: ImageType,
-        dicom_wsi_metadata: Dataset,
-        dicom_label_label: Dataset,
-        dicom_overview_label: Dataset,
-    ):
-        # Arrange
-        schema = WsiMetadataDicomSchema()
-        datasets = [dicom_wsi_metadata, dicom_label_label, dicom_overview_label]
-
-        # Act
-        deserialized = schema.from_datasets(datasets)
-
-        # Assert
-        assert isinstance(deserialized, WsiMetadata)
-        assert deserialized.equipment == equipment
-        assert deserialized.image == image
-        assert deserialized.optical_paths[0] == optical_path
-        assert deserialized.study == study
-        assert deserialized.series == series
-        assert deserialized.patient == patient
-        assert deserialized.label == label
 
     def test_deserialize_wsi_metadata_from_empty_dataset(
         self,
@@ -847,88 +912,6 @@ class TestDicomSchema:
         assert len(serialized.ImageOrientationSlide) == 6
         assert serialized.ImageOrientationSlide == list(
             image_coordinate_system.orientation.values
-        )
-
-    def test_serialize_empty_image_coordinate_system_without_image_size_in_context(
-        self,
-    ):
-        # Arrange
-
-        image_coordinate_system = None
-
-        schema = ImageCoordinateSystemDicomSchema()
-        # Act
-        serialized = schema.dump(image_coordinate_system)
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert (
-            "TotalPixelMatrixOriginSequence" in serialized
-            and len(serialized.TotalPixelMatrixOriginSequence) == 1
-        )
-        total_pixel_matrix_origin = serialized.TotalPixelMatrixOriginSequence[0]
-
-        assert (
-            total_pixel_matrix_origin.XOffsetInSlideCoordinateSystem
-            == defaults.slide_size_without_label.width
-        )
-        assert (
-            total_pixel_matrix_origin.YOffsetInSlideCoordinateSystem
-            == defaults.slide_size_without_label.height
-        )
-        assert "ImageOrientationSlide" in serialized
-        assert len(serialized.ImageOrientationSlide) == 6
-        assert serialized.ImageOrientationSlide == list(
-            Orientation.from_rotation(180).values
-        )
-
-    @pytest.mark.parametrize(
-        ["image_mm_size", "rotation", "expected_result"],
-        [
-            [SizeMm(20, 10), 0, PointMm(7.5, 15)],
-            [SizeMm(20, 10), 90, PointMm(22.5, 20)],
-            [SizeMm(20, 10), 180, PointMm(17.5, 35)],
-            [SizeMm(20, 10), 270, PointMm(2.5, 30)],
-            [SizeMm(50, 25), 0, PointMm(0, 0)],
-            [SizeMm(25, 50), 90, PointMm(25, 0)],
-            [SizeMm(50, 25), 180, PointMm(25, 50)],
-            [SizeMm(25, 50), 270, PointMm(0, 50)],
-        ],
-    )
-    def test_serialize_empty_image_coordinate_system_with_image_size_in_context(
-        self,
-        image_mm_size: SizeMm,
-        rotation: float,
-        expected_result: PointMm,
-    ):
-        # Arrange
-        image_coordinate_system = None
-        defaults.image_coordinate_system_rotation = rotation
-        schema = ImageCoordinateSystemDicomSchema(context={"image_size": image_mm_size})
-
-        # Act
-        serialized = schema.dump(image_coordinate_system)
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert (
-            "TotalPixelMatrixOriginSequence" in serialized
-            and len(serialized.TotalPixelMatrixOriginSequence) == 1
-        )
-        total_pixel_matrix_origin = serialized.TotalPixelMatrixOriginSequence[0]
-
-        assert (
-            total_pixel_matrix_origin.XOffsetInSlideCoordinateSystem
-            == expected_result.x
-        )
-        assert (
-            total_pixel_matrix_origin.YOffsetInSlideCoordinateSystem
-            == expected_result.y
-        )
-        assert "ImageOrientationSlide" in serialized
-        assert len(serialized.ImageOrientationSlide) == 6
-        assert serialized.ImageOrientationSlide == list(
-            Orientation.from_rotation(rotation).values
         )
 
     @pytest.mark.parametrize("origin", [PointMm(20.0, 30.0), None])
