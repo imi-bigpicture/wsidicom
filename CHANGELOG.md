@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Support for JPEG XL.
-
 ## [0.28.0] - 2025-09-29
 
 ### Added
@@ -18,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Pyramid` and `Overview` metadata classes to describe pyramid and overview specific metadata.
 - Additional fields to `Label` metadata class to describe label instance metadata.
 - Fields `description` and `body_part_examined` to `Series` metadata and `comments` to `Patient` metadata.
+- Support for JPEG XL.
 
 ### Changed
 
