@@ -30,6 +30,7 @@ try:
         JPEG2K,
         JPEG8,
         JPEGLS,
+        JPEGXL,
         dicomrle_decode,
         jpeg2k_decode,
         jpeg2k_encode,
@@ -37,6 +38,8 @@ try:
         jpeg8_encode,
         jpegls_decode,
         jpegls_encode,
+        jpegxl_decode,
+        jpegxl_encode,
         packbits_encode,
     )
 
@@ -47,14 +50,17 @@ except ImportError:
     JPEG2K = None
     JPEG8 = None
     JPEGLS = None
-    jpeg2k_decode = None
-    jpeg8_decode = None
-    jpegls_decode = None
-    jpeg2k_encode = None
-    jpeg8_encode = None
-    jpegls_encode = None
-    packbits_encode = None
+    JPEGXL = None
     dicomrle_decode = None
+    jpeg2k_decode = None
+    jpeg2k_encode = None
+    jpeg8_decode = None
+    jpeg8_encode = None
+    jpegls_decode = None
+    jpegls_encode = None
+    jpegxl_decode = None
+    jpegxl_encode = None
+    packbits_encode = None
 
 try:
     from jpeg_ls import decode as pylibjpeg_ls_decode

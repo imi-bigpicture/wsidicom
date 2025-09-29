@@ -19,10 +19,12 @@ from enum import Enum
 from typing import Literal, Optional, Sequence, Union
 
 from pydicom.uid import (
+    HTJ2K,
     JPEG2000,
     UID,
     ExplicitVRBigEndian,
     ExplicitVRLittleEndian,
+    HTJ2KLossless,
     ImplicitVRLittleEndian,
     JPEG2000Lossless,
     JPEGBaseline8Bit,
@@ -33,6 +35,8 @@ from pydicom.uid import (
     JPEGLSNearLossless,
     RLELossless,
 )
+
+from wsidicom.uid import JPEGXL, JPEGXLLossless
 
 
 class Channels(Enum):
@@ -155,7 +159,7 @@ class Settings(metaclass=ABCMeta):
         bits: int,
         photometric_interpretation: str,
     ) -> "Settings":
-        """Create settings based on properties dataset and transfer syntax.
+        """Create settings based on properties in dataset and transfer syntax.
 
         Parameters:
         ----------
@@ -187,6 +191,12 @@ class Settings(metaclass=ABCMeta):
             JPEG2000Lossless,
             JPEG2000,
         ]
+        ht_jpeg_2000_transfer_syntaxes = [
+            HTJ2K,
+            HTJ2KLossless,
+            # HTJ2KLosslessRPCL # Not supported in imagecodec jpeg2k encoder
+        ]
+        jpeg_xl_transfer_syntaxes = [JPEGXL, JPEGXLLossless]
         uncompressed_transfer_syntaxes = [
             ImplicitVRLittleEndian,
             ExplicitVRLittleEndian,
@@ -207,6 +217,14 @@ class Settings(metaclass=ABCMeta):
             if transfer_syntax == JPEG2000:
                 return Jpeg2kSettings(bits=bits, channels=channels)
             return Jpeg2kSettings(levels=0, bits=bits, channels=channels)
+        if transfer_syntax in ht_jpeg_2000_transfer_syntaxes:
+            if transfer_syntax == HTJ2K:
+                return HTJpeg2000Settings(bits=bits, channels=channels)
+            return HTJpeg2000Settings(levels=0, bits=bits, channels=channels)
+        if transfer_syntax in jpeg_xl_transfer_syntaxes:
+            if transfer_syntax == JPEGXL:
+                return JpegXlSettings(level=None, bits=bits, channels=channels)
+            return JpegXlSettings(level=100, bits=bits, channels=channels)
         if transfer_syntax == RLELossless:
             return RleSettings(bits=bits, channels=channels)
         if transfer_syntax in uncompressed_transfer_syntaxes:
@@ -394,7 +412,7 @@ class Jpeg2kSettings(Settings):
         Parameters:
         ----------
             levels: Union[float, Sequence[float]] = 80.0
-                JPEG 2000 compression levels in dB. Set to 0.
+                JPEG 2000 compression levels in dB. Set to 0 for lossless.
             bits: int = 8
                 Number of bits per pixel.
             channels: Channels = Channels.YBR
@@ -440,6 +458,69 @@ class Jpeg2kSettings(Settings):
     @property
     def extension(self) -> str:
         return ".jp2"
+
+
+class HTJpeg2000Settings(Jpeg2kSettings):
+    def transfer_syntax(self) -> UID:
+        if self.lossless:
+            return HTJ2K
+        return HTJ2KLossless
+
+    @property
+    def extension(self) -> str:
+        return ".jph"
+
+
+class JpegXlSettings(Settings):
+    def __init__(
+        self,
+        level: Optional[int] = None,
+        bits: int = 8,
+        channels: Channels = Channels.YBR,
+    ):
+        """
+        Initialize JPEG XL encoding settings.
+        Parameters:
+        ----------
+            level: Optional[int] = None
+                JPEG XL compression level. -100-100. Set to 100 for lossless.
+            bits: int = 8
+                Number of bits per pixel.
+            channels: Channels = Channels.YBR
+                Color channels in encoded image.
+        """
+        self._level = level
+        self._lossless = level is not None and level >= 100
+        super().__init__(bits, channels)
+
+    @property
+    def level(self) -> Optional[int]:
+        """Return level."""
+        return self._level
+
+    @property
+    def lossless(self) -> bool:
+        """Return True if lossless, else False."""
+        return self._lossless
+
+    @property
+    def transfer_syntax(self) -> UID:
+        if self._lossless:
+            return JPEGXLLossless
+        JPEGXL.is_encapsulated
+        return JPEGXL
+
+    @property
+    def photometric_interpretation(self) -> str:
+        if self.channels == Channels.GRAYSCALE:
+            return "MONOCHROME2"
+        if self.channels == Channels.YBR:
+            return "YBR_FULL"
+        return "RGB"
+
+    @property
+    def extension(self) -> str:
+        return ".jxl"
 
 
 class NumpySettings(Settings):

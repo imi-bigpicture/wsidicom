@@ -42,6 +42,7 @@ from wsidicom.codec.optionals import (
     jpeg2k_encode,
     jpeg8_encode,
     jpegls_encode,
+    jpegxl_encode,
     pylibjpeg_ls_encode,
     pylibjpeg_openjpeg_encode,
     rle_encode_frame,
@@ -49,15 +50,18 @@ from wsidicom.codec.optionals import (
 from wsidicom.codec.rle import RleCodec
 from wsidicom.codec.settings import (
     Channels,
+    HTJpeg2000Settings,
     Jpeg2kSettings,
     JpegLosslessSettings,
     JpegLsSettings,
     JpegSettings,
+    JpegXlSettings,
     NumpySettings,
     RleSettings,
     Settings,
     Subsampling,
 )
+from wsidicom.uid import JPEGXL, JPEGXLJPEGRecompression
 
 SettingsType = TypeVar("SettingsType", bound=Settings)
 
@@ -67,6 +71,7 @@ class LossyCompressionIsoStandard(Enum):
     JPEG_LS_NEAR_LOSSLESS = "ISO_14495_1"
     JPEG_2000_IRREVERSIBLE = "ISO_15444_1"
     HT_JPEG_2000_IRREVERSIBLE = "ISO_15444_15"
+    JPEG_XL_LOSSY = "ISO_18181_1"  # Not defined term in DICOM standard
 
     @classmethod
     def transfer_syntax_to_iso(
@@ -80,6 +85,8 @@ class LossyCompressionIsoStandard(Enum):
             return cls.JPEG_2000_IRREVERSIBLE
         elif transfer_syntax == HTJ2K:
             return cls.HT_JPEG_2000_IRREVERSIBLE
+        elif transfer_syntax == JPEGXL or transfer_syntax == JPEGXLJPEGRecompression:
+            return cls.JPEG_XL_LOSSY
         return None
 
 
@@ -243,6 +250,8 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
             JpegLosslessSettings: (JpegEncoder,),
             JpegLsSettings: (JpegLsEncoder, PyJpegLsEncoder),
             Jpeg2kSettings: (Jpeg2kEncoder, PyLibJpegOpenJpegEncoder, PillowEncoder),
+            HTJpeg2000Settings: (Jpeg2kEncoder,),
+            JpegXlSettings: (JpegXlEncoder,),
             NumpySettings: (NumpyEncoder,),
             RleSettings: (PylibjpegRleEncoder, ImageCodecsRleEncoder),
         }
@@ -436,15 +445,15 @@ class JpegLsEncoder(Encoder[JpegLsSettings]):
         return isinstance(settings, JpegLsSettings)
 
 
-class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
+class Jpeg2kEncoder(Encoder[Union[Jpeg2kSettings, HTJpeg2000Settings]]):
     """Encoder that uses jpeg2k to encode image."""
 
-    def __init__(self, settings: Jpeg2kSettings) -> None:
+    def __init__(self, settings: Union[Jpeg2kSettings, HTJpeg2000Settings]) -> None:
         """Initialize JPEG 2000 encoder.
 
         Parameters
         ----------
-        settings: Jpeg2kSettings
+        settings: Union[Jpeg2kSettings, HTJpeg2000Settings]
             Settings for the encoder.
         """
         if len(settings.levels) != 1:
@@ -487,6 +496,45 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings]):
     @classmethod
     def supports_settings(cls, settings: Settings) -> bool:
         return isinstance(settings, Jpeg2kSettings) and len(settings.levels) == 1
+
+
+class JpegXlEncoder(Encoder[JpegXlSettings]):
+    def __init__(self, settings: JpegXlSettings) -> None:
+        """Initialize JPEG XL encoder.
+
+        Parameters
+        ----------
+        settings: JpegXlSettings
+            Settings for the encoder.
+        """
+        self._level = settings.level
+        self._lossless = settings.lossless
+        self._bits = settings.bits
+        super().__init__(settings)
+
+    @property
+    def lossy(self) -> bool:
+        return not self.settings.lossless
+
+    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
+        if not self.is_available():
+            raise RuntimeError("Image codecs not available.")
+        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
+            raise ValueError(f"Unsupported mode: {image.mode}.")
+        return jpegxl_encode(
+            np.array(image),
+            level=self._level,
+            lossless=self._lossless,
+            bitspersample=self._bits,
+        )
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return IMAGE_CODECS_AVAILABLE
+
+    @classmethod
+    def supports_settings(cls, settings: Settings) -> bool:
+        return isinstance(settings, JpegXlSettings)
 
 
 class NumpyEncoder(Encoder[NumpySettings]):
