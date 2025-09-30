@@ -265,22 +265,52 @@ class WsiMetadataDicomSchema:
     def _insert_default_image_coordinate_system(
         image: Image, image_type: ImageType
     ) -> Image:
-        if image_type == ImageType.VOLUME:
-            default_size = defaults.slide_size_without_label
-        else:
-            default_size = defaults.slide_size_with_label
-        if defaults.image_coordinate_system_rotation == 0:
-            x = 0
-            y = 0
-        elif defaults.image_coordinate_system_rotation == 90:
-            x = default_size.width
-            y = 0
-        elif defaults.image_coordinate_system_rotation == 180:
-            x = default_size.width
-            y = default_size.height
-        elif defaults.image_coordinate_system_rotation == 270:
-            x = 0
-            y = default_size.height
+        if (
+            image_type == ImageType.VOLUME
+            or image_type == ImageType.THUMBNAIL
+            or image_type == ImageType.OVERVIEW
+        ):
+            if image_type == ImageType.OVERVIEW:
+                # Place origin at the corners of the slide
+                default_size = defaults.slide_size_with_label
+            else:
+                # Place the origin at the corners of the non-label part of the slide
+                default_size = defaults.slide_size_without_label
+
+            if defaults.image_coordinate_system_rotation == 0:
+                x = 0
+                y = 0
+            elif defaults.image_coordinate_system_rotation == 90:
+                x = default_size.width
+                y = 0
+            elif defaults.image_coordinate_system_rotation == 180:
+                x = default_size.width
+                y = default_size.height
+            elif defaults.image_coordinate_system_rotation == 270:
+                x = 0
+                y = default_size.height
+            else:
+                raise ValueError(
+                    f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"
+                )
+        elif image_type == ImageType.LABEL:
+            # Place the origin at the corners of the label area of the slide
+            if defaults.image_coordinate_system_rotation == 0:
+                x = 0
+                y = defaults.slide_size_without_label.height
+            elif defaults.image_coordinate_system_rotation == 90:
+                x = defaults.slide_size_with_label.width
+                y = defaults.slide_size_without_label.height
+            elif defaults.image_coordinate_system_rotation == 180:
+                x = defaults.slide_size_with_label.width
+                y = defaults.slide_size_with_label.height
+            elif defaults.image_coordinate_system_rotation == 270:
+                x = 0
+                y = defaults.slide_size_with_label.height
+            else:
+                raise ValueError(
+                    f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"
+                )
         else:
             raise ValueError(
                 f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"

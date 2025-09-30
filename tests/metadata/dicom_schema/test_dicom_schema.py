@@ -937,6 +937,7 @@ class TestDicomSchema:
             dataset.ImageOrientationSlide = list(orientation.values)
 
         schema = ImageCoordinateSystemDicomSchema()
+
         # Act
         deserialized = schema.load(dataset)
 
@@ -948,3 +949,41 @@ class TestDicomSchema:
             assert deserialized.z_offset == z_offset
         else:
             assert deserialized is None
+
+    @pytest.mark.parametrize(
+        ["image_type", "default_rotation", "expected_origin"],
+        [
+            (ImageType.VOLUME, 0, PointMm(0, 0)),
+            (ImageType.VOLUME, 90, PointMm(25, 0)),
+            (ImageType.VOLUME, 180, PointMm(25, 50)),
+            (ImageType.VOLUME, 270, PointMm(0, 50)),
+            (ImageType.THUMBNAIL, 0, PointMm(0, 0)),
+            (ImageType.THUMBNAIL, 90, PointMm(25, 0)),
+            (ImageType.THUMBNAIL, 180, PointMm(25, 50)),
+            (ImageType.THUMBNAIL, 270, PointMm(0, 50)),
+            (ImageType.OVERVIEW, 0, PointMm(0, 0)),
+            (ImageType.OVERVIEW, 90, PointMm(25, 0)),
+            (ImageType.OVERVIEW, 180, PointMm(25, 75)),
+            (ImageType.OVERVIEW, 270, PointMm(0, 75)),
+            (ImageType.LABEL, 0, PointMm(0, 50)),
+            (ImageType.LABEL, 90, PointMm(25, 50)),
+            (ImageType.LABEL, 180, PointMm(25, 75)),
+            (ImageType.LABEL, 270, PointMm(0, 75)),
+        ],
+    )
+    def test_insert_default_image_coordinate_system(
+        self, image_type: ImageType, default_rotation: int, expected_origin: PointMm
+    ):
+        # Arrange
+        image = Image()
+        defaults.image_coordinate_system_rotation = default_rotation
+
+        # Act
+        result = WsiMetadataDicomSchema._insert_default_image_coordinate_system(
+            image, image_type
+        )
+
+        # Assert
+        assert result.image_coordinate_system is not None
+        assert result.image_coordinate_system.origin == expected_origin
+        assert result.image_coordinate_system.rotation == default_rotation
