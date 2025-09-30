@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1] - 2025-09-30
+
+### Fixed
+
+- Correct default origin positions for label instances.
+
 ## [0.28.0] - 2025-09-29
 
 ### Added
@@ -526,7 +532,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.1..HEAD
+[0.28.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.0..v0.28.1
 [0.28.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.27.1..v0.28.0
 [0.27.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.27.0..v0.27.1
 [0.27.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.26.0..v0.27.0
