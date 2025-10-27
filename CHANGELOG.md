@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected errors in `HTJpeg2000Settings` (@HarmvZ)
+
 ## [0.28.1] - 2025-09-30
 
 ### Fixed
