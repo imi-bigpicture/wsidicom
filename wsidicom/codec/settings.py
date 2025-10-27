@@ -461,10 +461,11 @@ class Jpeg2kSettings(Settings):
 
 
 class HTJpeg2000Settings(Jpeg2kSettings):
+    @property
     def transfer_syntax(self) -> UID:
         if self.lossless:
-            return HTJ2K
-        return HTJ2KLossless
+            return HTJ2KLossless
+        return HTJ2K
 
     @property
     def extension(self) -> str:
