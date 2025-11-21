@@ -314,6 +314,7 @@ class ImageData(metaclass=ABCMeta):
         path: str,
         scale: int,
         workers: int = 1,
+        crop_to_image_boundary: bool = True,
     ) -> Image:
         """
         Return scaled tile as Pillow image.
@@ -331,6 +332,8 @@ class ImageData(metaclass=ABCMeta):
         workers: int = 1
             Workers to use for threading. Default to not use threading as method is
             likely already used in a threading context.
+        crop_to_image_boundary: bool = True
+            If True crop tile to be inside image boundary.
 
         Returns
         -------
@@ -349,6 +352,10 @@ class ImageData(metaclass=ABCMeta):
 
         def paste(image: Image, tile_point: Point, tile: Image):
             image_coordinate = (tile_point - tile_region.start) * self.tile_size
+            if crop_to_image_boundary:
+                tile_crop = self.image_region.inside_crop(tile_point, self.tile_size)
+                if tile_crop.size != self.tile_size:
+                    tile = tile.crop(box=tile_crop.box)
             image.paste(tile, image_coordinate.to_tuple())
 
         self._paste_tiles(
@@ -364,12 +371,18 @@ class ImageData(metaclass=ABCMeta):
             self.tile_size.to_tuple(), resample=settings.pillow_resampling_filter
         )
 
-    def get_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_tile(
+        self,
+        tile_point: Point,
+        z: float,
+        path: str,
+        crop_to_image_boundary: bool = True,
+    ) -> Image:
         """
         Get tile as Pillow image.
 
         If frame is inside tile geometry but no tile exists in frame data (sparse)
-        returns blank image. Crops tile to be inside image boundary.
+        returns blank image.
 
         Parameters
         ----------
@@ -379,7 +392,8 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
-
+        crop_to_image_boundary: bool = True
+            If True crop tile to be inside image boundary.
 
         Returns
         -------
@@ -387,12 +401,23 @@ class ImageData(metaclass=ABCMeta):
             Tile image.
         """
         tile = self._get_decoded_tile(tile_point, z, path)
+        if not crop_to_image_boundary:
+            return tile
         return self._crop_tile(tile_point, tile)
 
-    def get_tiles(self, tiles: Iterable[Point], z: float, path: str) -> Iterator[Image]:
+    def get_tiles(
+        self,
+        tiles: Iterable[Point],
+        z: float,
+        path: str,
+        crop_to_image_boundary: bool = True,
+    ) -> Iterator[Image]:
+        decoded_tiles = self._get_decoded_tiles(tiles, z, path)
+        if not crop_to_image_boundary:
+            return decoded_tiles
         return (
             self._crop_tile(tile_point, tile)
-            for tile_point, tile in zip(tiles, self._get_decoded_tiles(tiles, z, path))
+            for tile_point, tile in zip(tiles, decoded_tiles)
         )
 
     def get_scaled_encoded_tile(
@@ -420,12 +445,14 @@ class ImageData(metaclass=ABCMeta):
         image = self.get_scaled_tile(scaled_tile_point, z, path, scale)
         return self.encoder.encode(image)
 
-    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(
+        self, tile: Point, z: float, path: str, crop_to_image_boundary: bool = True
+    ) -> bytes:
         """
         Get tile as bytes.
 
         If frame is inside tile geometry but no tile exists in frame data (sparse)
-        returns encoded blank image. Crops tile to be inside image boundary.
+        returns encoded blank image.
 
         Parameters
         ----------
@@ -435,12 +462,16 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
+        crop_to_image_boundary: bool = True
+            If True crop tile to be inside image boundary.
 
         Returns
         -------
         bytes
             Tile image as bytes.
         """
+        if not crop_to_image_boundary:
+            return self._get_encoded_tile(tile, z, path)
         # Check if tile is an edge tile that should be cropped
         cropped_tile_region = self.image_region.inside_crop(tile, self.tile_size)
         if cropped_tile_region.size == self.tile_size:
@@ -471,6 +502,7 @@ class ImageData(metaclass=ABCMeta):
 
         tile_region = self._get_tile_range(region, z, path)
         if tile_region.size.area == 1:
+            # Only one tile, no need to stitch
             tile = self._get_decoded_tile(tile_region.start, z, path)
             tile_crop = region.inside_crop(tile_region.start, self.tile_size)
             if tile_crop.size != self.tile_size:

@@ -134,6 +134,7 @@ class TestWsiDicomIntegration:
         im = wsi.read_tile(
             region["level"],
             (region["location"]["x"], region["location"]["y"]),
+            crop_to_image_boundary=region.get("crop_to_image_boundary", True),
         )
 
         # Assert
@@ -160,6 +161,7 @@ class TestWsiDicomIntegration:
         im = wsi.read_encoded_tile(
             region["level"],
             (region["location"]["x"], region["location"]["y"]),
+            crop_to_image_boundary=region.get("crop_to_image_boundary", True),
         )
 
         # Assert

@@ -337,6 +337,23 @@
                 },
                 "level": 2,
                 "md5": "63c9750b5dd05c224ea2b1ddc6273ee9"
+            },
+            {
+                "location": {
+                    "x": 112,
+                    "y": 108
+                },
+                "level": 0,
+                "md5": "ffc08224a94678fdab77ecdcb948becc"
+            },
+            {
+                "location": {
+                    "x": 112,
+                    "y": 108
+                },
+                "level": 0,
+                "md5": "680c5eb5a5acc420ba43d7dbf3e144ce",
+                "crop_to_image_boundary": false
             }
         ],
         "read_encoded_tile": [
@@ -363,6 +380,23 @@
                 },
                 "level": 2,
                 "md5": "665e94c4f47180aacedeeaf5cc7e21bf"
+            },
+            {
+                "location": {
+                    "x": 112,
+                    "y": 108
+                },
+                "level": 0,
+                "md5": "ac3e277d47511436ba8d8dc043f482bc"
+            },
+            {
+                "location": {
+                    "x": 112,
+                    "y": 108
+                },
+                "level": 0,
+                "md5": "7417f856050c820250651e53270d1e92",
+                "crop_to_image_boundary": false
             }
         ],
         "read_thumbnail": [
