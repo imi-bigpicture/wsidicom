@@ -337,7 +337,11 @@ class Instances:
         return image
 
     def get_tile(
-        self, tile: Point, z: Optional[float] = None, path: Optional[str] = None
+        self,
+        tile: Point,
+        z: Optional[float] = None,
+        path: Optional[str] = None,
+        crop_to_image_boundary: bool = True,
     ) -> Image:
         """Return tile at tile coordinate x, y as image.
 
@@ -349,6 +353,8 @@ class Instances:
             Z coordinate
         path: Optional[str] = None
             Optical path
+        crop_to_image_boundary: bool = True
+            Whether to crop tiles that exceed image boundary.
 
         Returns
         -------
@@ -361,10 +367,14 @@ class Instances:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        return instance.image_data.get_tile(tile, z, path)
+        return instance.image_data.get_tile(tile, z, path, crop_to_image_boundary)
 
     def get_encoded_tile(
-        self, tile: Point, z: Optional[float] = None, path: Optional[str] = None
+        self,
+        tile: Point,
+        z: Optional[float] = None,
+        path: Optional[str] = None,
+        crop_to_image_boundary: bool = True,
     ) -> bytes:
         """Return tile at tile coordinate x, y as bytes.
 
@@ -376,6 +386,8 @@ class Instances:
             Z coordinate
         path: Optional[str] = None
             Optical path
+        crop_to_image_boundary: bool = True
+            Whether to crop tiles that exceed image boundary.
 
         Returns
         -------
@@ -387,7 +399,9 @@ class Instances:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        return instance.image_data.get_encoded_tile(tile, z, path)
+        return instance.image_data.get_encoded_tile(
+            tile, z, path, crop_to_image_boundary
+        )
 
     def mm_to_pixel(self, region: RegionMm) -> Region:
         """Convert region in mm to pixel region.

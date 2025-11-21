@@ -152,6 +152,7 @@ class Level(Instances):
         level: int,
         z: Optional[float] = None,
         path: Optional[str] = None,
+        crop_to_image_boundary: bool = True,
     ) -> Image:
         """Return tile in another level by scaling a region.
         If the tile is an edge tile, the resulting tile is croped
@@ -167,6 +168,8 @@ class Level(Instances):
             Z coordinate
         path: Optional[str] = None
             Optical path
+        crop_to_image_boundary: bool = True
+            If to crop tile to image boundary.
 
         Returns
         -------
@@ -181,7 +184,7 @@ class Level(Instances):
             raise WsiDicomOutOfBoundsError(
                 f"Region {cropped_region}", f"level size {self.size}"
             )
-        image = self.get_region(cropped_region, z, path)
+        image = self.get_region(cropped_region, z, path, crop_to_image_boundary)
         tile_size = cropped_region.size.ceil_div(scale)
         image = image.resize(
             tile_size.to_tuple(), resample=settings.pillow_resampling_filter
@@ -194,6 +197,7 @@ class Level(Instances):
         scale: int,
         z: Optional[float] = None,
         path: Optional[str] = None,
+        crop_to_image_boundary: bool = True,
     ) -> bytes:
         """Return encoded tile in another level by scaling a region.
 
@@ -207,13 +211,15 @@ class Level(Instances):
             Z coordinate
         path: Optional[str] = None
             Optical path
+        crop_to_image_boundary: bool = True
+            If to crop tile to image boundary.
 
         Returns
         -------
         bytes
             A transfer syntax encoded tile
         """
-        image = self.get_scaled_tile(tile, scale, z, path)
+        image = self.get_scaled_tile(tile, scale, z, path, crop_to_image_boundary)
         instance = self.get_instance(z, path)
         return instance.image_data.encoder.encode(image)
 

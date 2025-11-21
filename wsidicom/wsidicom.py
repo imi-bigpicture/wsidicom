@@ -722,6 +722,7 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None,
         pyramid: Optional[int] = None,
+        crop_to_image_boundary: bool = True,
     ) -> Image:
         """Read tile in pyramid level as Pillow image.
 
@@ -738,6 +739,8 @@ class WsiDicom:
         pyramid: Optional[int] = None
             Pyramid to read tile from. If `None` the index in `selected_pyramid` is
             used.
+        crop_to_image_boundary: bool = True
+            If to crop tile to image boundary.
 
         Returns
         -------
@@ -750,11 +753,13 @@ class WsiDicom:
         )
         try:
             wsi_level = wsi_pyramid.get(level)
-            return wsi_level.get_tile(tile_point, z, path)
+            return wsi_level.get_tile(tile_point, z, path, crop_to_image_boundary)
         except WsiDicomNotFoundError:
             # Scale from closest level
             wsi_level = wsi_pyramid.get_closest_by_level(level)
-            return wsi_level.get_scaled_tile(tile_point, level, z, path)
+            return wsi_level.get_scaled_tile(
+                tile_point, level, z, path, crop_to_image_boundary
+            )
 
     def read_encoded_tile(
         self,
@@ -763,6 +768,7 @@ class WsiDicom:
         z: Optional[float] = None,
         path: Optional[str] = None,
         pyramid: Optional[int] = None,
+        crop_to_image_boundary: bool = True,
     ) -> bytes:
         """Read tile in pyramid level as encoded bytes. For non-existing levels
         the tile is scaled down from a lower level, using the similar encoding.
@@ -780,6 +786,8 @@ class WsiDicom:
         pyramid: Optional[int] = None
             Pyramid to read tile from. If `None` the index in `selected_pyramid` is
             used.
+        crop_to_image_boundary: bool = True
+            If to crop tile to image boundary.
 
         Returns
         -------
@@ -792,11 +800,15 @@ class WsiDicom:
         )
         try:
             wsi_level = wsi_pyramid.get(level)
-            return wsi_level.get_encoded_tile(tile_point, z, path)
+            return wsi_level.get_encoded_tile(
+                tile_point, z, path, crop_to_image_boundary
+            )
         except WsiDicomNotFoundError:
             # Scale from closest level
             wsi_level = wsi_pyramid.get_closest_by_level(level)
-            return wsi_level.get_scaled_encoded_tile(tile_point, level, z, path)
+            return wsi_level.get_scaled_encoded_tile(
+                tile_point, level, z, path, crop_to_image_boundary
+            )
 
     def get_instance(
         self,

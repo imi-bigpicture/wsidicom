@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Parameter `crop_to_image_boundary` to `read_tile()` and `read_encoded_tile()` to allow control of if the tile should be cropped to the image boundary (default, old behavior) or not.
+
 ### Fixed
 
 - Corrected errors in `HTJpeg2000Settings` (@HarmvZ)
