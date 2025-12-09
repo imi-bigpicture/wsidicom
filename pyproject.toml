@@ -29,7 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 imagecodecs = ["imagecodecs>=2024.1.1,<2025.0.0,!=2024.9.22"]
-pylibjpeg-rle = ["pylibjpeg-rle>=1.3.0,<2.0.0"]
+pylibjpeg-rle = ["pylibjpeg-rle>=2.0.0,<3.0.0"]
 pyjpegls = ["pyjpegls>=1.2.0,<2.0.0"]
 pylibjpeg-openjpeg = ["pylibjpeg-openjpeg>=2.1.1,<3.0.0"]
 
