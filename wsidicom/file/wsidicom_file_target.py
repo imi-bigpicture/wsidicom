@@ -66,6 +66,7 @@ class WsiDicomFileTarget(Target):
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        force_transcoding: bool = False,
         file_options: Optional[Dict[str, Any]] = None,
     ):
         """
@@ -95,6 +96,9 @@ class WsiDicomFileTarget(Target):
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
+        force_transcoding: bool
+            If to force transcoding even if transfer syntax already matches the encoding
+            settings.
         file_options: Optional[Dict[str, Any]] = None
             Keyword arguments for saving files to output path.
         """
@@ -113,6 +117,7 @@ class WsiDicomFileTarget(Target):
             include_levels,
             add_missing_levels,
             transcoding,
+            force_transcoding,
         )
 
     @property
@@ -221,7 +226,11 @@ class WsiDicomFileTarget(Target):
             dataset = instances[0].dataset.as_tiled_full(
                 focal_planes, optical_paths, tiled_size, scale
             )
-            if self._transcoder is not None:
+            if self._transcoder is not None and (
+                self._force_transcoding
+                or instances[0].image_data.transfer_syntax
+                != self._transcoder.transfer_syntax
+            ):
                 transcoder = self._transcoder
             elif instances[0].image_data.transcoder is not None:
                 transcoder = instances[0].image_data.transcoder

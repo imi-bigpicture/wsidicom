@@ -222,6 +222,7 @@ class WsiDicom:
         add_missing_levels: bool = False,
         label: Optional[Union[Image, Union[str, Path, UPath]]] = None,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        force_transcoding: bool = False,
         file_options: Optional[Dict[str, Any]] = None,
     ) -> List[UPath]:
         """
@@ -267,6 +268,9 @@ class WsiDicom:
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
+        force_transcoding: bool = False
+            If to force transcoding even if transfer syntax already matches the encoding
+            settings.
         file_options: Optional[Dict[str, Any]] = None
             Optional options for saving files to output path.
 
@@ -295,6 +299,7 @@ class WsiDicom:
             include_levels,
             add_missing_levels,
             transcoding,
+            force_transcoding,
             file_options,
         ) as target:
             target.save_pyramids(self.pyramids, include_thumbnails)
