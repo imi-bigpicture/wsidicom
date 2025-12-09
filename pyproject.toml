@@ -1,12 +1,13 @@
-[tool.poetry]
+[project]
 name = "wsidicom"
 version = "0.28.1"
 description = "Tools for handling DICOM based whole scan images"
-authors = ["Erik O Gabrielsson <erik.o.gabrielsson@sectra.com>"]
-license = "Apache-2.0"
+authors = [
+    {name = "Erik O Gabrielsson", email = "erik.o.gabrielsson@sectra.com"}
+]
+license = {text = "Apache-2.0"}
 readme = "README.md"
-repository = "https://github.com/imi-bigpicture/wsidicom"
-packages = [{include = "wsidicom"}]
+requires-python = ">=3.10"
 keywords = ["whole slide image", "digital pathology", "annotations", "dicom"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -16,38 +17,38 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Medical Science Apps."
 ]
+dependencies = [
+    "numpy>=1.22.0",
+    "pydicom>=3.0.0",
+    "Pillow>=9.1.1",
+    "dicomweb-client>=0.59.2,<0.60.0",
+    "marshmallow>=3.20.1,<4.0.0",
+    "fsspec>=2024.2.0",
+    "universal-pathlib>=0.2.1,<0.3.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-numpy = ">=1.22.0"
-pydicom = ">=3.0.0"
-Pillow = ">=9.1.1"
-dicomweb-client = "^0.59.2"
-marshmallow = "^3.20.1"
-imagecodecs = { version = "^2024.1.1, !=2024.9.22", optional = true }
-pylibjpeg-rle = { version = "^1.3.0", optional = true }
-fsspec = ">=2024.2.0"
-universal-pathlib = "^0.2.1"
-pyjpegls = { version = "^1.2.0", optional = true }
-pylibjpeg-openjpeg = { version = "^2.1.1", optional = true }
+[project.optional-dependencies]
+imagecodecs = ["imagecodecs>=2024.1.1,<2025.0.0,!=2024.9.22"]
+pylibjpeg-rle = ["pylibjpeg-rle>=1.3.0,<2.0.0"]
+pyjpegls = ["pyjpegls>=1.2.0,<2.0.0"]
+pylibjpeg-openjpeg = ["pylibjpeg-openjpeg>=2.1.1,<3.0.0"]
 
-[tool.poetry.extras]
-imagecodecs = ["imagecodecs"]
-pylibjpeg-rle = ["pylibjpeg-rle"]
-pyjpegls = ["pyjpegls"]
-pylibjpeg-openjpeg = ["pylibjpeg-openjpeg"]
+[project.dependency-groups]
+dev = [
+    "pytest>=7.2.0,<8.0.0",
+    "pytest-watch>=4.2.0,<5.0.0",
+    "xmltodict>=0.12.0,<0.13.0",
+    "shapely>=2.0.2,<3.0.0",
+    "black>=24.2.0,<25.0.0",
+    "flake8>=7.0.0,<8.0.0",
+    "codespell>=2.2.5,<3.0.0",
+    "wsidicom-data>=0.3.0,<0.4.0",
+    "decoy>=2.2.0,<3.0.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.2.0"
-pytest-watch = "^4.2.0"
-xmltodict = "^0.12.0"
-shapely = "^2.0.2"
-black = "^24.2.0"
-flake8 = "^7.0.0"
-codespell = "^2.2.5"
-wsidicom-data =  "^0.3.0"
-decoy = "^2.2.0"
+[project.urls]
+Repository = "https://github.com/imi-bigpicture/wsidicom"
 
 [build-system]
-requires = ["poetry-core>=1.2.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
