@@ -33,7 +33,7 @@ class ConditionalThreadPoolExecutor(ThreadPoolExecutor):
         fn: Callable[..., ReturnType],
         *iterables: Iterable[Any],
         timeout: Optional[float] = None,
-        chunksize: int = 1
+        chunksize: int = 1,
     ) -> Iterator[ReturnType]:
         if self._max_workers == 1:
             if self._force_iteration:
