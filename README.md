@@ -433,17 +433,17 @@ annotations = slide.annotations
 
 ## Setup environment for development
 
-Requires poetry installed in the virtual environment.
+Requires uv installed.
 
 ```console
 git clone https://github.com/imi-bigpicture/wsidicom.git
-poetry install
+uv sync --all-extras
 ```
 
 To watch unit tests use:
 
 ```console
-poetry run pytest-watch -- -m unittest
+uv run pytest-watch -- -m unittest
 ```
 
 The integration tests uses test images from nema.org that's needs to be downloaded. The location of the test images can be changed from the default tests\testdata\slides using the environment variable WSIDICOM_TESTDIR. Download the images using the supplied script:
@@ -457,7 +457,7 @@ If the files are already downloaded the script will validate the checksums.
 To run integration tests:
 
 ```console
-poetry run pytest -m integration
+uv run pytest -m integration
 ```
 
 ## Data structure

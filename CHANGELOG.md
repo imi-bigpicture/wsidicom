@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2025-12-09
+
 ### Added
 
 - Parameter `crop_to_image_boundary` to `read_tile()` and `read_encoded_tile()` to allow control of if the tile should be cropped to the image boundary (default, old behavior) or not.
@@ -15,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Corrected errors in `HTJpeg2000Settings` (@HarmvZ)
+
+### Changed
+
+- Change from poetry to uv.
 
 ## [0.28.1] - 2025-09-30
 
@@ -541,7 +547,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.1..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.0..HEAD
+[0.29.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.1..v0.29.0
 [0.28.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.0..v0.28.1
 [0.28.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.27.1..v0.28.0
 [0.27.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.27.0..v0.27.1
