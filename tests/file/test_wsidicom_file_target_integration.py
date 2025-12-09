@@ -79,16 +79,24 @@ class TestWsiDicomFileTargetIntegration:
 
     @pytest.mark.parametrize("settings", [Jpeg2kSettings(), JpegSettings()])
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    @pytest.mark.parametrize("force_transcoding", [False, True])
     def test_transcode(
         self,
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         settings: Settings,
+        force_transcoding: bool,
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)
+        original_transfer_syntax = wsi.levels[
+            0
+        ].default_instance.image_data.transfer_syntax
         transcoder = Encoder.create_for_settings(settings)
+        expect_transcoding = force_transcoding or (
+            original_transfer_syntax != transcoder.transfer_syntax
+        )
 
         # Act
         with WsiDicomFileTarget(
@@ -101,6 +109,7 @@ class TestWsiDicomFileTargetIntegration:
             [-1],
             False,
             transcoder,
+            force_transcoding,
         ) as target:
             target.save_pyramids(wsi.pyramids, True)
 
@@ -126,8 +135,7 @@ class TestWsiDicomFileTargetIntegration:
                 LossyImageCompressionRatioTag
             )
 
-            if transcoder.lossy_method is not None:
-                assert level.default_instance.dataset
+            if expect_transcoding and transcoder.lossy_method is not None:
                 assert transcoder.lossy_method.value == methods[-1]
                 assert len(methods) == len(original_methods) + 1
                 assert len(ratios) == len(original_ratios) + 1

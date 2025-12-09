@@ -37,6 +37,7 @@ class Target(metaclass=ABCMeta):
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
         transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        force_transcoding: bool = False,
     ) -> None:
         """Initiate a target.
 
@@ -57,6 +58,12 @@ class Target(metaclass=ABCMeta):
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
+        transcoding: Optional[Union[EncoderSettings, Encoder]] = None
+            Optional settings or encoder for transcoding image data. If None, image data
+            will be copied as is.
+        force_transcoding: bool = False
+            If to force transcoding even if transfer syntax already matches the encoding
+            settings.
         """
         self._uid_generator = uid_generator
         self._workers = workers
@@ -65,6 +72,7 @@ class Target(metaclass=ABCMeta):
         self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
         self._instance_number = 0
+        self._force_transcoding = force_transcoding
         if isinstance(transcoding, EncoderSettings):
             self._transcoder = Encoder.create_for_settings(transcoding)
         else:
