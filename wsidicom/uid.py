@@ -85,7 +85,7 @@ class SlideUids:
             f"frame of reference {self.frame_of_reference}"
         )
 
-    def __eq__(self, other: "SlideUids") -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, SlideUids):
             return (
                 self.study_instance == other.study_instance
@@ -130,7 +130,7 @@ class FileUids:
             return self.concatenation
         return self.instance
 
-    def __eq__(self, other: "FileUids") -> bool:
+    def __eq__(self, other: object) -> bool:
         """Return true if concatenation uid is not none, matches other
         concatenation uid and base uids match.
 

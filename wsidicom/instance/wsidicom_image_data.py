@@ -187,13 +187,13 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             id(self), frame_index, self._get_tile_frame
         )
 
-    def _get_decoded_tile(self, tile: Point, z: float, path: str) -> Image:
+    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         """
         Return Pillow image for tile.
 
         Parameters
         ----------
-        tile: Point
+        tile_point: Point
             Tiles to get.
         z: float
             Z coordinate.
@@ -205,7 +205,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         Image
             Tile as Pillow Image.
         """
-        frame_index = self._get_frame_index(tile, z, path)
+        frame_index = self._get_frame_index(tile_point, z, path)
         if frame_index == -1:
             return self.blank_tile
         return self._decoded_frame_cache.get_tile_frame(
