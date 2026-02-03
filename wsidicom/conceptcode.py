@@ -41,7 +41,7 @@ class ConceptCode:
             (self.value, self.scheme_designator, self.meaning, self.scheme_version)
         )
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, Code):
             return self.code == other
         if isinstance(other, ConceptCode):

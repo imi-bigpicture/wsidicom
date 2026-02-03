@@ -199,7 +199,7 @@ class SpecimenIdentifier:
     value: str
     issuer: Optional[IssuerOfIdentifier] = None
 
-    def __eq__(self, other: Any):
+    def __eq__(self, other: object) -> bool:
         """Determine if other specimen identifiers is equal to this."""
         if isinstance(other, str):
             return self.value == other and self.issuer is None

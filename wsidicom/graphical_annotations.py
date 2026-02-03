@@ -418,7 +418,7 @@ class Point(Geometry):
         self.x = float(x)
         self.y = float(y)
 
-    def __eq__(self, point: "Point") -> bool:
+    def __eq__(self, point: object) -> bool:
         if isinstance(point, Point):
             return self.x == point.x and self.y == point.y
         else:
@@ -448,7 +448,7 @@ class Point(Geometry):
         return 1
 
     @classmethod
-    def from_list(cls, list: List[float]) -> "Point":
+    def from_list(cls, list: Sequence[float]) -> "Point":
         coordinates = cls.list_to_coords(list)
         return cls(*coordinates[0])
 
@@ -590,7 +590,7 @@ class Annotation:
     def __repr__(self) -> str:
         return f"Annotation({self.geometry}, {self.measurements})"
 
-    def __eq__(self, other: "Annotation") -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Annotation):
             return NotImplemented
         return (
@@ -657,7 +657,7 @@ AnnotationGroupType = TypeVar("AnnotationGroupType", bound="AnnotationGroup")
 
 
 class AnnotationGroup(Generic[GeometryType]):
-    _geometry_type: Type[Geometry]
+    _geometry_type: Type[GeometryType]
 
     def __init__(
         self,
@@ -720,7 +720,7 @@ class AnnotationGroup(Generic[GeometryType]):
             f"{self.description}, {self._is_double})"
         )
 
-    def __eq__(self, other: "AnnotationGroup") -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, AnnotationGroup):
             return NotImplemented
         return (
@@ -978,7 +978,7 @@ class AnnotationGroup(Generic[GeometryType]):
 
     @classmethod
     @abstractmethod
-    def _get_geometries_from_ds(cls, ds: Dataset) -> List[Geometry]:
+    def _get_geometries_from_ds(cls, ds: Dataset) -> Sequence[Geometry]:
         """Abstract method for getting geometries from dataset.
 
         Parameters
@@ -1381,7 +1381,7 @@ class PointAnnotationGroup(AnnotationGroup[Point]):
     _geometry_type = Point
 
     @classmethod
-    def _get_geometries_from_ds(cls, ds: Dataset) -> List[Point]:
+    def _get_geometries_from_ds(cls, ds: Dataset) -> Sequence[Point]:
         """Returns point geometries from dataset.
 
         Parameters
@@ -1401,8 +1401,6 @@ class PointAnnotationGroup(AnnotationGroup[Point]):
 
 class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
     """Meta class for line annotation group"""
-
-    geometry_type: Type[Geometry]
 
     @property
     def point_index_list(self) -> np.ndarray:
@@ -1443,7 +1441,7 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
         ]
 
     @classmethod
-    def _get_geometries_from_ds(cls, ds: Dataset) -> List[GeometryType]:
+    def _get_geometries_from_ds(cls, ds: Dataset) -> Sequence[GeometryType]:
         """Returns line geometries from dataset. Each line geometry consists of
         multiple points, and the first coordinate in the coordinate list is
 
