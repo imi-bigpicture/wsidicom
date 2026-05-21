@@ -172,7 +172,7 @@ class SparseTileIndex(TileIndex):
         for dataset in self._datasets:
             frame_sequence = dataset.frame_sequence
             for i, frame in enumerate(frame_sequence):
-                (tile, z) = self._read_frame_coordinates(frame)
+                tile, z = self._read_frame_coordinates(frame)
                 identifier = dataset.read_optical_path_identifier(frame)
                 planes[(z, identifier)][tile] = i + dataset.frame_offset
         return planes

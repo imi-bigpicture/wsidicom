@@ -14,7 +14,6 @@
 
 """Module with imports for optional codec packages."""
 
-
 try:
     from rle.utils import decode_frame as rle_decode_frame
     from rle.utils import encode_frame as rle_encode_frame
