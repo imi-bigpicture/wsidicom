@@ -19,7 +19,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import  Iterable, List, Optional, Sequence, Tuple, Union
 
 from pydicom.sr.coding import Code
 from pydicom.uid import UID, generate_uid
