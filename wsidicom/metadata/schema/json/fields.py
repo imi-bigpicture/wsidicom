@@ -14,7 +14,6 @@
 
 """Json fields for serializing values."""
 
-
 import dataclasses
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Type, Union
