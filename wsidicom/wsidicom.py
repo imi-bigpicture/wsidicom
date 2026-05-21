@@ -14,7 +14,6 @@
 
 import logging
 import os
-from functools import lru_cache
 from pathlib import Path
 from typing import (
     Any,
@@ -33,6 +32,7 @@ from PIL.Image import Image
 from pydicom.uid import UID, generate_uid
 from upath import UPath
 
+from wsidicom.cache import lru_cached_method
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.config import settings
@@ -911,7 +911,7 @@ class WsiDicom:
     def __str__(self) -> str:
         return self.pretty_str()
 
-    @lru_cache
+    @lru_cached_method()
     def _create_metadata(self, pyramid_index: int) -> WsiMetadata:
         pyramid = self.pyramids.get(pyramid_index)
 

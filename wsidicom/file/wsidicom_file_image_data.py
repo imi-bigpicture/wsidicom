@@ -12,13 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from functools import lru_cache
 from typing import List, Sequence, Union
 
 from pydicom.uid import UID
 from upath import UPath
 
-from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
+from wsidicom.cache import DecodedFrameCache, EncodedFrameCache, lru_cached_method
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.io import WsiDicomReader
@@ -85,7 +84,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         """The uid of the transfer syntax of the image."""
         return self._transfer_syntax
 
-    @lru_cache
+    @lru_cached_method()
     def _get_reader(self, frame_index: int) -> WsiDicomReader:
         """
         Return file containing frame index.
