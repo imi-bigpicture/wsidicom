@@ -65,7 +65,7 @@ class WsiInstance:
         return self.pretty_str()
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
-        string = f"default z: {self.default_z} " f"default path: { self.default_path}"
+        string = f"default z: {self.default_z} " f"default path: {self.default_path}"
         if depth is not None:
             depth -= 1
             if depth < 0:
