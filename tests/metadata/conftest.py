@@ -37,7 +37,6 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
 )
 from wsidicom.geometry import PointMm, SizeMm
-from wsidicom.instance.dataset import ImageType
 from wsidicom.metadata import (
     Collection,
     ConstantLutSegment,
@@ -48,6 +47,7 @@ from wsidicom.metadata import (
     FocusMethod,
     Image,
     ImageCoordinateSystem,
+    ImageType,
     ImagePathFilter,
     Label,
     LightPathFilter,

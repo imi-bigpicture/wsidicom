@@ -29,11 +29,10 @@ from wsidicom.errors import (
 from wsidicom.geometry import Point, Region, RegionMm, Size, SizeMm
 from wsidicom.instance import (
     ImageData,
-    ImageType,
     WsiDataset,
     WsiInstance,
 )
-from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem, ImageType
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
 

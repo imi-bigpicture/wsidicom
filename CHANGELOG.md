@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ImageCoordinateSystem.default_for()` for creating a default image coordinate system for a given rotation and image type, placing the image at the matching corner of a standard slide. Optional slide-size parameters support non-standard (e.g. large-format) slides.
+
+### Changed
+
+- `ImageType` is now exported from `wsidicom.metadata` instead of `wsidicom.instance`.
+
 ## [0.29.1] - 2026-04-21
 
 ### Fixed

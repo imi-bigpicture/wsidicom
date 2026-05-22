@@ -21,6 +21,7 @@ from wsidicom.metadata.image import (
     FocusMethod,
     Image,
     ImageCoordinateSystem,
+    ImageType,
     LossyCompression,
 )
 from wsidicom.metadata.label import Label
@@ -69,6 +70,7 @@ __all__ = [
     "FocusMethod",
     "Image",
     "ImageCoordinateSystem",
+    "ImageType",
     "Label",
     "ConstantLutSegment",
     "DiscreteLutSegment",

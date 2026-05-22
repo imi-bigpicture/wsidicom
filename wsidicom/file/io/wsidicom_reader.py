@@ -37,7 +37,8 @@ from wsidicom.file.io.frame_index.tiff import (
     TiffFrameIndexParser,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
-from wsidicom.instance import ImageType, WsiDataset
+from wsidicom.instance import WsiDataset
+from wsidicom.metadata import ImageType
 from wsidicom.tags import ExtendedOffsetTableTag
 from wsidicom.uid import FileUids
 

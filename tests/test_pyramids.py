@@ -5,9 +5,9 @@ from pydicom import Dataset
 from pydicom.uid import UID, generate_uid
 
 from wsidicom.geometry import Orientation, PointMm, Size, SizeMm
-from wsidicom.instance.dataset import ImageType, WsiDataset
+from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.instance import WsiInstance
-from wsidicom.metadata.image import ImageCoordinateSystem
+from wsidicom.metadata.image import ImageCoordinateSystem, ImageType
 from wsidicom.series.pyramids import Pyramids
 from wsidicom.uid import SlideUids
 

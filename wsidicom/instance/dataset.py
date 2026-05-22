@@ -41,15 +41,9 @@ from wsidicom.errors import (
 )
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.image_data import ImageData
+from wsidicom.metadata.image import ImageType
 from wsidicom.tags import OpticalPathIdentificationSequenceTag, OpticalPathIdentifierTag
 from wsidicom.uid import FileUids, SlideUids
-
-
-class ImageType(Enum):
-    VOLUME = "VOLUME"
-    LABEL = "LABEL"
-    OVERVIEW = "OVERVIEW"
-    THUMBNAIL = "THUMBNAIL"
 
 
 class Requirement(IntEnum):

@@ -30,7 +30,8 @@ from typing import (
 from wsidicom.errors import WsiDicomMatchError, WsiDicomNotFoundError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Label, Level, Overview, Thumbnail
-from wsidicom.instance import ImageType, WsiDataset, WsiInstance
+from wsidicom.instance import WsiDataset, WsiInstance
+from wsidicom.metadata import ImageType
 from wsidicom.metadata import Label as LabelMetadata
 from wsidicom.metadata import Overview as OverviewMetadata
 from wsidicom.metadata.schema.dicom import LabelDicomSchema, OverviewDicomSchema

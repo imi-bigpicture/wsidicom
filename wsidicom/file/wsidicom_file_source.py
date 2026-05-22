@@ -47,7 +47,8 @@ from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import ImageType, TileType, WsiDataset, WsiInstance
+from wsidicom.instance import TileType, WsiDataset, WsiInstance
+from wsidicom.metadata import ImageType
 from wsidicom.source import Source
 from wsidicom.uid import SlideUids
 

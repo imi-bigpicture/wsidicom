@@ -22,8 +22,8 @@ from wsidicom.errors import (
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level, Thumbnail
 from wsidicom.group.level import BaseLevel
-from wsidicom.instance import ImageType, WsiInstance
-from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.instance import WsiInstance
+from wsidicom.metadata import ImageCoordinateSystem, ImageType
 from wsidicom.metadata import Pyramid as PyramidMetadata
 from wsidicom.metadata.schema.dicom.pyramid import PyramidDicomSchema
 from wsidicom.series.series import Series, Thumbnails

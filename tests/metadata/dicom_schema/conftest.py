@@ -23,10 +23,10 @@ from tests.metadata.dicom_schema.helpers import (
     code_to_code_dataset,
 )
 from wsidicom.conceptcode import IlluminationColorCode
-from wsidicom.instance import ImageType
 from wsidicom.metadata import (
     Equipment,
     Image,
+    ImageType,
     Label,
     OpticalPath,
     Overview,
