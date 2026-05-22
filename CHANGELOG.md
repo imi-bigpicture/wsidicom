@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `ImageType` is now exported from `wsidicom.metadata` instead of `wsidicom.instance`.
+- `WsiDataset.is_supported_wsi_dicom()` now rejects a dataset up front when it is missing any attribute the library dereferences while opening an instance (identity, image/tile geometry, and pixel format). Previously such datasets passed the check and failed later with an `AttributeError`.
+
+### Removed
+
+- `settings.strict_attribute_check`. It defaulted to disabled and, when enabled, only enforced a handful of volume-image attributes; the required-attribute check is now always applied (see Changed).
+- `WsiDicomRequirementError`, which was only raised by the removed attribute-requirement machinery. `WsiDicomStrictRequirementError` is unchanged (still used by `strict_uid_check`).
 
 ## [0.29.1] - 2026-04-21
 
