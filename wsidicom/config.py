@@ -25,7 +25,6 @@ class Settings:
     def __init__(self) -> None:
         self._strict_uid_check = False
         self._strict_tile_size_check = True
-        self._strict_attribute_check = False
         self._strict_specimen_identifier_check = True
         self._focal_plane_distance_threshold = 0.000001
         self._pyramids_origin_threshold = 0.02
@@ -46,15 +45,6 @@ class Settings:
     @strict_uid_check.setter
     def strict_uid_check(self, value: bool) -> None:
         self._strict_uid_check = value
-
-    @property
-    def strict_attribute_check(self) -> bool:
-        """If attribute marked with Requirement.STRICT is required."""
-        return self._strict_attribute_check
-
-    @strict_attribute_check.setter
-    def strict_attribute_check(self, value: bool) -> None:
-        self._strict_attribute_check = value
 
     @property
     def strict_specimen_identifier_check(self) -> bool:

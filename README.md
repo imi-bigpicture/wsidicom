@@ -354,7 +354,6 @@ with WsiDicom.open("path_to_folder") as slide:
 ```python
 from wsidicom import settings
 settings.strict_uid_check = True
-settings.strict_attribute_check = True
 ```
 
 ## Annotation usage

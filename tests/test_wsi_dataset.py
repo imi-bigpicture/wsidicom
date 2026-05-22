@@ -5,6 +5,7 @@ from pydicom import Dataset
 from pydicom.dataelem import DataElement
 from pydicom.uid import UID, generate_uid
 
+from tests.data_gen import create_main_dataset
 from wsidicom.geometry import SizeMm
 from wsidicom.instance import ImageData, TileType
 from wsidicom.instance.dataset import WsiDataset
@@ -293,3 +294,75 @@ class TestWsiDataset:
 
         # Assert
         assert instance_dataset.ImageType == expected_image_type
+
+
+class TestIsSupportedWsiDicom:
+    def test_supported_volume_returns_image_type(self):
+        # Arrange
+        dataset = create_main_dataset()
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type == ImageType.VOLUME
+
+    @pytest.mark.parametrize("attribute", WsiDataset.REQUIRED_ATTRIBUTES)
+    def test_missing_required_attribute_returns_none(self, attribute: str):
+        # Arrange
+        dataset = create_main_dataset()
+        delattr(dataset, attribute)
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
+
+    def test_missing_sop_class_uid_returns_none(self):
+        # Arrange
+        dataset = create_main_dataset()
+        del dataset.SOPClassUID
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
+
+    def test_non_wsi_sop_class_returns_none(self):
+        # Arrange
+        dataset = create_main_dataset()
+        dataset.SOPClassUID = "1.2.840.10008.5.1.4.1.1.2"  # CT Image Storage
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
+
+    def test_unsupported_image_type_returns_none(self):
+        # Arrange
+        dataset = create_main_dataset()
+        dataset.ImageType = ["DERIVED", "PRIMARY", "BADFLAVOR", "NONE"]
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
+
+    @pytest.mark.parametrize(
+        ["attribute", "value"],
+        [("PixelRepresentation", 1), ("PlanarConfiguration", 1)],
+    )
+    def test_unsupported_pixel_format_returns_none(self, attribute: str, value: int):
+        # Arrange
+        dataset = create_main_dataset()
+        setattr(dataset, attribute, value)
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
