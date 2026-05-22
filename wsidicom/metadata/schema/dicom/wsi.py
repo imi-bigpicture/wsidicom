@@ -22,10 +22,8 @@ from PIL import ImageCms
 from pydicom import Dataset
 from pydicom.uid import UID, VLWholeSlideMicroscopyImageStorage
 
-from wsidicom.geometry import PointMm
-from wsidicom.instance.dataset import ImageType
 from wsidicom.metadata.equipment import Equipment
-from wsidicom.metadata.image import Image, ImageCoordinateSystem
+from wsidicom.metadata.image import Image, ImageCoordinateSystem, ImageType
 from wsidicom.metadata.label import Label
 from wsidicom.metadata.optical_path import OpticalPath
 from wsidicom.metadata.overview import Overview
@@ -265,61 +263,12 @@ class WsiMetadataDicomSchema:
     def _insert_default_image_coordinate_system(
         image: Image, image_type: ImageType
     ) -> Image:
-        if (
-            image_type == ImageType.VOLUME
-            or image_type == ImageType.THUMBNAIL
-            or image_type == ImageType.OVERVIEW
-        ):
-            if image_type == ImageType.OVERVIEW:
-                # Place origin at the corners of the slide
-                default_size = defaults.slide_size_with_label
-            else:
-                # Place the origin at the corners of the non-label part of the slide
-                default_size = defaults.slide_size_without_label
-
-            if defaults.image_coordinate_system_rotation == 0:
-                x = 0
-                y = 0
-            elif defaults.image_coordinate_system_rotation == 90:
-                x = default_size.width
-                y = 0
-            elif defaults.image_coordinate_system_rotation == 180:
-                x = default_size.width
-                y = default_size.height
-            elif defaults.image_coordinate_system_rotation == 270:
-                x = 0
-                y = default_size.height
-            else:
-                raise ValueError(
-                    f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"
-                )
-        elif image_type == ImageType.LABEL:
-            # Place the origin at the corners of the label area of the slide
-            if defaults.image_coordinate_system_rotation == 0:
-                x = 0
-                y = defaults.slide_size_without_label.height
-            elif defaults.image_coordinate_system_rotation == 90:
-                x = defaults.slide_size_with_label.width
-                y = defaults.slide_size_without_label.height
-            elif defaults.image_coordinate_system_rotation == 180:
-                x = defaults.slide_size_with_label.width
-                y = defaults.slide_size_with_label.height
-            elif defaults.image_coordinate_system_rotation == 270:
-                x = 0
-                y = defaults.slide_size_with_label.height
-            else:
-                raise ValueError(
-                    f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"
-                )
-        else:
-            raise ValueError(
-                f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"
-            )
         return replace(
             image,
-            image_coordinate_system=ImageCoordinateSystem(
-                origin=PointMm(x, y),
-                rotation=defaults.image_coordinate_system_rotation,
-                z_offset=None,
+            image_coordinate_system=ImageCoordinateSystem.default_for(
+                defaults.image_coordinate_system_rotation,
+                image_type,
+                slide_size_without_label=defaults.slide_size_without_label,
+                slide_size_with_label=defaults.slide_size_with_label,
             ),
         )

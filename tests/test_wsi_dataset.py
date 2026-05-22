@@ -7,7 +7,8 @@ from pydicom.uid import UID, generate_uid
 
 from wsidicom.geometry import SizeMm
 from wsidicom.instance import ImageData, TileType
-from wsidicom.instance.dataset import ImageType, WsiDataset
+from wsidicom.instance.dataset import WsiDataset
+from wsidicom.metadata import ImageType
 from wsidicom.tags import LossyImageCompressionRatioTag
 
 

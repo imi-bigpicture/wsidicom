@@ -28,7 +28,8 @@ from tests.data_gen import (
 )
 from wsidicom.file.io import OffsetTableType, WsiDicomReader
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
-from wsidicom.instance import ImageType, TileType, WsiDataset
+from wsidicom.instance import TileType, WsiDataset
+from wsidicom.metadata import ImageType
 
 FILE_SETTINGS = {
     "sparse_no_bot": {
