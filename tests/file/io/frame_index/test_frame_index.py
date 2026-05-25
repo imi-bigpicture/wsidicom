@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 from io import BytesIO
-from typing import List, Tuple
 
 import pytest
 from pydicom.encaps import encapsulate, encapsulate_extended
@@ -69,11 +68,11 @@ class TestFrameIndexParser:
     )
     @pytest.mark.parametrize("bits", [8, 16])
     def test_read_native_pixel_data_offset_table_frame_positions(
-        self, buffer: WsiDicomIO, tiles: List[bytes], transfer_syntax: UID, bits: int
+        self, buffer: WsiDicomIO, tiles: list[bytes], transfer_syntax: UID, bits: int
     ):
         # Arrange
         buffer.write_tag_of_vr_and_length(PixelDataTag, "OB", len(tiles) * bits // 8)
-        expected_frame_index: List[Tuple[int, int]] = []
+        expected_frame_index: list[tuple[int, int]] = []
         for tile in tiles:
             position = buffer.tell()
             length = len(tile)
@@ -90,7 +89,7 @@ class TestFrameIndexParser:
         assert frame_index == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_pixel_data_offset_table(self, buffer: WsiDicomIO, tiles: List[bytes]):
+    def test_pixel_data_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
         # Arrange
         EMPTY_BOT = 16
         ITEM_TAG_AND_LENGTH = 8
@@ -103,7 +102,7 @@ class TestFrameIndexParser:
         buffer.write(encapsulated)
         buffer.write_tag(SequenceDelimiterTag)
         buffer.write_UL(0)
-        expected_frame_index: List[Tuple[int, int]] = [
+        expected_frame_index: list[tuple[int, int]] = [
             ((bot_start + EMPTY_BOT + index * ITEM_LENGTH), FRAME_LENGTH)
             for index in range(len(tiles))
         ]
@@ -116,7 +115,7 @@ class TestFrameIndexParser:
         assert frame_index == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_basic_offset_table(self, buffer: WsiDicomIO, tiles: List[bytes]):
+    def test_basic_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
         # Arrange
         BOT = 16 + len(tiles) * 4
         ITEM_TAG_AND_LENGTH = 8
@@ -128,7 +127,7 @@ class TestFrameIndexParser:
         buffer.write(encapsulated)
         buffer.write_tag(SequenceDelimiterTag)
         buffer.write_UL(0)
-        expected_frame_index: List[Tuple[int, int]] = [
+        expected_frame_index: list[tuple[int, int]] = [
             ((bot_start + BOT + index * ITEM_LENGTH), FRAME_LENGTH)
             for index in range(len(tiles))
         ]
@@ -141,7 +140,7 @@ class TestFrameIndexParser:
         assert frame_index == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_extended_offset_table(self, buffer: WsiDicomIO, tiles: List[bytes]):
+    def test_extended_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
         # Arrange
         EMPTY_BOT = 16
         ITEM_TAG_AND_LENGTH = 8
@@ -170,7 +169,7 @@ class TestFrameIndexParser:
         buffer.write(encapsulated)
         buffer.write_tag(SequenceDelimiterTag)
         buffer.write_UL(0)
-        expected_frame_index: List[Tuple[int, int]] = [
+        expected_frame_index: list[tuple[int, int]] = [
             ((bot_start + EMPTY_BOT + index * ITEM_LENGTH), FRAME_LENGTH)
             for index in range(len(tiles))
         ]

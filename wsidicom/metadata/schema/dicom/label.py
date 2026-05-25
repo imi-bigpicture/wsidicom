@@ -14,7 +14,7 @@
 
 """DICOM schema for Label model."""
 
-from typing import Any, Dict, Type
+from typing import Any
 
 from marshmallow import post_dump, pre_dump
 from pydicom.valuerep import VR
@@ -51,7 +51,7 @@ class LabelBaseDicomSchema(ModuleDicomSchema[Label]):
     )
 
     @property
-    def load_type(self) -> Type[Label]:
+    def load_type(self) -> type[Label]:
         return Label
 
     @property
@@ -70,7 +70,7 @@ class LabelOnlyDicomSchema(LabelBaseDicomSchema):
         }
 
     @post_dump
-    def post_dump(self, data: Dict[str, Any], **kwargs):
+    def post_dump(self, data: dict[str, Any], **kwargs):
         # Remove text and barcode if empty
         if data["LabelText"] is None:
             data.pop("LabelText")

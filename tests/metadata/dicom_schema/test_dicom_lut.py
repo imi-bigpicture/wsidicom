@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import io
-from typing import Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 import pytest
@@ -82,7 +82,7 @@ class TestDicomLut:
     )
     def test_from_dataset(
         self,
-        descriptor: Tuple[int, int, int],
+        descriptor: tuple[int, int, int],
         red_lut: bytes,
         green_lut: bytes,
         blue_lut: bytes,
@@ -165,7 +165,7 @@ class TestDicomLut:
     def test_to_dataset(
         self,
         lut: Lut,
-        expected_descriptor: Tuple[int, int, int],
+        expected_descriptor: tuple[int, int, int],
         expected_red_lut: bytes,
         expected_green_lut: bytes,
         expected_blue_lut: bytes,

@@ -15,8 +15,9 @@
 """Optical path model."""
 
 from abc import ABCMeta, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Generic, Optional, Sequence, Type, TypeVar, Union
+from typing import Generic, TypeVar
 
 import numpy as np
 
@@ -28,7 +29,7 @@ from wsidicom.conceptcode import (
     LightPathFilterCode,
 )
 
-LutDataType = Type[Union[np.uint8, np.uint16]]
+LutDataType = type[np.uint8 | np.uint16]
 
 
 class LutSegment(metaclass=ABCMeta):
@@ -195,10 +196,7 @@ class Lut:
         np.ndarray
             Lookup table ordered by rgb, rgb ...
         """
-        if mode == "L" or mode == "I":
-            bits = 16
-        else:
-            bits = 8
+        bits = 16 if mode == "L" or mode == "I" else 8
         return self.table.flatten() / (2**self.bits / 2**bits)
 
 
@@ -216,20 +214,20 @@ class OpticalFilter(Generic[OpticalFilterCodeType]):
 
     Parameters
     ----------
-    filters: Optional[Sequence[OpticalFilterCodeType]] = None
+    filters: Sequence[OpticalFilterCodeType] | None = None
         The filters used.
-    nominal: Optional[float] = None
+    nominal: float | None = None
         The nominal value of the filter in nm.
-    low_pass: Optional[float] = None
+    low_pass: float | None = None
         The low pass value of the filter in nm.
-    high_pass: Optional[float] = None
+    high_pass: float | None = None
         The high pass value of the filter in nm.
     """
 
-    filters: Optional[Sequence[OpticalFilterCodeType]] = None
-    nominal: Optional[float] = None
-    low_pass: Optional[float] = None
-    high_pass: Optional[float] = None
+    filters: Sequence[OpticalFilterCodeType] | None = None
+    nominal: float | None = None
+    low_pass: float | None = None
+    high_pass: float | None = None
 
 
 class LightPathFilter(OpticalFilter[LightPathFilterCode]):
@@ -237,15 +235,15 @@ class LightPathFilter(OpticalFilter[LightPathFilterCode]):
 
     Parameters
     ----------
-    filters: Optional[Sequence[LightPathFilterCode]] = None
+    filters: Sequence[LightPathFilterCode] | None = None
         The filters used. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8124.html
         or `LightPathFilterCode.meanings` for a list of valid codes.
-    nominal: Optional[float] = None
+    nominal: float | None = None
         The nominal value of the filter in nm.
-    low_pass: Optional[float] = None
+    low_pass: float | None = None
         The low pass value of the filter in nm.
-    high_pass: Optional[float] = None
+    high_pass: float | None = None
         The high pass value of the filter in nm.
     """
 
@@ -255,15 +253,15 @@ class ImagePathFilter(OpticalFilter[ImagePathFilterCode]):
 
     Parameters
     ----------
-    filters: Optional[Sequence[ImagePathFilterCode]] = None
+    filters: Sequence[ImagePathFilterCode] | None = None
         The filters used. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8124.html
         or ImagePathFilterCode.meanings` for a list of valid codes.
-    nominal: Optional[float] = None
+    nominal: float | None = None
         The nominal value of the filter in nm.
-    low_pass: Optional[float] = None
+    low_pass: float | None = None
         The low pass value of the filter in nm.
-    high_pass: Optional[float] = None
+    high_pass: float | None = None
         The high pass value of the filter in nm.
     """
 
@@ -274,22 +272,22 @@ class Objectives:
 
     Parameters
     ----------
-    lenses: Optional[Sequence[LenseCode]] = None
+    lenses: Sequence[LenseCode] | None = None
         Lenses used. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8121.html
         or `LensCode.meanings` for a list of valid codes.
-    condenser_power: Optional[float] = None
+    condenser_power: float | None = None
         The condenser power.
-    objective_power: Optional[float] = None
+    objective_power: float | None = None
         The objective power.
-    objective_numerical_aperture: Optional[float] = None
+    objective_numerical_aperture: float | None = None
         The objective numerical aperture.
     """
 
-    lenses: Optional[Sequence[LenseCode]] = None
-    condenser_power: Optional[float] = None
-    objective_power: Optional[float] = None
-    objective_numerical_aperture: Optional[float] = None
+    lenses: Sequence[LenseCode] | None = None
+    condenser_power: float | None = None
+    objective_power: float | None = None
+    objective_numerical_aperture: float | None = None
 
 
 @dataclass(frozen=True)
@@ -302,32 +300,32 @@ class OpticalPath:
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.html
 
     Parameters
-    identifier : Optional[str] = None
+    identifier : str | None = None
         Identifier of the optical path.
-    description : Optional[str] = None
+    description : str | None = None
         Description of the optical path.
-    illumination_types : Optional[Sequence[IlluminationCode]] = None
+    illumination_types : Sequence[IlluminationCode] | None = None
         Illumination types used in the optical path.
-    illumination : Optional[Union[float, IlluminationColorCode]] = None
+    illumination : float | IlluminationColorCode | None = None
         Illumination used in the optical path.
-    icc_profile : Optional[bytes] = None
+    icc_profile : bytes | None = None
         ICC profile for the optical path.
-    lut : Optional[Lut] = None
+    lut : Lut | None = None
         Lookup table to use for the optical path.
-    light_path_filter : Optional[LightPathFilter] = None
+    light_path_filter : LightPathFilter | None = None
         Light path filter used in the optical path.
-    image_path_filter : Optional[ImagePathFilter] = None
+    image_path_filter : ImagePathFilter | None = None
         Image path filter used in the optical path.
-    objective : Optional[Objectives] = None
+    objective : Objectives | None = None
         Objectives used in the optical path.
     """
 
-    identifier: Optional[str] = None
-    description: Optional[str] = None
-    illumination_types: Optional[Sequence[IlluminationCode]] = None
-    illumination: Optional[Union[float, IlluminationColorCode]] = None
-    icc_profile: Optional[bytes] = None
-    lut: Optional[Lut] = None
-    light_path_filter: Optional[LightPathFilter] = None
-    image_path_filter: Optional[ImagePathFilter] = None
-    objective: Optional[Objectives] = None
+    identifier: str | None = None
+    description: str | None = None
+    illumination_types: Sequence[IlluminationCode] | None = None
+    illumination: float | IlluminationColorCode | None = None
+    icc_profile: bytes | None = None
+    lut: Lut | None = None
+    light_path_filter: LightPathFilter | None = None
+    image_path_filter: ImagePathFilter | None = None
+    objective: Objectives | None = None

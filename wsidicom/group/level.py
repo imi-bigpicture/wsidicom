@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import math
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from PIL.Image import Image
 
@@ -50,14 +50,12 @@ class Level(Instances):
         self._level = self._assign_level(self._base_pixel_spacing)
 
     def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}({self.instances}, " f"{self._base_pixel_spacing})"
-        )
+        return f"{type(self).__name__}({self.instances}, {self._base_pixel_spacing})"
 
     def __str__(self) -> str:
         return self.pretty_str()
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         string = f"Level: {self.level}, size: {self.size} px, mpp: {self.mpp} um/px"
         if depth is not None:
             depth -= 1
@@ -150,8 +148,8 @@ class Level(Instances):
         self,
         tile: Point,
         level: int,
-        z: Optional[float] = None,
-        path: Optional[str] = None,
+        z: float | None = None,
+        path: str | None = None,
         crop_to_image_boundary: bool = True,
     ) -> Image:
         """Return tile in another level by scaling a region.
@@ -164,9 +162,9 @@ class Level(Instances):
             Non scaled tile coordinate
         level: int
             Level to scale from
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate
-        path: Optional[str] = None
+        path: str | None = None
             Optical path
         crop_to_image_boundary: bool = True
             If to crop tile to image boundary.
@@ -195,8 +193,8 @@ class Level(Instances):
         self,
         tile: Point,
         scale: int,
-        z: Optional[float] = None,
-        path: Optional[str] = None,
+        z: float | None = None,
+        path: str | None = None,
         crop_to_image_boundary: bool = True,
     ) -> bytes:
         """Return encoded tile in another level by scaling a region.
@@ -207,9 +205,9 @@ class Level(Instances):
             Non scaled tile coordinate
         level: int
            Level to scale from
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate
-        path: Optional[str] = None
+        path: str | None = None
             Optical path
         crop_to_image_boundary: bool = True
             If to crop tile to image boundary.

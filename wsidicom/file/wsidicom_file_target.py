@@ -15,18 +15,10 @@
 """A target for writing WSI DICOM files to disk."""
 
 from collections import defaultdict
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import (
     Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
 )
 
 from pydicom.uid import UID, VLWholeSlideMicroscopyImageStorage
@@ -57,24 +49,24 @@ class WsiDicomFileTarget(Target):
 
     def __init__(
         self,
-        output_path: Union[str, Path, UPath],
+        output_path: str | Path | UPath,
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        offset_table: Optional[OffsetTableType] = None,
-        include_pyramids: Optional[Sequence[int]] = None,
-        include_levels: Optional[Sequence[int]] = None,
+        offset_table: OffsetTableType | None = None,
+        include_pyramids: Sequence[int] | None = None,
+        include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = False,
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ):
         """
         Create a WsiDicomFileTarget.
 
         Parameters
         ----------
-        output_path: Union[str, Path, UPath]
+        output_path: str | Path | UPath
             Folder path to save files to.
         uid_generator: Callable[..., UID]
             Uid generator to use.
@@ -85,27 +77,27 @@ class WsiDicomFileTarget(Target):
             size also depends on minimun_chunk_size from image_data.
         offset_table: OffsetTableType
             Offset table to use.
-        include_pyramids: Optional[Sequence[int]] = None
+        include_pyramids: Sequence[int] | None = None
             Optional list indices (in present pyramids) to include.
-        include_levels: Optional[Sequence[int]] = None
+        include_levels: Sequence[int] | None = None
             Optional list indices (in all pyramids) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indicies can be used,
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        transcoding: EncoderSettings | Encoder | None = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
         force_transcoding: bool
             If to force transcoding even if transfer syntax already matches the encoding
             settings.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Keyword arguments for saving files to output path.
         """
         self._output_path = UPath(output_path)
         self._offset_table = offset_table
-        self._filepaths: List[UPath] = []
-        self._opened_files: List[WsiDicomReader] = []
+        self._filepaths: list[UPath] = []
+        self._opened_files: list[WsiDicomReader] = []
         self._file_options = file_options
         self._decoded_frame_cache = DecodedFrameCache(settings.decoded_frame_cache_size)
         self._encoded_frame_cache = EncodedFrameCache(settings.encoded_frame_cache_size)
@@ -121,7 +113,7 @@ class WsiDicomFileTarget(Target):
         )
 
     @property
-    def filepaths(self) -> List[UPath]:
+    def filepaths(self) -> list[UPath]:
         """Return filepaths for created files."""
         return self._filepaths
 
@@ -151,7 +143,7 @@ class WsiDicomFileTarget(Target):
     def _save_pyramid(self, pyramid: Pyramid, include_thumbnails: bool):
         """Save pyramid to target."""
         # Collection of new pyramid levels.
-        new_levels: List[Level] = []
+        new_levels: list[Level] = []
         highest_level_in_file = pyramid.pyramid_indices[-1]
         lowest_single_tile_level = pyramid.lowest_single_tile_level
         highest_level = max(highest_level_in_file, lowest_single_tile_level)
@@ -207,13 +199,13 @@ class WsiDicomFileTarget(Target):
 
     def _save_group(
         self,
-        group: Union[Label, Level, Overview, Thumbnail],
+        group: Label | Level | Overview | Thumbnail,
         scale: int,
-    ) -> List[UPath]:
+    ) -> list[UPath]:
         """Save group to target."""
         if not isinstance(scale, int) or scale < 1:
             raise ValueError(f"Scale must be positive integer, got {scale}.")
-        filepaths: List[UPath] = []
+        filepaths: list[UPath] = []
         for instances in self._group_instances_to_file(group):
             uid = self._uid_generator()
             filepath = self._output_path.joinpath(uid + ".dcm")
@@ -289,7 +281,7 @@ class WsiDicomFileTarget(Target):
         self._filepaths.extend(filepaths)
         return filepaths
 
-    def _open_files(self, filepaths: Iterable[UPath]) -> List[WsiInstance]:
+    def _open_files(self, filepaths: Iterable[UPath]) -> list[WsiInstance]:
         readers = [
             WsiDicomReader(stream)
             for stream in WsiDicomStreamOpener(self._file_options).open(
@@ -308,19 +300,19 @@ class WsiDicomFileTarget(Target):
 
     @staticmethod
     def _group_instances_to_file(
-        group: Union[Label, Level, Overview, Thumbnail],
-    ) -> List[List[WsiInstance]]:
+        group: Label | Level | Overview | Thumbnail,
+    ) -> list[list[WsiInstance]]:
         """
         Group instances by properties that can't differ in a DICOM-file.
 
         Returns
         -------
-        List[List[WsiInstance]]
+        list[list[WsiInstance]]
             Instances grouped by common properties.
         """
-        groups: Dict[
-            Tuple[str, UID, bool, Optional[int], Optional[float], str],
-            List[WsiInstance],
+        groups: dict[
+            tuple[str, UID, bool, int | None, float | None, str],
+            list[WsiInstance],
         ] = defaultdict(list)
 
         for instance in group.instances.values():
@@ -337,7 +329,7 @@ class WsiDicomFileTarget(Target):
     @staticmethod
     def _list_image_data(
         instances: Iterable[WsiInstance],
-    ) -> Dict[Tuple[str, float], ImageData]:
+    ) -> dict[tuple[str, float], ImageData]:
         """
         Sort ImageData in instances by optical path and focal plane.
 
@@ -349,10 +341,10 @@ class WsiDicomFileTarget(Target):
 
         Returns
         -------
-        Dict[Tuple[str, float], ImageData]:
+        dict[tuple[str, float], ImageData]:
             ImageData sorted by optical path and focal plane.
         """
-        output: Dict[Tuple[str, float], ImageData] = {}
+        output: dict[tuple[str, float], ImageData] = {}
         for instance in instances:
             for optical_path in instance.optical_paths:
                 for z in sorted(instance.focal_planes):
@@ -362,12 +354,12 @@ class WsiDicomFileTarget(Target):
 
     @staticmethod
     def _get_frame_information(
-        data: Dict[Tuple[str, float], ImageData],
-    ) -> Tuple[List[float], List[str], Size]:
+        data: dict[tuple[str, float], ImageData],
+    ) -> tuple[list[float], list[str], Size]:
         """Return optical_paths, focal planes, and tiled size."""
-        focal_planes_by_optical_path: Dict[str, Set[float]] = defaultdict(set)
-        all_focal_planes: Set[float] = set()
-        tiled_sizes: Set[Size] = set()
+        focal_planes_by_optical_path: dict[str, set[float]] = defaultdict(set)
+        all_focal_planes: set[float] = set()
+        tiled_sizes: set[Size] = set()
         for (optical_path, focal_plane), image_data in data.items():
             focal_planes_by_optical_path[optical_path].add(focal_plane)
             all_focal_planes.add(focal_plane)

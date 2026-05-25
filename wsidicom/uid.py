@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional
 
 from pydicom.uid import (
     UID,
@@ -70,12 +69,12 @@ class SlideUids:
 
     study_instance: UID
     series_instance: UID
-    frame_of_reference: Optional[UID] = None
+    frame_of_reference: UID | None = None
 
     def __post_init__(self) -> None:
         if settings.strict_uid_check and self.frame_of_reference is None:
             raise WsiDicomStrictRequirementError(
-                "Frame of reference uid is missing and strict uid check is " "enabled"
+                "Frame of reference uid is missing and strict uid check is enabled"
             )
 
     def __str__(self) -> str:
@@ -113,7 +112,7 @@ class FileUids:
     """Represents the UIDs in a DICOM-file."""
 
     instance: UID
-    concatenation: Optional[UID]
+    concatenation: UID | None
     slide: SlideUids
 
     @property

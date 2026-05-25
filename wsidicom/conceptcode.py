@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from dataclasses import dataclass
-from typing import ClassVar, Dict, List, Optional, Type, TypeVar
+from typing import ClassVar, Optional, TypeVar
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
@@ -33,7 +33,7 @@ class ConceptCode:
     value: str
     scheme_designator: str
     meaning: str
-    scheme_version: Optional[str] = None
+    scheme_version: str | None = None
     sequence_name: ClassVar[str]
 
     def __hash__(self):
@@ -58,7 +58,7 @@ class ConceptCode:
         )
 
     @classmethod
-    def from_code(cls: Type[ConceptCodeType], code: Code) -> ConceptCodeType:
+    def from_code(cls: type[ConceptCodeType], code: Code) -> ConceptCodeType:
         return cls(
             value=code.value,
             scheme_designator=code.scheme_designator,
@@ -107,9 +107,9 @@ class ConceptCode:
 
     @classmethod
     def _from_ds(
-        cls: Type[ConceptCodeType],
+        cls: type[ConceptCodeType],
         ds: Dataset,
-    ) -> Optional[List[ConceptCodeType]]:
+    ) -> list[ConceptCodeType] | None:
         """Return list of ConceptCode from sequence in dataset.
 
         Parameters
@@ -119,7 +119,7 @@ class ConceptCode:
 
         Returns
         -------
-        Optional[List[ConceptCodeType]
+        Optional[list[ConceptCodeType]
             Codes created from sequence in dataset.
 
         """
@@ -140,7 +140,7 @@ class SingleConceptCode(ConceptCode):
     """Code for concepts  # type: ignore that only allow a single item"""
 
     @classmethod
-    def from_ds(cls: Type[ConceptCodeType], ds: Dataset) -> Optional["ConceptCodeType"]:
+    def from_ds(cls: type[ConceptCodeType], ds: Dataset) -> Optional["ConceptCodeType"]:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
@@ -151,7 +151,7 @@ class SingleConceptCode(ConceptCode):
 
         Returns
         -------
-        Optional[ConceptCodeType]
+        ConceptCodeType | None
             Concept code created from value.
 
         """
@@ -165,7 +165,7 @@ class MultipleConceptCode(ConceptCode):
     """Code for concepts  # type: ignore that allow multiple items"""
 
     @classmethod
-    def from_ds(cls: Type[ConceptCodeType], ds: Dataset) -> List[ConceptCodeType]:
+    def from_ds(cls: type[ConceptCodeType], ds: Dataset) -> list[ConceptCodeType]:
         """Return measurement code for value. Value can be a code meaning (str)
         or a DICOM dataset containing the code.
 
@@ -176,7 +176,7 @@ class MultipleConceptCode(ConceptCode):
 
         Returns
         -------
-        List[ConceptCodeType]
+        list[ConceptCodeType]
             Concept codes created from dataset.
 
         """
@@ -189,14 +189,14 @@ class MultipleConceptCode(ConceptCode):
 class CidConceptCode(ConceptCode):
     """Code for concepts  # type: ignore defined in Context groups"""
 
-    cid: ClassVar[Dict[str, Code]]
+    cid: ClassVar[dict[str, Code]]
 
     def __init__(
         self,
         meaning: str,
-        value: Optional[str] = None,
-        scheme_designator: Optional[str] = None,
-        scheme_version: Optional[str] = None,
+        value: str | None = None,
+        scheme_designator: str | None = None,
+        scheme_version: str | None = None,
     ):
         if value is None or scheme_designator is None:
             code = self._from_meaning(meaning)
@@ -215,7 +215,7 @@ class CidConceptCode(ConceptCode):
             )
 
     @classmethod
-    def _from_meaning(cls: Type[CidConceptCodeType], meaning: str) -> Code:
+    def _from_meaning(cls: type[CidConceptCodeType], meaning: str) -> Code:
         try:
             return next(
                 code
@@ -225,15 +225,15 @@ class CidConceptCode(ConceptCode):
         except StopIteration:
             raise ValueError(
                 f"There is no code with meaning '{meaning}' in {list(cls.cid.keys())}."
-            )
+            ) from None
 
     @classmethod
-    def list(cls) -> List[str]:
+    def list(cls) -> list[str]:
         """Return possible meanings for concept.
 
         Returns
         -------
-        List[str]
+        list[str]
             Possible meanings for concept.
 
         """
@@ -248,9 +248,9 @@ class UnitCode(SingleConceptCode):
     def __init__(
         self,
         meaning: str,
-        value: Optional[str] = None,
-        scheme_designator: Optional[str] = None,
-        scheme_version: Optional[str] = None,
+        value: str | None = None,
+        scheme_designator: str | None = None,
+        scheme_version: str | None = None,
     ):
         if value is None or scheme_designator is None:
             code = self._from_unit(meaning)
@@ -315,12 +315,12 @@ class UnitCode(SingleConceptCode):
         return Code(value=unit, scheme_designator="UCUM", meaning=meaning)
 
     @classmethod
-    def meanings(cls) -> List[str]:
+    def meanings(cls) -> list[str]:
         """Return possible meanings for concept.
 
         Returns
         -------
-        List[str]
+        list[str]
             Possible meanings for concept.
 
         """
@@ -484,7 +484,7 @@ class ConceptNameCode(SingleConceptCode):
     sequence_name = "ConceptNameCodeSequence"
 
     @classmethod
-    def list(cls) -> List[str]:
+    def list(cls) -> list[str]:
         return []
 
 

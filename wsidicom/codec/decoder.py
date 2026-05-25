@@ -16,7 +16,7 @@
 
 import io
 from abc import ABCMeta, abstractmethod
-from typing import Callable, Dict, Optional, Type
+from collections.abc import Callable
 
 import numpy as np
 from PIL import Image as Pillow
@@ -183,7 +183,7 @@ class Decoder(metaclass=ABCMeta):
     @classmethod
     def select_decoder(
         cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
-    ) -> Optional[Type["Decoder"]]:
+    ) -> type["Decoder"] | None:
         """Select decoder based on transfer syntax.
 
         Parameters
@@ -197,14 +197,14 @@ class Decoder(metaclass=ABCMeta):
 
         Returns
         -------
-        Optional[Type[Decoder]]
+        Type[Decoder] | None
             Decoder class. None if no decoder supports transfer syntax.
 
         """
         if bits != 8 and samples_per_pixel != 1:
             # Pillow only supports 8 bit color images
             return None
-        decoders: Dict[str, Type[Decoder]] = {
+        decoders: dict[str, type[Decoder]] = {
             "pillow": PillowDecoder,
             "imagecodecs": ImageCodecsDecoder,
             "pylibjpeg_rle": PylibjpegRleDecoder,
@@ -370,7 +370,7 @@ class PydicomDecoder(NumpyBasedDecoder):
     @classmethod
     def _get_handler(
         cls, transfer_syntax: UID
-    ) -> Optional[Callable[[Dataset], np.ndarray]]:
+    ) -> Callable[[Dataset], np.ndarray] | None:
         """Return pydicom pixel data handler that supports transfer syntax.
 
         A pydicom pixel data handler should implement methods `Is_available()`,
@@ -448,9 +448,7 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
         return IMAGE_CODECS_AVAILABLE
 
     @classmethod
-    def _get_decoder(
-        cls, transfer_syntax: UID
-    ) -> Optional[Callable[[bytes], np.ndarray]]:
+    def _get_decoder(cls, transfer_syntax: UID) -> Callable[[bytes], np.ndarray] | None:
         """Get imagecodes decoder for transfer syntax.
 
         Parameters
@@ -460,7 +458,7 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
 
         Returns
         -------
-        Optional[Callable[[bytes], np.ndarray]]
+        Callable[[bytes], np.ndarray] | None
             Decoder. None if no decoder supports transfer syntax.
         """
         if transfer_syntax not in cls._supported_transfer_syntaxes:

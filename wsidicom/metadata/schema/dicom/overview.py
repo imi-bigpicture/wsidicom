@@ -14,8 +14,6 @@
 
 """DICOM schema for Label model."""
 
-from typing import Type
-
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.image import Image
@@ -51,5 +49,5 @@ class OverviewDicomSchema(DicomSchema[Overview]):
     )
 
     @property
-    def load_type(self) -> Type[Overview]:
+    def load_type(self) -> type[Overview]:
         return Overview

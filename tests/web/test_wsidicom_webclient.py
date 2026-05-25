@@ -1,5 +1,5 @@
 from http import HTTPStatus
-from typing import Any, Dict, Optional
+from typing import Any
 
 import pytest
 from decoy import Decoy
@@ -49,7 +49,7 @@ def instance_metadata(
     study_instance_uid: UID,
     series_instance_uid: UID,
     sop_instance_uid: UID,
-    available_sop_transfer_syntax_uid: Optional[UID],
+    available_sop_transfer_syntax_uid: UID | None,
 ):
     wsi_instance = {
         STUDY_INSTANCE_UID: {"vr": "UI", "Value": [str(study_instance_uid)]},
@@ -160,7 +160,7 @@ class TestWsiDicomWebClient:
         study_instance_uid: UID,
         series_instance_uid: UID,
         sop_instance_uid: UID,
-        instance_metadata: Dict[str, Any],
+        instance_metadata: dict[str, Any],
     ):
         # Arrange
         def create_response(code: HTTPStatus, message: str) -> Response:
@@ -219,7 +219,7 @@ class TestWsiDicomWebClient:
         series_instance_uid: UID,
         sop_instance_uid: UID,
         available_sop_transfer_syntax_uid: UID,
-        instance_metadata: Dict[str, Any],
+        instance_metadata: dict[str, Any],
     ):
         # Arrange
 
@@ -313,7 +313,7 @@ class TestWsiDicomWebClient:
         series_instance_uid: UID,
         sop_instance_uid: UID,
         available_sop_transfer_syntax_uid: UID,
-        instance_metadata: Dict[str, Any],
+        instance_metadata: dict[str, Any],
     ):
 
         dicom_web_client = decoy.mock(cls=DICOMwebClient)

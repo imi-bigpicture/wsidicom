@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import List, Optional, Sequence, Union
+from collections.abc import Sequence
 
 import pytest
 from pydicom import Dataset
@@ -134,17 +134,17 @@ class TestSampleDicom:
         sample_localization: SampleLocalization,
         sampling_location: SamplingLocation,
         primary_anatomic_structures: Sequence[Code],
-        substances: Union[str, Sequence[SpecimenStainsCode]],
-        short_description: Optional[str],
-        detailed_description: Optional[str],
-        specimen_container: Optional[ContainerTypeCode],
-        block_container: Optional[ContainerTypeCode],
+        substances: str | Sequence[SpecimenStainsCode],
+        short_description: str | None,
+        detailed_description: str | None,
+        specimen_container: ContainerTypeCode | None,
+        block_container: ContainerTypeCode | None,
     ):
         # Arrange
-        descriptions: List[Dataset] = []
+        descriptions: list[Dataset] = []
         dataset = Dataset()
         for slide_sample_id, slide_sample_uid, specimen_id in zip(
-            slide_sample_ids, slide_sample_uids, specimen_ids
+            slide_sample_ids, slide_sample_uids, specimen_ids, strict=False
         ):
             preparation_steps = create_specimen_preparation_sequence(
                 slide_sample_id,
@@ -291,16 +291,16 @@ class TestSampleDicom:
         sample_localization: SampleLocalization,
         sampling_location: SamplingLocation,
         primary_anatomic_structures: Sequence[Code],
-        substances: Union[str, Sequence[SpecimenStainsCode]],
-        short_description: Optional[str],
-        detailed_description: Optional[str],
-        specimen_container: Optional[ContainerTypeCode],
-        block_container: Optional[ContainerTypeCode],
+        substances: str | Sequence[SpecimenStainsCode],
+        short_description: str | None,
+        detailed_description: str | None,
+        specimen_container: ContainerTypeCode | None,
+        block_container: ContainerTypeCode | None,
     ):
         # Arrange
         slide_samples = []
         for slide_sample_id, slide_sample_uid, specimen_id in zip(
-            slide_sample_ids, slide_sample_uids, specimen_ids
+            slide_sample_ids, slide_sample_uids, specimen_ids, strict=False
         ):
             specimen = Specimen(
                 identifier=specimen_id,
@@ -353,7 +353,7 @@ class TestSampleDicom:
 
         # Assert
         for index, (slide_sample_id, slide_sample_uid, specimen_id) in enumerate(
-            zip(slide_sample_ids, slide_sample_uids, specimen_ids)
+            zip(slide_sample_ids, slide_sample_uids, specimen_ids, strict=False)
         ):
             description = dataset.SpecimenDescriptionSequence[index]
             assert isinstance(description, Dataset)
@@ -654,8 +654,8 @@ class TestSampleDicom:
         slide_sample_id: str,
         slide_sample_uid: UID,
         setting: bool,
-        slide_sample_issuer: Optional[str],
-        processing_issuer: Optional[str],
+        slide_sample_issuer: str | None,
+        processing_issuer: str | None,
         processing_expected: bool,
     ):
         # Arrange

@@ -14,8 +14,6 @@
 
 """DICOM schema for Study model."""
 
-from typing import Type
-
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.schema.dicom.fields import (
@@ -59,7 +57,7 @@ class StudyDicomSchema(ModuleDicomSchema[Study]):
     )
 
     @property
-    def load_type(self) -> Type[Study]:
+    def load_type(self) -> type[Study]:
         return Study
 
     @property

@@ -15,11 +15,12 @@
 """Module with base IO class for handling DICOM WSI files."""
 
 import struct
+from collections.abc import Callable
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from struct import pack
-from typing import Any, BinaryIO, Callable, Dict, Optional, Union, cast
+from typing import Any, BinaryIO, cast
 
 from fsspec.spec import AbstractBufferedFile
 from pydicom.dataelem import RawDataElement, convert_raw_data_element
@@ -47,9 +48,9 @@ class WsiDicomIO:
 
     def __init__(
         self,
-        stream: Union[BinaryIO, AbstractBufferedFile],
-        transfer_syntax: Optional[UID] = None,
-        filepath: Optional[Union[str, Path, UPath]] = None,
+        stream: BinaryIO | AbstractBufferedFile,
+        transfer_syntax: UID | None = None,
+        filepath: str | Path | UPath | None = None,
         owned: bool = False,
     ):
         """
@@ -63,7 +64,7 @@ class WsiDicomIO:
             If to set the stream to little endian.
         implicit_vr: bool = False
             If to set the stream to implicit VR.
-        filepath: Optional[Union[str, Path, UPath]] = None,
+        filepath: str | Path | UPath | None = None,
             Optional filepath of stream.
         owned: bool = False
             If the stream should be closed by this instance.
@@ -99,7 +100,7 @@ class WsiDicomIO:
         return self._stream.closed
 
     @property
-    def filepath(self) -> Optional[UPath]:
+    def filepath(self) -> UPath | None:
         """Return filepath, if opened from file."""
         return self._filepath
 
@@ -153,7 +154,9 @@ class WsiDicomIO:
             read_preamble(self._stream, False)
             file_meta_info = _read_file_meta_info(self._stream)
         except InvalidDicomError:
-            raise WsiDicomFileError(str(self), "is not a DICOM file or stream.")
+            raise WsiDicomFileError(
+                str(self), "is not a DICOM file or stream."
+            ) from None
         finally:
             self.seek(0)
         return file_meta_info
@@ -162,7 +165,7 @@ class WsiDicomIO:
         """Read dataset, excluding EOT and PixelData from stream."""
         extended_offset_table_tag = ExtendedOffsetTableTag
 
-        def _stop_at(tag: BaseTag, vr: Optional[str], length: int) -> bool:
+        def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
             return tag >= extended_offset_table_tag
 
         self.seek(0)
@@ -184,7 +187,7 @@ class WsiDicomIO:
             return self._dicom_io.read_US()
         return self._dicom_io.read_UL()
 
-    def read_tag_vr(self) -> Optional[bytes]:
+    def read_tag_vr(self) -> bytes | None:
         """Read tag VR if implicit VR."""
         if not self._dicom_io.is_implicit_VR:
             vr = self.stream.read(4)
@@ -234,7 +237,7 @@ class WsiDicomIO:
                     str(self), f"Found length {read_length} expected {length}."
                 )
         except struct.error:
-            raise WsiDicomFileError(str(self), "Failed to unpack data.")
+            raise WsiDicomFileError(str(self), "Failed to unpack data.") from None
 
     def read_sequence_delimiter(self):
         """Check if last read tag was a sequence delimiter.
@@ -254,10 +257,7 @@ class WsiDicomIO:
             Value to write.
 
         """
-        if self._dicom_io.is_little_endian:
-            format = "<Q"
-        else:
-            format = ">Q"
+        format = "<Q" if self._dicom_io.is_little_endian else ">Q"
         self.write(pack(format, value))
 
     def write_tag(self, tag: BaseTag):
@@ -283,7 +283,7 @@ class WsiDicomIO:
         self._dicom_io.write_UL(value)
 
     def write_tag_of_vr_and_length(
-        self, tag: BaseTag, value_representation: str, length: Optional[int] = None
+        self, tag: BaseTag, value_representation: str, length: int | None = None
     ):
         """Write tag, tag VR and length.
 
@@ -293,7 +293,7 @@ class WsiDicomIO:
             Name of tag to write.
         value_representation: str.
             Value representation (VR) of tag to write.
-        length: Optional[int] = None
+        length: int | None = None
             Length of data after tag. 'Unspecified' (0xFFFFFFFF) if None.
 
         """
@@ -346,12 +346,12 @@ class WsiDicomIO:
         dataset.ContentTime = datetime.time(content_datetime).strftime("%H%M%S.%f")
         write_dataset(self._dicom_io, dataset)
 
-    def close(self, force: Optional[bool] = False) -> None:
+    def close(self, force: bool | None = False) -> None:
         """Close stream if owned by instance or forced."""
         if self._owned or force:
             self._stream.close()
 
-    def update_dataset(self, dataset_start: int, update: Dict[BaseTag, Any]):
+    def update_dataset(self, dataset_start: int, update: dict[BaseTag, Any]):
         """Update dataset in place.
 
         The element value representation must allow padding,
@@ -363,7 +363,7 @@ class WsiDicomIO:
         ----------
         dataset_start: int
             Position of dataset start.
-        update: Dict[BaseTag, Any]
+        update: dict[BaseTag, Any]
             Dictionary with tags to update and their new values.
         """
 
@@ -375,7 +375,7 @@ class WsiDicomIO:
             self.is_little_endian,
             specific_tags=list(update.keys()),
         ):
-            if element.tag not in update.keys():
+            if element.tag not in update:
                 # generator can include `Specific Character Set` element
                 continue
             if not isinstance(element, RawDataElement):

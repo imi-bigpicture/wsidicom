@@ -40,8 +40,8 @@ dev = [
     "pytest-watch>=4.2.0,<5.0.0",
     "xmltodict>=0.12.0,<0.13.0",
     "shapely>=2.0.2,<3.0.0",
-    "black>=26.0.0,<27.0.0",
-    "flake8>=7.0.0,<8.0.0",
+    "ruff>=0.15.14",
+    "pyright>=1.1.409",
     "codespell>=2.2.5,<3.0.0",
     "wsidicom-data>=0.3.0,<0.4.0",
     "decoy>=2.2.0,<3.0.0",
@@ -49,6 +49,25 @@ dev = [
 
 [project.urls]
 Repository = "https://github.com/imi-bigpicture/wsidicom"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+# E/F: pycodestyle+pyflakes (replaces the old flake8 dep)
+# I: import sorting, UP: pyupgrade, B: bugbear, SIM: simplify
+# S: flake8-bandit security rules (the free SAST baseline)
+select = ["E", "F", "I", "UP", "B", "SIM", "S"]
+# S101: asserts are used throughout for type narrowing and internal invariants.
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately use hardcoded credentials (S105/S106), pseudo-random test
+# data (S311), md5 for image-hash comparison (S324), file handles whose lifetime
+# is managed by a fixture/wrapper rather than a context manager (SIM115), and long
+# lines from embedded test data such as base64 blobs, URLs, and checksums (E501).
+"tests/**" = ["S105", "S106", "S311", "S324", "SIM115", "E501"]
 
 [build-system]
 requires = ["hatchling"]

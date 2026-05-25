@@ -14,8 +14,6 @@
 
 """DICOM schema for Equipment model."""
 
-from typing import Type
-
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.equipment import Equipment
@@ -55,7 +53,7 @@ class EquipmentDicomSchema(ModuleDicomSchema[Equipment]):
     )
 
     @property
-    def load_type(self) -> Type[Equipment]:
+    def load_type(self) -> type[Equipment]:
         return Equipment
 
     @property

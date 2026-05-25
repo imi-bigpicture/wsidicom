@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from typing import Callable, Optional, Sequence, Union
+from collections.abc import Callable, Sequence
 
 from pydicom.uid import UID
 
@@ -33,10 +33,10 @@ class Target(metaclass=ABCMeta):
         uid_generator: Callable[..., UID],
         workers: int,
         chunk_size: int,
-        include_pyramids: Optional[Sequence[int]] = None,
-        include_levels: Optional[Sequence[int]] = None,
+        include_pyramids: Sequence[int] | None = None,
+        include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = False,
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
     ) -> None:
         """Initiate a target.
@@ -50,15 +50,15 @@ class Target(metaclass=ABCMeta):
         chunk_size: int
             Chunk size (number of tiles) to process at a time. Actual chunk
             size also depends on minimun_chunk_size from image_data.
-        include_pyramids: Optional[Sequence[int]] = None
+        include_pyramids: Sequence[int] | None = None
             Optional list indices (in present pyramids) to include.
-        include_levels: Optional[Sequence[int]] = None
+        include_levels: Sequence[int] | None = None
             Optional list indices (in present levels) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indices can be used,
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None
+        transcoding: EncoderSettings | Encoder | None = None
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
         force_transcoding: bool = False
@@ -110,7 +110,7 @@ class Target(metaclass=ABCMeta):
         level: int,
         present_levels: Sequence[int],
         allow_missing: bool,
-        include_indices: Optional[Sequence[int]] = None,
+        include_indices: Sequence[int] | None = None,
     ) -> bool:
         """Return true if pyramid level is in included levels.
 
@@ -122,7 +122,7 @@ class Target(metaclass=ABCMeta):
             List of pyramid levels present.
         allow_missing: bool
             If to include missing levels (not in present_levels).
-        include_indices: Optional[Sequence[int]] = None
+        include_indices: Sequence[int] | None = None
             Optional list indices (in present levels) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indices can be used,
             e.g. [-1, -2] includes the two highest levels. Default of None

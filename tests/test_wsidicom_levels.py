@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Optional
 
 import pytest
 
@@ -225,7 +224,7 @@ class TestWsiDicomLevels:
         ["z", "path"], [(None, None), (0, None), (None, "0"), (0, "0")]
     )
     def test_get_instance_defaulting(
-        self, wsi: WsiDicom, z: Optional[float], path: Optional[str]
+        self, wsi: WsiDicom, z: float | None, path: str | None
     ):
         # Arrange
         wsi_level = wsi.pyramids[0].get(0)

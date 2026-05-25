@@ -14,8 +14,9 @@
 
 """DICOM schema for Image model."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple, Type
+from typing import Any
 
 from marshmallow import fields, post_load, pre_dump
 from pydicom.dataset import Dataset
@@ -60,11 +61,11 @@ class ExtendedDepthOfFieldDicomSchema(DicomSchema[ExtendedDepthOfField]):
     )
 
     @property
-    def load_type(self) -> Type[ExtendedDepthOfField]:
+    def load_type(self) -> type[ExtendedDepthOfField]:
         return ExtendedDepthOfField
 
 
-class ImageCoordinateSystemDicomSchema(DicomSchema[Optional[ImageCoordinateSystem]]):
+class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem | None]):
     origin = OffsetInSlideCoordinateSystemField(
         data_key="TotalPixelMatrixOriginSequence", allow_none=False
     )
@@ -73,29 +74,27 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[Optional[ImageCoordinateSyste
     )
 
     @property
-    def load_type(self) -> Type[ImageCoordinateSystem]:
+    def load_type(self) -> type[ImageCoordinateSystem]:
         return ImageCoordinateSystem
 
-    def load(self, dataset: Dataset, **kwargs) -> Optional[ImageCoordinateSystem]:
+    def load(self, dataset: Dataset, **kwargs) -> ImageCoordinateSystem | None:
         try:
             return super().load(dataset, **kwargs)
         except (TypeError, AttributeError, KeyError, IndexError):
             return None
 
     @post_load
-    def post_load(
-        self, data: Dict[str, Any], **kwargs
-    ) -> Optional[ImageCoordinateSystem]:
+    def post_load(self, data: dict[str, Any], **kwargs) -> ImageCoordinateSystem | None:
         """Post load hook to handle separation of xy and z offset."""
-        origin: Tuple[ImageCoordinateSystem, float] = data.pop("origin")
+        origin: tuple[ImageCoordinateSystem, float] = data.pop("origin")
         return super().post_load(
             {"origin": (origin[0]), "rotation": data["rotation"], "z_offset": origin[1]}
         )
 
     @pre_dump
     def pre_dump(
-        self, image_coordinate_system: Optional[ImageCoordinateSystem], **kwargs
-    ) -> Dict[str, Any]:
+        self, image_coordinate_system: ImageCoordinateSystem | None, **kwargs
+    ) -> dict[str, Any]:
         """Pre dump hook to handle default dump value if value is None."""
         if image_coordinate_system is None:
             raise ValueError("Image coordinate system is None.")
@@ -110,9 +109,9 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[Optional[ImageCoordinateSyste
 
 @dataclass(frozen=True)
 class PixelMeasureDicomModel:
-    pixel_spacing: Optional[SizeMm] = None
-    focal_plane_spacing: Optional[float] = None
-    depth_of_field: Optional[float] = None
+    pixel_spacing: SizeMm | None = None
+    focal_plane_spacing: float | None = None
+    depth_of_field: float | None = None
 
 
 class PixelMeasureDicomSchema(DicomSchema[PixelMeasureDicomModel]):
@@ -123,7 +122,7 @@ class PixelMeasureDicomSchema(DicomSchema[PixelMeasureDicomModel]):
     depth_of_field = FloatDicomField(data_key="SliceThickness", allow_none=True)
 
     @property
-    def load_type(self) -> Type[PixelMeasureDicomModel]:
+    def load_type(self) -> type[PixelMeasureDicomModel]:
         return PixelMeasureDicomModel
 
 
@@ -148,13 +147,13 @@ class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):
     )
 
     @property
-    def load_type(self) -> Type[Sequence[LossyCompression]]:
+    def load_type(self) -> type[Sequence[LossyCompression]]:
         return list
 
     @pre_dump
     def pre_dump(
         self, lossy_compressions: Sequence[LossyCompression], **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {
             "methods": [compression.method for compression in lossy_compressions],
             "ratios": [compression.ratio for compression in lossy_compressions],
@@ -162,18 +161,17 @@ class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):
         }
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs) -> Sequence[LossyCompression]:
+    def post_load(self, data: dict[str, Any], **kwargs) -> Sequence[LossyCompression]:
         methods = data.pop("methods", [])
         ratios = data.pop("ratios", [])
         if len(methods) != len(ratios):
             raise ValueError(
-                (
-                    f"Number of lossy compression methods {len(methods)} did not match "
-                    f"number of ratios {len(ratios)}."
-                )
+                f"Number of lossy compression methods {len(methods)} did not match "
+                f"number of ratios {len(ratios)}."
             )
         return [
-            LossyCompression(method, ratio) for method, ratio in zip(methods, ratios)
+            LossyCompression(method, ratio)
+            for method, ratio in zip(methods, ratios, strict=False)
         ]
 
 
@@ -215,7 +213,7 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
     )
 
     @property
-    def load_type(self) -> Type[Image]:
+    def load_type(self) -> type[Image]:
         return Image
 
     @pre_dump
@@ -237,9 +235,9 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         }
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs):
         extended_depth_of_field_bool = data.pop("extended_depth_of_field_bool")
-        extended_depth_of_field = data.get("extended_depth_of_field", None)
+        extended_depth_of_field = data.get("extended_depth_of_field")
         if (extended_depth_of_field_bool) != (extended_depth_of_field is not None):
             raise ValueError(
                 (
@@ -247,9 +245,7 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
                     f"not match depth of field data {extended_depth_of_field}.",
                 )
             )
-        pixel_measure: Optional[PixelMeasureDicomModel] = data.pop(
-            "pixel_measure", None
-        )
+        pixel_measure: PixelMeasureDicomModel | None = data.pop("pixel_measure", None)
         if pixel_measure is not None:
             data["pixel_spacing"] = pixel_measure.pixel_spacing
             data["focal_plane_spacing"] = pixel_measure.focal_plane_spacing

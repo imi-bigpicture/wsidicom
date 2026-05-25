@@ -15,7 +15,7 @@
 """DICOM schema for Slide model."""
 
 import logging
-from typing import Any, Dict, Type
+from typing import Any
 
 from marshmallow import fields, post_load, pre_dump
 from pydicom.valuerep import VR
@@ -63,7 +63,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
     )
 
     @property
-    def load_type(self) -> Type[Slide]:
+    def load_type(self) -> type[Slide]:
         return Slide
 
     @pre_dump
@@ -90,7 +90,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         }
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs):
         dicom_samples = data.pop("samples", None)
         if dicom_samples is not None:
             try:

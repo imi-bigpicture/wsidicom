@@ -13,29 +13,24 @@
 #    limitations under the License.
 
 from collections import UserDict
-from typing import (
-    Callable,
-    Iterable,
-    List,
-    Union,
-)
+from collections.abc import Callable, Iterable
 
+from wsidicom.metadata.sample import (
+    BaseSpecimen,
+    SampledSpecimen,
+    SpecimenIdentifier,
+)
 from wsidicom.metadata.schema.json.sample.model import (
     BaseSpecimenJsonModel,
 )
-from wsidicom.metadata.sample import (
-    SampledSpecimen,
-    BaseSpecimen,
-    SpecimenIdentifier,
-)
 
 
-class SpecimenDictionary(UserDict[Union[str, SpecimenIdentifier], BaseSpecimen]):
+class SpecimenDictionary(UserDict[str | SpecimenIdentifier, BaseSpecimen]):
     """Dictionary for specimens that creates missing specimens when accessed."""
 
     def __init__(
         self,
-        create_missing: Callable[[Union[str, SpecimenIdentifier]], BaseSpecimen],
+        create_missing: Callable[[str | SpecimenIdentifier], BaseSpecimen],
         *args,
         **kwargs,
     ):
@@ -43,13 +38,13 @@ class SpecimenDictionary(UserDict[Union[str, SpecimenIdentifier], BaseSpecimen])
 
         Parameters
         ----------
-        create_missing: Callable[[Union[str, SpecimenIdentifier]], Specimen]
+        create_missing: Callable[[str | SpecimenIdentifier], Specimen]
             Function that creates a specimen for a given identifier.
         """
         super().__init__(*args, **kwargs)
         self._create_missing = create_missing
 
-    def __missing__(self, key: Union[str, SpecimenIdentifier]) -> BaseSpecimen:
+    def __missing__(self, key: str | SpecimenIdentifier) -> BaseSpecimen:
         """Create missing specimen."""
         specimen = self._create_missing(key)
         self[key] = specimen
@@ -72,12 +67,12 @@ class SpecimenJsonParser:
             specimen.identifier: specimen for specimen in specimen_models
         }
 
-    def create_specimens(self) -> List[BaseSpecimen]:
+    def create_specimens(self) -> list[BaseSpecimen]:
         """Create specimens
 
         Returns
         -------
-        List[Specimen]
+        list[Specimen]
             List of created specimens.
         """
         for identifier in self._specimen_models_by_identifier:
@@ -96,7 +91,7 @@ class SpecimenJsonParser:
 
     def _make_specimen(
         self,
-        identifier: Union[str, SpecimenIdentifier],
+        identifier: str | SpecimenIdentifier,
     ) -> BaseSpecimen:
         """Create specimen by identifier from json model.
 
@@ -104,7 +99,7 @@ class SpecimenJsonParser:
 
         Parameters
         ----------
-        identifier: Union[str, SpecimenIdentifier]
+        identifier: str | SpecimenIdentifier
             Identifier of specimen to create
 
         Returns

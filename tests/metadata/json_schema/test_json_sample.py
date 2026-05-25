@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import datetime
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from pydicom.sr.coding import Code
@@ -106,7 +106,7 @@ class TestSampleJsonSchema:
         ],
     )
     def test_sample_localization_serialize(
-        self, localization: SampleLocalization, expected: Dict[str, Any]
+        self, localization: SampleLocalization, expected: dict[str, Any]
     ):
         # Arrange
 
@@ -151,7 +151,7 @@ class TestSampleJsonSchema:
         ],
     )
     def test_sample_localization_deserialize(
-        self, localization: Dict[str, Any], expected: SampleLocalization
+        self, localization: dict[str, Any], expected: SampleLocalization
     ):
         # Arrange
 
@@ -442,7 +442,7 @@ class TestSampleJsonSchema:
 
     def test_processing_deserialize(self, processing: Processing):
         # Arrange
-        dumped: Dict[str, Any] = {
+        dumped: dict[str, Any] = {
             "action": "processing",
         }
         if processing.method is not None:

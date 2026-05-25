@@ -16,7 +16,6 @@
 
 from abc import abstractmethod
 from struct import unpack
-from typing import List, Tuple
 
 from pydicom.tag import ItemTag
 
@@ -39,7 +38,7 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         """Return the mode used for unpacking the table."""
         raise NotImplementedError()
 
-    def _parse_table(self, table: bytes, pixels_start: int) -> List[Tuple[int, int]]:
+    def _parse_table(self, table: bytes, pixels_start: int) -> list[tuple[int, int]]:
         """Parse table with offsets (BOT or EOT).
 
         Parameters
@@ -53,7 +52,7 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
 
         Returns
         -------
-        List[Tuple[int, int]]
+        list[tuple[int, int]]
             A list with frame positions and frame lengths.
         """
         if not self._file.is_little_endian:
@@ -65,7 +64,7 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         table_length = len(table)
         TAG_BYTES = 4
         LENGTH_BYTES = 4
-        positions: List[Tuple[int, int]] = []
+        positions: list[tuple[int, int]] = []
         # Read through table to get offset and length for all but last item
         # All read offsets are for item tag of frame and relative to first
         # frame in pixel data.

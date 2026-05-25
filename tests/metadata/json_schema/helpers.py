@@ -12,7 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import Any
 
 from pydicom.sr.coding import Code
 
@@ -30,26 +31,27 @@ from wsidicom.metadata.optical_path import (
 
 
 def assert_dict_equals_code(
-    dumped_code: Dict[str, str], expected_code: Union[Code, ConceptCode]
+    dumped_code: dict[str, str], expected_code: Code | ConceptCode
 ):
     assert dumped_code["value"] == expected_code.value
     assert dumped_code["scheme_designator"] == expected_code.scheme_designator
     assert dumped_code["meaning"] == expected_code.meaning
-    assert dumped_code.get("scheme_version", None) == expected_code.scheme_version
+    assert dumped_code.get("scheme_version") == expected_code.scheme_version
 
 
-def assert_lut_is_equal(dumped: Dict[str, Any], lut: Lut):
+def assert_lut_is_equal(dumped: dict[str, Any], lut: Lut):
     assert dumped["bits"] == 8 * lut.data_type().itemsize
     for dumped_component, component in zip(
         (dumped["red"], dumped["green"], dumped["blue"]),
         (lut.red, lut.green, lut.blue),
+        strict=False,
     ):
         assert len(dumped_component) == len(component)
-        for dumped_segment, segment in zip(dumped_component, component):
+        for dumped_segment, segment in zip(dumped_component, component, strict=False):
             assert_lut_segment_is_equal(dumped_segment, segment)
 
 
-def assert_lut_segment_is_equal(dumped: Dict[str, Any], segment: LutSegment):
+def assert_lut_segment_is_equal(dumped: dict[str, Any], segment: LutSegment):
     if isinstance(segment, LinearLutSegment):
         assert dumped["start_value"] == segment.start_value
         assert dumped["end_value"] == segment.end_value
@@ -62,8 +64,8 @@ def assert_lut_segment_is_equal(dumped: Dict[str, Any], segment: LutSegment):
 
 
 def assert_image_coordinate_system_is_equal(
-    dumped: Optional[Dict[str, Any]],
-    image_coordinate_system: Optional[ImageCoordinateSystem],
+    dumped: dict[str, Any] | None,
+    image_coordinate_system: ImageCoordinateSystem | None,
 ):
     if image_coordinate_system is None:
         assert dumped is None
@@ -79,8 +81,8 @@ def assert_image_coordinate_system_is_equal(
 
 
 def assert_pixel_spacing_is_equal(
-    dumped: Optional[Dict[str, Any]],
-    pixel_spacing: Optional[SizeMm],
+    dumped: dict[str, Any] | None,
+    pixel_spacing: SizeMm | None,
 ):
     if pixel_spacing is None:
         assert dumped is None
@@ -91,20 +93,22 @@ def assert_pixel_spacing_is_equal(
 
 
 def assert_lossy_compression_is_equal(
-    dumped: Optional[Sequence[Dict[str, Any]]],
-    lossy_compression: Optional[Sequence[LossyCompression]],
+    dumped: Sequence[dict[str, Any]] | None,
+    lossy_compression: Sequence[LossyCompression] | None,
 ):
     if lossy_compression is None:
         assert dumped is None
         return
     assert dumped is not None
     assert len(dumped) == len(lossy_compression)
-    for dumped_compression, expected_compression in zip(dumped, lossy_compression):
+    for dumped_compression, expected_compression in zip(
+        dumped, lossy_compression, strict=False
+    ):
         assert dumped_compression["method"] == expected_compression.method.value
         assert dumped_compression["ratio"] == expected_compression.ratio
 
 
-def assert_image_is_equal(dumped: Dict[str, Any], image: Image):
+def assert_image_is_equal(dumped: dict[str, Any], image: Image):
     if image.acquisition_datetime is None:
         assert dumped["acquisition_datetime"] is None
     else:
@@ -143,7 +147,7 @@ def assert_image_is_equal(dumped: Dict[str, Any], image: Image):
     )
 
 
-def assert_optical_path_is_equal(dumped: Dict[str, Any], optical_path: OpticalPath):
+def assert_optical_path_is_equal(dumped: dict[str, Any], optical_path: OpticalPath):
     assert dumped["identifier"] == optical_path.identifier
     assert dumped["description"] == optical_path.description
     if optical_path.illumination_types is None:
@@ -151,12 +155,10 @@ def assert_optical_path_is_equal(dumped: Dict[str, Any], optical_path: OpticalPa
     else:
         assert len(dumped["illumination_types"]) == len(optical_path.illumination_types)
         for dumped_type, expected_type in zip(
-            dumped["illumination_types"], optical_path.illumination_types
+            dumped["illumination_types"], optical_path.illumination_types, strict=False
         ):
             assert_dict_equals_code(dumped_type, expected_type)
-    if optical_path.light_path_filter is None:
-        assert dumped.get("light_path_filter") is None
-    elif optical_path.light_path_filter is None:
+    if optical_path.light_path_filter is None or optical_path.light_path_filter is None:
         assert dumped.get("light_path_filter") is None
     else:
         if isinstance(optical_path.illumination, IlluminationColorCode):

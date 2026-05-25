@@ -14,8 +14,6 @@
 
 """Frame index for empty BOT, parsing the positions from the pixel data."""
 
-from typing import List, Tuple
-
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomFileError
@@ -33,7 +31,7 @@ class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
     def offset_table_type(self) -> OffsetTableType:
         return OffsetTableType.EMPTY
 
-    def _get_index(self) -> List[Tuple[int, int]]:
+    def _get_index(self) -> list[tuple[int, int]]:
         """Get frame positions and length from sequence of frames that ends with a tag
         not equal to ItemTag.
 
@@ -51,7 +49,7 @@ class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         self._file.seek(self._pixels_start)
         TAG_BYTES = 4
         LENGTH_BYTES = 4
-        positions: List[Tuple[int, int]] = []
+        positions: list[tuple[int, int]] = []
         frame_position = self._file.tell()
         # Read items until sequence delimiter
         while self._file.read_tag() == ItemTag:

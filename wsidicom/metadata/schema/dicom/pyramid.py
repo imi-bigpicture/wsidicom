@@ -14,8 +14,6 @@
 
 """DICOM schema for Pyramid model."""
 
-from typing import Type
-
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.image import Image
@@ -59,5 +57,5 @@ class PyramidDicomSchema(DicomSchema[Pyramid]):
     )
 
     @property
-    def load_type(self) -> Type[Pyramid]:
+    def load_type(self) -> type[Pyramid]:
         return Pyramid

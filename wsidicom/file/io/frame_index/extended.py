@@ -53,7 +53,8 @@ class ExtendedOffsetFrameIndexParser(OffsetTableFrameIndexParser):
         bot_length = self._read_bot_length()
         if bot_length is not None:
             logger.warning(
-                "BOT table was not empty in file with EOT table. The BOT table will be ignored."
+                "BOT table was not empty in file with EOT table. "
+                "The BOT table will be ignored."
             )
             self._file.seek(bot_length, 1)
         return self._file.tell()
@@ -95,7 +96,7 @@ class ExtendedOffsetFrameIndexParser(OffsetTableFrameIndexParser):
         elif eot_length % EOT_BYTES:
             raise WsiDicomFileError(
                 str(self._file),
-                "Extended offset table should be a multiple of " f"{EOT_BYTES} bytes",
+                f"Extended offset table should be a multiple of {EOT_BYTES} bytes",
             )
         return eot_length
 

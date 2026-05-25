@@ -14,8 +14,8 @@
 
 """Equipment model."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Optional, Sequence
 
 
 @dataclass(frozen=True)
@@ -28,20 +28,20 @@ class Equipment:
 
     Parameters
     ----------
-    manufacturer : Optional[str] = None
+    manufacturer : str | None = None
         The scanner manufacturer.
-    model_name : Optional[str] = None
+    model_name : str | None = None
         The scanner model name.
-    device_serial_number : Optional[str] = None
+    device_serial_number : str | None = None
         The scanner device serial number.
-    software_versions : Optional[Sequence[str]] = None
+    software_versions : Sequence[str] | None = None
         The scanner software versions.
     """
 
-    manufacturer: Optional[str] = None
-    model_name: Optional[str] = None
-    device_serial_number: Optional[str] = None
-    software_versions: Optional[Sequence[str]] = None
+    manufacturer: str | None = None
+    model_name: str | None = None
+    device_serial_number: str | None = None
+    software_versions: Sequence[str] | None = None
 
     def remove_confidential(self) -> "Equipment":
         return replace(

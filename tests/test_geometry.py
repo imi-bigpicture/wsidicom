@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Union
 
 import pytest
 
@@ -239,9 +238,7 @@ class TestWsiDicomGeomtry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(30, 20)), (Size(3, 2), Point(30, 20)), (2, Point(20, 20))],
     )
-    def test_point_multiplication(
-        self, by: Union[Point, Size, int], expected_result: Point
-    ):
+    def test_point_multiplication(self, by: Point | Size | int, expected_result: Point):
         # Arrange
         point = Point(10, 10)
 
@@ -271,7 +268,7 @@ class TestWsiDicomGeomtry:
             (Size(2, 2), Point(0, 0)),
         ],
     )
-    def test_point_mod(self, by: Union[Point, Size], expected_result: Point):
+    def test_point_mod(self, by: Point | Size, expected_result: Point):
         # Arrange
         point = Point(10, 10)
 
@@ -285,7 +282,7 @@ class TestWsiDicomGeomtry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(13, 12)), (2, Point(12, 12)), (Size(3, 2), Point(13, 12))],
     )
-    def test_point_addition(self, by: Union[Point, Size, int], expected_result: Point):
+    def test_point_addition(self, by: Point | Size | int, expected_result: Point):
         # Arrange
         point = Point(10, 10)
 
@@ -299,9 +296,7 @@ class TestWsiDicomGeomtry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(7, 8)), (2, Point(8, 8)), (Size(3, 2), Point(7, 8))],
     )
-    def test_point_subtraction(
-        self, by: Union[Point, Size, int], expected_result: Point
-    ):
+    def test_point_subtraction(self, by: Point | Size | int, expected_result: Point):
         # Arrange
         point = Point(10, 10)
 

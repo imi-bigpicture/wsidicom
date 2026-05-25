@@ -15,8 +15,9 @@
 """Json fields for serializing values."""
 
 import dataclasses
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Type, Union
+from typing import Any
 
 import numpy as np
 from marshmallow import ValidationError, fields
@@ -38,8 +39,8 @@ from wsidicom.metadata.sample import (
 
 class IssuerOfIdentifierJsonField(fields.Field):
     def _serialize(
-        self, value: Optional[IssuerOfIdentifier], attr, obj, **kwargs
-    ) -> Optional[Union[str, Dict]]:
+        self, value: IssuerOfIdentifier | None, attr, obj, **kwargs
+    ) -> str | dict | None:
         if value is None:
             return None
         if isinstance(value, LocalIssuerOfIdentifier):
@@ -58,16 +59,16 @@ class IssuerOfIdentifierJsonField(fields.Field):
 
     def _deserialize(
         self,
-        value: Dict[str, Any],
-        attr: Optional[str],
-        data: Optional[Mapping[str, Any]],
+        value: dict[str, Any],
+        attr: str | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ) -> IssuerOfIdentifier:
         try:
             identifier = value["identifier"]
             if "issuer_type" in value:
                 issuer_type = UniversalIssuerType(value["issuer_type"])
-                local_identifier = value.get("local_identifier", None)
+                local_identifier = value.get("local_identifier")
                 return UniversalIssuerOfIdentifier(
                     identifier, issuer_type, local_identifier
                 )
@@ -83,11 +84,11 @@ class SpecimenIdentifierJsonField(fields.Field):
 
     def _serialize(
         self,
-        value: Optional[Union[str, SpecimenIdentifier]],
+        value: str | SpecimenIdentifier | None,
         attr,
         obj,
         **kwargs,
-    ) -> Optional[Union[str, Dict]]:
+    ) -> str | dict | None:
         if value is None:
             return None
         if isinstance(value, str):
@@ -106,11 +107,11 @@ class SpecimenIdentifierJsonField(fields.Field):
 
     def _deserialize(
         self,
-        value: Union[str, Dict],
-        attr: Optional[str],
-        data: Optional[Mapping[str, Any]],
+        value: str | dict,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
-    ) -> Union[str, SpecimenIdentifier]:
+    ) -> str | SpecimenIdentifier:
         try:
             if isinstance(value, str):
                 return value
@@ -128,9 +129,7 @@ class SpecimenIdentifierJsonField(fields.Field):
 
 
 class PointMmJsonField(fields.Field):
-    def _serialize(
-        self, value: Optional[PointMm], attr, obj, **kwargs
-    ) -> Optional[Dict]:
+    def _serialize(self, value: PointMm | None, attr, obj, **kwargs) -> dict | None:
         if value is None:
             return None
         return {
@@ -140,9 +139,9 @@ class PointMmJsonField(fields.Field):
 
     def _deserialize(
         self,
-        value: Dict,
-        attr: Optional[str],
-        data: Optional[Mapping[str, Any]],
+        value: dict,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ) -> PointMm:
         try:
@@ -152,9 +151,7 @@ class PointMmJsonField(fields.Field):
 
 
 class SizeMmJsonField(fields.Field):
-    def _serialize(
-        self, value: Optional[SizeMm], attr, obj, **kwargs
-    ) -> Optional[Dict]:
+    def _serialize(self, value: SizeMm | None, attr, obj, **kwargs) -> dict | None:
         if value is None:
             return None
         return {
@@ -164,9 +161,9 @@ class SizeMmJsonField(fields.Field):
 
     def _deserialize(
         self,
-        value: Dict,
-        attr: Optional[str],
-        data: Optional[Mapping[str, Any]],
+        value: dict,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ) -> SizeMm:
         try:
@@ -176,7 +173,7 @@ class SizeMmJsonField(fields.Field):
 
 
 class UidJsonField(fields.Field):
-    def _serialize(self, value: Optional[UID], attr, obj, **kwargs) -> Optional[str]:
+    def _serialize(self, value: UID | None, attr, obj, **kwargs) -> str | None:
         if value is None:
             return None
         return str(value)
@@ -189,12 +186,12 @@ class UidJsonField(fields.Field):
 
 
 class CodeJsonField(fields.Field):
-    def _serialize(self, value: Optional[Code], attr, obj, **kwargs) -> Optional[Dict]:
+    def _serialize(self, value: Code | None, attr, obj, **kwargs) -> dict | None:
         if value is None:
             return None
         return JsonFieldFactory._serialize_code(value)
 
-    def _deserialize(self, value: Dict, attr, data, **kwargs) -> Code:
+    def _deserialize(self, value: dict, attr, data, **kwargs) -> Code:
         try:
             return Code(**value)
         except ValueError as error:
@@ -203,8 +200,8 @@ class CodeJsonField(fields.Field):
 
 class StringOrCodeJsonField(fields.Field):
     def _serialize(
-        self, value: Optional[Union[str, Code]], attr, obj, **kwargs
-    ) -> Optional[Union[str, Dict]]:
+        self, value: str | Code | None, attr, obj, **kwargs
+    ) -> str | dict | None:
         if value is None:
             return None
         if isinstance(value, str):
@@ -218,9 +215,7 @@ class StringOrCodeJsonField(fields.Field):
             code["scheme_version"] = value.scheme_version
         return code
 
-    def _deserialize(
-        self, value: Union[str, Dict], attr, data, **kwargs
-    ) -> Union[str, Code]:
+    def _deserialize(self, value: str | dict, attr, data, **kwargs) -> str | Code:
         if isinstance(value, str):
             return value
         try:
@@ -232,11 +227,11 @@ class StringOrCodeJsonField(fields.Field):
 class JsonFieldFactory:
     @classmethod
     def float_or_concept_code(
-        cls, concept_code_type: Type[CidConceptCodeType], many=False, **metadata
-    ) -> Type[fields.Field]:
+        cls, concept_code_type: type[CidConceptCodeType], many=False, **metadata
+    ) -> type[fields.Field]:
         def serialize(
-            self, value: Optional[Union[float, CidConceptCodeType]], attr, obj, **kwargs
-        ) -> Optional[Union[float, Dict]]:
+            self, value: float | CidConceptCodeType | None, attr, obj, **kwargs
+        ) -> float | dict | None:
             if isinstance(value, float):
                 return value
             if isinstance(value, (Code, CidConceptCode)):
@@ -244,11 +239,11 @@ class JsonFieldFactory:
 
         def deserialize(
             self,
-            value: Union[float, Dict[str, Any]],
-            attr: Optional[str],
-            data: Optional[Mapping[str, Any]],
+            value: float | dict[str, Any],
+            attr: str | None,
+            data: Mapping[str, Any] | None,
             **kwargs,
-        ) -> Union[float, CidConceptCodeType]:
+        ) -> float | CidConceptCodeType:
             if isinstance(value, (int, float)):
                 return value
             try:
@@ -264,11 +259,11 @@ class JsonFieldFactory:
 
     @classmethod
     def str_or_concept_code(
-        cls, concept_code_type: Type[CidConceptCodeType], many=False, **metadata
-    ) -> Type[fields.Field]:
+        cls, concept_code_type: type[CidConceptCodeType], many=False, **metadata
+    ) -> type[fields.Field]:
         def serialize(
-            self, value: Optional[Union[str, CidConceptCodeType]], attr, obj, **kwargs
-        ) -> Optional[Union[str, Dict]]:
+            self, value: str | CidConceptCodeType | None, attr, obj, **kwargs
+        ) -> str | dict | None:
             if value is None:
                 return None
             if isinstance(value, str):
@@ -278,11 +273,11 @@ class JsonFieldFactory:
 
         def deserialize(
             self,
-            value: Union[str, Dict],
-            attr: Optional[str],
-            data: Optional[Mapping[str, Any]],
+            value: str | dict,
+            attr: str | None,
+            data: Mapping[str, Any] | None,
             **kwargs,
-        ) -> Union[str, CidConceptCodeType]:
+        ) -> str | CidConceptCodeType:
             if isinstance(value, str):
                 return value
             try:
@@ -299,11 +294,11 @@ class JsonFieldFactory:
     @classmethod
     def concept_code(
         cls,
-        concept_code_type: Type[CidConceptCodeType],
-    ) -> Type[fields.Field]:
+        concept_code_type: type[CidConceptCodeType],
+    ) -> type[fields.Field]:
         def serialize(
-            self, value: Optional[CidConceptCodeType], attr, obj, **kwargs
-        ) -> Optional[Dict]:
+            self, value: CidConceptCodeType | None, attr, obj, **kwargs
+        ) -> dict | None:
             if value is None:
                 return None
             return cls._serialize_code(value)
@@ -318,13 +313,13 @@ class JsonFieldFactory:
 
     @staticmethod
     def _concept_code_deserializer_factory(
-        concept_code_type: Type[CidConceptCodeType],
+        concept_code_type: type[CidConceptCodeType],
     ):
         def _deserialize(
             self,
-            value: Dict,
-            attr: Optional[str],
-            data: Optional[Mapping[str, Any]],
+            value: dict,
+            attr: str | None,
+            data: Mapping[str, Any] | None,
             **kwargs,
         ) -> CidConceptCodeType:
             try:
@@ -335,7 +330,7 @@ class JsonFieldFactory:
         return _deserialize
 
     @staticmethod
-    def _serialize_code(code: Union[Code, CidConceptCode]) -> Dict[str, str]:
+    def _serialize_code(code: Code | CidConceptCode) -> dict[str, str]:
         try:
             result = {
                 "value": code.value,
@@ -352,15 +347,15 @@ class JsonFieldFactory:
 
 class NpUIntDTypeField(fields.Field):
     def _serialize(
-        self, value: LutDataType, attr: Optional[str], obj: Any, **kwargs
+        self, value: LutDataType, attr: str | None, obj: Any, **kwargs
     ) -> int:
         return 8 * value().itemsize
 
     def _deserialize(
         self,
         value: int,
-        attr: Optional[str],
-        data: Optional[Mapping[str, Any]],
+        attr: str | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ) -> LutDataType:
         if value == 8:
@@ -371,14 +366,14 @@ class NpUIntDTypeField(fields.Field):
 
 
 class FileLoadingField(fields.Field):
-    def _serialize(self, value: bytes, attr: Optional[str], obj: Any, **kwargs):
+    def _serialize(self, value: bytes, attr: str | None, obj: Any, **kwargs):
         raise NotImplementedError("Dumping bytes to file not implemented.")
 
     def _deserialize(
         self,
         value: str,
-        attr: Optional[str],
-        data: Optional[Mapping[str, Any]],
+        attr: str | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ):
         path = Path(value)
@@ -390,17 +385,17 @@ class FileLoadingField(fields.Field):
 
 class MeasurementJsonField(fields.Field):
     def _serialize(
-        self, value: Optional[Measurement], attr, obj, **kwargs
-    ) -> Optional[Dict[str, Any]]:
+        self, value: Measurement | None, attr, obj, **kwargs
+    ) -> dict[str, Any] | None:
         if value is None:
             return None
         return {"value": value.value, "unit": value.unit.value}
 
     def _deserialize(
         self,
-        value: Dict[str, Any],
-        attr: Optional[str],
-        data: Optional[Mapping[str, Any]],
+        value: dict[str, Any],
+        attr: str | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ) -> Measurement:
         try:
