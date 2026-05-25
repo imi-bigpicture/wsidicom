@@ -97,12 +97,12 @@ class LutSegmentJsonSchema(Schema):
 
     def dump(
         self,
-        data: LutSegment | Iterable[LutSegment],
+        obj: LutSegment | Iterable[LutSegment],
         **kwargs,
     ):
-        if isinstance(data, LutSegment):
-            return self._subschema_dump(data)
-        return [self._subschema_dump(item) for item in data]
+        if isinstance(obj, LutSegment):
+            return self._subschema_dump(obj)
+        return [self._subschema_dump(item) for item in obj]
 
     def load(
         self,
@@ -180,7 +180,7 @@ class ObjectivesJsonSchema(LoadingSchema[Objectives]):
 
 
 class OpticalPathJsonSchema(LoadingSchema[OpticalPath]):
-    """Optical path. Icc profile is not included but can be loaded from context."""
+    """Optical path. Icc profile is not included but is loaded via the icc_profile field."""
 
     identifier = fields.String(allow_none=True)
     description = fields.String(allow_none=True)

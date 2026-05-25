@@ -165,7 +165,7 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
     @classmethod
     def from_step(
         cls,
-        sampling: Sampling,
+        step: Sampling,
         specimen: BaseSpecimen,
     ) -> "SamplingDicomModel":
         """Return Dicom dataset for the step.
@@ -183,6 +183,7 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
             Dicom dataset describing the processing step.
 
         """
+        sampling = step
         if sampling.specimen.type is None:
             raise ValueError("Sampled specimen must have a specimen type.")
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
@@ -280,7 +281,7 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
     @classmethod
     def from_step(
         cls,
-        collection: Collection,
+        step: Collection,
         specimen: BaseSpecimen,
     ) -> "CollectionDicomModel":
         """Return Dicom dataset for the step.
@@ -304,9 +305,9 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
         return cls(
             identifier=identifier,
             issuer_of_identifier=issuer,
-            date_time=collection.date_time,
-            description=collection.description,
-            method=collection.method,
+            date_time=step.date_time,
+            description=step.description,
+            method=step.method,
             container=specimen.container,
             specimen_type=specimen.type,
         )
@@ -327,7 +328,7 @@ class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
     @classmethod
     def from_step(
         cls,
-        receiving: Receiving,
+        step: Receiving,
         specimen: BaseSpecimen,
     ):
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
@@ -336,8 +337,8 @@ class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
         return cls(
             identifier=identifier,
             issuer_of_identifier=issuer,
-            date_time=receiving.date_time,
-            description=receiving.description,
+            date_time=step.date_time,
+            description=step.description,
             container=specimen.container,
             specimen_type=specimen.type,
         )
@@ -358,7 +359,7 @@ class StorageDicomModel(SpecimenPreparationStepDicomModel):
     @classmethod
     def from_step(
         cls,
-        storage: Storage,
+        step: Storage,
         specimen: BaseSpecimen,
     ):
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
@@ -367,8 +368,8 @@ class StorageDicomModel(SpecimenPreparationStepDicomModel):
         return cls(
             identifier=identifier,
             issuer_of_identifier=issuer,
-            date_time=storage.date_time,
-            description=storage.description,
+            date_time=step.date_time,
+            description=step.description,
             container=specimen.container,
             specimen_type=specimen.type,
         )
@@ -389,7 +390,7 @@ class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
     @classmethod
     def from_step(
         cls,
-        processing: Processing | Embedding | Fixation,
+        step: Processing | Embedding | Fixation,
         specimen: BaseSpecimen,
     ) -> "ProcessingDicomModel":
         """Return Dicom dataset for the step.
@@ -410,6 +411,7 @@ class ProcessingDicomModel(SpecimenPreparationStepDicomModel):
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
             specimen.identifier
         )
+        processing = step
         method = processing.method if isinstance(processing, Processing) else None
         fixative = processing.fixative if isinstance(processing, Fixation) else None
         embedding = processing.medium if isinstance(processing, Embedding) else None
@@ -443,7 +445,7 @@ class StainingDicomModel(SpecimenPreparationStepDicomModel):
     @classmethod
     def from_step(
         cls,
-        staining: Staining,
+        step: Staining,
         specimen: BaseSpecimen,
     ) -> "StainingDicomModel":
         """Return Dicom dataset for the step.
@@ -465,9 +467,9 @@ class StainingDicomModel(SpecimenPreparationStepDicomModel):
         return cls(
             identifier=identifier,
             issuer_of_identifier=issuer,
-            date_time=staining.date_time,
-            description=staining.description,
-            substances=staining.substances,
+            date_time=step.date_time,
+            description=step.description,
+            substances=step.substances,
             container=specimen.container,
             specimen_type=specimen.type,
         )

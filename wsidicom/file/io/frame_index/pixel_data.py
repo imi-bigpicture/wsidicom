@@ -65,7 +65,7 @@ class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         return positions
 
     def _get_pixels_start(self) -> int:
-        self._validate_pixel_data_start()
+        self._validate_pixel_data_start(None)
         bot_length = self._read_bot_length()
         if bot_length is not None:
             raise EmptyBasicTableOffsetException()

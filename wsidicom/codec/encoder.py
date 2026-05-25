@@ -386,14 +386,16 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
     def encode(self, image: Image | np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
-        return jpeg8_encode(
-            np.array(image).astype(self._dtype),
-            level=self._level,
-            lossless=self._lossless,
-            bitspersample=self._bits,
-            subsampling=self._subsampling,
-            outcolorspace=self._output_colorspace,
-            predictor=self._predictor,
+        return bytes(
+            jpeg8_encode(
+                np.array(image).astype(self._dtype),
+                level=self._level,
+                lossless=self._lossless,
+                bitspersample=self._bits,
+                subsampling=self._subsampling,
+                outcolorspace=self._output_colorspace,
+                predictor=self._predictor,
+            )
         )
 
     @classmethod
@@ -436,7 +438,7 @@ class JpegLsEncoder(Encoder[JpegLsSettings]):
             raise RuntimeError("Image codecs not available.")
         if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
             raise ValueError(f"Unsupported mode: {image.mode}.")
-        return jpegls_encode(np.array(image), level=self._level)
+        return bytes(jpegls_encode(np.array(image), level=self._level))
 
     @classmethod
     def is_available(cls) -> bool:
@@ -482,13 +484,15 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings | HTJpeg2000Settings]):
             raise RuntimeError("Image codecs not available.")
         if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
             raise ValueError(f"Unsupported mode: {image.mode}.")
-        return jpeg2k_encode(
-            np.array(image),
-            level=self._level,
-            reversible=self._reversible,
-            bitspersample=self._bits,
-            codecformat="J2K",
-            mct=self._multiple_component_transform,
+        return bytes(
+            jpeg2k_encode(
+                np.array(image),
+                level=self._level,
+                reversible=self._reversible,
+                bitspersample=self._bits,
+                codecformat="J2K",
+                mct=self._multiple_component_transform,
+            )
         )
 
     @classmethod
@@ -523,11 +527,13 @@ class JpegXlEncoder(Encoder[JpegXlSettings]):
             raise RuntimeError("Image codecs not available.")
         if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
             raise ValueError(f"Unsupported mode: {image.mode}.")
-        return jpegxl_encode(
-            np.array(image),
-            level=self._level,
-            lossless=self._lossless,
-            bitspersample=self._bits,
+        return bytes(
+            jpegxl_encode(
+                np.array(image),
+                level=self._level,
+                lossless=self._lossless,
+                bitspersample=self._bits,
+            )
         )
 
     @classmethod
@@ -681,10 +687,12 @@ class PyJpegLsEncoder(Encoder[JpegLsSettings]):
     def encode(self, image: Image | np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Pylibjpeg-ls not available.")
-        return pylibjpeg_ls_encode(
-            np.asarray(image),
-            lossy_error=self.settings.level,
-            interleave_mode=self._interleave_mode,
+        return bytes(
+            pylibjpeg_ls_encode(
+                np.asarray(image),
+                lossy_error=self.settings.level,
+                interleave_mode=self._interleave_mode,
+            )
         )
 
     @classmethod

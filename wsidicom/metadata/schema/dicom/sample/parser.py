@@ -145,7 +145,10 @@ class StepsDirectory:
         for step in steps:
             identifier = step.specimen_identifier
             matching_identifier = self._get_identifier(identifier, steps_by_identifier)
-            if matching_identifier not in steps_by_identifier:
+            if (
+                matching_identifier is None
+                or matching_identifier not in steps_by_identifier
+            ):
                 steps_by_identifier[identifier] = [step]
             else:
                 existing_steps = steps_by_identifier[matching_identifier]
@@ -181,7 +184,10 @@ class StepsDirectory:
         matching_identifier = self._get_identifier(
             identifier, self._steps_by_identifier
         )
-        if matching_identifier not in self._steps_by_identifier:
+        if (
+            matching_identifier is None
+            or matching_identifier not in self._steps_by_identifier
+        ):
             # Specimen does not have any describing preparation steps
             return []
         steps = self._steps_by_identifier[matching_identifier]

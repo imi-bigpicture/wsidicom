@@ -39,14 +39,14 @@ class BasicOffsetTableFrameIndexParser(OffsetTableFrameIndexParser):
 
     def _get_index(self) -> list[tuple[int, int]]:
         """Get frame positions and length from bot."""
-        self._validate_pixel_data_start()
+        self._validate_pixel_data_start(None)
         table = self._read_table()
         pixels_start = self._file.tell()
         assert table is not None
         return self._parse_table(table, pixels_start)
 
     def _get_pixels_start(self) -> int:
-        self._validate_pixel_data_start()
+        self._validate_pixel_data_start(None)
         bot_length = self._read_bot_length()
         if bot_length is None:
             raise EmptyBasicTableOffsetException()

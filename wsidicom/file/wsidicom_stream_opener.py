@@ -71,7 +71,8 @@ class WsiDicomStreamOpener:
         for file in files:
             for stream in self._open_streams(file, "rb"):
                 try:
-                    path = UPath(stream.path) if hasattr(stream, "path") else None
+                    stream_path = getattr(stream, "path", None)
+                    path = UPath(stream_path) if stream_path is not None else None
                     dicom_io = WsiDicomIO(stream, owned=True, filepath=path)
                     if dicom_io.is_dicom and (
                         sop_class_uids is None

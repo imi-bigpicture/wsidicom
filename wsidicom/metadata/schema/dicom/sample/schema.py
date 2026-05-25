@@ -325,12 +325,13 @@ class SubstanceItemDicomField(fields.Field):
             return [self._string_field._serialize(value, attr, obj, **kwargs)]
         return self._code_list_field._serialize(value, attr, obj, **kwargs)
 
-    def _deserialize(self, datasets: Sequence[Dataset], attr, obj, **kwargs):
+    def _deserialize(self, value: Sequence[Dataset], attr, data, **kwargs):
+        datasets = value
         first_value = datasets[0]
 
         if first_value.ValueType == "TEXT" or hasattr(first_value, "TextValue"):
-            return self._string_field.deserialize(first_value, attr, obj, **kwargs)
-        return self._code_list_field.deserialize(datasets, attr, obj, **kwargs)
+            return self._string_field.deserialize(first_value, attr, data, **kwargs)
+        return self._code_list_field.deserialize(datasets, attr, data, **kwargs)
 
 
 class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
@@ -418,12 +419,13 @@ class PreparationStepDicomField(fields.Field):
 
     def _serialize(
         self,
-        step: SpecimenPreparationStepDicomModel,
+        value: SpecimenPreparationStepDicomModel,
         attr: str | None,
         obj: Any,
         **kwargs,
     ) -> Dataset:
         """Serialize step to dataset."""
+        step = value
         assert self.data_key is not None
         sequence = self._subschema_dump(step)
         dataset = Dataset()
@@ -431,9 +433,10 @@ class PreparationStepDicomField(fields.Field):
         return dataset
 
     def _deserialize(
-        self, dataset: Dataset, attr: str | None, data: Any, **kwargs
+        self, value: Dataset, attr: str | None, data: Any, **kwargs
     ) -> SpecimenPreparationStepDicomModel | None:
         """Deserialize step from dataset."""
+        dataset = value
         assert self.data_key is not None
         sequence = getattr(dataset, self.data_key)
         return self._subschema_load(sequence)
