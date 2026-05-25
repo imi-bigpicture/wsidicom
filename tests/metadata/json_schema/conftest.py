@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import pytest
 
@@ -24,7 +24,7 @@ from wsidicom.metadata.sample import (
 
 
 @pytest.fixture()
-def json_slide_identifier(slide_identifier: Optional[Union[str, SpecimenIdentifier]]):
+def json_slide_identifier(slide_identifier: str | SpecimenIdentifier | None):
     if slide_identifier is None:
         yield None
     elif isinstance(slide_identifier, str):
@@ -45,7 +45,7 @@ def json_slide_identifier(slide_identifier: Optional[Union[str, SpecimenIdentifi
 
 
 @pytest.fixture()
-def json_slide(json_slide_identifier: Union[str, Dict[str, Any]]):
+def json_slide(json_slide_identifier: str | dict[str, Any]):
     yield {
         "identifier": json_slide_identifier,
         "stainings": [

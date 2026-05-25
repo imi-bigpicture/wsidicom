@@ -15,8 +15,9 @@
 """Module with settings for encoding image data."""
 
 from abc import ABCMeta, abstractmethod
+from collections.abc import Sequence
 from enum import Enum
-from typing import Literal, Optional, Sequence, Union
+from typing import Literal
 
 from pydicom.uid import (
     HTJ2K,
@@ -80,7 +81,7 @@ class Subsampling(Enum):
     R440 = "Full horizontal, half vertical (4:4:0)"
 
     @classmethod
-    def from_string(cls, string: Optional[str]) -> "Subsampling":
+    def from_string(cls, string: str | None) -> "Subsampling":
         """Return subsampling matching string."""
         if string is None or string == "444":
             return Subsampling.R444
@@ -402,7 +403,7 @@ class JpegLsSettings(Settings):
 class Jpeg2kSettings(Settings):
     def __init__(
         self,
-        levels: Union[int, Sequence[int]] = 80,
+        levels: int | Sequence[int] = 80,
         bits: int = 8,
         channels: Channels = Channels.YBR,
     ):
@@ -411,7 +412,7 @@ class Jpeg2kSettings(Settings):
 
         Parameters:
         ----------
-            levels: Union[float, Sequence[float]] = 80.0
+            levels: float | Sequence[float] = 80.0
                 JPEG 2000 compression levels in dB. Set to 0 for lossless.
             bits: int = 8
                 Number of bits per pixel.
@@ -475,7 +476,7 @@ class HTJpeg2000Settings(Jpeg2kSettings):
 class JpegXlSettings(Settings):
     def __init__(
         self,
-        level: Optional[int] = None,
+        level: int | None = None,
         bits: int = 8,
         channels: Channels = Channels.YBR,
     ):
@@ -483,7 +484,7 @@ class JpegXlSettings(Settings):
         Initialize JPEG XL encoding settings.
         Parameters:
         ----------
-            level: Optional[int] = None
+            level: int | None = None
                 JPEG XL compression level. -100-100. Set to 100 for lossless.
             bits: int = 8
                 Number of bits per pixel.
@@ -495,7 +496,7 @@ class JpegXlSettings(Settings):
         super().__init__(bits, channels)
 
     @property
-    def level(self) -> Optional[int]:
+    def level(self) -> int | None:
         """Return level."""
         return self._level
 
@@ -508,7 +509,6 @@ class JpegXlSettings(Settings):
     def transfer_syntax(self) -> UID:
         if self._lossless:
             return JPEGXLLossless
-        JPEGXL.is_encapsulated
         return JPEGXL
 
     @property
@@ -528,9 +528,7 @@ class NumpySettings(Settings):
     def __init__(
         self,
         bits: int = 8,
-        channels: Union[
-            Literal[Channels.GRAYSCALE], Literal[Channels.RGB]
-        ] = Channels.RGB,
+        channels: Literal[Channels.GRAYSCALE, Channels.RGB] = Channels.RGB,
         little_endian: bool = True,
         implicit_vr: bool = False,
     ):
@@ -541,9 +539,7 @@ class NumpySettings(Settings):
         ----------
             bits: int = 8
                 Number of bits per pixel.
-            channels: Union[
-                Literal[Channels.GRAYSCALE], Literal[Channels.RGB]
-            ] = Channels.RGB,
+            channels: Literal[Channels.GRAYSCALE, Channels.RGB] = Channels.RGB,
                 Color channels in encoded image.
             little_endian: bool = True
                 Endianness of encoded image.

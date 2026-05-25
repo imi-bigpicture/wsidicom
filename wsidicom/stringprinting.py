@@ -12,7 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 
 def str_indent(indent: int = 0) -> str:
@@ -35,7 +36,7 @@ def str_indent(indent: int = 0) -> str:
 def list_pretty_str(
     items: Iterable[Any],
     indent: int = 0,
-    depth: Optional[int] = None,
+    depth: int | None = None,
     pre_new_lines: int = 0,
     list_new_lines: int = 1,
     space: bool = False,
@@ -51,7 +52,7 @@ def list_pretty_str(
         List of items to pretty-print
     indent: int
         Indentation for the string and list
-    depth: Optional[int] = None
+    depth: int | None = None
         Depth to print, if item contains list
     pre_new_lines: int
         Number of new lines at beginning of string
@@ -78,9 +79,9 @@ def list_pretty_str(
 
 
 def dict_pretty_str(
-    items: Dict[Any, Any],
+    items: dict[Any, Any],
     indent: int = 0,
-    depth: Optional[int] = None,
+    depth: int | None = None,
     pre_new_lines: int = 0,
     list_new_lines: int = 1,
     space: bool = False,
@@ -96,7 +97,7 @@ def dict_pretty_str(
         List of items to pretty-print
     indent: int
         Indentation for the string and list
-    depth: Optional[int] = None
+    depth: int | None = None
         Depth to print, if item contains list
     pre_new_lines: int
         Number of new lines at beginning of string

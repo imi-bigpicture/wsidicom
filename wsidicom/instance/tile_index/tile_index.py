@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Optional, Sequence, Set, Tuple
+from collections.abc import Sequence
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
@@ -59,7 +59,7 @@ class TileIndex(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def focal_planes(self) -> List[float]:
+    def focal_planes(self) -> list[float]:
         """Return list of focal planes in index."""
         raise NotImplementedError()
 
@@ -79,12 +79,12 @@ class TileIndex(metaclass=ABCMeta):
         return self._tiled_size
 
     @property
-    def optical_paths(self) -> List[str]:
+    def optical_paths(self) -> list[str]:
         """Return list of optical paths in index."""
         return self._optical_paths
 
     @abstractmethod
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         raise NotImplementedError()
 
     @abstractmethod
@@ -115,7 +115,7 @@ class TileIndex(metaclass=ABCMeta):
     @classmethod
     def _read_optical_paths_from_datasets(
         cls, datasets: Sequence[WsiDataset]
-    ) -> List[str]:
+    ) -> list[str]:
         """Return list of optical path identifiers from files.
 
         Parameters
@@ -125,11 +125,11 @@ class TileIndex(metaclass=ABCMeta):
 
         Returns
         -------
-        List[str]
+        list[str]
             Optical identifiers.
 
         """
-        paths: Set[str] = set()
+        paths: set[str] = set()
         for dataset in datasets:
             paths.update(cls._get_path_identifers(dataset.optical_path_sequence))
         if len(paths) == 0:
@@ -138,8 +138,8 @@ class TileIndex(metaclass=ABCMeta):
 
     @staticmethod
     def _get_path_identifers(
-        optical_path_sequence: Optional[DicomSequence],
-    ) -> List[str]:
+        optical_path_sequence: DicomSequence | None,
+    ) -> list[str]:
         """Parse optical path sequence and return list of optical path
         identifiers
 
@@ -150,7 +150,7 @@ class TileIndex(metaclass=ABCMeta):
 
         Returns
         -------
-        List[str]
+        list[str]
             List of optical path identifiers.
         """
         if optical_path_sequence is None:
@@ -162,7 +162,7 @@ class TileIndex(metaclass=ABCMeta):
             }
         )
 
-    def _read_frame_coordinates(self, frame: Dataset) -> Tuple[Point, float]:
+    def _read_frame_coordinates(self, frame: Dataset) -> tuple[Point, float]:
         """Return frame coordinate (Point(x, y) and float z) of the frame.
         In the Plane Position Slide Sequence x and y are defined in mm and z in
         um.
@@ -182,9 +182,6 @@ class TileIndex(metaclass=ABCMeta):
         y = int(position[RowPositionInTotalImagePixelMatrixTag].value) - 1
         x = int(position[ColumnPositionInTotalImagePixelMatrixTag].value) - 1
         z_offset = position.get(ZOffsetInSlideCoordinateSystemTag, None)
-        if z_offset is None:
-            z = 0
-        else:
-            z = round(float(z_offset.value), DECIMALS)
+        z = 0 if z_offset is None else round(float(z_offset.value), DECIMALS)
         tile = Point(x=x, y=y) // self.tile_size
         return tile, z

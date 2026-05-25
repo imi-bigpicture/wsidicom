@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Tuple
 
 import pytest
 from pydicom.uid import VLWholeSlideMicroscopyImageStorage
@@ -26,7 +25,7 @@ class TestWsiDicomStreamOpener:
     @pytest.mark.parametrize(
         "wsi_folder_and_counts", WsiTestDefinitions.folders_and_instance_counts()
     )
-    def test_open_folder(self, wsi_folder_and_counts: Tuple[Path, int]):
+    def test_open_folder(self, wsi_folder_and_counts: tuple[Path, int]):
         # Arrange
         wsi_folder, instances_count = wsi_folder_and_counts
 
@@ -43,7 +42,7 @@ class TestWsiDicomStreamOpener:
     @pytest.mark.parametrize(
         "wsi_folder_and_counts", WsiTestDefinitions.folders_and_instance_counts()
     )
-    def test_open_files(self, wsi_folder_and_counts: Tuple[Path, int]):
+    def test_open_files(self, wsi_folder_and_counts: tuple[Path, int]):
         # Arrange
         wsi_folder, instances_count = wsi_folder_and_counts
         files = list(wsi_folder.iterdir())

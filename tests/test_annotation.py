@@ -19,7 +19,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any
 
 import numpy as np
 import pytest
@@ -83,7 +83,7 @@ class TestWsiDicomAnnotation:
     def test_qupath_geojson(self, file_path: Path):
         with open(file_path) as f:
             # Arrange
-            input_dict: Dict[str, Any] = json.load(f)
+            input_dict: dict[str, Any] = json.load(f)
             group = AnnotationGroup.from_geometries(
                 Geometry.from_geojson(input_dict["geometry"]),
                 label=input_dict["properties"]["name"],
@@ -108,7 +108,7 @@ class TestWsiDicomAnnotation:
     def test_qupath_geojson_advanced(self, file_path: Path):
         with open(file_path) as f:
             # Arrange
-            input_dict: Dict = json.load(f)
+            input_dict: dict = json.load(f)
             # Group annotations by type and type using key
 
             @dataclass(frozen=True)
@@ -120,9 +120,9 @@ class TestWsiDicomAnnotation:
             class Value:
                 label: str
                 color: LabColor
-                geometries: List[Geometry]
+                geometries: list[Geometry]
 
-            grouped_annotations: Dict[Key, Value] = {}
+            grouped_annotations: dict[Key, Value] = {}
 
             # For each annotation, make a type-category key and insert the
             # annotation in the correct dict-group. If no group exists,
@@ -148,7 +148,7 @@ class TestWsiDicomAnnotation:
 
             # For each group of annotations (same type and category) make
             # an annotation group
-            annotation_groups: List[AnnotationGroup] = []
+            annotation_groups: list[AnnotationGroup] = []
             for group_keys, group_values in grouped_annotations.items():
                 annotation_group = AnnotationGroup.from_geometries(
                     geometries=group_values.geometries,
@@ -189,7 +189,7 @@ class TestWsiDicomAnnotation:
         with open(file_path) as f:
             # Arrange
             annotation_xml = xmltodict.parse(f.read())["ASAP_Annotations"]
-            input_dict: Dict[str, Any] = annotation_xml["Annotations"]["Annotation"]
+            input_dict: dict[str, Any] = annotation_xml["Annotations"]["Annotation"]
             group = AnnotationGroup.from_geometries(
                 self.asap_to_geometries(input_dict),
                 label=input_dict["@Name"],
@@ -220,7 +220,7 @@ class TestWsiDicomAnnotation:
     def test_sectra(self, file_path: Path):
         with open(file_path) as f:
             # Arrange
-            input_dict: Union[Dict[str, Any], List[Dict[str, Any]]] = json.load(f)
+            input_dict: dict[str, Any] | list[dict[str, Any]] = json.load(f)
             if isinstance(input_dict, list):
                 input_dict = input_dict[0]
             group = AnnotationGroup.from_geometries(
@@ -327,7 +327,7 @@ class TestWsiDicomAnnotation:
             [Annotation(Point(0.0, 0.1)), Annotation(Point(0.0, 0.1))],
         ],
     )
-    def test_point_annotation(self, input_annotations: List[Annotation]):
+    def test_point_annotation(self, input_annotations: list[Annotation]):
         # Arrange
 
         # Act
@@ -337,7 +337,9 @@ class TestWsiDicomAnnotation:
 
         # Assert
         assert input_annotations == group.annotations
-        for input_annotation, annotation in zip(input_annotations, group.annotations):
+        for input_annotation, annotation in zip(
+            input_annotations, group.annotations, strict=False
+        ):
             assert annotation == input_annotation
 
     @pytest.mark.parametrize(
@@ -362,7 +364,7 @@ class TestWsiDicomAnnotation:
             ],
         ],
     )
-    def test_line_annotation(self, input_annotations: List[Annotation]):
+    def test_line_annotation(self, input_annotations: list[Annotation]):
         # Arrange
 
         # Act
@@ -372,7 +374,9 @@ class TestWsiDicomAnnotation:
 
         # Assert
         assert input_annotations == group.annotations
-        for input_annotation, annotation in zip(input_annotations, group.annotations):
+        for input_annotation, annotation in zip(
+            input_annotations, group.annotations, strict=False
+        ):
             assert annotation == input_annotation
 
     def test_float_32_to_32(self):
@@ -467,7 +471,7 @@ class TestWsiDicomAnnotation:
             ],
         ],
     )
-    def test_measurement(self, measurements: List[Measurement]):
+    def test_measurement(self, measurements: list[Measurement]):
         # Arrange
         point = Point(1, 1)
 
@@ -600,7 +604,7 @@ class TestWsiDicomAnnotation:
     @staticmethod
     def annotation_group_to_qupath(
         group: AnnotationGroup,
-    ) -> Tuple[str, Union[List[float], List[List[float]], List[List[List[float]]]]]:
+    ) -> tuple[str, list[float] | list[list[float]] | list[list[list[float]]]]:
         if isinstance(group, PointAnnotationGroup):
             if len(group) == 1:
                 return ("Point", group.annotations[0].geometry.to_list_coords()[0])
@@ -616,24 +620,24 @@ class TestWsiDicomAnnotation:
         raise NotImplementedError()
 
     @staticmethod
-    def qupath_get_type_code(annotation: Dict) -> AnnotationTypeCode:
+    def qupath_get_type_code(annotation: dict) -> AnnotationTypeCode:
         type_code = annotation["properties"]["classification"]["name"]
         return AnnotationTypeCode(type_code)
 
     @staticmethod
-    def qupath_get_color(annotation: Dict) -> Tuple[int, int, int]:
-        color: Tuple[int, int, int] = annotation["properties"]["color"]
+    def qupath_get_color(annotation: dict) -> tuple[int, int, int]:
+        color: tuple[int, int, int] = annotation["properties"]["color"]
         return color
 
     @staticmethod
-    def qupath_get_label(annotation: Dict) -> str:
+    def qupath_get_label(annotation: dict) -> str:
         label: str = annotation["properties"]["name"]
         return label
 
     @staticmethod
     def asap_annotation_group_to_geometries(
         group: AnnotationGroup,
-    ) -> Tuple[str, List[OrderedDict]]:
+    ) -> tuple[str, list[OrderedDict]]:
         increase_order_by_annotation = False
         if isinstance(group, PointAnnotationGroup):
             if len(group) == 1:
@@ -661,7 +665,7 @@ class TestWsiDicomAnnotation:
         return geometry_type, group_coordinates
 
     @classmethod
-    def asap_to_geometries(cls, dictionary: Dict[str, Any]) -> List[Geometry]:
+    def asap_to_geometries(cls, dictionary: dict[str, Any]) -> list[Geometry]:
         annotation_type: str = dictionary["@Type"]
         coordinate_dict = dictionary["Coordinates"]["Coordinate"]
         if annotation_type == "Dot":
@@ -677,7 +681,7 @@ class TestWsiDicomAnnotation:
     @staticmethod
     def annotation_to_sectra(
         annotation: Annotation,
-    ) -> Tuple[str, List[Dict[str, float]]]:
+    ) -> tuple[str, list[dict[str, float]]]:
         if isinstance(annotation.geometry, Polygon):
             geometry_type = "Area"
         elif isinstance(annotation.geometry, Polyline):
@@ -691,7 +695,7 @@ class TestWsiDicomAnnotation:
         return geometry_type, group_coordinates
 
     @staticmethod
-    def sectra_to_geometry(dictionary: Dict[str, Any]) -> Geometry:
+    def sectra_to_geometry(dictionary: dict[str, Any]) -> Geometry:
         geometry_type: str = dictionary["type"]
         if geometry_type == "Area":
             return Polygon.from_dict(dictionary["content"], "x", "y")

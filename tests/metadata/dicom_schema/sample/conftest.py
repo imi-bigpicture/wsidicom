@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Optional, Union
 
 import pytest
 from pydicom import Dataset
@@ -137,12 +136,12 @@ def stains():
 @pytest.fixture()
 def collection_dicom(
     collection: Collection,
-    identifier: Union[str, SpecimenIdentifier],
-    fixative: Optional[SpecimenFixativesCode],
-    medium: Optional[SpecimenEmbeddingMediaCode],
-    processing_method: Optional[SpecimenPreparationStepsCode],
-    container: Optional[ContainerTypeCode],
-    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
+    identifier: str | SpecimenIdentifier,
+    fixative: SpecimenFixativesCode | None,
+    medium: SpecimenEmbeddingMediaCode | None,
+    processing_method: SpecimenPreparationStepsCode | None,
+    container: ContainerTypeCode | None,
+    specimen_type: AnatomicPathologySpecimenTypesCode | None,
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield CollectionDicomModel(
@@ -162,7 +161,7 @@ def collection_dicom(
 @pytest.fixture()
 def collection_dataset(
     collection_dicom: CollectionDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     yield create_collection_dataset(collection_dicom, identifier)
 
@@ -170,12 +169,12 @@ def collection_dataset(
 @pytest.fixture()
 def sampling_dicom(
     sampling: Sampling,
-    identifier: Union[str, SpecimenIdentifier],
-    fixative: Optional[SpecimenFixativesCode],
-    medium: Optional[SpecimenEmbeddingMediaCode],
-    processing_method: Optional[SpecimenPreparationStepsCode],
-    container: Optional[ContainerTypeCode],
-    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
+    identifier: str | SpecimenIdentifier,
+    fixative: SpecimenFixativesCode | None,
+    medium: SpecimenEmbeddingMediaCode | None,
+    processing_method: SpecimenPreparationStepsCode | None,
+    container: ContainerTypeCode | None,
+    specimen_type: AnatomicPathologySpecimenTypesCode | None,
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     (
@@ -213,7 +212,7 @@ def sampling_dicom(
 @pytest.fixture()
 def sampling_dataset(
     sampling_dicom: SamplingDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     yield create_sampling_dataset(sampling_dicom, identifier)
 
@@ -221,11 +220,11 @@ def sampling_dataset(
 @pytest.fixture()
 def processing_dicom(
     processing: Processing,
-    identifier: Union[str, SpecimenIdentifier],
-    fixative: Optional[SpecimenFixativesCode],
-    medium: Optional[SpecimenEmbeddingMediaCode],
-    container: Optional[ContainerTypeCode],
-    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
+    identifier: str | SpecimenIdentifier,
+    fixative: SpecimenFixativesCode | None,
+    medium: SpecimenEmbeddingMediaCode | None,
+    container: ContainerTypeCode | None,
+    specimen_type: AnatomicPathologySpecimenTypesCode | None,
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield ProcessingDicomModel(
@@ -244,7 +243,7 @@ def processing_dicom(
 @pytest.fixture()
 def processing_dataset(
     processing_dicom: ProcessingDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     yield create_processing_dataset(processing_dicom, identifier)
 
@@ -252,12 +251,12 @@ def processing_dataset(
 @pytest.fixture()
 def staining_dicom(
     staining: Staining,
-    identifier: Union[str, SpecimenIdentifier],
-    fixative: Optional[SpecimenFixativesCode],
-    medium: Optional[SpecimenEmbeddingMediaCode],
-    processing_method: Optional[SpecimenPreparationStepsCode],
-    container: Optional[ContainerTypeCode],
-    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
+    identifier: str | SpecimenIdentifier,
+    fixative: SpecimenFixativesCode | None,
+    medium: SpecimenEmbeddingMediaCode | None,
+    processing_method: SpecimenPreparationStepsCode | None,
+    container: ContainerTypeCode | None,
+    specimen_type: AnatomicPathologySpecimenTypesCode | None,
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield StainingDicomModel(
@@ -277,7 +276,7 @@ def staining_dicom(
 @pytest.fixture()
 def staining_dataset(
     staining_dicom: StainingDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     yield create_staining_dataset(staining_dicom, identifier)
 
@@ -285,12 +284,12 @@ def staining_dataset(
 @pytest.fixture()
 def receiving_dicom(
     receiving: Receiving,
-    identifier: Union[str, SpecimenIdentifier],
-    fixative: Optional[SpecimenFixativesCode],
-    medium: Optional[SpecimenEmbeddingMediaCode],
-    processing_method: Optional[SpecimenPreparationStepsCode],
-    container: Optional[ContainerTypeCode],
-    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
+    identifier: str | SpecimenIdentifier,
+    fixative: SpecimenFixativesCode | None,
+    medium: SpecimenEmbeddingMediaCode | None,
+    processing_method: SpecimenPreparationStepsCode | None,
+    container: ContainerTypeCode | None,
+    specimen_type: AnatomicPathologySpecimenTypesCode | None,
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield ReceivingDicomModel(
@@ -309,7 +308,7 @@ def receiving_dicom(
 @pytest.fixture()
 def receiving_dataset(
     receiving_dicom: ReceivingDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     yield create_receiving_dataset(receiving_dicom, identifier)
 
@@ -317,12 +316,12 @@ def receiving_dataset(
 @pytest.fixture()
 def storage_dicom(
     storage: Storage,
-    identifier: Union[str, SpecimenIdentifier],
-    fixative: Optional[SpecimenFixativesCode],
-    medium: Optional[SpecimenEmbeddingMediaCode],
-    processing_method: Optional[SpecimenPreparationStepsCode],
-    container: Optional[ContainerTypeCode],
-    specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
+    identifier: str | SpecimenIdentifier,
+    fixative: SpecimenFixativesCode | None,
+    medium: SpecimenEmbeddingMediaCode | None,
+    processing_method: SpecimenPreparationStepsCode | None,
+    container: ContainerTypeCode | None,
+    specimen_type: AnatomicPathologySpecimenTypesCode | None,
 ):
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     yield StorageDicomModel(
@@ -341,7 +340,7 @@ def storage_dicom(
 @pytest.fixture()
 def storage_dataset(
     storage_dicom: StorageDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     yield create_storage_dataset(storage_dicom, identifier)
 

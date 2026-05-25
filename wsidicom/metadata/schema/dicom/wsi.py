@@ -14,8 +14,9 @@
 
 """DICOM schema for complete WsiMetadata model."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Optional, Sequence, Type, TypeVar
+from typing import TypeVar
 
 from marshmallow import fields
 from PIL import ImageCms
@@ -62,8 +63,8 @@ class BaseWsiMetadata:
     patient: Patient
     equipment: Equipment
     slide: Slide
-    frame_of_reference_uid: Optional[UID] = None
-    dimension_organization_uids: Optional[Sequence[UID]] = None
+    frame_of_reference_uid: UID | None = None
+    dimension_organization_uids: Sequence[UID] | None = None
 
 
 class BaseWsiMetadataDicomSchema(DicomSchema[BaseWsiMetadata]):
@@ -107,7 +108,7 @@ class BaseWsiMetadataDicomSchema(DicomSchema[BaseWsiMetadata]):
     )
 
     @property
-    def load_type(self) -> Type[BaseWsiMetadata]:
+    def load_type(self) -> type[BaseWsiMetadata]:
         return BaseWsiMetadata
 
 
@@ -202,8 +203,8 @@ class WsiMetadataDicomSchema:
     def load(
         self,
         pyramid_dataset: Dataset,
-        label_dataset: Optional[Dataset] = None,
-        overview_dataset: Optional[Dataset] = None,
+        label_dataset: Dataset | None = None,
+        overview_dataset: Dataset | None = None,
         **kwargs,
     ) -> WsiMetadata:
         metadata = BaseWsiMetadataDicomSchema().load(pyramid_dataset)

@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Union
+from collections.abc import Sequence
 
 import pytest
 from pydicom import Dataset
@@ -74,9 +74,7 @@ def spacing_between_slices():
 
 
 @pytest.fixture
-def pixel_measure(
-    pixel_spacing: Optional[SizeMm], spacing_between_slices: Optional[float]
-):
+def pixel_measure(pixel_spacing: SizeMm | None, spacing_between_slices: float | None):
     pixel_measure = Dataset()
     if pixel_spacing is not None:
         pixel_measure.PixelSpacing = [pixel_spacing.height, pixel_spacing.width]
@@ -100,7 +98,7 @@ class TestWsiDataset:
     def test_get_multi_value(
         self,
         dataset: WsiDataset,
-        values: Optional[Union[str, Sequence[str]]],
+        values: str | Sequence[str] | None,
         expected_values: Sequence[str],
     ):
         # Arrange
@@ -147,7 +145,7 @@ class TestWsiDataset:
     def test_frame_offset(
         self,
         dataset: WsiDataset,
-        concatenation: Optional[int],
+        concatenation: int | None,
         expected_frame_offset: int,
     ):
         # Arrange
@@ -164,7 +162,7 @@ class TestWsiDataset:
         ["frame_count", "expected_frame_count"], [(None, 1), (1, 1), (100, 100)]
     )
     def test_frame_count(
-        self, dataset: WsiDataset, frame_count: Optional[int], expected_frame_count: int
+        self, dataset: WsiDataset, frame_count: int | None, expected_frame_count: int
     ):
         # Arrange
         if frame_count is not None:
@@ -241,7 +239,7 @@ class TestWsiDataset:
         self,
         dataset: WsiDataset,
         shared_functional_group: Dataset,
-        expected_pixel_spacing: Optional[SizeMm],
+        expected_pixel_spacing: SizeMm | None,
     ):
         # Arrange
         dataset.SharedFunctionalGroupsSequence = [shared_functional_group]
@@ -257,7 +255,7 @@ class TestWsiDataset:
         self,
         dataset: WsiDataset,
         shared_functional_group: Dataset,
-        spacing_between_slices: Optional[float],
+        spacing_between_slices: float | None,
     ):
         # Arrange
         dataset.SharedFunctionalGroupsSequence = [shared_functional_group]
@@ -281,7 +279,7 @@ class TestWsiDataset:
         self,
         image_data: ImageData,
         image_type: ImageType,
-        pyramid_index: Optional[int],
+        pyramid_index: int | None,
         expected_image_type: Sequence[str],
     ):
         # Arrange

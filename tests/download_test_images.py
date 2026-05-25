@@ -14,11 +14,11 @@
 
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from ftplib import Error, error_perm
 from hashlib import sha256
 from pathlib import Path
-from typing import Dict, Sequence
 
 from fsspec import register_implementation
 from fsspec.core import url_to_fs
@@ -29,10 +29,10 @@ from fsspec.implementations.ftp import FTPFileSystem
 class TestSlideDefinition:
     remote_path: str
     local_path: str
-    files: Dict[str, str]
+    files: dict[str, str]
 
 
-SLIDES: Dict[str, TestSlideDefinition] = {
+SLIDES: dict[str, TestSlideDefinition] = {
     "FULL_WITH_BOT": TestSlideDefinition(
         remote_path="ftp://medical.nema.org/MEDICAL/Dicom/DataSets/WG26/WG26Demo2020_PV/Histech^Samantha [1229631]/20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
         local_path="WG26Demo2020_PV/Histech^Samantha [1229631]/20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
@@ -186,7 +186,7 @@ class PatchedFTPFileSystem(FTPFileSystem):
                     "size": split_line[4],
                 },
             )
-            if "d" == this[1]["unix.mode"][0]:
+            if this[1]["unix.mode"][0] == "d":
                 this[1]["type"] = "dir"
             else:
                 this[1]["type"] = "file"
@@ -264,9 +264,11 @@ def main():
             if not full_local_file_path.exists():
                 fs, path = url_to_fs(slide.remote_path)  #
                 full_remote_file_path = path + "/" + file
-                with fs.open(full_remote_file_path, mode="rb") as remote_file:
-                    with open(full_local_file_path, "wb") as local_file:
-                        local_file.write(remote_file.read())
+                with (
+                    fs.open(full_remote_file_path, mode="rb") as remote_file,
+                    open(full_local_file_path, "wb") as local_file,
+                ):
+                    local_file.write(remote_file.read())
             check_checksum(full_local_file_path, checksum)
 
 

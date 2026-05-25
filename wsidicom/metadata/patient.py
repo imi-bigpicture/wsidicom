@@ -15,9 +15,9 @@
 """Patient model."""
 
 import datetime
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Optional, Sequence, Union
 
 from pydicom.sr.coding import Code
 
@@ -38,12 +38,12 @@ class PatientDeIdentification:
     ----------
     identity_removed : bool
         Whether the patient identity has been removed.
-    methods : Optional[Sequence[Union[str, Code]]] = None
+    methods : Sequence[str | Code] | None = None
         The methods used to de-identify the patient.
     """
 
     identity_removed: bool
-    methods: Optional[Sequence[Union[str, Code]]] = None
+    methods: Sequence[str | Code] | None = None
 
 
 @dataclass(frozen=True)
@@ -57,29 +57,29 @@ class Patient:
 
     Parameters
     ----------
-    name : Optional[str] = None
+    name : str | None = None
         The patient name.
-    identifier : Optional[str] = None
+    identifier : str | None = None
         The patient identifier.
-    birth_date : Optional[datetime.date] = None
+    birth_date : datetime.date | None = None
         The patient birth date.
-    sex : Optional[PatientSex] = None
+    sex : PatientSex | None = None
         The sex of the patient.
-    species_description : Optional[Union[str, Code]] = None
+    species_description : str | Code | None = None
         The species description of the patient.
-    de_identification : Optional[PatientDeIdentification] = None
+    de_identification : PatientDeIdentification | None = None
         The de-identification of the patient.
-    comments : Optional[str] = None
+    comments : str | None = None
         Comments about the patient.
     """
 
-    name: Optional[str] = None
-    identifier: Optional[str] = None
-    birth_date: Optional[datetime.date] = None
-    sex: Optional[PatientSex] = None
-    species_description: Optional[Union[str, Code]] = None
-    de_identification: Optional[PatientDeIdentification] = None
-    comments: Optional[str] = None
+    name: str | None = None
+    identifier: str | None = None
+    birth_date: datetime.date | None = None
+    sex: PatientSex | None = None
+    species_description: str | Code | None = None
+    de_identification: PatientDeIdentification | None = None
+    comments: str | None = None
 
     def remove_confidential(self) -> "Patient":
         return replace(

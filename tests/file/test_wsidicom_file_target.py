@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import pytest
 
@@ -31,7 +31,7 @@ class TestWsiDicomFileTarget:
         level: int,
         present_levels: Sequence[int],
         allow_missing: bool,
-        include_indices: Optional[Sequence[int]],
+        include_indices: Sequence[int] | None,
     ):
         # Arrange
 
@@ -60,7 +60,7 @@ class TestWsiDicomFileTarget:
         level: int,
         present_levels: Sequence[int],
         allow_missing: bool,
-        include_indices: Optional[Sequence[int]],
+        include_indices: Sequence[int] | None,
     ):
         # Arrange
 

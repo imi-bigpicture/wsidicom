@@ -12,8 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections.abc import Sequence
 from functools import cached_property
-from typing import List, Optional, Sequence, Set
 
 from wsidicom.cache import lru_cached_method
 from wsidicom.errors import WsiDicomNotFoundError
@@ -39,13 +39,13 @@ class FullTileIndex(TileIndex):
         super().__init__(datasets)
 
     @cached_property
-    def focal_planes(self) -> List[float]:
+    def focal_planes(self) -> list[float]:
         return self._read_focal_planes_from_datasets()
 
     def __str__(self) -> str:
         return self.pretty_str()
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         string = (
             f"Full tile index tile size: {self.tile_size}"
             f", plane size: {self.tiled_size}"
@@ -87,19 +87,19 @@ class FullTileIndex(TileIndex):
 
     def _read_focal_planes_from_datasets(
         self,
-    ) -> List[float]:
+    ) -> list[float]:
         """Return list of focal planes in datasets. Values in Pixel Measures
         Sequence are in mm.
 
         Returns
         -------
-        List[float]
+        list[float]
             Focal planes, specified in um.
 
         """
         MM_TO_MICRON = 1000.0
         DECIMALS = 3
-        focal_planes: Set[float] = set()
+        focal_planes: set[float] = set()
         for dataset in self._datasets:
             slice_spacing = dataset.spacing_between_slices
             number_of_focal_planes = dataset.number_of_focal_planes
@@ -148,7 +148,7 @@ class FullTileIndex(TileIndex):
                 )
             )
         except StopIteration:
-            raise WsiDicomNotFoundError(f"Optical path {path}", str(self))
+            raise WsiDicomNotFoundError(f"Optical path {path}", str(self)) from None
 
     @lru_cached_method()
     def _get_focal_plane_index(self, z: float) -> int:
@@ -169,4 +169,4 @@ class FullTileIndex(TileIndex):
                 index for index, plane in enumerate(self.focal_planes) if plane == z
             )
         except StopIteration:
-            raise WsiDicomNotFoundError(f"Z {z} in instance", str(self))
+            raise WsiDicomNotFoundError(f"Z {z} in instance", str(self)) from None

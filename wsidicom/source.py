@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from typing import Iterable
+from collections.abc import Iterable
 
 from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
 from wsidicom.config import settings

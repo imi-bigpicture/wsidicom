@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Optional, Tuple, Union
 
 import pytest
 
@@ -118,8 +117,8 @@ class TestSpecimenIdentifier:
     )
     def test_equal(
         self,
-        first: Union[str, SpecimenIdentifier],
-        second: Union[str, SpecimenIdentifier],
+        first: str | SpecimenIdentifier,
+        second: str | SpecimenIdentifier,
         expected: bool,
     ):
         # Arrange
@@ -157,7 +156,7 @@ class TestSpecimenIdentifier:
         ],
     )
     def test_to_string_identifier_and_issuer(
-        self, identifier: SpecimenIdentifier, expected: Tuple[str, Optional[str]]
+        self, identifier: SpecimenIdentifier, expected: tuple[str, str | None]
     ):
         # Arrange
 
@@ -173,8 +172,8 @@ class TestSpecimenIdentifier:
     )
     def test_get_string_identifier_and_issuer(
         self,
-        identifier: Union[str, SpecimenIdentifier],
-        expected: Tuple[str, Optional[str]],
+        identifier: str | SpecimenIdentifier,
+        expected: tuple[str, str | None],
     ):
         # Arrange
 

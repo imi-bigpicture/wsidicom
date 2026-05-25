@@ -12,14 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import builtins
+from collections.abc import Iterable, Sequence
 from typing import (
     Any,
-    Dict,
-    Iterable,
-    List,
-    Sequence,
-    Type,
-    Union,
 )
 
 from marshmallow import Schema, fields, pre_dump
@@ -82,7 +78,7 @@ class SamplingLocationJsonSchema(LoadingSchema[SamplingLocation]):
     z = MeasurementJsonField(allow_none=True)
 
     @property
-    def load_type(self) -> Type[SamplingLocation]:
+    def load_type(self) -> type[SamplingLocation]:
         return SamplingLocation
 
 
@@ -92,7 +88,7 @@ class SampleLocalizationJsonSchema(
     visual_marking = fields.String(allow_none=True)
 
     @property
-    def load_type(self) -> Type[SamplingLocation]:
+    def load_type(self) -> type[SamplingLocation]:
         return SampleLocalization
 
 
@@ -103,7 +99,7 @@ class SamplingConstraintJsonSchema(LoadingSchema[SamplingConstraintJsonModel]):
     sampling_step_index = fields.Integer()
 
     @property
-    def load_type(self) -> Type[SamplingConstraintJsonModel]:
+    def load_type(self) -> type[SamplingConstraintJsonModel]:
         return SamplingConstraintJsonModel
 
     @pre_dump
@@ -124,7 +120,7 @@ class SamplingJsonSchema(DataclassLoadingSchema[SamplingJsonModel]):
     location = fields.Nested(SamplingLocationJsonSchema, allow_none=True)
 
     @property
-    def load_type(self) -> Type[SamplingJsonModel]:
+    def load_type(self) -> type[SamplingJsonModel]:
         return SamplingJsonModel
 
 
@@ -135,7 +131,7 @@ class CollectionJsonSchema(DataclassLoadingSchema[Collection]):
     description = fields.String(allow_none=True)
 
     @property
-    def load_type(self) -> Type[Collection]:
+    def load_type(self) -> type[Collection]:
         return Collection
 
 
@@ -148,7 +144,7 @@ class ProcessingJsonSchema(DataclassLoadingSchema[Processing]):
     description = fields.String(allow_none=True)
 
     @property
-    def load_type(self) -> Type[Processing]:
+    def load_type(self) -> type[Processing]:
         return Processing
 
 
@@ -159,7 +155,7 @@ class EmbeddingJsonSchema(DataclassLoadingSchema[Embedding]):
     description = fields.String(allow_none=True)
 
     @property
-    def load_type(self) -> Type[Embedding]:
+    def load_type(self) -> type[Embedding]:
         return Embedding
 
 
@@ -170,7 +166,7 @@ class FixationJsonSchema(DataclassLoadingSchema[Fixation]):
     description = fields.String(allow_none=True)
 
     @property
-    def load_type(self) -> Type[Fixation]:
+    def load_type(self) -> type[Fixation]:
         return Fixation
 
 
@@ -180,7 +176,7 @@ class ReceivingJsonSchema(DataclassLoadingSchema[Receiving]):
     description = fields.String(allow_none=True)
 
     @property
-    def load_type(self) -> Type[Receiving]:
+    def load_type(self) -> type[Receiving]:
         return Receiving
 
 
@@ -190,7 +186,7 @@ class StorageJsonSchema(DataclassLoadingSchema[Storage]):
     description = fields.String(allow_none=True)
 
     @property
-    def load_type(self) -> Type[Storage]:
+    def load_type(self) -> type[Storage]:
         return Storage
 
 
@@ -198,7 +194,7 @@ class PreparationStepJsonSchema(Schema):
     """Schema to use to serialize/deserialize preparation steps."""
 
     """Mapping step type to schema."""
-    _type_to_schema_mapping: Dict[Type[PreparationStep], Type[Schema]] = {
+    _type_to_schema_mapping: dict[type[PreparationStep], type[Schema]] = {
         Sampling: SamplingJsonSchema,
         UnknownSampling: SamplingJsonSchema,
         Collection: CollectionJsonSchema,
@@ -210,7 +206,7 @@ class PreparationStepJsonSchema(Schema):
     }
 
     """Mapping key in serialized step to schema."""
-    _action_to_schema_mapping: Dict[PreparationAction, Type[Schema]] = {
+    _action_to_schema_mapping: dict[PreparationAction, type[Schema]] = {
         PreparationAction.SAMPLING: SamplingJsonSchema,
         PreparationAction.COLLECTION: CollectionJsonSchema,
         PreparationAction.PROCESSING: ProcessingJsonSchema,
@@ -222,7 +218,7 @@ class PreparationStepJsonSchema(Schema):
 
     def dump(
         self,
-        data: Union[PreparationStep, Iterable[PreparationStep]],
+        data: PreparationStep | Iterable[PreparationStep],
         **kwargs,
     ):
         if isinstance(data, PreparationStep):
@@ -231,7 +227,7 @@ class PreparationStepJsonSchema(Schema):
 
     def load(
         self,
-        data: Union[Dict[str, Any], Iterable[Dict[str, Any]]],
+        data: dict[str, Any] | Iterable[dict[str, Any]],
         **kwargs,
     ):
         if isinstance(data, dict):
@@ -239,14 +235,14 @@ class PreparationStepJsonSchema(Schema):
         return [self._subschema_load(step) for step in data]
 
     def _subschema_load(
-        self, step: Dict[str, Any]
-    ) -> Union[PreparationStep, SamplingJsonModel]:
+        self, step: dict[str, Any]
+    ) -> PreparationStep | SamplingJsonModel:
         """Select a schema and load and return step using the schema."""
         try:
             action = PreparationAction(step.pop("action"))
             schema = self._action_to_schema_mapping[action]
         except KeyError:
-            raise NotImplementedError()
+            raise NotImplementedError() from None
         loaded = schema().load(step, many=False)
         assert isinstance(loaded, (PreparationStep, SamplingJsonModel))
         return loaded
@@ -263,15 +259,13 @@ class SubstanceJsonField(fields.Field):
     )
 
     def _serialize(
-        self, value: Union[str, Sequence[SpecimenStainsCode]], attr, obj, **kwargs
+        self, value: str | Sequence[SpecimenStainsCode], attr, obj, **kwargs
     ):
         if isinstance(value, str):
             return value
         return self._code_list_field._serialize(value, attr, obj, **kwargs)
 
-    def _deserialize(
-        self, value: Union[str, List[Dict[str, Any]]], attr, data, **kwargs
-    ):
+    def _deserialize(self, value: str | list[dict[str, Any]], attr, data, **kwargs):
         if isinstance(value, str):
             return value
         return self._code_list_field._deserialize(value, attr, data, **kwargs)
@@ -283,7 +277,7 @@ class StainingJsonSchema(DataclassLoadingSchema[Staining]):
     description = fields.String(allow_none=True)
 
     @property
-    def load_type(self) -> Type[Staining]:
+    def load_type(self) -> type[Staining]:
         return Staining
 
 
@@ -300,7 +294,7 @@ class SpecimenJsonSchema(LoadingSchema[Specimen]):
     )
 
     @property
-    def load_type(self) -> Type[SpecimenJsonModel]:
+    def load_type(self) -> builtins.type[SpecimenJsonModel]:
         return SpecimenJsonModel
 
 
@@ -318,7 +312,7 @@ class SampleJsonSchema(LoadingSchema[SampleJsonModel]):
     )
 
     @property
-    def load_type(self) -> Type[SampleJsonModel]:
+    def load_type(self) -> builtins.type[SampleJsonModel]:
         return SampleJsonModel
 
 
@@ -337,7 +331,7 @@ class SlideSampleJsonSchema(LoadingSchema[SlideSampleJsonModel]):
     detailed_description = fields.String(allow_none=True, load_default=None)
 
     @property
-    def load_type(self) -> Type[SlideSampleJsonModel]:
+    def load_type(self) -> type[SlideSampleJsonModel]:
         return SlideSampleJsonModel
 
 
@@ -345,14 +339,14 @@ class BaseSpecimenJsonSchema(Schema):
     """Schema to use to serialize/deserialize specimens."""
 
     """Mapping specimen type to schema."""
-    _type_to_schema_mapping: Dict[Type[BaseSpecimen], Type[Schema]] = {
+    _type_to_schema_mapping: dict[type[BaseSpecimen], type[Schema]] = {
         Specimen: SpecimenJsonSchema,
         Sample: SampleJsonSchema,
         SlideSample: SlideSampleJsonSchema,
     }
 
     """Mapping key in serialized specimen to schema."""
-    _key_to_schema_mapping: Dict[str, Type[Schema]] = {
+    _key_to_schema_mapping: dict[str, type[Schema]] = {
         "anatomical_sites": SlideSampleJsonSchema,
         "sampled_from": SampleJsonSchema,
         "type": SpecimenJsonSchema,
@@ -360,13 +354,13 @@ class BaseSpecimenJsonSchema(Schema):
 
     def dump(
         self,
-        specimens: Union[BaseSpecimen, Iterable[BaseSpecimen]],
+        specimens: BaseSpecimen | Iterable[BaseSpecimen],
         **kwargs,
     ):
         if isinstance(specimens, BaseSpecimen):
             specimens = [specimens]
 
-        all_specimens: Dict[Union[str, SpecimenIdentifier], BaseSpecimen] = {}
+        all_specimens: dict[str | SpecimenIdentifier, BaseSpecimen] = {}
         for specimen in specimens:
             if isinstance(specimen, SampledSpecimen):
                 all_specimens.update(self._get_samplings(specimen))
@@ -375,9 +369,9 @@ class BaseSpecimenJsonSchema(Schema):
 
     def load(
         self,
-        data: Union[Dict[str, Any], Iterable[Dict[str, Any]]],
+        data: dict[str, Any] | Iterable[dict[str, Any]],
         **kwargs,
-    ) -> List[BaseSpecimen]:
+    ) -> list[BaseSpecimen]:
         """Load serialized specimen or list of specimen as `Specimen`."""
         if isinstance(data, dict):
             loaded = [self._subschema_load(data)]  # type: ignore
@@ -389,10 +383,10 @@ class BaseSpecimenJsonSchema(Schema):
     @classmethod
     def _get_samplings(
         cls, sample: SampledSpecimen
-    ) -> Dict[Union[str, SpecimenIdentifier], BaseSpecimen]:
+    ) -> dict[str | SpecimenIdentifier, BaseSpecimen]:
         """Return a dictionary containing this specimen and all recursive sampled
         specimens."""
-        samplings: Dict[Union[str, SpecimenIdentifier], BaseSpecimen] = {
+        samplings: dict[str | SpecimenIdentifier, BaseSpecimen] = {
             sample.identifier: sample
         }
         for sampling in sample.sampled_from_list:
@@ -403,7 +397,7 @@ class BaseSpecimenJsonSchema(Schema):
         return samplings
 
     @classmethod
-    def _subschema_select(cls, specimen: Dict[str, Any]) -> Type[Schema]:
+    def _subschema_select(cls, specimen: dict[str, Any]) -> type[Schema]:
         try:
             return next(
                 schema
@@ -411,16 +405,16 @@ class BaseSpecimenJsonSchema(Schema):
                 if key in specimen
             )
         except StopIteration:
-            raise NotImplementedError()
+            raise NotImplementedError() from None
 
-    def _subschema_load(self, specimen: Dict[str, Any]) -> BaseSpecimenJsonModel:
+    def _subschema_load(self, specimen: dict[str, Any]) -> BaseSpecimenJsonModel:
         """Select a schema and load and return specimen using the schema."""
         schema = self._subschema_select(specimen)
         loaded = schema().load(specimen, many=False)
         assert isinstance(loaded, BaseSpecimenJsonModel)
         return loaded
 
-    def _subschema_dump(self, specimen: BaseSpecimen) -> Dict[str, Any]:
+    def _subschema_dump(self, specimen: BaseSpecimen) -> dict[str, Any]:
         """Select a schema and dump the specimen using the schema."""
         schema = self._type_to_schema_mapping[type(specimen)]
         dumped = schema().dump(specimen)

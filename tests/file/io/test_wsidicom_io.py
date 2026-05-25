@@ -16,7 +16,7 @@ import datetime
 import struct
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, List, Optional, Union
+from typing import BinaryIO
 
 import pytest
 from pydicom import DataElement, Dataset
@@ -233,10 +233,7 @@ class TestWsiDicomIO:
         self, buffer: BinaryIO, little_endian: bool, long: bool, length: int
     ):
         # Arrange
-        if little_endian:
-            format = "<"
-        else:
-            format = ">"
+        format = "<" if little_endian else ">"
         if long:
             format += "L"
         else:
@@ -248,10 +245,7 @@ class TestWsiDicomIO:
             transfer_syntax = ExplicitVRBigEndian
         io = WsiDicomIO(buffer, transfer_syntax=transfer_syntax)
         pre_position = io.tell()
-        if long:
-            expected_read_length = 4
-        else:
-            expected_read_length = 2
+        expected_read_length = 4 if long else 2
 
         # Act
         read_length = io.read_tag_length(long)
@@ -305,15 +299,12 @@ class TestWsiDicomIO:
         self,
         buffer: BinaryIO,
         tag: BaseTag,
-        vr: Optional[str],
+        vr: str | None,
         length: int,
         transfer_syntax: UID,
     ):
         # Arrange
-        if transfer_syntax.is_little_endian:
-            format = "<"
-        else:
-            format = ">"
+        format = "<" if transfer_syntax.is_little_endian else ">"
         buffer.write(struct.pack(format + "H", tag.group))
         buffer.write(struct.pack(format + "H", tag.element))
         if not transfer_syntax.is_implicit_VR and vr is not None:
@@ -350,18 +341,15 @@ class TestWsiDicomIO:
         self,
         buffer: BinaryIO,
         tag: BaseTag,
-        vr: Optional[str],
+        vr: str | None,
         length: int,
         expected_tag: BaseTag,
-        expected_vr: Optional[str],
+        expected_vr: str | None,
         expected_length: int,
         transfer_syntax: UID,
     ):
         # Arrange
-        if transfer_syntax.is_little_endian:
-            format = "<"
-        else:
-            format = ">"
+        format = "<" if transfer_syntax.is_little_endian else ">"
         buffer.write(struct.pack(format + "H", tag.group))
         buffer.write(struct.pack(format + "H", tag.element))
         if not transfer_syntax.is_implicit_VR and vr is not None:
@@ -403,10 +391,7 @@ class TestWsiDicomIO:
         self, buffer: BinaryIO, little_endian: bool, value: int
     ):
         # Arrange
-        if little_endian:
-            format = "<Q"
-        else:
-            format = ">Q"
+        format = "<Q" if little_endian else ">Q"
         # buffer.write(struct.pack(format, value))
         if little_endian:
             transfer_syntax = ExplicitVRLittleEndian
@@ -441,10 +426,7 @@ class TestWsiDicomIO:
         transfer_syntax: UID,
     ):
         # Arrange
-        if transfer_syntax.is_little_endian:
-            format = "<"
-        else:
-            format = ">"
+        format = "<" if transfer_syntax.is_little_endian else ">"
 
         io = WsiDicomIO(buffer, transfer_syntax)
 
@@ -533,8 +515,8 @@ class TestWsiDicomIO:
     def test_update_dataset(
         self,
         buffer: BinaryIO,
-        original_values: List[str],
-        update_values: Union[str, List[str]],
+        original_values: list[str],
+        update_values: str | list[str],
     ):
         # Arrange
         io = WsiDicomIO(buffer, transfer_syntax=JPEGBaseline8Bit)

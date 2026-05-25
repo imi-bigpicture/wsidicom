@@ -14,8 +14,6 @@
 
 """DICOM schema for Series model."""
 
-from typing import Type
-
 from marshmallow import fields
 from pydicom.valuerep import VR
 
@@ -44,7 +42,7 @@ class SeriesDicomSchema(ModuleDicomSchema[Series]):
     )
 
     @property
-    def load_type(self) -> Type[Series]:
+    def load_type(self) -> type[Series]:
         return Series
 
     @property

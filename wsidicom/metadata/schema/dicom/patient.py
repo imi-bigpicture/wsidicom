@@ -15,7 +15,7 @@
 """DICOM schema for Patient model."""
 
 from collections import defaultdict
-from typing import Any, Dict, Type
+from typing import Any
 
 from marshmallow import fields, post_load, pre_dump
 from pydicom.sr.coding import Code
@@ -50,7 +50,7 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
     )
 
     @property
-    def load_type(self) -> Type[PatientDeIdentification]:
+    def load_type(self) -> type[PatientDeIdentification]:
         return PatientDeIdentification
 
     @pre_dump
@@ -67,7 +67,7 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
         return fields
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs):
         method_strings = data.pop("method_strings", [])
         method_codes = data.pop("method_codes", [])
         methods = method_strings + method_codes
@@ -109,7 +109,7 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
     )
 
     @property
-    def load_type(self) -> Type[Patient]:
+    def load_type(self) -> type[Patient]:
         return Patient
 
     @pre_dump
@@ -130,7 +130,7 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
         return fields
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs):
         species_description_string = data.pop("species_description_string", None)
         species_description_code = data.pop("species_description_code", None)
         if species_description_code is not None:

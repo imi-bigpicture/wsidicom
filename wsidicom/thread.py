@@ -14,7 +14,7 @@
 
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 ReturnType = TypeVar("ReturnType")
 
@@ -23,7 +23,7 @@ class ConditionalThreadPoolExecutor(ThreadPoolExecutor):
     """ThreadPoolExecutor that uses a single thread if max workers is 1."""
 
     def __init__(
-        self, max_workers: Optional[int] = None, force_iteration: bool = False, **kwargs
+        self, max_workers: int | None = None, force_iteration: bool = False, **kwargs
     ) -> None:
         self._force_iteration = force_iteration
         super().__init__(max_workers, **kwargs)
@@ -32,7 +32,7 @@ class ConditionalThreadPoolExecutor(ThreadPoolExecutor):
         self,
         fn: Callable[..., ReturnType],
         *iterables: Iterable[Any],
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         chunksize: int = 1,
     ) -> Iterator[ReturnType]:
         if self._max_workers == 1:

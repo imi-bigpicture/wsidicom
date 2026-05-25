@@ -14,7 +14,7 @@
 
 
 import datetime
-from typing import Iterator, List, Optional, Sequence, Union
+from collections.abc import Iterator, Sequence
 
 from pydicom import Dataset
 from pydicom.sequence import Sequence as DicomSequence
@@ -114,7 +114,7 @@ def assert_dicom_bool_equals_bool(dicom_bool: str, expected_bool: bool):
 
 
 def assert_dicom_code_dataset_equals_code(
-    code_dataset: Dataset, expected_code: Union[Code, ConceptCode]
+    code_dataset: Dataset, expected_code: Code | ConceptCode
 ):
     assert code_dataset.CodeValue == expected_code.value
     assert code_dataset.CodingSchemeDesignator == expected_code.scheme_designator
@@ -126,10 +126,10 @@ def assert_dicom_code_dataset_equals_code(
 
 
 def assert_dicom_code_sequence_equals_codes(
-    code_sequence: Sequence[Dataset], expected_codes: Sequence[Union[Code, ConceptCode]]
+    code_sequence: Sequence[Dataset], expected_codes: Sequence[Code | ConceptCode]
 ):
     assert len(code_sequence) == len(expected_codes)
-    for code_dataset, expected_code in zip(code_sequence, expected_codes):
+    for code_dataset, expected_code in zip(code_sequence, expected_codes, strict=False):
         assert_dicom_code_dataset_equals_code(code_dataset, expected_code)
 
 
@@ -192,7 +192,7 @@ def assert_dicom_overview_equals_overview(dicom_overview: Dataset, overview: Ove
 
 
 def assert_dicom_pixel_spacing_equals_pixel_spacing(
-    dicom: Dataset, pixel_spacing: Optional[SizeMm]
+    dicom: Dataset, pixel_spacing: SizeMm | None
 ):
     if pixel_spacing is not None:
         assert "SharedFunctionalGroupsSequence" in dicom
@@ -206,7 +206,7 @@ def assert_dicom_pixel_spacing_equals_pixel_spacing(
 
 
 def assert_dicom_focal_plane_spacing_equals_pixel_spacing(
-    dicom: Dataset, focal_plane_spacing: Optional[float]
+    dicom: Dataset, focal_plane_spacing: float | None
 ):
     if focal_plane_spacing is not None:
         assert "SharedFunctionalGroupsSequence" in dicom
@@ -217,7 +217,7 @@ def assert_dicom_focal_plane_spacing_equals_pixel_spacing(
 
 
 def assert_dicom_depth_of_field_equals_depth_of_field(
-    dicom: Dataset, depth_of_field: Optional[float]
+    dicom: Dataset, depth_of_field: float | None
 ):
     if depth_of_field is not None:
         assert "SharedFunctionalGroupsSequence" in dicom
@@ -228,7 +228,7 @@ def assert_dicom_depth_of_field_equals_depth_of_field(
 
 
 def assert_dicom_image_coordinate_system_equals_image_coordinate_system(
-    dicom: Dataset, image_coordinate_system: Optional[ImageCoordinateSystem]
+    dicom: Dataset, image_coordinate_system: ImageCoordinateSystem | None
 ):
     if image_coordinate_system is not None:
         assert (
@@ -250,7 +250,7 @@ def assert_dicom_image_coordinate_system_equals_image_coordinate_system(
 
 
 def assert_dicom_lossy_compression_equals_lossy_compressions(
-    dicom: Dataset, lossy_compressions: Optional[Sequence[LossyCompression]]
+    dicom: Dataset, lossy_compressions: Sequence[LossyCompression] | None
 ):
     if lossy_compressions is not None:
         assert "LossyImageCompressionMethod" in dicom
@@ -268,6 +268,7 @@ def assert_dicom_lossy_compression_equals_lossy_compressions(
             lossy_compressions,
             dicom_methods,
             dicom_ratios,
+            strict=False,
         ):
             assert lossy_compression.method.value == dicom_method
             assert lossy_compression.ratio == dicom_ratio
@@ -415,9 +416,7 @@ def assert_dicom_patient_equals_patient(dicom_patient: Dataset, patient: Patient
                 for method in patient.de_identification.methods
                 if isinstance(method, str)
             ]
-            if len(string_methods) == 1:
-                assert dicom_patient.DeidentificationMethod == string_methods[0]
-            elif len(string_methods) > 1:
+            if len(string_methods) == 1 or len(string_methods) > 1:
                 assert dicom_patient.DeidentificationMethod == string_methods[0]
             code_methods = [
                 method
@@ -456,7 +455,7 @@ def assert_item_datetime_equals_value(item: Dataset, value: datetime.datetime):
     assert item.DateTime == value
 
 
-def assert_item_code_equals_value(item: Dataset, value: Union[Code, ConceptCode]):
+def assert_item_code_equals_value(item: Dataset, value: Code | ConceptCode):
     assert_code_dataset_equals_code(item.ConceptCodeSequence[0], value)
 
 
@@ -468,7 +467,7 @@ def assert_item_measurement_equals_value(item: Dataset, value: Measurement):
     )
 
 
-def assert_code_dataset_equals_code(item: Dataset, code: Union[Code, ConceptCode]):
+def assert_code_dataset_equals_code(item: Dataset, code: Code | ConceptCode):
     assert item.CodeValue == code.value, (item.CodeMeaning, code.meaning)
     assert item.CodingSchemeDesignator == code.scheme_designator, (
         item.CodeMeaning,
@@ -483,7 +482,7 @@ def assert_next_item_equals_string(iterator: Iterator[Dataset], name: Code, valu
 
 
 def assert_next_item_equals_code(
-    iterator: Iterator[Dataset], name: Code, value: Union[Code, ConceptCode]
+    iterator: Iterator[Dataset], name: Code, value: Code | ConceptCode
 ):
     item = next(iterator)
     assert_item_name_equals_code(item, name)
@@ -508,7 +507,7 @@ def assert_next_item_equals_measurement(
 
 def create_initial_common_preparation_step_items(
     dicom_model: SpecimenPreparationStepDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     items = create_identifier_items(identifier)
     if dicom_model.container is not None:
@@ -540,7 +539,7 @@ def create_initial_common_preparation_step_items(
 def create_final_common_preparation_step_items(
     dicom_model: SpecimenPreparationStepDicomModel,
 ):
-    items: List[Dataset] = []
+    items: list[Dataset] = []
     if dicom_model.fixative is not None:
         items.append(create_code_item(SampleCodes.fixative, dicom_model.fixative))
     if dicom_model.embedding is not None:
@@ -550,7 +549,7 @@ def create_final_common_preparation_step_items(
 
 def create_collection_dataset(
     collection_dicom: CollectionDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     dataset = Dataset()
     items = create_initial_common_preparation_step_items(collection_dicom, identifier)
@@ -563,7 +562,7 @@ def create_collection_dataset(
 
 
 def create_sampling_dataset(
-    sampling_dicom: SamplingDicomModel, identifier: Union[str, SpecimenIdentifier]
+    sampling_dicom: SamplingDicomModel, identifier: str | SpecimenIdentifier
 ):
     dataset = Dataset()
     items = create_initial_common_preparation_step_items(sampling_dicom, identifier)
@@ -625,7 +624,7 @@ def create_sampling_dataset(
 
 def create_processing_dataset(
     processing_dicom: ProcessingDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     dataset = Dataset()
     items = create_initial_common_preparation_step_items(processing_dicom, identifier)
@@ -636,7 +635,7 @@ def create_processing_dataset(
 
 def create_staining_dataset(
     staining_dicom: StainingDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     dataset = Dataset()
     items = create_initial_common_preparation_step_items(staining_dicom, identifier)
@@ -658,7 +657,7 @@ def create_staining_dataset(
 
 def create_receiving_dataset(
     receiving_dicom: ReceivingDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     dataset = Dataset()
     items = create_initial_common_preparation_step_items(receiving_dicom, identifier)
@@ -669,7 +668,7 @@ def create_receiving_dataset(
 
 def create_storage_dataset(
     storage_dicom: StorageDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
 ):
     dataset = Dataset()
     items = create_initial_common_preparation_step_items(storage_dicom, identifier)
@@ -690,9 +689,9 @@ def create_specimen_preparation_sequence(
     block_sampling_method: SpecimenSamplingProcedureCode,
     block_type: AnatomicPathologySpecimenTypesCode,
     sampling_location: SamplingLocation,
-    stains: Union[str, Sequence[SpecimenStainsCode]],
-    specimen_container: Optional[ContainerTypeCode] = None,
-    block_container: Optional[ContainerTypeCode] = None,
+    stains: str | Sequence[SpecimenStainsCode],
+    specimen_container: ContainerTypeCode | None = None,
+    block_container: ContainerTypeCode | None = None,
 ):
     collection = create_collection_dataset(
         CollectionDicomModel(
@@ -766,12 +765,12 @@ def create_specimen_preparation_sequence(
 def create_description_dataset(
     slide_sample_id: str,
     slide_sample_uid: UID,
-    primary_anatomic_structures: Optional[Sequence[Code]] = None,
-    sample_localization: Optional[SampleLocalization] = None,
-    short_description: Optional[str] = None,
-    detailed_description: Optional[str] = None,
-    preparation_step_datasets: Optional[Sequence[Dataset]] = None,
-    slide_sample_issuer: Optional[IssuerOfIdentifier] = None,
+    primary_anatomic_structures: Sequence[Code] | None = None,
+    sample_localization: SampleLocalization | None = None,
+    short_description: str | None = None,
+    detailed_description: str | None = None,
+    preparation_step_datasets: Sequence[Dataset] | None = None,
+    slide_sample_issuer: IssuerOfIdentifier | None = None,
 ):
     description = Dataset()
     description.SpecimenIdentifier = slide_sample_id
@@ -855,7 +854,7 @@ def create_description_dataset(
     return description
 
 
-def create_identifier_items(identifier: Union[str, SpecimenIdentifier]):
+def create_identifier_items(identifier: str | SpecimenIdentifier):
     identifier_item = create_string_item(
         SampleCodes.identifier,
         identifier if isinstance(identifier, str) else identifier.value,
@@ -869,7 +868,7 @@ def create_identifier_items(identifier: Union[str, SpecimenIdentifier]):
     return [identifier_item, issuer_item]
 
 
-def create_code_dataset(code: Union[Code, ConceptCode]):
+def create_code_dataset(code: Code | ConceptCode):
     dataset = Dataset()
     dataset.CodeValue = code.value
     dataset.CodingSchemeDesignator = code.scheme_designator
@@ -895,7 +894,7 @@ def create_datetime_item(name: Code, value: datetime.datetime):
     return dataset
 
 
-def create_code_item(name: Code, value: Union[Code, ConceptCode]):
+def create_code_item(name: Code, value: Code | ConceptCode):
     dataset = Dataset()
     dataset.ValueType = "CODE"
     dataset.ConceptNameCodeSequence = [create_code_dataset(name)]
@@ -935,7 +934,7 @@ def create_processing_type_item(step: SpecimenPreparationStepDicomModel):
     return dataset
 
 
-def create_specimen_preparation_dataset(step: List[Dataset]):
+def create_specimen_preparation_dataset(step: list[Dataset]):
     dataset = Dataset()
     dataset.SpecimenPreparationStepContentItemSequence = step
     return dataset
@@ -944,7 +943,7 @@ def create_specimen_preparation_dataset(step: List[Dataset]):
 def assert_initial_common_preparation_step_items(
     item_iterator: Iterator[Dataset],
     dicom_model: SpecimenPreparationStepDicomModel,
-    identifier: Union[str, SpecimenIdentifier],
+    identifier: str | SpecimenIdentifier,
     processing_type: Code,
 ):
     assert_next_item_equals_string(

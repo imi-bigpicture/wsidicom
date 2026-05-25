@@ -12,8 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List
 
 import pytest
 from PIL import ImageChops, ImageFilter, ImageStat
@@ -55,7 +55,7 @@ class TestWsiDicomFileTargetIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
-        include_levels: List[int],
+        include_levels: list[int],
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)

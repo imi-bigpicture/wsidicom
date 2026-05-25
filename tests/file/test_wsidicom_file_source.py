@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 from pathlib import Path
-from typing import Tuple
 
 import pytest
 from pydicom.fileset import FileSet
@@ -27,7 +26,7 @@ class TestWsiDicomFileSource:
     @pytest.mark.parametrize(
         "wsi_folder_and_counts", WsiTestDefinitions.folders_and_counts()
     )
-    def test_open(self, wsi_folder_and_counts: Tuple[Path, int, bool, bool]):
+    def test_open(self, wsi_folder_and_counts: tuple[Path, int, bool, bool]):
         # Arrange
         wsi_folder, level_count, label, overview = wsi_folder_and_counts
 

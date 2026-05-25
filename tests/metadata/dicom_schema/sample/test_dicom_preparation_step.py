@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 import datetime
-from typing import Optional, Union
 
 import marshmallow
 import pytest
@@ -114,7 +113,7 @@ class TestPreparationStepDicomSchema:
     def test_serialize_collection_dicom(
         self,
         collection_dicom: CollectionDicomModel,
-        identifier: Union[str, SpecimenIdentifier],
+        identifier: str | SpecimenIdentifier,
     ):
         # Arrange
         schema = CollectionDicomSchema()
@@ -182,7 +181,7 @@ class TestPreparationStepDicomSchema:
     def test_serialize_sampling_dicom(
         self,
         sampling_dicom: SamplingDicomModel,
-        identifier: Union[str, SpecimenIdentifier],
+        identifier: str | SpecimenIdentifier,
     ):
         # Arrange
         schema = SamplingDicomSchema()
@@ -308,7 +307,7 @@ class TestPreparationStepDicomSchema:
     def test_serialize_processing_dicom(
         self,
         processing_dicom: ProcessingDicomModel,
-        identifier: Union[str, SpecimenIdentifier],
+        identifier: str | SpecimenIdentifier,
     ):
         # Arrange
         schema = ProcessingDicomSchema()
@@ -357,7 +356,7 @@ class TestPreparationStepDicomSchema:
     def test_serialize_staining_dicom(
         self,
         staining_dicom: StainingDicomModel,
-        identifier: Union[str, SpecimenIdentifier],
+        identifier: str | SpecimenIdentifier,
     ):
         # Arrange
         schema = StainingDicomSchema()
@@ -416,7 +415,7 @@ class TestPreparationStepDicomSchema:
     def test_serialize_receiving_dicom(
         self,
         receiving_dicom: ReceivingDicomModel,
-        identifier: Union[str, SpecimenIdentifier],
+        identifier: str | SpecimenIdentifier,
     ):
         # Arrange
         schema = ReceivingDicomSchema()
@@ -463,7 +462,7 @@ class TestPreparationStepDicomSchema:
     def test_serialize_storage_dicom(
         self,
         storage_dicom: StorageDicomModel,
-        identifier: Union[str, SpecimenIdentifier],
+        identifier: str | SpecimenIdentifier,
     ):
         # Arrange
         schema = StorageDicomSchema()
@@ -624,12 +623,12 @@ class TestSampleLocalizationDicomSchema:
     @pytest.mark.parametrize("visual_marking", ["visual_marking", None])
     def test_serialize_specimen_location_dicom(
         self,
-        reference: Optional[str],
-        description: Optional[str],
-        x: Optional[Measurement],
-        y: Optional[Measurement],
-        z: Optional[Measurement],
-        visual_marking: Optional[str],
+        reference: str | None,
+        description: str | None,
+        x: Measurement | None,
+        y: Measurement | None,
+        z: Measurement | None,
+        visual_marking: str | None,
     ):
         # Arrange
         location = SampleLocalization(
@@ -681,12 +680,12 @@ class TestSampleLocalizationDicomSchema:
     @pytest.mark.parametrize("visual_marking", ["visual_marking", None])
     def test_deserialize_specimen_location_dicom(
         self,
-        reference: Optional[str],
-        description: Optional[str],
-        x: Optional[Measurement],
-        y: Optional[Measurement],
-        z: Optional[Measurement],
-        visual_marking: Optional[str],
+        reference: str | None,
+        description: str | None,
+        x: Measurement | None,
+        y: Measurement | None,
+        z: Measurement | None,
+        visual_marking: str | None,
     ):
         # Arrange
         sequence = []

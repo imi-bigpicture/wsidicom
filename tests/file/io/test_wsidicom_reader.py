@@ -14,7 +14,7 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from pydicom import Dataset, dcmread
@@ -87,7 +87,7 @@ def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
 class TestWWsiDicomReader:
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_offset_table_type_property(
-        self, test_file: WsiDicomReader, settings: Dict[str, Any]
+        self, test_file: WsiDicomReader, settings: dict[str, Any]
     ):
         # Arrange
 
@@ -99,7 +99,7 @@ class TestWWsiDicomReader:
 
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_tile_type_property(
-        self, test_file: WsiDicomReader, settings: Dict[str, Any]
+        self, test_file: WsiDicomReader, settings: dict[str, Any]
     ):
         # Arrange
 
@@ -184,7 +184,7 @@ class TestWWsiDicomReader:
 
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_get_offset_table_type(
-        self, test_file: WsiDicomReader, settings: Dict[str, Any]
+        self, test_file: WsiDicomReader, settings: dict[str, Any]
     ):
         # Arrange
 

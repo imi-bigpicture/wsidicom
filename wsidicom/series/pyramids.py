@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Dict, Iterable, List, Optional, Tuple
+from collections.abc import Iterable
 
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomNotFoundError
@@ -50,7 +50,7 @@ class Pyramids:
         try:
             return self[index]
         except IndexError:
-            raise WsiDicomNotFoundError(f"Pyramid index {index}", "pyramids")
+            raise WsiDicomNotFoundError(f"Pyramid index {index}", "pyramids") from None
 
     @classmethod
     def open(
@@ -88,9 +88,11 @@ class Pyramids:
         return cls(pyramids)
 
     @classmethod
-    def _group_instances_into_pyramids(cls, instances: Iterable[WsiInstance]) -> Dict[
-        Tuple[Optional[Tuple[float, float, float]], Optional[Tuple[int, float]]],
-        List[WsiInstance],
+    def _group_instances_into_pyramids(
+        cls, instances: Iterable[WsiInstance]
+    ) -> dict[
+        tuple[tuple[float, float, float] | None, tuple[int, float] | None],
+        list[WsiInstance],
     ]:
         """Return instances grouped and sorted by pyramid.
 
@@ -101,16 +103,16 @@ class Pyramids:
 
         Returns
         -------
-        Dict[
-            Tuple[Optional[Tuple[float, float, float]], Optional[Tuple[int, float]]],
-            List[WsiInstance],
+        dict[
+            tuple[tuple[float, float, float] | None, tuple[int, float] | None],
+            list[WsiInstance],
         ]
             Instances grouped by image coordinate system and depth of field.
 
         """
-        grouped_instances: Dict[
-            Tuple[Optional[Tuple[float, float, float]], Optional[Tuple[int, float]]],
-            List[WsiInstance],
+        grouped_instances: dict[
+            tuple[tuple[float, float, float] | None, tuple[int, float] | None],
+            list[WsiInstance],
         ] = defaultdict(list)
         for instance in sorted(
             instances, key=lambda x: x.size.to_tuple(), reverse=True

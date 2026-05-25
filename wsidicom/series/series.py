@@ -14,16 +14,10 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
+from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 from typing import (
-    Dict,
     Generic,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Type,
     TypeVar,
 )
 
@@ -46,7 +40,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
     pyramidal levels, labels, or overviews.
     """
 
-    _group_type: Type[GroupType]
+    _group_type: type[GroupType]
 
     def __init__(self, groups: Iterable[GroupType]):
         """Create a Series from list of Groups.
@@ -87,7 +81,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
         try:
             return self[index]
         except IndexError:
-            raise WsiDicomNotFoundError(f"Group index {index}", "series")
+            raise WsiDicomNotFoundError(f"Group index {index}", "series") from None
 
     def __len__(self) -> int:
         return len(self._groups)
@@ -100,37 +94,37 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
         raise NotImplementedError()
 
     @property
-    def groups(self) -> List[GroupType]:
+    def groups(self) -> list[GroupType]:
         """Return contained groups."""
         return self._groups
 
     @property
-    def uids(self) -> Optional[SlideUids]:
+    def uids(self) -> SlideUids | None:
         """Return uids."""
         return self._uids
 
     @property
-    def mpps(self) -> List[SizeMm]:
+    def mpps(self) -> list[SizeMm]:
         """Return contained mpp (um/px)."""
         return [group.mpp for group in self if group.mpp is not None]
 
     @property
-    def datasets(self) -> List[WsiDataset]:
+    def datasets(self) -> list[WsiDataset]:
         """Return contained datasets."""
 
         series_datasets = [series.datasets for series in self]
         return [dataset for sublist in series_datasets for dataset in sublist]
 
     @property
-    def instances(self) -> List[WsiInstance]:
+    def instances(self) -> list[WsiInstance]:
         """Return contained instances"""
         series_instances = [series.instances.values() for series in self]
         return [instance for sublist in series_instances for instance in sublist]
 
     @classmethod
     def open(
-        cls: Type[SeriesType], instances: Iterable[WsiInstance]
-    ) -> Optional[SeriesType]:
+        cls: type[SeriesType], instances: Iterable[WsiInstance]
+    ) -> SeriesType | None:
         """Return series created from instances.
 
         Parameters
@@ -140,7 +134,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
 
         Returns
         -------
-        Optional[SeriesType]
+        SeriesType | None
             Created series.
         """
         instances_grouped_by_size = cls._group_instances_by_size(instances)
@@ -149,7 +143,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
             return None
         return cls(groups)
 
-    def get_closest_by_size(self, size: Size) -> Optional[GroupType]:
+    def get_closest_by_size(self, size: Size) -> GroupType | None:
         """Search for group that by size is closest to and larger than the
         given size.
 
@@ -160,7 +154,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
 
         Returns
         -------
-        Optional[Group]
+        Group | None
             The group with size closest to searched size, or None if no group is
             larger than or equal to the searched size.
         """
@@ -179,7 +173,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
     @classmethod
     def _group_instances_by_size(
         cls, instances: Iterable[WsiInstance]
-    ) -> Iterator[List[WsiInstance]]:
+    ) -> Iterator[list[WsiInstance]]:
         """Return instances grouped and sorted by image size.
 
         Parameters
@@ -189,11 +183,11 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
 
         Returns
         -------
-        Iterator[List[WsiInstance]]:
+        Iterator[list[WsiInstance]]:
             Instances grouped by size.
 
         """
-        grouped_instances: Dict[Size, List[WsiInstance]] = defaultdict(list)
+        grouped_instances: dict[Size, list[WsiInstance]] = defaultdict(list)
         for instance in instances:
             grouped_instances[instance.size].append(instance)
         return (
@@ -203,7 +197,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
             )
         )
 
-    def _validate_series(self, groups: Sequence[GroupType]) -> Optional[SlideUids]:
+    def _validate_series(self, groups: Sequence[GroupType]) -> SlideUids | None:
         """Check that no files or instances in series is duplicate and that
         all groups in series matches.
         Raises WsiDicomMatchError otherwise.
@@ -211,12 +205,12 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
 
         Parameters
         ----------
-        groups: Union[Sequence[Group], Sequence[Level]]
+        groups: Sequence[Group] | Sequence[Level]
             List of groups or levels to check
 
         Returns
         -------
-        Optional[SlideUids]:
+        SlideUids | None:
             Matching uids
         """
         WsiDataset.check_duplicate_dataset(self.datasets, self)

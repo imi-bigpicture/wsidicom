@@ -15,10 +15,11 @@
 """Image model."""
 
 import datetime
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 from math import sqrt
-from typing import ClassVar, Optional, Sequence, TypeVar
+from typing import ClassVar, Optional, TypeVar
 
 from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.geometry import Orientation, PointMm, RegionMm, SizeMm
@@ -69,13 +70,13 @@ class ImageCoordinateSystem:
         The position of the top left pixel in the slide coorindate system.
     rotation : float
         The rotation of the image in degrees in the slide coordinate system.
-    z_offset : Optional[float]
+    z_offset : float | None
         The z offset of the image in the slide coordinate system.
     """
 
     origin: PointMm
     rotation: float
-    z_offset: Optional[float] = None
+    z_offset: float | None = None
 
     # Standard glass microscope slide geometry. The label area occupies the top 25 mm
     # of the slide, so the imaged (non-label) part is 25 x 50 mm and the full slide is
@@ -163,7 +164,7 @@ class ImageCoordinateSystem:
         slide_middle: PointMm,
         image_size: SizeMm,
         rotation: float,
-        z_offset: Optional[float],
+        z_offset: float | None,
     ) -> "ImageCoordinateSystem":
         """Create an image coordinate system that places the image in the middle of the
         slide.
@@ -176,7 +177,7 @@ class ImageCoordinateSystem:
             The size of the image.
         rotation : float
             The rotation of the image in degrees.
-        z_offset : Optional[float]
+        z_offset : float | None
             The z offset of the image.
 
         Returns
@@ -202,9 +203,9 @@ class ImageCoordinateSystem:
         cls,
         rotation: float,
         image_type: ImageType,
-        z_offset: Optional[float] = None,
-        slide_size_without_label: Optional[SizeMm] = None,
-        slide_size_with_label: Optional[SizeMm] = None,
+        z_offset: float | None = None,
+        slide_size_without_label: SizeMm | None = None,
+        slide_size_with_label: SizeMm | None = None,
     ) -> "ImageCoordinateSystem":
         """Create a default image coordinate system for an image of ``image_type``.
 
@@ -219,12 +220,12 @@ class ImageCoordinateSystem:
             The rotation of the image in degrees. One of 0, 90, 180 or 270.
         image_type : ImageType
             The type of image to place on the slide.
-        z_offset : Optional[float]
+        z_offset : float | None
             The z offset of the image.
-        slide_size_without_label : Optional[SizeMm]
+        slide_size_without_label : SizeMm | None
             Size of the non-label part of the slide. Defaults to a standard slide
             (``SLIDE_SIZE_WITHOUT_LABEL``), e.g. for large-format scanners.
-        slide_size_with_label : Optional[SizeMm]
+        slide_size_with_label : SizeMm | None
             Size of the full slide including the label area. Defaults to a standard
             slide (``SLIDE_SIZE_WITH_LABEL``).
 
@@ -317,32 +318,32 @@ class Image:
 
     Parameters
     ----------
-    acquisition_datetime : Optional[datetime.datetime] = None
+    acquisition_datetime : datetime.datetime | None = None
         The acquisition datetime of the image.
-    focus_method : Optional[FocusMethod] = None
+    focus_method : FocusMethod | None = None
         The focus method used for imaging.
-    extended_depth_of_field : Optional[ExtendedDepthOfField] = None
+    extended_depth_of_field : ExtendedDepthOfField | None = None
         Describes if extended depth of field has been used for imaging.
-    image_coordinate_system : Optional[ImageCoordinateSystem] = None
+    image_coordinate_system : ImageCoordinateSystem | None = None
         The image coordinate system in relation the slide frame of reference.
-    pixel_spacing : Optional[SizeMm] = None
+    pixel_spacing : SizeMm | None = None
         The pixel spacing in mm per pixel.
-    focal_plane_spacing : Optional[float] = None
+    focal_plane_spacing : float | None = None
         The spacing between focal planes if image with multiple focal planes.
-    depth_of_field : Optional[float] = None
+    depth_of_field : float | None = None
         The depth of field of the image.
-    lossy_compressions : Optional[Sequence[LossyCompression]] = None
+    lossy_compressions : Sequence[LossyCompression] | None = None
         The lossy compressions method that has been applied to the image data.
     """
 
-    acquisition_datetime: Optional[datetime.datetime] = None
-    focus_method: Optional[FocusMethod] = None
-    extended_depth_of_field: Optional[ExtendedDepthOfField] = None
-    image_coordinate_system: Optional[ImageCoordinateSystem] = None
-    pixel_spacing: Optional[SizeMm] = None
-    focal_plane_spacing: Optional[float] = None
-    depth_of_field: Optional[float] = None
-    lossy_compressions: Optional[Sequence[LossyCompression]] = None
+    acquisition_datetime: datetime.datetime | None = None
+    focus_method: FocusMethod | None = None
+    extended_depth_of_field: ExtendedDepthOfField | None = None
+    image_coordinate_system: ImageCoordinateSystem | None = None
+    pixel_spacing: SizeMm | None = None
+    focal_plane_spacing: float | None = None
+    depth_of_field: float | None = None
+    lossy_compressions: Sequence[LossyCompression] | None = None
 
     def remove_confidential(self) -> "Image":
         return replace(

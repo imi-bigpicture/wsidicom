@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import datetime
-from typing import List, Sequence
+from collections.abc import Sequence
 
 import pytest
 from pydicom import Dataset
@@ -256,7 +256,7 @@ class TestExampleSpecimenModule:
         staining_substances: Sequence[SpecimenStainsCode],
     ):
         # Arrange
-        steps: List[List[Dataset]] = [
+        steps: list[list[Dataset]] = [
             # Part Collection in OR
             [
                 create_string_item(SampleCodes.identifier, specimen_identifier),

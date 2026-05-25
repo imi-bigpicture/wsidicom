@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 from datetime import datetime
-from typing import Optional
 
 import pytest
 from pydicom import Dataset
@@ -46,8 +45,8 @@ from wsidicom.metadata import (
     FocusMethod,
     Image,
     ImageCoordinateSystem,
-    ImageType,
     ImagePathFilter,
+    ImageType,
     Label,
     LightPathFilter,
     LocalIssuerOfIdentifier,
@@ -637,7 +636,7 @@ class TestDicomSchema:
         )
         assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
         for specimen_description, sample in zip(
-            serialized.SpecimenDescriptionSequence, expected_samples
+            serialized.SpecimenDescriptionSequence, expected_samples, strict=False
         ):
             assert specimen_description.SpecimenIdentifier == sample.identifier
             assert specimen_description.SpecimenUID == sample.uid
@@ -659,7 +658,7 @@ class TestDicomSchema:
         )
         assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
         for specimen_description, sample in zip(
-            serialized.SpecimenDescriptionSequence, expected_samples
+            serialized.SpecimenDescriptionSequence, expected_samples, strict=False
         ):
             assert specimen_description.SpecimenIdentifier == sample.identifier
 
@@ -778,7 +777,7 @@ class TestDicomSchema:
             else:
                 assert len(serialized.OpticalPathSequence) == len(label.optical_paths)
                 for dicom_optical_path, optical_path in zip(
-                    serialized.OpticalPathSequence, label.optical_paths
+                    serialized.OpticalPathSequence, label.optical_paths, strict=False
                 ):
                     assert_dicom_optical_path_equals_optical_path(
                         dicom_optical_path,
@@ -879,7 +878,7 @@ class TestDicomSchema:
     @pytest.mark.parametrize("z_offset", [1.0, None])
     def test_serialize_image_coordinate_system(
         self,
-        z_offset: Optional[float],
+        z_offset: float | None,
     ):
         # Arrange
         image_coordinate_system = ImageCoordinateSystem(
@@ -919,9 +918,9 @@ class TestDicomSchema:
     @pytest.mark.parametrize("z_offset", [1.0, None])
     def test_deserialize_image_coordinate_system(
         self,
-        origin: Optional[PointMm],
-        orientation: Optional[Orientation],
-        z_offset: Optional[float],
+        origin: PointMm | None,
+        orientation: Orientation | None,
+        z_offset: float | None,
     ):
         # Arrange
         dataset = Dataset()

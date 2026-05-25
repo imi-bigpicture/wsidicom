@@ -15,7 +15,6 @@
 """Class for reading frame positions from non-encapsulated data."""
 
 import math
-from typing import List, Tuple
 
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
@@ -46,7 +45,7 @@ class NativePixelDataFrameIndexParser(FrameIndexParser):
         self._validate_pixel_data_start()
         return self._file.tell()
 
-    def _get_index(self) -> List[Tuple[int, int]]:
+    def _get_index(self) -> list[tuple[int, int]]:
         """Create frame positions for uncapsulated data.
 
         Parameters
@@ -56,7 +55,7 @@ class NativePixelDataFrameIndexParser(FrameIndexParser):
 
         Returns
         -------
-        List[Tuple[int, int]]
+        list[tuple[int, int]]
             A list with frame positions and frame lengths.
         """
         frame_size = self._tile_size.area * self._samples_per_pixel * (self._bits // 8)

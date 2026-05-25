@@ -16,10 +16,11 @@ import json
 import os
 import random
 import sys
+from collections.abc import Iterable
 from enum import Enum
 from io import BufferedReader
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 import pytest
 from dicomweb_client import DICOMfileClient
@@ -53,7 +54,7 @@ class WsiTestDefinitions:
     """Interface for reading test parameters from definition file."""
 
     with open(REGION_DEFINITIONS_FILE) as json_file:
-        test_definitions: Dict[str, Dict[str, Any]] = json.load(json_file)
+        test_definitions: dict[str, dict[str, Any]] = json.load(json_file)
     if len(test_definitions) == 0:
         pytest.skip("No test definition found, skipping.")
 
@@ -62,7 +63,7 @@ class WsiTestDefinitions:
         return (SLIDE_FOLDER.joinpath(path) for _, path in cls._get_parameter("path"))
 
     @classmethod
-    def folders_and_counts(cls) -> Iterable[Tuple[Path, int, bool, bool]]:
+    def folders_and_counts(cls) -> Iterable[tuple[Path, int, bool, bool]]:
         return (
             (
                 SLIDE_FOLDER.joinpath(wsi_definition["path"]),
@@ -74,7 +75,7 @@ class WsiTestDefinitions:
         )
 
     @classmethod
-    def folders_and_instance_counts(cls) -> Iterable[Tuple[Path, int]]:
+    def folders_and_instance_counts(cls) -> Iterable[tuple[Path, int]]:
         return (
             (
                 SLIDE_FOLDER.joinpath(wsi_definition["path"]),
@@ -84,7 +85,7 @@ class WsiTestDefinitions:
         )
 
     @classmethod
-    def wsi_names(cls, tiling: Optional[str] = None) -> Iterable[str]:
+    def wsi_names(cls, tiling: str | None = None) -> Iterable[str]:
         return (
             key
             for key, value in cls.test_definitions.items()
@@ -92,51 +93,51 @@ class WsiTestDefinitions:
         )
 
     @classmethod
-    def read_region(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+    def read_region(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_region", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_region_mm(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+    def read_region_mm(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_region_mm", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_region_mpp(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+    def read_region_mpp(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_region_mpp", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_tile(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+    def read_tile(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_tile", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_encoded_tile(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+    def read_encoded_tile(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_encoded_tile", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_thumbnail(cls) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+    def read_thumbnail(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_thumbnail", "level_transfer_syntax"
         )
 
     @classmethod
-    def levels(cls) -> Iterable[Tuple[str, int]]:
+    def levels(cls) -> Iterable[tuple[str, int]]:
         return cls._get_parameter("levels")
 
     @classmethod
-    def label_hash(cls) -> Iterable[Tuple[str, UID, Optional[str]]]:
+    def label_hash(cls) -> Iterable[tuple[str, UID, str | None]]:
         return cls._get_parameter_and_transfer_syntax("label", "label_transfer_syntax")
 
     @classmethod
-    def overview_hash(cls) -> Iterable[Tuple[str, UID, Optional[str]]]:
+    def overview_hash(cls) -> Iterable[tuple[str, UID, str | None]]:
         return cls._get_parameter_and_transfer_syntax(
             "overview", "overview_transfer_syntax"
         )
@@ -144,7 +145,7 @@ class WsiTestDefinitions:
     @classmethod
     def _get_test_values_and_transfer_syntax(
         cls, test_value_name: str, transfer_syntax_name: str
-    ) -> Iterable[Tuple[str, UID, Dict[str, Any]]]:
+    ) -> Iterable[tuple[str, UID, dict[str, Any]]]:
         return [
             (wsi_name, UID(wsi_definition[transfer_syntax_name]), region)
             for wsi_name, wsi_definition in cls.test_definitions.items()
@@ -154,7 +155,7 @@ class WsiTestDefinitions:
     @classmethod
     def _get_parameter_and_transfer_syntax(
         cls, parameter_name: str, transfer_syntax_name: str
-    ) -> Iterable[Tuple[str, UID, Any]]:
+    ) -> Iterable[tuple[str, UID, Any]]:
         return [
             (
                 wsi_name,
@@ -165,7 +166,7 @@ class WsiTestDefinitions:
         ]
 
     @classmethod
-    def _get_parameter(cls, parameter_name: str) -> Iterable[Tuple[str, Any]]:
+    def _get_parameter(cls, parameter_name: str) -> Iterable[tuple[str, Any]]:
         return [
             (
                 wsi_name,
@@ -193,8 +194,8 @@ def wsi_factory():
     """Fixture providing a callable that takes a wsi name and input type and returns a
     WsiDicom object. Caches opened objects and closes when tests using fixture are done.
     """
-    streams: List[BufferedReader] = []
-    wsis: Dict[Tuple[WsiInputType, Path], WsiDicom] = {}
+    streams: list[BufferedReader] = []
+    wsis: dict[tuple[WsiInputType, Path], WsiDicom] = {}
 
     def open_wsi(
         wsi_name: str, input_type: WsiInputType = WsiInputType.FILE
@@ -298,5 +299,5 @@ def frames(
 
 
 @pytest.fixture()
-def image_data(frames: List[bytes], tiled_size: Size):
+def image_data(frames: list[bytes], tiled_size: Size):
     yield WsiDicomTestImageData(frames, tiled_size)

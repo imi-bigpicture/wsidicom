@@ -15,18 +15,11 @@
 
 import os
 from abc import abstractmethod
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import (
     Any,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
 )
 
 from pydicom.encaps import itemize_frame
@@ -91,22 +84,22 @@ class WsiDicomWriter:
     @classmethod
     def open(
         cls,
-        file: Union[str, Path, UPath],
+        file: str | Path | UPath,
         transfer_syntax: UID,
         offset_table: OffsetTableType,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ) -> "WsiDicomWriter":
         """Open file in path as WsiDicomWriter.
 
         Parameters
         ----------
-        file: Union[str, Path, UPath]
+        file: str | Path | UPath
             Path to file.
         transfer_syntax: UID
             Transfer syntax to use.
         offset_table: OffsetTableType
             Offset table to use.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Keyword arguments for opening files.
 
         Returns
@@ -124,12 +117,12 @@ class WsiDicomWriter:
         self,
         uid: UID,
         dataset: WsiDataset,
-        data: Dict[Tuple[str, float], ImageData],
+        data: dict[tuple[str, float], ImageData],
         workers: int,
         chunk_size: int,
         instance_number: int,
         scale: int = 1,
-        transcoder: Optional[Encoder] = None,
+        transcoder: Encoder | None = None,
     ) -> None:
         """
         Write data to file.
@@ -142,7 +135,7 @@ class WsiDicomWriter:
             Transfer syntax for file
         dataset: WsiDataset
             Dataset to write (excluding pixel data).
-        data: Dict[Tuple[str, float], ImageData]
+        data: dict[tuple[str, float], ImageData]
             Pixel data to write.
         workers: int
             Number of workers to use for writing pixel data.
@@ -154,13 +147,15 @@ class WsiDicomWriter:
             Instance number for file.
         scale: int = 1
             Scale factor.
-        transcoder: Optional[Encoder] = None,
+        transcoder: Encoder | None = None,
             Encoder to use if transcoding pixel data. Default is None to not transcode.
 
         """
-        if transcoder is not None:
-            if transcoder.transfer_syntax != self._transfer_syntax:
-                raise ValueError("Transcoder transfer syntax must match writer.")
+        if (
+            transcoder is not None
+            and transcoder.transfer_syntax != self._transfer_syntax
+        ):
+            raise ValueError("Transcoder transfer syntax must match writer.")
         self._file.write_preamble()
         self._file.write_file_meta_info(
             uid, VLWholeSlideMicroscopyImageStorage, self._transfer_syntax
@@ -183,19 +178,19 @@ class WsiDicomWriter:
     @abstractmethod
     def _write_pixel_data(
         self,
-        data: Dict[Tuple[str, float], ImageData],
+        data: dict[tuple[str, float], ImageData],
         dataset: WsiDataset,
-        dataset_range: Tuple[int, int],
+        dataset_range: tuple[int, int],
         workers: int,
         chunk_size: int,
         scale: int,
-        transcoder: Optional[Encoder],
-    ) -> List[int]:
+        transcoder: Encoder | None,
+    ) -> list[int]:
         """Write pixel data to file.
 
         Parameters
         ----------
-        data: Dict[Tuple[str, float], ImageData]
+        data: dict[tuple[str, float], ImageData]
             Pixel data to write.
         dataset: WsiDataset
             Dataset with parameters for image to write.
@@ -207,7 +202,7 @@ class WsiDicomWriter:
             Number of frames to give each worker.
         scale: int
             Scale factor. Set to 1 for no scaling.
-        transcoder: Optional[Encoder]
+        transcoder: Encoder | None
             Encoder to use if transcoding image.
         """
         raise NotImplementedError()
@@ -227,22 +222,22 @@ class WsiDicomWriter:
         """Return True if writer supports offset table."""
         raise NotImplementedError()
 
-    def close(self, force: Optional[bool] = False) -> None:
+    def close(self, force: bool | None = False) -> None:
         self._file.close(force)
 
     @staticmethod
     def _open_stream(
-        file: Union[str, Path, UPath],
+        file: str | Path | UPath,
         transfer_syntax: UID,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ):
         """Open file in path as WsiDicomIO.
 
         Parameters
         ----------
-        file: Union[str, Path, UPath]
+        file: str | Path | UPath
             Path to file.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Keyword arguments for opening files.
 
         Returns
@@ -262,8 +257,8 @@ class WsiDicomWriter:
         workers: int,
         chunk_size: int,
         scale: int = 1,
-        transcoder: Optional[Encoder] = None,
-    ) -> List[int]:
+        transcoder: Encoder | None = None,
+    ) -> list[int]:
         """Write pixel data to file.
 
         Parameters
@@ -286,13 +281,13 @@ class WsiDicomWriter:
 
         Returns
         -------
-        List[int]
+        list[int]
             List of frame position (position of ItemTag), relative to start of
             file.
         """
         chunked_tile_points = self._chunk_tile_points(image_data, chunk_size, scale)
 
-        def get_tiles(tile_points: Iterable[Point]) -> List[bytes]:
+        def get_tiles(tile_points: Iterable[Point]) -> list[bytes]:
             """Function to get tiles as bytes."""
             return list(
                 image_data.get_encoded_tiles(tile_points, z, path, scale, transcoder)
@@ -350,7 +345,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         file: WsiDicomIO,
         transfer_syntax: UID,
         offset_table: OffsetTableType,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ):
         super().__init__(file, transfer_syntax, offset_table)
         self._file_options = file_options
@@ -358,22 +353,22 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
     @classmethod
     def open(
         cls,
-        file: Union[str, Path, UPath],
+        file: str | Path | UPath,
         transfer_syntax: UID,
         offset_table: OffsetTableType,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ) -> "WsiDicomEncapsulatedWriter":
         """Open file in path as WsiDicomEncapsulatedWriter.
 
         Parameters
         ----------
-        file: Union[str, Path, UPath]
+        file: str | Path | UPath
             Path to file.
         transfer_syntax: UID
             Transfer syntax to use.
         offset_table: OffsetTableType
             Offset table to use.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Keyword arguments for opening files.
 
         Returns
@@ -389,8 +384,8 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         copy_from: WsiDicomIO,
         dataset_end: int,
         pixels_end: int,
-        frame_positions: List[int],
-    ) -> List[int]:
+        frame_positions: list[int],
+    ) -> list[int]:
         """Copy dataset and pixel data from other file to this.
 
         Parameters
@@ -401,12 +396,12 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
             Position of EOT or PixelData tag in copy_from.
         pixels_end: int
             End of PixelData in copy_from.
-        frame_positions: List[int]
+        frame_positions: list[int]
             List of frame positions in copy_from, relative to start of file.
 
         Returns
         -------
-        List[int]
+        list[int]
             List of frame position relative to start of new file.
         """
         # Copy dataset until EOT or PixelData tag
@@ -445,14 +440,14 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
 
     def _write_pixel_data(
         self,
-        data: Dict[Tuple[str, float], ImageData],
+        data: dict[tuple[str, float], ImageData],
         dataset: WsiDataset,
-        dataset_range: Tuple[int, int],
+        dataset_range: tuple[int, int],
         workers: int,
         chunk_size: int,
         scale: int,
-        transcoder: Optional[Encoder],
-    ) -> List[int]:
+        transcoder: Encoder | None,
+    ) -> list[int]:
         (
             pixels_start,
             table_writer,
@@ -501,7 +496,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
     def _write_pixel_data_start(
         self,
         number_of_frames: int,
-    ) -> Tuple[int, Optional[OffsetTableWriter]]:
+    ) -> tuple[int, OffsetTableWriter | None]:
         """Write tags starting pixel data and reserves space for BOT or EOT.
 
         Parameters
@@ -511,7 +506,7 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
 
         Returns
         -------
-        Tuple[int, Optional[OffsetTableWriter]]:
+        tuple[int, OffsetTableWriter | None]:
             Start of pixel data (after BOT) and optional offset table writer.
         """
         table_writer = None
@@ -538,23 +533,23 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
 
     def _write_pixel_data_end(
         self,
-        offset_writer: Optional[OffsetTableWriter],
+        offset_writer: OffsetTableWriter | None,
         pixels_start: int,
         last_frame_end: int,
         dataset_end: int,
-        frame_positions: List[int],
+        frame_positions: list[int],
     ):
         """Write tags ending pixel data and BOT or EOT.
 
         Parameters
         ----------
-        offset_writer: Optional[OffsetTableWriter]
+        offset_writer: OffsetTableWriter | None
             Offset table writer to use.
         pixels_start: int
             Position of start of pixel data.
         dataset_end: int
             Position of EOT or PixelData tag.
-        frame_positions: List[int]
+        frame_positions: list[int]
             List of frame positions in file, relative to start of file.
         """
         self._write_pixel_data_end_tag()
@@ -585,8 +580,8 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
         offset_table: OffsetTableType,
         dataset_end: int,
         pixels_end: int,
-        frame_positions: List[int],
-    ) -> List[int]:
+        frame_positions: list[int],
+    ) -> list[int]:
         """Rewrite file as encapsulated with EOT. Closes current file and replaces
         it with the new a new file.
 
@@ -598,12 +593,12 @@ class WsiDicomEncapsulatedWriter(WsiDicomWriter):
             Position of EOT or PixelData tag in current file.
         pixels_end: int
             End of PixelData in current file.
-        frame_positions: List[int]
+        frame_positions: list[int]
             List of frame positions in current file, relative to start of file.
 
         Returns
         -------
-        List[int]
+        list[int]
             List of frame position relative to start of new file.
         """
         file_path = self._file.filepath
@@ -658,19 +653,19 @@ class WsiDicomNativeWriter(WsiDicomWriter):
     @classmethod
     def open(
         cls,
-        file: Union[str, Path, UPath],
+        file: str | Path | UPath,
         transfer_syntax: UID,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ) -> "WsiDicomNativeWriter":
         """Open file in path as WsiDicomNativeWriter.
 
         Parameters
         ----------
-        file: Union[str, Path, UPath]
+        file: str | Path | UPath
             Path to file.
         transfer_syntax: UID
             Transfer syntax to use.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Keyword arguments for opening files.
 
         Returns
@@ -683,14 +678,14 @@ class WsiDicomNativeWriter(WsiDicomWriter):
 
     def _write_pixel_data(
         self,
-        data: Dict[Tuple[str, float], ImageData],
+        data: dict[tuple[str, float], ImageData],
         dataset: WsiDataset,
-        dataset_range: Tuple[int, int],
+        dataset_range: tuple[int, int],
         workers: int,
         chunk_size: int,
         scale: int,
-        transcoder: Optional[Encoder],
-    ) -> List[int]:
+        transcoder: Encoder | None,
+    ) -> list[int]:
         length = (
             dataset.tile_size.area
             * dataset.samples_per_pixel

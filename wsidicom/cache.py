@@ -13,19 +13,12 @@
 #    limitations under the License.
 
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from threading import Condition, Lock
 from typing import (
-    Callable,
-    Dict,
     Generic,
-    Iterable,
-    Optional,
-    Sequence,
-    Tuple,
     TypeVar,
-    Union,
 )
 
 from cachetools import LRUCache, cachedmethod
@@ -33,7 +26,7 @@ from PIL.Image import Image
 
 
 def lru_cached_method(
-    maxsize: Optional[Union[int, Callable[[], Optional[int]]]] = 128,
+    maxsize: int | Callable[[], int | None] | None = 128,
 ):
     """Cache a method's return values in a per-instance LRU cache.
 
@@ -89,7 +82,7 @@ class CacheItem(Generic[CacheItemType]):
 class LRU(Generic[CacheKeyType, CacheItemType]):
     def __init__(self, maxsize: int):
         self._lock = Lock()
-        self._cache: Dict[CacheKeyType, CacheItem[CacheItemType]] = {}
+        self._cache: dict[CacheKeyType, CacheItem[CacheItemType]] = {}
         self._maxsize = maxsize
         self._size = 0
 
@@ -97,7 +90,7 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
     def maxsize(self) -> int:
         return self._maxsize
 
-    def get(self, key: CacheKeyType) -> Optional[CacheItemType]:
+    def get(self, key: CacheKeyType) -> CacheItemType | None:
         with self._lock:
             item = self._cache.pop(key, None)
             if item is not None:
@@ -125,7 +118,7 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
 class FrameCache(Generic[CacheItemType]):
     def __init__(self, size: int):
         self._size = size
-        self._lru_cache = LRU[Tuple[int, int], CacheItemType](size)
+        self._lru_cache = LRU[tuple[int, int], CacheItemType](size)
 
     def get_tile_frame(
         self,

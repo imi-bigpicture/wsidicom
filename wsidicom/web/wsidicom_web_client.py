@@ -13,8 +13,9 @@
 #    limitations under the License.
 
 import logging
+from collections.abc import Iterable, Iterator
 from http import HTTPStatus
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any
 
 from dicomweb_client.api import DICOMfileClient, DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
@@ -39,12 +40,12 @@ ANNOTATION_MODALITY = "ANN"
 
 
 class WsiDicomWebClient:
-    def __init__(self, client: Union[DICOMwebClient, DICOMfileClient]):
+    def __init__(self, client: DICOMwebClient | DICOMfileClient):
         """Create a WsiDicomWebClient.
 
         Parameters
         ----------
-        client: Union[DICOMwebClient, DICOMfileClient]
+        client: DICOMwebClient | DICOMfileClient
             The client to use
         """
         self._client = client
@@ -53,9 +54,9 @@ class WsiDicomWebClient:
     def create_client(
         cls,
         hostname: str,
-        qido_prefix: Optional[str] = None,
-        wado_prefix: Optional[str] = None,
-        auth: Optional[Union[AuthBase, Session]] = None,
+        qido_prefix: str | None = None,
+        wado_prefix: str | None = None,
+        auth: AuthBase | Session | None = None,
     ):
         """Create a WsiDicomWebClient.
 
@@ -63,20 +64,17 @@ class WsiDicomWebClient:
         ----------
         hostname: str
             The URL of the DICOMweb server
-        qido_prefix: Optional[str]
+        qido_prefix: str | None
             If needed by the server, provide the prefix for QIDO services
-        wado_prefix: Optional[str]
+        wado_prefix: str | None
             If needed by the server, provide the prefix for WADO services
-        auth: Optional[Union[AuthBase, Session]]
+        auth: AuthBase | Session | None
             If needed by the server, provide authentication credentials.
             This may be provided by either passing an object that
             inherits from requests.auth.AuthBase, or by passing a
             requests.Session object.
         """
-        if isinstance(auth, AuthBase):
-            session = create_session_from_auth(auth)
-        else:
-            session = auth
+        session = create_session_from_auth(auth) if isinstance(auth, AuthBase) else auth
 
         client = DICOMwebClient(
             hostname,
@@ -89,7 +87,7 @@ class WsiDicomWebClient:
 
     def get_wsi_instances(
         self, study_uid: UID, series_uids: Iterable[UID]
-    ) -> Iterator[Tuple[UID, UID, Optional[Set[UID]]]]:
+    ) -> Iterator[tuple[UID, UID, set[UID] | None]]:
         """
         Get instance uids for WSI instances in a study.
 
@@ -102,7 +100,7 @@ class WsiDicomWebClient:
 
         Returns
         -------
-        Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
+        Iterator[tuple[UID, UID, set[UID] | None]]
             Iterator of series and instance uid and optionally available transfer syntax
              uids for WSI instances in the study and series.
         """
@@ -112,7 +110,7 @@ class WsiDicomWebClient:
 
     def get_annotation_instances(
         self, study_uid: UID, series_uids: Iterable[UID]
-    ) -> Iterator[Tuple[UID, UID, Optional[Set[UID]]]]:
+    ) -> Iterator[tuple[UID, UID, set[UID] | None]]:
         """
         Get instance uids of Annotation instances in a study.
 
@@ -125,7 +123,7 @@ class WsiDicomWebClient:
 
         Returns
         -------
-        Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
+        Iterator[tuple[UID, UID, set[UID] | None]]
             Iterator of series and instance uid and optionally available transfer syntax
             uids for Annotation instances in the study and series.
         """
@@ -166,7 +164,7 @@ class WsiDicomWebClient:
         study_uid: UID,
         series_uid: UID,
         instance_uid: UID,
-        frame_indices: List[int],
+        frame_indices: list[int],
         transfer_syntax: UID,
     ) -> Iterator[bytes]:
         """
@@ -180,7 +178,7 @@ class WsiDicomWebClient:
             Series UID of the instance.
         instance_uid: UID
             Instance UID of the instance.
-        frame_indices: List[int]
+        frame_indices: list[int]
             List of frame indices to get. Note frames are indexed starting from 1.
         transfer_syntax: UID
             Transfer syntax of the to get frames.
@@ -247,7 +245,7 @@ class WsiDicomWebClient:
         series_uids: Iterable[UID],
         sop_class_uid: UID,
         modality: str,
-    ) -> Iterator[Tuple[UID, UID, Optional[Set[UID]]]]:
+    ) -> Iterator[tuple[UID, UID, set[UID] | None]]:
         """Get series, instance, and optionally available transfer syntax uids for
         instances of SOP class in study.
 
@@ -262,7 +260,7 @@ class WsiDicomWebClient:
 
         Returns
         -------
-        Iterator[Tuple[UID, UID, Optional[Set[UID]]]]
+        Iterator[tuple[UID, UID, set[UID] | None]]
             Iterator of series and instance uid and optionally available transfer syntax
             uids for instances in the study and series.
         """
@@ -292,8 +290,8 @@ class WsiDicomWebClient:
         )
 
     def _search_for_instances(
-        self, study_uid: UID, fields: List[str], search_filters: Dict[str, Any]
-    ) -> Iterator[Dict[str, Dict[Any, Any]]]:
+        self, study_uid: UID, fields: list[str], search_filters: dict[str, Any]
+    ) -> Iterator[dict[str, dict[Any, Any]]]:
         """Search for instances in study.
 
         Catches known errors in server DICOMweb implementation and tries to fix them.
@@ -302,14 +300,14 @@ class WsiDicomWebClient:
         ----------
         study_uid: UID
             Study UID of the study.
-        fields: List[str]
+        fields: list[str]
             Fields to include in the response.
-        search_filters: Dict[str, Any]
+        search_filters: dict[str, Any]
             Search filters to use.
 
         Returns
         -------
-        Iterator[Dict[str, Dict[Any, Any]]]
+        Iterator[dict[str, dict[Any, Any]]]
             Iterator of instance metadata.
         """
         # Errors that can be fixed by removing the offending filter and filtering
@@ -323,7 +321,8 @@ class WsiDicomWebClient:
         # be used if the offending field is not required.
         known_field_errors = {
             HTTPStatus.BAD_REQUEST: {
-                "unknown/unsupported QIDO attribute: AvailableTransferSyntaxUID": "AvailableTransferSyntaxUID"
+                "unknown/unsupported QIDO attribute: "
+                "AvailableTransferSyntaxUID": "AvailableTransferSyntaxUID"
             }
         }
         try:
@@ -389,24 +388,22 @@ class WsiDicomWebClient:
 
     @staticmethod
     def _get_uids_from_response(
-        response: Dict[str, Dict[Any, Any]], series_uid: Optional[UID] = None
-    ) -> Tuple[UID, UID, Optional[Set[UID]]]:
+        response: dict[str, dict[Any, Any]], series_uid: UID | None = None
+    ) -> tuple[UID, UID, set[UID] | None]:
         """Get series, instance, and optionally transfer syntax uids from response.
 
         Parameters
         ----------
-        response: Dict[str, Dict[Any, Any]]
+        response: dict[str, dict[Any, Any]]
             Response from server for an instance.
 
         Returns
         -------
-        Tuple[UID, UID, Optional[Set[UID]]]
+        tuple[UID, UID, set[UID] | None]
             Series and instance uid and optionally available transfer syntax
             uids for instances in response.
         """
-        available_transfer_syntaxes = response.get(
-            AVAILABLE_SOP_TRANSFER_SYNTAX_UID, None
-        )
+        available_transfer_syntaxes = response.get(AVAILABLE_SOP_TRANSFER_SYNTAX_UID)
         return (
             (
                 series_uid
@@ -422,12 +419,12 @@ class WsiDicomWebClient:
         )
 
     @staticmethod
-    def _get_sop_class_uid_from_response(response: Dict[str, Dict[Any, Any]]) -> UID:
+    def _get_sop_class_uid_from_response(response: dict[str, dict[Any, Any]]) -> UID:
         """Get SOP Class UID from response.
 
         Parameters
         ----------
-        response: Dict[str, Dict[Any, Any]]
+        response: dict[str, dict[Any, Any]]
             Response from server.
 
         Returns
@@ -438,7 +435,7 @@ class WsiDicomWebClient:
         return UID(response[SOP_CLASS_UID]["Value"][0])
 
     @staticmethod
-    def _transfer_syntax_to_media_type(transfer_syntax: UID) -> Tuple[str, str]:
+    def _transfer_syntax_to_media_type(transfer_syntax: UID) -> tuple[str, str]:
         """Convert transfer syntax to media type.
 
         Parameters
@@ -448,7 +445,7 @@ class WsiDicomWebClient:
 
         Returns
         -------
-        Tuple[str, str]
+        tuple[str, str]
             Media type and transfer syntax.
         """
         try:

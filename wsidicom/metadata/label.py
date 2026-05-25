@@ -14,8 +14,8 @@
 
 """Label model."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Optional, Sequence
 
 from wsidicom.metadata.image import Image
 from wsidicom.metadata.optical_path import OpticalPath
@@ -28,26 +28,26 @@ class Label:
 
     Parameters
     ----------
-    text : Optional[str] = None
+    text : str | None = None
         The label text.
-    barcode : Optional[str] = None
+    barcode : str | None = None
         The label barcode.
-    image : Optional[Image] = None
+    image : Image | None = None
         Technical metadata of the label image.
-    optical_paths : Optional[Sequence[OpticalPath]] = None
+    optical_paths : Sequence[OpticalPath] | None = None
         Metadata of the optical paths used to acquire the label image.
     contains_phi : bool = True
         Whether the label image contains personal health information.
-    comments: Optional[str] = None
+    comments: str | None = None
         Comments related to the label image.
     """
 
-    text: Optional[str] = None
-    barcode: Optional[str] = None
-    image: Optional[Image] = None
-    optical_paths: Optional[Sequence[OpticalPath]] = None
+    text: str | None = None
+    barcode: str | None = None
+    image: Image | None = None
+    optical_paths: Sequence[OpticalPath] | None = None
     contains_phi: bool = True
-    comments: Optional[str] = None
+    comments: str | None = None
 
     def remove_confidential(self) -> "Label":
         return replace(
