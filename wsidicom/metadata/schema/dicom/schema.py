@@ -48,9 +48,9 @@ class BaseDicomSchema(LoadingSchema[LoadType], Generic[LoadType, DumpType]):
     def dump_type(self) -> type[DumpType]:
         raise NotImplementedError()
 
-    def load(self, dataset: DumpType, **kwargs) -> LoadType:
+    def load(self, data: DumpType, **kwargs) -> LoadType:
         """Load object from DumpType."""
-        item = super().load(dataset, **kwargs)  # type: ignore
+        item = super().load(data, **kwargs)  # type: ignore
         assert isinstance(item, self.load_type)
         return item
 
@@ -114,10 +114,10 @@ class ModuleDicomSchema(DicomSchema[LoadType]):
     def module_name(self) -> str:
         raise NotImplementedError()
 
-    def load(self, dataset: Dataset, **kwargs) -> LoadType:
+    def load(self, data: Dataset, **kwargs) -> LoadType:
         """Load dataset to LoadType. Return default LoadType if validation error."""
         try:
-            return super().load(dataset, **kwargs)  # type: ignore
+            return super().load(data, **kwargs)  # type: ignore
         except ValidationError:
             logging.warning(
                 f"Failed to load module {self.module_name} with schema {self}.",

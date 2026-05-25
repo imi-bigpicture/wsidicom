@@ -16,7 +16,7 @@
 
 import io
 import struct
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
 from enum import Enum
 from typing import (
@@ -505,7 +505,7 @@ class LutDicomField(fields.Field):
         self,
         value: Sequence[Dataset] | None,
         attr: str | None,
-        data: dict[str, Any] | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ) -> Lut | None:
         if value is None or len(value) == 0:

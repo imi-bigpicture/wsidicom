@@ -77,9 +77,9 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem | None]
     def load_type(self) -> type[ImageCoordinateSystem]:
         return ImageCoordinateSystem
 
-    def load(self, dataset: Dataset, **kwargs) -> ImageCoordinateSystem | None:
+    def load(self, data: Dataset, **kwargs) -> ImageCoordinateSystem | None:
         try:
-            return super().load(dataset, **kwargs)
+            return super().load(data, **kwargs)
         except (TypeError, AttributeError, KeyError, IndexError):
             return None
 

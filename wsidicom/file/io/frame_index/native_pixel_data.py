@@ -41,8 +41,21 @@ class NativePixelDataFrameIndexParser(FrameIndexParser):
     def offset_table_type(self) -> OffsetTableType:
         return OffsetTableType.NONE
 
+    @property
+    def expected_length(self) -> int:
+        return (
+            math.ceil(
+                self._tile_size.area
+                * self._samples_per_pixel
+                * (self._bits // 8)
+                * self._frame_count
+                / 2
+            )
+            * 2
+        )
+
     def _get_pixels_start(self) -> int:
-        self._validate_pixel_data_start()
+        self._validate_pixel_data_start(self.expected_length)
         return self._file.tell()
 
     def _get_index(self) -> list[tuple[int, int]]:
@@ -63,20 +76,3 @@ class NativePixelDataFrameIndexParser(FrameIndexParser):
             (self._pixels_start + index * frame_size, frame_size)
             for index in range(self._frame_count)
         ]
-
-    def _validate_pixel_data_start(self):
-        """Check that pixel data tag is present and that the tag length is equal to
-        expected count. Raises WsiDicomFileError otherwise.
-
-        """
-        expected_length = (
-            math.ceil(
-                self._tile_size.area
-                * self._samples_per_pixel
-                * (self._bits // 8)
-                * self._frame_count
-                / 2
-            )
-            * 2
-        )
-        super()._validate_pixel_data_start(expected_length)

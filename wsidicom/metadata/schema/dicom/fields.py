@@ -18,7 +18,7 @@ import datetime
 import logging
 import math
 from abc import abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import (
     Any,
     Generic,
@@ -183,11 +183,12 @@ class BooleanDicomField(fields.Boolean):
 class OffsetInSlideCoordinateSystemField(fields.Field):
     def _serialize(
         self,
-        origin: tuple[PointMm, float | None] | None,
+        value: tuple[PointMm, float | None] | None,
         attr: str | None,
         obj: Any,
         **kwargs,
     ):
+        origin = value
         if origin is None:
             if self.dump_default is None:
                 return None
@@ -209,7 +210,7 @@ class OffsetInSlideCoordinateSystemField(fields.Field):
         self,
         value: DataElement,
         attr: str | None,
-        data: dict[str, Any] | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ) -> tuple[PointMm, float | None]:
         return PointMm(
@@ -219,7 +220,8 @@ class OffsetInSlideCoordinateSystemField(fields.Field):
 
 
 class ImageOrientationSlideField(fields.Field):
-    def _serialize(self, rotation: float | None, attr: str | None, obj: Any, **kwargs):
+    def _serialize(self, value: float | None, attr: str | None, obj: Any, **kwargs):
+        rotation = value
         if rotation is None:
             if self.dump_default is None:
                 return None
@@ -233,7 +235,7 @@ class ImageOrientationSlideField(fields.Field):
         self,
         value: tuple[float, float, float, float, float, float],
         attr: str | None,
-        data: dict[str, Any] | None,
+        data: Mapping[str, Any] | None,
         **kwargs,
     ) -> float:
         orientation = Orientation(value)
@@ -386,8 +388,8 @@ class CodeDicomField(fields.Nested, Generic[CodeType]):
 class SingleCodeSequenceField(CodeDicomField):
     """Field for a DICOM `code sequence` that can only contain one code."""
 
-    def _serialize(self, value: CodeType, attr: str | None, obj: Any, **kwargs):
-        return [super()._serialize(value, attr, obj, **kwargs)]
+    def _serialize(self, nested_obj: CodeType, attr: str | None, obj: Any, **kwargs):
+        return [super()._serialize(nested_obj, attr, obj, **kwargs)]
 
     def _deserialize(
         self,
@@ -594,9 +596,9 @@ class NestedDatasetDicomField(fields.Nested, Generic[ValueType]):
         super().__init__(nested=nested, data_key=data_key, **kwargs)
 
     def _serialize(
-        self, value: ValueType | None, attr: str | None, obj: Any, **kwargs
+        self, nested_obj: ValueType | None, attr: str | None, obj: Any, **kwargs
     ) -> list[Dataset] | None:
-        nested_value = super()._serialize(value, attr, obj, **kwargs)
+        nested_value = super()._serialize(nested_obj, attr, obj, **kwargs)
         if nested_value is None:
             return None
         dataset = Dataset()
@@ -621,7 +623,7 @@ class ContentItemDicomField(fields.Field, Generic[ValueType]):
 
     @abstractmethod
     def _deserialize(
-        self, value: Dataset, attr: str | None, obj: Any, **kwargs
+        self, value: Dataset, attr: str | None, data: Any, **kwargs
     ) -> ValueType | None:
         raise NotImplementedError()
 
@@ -647,7 +649,8 @@ class CodeItemDicomField(ContentItemDicomField[Code]):
         dataset.ConceptCodeSequence = [code_dataset]
         return dataset
 
-    def _deserialize(self, dataset: Dataset, attr: str | None, obj: Any, **kwargs):
+    def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
+        dataset = value
         version = dataset.ConceptCodeSequence[0].get("CodingSchemeVersion", None)
         if version == "":
             version = None
@@ -670,7 +673,8 @@ class StringItemDicomField(ContentItemDicomField[str]):
         dataset.TextValue = value
         return dataset
 
-    def _deserialize(self, dataset: Dataset, attr: str | None, obj: Any, **kwargs):
+    def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
+        dataset = value
         return dataset.TextValue
 
 
@@ -689,7 +693,8 @@ class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime]):
         dataset.DateTime = DT(value)
         return dataset
 
-    def _deserialize(self, dataset: Dataset, attr: str | None, obj: Any, **kwargs):
+    def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
+        dataset = value
         try:
             return DT(dataset.DateTime)
         except ValueError:
@@ -715,12 +720,13 @@ class MeasurementtemDicomField(ContentItemDicomField[Measurement]):
         dataset.MeasurementUnitsCodeSequence = [unit_dataset]
         return dataset
 
-    def _deserialize(self, dataset: Dataset, attr: str | None, obj: Any, **kwargs):
+    def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
+        dataset = value
         if hasattr(dataset, "FloatingPointValue"):
-            value = dataset.FloatingPointValue
+            measurement_value = dataset.FloatingPointValue
         else:
-            value = DSfloat(dataset.NumericValue)
-            assert isinstance(value, float)
+            measurement_value = DSfloat(dataset.NumericValue)
+            assert isinstance(measurement_value, float)
         unit_dataset = dataset.MeasurementUnitsCodeSequence[0]
         version = unit_dataset.get("CodingSchemeVersion", None)
         if version == "":
@@ -731,4 +737,4 @@ class MeasurementtemDicomField(ContentItemDicomField[Measurement]):
             meaning=unit_dataset.CodeMeaning,
             scheme_version=version,
         )
-        return Measurement(value=value, unit=unit)
+        return Measurement(value=measurement_value, unit=unit)
