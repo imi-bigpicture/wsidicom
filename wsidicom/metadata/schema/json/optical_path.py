@@ -180,7 +180,10 @@ class ObjectivesJsonSchema(LoadingSchema[Objectives]):
 
 
 class OpticalPathJsonSchema(LoadingSchema[OpticalPath]):
-    """Optical path. Icc profile is not included but is loaded via the icc_profile field."""
+    """Optical path.
+
+    Icc profile is not included but is loaded via the icc_profile field.
+    """
 
     identifier = fields.String(allow_none=True)
     description = fields.String(allow_none=True)
