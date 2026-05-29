@@ -106,41 +106,37 @@ class Target(metaclass=ABCMeta):
         self.close()
 
     @staticmethod
-    def _is_included_level(
-        level: int,
-        present_levels: Sequence[int],
-        allow_missing: bool,
+    def _select_included_levels(
+        candidate_levels: Sequence[int],
         include_indices: Sequence[int] | None = None,
-    ) -> bool:
-        """Return true if pyramid level is in included levels.
+    ) -> set[int]:
+        """Return the set of pyramid levels to include from candidate_levels.
 
         Parameters
         ----------
-        level: int
-            Pyramid level to check.
-        present_levels: Sequence[int]
-            List of pyramid levels present.
-        allow_missing: bool
-            If to include missing levels (not in present_levels).
+        candidate_levels: Sequence[int]
+            Pyramid levels eligible for inclusion. When the caller wants to
+            allow missing levels to be generated, this should be the extended
+            level list (e.g. ``range(0, highest_level + 1)``); otherwise it
+            should be the list of natively present levels.
         include_indices: Sequence[int] | None = None
-            Optional list indices (in present levels) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indices can be used,
-            e.g. [-1, -2] includes the two highest levels. Default of None
-            will not limit the selection. An empty sequence will excluded all
-            levels.
+            Optional list of indices (into ``candidate_levels``) to include,
+            e.g. ``[0, 1]`` includes the two lowest. Negative indices can be
+            used, e.g. ``[-1, -2]`` includes the two highest. Out-of-range
+            indices are silently ignored. ``None`` selects all candidates;
+            an empty sequence selects none.
 
         Returns
         -------
-        bool
-            True if level should be included.
+        set[int]
+            Set of pyramid levels to include.
         """
-        if level not in present_levels:
-            return allow_missing
         if include_indices is None:
-            return True
-        absolute_levels = [
-            present_levels[level]
-            for level in include_indices
-            if -len(present_levels) <= level < len(present_levels)
+            return set(candidate_levels)
+        candidate_count = len(candidate_levels)
+        valid_indices = [
+            index
+            for index in include_indices
+            if -candidate_count <= index < candidate_count
         ]
-        return level in absolute_levels
+        return {candidate_levels[index] for index in valid_indices}

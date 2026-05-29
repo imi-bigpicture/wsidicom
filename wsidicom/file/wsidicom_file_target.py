@@ -147,13 +147,15 @@ class WsiDicomFileTarget(Target):
         highest_level_in_file = pyramid.pyramid_indices[-1]
         lowest_single_tile_level = pyramid.lowest_single_tile_level
         highest_level = max(highest_level_in_file, lowest_single_tile_level)
+        if self._add_missing_levels:
+            candidate_levels = list(range(highest_level + 1))
+        else:
+            candidate_levels = list(pyramid.pyramid_indices)
+        included_levels = self._select_included_levels(
+            candidate_levels, self._include_levels
+        )
         for pyramid_level in range(highest_level + 1):
-            if not self._is_included_level(
-                pyramid_level,
-                pyramid.pyramid_indices,
-                self._add_missing_levels,
-                self._include_levels,
-            ):
+            if pyramid_level not in included_levels:
                 continue
             if pyramid_level in pyramid.pyramid_indices:
                 level = pyramid.get(pyramid_level)
