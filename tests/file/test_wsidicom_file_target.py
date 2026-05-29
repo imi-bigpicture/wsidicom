@@ -30,9 +30,7 @@ class TestWsiDicomFileTarget:
         candidate_levels: Sequence[int],
     ):
         # Act
-        selected = WsiDicomFileTarget._select_included_levels(
-            candidate_levels, None
-        )
+        selected = WsiDicomFileTarget._select_included_levels(candidate_levels, None)
 
         # Assert
         assert selected == set(candidate_levels)
