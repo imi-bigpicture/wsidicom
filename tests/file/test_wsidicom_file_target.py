@@ -22,119 +22,96 @@ from wsidicom.file import WsiDicomFileTarget
 @pytest.mark.unittest
 class TestWsiDicomFileTarget:
     @pytest.mark.parametrize(
-        ["level", "present_levels", "include_indices"],
-        [(0, [0, 1, 2], None), (1, [0, 1, 2], None), (2, [0, 1, 2], None)],
+        "candidate_levels",
+        [[0, 1, 2], [0, 2, 4], [0, 1, 2, 3, 4, 5, 6, 7, 8]],
     )
-    @pytest.mark.parametrize("allow_missing", [False, True])
-    def test_is_in_present_level_include_indices_is_none_return_true(
+    def test_select_included_levels_include_indices_is_none_returns_all_candidates(
         self,
-        level: int,
-        present_levels: Sequence[int],
-        allow_missing: bool,
-        include_indices: Sequence[int] | None,
+        candidate_levels: Sequence[int],
     ):
-        # Arrange
-
         # Act
-        is_included = WsiDicomFileTarget._is_included_level(
-            level, present_levels, allow_missing, include_indices
+        selected = WsiDicomFileTarget._select_included_levels(
+            candidate_levels, None
         )
 
         # Assert
-        assert is_included
+        assert selected == set(candidate_levels)
 
     @pytest.mark.parametrize(
-        ["level", "present_levels", "include_indices"],
+        ["candidate_levels", "include_indices", "expected"],
         [
-            (-1, [0, 1, 2], None),
-            (3, [0, 1, 2], None),
-            (0, [], None),
-            (-1, [0, 1, 2], [0, 1, 2]),
-            (3, [0, 1, 2], [0, 1, 2]),
-            (0, [], [0, 1, 2]),
+            # All indices in range
+            ([0, 1, 2], [0, 1, 2], {0, 1, 2}),
+            # Single positive index
+            ([0, 1, 2], [0], {0}),
+            ([0, 1, 2], [1], {1}),
+            ([0, 1, 2], [2], {2}),
+            # Negative indices
+            ([0, 1, 2], [-3], {0}),
+            ([0, 1, 2], [-2], {1}),
+            ([0, 1, 2], [-1], {2}),
+            # Mix of positive and negative
+            ([0, 1, 2], [0, -1], {0, 2}),
+            # Out-of-range indices silently dropped
+            ([0, 1, 2], [0, 10, -10], {0}),
+            # Sparse present_levels: indices map to absolute level numbers
+            ([0, 2, 4], [0], {0}),
+            ([0, 2, 4], [1], {2}),
+            ([0, 2, 4], [2], {4}),
+            ([0, 2, 4], [-1], {4}),
+            # Indices beyond sparse list are dropped (legacy behaviour)
+            ([0, 2, 4], [0, 1, 2, 3, 4, 5], {0, 2, 4}),
         ],
     )
-    @pytest.mark.parametrize("allow_missing", [False, True])
-    def test_is_not_in_present_levels_is_in_include_incides_return_if_allow_missing(
+    def test_select_included_levels_returns_levels_at_indices(
         self,
-        level: int,
-        present_levels: Sequence[int],
-        allow_missing: bool,
-        include_indices: Sequence[int] | None,
-    ):
-        # Arrange
-
-        # Act
-        is_included = WsiDicomFileTarget._is_included_level(
-            level, present_levels, allow_missing, include_indices
-        )
-
-        # Assert
-        assert is_included == allow_missing
-
-    @pytest.mark.parametrize(
-        ["level", "present_levels", "include_indices"],
-        [
-            (0, [0, 1, 2], [0, 1, 2]),
-            (1, [0, 1, 2], [0, 1, 2]),
-            (2, [0, 1, 2], [0, 1, 2]),
-            (0, [0, 1, 2], [0]),
-            (1, [0, 1, 2], [1]),
-            (2, [0, 1, 2], [2]),
-            (0, [0, 1, 2], [-3]),
-            (1, [0, 1, 2], [-2]),
-            (2, [0, 1, 2], [-1]),
-            (0, [0, 1, 2], [0, 10, -10]),
-        ],
-    )
-    @pytest.mark.parametrize("allow_missing", [False, True])
-    def test_is_in_present_levels_and_in_include_indices_return_true(
-        self,
-        level: int,
-        present_levels: Sequence[int],
-        allow_missing: bool,
+        candidate_levels: Sequence[int],
         include_indices: Sequence[int],
+        expected: set[int],
     ):
-        # Arrange
-
         # Act
-        is_included = WsiDicomFileTarget._is_included_level(
-            level, present_levels, allow_missing, include_indices
+        selected = WsiDicomFileTarget._select_included_levels(
+            candidate_levels, include_indices
         )
 
         # Assert
-        assert is_included
+        assert selected == expected
+
+    def test_select_included_levels_empty_indices_returns_empty(self):
+        # Act
+        selected = WsiDicomFileTarget._select_included_levels([0, 1, 2], [])
+
+        # Assert
+        assert selected == set()
 
     @pytest.mark.parametrize(
-        ["level", "present_levels", "include_indices"],
+        ["candidate_levels", "include_indices", "expected"],
         [
-            (0, [0, 1, 2], [1, 2]),
-            (1, [0, 1, 2], [0, 2]),
-            (2, [0, 1, 2], [0, 1]),
-            (0, [0, 1, 2], [1]),
-            (1, [0, 1, 2], [2]),
-            (2, [0, 1, 2], [0]),
-            (0, [0, 1, 2], [-1]),
-            (1, [0, 1, 2], [-1]),
-            (2, [0, 1, 2], [-2]),
-            (0, [0, 1, 2], [1, 10, -10]),
-            (0, [0, 1, 2], []),
+            # Sparse pyramid (e.g. APERIO_JP2000_RGB at indices 0, 2, 4)
+            # extended with missing levels up to lowest_single_tile_level=8.
+            # Reproduces #140: include_indices=range(6) should select 6 levels,
+            # not 9. The candidate list is the extended virtual pyramid.
+            (
+                list(range(9)),
+                list(range(6)),
+                {0, 1, 2, 3, 4, 5},
+            ),
+            # First three levels of the extended list.
+            (list(range(9)), [0, 1, 2], {0, 1, 2}),
+            # Last three levels.
+            (list(range(9)), [-1, -2, -3], {6, 7, 8}),
         ],
     )
-    @pytest.mark.parametrize("allow_missing", [False, True])
-    def test_is_in_present_levels_but_not_in_include_indices_return_false(
+    def test_select_included_levels_extended_pyramid_for_add_missing_levels(
         self,
-        level: int,
-        present_levels: Sequence[int],
-        allow_missing: bool,
+        candidate_levels: Sequence[int],
         include_indices: Sequence[int],
+        expected: set[int],
     ):
-        # Arrange
-
         # Act
-        is_included = WsiDicomFileTarget._is_included_level(
-            level, present_levels, allow_missing, include_indices
+        selected = WsiDicomFileTarget._select_included_levels(
+            candidate_levels, include_indices
         )
 
         # Assert
-        assert not is_included
+        assert selected == expected
