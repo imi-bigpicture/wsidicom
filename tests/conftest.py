@@ -38,6 +38,7 @@ from tests.file.io.test_wsidicom_writer import WsiDicomTestImageData
 from wsidicom import WsiDicom
 from wsidicom.config import settings
 from wsidicom.geometry import Size
+from wsidicom.metadata.uid_generator import CallableUidGenerator
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
@@ -301,3 +302,8 @@ def frames(
 @pytest.fixture()
 def image_data(frames: list[bytes], tiled_size: Size):
     yield WsiDicomTestImageData(frames, tiled_size)
+
+
+@pytest.fixture
+def uid_generator():
+    return CallableUidGenerator()

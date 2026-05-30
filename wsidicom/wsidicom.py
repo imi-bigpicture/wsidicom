@@ -23,7 +23,7 @@ from typing import (
 )
 
 from PIL.Image import Image
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 from upath import UPath
 
 from wsidicom.cache import lru_cached_method
@@ -43,6 +43,7 @@ from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.schema.dicom.label import LabelBaseDicomSchema
 from wsidicom.metadata.schema.dicom.wsi import BaseWsiMetadataDicomSchema
+from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -202,7 +203,7 @@ class WsiDicom:
     def save(
         self,
         output_path: str | Path | UPath,
-        uid_generator: Callable[..., UID] = generate_uid,
+        uid_generator: Callable[[], UID] | UidGenerator | None = None,
         workers: int | None = None,
         chunk_size: int | None = None,
         offset_table: Union["str", OffsetTableType] | None = None,
@@ -229,8 +230,8 @@ class WsiDicom:
         output_path: str | Path | UPath
             Output folder to write files to. Should preferably be an dedicated folder
             for the wsi. Path can be local or an URL supported by fsspec.
-        uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
-            Function that can generate unique identifiers.
+        uid_generator: Callable[[], UID] | UidGenerator | None = None
+            Zero-arg callable or `UidGenerator` instance for producing UIDs.
         workers: int | None = None
             Maximum number of thread workers to use.
         chunk_size: int | None = None
@@ -278,6 +279,10 @@ class WsiDicom:
             chunk_size = 16
         if isinstance(offset_table, str):
             offset_table = OffsetTableType.from_string(offset_table)
+        if uid_generator is None:
+            uid_generator = CallableUidGenerator()
+        elif not isinstance(uid_generator, UidGenerator):
+            uid_generator = CallableUidGenerator(uid_generator)
         with WsiDicomFileTarget(
             output_path,
             uid_generator,

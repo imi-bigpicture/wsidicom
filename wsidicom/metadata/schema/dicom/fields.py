@@ -25,7 +25,15 @@ from typing import (
     TypeVar,
 )
 
-from marshmallow import Schema, fields, post_dump, post_load, pre_dump, pre_load
+from marshmallow import (
+    Schema,
+    ValidationError,
+    fields,
+    post_dump,
+    post_load,
+    pre_dump,
+    pre_load,
+)
 from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
 from pydicom import Sequence as DicomSequence
@@ -243,18 +251,32 @@ class ImageOrientationSlideField(fields.Field):
 
 
 class ListDicomField(fields.List):
-    """Wrapper around normal list that handles single-valued lists from pydicom."""
+    """Wrapper around normal list that handles single-valued lists from pydicom.
+
+    Set ``dump_required=True`` for Type-1 list attributes whose value
+    multiplicity is at least 1: dumping a `None` or empty list then raises a
+    `ValidationError` with a structural message. The load path is unaffected.
+    """
 
     def __init__(
         self,
         cls_or_instance: fields.Field | type,
         dump_none_if_empty: bool = False,
+        *,
+        dump_required: bool = False,
         **kwargs,
     ):
         self._dump_none_if_empty = dump_none_if_empty
+        self._dump_required = dump_required
         super().__init__(cls_or_instance, **kwargs)
 
     def _serialize(self, value, attr, obj, **kwargs) -> Any:
+        if self._dump_required and not value:
+            raise ValidationError(
+                f"{self.data_key or attr} is a Type 1 DICOM attribute and "
+                "must contain at least one item; populate the metadata "
+                "field before dumping."
+            )
         if self._dump_none_if_empty and value is None or len(value) == 0:
             return None
         return super()._serialize(value, attr, obj, **kwargs)
@@ -420,8 +442,25 @@ class FloatOrCodeDicomField(fields.Field, Generic[CodeType]):
 
 
 class UidDicomField(StringDicomField):
-    def __init__(self, **kwargs):
+    """DICOM UI value-representation field.
+
+    Set ``dump_required=True`` for Type-1 attributes: dumping a `None` value
+    then raises a `ValidationError` with a structural message. The load path
+    is unaffected — use ``allow_none=True`` independently to control whether
+    a missing/None value is accepted at deserialization.
+    """
+
+    def __init__(self, *, dump_required: bool = False, **kwargs):
         super().__init__(value_representation=VR.UI, **kwargs)
+        self._dump_required = dump_required
+
+    def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs):
+        if value is None and self._dump_required:
+            raise ValidationError(
+                f"{self.data_key or attr} is a Type 1 DICOM attribute and "
+                "must be set; populate the metadata field before dumping."
+            )
+        return super()._serialize(value, attr, obj, **kwargs)
 
     def _deserialize(self, value: Any, attr, data, **kwargs):
         if value is None or value == "":

@@ -15,9 +15,8 @@
 """Series model."""
 
 from dataclasses import dataclass
-from functools import cached_property
 
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 
 
 @dataclass(frozen=True)
@@ -46,9 +45,3 @@ class Series:
     number: int | None = None
     description: str | None = None
     body_part_examined: str | None = None
-
-    @cached_property
-    def default_uid(self) -> UID:
-        if self.uid is not None:
-            return self.uid
-        return generate_uid()

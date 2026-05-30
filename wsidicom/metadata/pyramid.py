@@ -17,6 +17,8 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
+from pydicom.uid import UID
+
 from wsidicom.metadata.image import Image
 from wsidicom.metadata.optical_path import OpticalPath
 
@@ -32,7 +34,7 @@ class Pyramid:
         Technical metadata of the pyramid image.
     optical_paths: Sequence[OpticalPath]
         Metadata of the optical paths used to acquire the pyramid image.
-    uid: str | None = None
+    uid: UID | None = None
         The unique identifier of the pyramid image.
     description: str | None = None
         Description of the pyramid image.
@@ -46,7 +48,7 @@ class Pyramid:
 
     image: Image
     optical_paths: Sequence[OpticalPath]
-    uid: str | None = None
+    uid: UID | None = None
     description: str | None = None
     label: str | None = None
     contains_phi: bool = False

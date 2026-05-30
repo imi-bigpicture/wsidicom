@@ -15,7 +15,7 @@
 """A target for writing WSI DICOM files to disk."""
 
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import (
     Any,
@@ -39,6 +39,7 @@ from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Label, Level, Overview, Thumbnail
 from wsidicom.instance import ImageData, WsiInstance
+from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
 from wsidicom.target import Target
@@ -50,7 +51,7 @@ class WsiDicomFileTarget(Target):
     def __init__(
         self,
         output_path: str | Path | UPath,
-        uid_generator: Callable[..., UID],
+        uid_generator: UidGenerator,
         workers: int,
         chunk_size: int,
         offset_table: OffsetTableType | None = None,
@@ -68,8 +69,8 @@ class WsiDicomFileTarget(Target):
         ----------
         output_path: str | Path | UPath
             Folder path to save files to.
-        uid_generator: Callable[..., UID]
-            Uid generator to use.
+        uid_generator: UidGenerator
+            Generator for producing UIDs.
         workers: int
             Maximum number of thread workers to use.
         chunk_size: int
@@ -209,9 +210,6 @@ class WsiDicomFileTarget(Target):
             raise ValueError(f"Scale must be positive integer, got {scale}.")
         filepaths: list[UPath] = []
         for instances in self._group_instances_to_file(group):
-            uid = self._uid_generator()
-            filepath = self._output_path.joinpath(uid + ".dcm")
-
             image_data_list = self._list_image_data(instances)
             focal_planes, optical_paths, tiled_size = self._get_frame_information(
                 image_data_list
@@ -220,6 +218,8 @@ class WsiDicomFileTarget(Target):
             dataset = instances[0].dataset.as_tiled_full(
                 focal_planes, optical_paths, tiled_size, scale
             )
+            uid = self._uid_generator.sop_uid(dataset)
+            filepath = self._output_path.joinpath(uid + ".dcm")
             if self._transcoder is not None and (
                 self._force_transcoding
                 or instances[0].image_data.transfer_syntax

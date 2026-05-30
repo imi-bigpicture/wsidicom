@@ -13,12 +13,11 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Callable, Sequence
-
-from pydicom.uid import UID
+from collections.abc import Sequence
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramids
 
 """A Target enables creating new instances."""
@@ -30,7 +29,7 @@ class Target(metaclass=ABCMeta):
 
     def __init__(
         self,
-        uid_generator: Callable[..., UID],
+        uid_generator: UidGenerator,
         workers: int,
         chunk_size: int,
         include_pyramids: Sequence[int] | None = None,
@@ -43,8 +42,8 @@ class Target(metaclass=ABCMeta):
 
         Parameters
         ----------
-        uid_generator: Callable[..., UID]
-            Uid generator to use.
+        uid_generator: UidGenerator
+            Generator for producing UIDs.
         workers: int
             Maximum number of thread workers to use.
         chunk_size: int

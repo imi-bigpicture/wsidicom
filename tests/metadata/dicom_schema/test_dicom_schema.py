@@ -15,6 +15,7 @@
 from datetime import datetime
 
 import pytest
+from marshmallow import ValidationError
 from pydicom import Dataset
 
 from tests.metadata.dicom_schema.helpers import (
@@ -532,13 +533,11 @@ class TestDicomSchema:
         series = Series()
         schema = SeriesDicomSchema()
 
-        # Act
-        serialized = schema.dump(series)
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert serialized.SeriesInstanceUID == series.default_uid
-        assert serialized.SeriesNumber == 1
+        # Act / Assert: SeriesInstanceUID is Type 1 — dumping with `uid=None`
+        # must raise so unresolved metadata can't silently produce a
+        # non-conforming DICOM.
+        with pytest.raises(ValidationError, match="SeriesInstanceUID"):
+            schema.dump(series)
 
     def test_deserialize_series(self, dicom_series: Dataset, series: Series):
         # Arrange
@@ -568,18 +567,11 @@ class TestDicomSchema:
         study = Study()
         schema = StudyDicomSchema()
 
-        # Act
-        serialized = schema.dump(study)
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert serialized.StudyInstanceUID == study.default_uid
-        assert serialized.StudyID is None
-        assert serialized.StudyDate is None
-        assert serialized.StudyTime is None
-        assert serialized.AccessionNumber is None
-        assert serialized.ReferringPhysicianName is None
-        assert "StudyDescription" not in serialized
+        # Act / Assert: StudyInstanceUID is Type 1 — dumping with `uid=None`
+        # must raise so unresolved metadata can't silently produce a
+        # non-conforming DICOM.
+        with pytest.raises(ValidationError, match="StudyInstanceUID"):
+            schema.dump(study)
 
     def test_deserialize_study(self, dicom_study: Dataset, study: Study):
         # Arrange
@@ -641,26 +633,15 @@ class TestDicomSchema:
             assert specimen_description.SpecimenIdentifier == sample.identifier
             assert specimen_description.SpecimenUID == sample.uid
 
-    def test_serialize_default_slide(self):
-        # Arrange
+    def test_serialize_default_slide_raises(self):
+        # Arrange: an unset slide has no samples.
         slide = Slide()
         schema = SlideDicomSchema()
-        expected_samples = [SlideSample(identifier=defaults.string)]
 
-        # Act
-        serialized = schema.dump(slide)
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert serialized.ContainerIdentifier == defaults.string
-        assert_dicom_code_dataset_equals_code(
-            serialized.ContainerTypeCodeSequence[0], defaults.slide_container_type
-        )
-        assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
-        for specimen_description, sample in zip(
-            serialized.SpecimenDescriptionSequence, expected_samples, strict=False
-        ):
-            assert specimen_description.SpecimenIdentifier == sample.identifier
+        # Act / Assert: SpecimenDescriptionSequence is Type 1 with VM >= 1 —
+        # dumping a slide with no samples must raise.
+        with pytest.raises(ValidationError, match="SpecimenDescriptionSequence"):
+            schema.dump(slide)
 
     @pytest.mark.parametrize(
         "slide_identifier",
@@ -811,18 +792,11 @@ class TestDicomSchema:
         )
         schema = WsiMetadataDicomSchema()
 
-        # Act
-        serialized = schema.dump(
-            wsi_metadata, image_type=image_type, require_icc_profile=False
-        )
-
-        # Assert
-        assert "DimensionOrganizationSequence" in serialized
-        assert len(serialized.DimensionOrganizationSequence) == 1
-        assert (
-            serialized.DimensionOrganizationSequence[0].DimensionOrganizationUID
-            == wsi_metadata.default_dimension_organization_uids[0]
-        )
+        # Act / Assert: dumping unresolved metadata must raise — Type-1
+        # attributes such as FrameOfReferenceUID and SpecimenDescriptionSequence
+        # are required.
+        with pytest.raises(ValidationError, match="Type 1"):
+            schema.dump(wsi_metadata, image_type=image_type, require_icc_profile=False)
 
     def test_deserialize_wsi_metadata_from_multiple_datasets(
         self,
@@ -855,11 +829,11 @@ class TestDicomSchema:
         assert deserialized.patient == patient
         assert (
             deserialized.frame_of_reference_uid
-            == wsi_metadata.default_frame_of_reference_uid
+            == wsi_metadata.frame_of_reference_uid
         )
         assert (
             deserialized.dimension_organization_uids
-            == wsi_metadata.default_dimension_organization_uids
+            == wsi_metadata.dimension_organization_uids
         )
 
     def test_deserialize_wsi_metadata_from_empty_dataset(

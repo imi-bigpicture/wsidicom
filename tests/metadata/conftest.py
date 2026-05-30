@@ -797,6 +797,16 @@ def image_type():
 
 
 @pytest.fixture()
+def frame_of_reference_uid() -> UID:
+    return UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445425")
+
+
+@pytest.fixture()
+def dimension_organization_uids() -> list[UID]:
+    return [UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445426")]
+
+
+@pytest.fixture()
 def wsi_metadata(
     study: Study,
     series: Series,
@@ -806,6 +816,8 @@ def wsi_metadata(
     pyramid: Pyramid,
     label: Label,
     overview: Overview,
+    frame_of_reference_uid: UID,
+    dimension_organization_uids: list[UID],
 ):
     yield WsiMetadata(
         study=study,
@@ -816,4 +828,6 @@ def wsi_metadata(
         pyramid=pyramid,
         label=label,
         overview=overview,
+        frame_of_reference_uid=frame_of_reference_uid,
+        dimension_organization_uids=dimension_organization_uids,
     )

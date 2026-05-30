@@ -14,14 +14,13 @@
 
 """DICOM schema for Pyramid model."""
 
+from marshmallow import fields
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.image import Image
-from wsidicom.metadata.optical_path import OpticalPath
 from wsidicom.metadata.pyramid import Pyramid
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
-    DefaultingListDicomField,
     FlattenOnDumpNestedDicomField,
     StringDicomField,
     UidDicomField,
@@ -32,16 +31,13 @@ from wsidicom.metadata.schema.dicom.schema import DicomSchema
 
 
 class PyramidDicomSchema(DicomSchema[Pyramid]):
-    image = FlattenOnDumpNestedDicomField(
-        ImageDicomSchema(), dump_default=Image(), load_default=Image()
-    )
-    optical_paths = DefaultingListDicomField(
+    image = FlattenOnDumpNestedDicomField(ImageDicomSchema(), load_default=Image())
+    optical_paths = fields.List(
         FlattenOnDumpNestedDicomField(OpticalPathDicomSchema()),
         data_key="OpticalPathSequence",
-        dump_default=[OpticalPath()],
         load_default=[],
     )
-    uid = UidDicomField(data_key="PyramidUID", allow_none=True)
+    uid = UidDicomField(data_key="PyramidUID", allow_none=True, dump_required=True)
     description = StringDicomField(
         value_representation=VR.LO, data_key="PyramidDescription", allow_none=True
     )

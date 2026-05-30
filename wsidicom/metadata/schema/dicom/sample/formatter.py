@@ -63,10 +63,7 @@ class SpecimenDicomFormatter:
         """
         if stains is None:
             stains = []
-        if slide_sample.uid is None:
-            sample_uid = slide_sample.default_uid
-        else:
-            sample_uid = slide_sample.uid
+        sample_uid = slide_sample.uid
         sample_preparation_steps = cls._get_steps(slide_sample, stains)
         identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
             slide_sample.identifier
