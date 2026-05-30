@@ -7,13 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- `add_missing_levels=True` in `WsiDicom.save()` now respects `include_levels`.
+- Improved control of uid generation by use of an user-supplied `UidGenerator` (abstract) or `CallableUidGenerator` (default implementation).
 
 ### Changed
 
-- Relaxed the `imagecodecs` optional dependency upper bound from `<2025.0.0` to unbounded (keeping the `!=2024.9.22` exclusion).
+- Relaxed the `imagecodecs` optional dependency upper bound from `<2025.0.0` to unbounded.
+- Default UID generation by `Study.default_uid`, `Series.default_uid`, `SlideSample.default_uid`, `WsiMetadata.default_frame_of_reference_uid`, and `WsiMetadata.default_dimension_organization_uids` have been removed.
+- Serializing a `WsiMetadata` (or its sub-models) to DICOM no longer silently mints UIDs for unset fields. `StudyInstanceUID`, `SeriesInstanceUID`, `FrameOfReferenceUID`, `DimensionOrganizationSequence`, `SpecimenDescriptionSequence`, `SpecimenUID`, and `PyramidUID` raise `ValidationError` on dump when their source field is `None`/empty.
+
+### Fixed
+
+- `add_missing_levels=True` in `WsiDicom.save()` now respects `include_levels`.
 
 ## [0.30.0] - 2026-05-22
 

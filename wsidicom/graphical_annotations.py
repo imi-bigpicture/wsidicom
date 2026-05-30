@@ -14,7 +14,7 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -36,7 +36,6 @@ from pydicom.uid import (
     ExplicitVRLittleEndian,
     ImplicitVRLittleEndian,
     MicroscopyBulkSimpleAnnotationsStorage,
-    generate_uid,
 )
 from pydicom.values import convert_numbers
 
@@ -47,6 +46,7 @@ from wsidicom.conceptcode import (
     UnitCode,
 )
 from wsidicom.geometry import PointMm, RegionMm, SizeMm
+from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.uid import SlideUids
 
 
@@ -646,6 +646,7 @@ class AnnotationGroup(Generic[GeometryType]):
         color: LabColor | None = None,
         is_double: bool = True,
         instance: UID | None = None,
+        uid_generator: UidGenerator | None = None,
     ):
         """Represents a group of annotations of the same type.
 
@@ -667,12 +668,16 @@ class AnnotationGroup(Generic[GeometryType]):
             If group is stored with double float
         instance: Uid | None
             Uid this group was created from.
+        uid_generator: UidGenerator | None = None
+            Generator for the group's UID.
 
         """
         self.validate_type(annotations)
         self._z_planes: list[float] = []
         self._optical_paths: list[str] = []
-        self._uid = generate_uid()
+        if uid_generator is None:
+            uid_generator = CallableUidGenerator()
+        self._uid = uid_generator.annotation_group_uid()
         self._category_code = category_code
         self._type_code = type_code
         self._is_double = is_double
@@ -1531,7 +1536,7 @@ class AnnotationInstance:
         path: str | Path,
         little_endian: bool = True,
         implicit_vr: bool = False,
-        uid_generator: Callable[..., UID] = generate_uid,
+        uid_generator: UidGenerator | None = None,
     ):
         """Write annotations to DICOM file according to sup 222.
         Note that the file will miss DICOM attributes that has not yet been
@@ -1545,7 +1550,11 @@ class AnnotationInstance:
             Write DICOM file as little endian
         implicit_vr: bool
             Write DICOM file with implicit value representation
+        uid_generator: UidGenerator | None = None
+            Generator for the SOP UID.
         """
+        if uid_generator is None:
+            uid_generator = CallableUidGenerator()
         ds = Dataset()
         bulk_sequence = DicomSequence()
         for index, annotation_group in enumerate(self.groups):
@@ -1564,7 +1573,7 @@ class AnnotationInstance:
             ds.FrameOfReferenceUID = self.slide_uids.frame_of_reference
         ds.StudyInstanceUID = self.slide_uids.study_instance
         ds.SeriesInstanceUID = self.slide_uids.series_instance
-        ds.SOPInstanceUID = uid_generator()
+        ds.SOPInstanceUID = uid_generator.sop_uid(ds)
         ds.SOPClassUID = MicroscopyBulkSimpleAnnotationsStorage
         ds.Modality = "ANN"
 

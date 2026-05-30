@@ -34,6 +34,7 @@ from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.fields import (
     FlattenOnDumpNestedDicomField,
+    ListDicomField,
     UidDatasetDicomField,
     UidDicomField,
 )
@@ -70,28 +71,23 @@ class BaseWsiMetadata:
 class BaseWsiMetadataDicomSchema(DicomSchema[BaseWsiMetadata]):
     """Schema to load and dump BaseWsiMetadata to and from DICOM dataset."""
 
-    study = FlattenOnDumpNestedDicomField(
-        StudyDicomSchema(), dump_default=Study(), load_default=Study()
-    )
-    series = FlattenOnDumpNestedDicomField(
-        SeriesDicomSchema(), dump_default=Series(), load_default=Series()
-    )
+    study = FlattenOnDumpNestedDicomField(StudyDicomSchema(), load_default=Study())
+    series = FlattenOnDumpNestedDicomField(SeriesDicomSchema(), load_default=Series())
     patient = FlattenOnDumpNestedDicomField(
-        PatientDicomSchema(), dump_default=Patient(), load_default=Patient()
+        PatientDicomSchema(), load_default=Patient()
     )
     equipment = FlattenOnDumpNestedDicomField(
-        EquipmentDicomSchema(), dump_default=Equipment(), load_default=Equipment()
+        EquipmentDicomSchema(), load_default=Equipment()
     )
-    slide = FlattenOnDumpNestedDicomField(
-        SlideDicomSchema(), dump_default=Slide(), load_default=Slide()
-    )
+    slide = FlattenOnDumpNestedDicomField(SlideDicomSchema(), load_default=Slide())
     frame_of_reference_uid = UidDicomField(
-        data_key="FrameOfReferenceUID", load_default=None
+        data_key="FrameOfReferenceUID", load_default=None, dump_required=True
     )
-    dimension_organization_uids = fields.List(
+    dimension_organization_uids = ListDicomField(
         UidDatasetDicomField(data_key="DimensionOrganizationUID"),
         data_key="DimensionOrganizationSequence",
         load_default=None,
+        dump_required=True,
     )
     sop_class_uid = fields.Constant(
         VLWholeSlideMicroscopyImageStorage, dump_only=True, data_key="SOPClassUID"
@@ -132,16 +128,8 @@ class WsiMetadataDicomSchema:
                 patient=metadata.patient,
                 equipment=metadata.equipment,
                 slide=metadata.slide,
-                frame_of_reference_uid=(
-                    metadata.frame_of_reference_uid
-                    if metadata.frame_of_reference_uid
-                    else metadata.default_frame_of_reference_uid
-                ),
-                dimension_organization_uids=(
-                    metadata.dimension_organization_uids
-                    if metadata.dimension_organization_uids
-                    else metadata.default_dimension_organization_uids
-                ),
+                frame_of_reference_uid=metadata.frame_of_reference_uid,
+                dimension_organization_uids=metadata.dimension_organization_uids,
             )
         )
         if image_type == ImageType.VOLUME or image_type == ImageType.THUMBNAIL:

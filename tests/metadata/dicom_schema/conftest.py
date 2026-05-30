@@ -366,10 +366,10 @@ def pyramid_dataset(
     dataset.update(dicom_series)
     dataset.update(dicom_patient)
     dimension_organization_sequence = []
-    for uid in wsi_metadata.default_dimension_organization_uids:
+    for uid in wsi_metadata.dimension_organization_uids or []:
         dimension_organization = Dataset()
         dimension_organization.DimensionOrganizationUID = uid
         dimension_organization_sequence.append(dimension_organization)
     dataset.DimensionOrganizationSequence = dimension_organization_sequence
-    dataset.FrameOfReferenceUID = wsi_metadata.default_frame_of_reference_uid
+    dataset.FrameOfReferenceUID = wsi_metadata.frame_of_reference_uid
     yield dataset

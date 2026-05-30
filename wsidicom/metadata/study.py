@@ -16,9 +16,8 @@
 
 import datetime
 from dataclasses import dataclass
-from functools import cached_property
 
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 
 
 @dataclass(frozen=True)
@@ -55,9 +54,3 @@ class Study:
     accession_number: str | None = None
     referring_physician_name: str | None = None
     description: str | None = None
-
-    @cached_property
-    def default_uid(self) -> UID:
-        if self.uid is not None:
-            return self.uid
-        return generate_uid()

@@ -19,11 +19,10 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from functools import cached_property
 from typing import Union
 
 from pydicom.sr.coding import Code
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
@@ -772,10 +771,3 @@ class SlideSample(SampledSpecimen):
             else []
         ):
             raise ValueError("Sampling constraints for slide sample are ambiguous.")
-
-    @cached_property
-    def default_uid(self) -> UID:
-        """Uid used if not set."""
-        if self.uid is not None:
-            return self.uid
-        return generate_uid()

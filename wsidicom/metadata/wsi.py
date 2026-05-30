@@ -16,9 +16,8 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import cached_property
 
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.label import Label
@@ -68,17 +67,3 @@ class WsiMetadata:
     overview: Overview | None = None
     frame_of_reference_uid: UID | None = None
     dimension_organization_uids: Sequence[UID] | None = None
-
-    @cached_property
-    def default_frame_of_reference_uid(self) -> UID:
-        """Frame of reference uid used if not set."""
-        if self.frame_of_reference_uid is not None:
-            return self.frame_of_reference_uid
-        return generate_uid()
-
-    @cached_property
-    def default_dimension_organization_uids(self) -> Sequence[UID]:
-        """Dimension organization uids used if not set."""
-        if self.dimension_organization_uids is not None:
-            return self.dimension_organization_uids
-        return [generate_uid()]

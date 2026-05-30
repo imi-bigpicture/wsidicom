@@ -480,7 +480,7 @@ class SpecimenDescriptionDicomModel:
     """A sample that has been placed on a slide."""
 
     identifier: str
-    uid: UID
+    uid: UID | None
     steps: list[SpecimenPreparationStepDicomModel] = field(default_factory=list)
     anatomical_sites: list[Code] = field(default_factory=list)
     issuer_of_identifier: IssuerOfIdentifier | None = None

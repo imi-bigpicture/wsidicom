@@ -17,13 +17,13 @@ from pathlib import Path
 
 import pytest
 from PIL import ImageChops, ImageFilter, ImageStat
-from pydicom.uid import generate_uid
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
 from wsidicom.codec import Jpeg2kSettings, JpegSettings, Settings
 from wsidicom.codec.encoder import Encoder
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
+from wsidicom.metadata.uid_generator import CallableUidGenerator
 from wsidicom.series import Pyramid, Pyramids
 from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
 
@@ -32,7 +32,11 @@ from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionR
 class TestWsiDicomFileTargetIntegration:
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_save_levels(
-        self, wsi_name: str, wsi_factory: Callable[[str], WsiDicom], tmp_path: Path
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+        uid_generator: CallableUidGenerator,
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -40,7 +44,14 @@ class TestWsiDicomFileTargetIntegration:
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, None, False
+            tmp_path,
+            uid_generator,
+            1,
+            16,
+            OffsetTableType.BASIC,
+            None,
+            None,
+            False,
         ) as target:
             target.save_pyramids(wsi.pyramids, True)
 
@@ -56,6 +67,7 @@ class TestWsiDicomFileTargetIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         include_levels: list[int],
+        uid_generator: CallableUidGenerator,
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -63,7 +75,7 @@ class TestWsiDicomFileTargetIntegration:
         # Act
         with WsiDicomFileTarget(
             tmp_path,
-            generate_uid,
+            uid_generator,
             1,
             16,
             OffsetTableType.BASIC,
@@ -87,6 +99,7 @@ class TestWsiDicomFileTargetIntegration:
         tmp_path: Path,
         settings: Settings,
         force_transcoding: bool,
+        uid_generator: CallableUidGenerator,
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -101,7 +114,7 @@ class TestWsiDicomFileTargetIntegration:
         # Act
         with WsiDicomFileTarget(
             tmp_path,
-            generate_uid,
+            uid_generator,
             1,
             16,
             OffsetTableType.BASIC,
@@ -156,6 +169,7 @@ class TestWsiDicomFileTargetIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: CallableUidGenerator,
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -170,7 +184,14 @@ class TestWsiDicomFileTargetIntegration:
 
         # Act
         with WsiDicomFileTarget(
-            tmp_path, generate_uid, 1, 16, OffsetTableType.BASIC, None, None, True
+            tmp_path,
+            uid_generator,
+            1,
+            16,
+            OffsetTableType.BASIC,
+            None,
+            None,
+            True,
         ) as target:
             target.save_pyramids(pyramids, True)
 
@@ -190,6 +211,7 @@ class TestWsiDicomFileTargetIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: CallableUidGenerator,
     ):
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -199,7 +221,7 @@ class TestWsiDicomFileTargetIntegration:
         # Act
         with WsiDicomFileTarget(
             tmp_path,
-            generate_uid,
+            uid_generator,
             1,
             100,
             OffsetTableType.BASIC,

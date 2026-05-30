@@ -19,7 +19,6 @@ from pydicom.valuerep import VR
 from wsidicom.metadata.schema.dicom.fields import (
     DateDicomField,
     DefaultingNoneDicomField,
-    DefaultingTagDicomField,
     PersonNameDicomField,
     StringDicomField,
     TimeDicomField,
@@ -30,8 +29,8 @@ from wsidicom.metadata.study import Study
 
 
 class StudyDicomSchema(ModuleDicomSchema[Study]):
-    uid = DefaultingTagDicomField(
-        UidDicomField(), tag="default_uid", data_key="StudyInstanceUID", allow_none=True
+    uid = UidDicomField(
+        data_key="StudyInstanceUID", allow_none=True, dump_required=True
     )
     identifier = DefaultingNoneDicomField(
         StringDicomField(value_representation=VR.ST),

@@ -490,7 +490,7 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     identifier = StringDicomField(
         value_representation=VR.LO, data_key="SpecimenIdentifier"
     )
-    uid = UidDicomField(data_key="SpecimenUID")
+    uid = UidDicomField(data_key="SpecimenUID", dump_required=True)
     localization = fields.Nested(
         SampleLocalizationDicomSchema(),
         data_key="SpecimenLocalizationContentItemSequence",
