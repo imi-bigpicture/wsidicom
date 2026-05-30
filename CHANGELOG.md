@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `add_missing_levels=True` in `WsiDicom.save()` now respects `include_levels`.
 
+### Changed
+
+- Relaxed the `imagecodecs` optional dependency upper bound from `<2025.0.0` to unbounded (keeping the `!=2024.9.22` exclusion).
+
 ## [0.30.0] - 2026-05-22
 
 ### Added
