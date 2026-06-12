@@ -242,8 +242,8 @@ class WsiDicom:
         workers: Optional[int] = None
             Maximum number of thread workers to use.
         chunk_size: Optional[int] = None
-            Chunk size (number of tiles) to process at a time. Actual chunk
-            size also depends on minimun_chunk_size from image_data.
+            Per-batch tile width hint for source tile reading. When None,
+            each source's `ImageData.suggested_minimum_chunk_size` is used.
         offset_table: Optional[Union["str", OffsetTableType]] = None,
             Offset table to use, defined either by string (`empty`, `bot`, `eot`, or
             `none`) or `OffsetTableType` enum. Default to None, which will use
@@ -285,10 +285,24 @@ class WsiDicom:
                 workers = 1
             else:
                 workers = cpus
-        if chunk_size is None:
-            chunk_size = 16
         if isinstance(offset_table, str):
             offset_table = OffsetTableType.from_string(offset_table)
+        if include_labels:
+            if label is not None:
+                label_instances = [
+                    WsiInstance.create_label(
+                        label,
+                        self._source.base_dataset,
+                    )
+                ]
+                labels = Labels.open(label_instances)
+            else:
+                labels = self.labels
+        else:
+            labels = None
+
+        overviews = self.overviews if include_overviews else None
+
         with WsiDicomFileTarget(
             output_path,
             uid_generator,
@@ -302,22 +316,7 @@ class WsiDicom:
             force_transcoding,
             file_options,
         ) as target:
-            target.save_pyramids(self.pyramids, include_thumbnails)
-            if include_overviews and self.overviews is not None:
-                target.save_overviews(self.overviews)
-            if include_labels:
-                if label is not None:
-                    label_instances = [
-                        WsiInstance.create_label(
-                            label,
-                            self._source.base_dataset,
-                        )
-                    ]
-                    labels = Labels.open(label_instances)
-                else:
-                    labels = self.labels
-                if labels is not None:
-                    target.save_labels(labels)
+            target.save(self.pyramids, labels, overviews, include_thumbnails)
             return target.filepaths
 
     @classmethod

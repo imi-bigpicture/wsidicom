@@ -14,7 +14,7 @@
 
 from abc import ABCMeta, abstractmethod
 from functools import cached_property
-from typing import Iterator, List, Optional, Sequence
+from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from PIL.Image import Image
 
@@ -211,6 +211,30 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return self._decoded_frame_cache.get_tile_frame(
             id(self), frame_index, self._get_decoded_tile_frame
         )
+
+    def get_encoded_and_decoded_tile(
+        self, tile: Point, z: float, path: str
+    ) -> Tuple[bytes, Image]:
+        frame_index = self._get_frame_index(tile, z, path)
+        return self._get_encoded_and_decoded_tile(frame_index)
+
+    def get_encoded_and_decoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[Tuple[bytes, Image]]:
+        frame_indices = (self._get_frame_index(tile, z, path) for tile in tiles)
+        return (
+            self._get_encoded_and_decoded_tile(frame_index)
+            for frame_index in frame_indices
+        )
+
+    def _get_encoded_and_decoded_tile(self, frame_index: int) -> Tuple[bytes, Image]:
+        if frame_index == -1:
+            return self.blank_encoded_tile, self.blank_tile
+        encoded = self._encoded_frame_cache.get_tile_frame(
+            id(self), frame_index, self._get_tile_frame
+        )
+        decoded = self.decoder.decode(encoded)
+        return encoded, decoded
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """

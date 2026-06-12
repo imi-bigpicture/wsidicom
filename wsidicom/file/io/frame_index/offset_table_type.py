@@ -38,3 +38,4 @@ class OffsetTableType(Enum):
         if offset_table.strip().lower() == "tiff":
             return OffsetTableType.TIFF
         raise ValueError(f"Unknown offset table type: {offset_table}")
+

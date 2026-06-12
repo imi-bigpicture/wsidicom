@@ -29,8 +29,9 @@ from pydicom.uid import (
     VLWholeSlideMicroscopyImageStorage,
     generate_uid,
 )
-from pydicom.valuerep import DSfloat
+from pydicom.valuerep import MAX_VALUE_LEN, DSfloat
 
+from wsidicom.codec import Encoder
 from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomError,
@@ -41,7 +42,13 @@ from wsidicom.errors import (
 )
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.image_data import ImageData
-from wsidicom.tags import OpticalPathIdentificationSequenceTag, OpticalPathIdentifierTag
+from wsidicom.tags import (
+    LossyImageCompressionMethodTag,
+    LossyImageCompressionRatioTag,
+    OpticalPathIdentificationSequenceTag,
+    OpticalPathIdentifierTag,
+    PerFrameFunctionalGroupsSequenceTag,
+)
 from wsidicom.uid import FileUids, SlideUids
 
 
@@ -698,7 +705,7 @@ class WsiDataset(Dataset):
             Copy of dataset set as tiled full.
 
         """
-        dataset = deepcopy(self)
+        dataset = self._copy_without_per_frame()
         dataset.DimensionOrganizationType = "TILED_FULL"
         # Make a new Shared functional group sequence and Pixel measure
         # sequence if not in dataset, otherwise update the Pixel measure
@@ -729,10 +736,6 @@ class WsiDataset(Dataset):
         shared_functional_group[0].PixelMeasuresSequence = pixel_measure
         dataset.SharedFunctionalGroupsSequence = shared_functional_group
 
-        # Remove Per Frame functional groups sequence
-        if "PerFrameFunctionalGroupsSequence" in dataset:
-            del dataset["PerFrameFunctionalGroupsSequence"]
-
         dataset.TotalPixelMatrixColumns = max(
             math.ceil(dataset.TotalPixelMatrixColumns / scale), 1
         )
@@ -748,6 +751,29 @@ class WsiDataset(Dataset):
         )
 
         return dataset
+
+    def update_for_transcoding(self, transcoder: Encoder, scale: int) -> None:
+        """Update dataset metadata for transcoding.
+
+        Parameters
+        ----------
+        transcoder: Encoder
+            Encoder being used for transcoding.
+        scale: int
+            Scale factor applied to the image data.
+        """
+        self.PhotometricInterpretation = transcoder.photometric_interpretation
+        if transcoder.lossy_method:
+            self.LossyImageCompression = "01"
+            ratios = self.get_multi_value(LossyImageCompressionRatioTag)
+            methods = self.get_multi_value(LossyImageCompressionMethodTag)
+            if scale != 1:
+                ratios.clear()
+                methods.clear()
+            ratios.append(" " * MAX_VALUE_LEN["DS"])
+            methods.append(transcoder.lossy_method.value)
+            self.LossyImageCompressionRatio = ratios
+            self.LossyImageCompressionMethod = methods
 
     @classmethod
     def create_instance_dataset(
@@ -895,6 +921,17 @@ class WsiDataset(Dataset):
 
         dataset.FocusMethod = "AUTO"
         dataset.ExtendedDepthOfField = "NO"
+        return WsiDataset(dataset)
+
+    def _copy_without_per_frame(self) -> "WsiDataset":
+        """Copy dataset excluding PerFrameFunctionalGroupsSequence."""
+        dataset = deepcopy(
+            {
+                tag: elem
+                for tag, elem in self.items()
+                if tag != PerFrameFunctionalGroupsSequenceTag
+            }
+        )
         return WsiDataset(dataset)
 
     def _get_dicom_attribute(

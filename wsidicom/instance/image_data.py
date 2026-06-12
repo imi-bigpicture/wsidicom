@@ -17,11 +17,12 @@
 from abc import ABCMeta, abstractmethod
 from functools import cached_property
 from typing import (
-    Callable,
     Iterable,
     Iterator,
     List,
+    Literal,
     Optional,
+    Sequence,
     Tuple,
     Union,
 )
@@ -32,10 +33,11 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.config import settings
+from wsidicom.downsampler import Downsampler, PillowDownsampler
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
-from wsidicom.thread import ConditionalThreadPoolExecutor
+from wsidicom.stitcher import PillowStitcher, Stitcher
 
 
 class ImageData(metaclass=ABCMeta):
@@ -179,6 +181,57 @@ class ImageData(metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
+    def get_encoded_and_decoded_tile(
+        self, tile: Point, z: float, path: str
+    ) -> Tuple[bytes, Image]:
+        """Return both encoded bytes and decoded image for a tile.
+
+        Default implementation calls _get_encoded_tile and _get_decoded_tile
+        separately. Subclasses can override to read from source only once.
+
+        Parameters
+        ----------
+        tile: Point
+            Tile x, y coordinate.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        -------
+        Tuple[bytes, Image]
+            Encoded tile bytes and decoded tile image.
+        """
+        return (
+            self._get_encoded_tile(tile, z, path),
+            self._get_decoded_tile(tile, z, path),
+        )
+
+    def get_encoded_and_decoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[Tuple[bytes, Image]]:
+        """Return both encoded bytes and decoded image for multiple tiles.
+
+        Default implementation calls get_encoded_and_decoded_tile per tile.
+        Subclasses can override for batch-efficient reading.
+
+        Parameters
+        ----------
+        tiles: Iterable[Point]
+            Tile positions to read.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Yields
+        ------
+        Tuple[bytes, Image]
+            Encoded tile bytes and decoded tile image for each position.
+        """
+        return (self.get_encoded_and_decoded_tile(tile, z, path) for tile in tiles)
+
     @property
     def tiled_size(self) -> Size:
         """
@@ -204,8 +257,17 @@ class ImageData(metaclass=ABCMeta):
         return ["0"]
 
     @property
-    def image_mode(self) -> str:
-        """Return Pillow image mode (e.g. RGB) for image data."""
+    def suggested_minimum_chunk_size(self) -> int:
+        """Suggested minimum number of tiles to read in a batch.
+
+        Subclasses may override this to indicate that reading tiles in
+        larger batches is more efficient.
+        """
+        return 1
+
+    @property
+    def image_mode(self) -> Literal["L", "I", "RGB"]:
+        """Return Pillow image mode for image data."""
         if self.samples_per_pixel == 1:
             if self.bits == 8:
                 return "L"
@@ -219,6 +281,16 @@ class ImageData(metaclass=ABCMeta):
     def blank_color(self) -> Union[int, Tuple[int, int, int]]:
         """Return grey level or RGB background color."""
         return self._get_blank_color(self.photometric_interpretation)
+
+    @cached_property
+    def _stitcher(self) -> Stitcher:
+        """Stitcher used when assembling regions or scaled tiles."""
+        return PillowStitcher()
+
+    @cached_property
+    def _downsampler(self) -> Downsampler:
+        """Downsampler used when producing virtual downscaled tiles."""
+        return PillowDownsampler(resample=settings.pillow_resampling_filter)
 
     def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
         """Return pretty string of object."""
@@ -340,36 +412,33 @@ class ImageData(metaclass=ABCMeta):
         Image
             Scaled tiled as Pillow image.
         """
-        image = Pillow.new(
-            mode=self.image_mode,
-            size=(self.tile_size * scale).to_tuple(),
-            color=self.blank_color,
+        # Tile region covering the scaled tile, cropped to image bounds
+        tile_region = Region(scaled_tile_point * scale, Size(1, 1) * scale).crop(
+            self.tiled_size
         )
-        # Get decoded tiles for the region covering the scaled tile
-        # in the image data
-        tile_region = Region(scaled_tile_point * scale, Size(1, 1) * scale)
-        tile_region = tile_region.crop(self.tiled_size)
 
-        def paste(image: Image, tile_point: Point, tile: Image):
-            image_coordinate = (tile_point - tile_region.start) * self.tile_size
-            if crop_to_image_boundary:
-                tile_crop = self.image_region.inside_crop(tile_point, self.tile_size)
+        def fetch(chunk: Sequence[Point]) -> Iterator[Image]:
+            decoded = self._get_decoded_tiles(chunk, z, path)
+            if not crop_to_image_boundary:
+                yield from decoded
+                return
+            for point, tile in zip(chunk, decoded):
+                tile_crop = self.image_region.inside_crop(point, self.tile_size)
                 if tile_crop.size != self.tile_size:
                     tile = tile.crop(box=tile_crop.box)
-            image.paste(tile, image_coordinate.to_tuple())
+                yield tile
 
-        self._paste_tiles(
-            image,
-            tile_region,
-            z,
-            path,
-            paste,
-            workers,
+        canvas = self._stitcher.stitch_parallel(
+            tile_region=tile_region,
+            fetch=fetch,
+            tile_size=self.tile_size,
+            mode=self.image_mode,
+            canvas_grid_size=Size(scale, scale),
+            fill=self.blank_color,
+            threads=workers,
         )
 
-        return image.resize(
-            self.tile_size.to_tuple(), resample=settings.pillow_resampling_filter
-        )
+        return self._downsampler.downsample(canvas, self.tile_size)
 
     def get_tile(
         self,
@@ -499,7 +568,6 @@ class ImageData(metaclass=ABCMeta):
         Image
             Stitched image
         """
-
         tile_region = self._get_tile_range(region, z, path)
         if tile_region.size.area == 1:
             # Only one tile, no need to stitch
@@ -508,32 +576,23 @@ class ImageData(metaclass=ABCMeta):
             if tile_crop.size != self.tile_size:
                 tile = tile.crop(box=tile_crop.box)
             return tile
-        image = Pillow.new(mode=self.image_mode, size=region.size.to_tuple())
-        # The tiles are cropped prior to pasting. This offset is the equal to the first
-        # (upper left) tiles size, and is added to the image coordinate for tiles not
-        # in the first row or column.
-        offset = (tile_region.start * self.tile_size) - region.start
 
-        def paste(image: Image, tile_point: Point, tile: Image):
-            image_coordinate = Point(
-                offset.x * (tile_point.x != tile_region.start.x),
-                offset.y * (tile_point.y != tile_region.start.y),
-            )
-            image_coordinate += (tile_point - tile_region.start) * self.tile_size
-            tile_crop = region.inside_crop(tile_point, self.tile_size)
-            if tile_crop.size != self.tile_size:
-                tile = tile.crop(box=tile_crop.box)
-            image.paste(tile, image_coordinate.to_tuple())
-
-        self._paste_tiles(
-            image,
-            tile_region,
-            z,
-            path,
-            paste,
-            threads,
+        canvas = self._stitcher.stitch_parallel(
+            tile_region=tile_region,
+            fetch=lambda chunk: self._get_decoded_tiles(chunk, z, path),
+            tile_size=self.tile_size,
+            mode=self.image_mode,
+            threads=threads,
         )
-        return image
+        crop_origin = region.start - tile_region.start * self.tile_size
+        return canvas.crop(
+            (
+                crop_origin.x,
+                crop_origin.y,
+                crop_origin.x + region.size.width,
+                crop_origin.y + region.size.height,
+            )
+        )
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
         """
@@ -612,50 +671,6 @@ class ImageData(metaclass=ABCMeta):
         if tile_crop.size != self.tile_size:
             return tile.crop(box=tile_crop.box)
         return tile.copy()
-
-    def _paste_tiles(
-        self,
-        image: Image,
-        tile_region: Region,
-        z: float,
-        path: str,
-        paste_method: Callable[[Image, Point, Image], None],
-        threads: int,
-    ):
-        """
-        Paste tiles in region using method.
-
-        Use threading if number of tiles to paste
-        is larger than one and requested worker count is more than one.
-
-        Parameters
-        ----------
-        image: Image
-            Image to paste into.
-        tile_region: Region
-            Tile region of tiles to paste.
-        z: float
-            Z coordinate.
-        path: str
-            Optical path.
-        paste_method: Callable[[Image, Point, Image], None]
-            Method that accepts a image, a tile point and tile to paste and returns
-            None.
-        threads: int
-            Number of workers to use.
-        """
-
-        def thread_paste(tile_points: Iterable[Point]) -> None:
-            tile_points = list(tile_points)
-            for tile_point, tile in zip(
-                tile_points, self._get_decoded_tiles(tile_points, z, path)
-            ):
-                paste_method(image, tile_point, tile)
-
-        with ConditionalThreadPoolExecutor(
-            max_workers=threads, force_iteration=True
-        ) as pool:
-            pool.map(thread_paste, tile_region.chunked_iterate_all(threads))
 
     def _get_reencoded_tiles(
         self,

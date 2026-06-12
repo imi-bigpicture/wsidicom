@@ -21,8 +21,6 @@ from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.series import Labels, Overviews, Pyramids
 
-"""A Target enables creating new instances."""
-
 
 class Target(metaclass=ABCMeta):
     """A target should be initiated with a path or similar, and enable saving of
@@ -32,7 +30,6 @@ class Target(metaclass=ABCMeta):
         self,
         uid_generator: Callable[..., UID],
         workers: int,
-        chunk_size: int,
         include_pyramids: Optional[Sequence[int]] = None,
         include_levels: Optional[Sequence[int]] = None,
         add_missing_levels: bool = False,
@@ -47,9 +44,6 @@ class Target(metaclass=ABCMeta):
             Uid generator to use.
         workers: int
             Maximum number of thread workers to use.
-        chunk_size: int
-            Chunk size (number of tiles) to process at a time. Actual chunk
-            size also depends on minimun_chunk_size from image_data.
         include_pyramids: Optional[Sequence[int]] = None
             Optional list indices (in present pyramids) to include.
         include_levels: Optional[Sequence[int]] = None
@@ -67,7 +61,6 @@ class Target(metaclass=ABCMeta):
         """
         self._uid_generator = uid_generator
         self._workers = workers
-        self._chunk_size = chunk_size
         self._include_pyramids = include_pyramids
         self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
@@ -80,18 +73,26 @@ class Target(metaclass=ABCMeta):
         self.__enter__()
 
     @abstractmethod
-    def save_pyramids(self, pyramids: Pyramids, include_thumbnails: bool) -> None:
-        """Should save the pyramids to the target."""
-        raise NotImplementedError()
+    def save(
+        self,
+        pyramids: Pyramids,
+        labels: Optional[Labels],
+        overviews: Optional[Overviews],
+        include_thumbnails: bool,
+    ) -> None:
+        """Save pyramids, labels, and overviews to the target.
 
-    @abstractmethod
-    def save_labels(self, labels: Labels) -> None:
-        """Should save the labels to the target."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def save_overviews(self, overviews: Overviews) -> None:
-        """Should save the overviews to the target."""
+        Parameters
+        ----------
+        pyramids: Pyramids
+            Pyramids to save.
+        labels: Optional[Labels]
+            Labels to save, or None to skip.
+        overviews: Optional[Overviews]
+            Overviews to save, or None to skip.
+        include_thumbnails: bool
+            If to include thumbnails from pyramids.
+        """
         raise NotImplementedError()
 
     @abstractmethod
@@ -104,43 +105,3 @@ class Target(metaclass=ABCMeta):
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
-
-    @staticmethod
-    def _is_included_level(
-        level: int,
-        present_levels: Sequence[int],
-        allow_missing: bool,
-        include_indices: Optional[Sequence[int]] = None,
-    ) -> bool:
-        """Return true if pyramid level is in included levels.
-
-        Parameters
-        ----------
-        level: int
-            Pyramid level to check.
-        present_levels: Sequence[int]
-            List of pyramid levels present.
-        allow_missing: bool
-            If to include missing levels (not in present_levels).
-        include_indices: Optional[Sequence[int]] = None
-            Optional list indices (in present levels) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indices can be used,
-            e.g. [-1, -2] includes the two highest levels. Default of None
-            will not limit the selection. An empty sequence will excluded all
-            levels.
-
-        Returns
-        -------
-        bool
-            True if level should be included.
-        """
-        if level not in present_levels:
-            return allow_missing
-        if include_indices is None:
-            return True
-        absolute_levels = [
-            present_levels[level]
-            for level in include_indices
-            if -len(present_levels) <= level < len(present_levels)
-        ]
-        return level in absolute_levels

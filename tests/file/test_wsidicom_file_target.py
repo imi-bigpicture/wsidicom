@@ -16,7 +16,7 @@ from typing import Optional, Sequence
 
 import pytest
 
-from wsidicom.file import WsiDicomFileTarget
+from wsidicom.file.file_writer import PyramidFileWriter
 
 
 @pytest.mark.unittest
@@ -36,7 +36,7 @@ class TestWsiDicomFileTarget:
         # Arrange
 
         # Act
-        is_included = WsiDicomFileTarget._is_included_level(
+        is_included = PyramidFileWriter._is_included_level(
             level, present_levels, allow_missing, include_indices
         )
 
@@ -65,7 +65,7 @@ class TestWsiDicomFileTarget:
         # Arrange
 
         # Act
-        is_included = WsiDicomFileTarget._is_included_level(
+        is_included = PyramidFileWriter._is_included_level(
             level, present_levels, allow_missing, include_indices
         )
 
@@ -98,7 +98,7 @@ class TestWsiDicomFileTarget:
         # Arrange
 
         # Act
-        is_included = WsiDicomFileTarget._is_included_level(
+        is_included = PyramidFileWriter._is_included_level(
             level, present_levels, allow_missing, include_indices
         )
 
@@ -132,7 +132,7 @@ class TestWsiDicomFileTarget:
         # Arrange
 
         # Act
-        is_included = WsiDicomFileTarget._is_included_level(
+        is_included = PyramidFileWriter._is_included_level(
             level, present_levels, allow_missing, include_indices
         )
 

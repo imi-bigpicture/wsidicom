@@ -1,4 +1,4 @@
-#    Copyright 2023 SECTRA AB
+#    Copyright 2026 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,9 +12,4 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module for handling group of instances, such as a level."""
-
-from wsidicom.group.group import Instances, Label, Overview, Thumbnail
-from wsidicom.group.level import Level
-
-__all__ = ["Instances", "Label", "Overview", "Thumbnail", "Level"]
+"""Sink-agnostic components of the write pipeline."""

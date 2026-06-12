@@ -257,6 +257,7 @@ class PillowDecoder(Decoder):
 
     def decode(self, frame: bytes) -> Image:
         image = Pillow.open(io.BytesIO(frame))
+        image.load()
         return self._set_mode(image)
 
     @classmethod
