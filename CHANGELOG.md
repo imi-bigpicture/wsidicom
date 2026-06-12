@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Pyramid writing now runs as a multi-threaded pipeline (source read →
+  downsample → encode → write). An error in any stage aborts the save promptly
+  and re-raises the original exception.
+
 ## [0.29.0] - 2025-12-09
 
 ### Added
