@@ -45,15 +45,14 @@ class ReadOnlyQueue(Protocol[QueueItemTypeOut]):
 
 
 class ShutdownSentinel:
-    """Sentinel that compares greater than any other object, thus processed last in priority queue."""
+    """Sentinel that compares greater than any other object, thus processed last
+    in priority queue."""
 
     def __lt__(self, other: object) -> bool:
         return False
 
     def __gt__(self, other: object) -> bool:
-        if isinstance(other, ShutdownSentinel):
-            return False
-        return True
+        return not isinstance(other, ShutdownSentinel)
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, ShutdownSentinel)

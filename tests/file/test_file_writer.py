@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 from decoy import Decoy, matchers
 from PIL import ImageChops, ImageFilter, ImageStat
+
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
 from wsidicom.codec import Encoder

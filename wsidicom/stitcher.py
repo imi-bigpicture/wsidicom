@@ -170,7 +170,7 @@ class PillowStitcher(Stitcher):
         try:
             first = next(tile_iterator)
         except StopIteration:
-            raise ValueError("Cannot stitch an empty tile iterable")
+            raise ValueError("Cannot stitch an empty tile iterable") from None
 
         tile_size = Size(first.width, first.height)
         canvas = self._create_canvas(first.mode, grid_size, tile_size, fill)

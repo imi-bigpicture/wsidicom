@@ -216,10 +216,8 @@ class DictTileCache(TileCache):
         self, level: int, start_index: int, tiles: Iterable[bytes]
     ) -> None:
         with self._lock:
-            count = 0
             for i, tile in enumerate(tiles):
                 self._cache[(level, start_index + i)] = tile
-                count += 1
 
     def load_sequential(self, level: int, index: int) -> Iterable[bytes]:
         result: list[bytes] = []
@@ -265,12 +263,10 @@ class ByteBudgetTileCache(TileCache):
     def save_sequential(
         self, level: int, start_index: int, tiles: Iterable[bytes]
     ) -> None:
-        count = 0
         for i, tile in enumerate(tiles):
             tile_index = start_index + i
             if not self._memory_store.try_save(level, tile_index, tile):
                 self._file_store.save(level, tile_index, tile)
-            count += 1
 
     def load_sequential(self, level: int, index: int) -> Iterable[bytes]:
         tile = self._load(level, index)

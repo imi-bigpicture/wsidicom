@@ -16,6 +16,7 @@
 (a pyramid level or an ancillary group) and hand them to an injected `TileWriter`.
 """
 
+import contextlib
 from collections.abc import Iterable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Semaphore
@@ -37,7 +38,6 @@ from wsidicom.writing.pyramid_tile_accumulator import PyramidTileAccumulator
 from wsidicom.writing.tile_cache import TileCache
 from wsidicom.writing.tile_readers import TileReader
 from wsidicom.writing.tile_sequencer import TileSequencer, TileWriter
-import contextlib
 
 
 class GroupInstanceWriter:

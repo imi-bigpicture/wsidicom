@@ -14,6 +14,7 @@
 
 """Priority-based encoder pool for parallel tile encoding."""
 
+import contextlib
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
@@ -40,7 +41,6 @@ from wsidicom.writing.models import (
     EncodeTask,
     EncodingTaskResult,
 )
-import contextlib
 
 
 class EncoderPool:
