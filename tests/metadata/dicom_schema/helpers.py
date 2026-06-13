@@ -129,7 +129,7 @@ def assert_dicom_code_sequence_equals_codes(
     code_sequence: Sequence[Dataset], expected_codes: Sequence[Code | ConceptCode]
 ):
     assert len(code_sequence) == len(expected_codes)
-    for code_dataset, expected_code in zip(code_sequence, expected_codes, strict=False):
+    for code_dataset, expected_code in zip(code_sequence, expected_codes, strict=True):
         assert_dicom_code_dataset_equals_code(code_dataset, expected_code)
 
 
@@ -268,7 +268,7 @@ def assert_dicom_lossy_compression_equals_lossy_compressions(
             lossy_compressions,
             dicom_methods,
             dicom_ratios,
-            strict=False,
+            strict=True,
         ):
             assert lossy_compression.method.value == dicom_method
             assert lossy_compression.ratio == dicom_ratio

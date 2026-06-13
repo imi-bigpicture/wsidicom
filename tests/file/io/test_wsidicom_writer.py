@@ -41,6 +41,7 @@ from wsidicom.file.io import (
     WsiDicomWriter,
 )
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
+from wsidicom.file.io.wsidicom_writer import EncapsulatedPixelDataWriter
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.instance import ImageData
 from wsidicom.instance.dataset import WsiDataset
@@ -280,7 +281,7 @@ class TestWsiDicomWriter:
         ]
         expected_frame_positons = [
             (offset, length)
-            for offset, length in zip(frame_offsets, frame_lengths, strict=False)
+            for offset, length in zip(frame_offsets, frame_lengths, strict=True)
         ]
         assert expected_frame_positons == read_frame_positions
         assert writen_table_type == read_table_type
@@ -340,8 +341,10 @@ class TestWsiDicomWriter:
         with WsiDicomWriter.open(
             filepath, JPEGBaseline8Bit, OffsetTableType.BASIC
         ) as writer:
-            writer._pixel_data_writer._file.write_tag(SequenceDelimiterTag)
-            writer._pixel_data_writer._file.write_UL(0)
+            pixel_data_writer = writer._pixel_data_writer
+            assert isinstance(pixel_data_writer, EncapsulatedPixelDataWriter)
+            pixel_data_writer._file.write_tag(SequenceDelimiterTag)
+            pixel_data_writer._file.write_UL(0)
 
         # Assert
         with WsiDicomIO(

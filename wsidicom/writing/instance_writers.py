@@ -37,6 +37,7 @@ from wsidicom.writing.pyramid_tile_accumulator import PyramidTileAccumulator
 from wsidicom.writing.tile_cache import TileCache
 from wsidicom.writing.tile_readers import TileReader
 from wsidicom.writing.tile_sequencer import TileSequencer, TileWriter
+import contextlib
 
 
 class GroupInstanceWriter:
@@ -147,10 +148,8 @@ class PyramidLevelWriter:
     def cleanup(self) -> None:
         """Best-effort pipeline shutdown on error."""
         if self._tile_sequencer is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._tile_sequencer.shutdown()
-            except Exception:
-                pass
 
 
 class SourcePyramidLevelWriter(PyramidLevelWriter):
@@ -196,10 +195,8 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         The emission is cancel-aware so it cannot block if the token cancels
         concurrently; the sequencer's `finalize` then surfaces the cause.
         """
-        try:
+        with contextlib.suppress(Cancelled):
             self._owned_tile_queue.put(ShutdownSentinel(), self._token)
-        except Cancelled:
-            pass
         super().finalize_writers()
 
     def run(self, pool: ThreadPoolExecutor, max_inflight: int) -> None:

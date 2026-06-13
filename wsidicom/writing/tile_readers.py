@@ -45,9 +45,7 @@ class TileAccumulator(Protocol):
         """Number of generated levels in the cascade starting from this one."""
         ...
 
-    def add_tile(
-        self, x: int, y: int, z: int, path: int, tile: Image.Image
-    ) -> None:
+    def add_tile(self, x: int, y: int, z: int, path: int, tile: Image.Image) -> None:
         """Submit a decoded tile for accumulation."""
         ...
 
@@ -127,7 +125,7 @@ class PassthroughTileReader(TileReader):
         row_start: Point | None = None
         row_tiles: list[bytes] = []
         for position, encoded in zip(
-            positions, image_data.get_encoded_tiles(positions, z, path)
+            positions, image_data.get_encoded_tiles(positions, z, path), strict=True
         ):
             if row_start is not None and position.y != row_start.y:
                 self._submit_row(
@@ -172,6 +170,7 @@ class CascadingPassthroughTileReader(TileReader):
         for position, (encoded, decoded) in zip(
             positions,
             image_data.get_encoded_and_decoded_tiles(positions, z, path),
+            strict=True,
         ):
             if row_start is not None and position.y != row_start.y:
                 self._submit_row(
@@ -215,6 +214,7 @@ class TranscodeTileReader(TileReader):
         for position, decoded in zip(
             positions,
             image_data.get_tiles(positions, z, path, crop_to_image_boundary=False),
+            strict=True,
         ):
             if row_start is not None and position.y != row_start.y:
                 self._encoder_pool_queue.put(
@@ -275,6 +275,7 @@ class CascadingTranscodeTileReader(TileReader):
         for position, decoded in zip(
             positions,
             image_data.get_tiles(positions, z, path, crop_to_image_boundary=False),
+            strict=True,
         ):
             if row_start is not None and position.y != row_start.y:
                 self._encoder_pool_queue.put(

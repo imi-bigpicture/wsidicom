@@ -416,7 +416,7 @@ class ImageData(metaclass=ABCMeta):
             if not crop_to_image_boundary:
                 yield from decoded
                 return
-            for point, tile in zip(chunk, decoded):
+            for point, tile in zip(chunk, decoded, strict=True):
                 tile_crop = self.image_region.inside_crop(point, self.tile_size)
                 if tile_crop.size != self.tile_size:
                     tile = tile.crop(box=tile_crop.box)
@@ -480,7 +480,7 @@ class ImageData(metaclass=ABCMeta):
             return decoded_tiles
         return (
             self._crop_tile(tile_point, tile)
-            for tile_point, tile in zip(tiles, decoded_tiles, strict=False)
+            for tile_point, tile in zip(tiles, decoded_tiles, strict=True)
         )
 
     def get_scaled_encoded_tile(

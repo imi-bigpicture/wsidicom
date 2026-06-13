@@ -86,7 +86,7 @@ class TestDicomLut:
 
         # Assert
         for component, expected_component in zip(
-            table, expected_table_component, strict=False
+            table, expected_table_component, strict=True
         ):
             assert len(component) == len(expected_component)
             assert np.array_equal(component, expected_component)

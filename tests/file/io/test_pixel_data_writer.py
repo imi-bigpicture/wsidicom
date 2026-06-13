@@ -41,9 +41,7 @@ ITEM_HEADER_SIZE = 8  # 4-byte tag + 4-byte length
 
 
 def _open_stream(filepath: Path, transfer_syntax) -> WsiDicomIO:
-    return WsiDicomStreamOpener().open_for_writing(
-        filepath, "w+b", transfer_syntax
-    )
+    return WsiDicomStreamOpener().open_for_writing(filepath, "w+b", transfer_syntax)
 
 
 def _make_dataset(frame_count: int, tile_size: Size = Size(10, 10)) -> WsiDataset:
@@ -213,7 +211,13 @@ class TestEncapsulatedPixelDataWriter:
 
         # Act
         writer.write_pixel_data_end(
-            table_writer, pixels_start, 0, 0, dataset, [pos], None,
+            table_writer,
+            pixels_start,
+            0,
+            0,
+            dataset,
+            [pos],
+            None,
         )
         delimiter_pos = stream.tell() - ITEM_HEADER_SIZE
         stream.seek(delimiter_pos)
@@ -249,9 +253,7 @@ class TestEncapsulatedPixelDataWriter:
         last_frame_end = offset
 
         # Act
-        result = EncapsulatedPixelDataWriter._calculate_size(
-            positions, last_frame_end
-        )
+        result = EncapsulatedPixelDataWriter._calculate_size(positions, last_frame_end)
 
         # Assert
         assert result == sum(tile_sizes)

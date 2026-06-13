@@ -210,4 +210,3 @@ class TileSequencer:
             + coordinates.y_index * self._tiled_size.width
             + coordinates.x_index
         )
-

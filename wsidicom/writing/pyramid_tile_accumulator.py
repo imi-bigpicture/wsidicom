@@ -14,6 +14,7 @@
 
 """Accumulator for cascaded tiles in pyramid generation."""
 
+import contextlib
 from threading import Thread
 from typing import Optional
 
@@ -120,9 +121,9 @@ class PyramidTileAccumulator:
             next_accumulator.input_queue if next_accumulator is not None else None
         )
         self._buffer: dict[tuple[int, int, int, int], Image.Image] = {}
-        self._input_queue: FifoCancelableQueue[
-            CascadedTile | ShutdownSentinel
-        ] = FifoCancelableQueue(maxsize=queue_maxsize)
+        self._input_queue: FifoCancelableQueue[CascadedTile | ShutdownSentinel] = (
+            FifoCancelableQueue(maxsize=queue_maxsize)
+        )
         self._output_queue: PriorityCancelableQueue[
             EncodingTaskResult | ShutdownSentinel
         ] = PriorityCancelableQueue(maxsize=queue_maxsize)
@@ -206,10 +207,8 @@ class PyramidTileAccumulator:
         accumulator's consumer.
         """
         if self._is_chain_start:
-            try:
+            with contextlib.suppress(Cancelled):
                 self._input_queue.put(ShutdownSentinel(), self._token)
-            except Cancelled:
-                pass
         self._consumer_thread.join()
         if self._failure is not None:
             raise self._failure
@@ -253,9 +252,7 @@ class PyramidTileAccumulator:
         try:
             self._output_queue.put(ShutdownSentinel(), self._token)
             if self.next_accumulator is not None:
-                self.next_accumulator.input_queue.put(
-                    ShutdownSentinel(), self._token
-                )
+                self.next_accumulator.input_queue.put(ShutdownSentinel(), self._token)
         except Cancelled:
             pass
 

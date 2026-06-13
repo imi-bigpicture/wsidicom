@@ -23,8 +23,6 @@ from pathlib import Path
 import pytest
 from decoy import Decoy, matchers
 from PIL import ImageChops, ImageFilter, ImageStat
-from pydicom.uid import generate_uid
-
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
 from wsidicom.codec import Encoder
@@ -32,6 +30,7 @@ from wsidicom.file import OffsetTableType
 from wsidicom.file.file_writer import (
     PyramidFileWriter,
 )
+from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Pyramid
 
 
@@ -56,6 +55,7 @@ class TestPyramidFileWriterIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: UidGenerator,
     ):
         """Test generating a full pyramid preserves all existing levels."""
         # Arrange
@@ -67,7 +67,7 @@ class TestPyramidFileWriterIntegration:
         generator = PyramidFileWriter(
             pyramid=pyramid,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -83,6 +83,7 @@ class TestPyramidFileWriterIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: UidGenerator,
     ):
         """Test generating a full pyramid from only the base level."""
         # Arrange
@@ -95,7 +96,7 @@ class TestPyramidFileWriterIntegration:
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -115,6 +116,7 @@ class TestPyramidFileWriterIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: UidGenerator,
     ):
         """Test that generated files produce readable image data."""
         # Arrange
@@ -125,7 +127,7 @@ class TestPyramidFileWriterIntegration:
         generator = PyramidFileWriter(
             pyramid=pyramid,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -145,6 +147,7 @@ class TestPyramidFileWriterIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: UidGenerator,
     ):
         """Test that a downsampled level is visually close to the original."""
         # Arrange
@@ -161,7 +164,7 @@ class TestPyramidFileWriterIntegration:
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
         )
@@ -188,9 +191,7 @@ class TestPyramidFileWriterIntegration:
             original = wsi.read_region(location, target_level.level, crop_size)
 
             blur = ImageFilter.GaussianBlur(2)
-            diff = ImageChops.difference(
-                created.filter(blur), original.filter(blur)
-            )
+            diff = ImageChops.difference(created.filter(blur), original.filter(blur))
             for band_rms in ImageStat.Stat(diff).rms:
                 assert band_rms < 2
 
@@ -205,6 +206,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: UidGenerator,
     ):
         """Test generating a full pyramid with bottom-up threading model."""
         # Arrange
@@ -216,10 +218,9 @@ class TestPyramidFileWriterBottomUpIntegration:
         generator = PyramidFileWriter(
             pyramid=pyramid,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
-
         )
         generator.write()
 
@@ -233,6 +234,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: UidGenerator,
     ):
         """Test generating from base only with bottom-up threading model."""
         # Arrange
@@ -245,10 +247,9 @@ class TestPyramidFileWriterBottomUpIntegration:
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
-
         )
         generator.write()
 
@@ -271,6 +272,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: UidGenerator,
     ):
         """Test generating a full pyramid with sequential bottom-up model."""
         # Arrange
@@ -282,10 +284,9 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         generator = PyramidFileWriter(
             pyramid=pyramid,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
-
             source_workers=1,
         )
         generator.write()
@@ -300,6 +301,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
+        uid_generator: UidGenerator,
     ):
         """Test generating from base only with sequential bottom-up model."""
         # Arrange
@@ -312,10 +314,9 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
-
             source_workers=1,
         )
         generator.write()
@@ -340,6 +341,7 @@ class TestPyramidFileWriterFailFast:
         self,
         wsi_name: str,
         source_workers: int | None,
+        uid_generator: UidGenerator,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         decoy: Decoy,
@@ -386,7 +388,7 @@ class TestPyramidFileWriterFailFast:
         writer = PyramidFileWriter(
             pyramid=pyramid,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             transcoder=failing_encoder,
             force_transcoding=True,
@@ -421,6 +423,7 @@ class TestPyramidFileWriterFailFast:
         self,
         wsi_name: str,
         source_workers: int | None,
+        uid_generator: UidGenerator,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -459,7 +462,7 @@ class TestPyramidFileWriterFailFast:
         writer = PyramidFileWriter(
             pyramid=pyramid,
             output_path=tmp_path,
-            uid_generator=generate_uid,
+            uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
             source_workers=source_workers,
@@ -484,5 +487,3 @@ class TestPyramidFileWriterFailFast:
         assert created_temp_dirs, "pipeline did not create a temp dir"
         for path in created_temp_dirs:
             assert not os.path.exists(path), f"temp dir not cleaned up: {path}"
-
-

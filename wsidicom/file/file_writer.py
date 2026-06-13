@@ -14,6 +14,7 @@
 
 """Writers for WSI DICOM pyramid and group files."""
 
+import contextlib
 import itertools
 import logging
 import shutil
@@ -24,9 +25,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Thread
-from typing import (
-    Any,
-)
+from typing import Any
 
 from pydicom.uid import UID
 from upath import UPath
@@ -324,9 +323,14 @@ class PyramidFileWriter(BaseFileWriter):
                 # recorded by a worker, if any) rather than a downstream symptom.
                 token.cancel(error)
                 self._cleanup_writers(level_writers, file_writers, encoder_pool)
-                raise token.exception or error
+                raise token.exception or error from None
 
-            return [file_writer.filepath for file_writer in file_writers]
+            filepaths: list[UPath] = []
+            for file_writer in file_writers:
+                filepath = file_writer.filepath
+                assert filepath is not None  # always set once the writer is opened
+                filepaths.append(filepath)
+            return filepaths
 
         finally:
             self._cleanup_temp(temp_dir)
@@ -520,7 +524,7 @@ class PyramidFileWriter(BaseFileWriter):
         # per-level finalize reports a (misleading) tile-count mismatch.
         token.raise_if_cancelled()
 
-        for level_writer, file_writer in zip(level_writers, file_writers):
+        for level_writer, file_writer in zip(level_writers, file_writers, strict=True):
             level_writer.finalize_writers()
             file_writer.finalize(level_writer.dataset, transcoder)
 
@@ -531,17 +535,13 @@ class PyramidFileWriter(BaseFileWriter):
         encoder_pool: EncoderPool,
     ) -> None:
         """Clean up all resources on error."""
-        try:
+        with contextlib.suppress(Exception):
             encoder_pool.shutdown(wait=False)
-        except Exception:
-            pass
         for level_writer in level_writers:
             level_writer.cleanup()
         for file_writer in file_writers:
-            try:
+            with contextlib.suppress(Exception):
                 file_writer.close()
-            except Exception:
-                pass
 
     def _run_source_level_writers_in_threads(
         self,
@@ -592,10 +592,8 @@ class PyramidFileWriter(BaseFileWriter):
     def _cleanup_temp(temp_dir: UPath) -> None:
         """Remove temporary directory."""
         if temp_dir.exists():
-            try:
+            with contextlib.suppress(OSError):
                 shutil.rmtree(str(temp_dir), ignore_errors=True)
-            except OSError:
-                pass
 
     @staticmethod
     def _select_included_levels(

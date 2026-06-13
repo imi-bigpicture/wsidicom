@@ -40,6 +40,7 @@ from wsidicom.writing.models import (
     EncodeTask,
     EncodingTaskResult,
 )
+import contextlib
 
 
 class EncoderPool:
@@ -113,10 +114,8 @@ class EncoderPool:
         """
         # Cancel-aware: on the cancel path the dispatcher has already exited and
         # nothing drains the input queue, so a plain put could block forever.
-        try:
+        with contextlib.suppress(Cancelled):
             self._input_queue.put(ShutdownSentinel(), self._token)
-        except Cancelled:
-            pass
         if wait and self._dispatcher_thread.is_alive():
             self._dispatcher_thread.join()
 
@@ -150,10 +149,8 @@ class EncoderPool:
         full queue) so a worker tearing down does not raise; the originating
         failure is already held by the token.
         """
-        try:
+        with contextlib.suppress(Cancelled):
             queue.put(item, self._token)
-        except Cancelled:
-            pass
 
     def _encode(self, task: EncodeTask) -> None:
         """Encode tiles and submit the result to the output queue.

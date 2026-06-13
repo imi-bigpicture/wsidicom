@@ -325,7 +325,9 @@ class TestEncoderPool:
         encoder = decoy.mock(cls=Encoder)
         tiles = [Image.new("RGB", (256, 256), color=(i * 50, 0, 0)) for i in range(4)]
         expected_results = [f"encoded_{i}".encode() for i in range(4)]
-        for i, (tile, expected_result) in enumerate(zip(tiles, expected_results)):
+        for _, (tile, expected_result) in enumerate(
+            zip(tiles, expected_results, strict=True)
+        ):
             decoy.when(encoder.encode(tile)).then_return(expected_result)
         output_queue: PriorityCancelableQueue[EncodingTaskResult] = (
             PriorityCancelableQueue()
@@ -581,7 +583,9 @@ class TestEncoderPool:
         assert output_queue.qsize() == 1
         result = output_queue.get(token)
         assert result.tiles == [b"enc"]
-        decoy.verify(downsampler.downsample(matchers.Anything(), matchers.Anything()), times=0)
+        decoy.verify(
+            downsampler.downsample(matchers.Anything(), matchers.Anything()), times=0
+        )
 
         # Assert - tracker decremented
         tracker.wait_for_zero()
@@ -612,9 +616,7 @@ class TestEncoderPool:
         coordinates = PyramidTilePosition(
             level=1, x_index=0, y_index=0, z_index=0, optical_path_index=0
         )
-        tiles = [
-            [Image.new("RGB", (256, 256)) for _ in range(2)] for _ in range(2)
-        ]
+        tiles = [[Image.new("RGB", (256, 256)) for _ in range(2)] for _ in range(2)]
         tracker.increment()
         task = DownsampleEncodeTask(
             coordinates=coordinates,
@@ -642,5 +644,3 @@ class TestEncoderPool:
 
         # Assert - tracker still decremented (no leak)
         tracker.wait_for_zero()
-
-

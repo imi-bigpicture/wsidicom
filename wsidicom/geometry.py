@@ -220,7 +220,7 @@ class Size:
         return (
             operation(dimension, other_dimension)
             for (dimension, other_dimension) in zip(
-                [self.width, self.height], [item.width, item.height], strict=False
+                [self.width, self.height], [item.width, item.height], strict=True
             )
         )
 

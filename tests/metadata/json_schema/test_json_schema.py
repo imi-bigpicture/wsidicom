@@ -238,7 +238,7 @@ class TestJsonSchema:
         assert_image_is_equal(dumped["image"], pyramid.image)
         assert len(dumped["optical_paths"]) == len(pyramid.optical_paths)
         for dumped_path, expected_path in zip(
-            dumped["optical_paths"], pyramid.optical_paths, strict=False
+            dumped["optical_paths"], pyramid.optical_paths, strict=True
         ):
             assert_optical_path_is_equal(dumped_path, expected_path)
         assert dumped["contains_phi"] == pyramid.contains_phi
@@ -333,7 +333,7 @@ class TestJsonSchema:
         else:
             assert len(dumped["optical_paths"]) == len(label.optical_paths)
             for dumped_path, expected_path in zip(
-                dumped["optical_paths"], label.optical_paths, strict=False
+                dumped["optical_paths"], label.optical_paths, strict=True
             ):
                 assert_optical_path_is_equal(dumped_path, expected_path)
         assert dumped["contains_phi"] == label.contains_phi
@@ -424,7 +424,7 @@ class TestJsonSchema:
         assert_image_is_equal(dumped["image"], overview.image)
         assert len(dumped["optical_paths"]) == len(overview.optical_paths)
         for dumped_path, expected_path in zip(
-            dumped["optical_paths"], overview.optical_paths, strict=False
+            dumped["optical_paths"], overview.optical_paths, strict=True
         ):
             assert_optical_path_is_equal(dumped_path, expected_path)
         assert dumped["contains_label"] == overview.contains_label

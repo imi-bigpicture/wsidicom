@@ -14,7 +14,6 @@
 
 """Tests for PyramidTileAccumulator."""
 
-
 import pytest
 from PIL import Image
 
@@ -271,7 +270,9 @@ class TestCascadeShutdown:
         upper._consumer_thread.join(timeout=5)
         assert not upper._consumer_thread.is_alive()
 
-    def test_non_chain_start_does_not_send_sentinel_on_shutdown(self, token: CancellationToken):
+    def test_non_chain_start_does_not_send_sentinel_on_shutdown(
+        self, token: CancellationToken
+    ):
         # Arrange — upper accumulator with is_chain_start=False
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
         upper = PyramidTileAccumulator(
@@ -343,7 +344,9 @@ class TestConsumerFailureWatchdog:
         with pytest.raises(RuntimeError, match="encoder pool put failed"):
             accumulator.shutdown()
 
-    def test_consumer_failure_propagates_shutdown_to_next(self, token: CancellationToken):
+    def test_consumer_failure_propagates_shutdown_to_next(
+        self, token: CancellationToken
+    ):
         # Arrange — two-level chain sharing one cancellation token; lower consumer
         # fails, and upper must still exit (via the shared cancellation token).
         class FailingQueue:

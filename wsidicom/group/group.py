@@ -134,7 +134,6 @@ class Instances:
         """Return tiled size (number of tiles in each dimension)."""
         return self.default_instance.image_data.tiled_size
 
-
     @property
     def datasets(self) -> list[WsiDataset]:
         """Return contained datasets."""
@@ -532,6 +531,7 @@ class Instances:
             sorted(list(focal_planes_by_optical_path.keys())),
             tiled_size,
         )
+
 
 class Overview(Instances):
     pass

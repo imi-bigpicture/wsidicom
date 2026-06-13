@@ -83,7 +83,8 @@ def make_batch(
             optical_path_index=path,
         ),
         tiles=[
-            f"tile_data {x,y, z, path, level, index}".encode() for index in range(count)
+            f"tile_data {x, y, z, path, level, index}".encode()
+            for index in range(count)
         ],
     )
 
@@ -382,9 +383,9 @@ class TestTileSequencer:
         focal_planes = [0.0]
         optical_paths = ["0", "1"]
         batches = {
-            x
-            + y * tiled_size.width
-            + path_index * tiled_size.area: make_batch(x=x, y=y, path=path_index)
+            x + y * tiled_size.width + path_index * tiled_size.area: make_batch(
+                x=x, y=y, path=path_index
+            )
             for x in range(tiled_size.width)
             for y in range(tiled_size.height)
             for path_index in range(len(optical_paths))
@@ -604,7 +605,9 @@ def _run_with_real_cache(
     decoy.when(tile_writer.write_tiles(Anything())).then_do(capture_write)
 
     real_cache = DictTileCache()
-    input_queue: PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel] = PriorityCancelableQueue()
+    input_queue: PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel] = (
+        PriorityCancelableQueue()
+    )
     token = CancellationToken()
 
     sequencer = TileSequencer(
@@ -867,7 +870,9 @@ def _run_with_byte_budget_cache(
         cache_dir=UPath(tmp_path / "byte_budget_cache"),
         memory_budget_bytes=memory_budget_bytes,
     )
-    input_queue: PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel] = PriorityCancelableQueue()
+    input_queue: PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel] = (
+        PriorityCancelableQueue()
+    )
     token = CancellationToken()
 
     sequencer = TileSequencer(
@@ -1046,7 +1051,9 @@ def _run_with_dict_cache_fifo(
     decoy.when(tile_writer.write_tiles(Anything())).then_do(capture_write)
 
     dict_cache = DictTileCache()
-    input_queue: FifoCancelableQueue[EncodingTaskResult | ShutdownSentinel] = FifoCancelableQueue()
+    input_queue: FifoCancelableQueue[EncodingTaskResult | ShutdownSentinel] = (
+        FifoCancelableQueue()
+    )
     token = CancellationToken()
 
     sequencer = TileSequencer(
