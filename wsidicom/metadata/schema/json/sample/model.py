@@ -15,14 +15,9 @@
 import datetime
 from abc import abstractmethod
 from collections import UserDict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import (
-    List,
-    Optional,
-    Sequence,
-    Union,
-)
 
 from pydicom.sr.coding import Code
 from pydicom.uid import UID
@@ -34,16 +29,16 @@ from wsidicom.conceptcode import (
 )
 from wsidicom.metadata.sample import (
     BaseSampling,
+    BaseSpecimen,
     Collection,
-    Specimen,
     PreparationStep,
     Sample,
+    SampleLocalization,
     Sampling,
     SamplingLocation,
     SlideSample,
-    BaseSpecimen,
+    Specimen,
     SpecimenIdentifier,
-    SampleLocalization,
     UnknownSampling,
 )
 
@@ -65,7 +60,7 @@ class SamplingConstraintJsonModel:
     replacing the sampling with the identifier of the sampled specimen and the index of
     the sampling step within the step sequence of the specimen."""
 
-    identifier: Union[str, SpecimenIdentifier]
+    identifier: str | SpecimenIdentifier
     sampling_step_index: int
 
     @classmethod
@@ -78,14 +73,14 @@ class SamplingConstraintJsonModel:
 
     def from_json_model(
         self,
-        specimens: UserDict[Union[str, SpecimenIdentifier], BaseSpecimen],
+        specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen],
     ) -> Sampling:
         """Create sampling from json model.
 
         Parameters
         ----------
         specimens: UserDict[
-            Union[str, SpecimenIdentifier], Specimen
+            str | SpecimenIdentifier, Specimen
         ]
             Dictionary providing specimens.
 
@@ -103,16 +98,16 @@ class SamplingJsonModel:
     """Simplified representation of a `Sampling`, replacing the sampled specimen with
     the idententifier and sampling constraints with simplified sampling constraints."""
 
-    method: Optional[SpecimenSamplingProcedureCode] = None
-    sampling_constraints: Optional[Sequence[SamplingConstraintJsonModel]] = None
-    date_time: Optional[datetime.datetime] = None
-    location: Optional[SamplingLocation] = None
-    description: Optional[str] = None
+    method: SpecimenSamplingProcedureCode | None = None
+    sampling_constraints: Sequence[SamplingConstraintJsonModel] | None = None
+    date_time: datetime.datetime | None = None
+    location: SamplingLocation | None = None
+    description: str | None = None
 
     def from_json_model(
         self,
         specimen: BaseSpecimen,
-        specimens: UserDict[Union[str, SpecimenIdentifier], BaseSpecimen],
+        specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen],
     ) -> BaseSampling:
         """Create sampling from json model.
 
@@ -121,7 +116,7 @@ class SamplingJsonModel:
         specimen: Specimen
             The specimen that has been sampled.
         specimens: UserDict[
-            Union[str, SpecimenIdentifier], Specimen
+            str | SpecimenIdentifier, Specimen
         ]
             Dictionary providing specimens.
 
@@ -147,21 +142,21 @@ class SamplingJsonModel:
 
     def _get_sampling_constraints(
         self,
-        specimens: UserDict[Union[str, SpecimenIdentifier], BaseSpecimen],
-    ) -> Optional[List[Sampling]]:
+        specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen],
+    ) -> list[Sampling] | None:
         """
         Get list of constraint sampling this sampling.
 
         Parameters
         ---------
         specimens: UserDict[
-            Union[str, SpecimenIdentifier], Specimen
+            str | SpecimenIdentifier, Specimen
         ]
             Dictionary providing specimens.
 
         Returns
         -------
-        Optional[List[Sampling]]
+        list[Sampling] | None
             List of constraint samplings, or None if no constraints.
         """
         if self.sampling_constraints is None:
@@ -176,19 +171,19 @@ class SamplingJsonModel:
 class BaseSpecimenJsonModel:
     """Base json model for a specimen."""
 
-    identifier: Union[str, SpecimenIdentifier]
-    steps: List[Union[PreparationStep, SamplingJsonModel]]
+    identifier: str | SpecimenIdentifier
+    steps: list[PreparationStep | SamplingJsonModel]
 
     @abstractmethod
     def from_json_model(
-        self, specimens: UserDict[Union[str, SpecimenIdentifier], BaseSpecimen]
+        self, specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen]
     ) -> BaseSpecimen:
         """Return specimen created from this json model.
 
         Parameters
         ----------
         specimens: UserDict[
-            Union[str, SpecimenIdentifier], Specimen
+            str | SpecimenIdentifier, Specimen
         ]
             Dictionary providing specimens.
 
@@ -203,11 +198,11 @@ class BaseSpecimenJsonModel:
 @dataclass(frozen=True)
 class SpecimenJsonModel(BaseSpecimenJsonModel):
     type: AnatomicPathologySpecimenTypesCode
-    container: Optional[ContainerTypeCode]
+    container: ContainerTypeCode | None
 
     def from_json_model(
         self,
-        specimens: UserDict[Union[str, SpecimenIdentifier], BaseSpecimen],
+        specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen],
     ) -> Specimen:
         extraction_step = next(
             (step for step in self.steps if isinstance(step, Collection)), None
@@ -235,11 +230,11 @@ class SpecimenJsonModel(BaseSpecimenJsonModel):
 class SampleJsonModel(BaseSpecimenJsonModel):
     type: AnatomicPathologySpecimenTypesCode
     sampled_from: Sequence[SamplingConstraintJsonModel]
-    container: Optional[ContainerTypeCode]
+    container: ContainerTypeCode | None
 
     def from_json_model(
         self,
-        specimens: UserDict[Union[str, SpecimenIdentifier], BaseSpecimen],
+        specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen],
     ) -> Sample:
         sample = Sample(
             identifier=self.identifier,
@@ -262,16 +257,16 @@ class SampleJsonModel(BaseSpecimenJsonModel):
 
 @dataclass(frozen=True)
 class SlideSampleJsonModel(BaseSpecimenJsonModel):
-    anatomical_sites: Optional[Sequence[Code]] = None
-    sampled_from: Optional[SamplingConstraintJsonModel] = None
-    uid: Optional[UID] = None
-    localization: Optional[SampleLocalization] = None
-    short_description: Optional[str] = None
-    detailed_description: Optional[str] = None
+    anatomical_sites: Sequence[Code] | None = None
+    sampled_from: SamplingConstraintJsonModel | None = None
+    uid: UID | None = None
+    localization: SampleLocalization | None = None
+    short_description: str | None = None
+    detailed_description: str | None = None
 
     def from_json_model(
         self,
-        specimens: UserDict[Union[str, SpecimenIdentifier], BaseSpecimen],
+        specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen],
     ) -> SlideSample:
         sample = SlideSample(
             identifier=self.identifier,

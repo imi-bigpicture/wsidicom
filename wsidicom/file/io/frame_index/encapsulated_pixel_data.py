@@ -14,8 +14,6 @@
 
 """Abstract frame index for files with encapsulated data."""
 
-from typing import Optional
-
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomFileError
@@ -23,20 +21,13 @@ from wsidicom.file.io.frame_index.parser import FrameIndexParser
 
 
 class EncapsulatedPixelDataFrameIndexParser(FrameIndexParser):
-    def _validate_pixel_data_start(self):
-        """Check that pixel data tag is present and that the tag length is
-        set as undefined. Raises WsiDicomFileError otherwise.
-
-        """
-        super()._validate_pixel_data_start(None)
-
-    def _read_bot_length(self) -> Optional[int]:
+    def _read_bot_length(self) -> int | None:
         """Read the length of the basic table offset (BOT). Returns None if BOT
         is empty.
 
         Returns
         -------
-        Optional[int]
+        int | None
             BOT length.
         """
         BOT_BYTES = 4

@@ -12,8 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
 
 from PIL.Image import Image
 from pydicom import Dataset
@@ -22,10 +22,10 @@ from upath import UPath
 
 from wsidicom.errors import WsiDicomError, WsiDicomUidDuplicateError
 from wsidicom.geometry import Size, SizeMm
-from wsidicom.instance.dataset import ImageType, WsiDataset
+from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.pillow_image_data import PillowImageData
-from wsidicom.metadata.image import ImageCoordinateSystem
+from wsidicom.metadata.image import ImageCoordinateSystem, ImageType
 from wsidicom.uid import SlideUids
 
 
@@ -34,13 +34,13 @@ class WsiInstance:
     and datasets with metadata."""
 
     def __init__(
-        self, datasets: Union[WsiDataset, Sequence[WsiDataset]], image_data: ImageData
+        self, datasets: WsiDataset | Sequence[WsiDataset], image_data: ImageData
     ):
         """Create a WsiInstance from datasets with metadata and image data.
 
         Parameters
         ----------
-        datasets: Union[WsiDataset, Sequence[WsiDataset]]
+        datasets: WsiDataset | Sequence[WsiDataset]
             Single dataset or list of datasets.
         image_data: ImageData
             Image data.
@@ -64,8 +64,8 @@ class WsiInstance:
     def __str__(self) -> str:
         return self.pretty_str()
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
-        string = f"default z: {self.default_z} " f"default path: { self.default_path}"
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
+        string = f"default z: {self.default_z} default path: {self.default_path}"
         if depth is not None:
             depth -= 1
             if depth < 0:
@@ -101,34 +101,34 @@ class WsiInstance:
         return self._image_data.tile_size
 
     @property
-    def mpp(self) -> Optional[SizeMm]:
+    def mpp(self) -> SizeMm | None:
         """Return pixel spacing in um/pixel."""
         if self.pixel_spacing is None:
             return None
         return self.pixel_spacing * 1000.0
 
     @property
-    def pixel_spacing(self) -> Optional[SizeMm]:
+    def pixel_spacing(self) -> SizeMm | None:
         """Return pixel spacing in mm/pixel."""
         return self._image_data.pixel_spacing
 
     @property
-    def mm_size(self) -> Optional[SizeMm]:
+    def mm_size(self) -> SizeMm | None:
         """Return slide size in mm."""
         return self.dataset.mm_size
 
     @property
-    def mm_depth(self) -> Optional[float]:
+    def mm_depth(self) -> float | None:
         """Return imaged depth in mm."""
         return self.dataset.mm_depth
 
     @property
-    def slice_thickness(self) -> Optional[float]:
+    def slice_thickness(self) -> float | None:
         """Return slice thickness."""
         return self.dataset.slice_thickness
 
     @property
-    def slice_spacing(self) -> Optional[float]:
+    def slice_spacing(self) -> float | None:
         """Return slice spacing."""
         return self.dataset.spacing_between_slices
 
@@ -141,11 +141,11 @@ class WsiInstance:
         return self.dataset.ext_depth_of_field
 
     @property
-    def ext_depth_of_field_planes(self) -> Optional[int]:
+    def ext_depth_of_field_planes(self) -> int | None:
         return self.dataset.ext_depth_of_field_planes
 
     @property
-    def ext_depth_of_field_plane_distance(self) -> Optional[float]:
+    def ext_depth_of_field_plane_distance(self) -> float | None:
         return self.dataset.ext_depth_of_field_plane_distance
 
     @property
@@ -163,11 +163,11 @@ class WsiInstance:
         return self._image_data.default_path
 
     @property
-    def focal_planes(self) -> List[float]:
+    def focal_planes(self) -> list[float]:
         return self._image_data.focal_planes
 
     @property
-    def optical_paths(self) -> List[str]:
+    def optical_paths(self) -> list[str]:
         return self._image_data.optical_paths
 
     @property
@@ -180,18 +180,18 @@ class WsiInstance:
         return self._uids
 
     @property
-    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+    def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         return self.image_data.image_coordinate_system
 
     @classmethod
     def create_label(
-        cls, image: Union[Image, Union[str, Path, UPath]], base_dataset: Dataset
+        cls, image: Image | str | Path | UPath, base_dataset: Dataset
     ) -> "WsiInstance":
         """Create a label WsiInstance.
 
         Parameters
         ----------
-        image: Union[Image, Union[str, Path, UPath]]
+        image: Image | str | Path | UPath
             Image or path to image.
         base_dataset: Dataset
             Base dataset to include.
@@ -213,7 +213,7 @@ class WsiInstance:
         image_data: ImageData,
         base_dataset: Dataset,
         image_type: ImageType,
-        pyramid_index: Optional[int] = None,
+        pyramid_index: int | None = None,
     ) -> "WsiInstance":
         """Create WsiInstance from ImageData.
 
@@ -225,7 +225,7 @@ class WsiInstance:
             Base dataset to include.
         image_type: ImageType
             Type of instance to create.
-        pyramid_index: Optional[int] = None
+        pyramid_index: int | None = None
             Pyramid index. of image data, if volume image.
 
         Returns
@@ -254,7 +254,7 @@ class WsiInstance:
         caller: Object
             Object that the instances belongs to.
         """
-        instance_identifiers: List[str] = []
+        instance_identifiers: list[str] = []
         for instance in instances:
             instance_identifier = instance.identifier
             if instance_identifier not in instance_identifiers:
@@ -264,7 +264,7 @@ class WsiInstance:
 
     def _validate_instance(
         self, datasets: Sequence[WsiDataset]
-    ) -> Tuple[UID, SlideUids]:
+    ) -> tuple[UID, SlideUids]:
         """Check that no files in instance are duplicate, that all files in
         instance matches (uid, type and size).
         Raises WsiDicomMatchError otherwise.
@@ -272,7 +272,7 @@ class WsiInstance:
 
         Returns
         -------
-        Tuple[UID, SlideUids]
+        tuple[UID, SlideUids]
             Instance identifier uid and base uids
         """
         WsiDataset.check_duplicate_dataset(datasets, self)

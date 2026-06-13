@@ -14,7 +14,7 @@
 
 import logging
 from collections import defaultdict
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from collections.abc import Iterable, Sequence
 
 from pydicom.uid import (
     JPEG2000,
@@ -33,7 +33,8 @@ from wsidicom.codec import Codec
 from wsidicom.config import settings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import ImageType, WsiDataset, WsiInstance
+from wsidicom.instance import WsiDataset, WsiInstance
+from wsidicom.metadata import ImageType
 from wsidicom.source import Source
 from wsidicom.thread import ConditionalThreadPoolExecutor
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
@@ -63,7 +64,7 @@ class WsiDicomWebSource(Source):
         client: WsiDicomWebClient,
         study_uid: UID,
         series_uids: Iterable[UID],
-        requested_transfer_syntaxes: Optional[Sequence[UID]] = None,
+        requested_transfer_syntaxes: Sequence[UID] | None = None,
     ):
         """Create a WsiDicomWebSource.
 
@@ -73,26 +74,26 @@ class WsiDicomWebSource(Source):
             Client use for DICOMWeb communication.
         study_uid: UID
             Study UID of DICOM WSI to open.
-        series_uids: Union[str, UID, Iterable[Union[str, UID]]]
+        series_uids: str | UID | Iterable[str | UID]
             Series UIDs of DICOM WSI top open.
-        requested_transfer_syntaxes: Optional[Sequence[UID]] = None
+        requested_transfer_syntaxes: Sequence[UID] | None = None
             Transfer syntax to request for image data, for example
             UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
 
         """
         super().__init__()
-        self._level_instances: List[WsiInstance] = []
-        self._label_instances: List[WsiInstance] = []
-        self._overview_instances: List[WsiInstance] = []
-        self._thumbnail_instances: List[WsiInstance] = []
-        self._annotation_instances: List[AnnotationInstance] = []
-        detected_transfer_syntaxes_by_image_type: Dict[ImageType, Set[UID]] = (
+        self._level_instances: list[WsiInstance] = []
+        self._label_instances: list[WsiInstance] = []
+        self._overview_instances: list[WsiInstance] = []
+        self._thumbnail_instances: list[WsiInstance] = []
+        self._annotation_instances: list[AnnotationInstance] = []
+        detected_transfer_syntaxes_by_image_type: dict[ImageType, set[UID]] = (
             defaultdict(set)
         )
 
         def create_instance(
-            uids: Tuple[UID, UID, UID, Optional[Set[UID]]],
-        ) -> Optional[WsiInstance]:
+            uids: tuple[UID, UID, UID, set[UID] | None],
+        ) -> WsiInstance | None:
             study_uid, series_uid, instance_uid, available_transfer_syntaxes = uids
             dataset = client.get_instance(study_uid, series_uid, instance_uid)
             if not WsiDataset.is_supported_wsi_dicom(dataset):
@@ -124,11 +125,10 @@ class WsiDicomWebSource(Source):
             )
             return WsiInstance(dataset, image_data)
 
+        wsi_instances = client.get_wsi_instances(study_uid, series_uids)
         instance_uids = (
             (study_uid, series_uid, instance_uid, available_transfer_syntaxes)
-            for series_uid, instance_uid, available_transfer_syntaxes in client.get_wsi_instances(
-                study_uid, series_uids
-            )
+            for series_uid, instance_uid, available_transfer_syntaxes in wsi_instances
         )
         annotation_instances = (
             client.get_instance(study_uid, series_uid, instance_uid)
@@ -177,7 +177,7 @@ class WsiDicomWebSource(Source):
         return self._base_dataset
 
     @property
-    def level_instances(self) -> List[WsiInstance]:
+    def level_instances(self) -> list[WsiInstance]:
         """The level instances parsed from the source."""
         if settings.strict_tile_size_check:
             return [
@@ -188,22 +188,22 @@ class WsiDicomWebSource(Source):
         return self._level_instances
 
     @property
-    def label_instances(self) -> List[WsiInstance]:
+    def label_instances(self) -> list[WsiInstance]:
         """The label instances parsed from the source."""
         return self._label_instances
 
     @property
-    def overview_instances(self) -> List[WsiInstance]:
+    def overview_instances(self) -> list[WsiInstance]:
         """The overview instances parsed from the source."""
         return self._overview_instances
 
     @property
-    def thumbnail_instances(self) -> List[WsiInstance]:
+    def thumbnail_instances(self) -> list[WsiInstance]:
         """The thumbnail instances parsed from the source."""
         return self._thumbnail_instances
 
     @property
-    def annotation_instances(self) -> List[AnnotationInstance]:
+    def annotation_instances(self) -> list[AnnotationInstance]:
         """The annotation instances parsed from the source."""
         return self._annotation_instances
 
@@ -214,10 +214,10 @@ class WsiDicomWebSource(Source):
         self,
         client: WsiDicomWebClient,
         dataset: WsiDataset,
-        available_transfer_syntaxes: Optional[Set[UID]],
-        detected_transfer_syntaxes: Set[UID],
-        requested_transfer_syntaxes: Optional[Iterable[UID]],
-    ) -> Optional[UID]:
+        available_transfer_syntaxes: set[UID] | None,
+        detected_transfer_syntaxes: set[UID],
+        requested_transfer_syntaxes: Iterable[UID] | None,
+    ) -> UID | None:
         """Determine transfer syntax to use for image data.
 
         Parameters
@@ -226,16 +226,16 @@ class WsiDicomWebSource(Source):
             Client used for DICOMWeb communication.
         dataset: WsiDataset
             Dataset to determine transfer syntax for.
-        available_transfer_syntaxes: Optional[Set[UID]]
+        available_transfer_syntaxes: set[UID] | None
             Transfer syntaxes available on the server, or None if not known.
-        detected_transfer_syntaxes: Set[UID]
+        detected_transfer_syntaxes: set[UID]
             Transfer syntaxes that have already been detected.
-        requested_transfer_syntaxes: Optional[Iterable[UID]]
+        requested_transfer_syntaxes: Iterable[UID] | None
             Transfer syntaxes to try in order of preference.
 
         Returns
         -------
-        Optional[UID]
+        UID | None
             Transfer syntax to use for image data, or None if no supported transfer
             syntax was found.
         """

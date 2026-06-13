@@ -14,8 +14,8 @@
 
 """Overview model."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Optional, Sequence
 
 from wsidicom.metadata.image import Image
 from wsidicom.metadata.optical_path import OpticalPath
@@ -36,7 +36,7 @@ class Overview:
         Whether the specimen label is present in the overview image.
     contains_phi: bool = True
         Whether the overview image contains personal health information.
-    comments: Optional[str] = None
+    comments: str | None = None
         Comments related to the overview image.
     """
 
@@ -44,7 +44,7 @@ class Overview:
     optical_paths: Sequence[OpticalPath]
     contains_phi: bool = False
     contains_label: bool = True
-    comments: Optional[str] = None
+    comments: str | None = None
 
     def remove_confidential(self) -> "Overview":
         return replace(self, image=self.image.remove_confidential(), comments=None)

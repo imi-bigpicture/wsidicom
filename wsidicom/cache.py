@@ -13,21 +13,61 @@
 #    limitations under the License.
 
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from threading import Lock
+from threading import Condition, Lock
 from typing import (
-    Callable,
-    Dict,
     Generic,
-    Iterable,
-    Optional,
-    Sequence,
-    Tuple,
     TypeVar,
 )
 
+from cachetools import LRUCache, cachedmethod
 from PIL.Image import Image
+
+
+def lru_cached_method(
+    maxsize: int | Callable[[], int | None] | None = 128,
+):
+    """Cache a method's return values in a per-instance LRU cache.
+
+    Like ``functools.lru_cache`` but bound to the instance rather than the class,
+    so the cache is released with the instance instead of being pinned on the
+    class for the lifetime of the process. A per-instance ``threading.Condition``
+    makes concurrent calls for the same key wait for the first to finish instead
+    of recomputing, so the wrapped method runs at most once per key while calls
+    for different keys still run concurrently.
+
+    Parameters
+    ----------
+    maxsize:
+        Maximum number of entries before least-recently-used eviction, or
+        ``None`` for an unbounded cache. May be a callable returning the size,
+        evaluated when an instance's cache is first created, so a size taken from
+        runtime configuration is honoured.
+    """
+
+    def decorator(method: Callable):
+        cache_attr = f"_{method.__name__}_cache"
+        condition_attr = f"_{method.__name__}_condition"
+
+        def get_cache(self):
+            cache = self.__dict__.get(cache_attr)
+            if cache is None:
+                size = maxsize() if callable(maxsize) else maxsize
+                default = {} if size is None else LRUCache(maxsize=size)
+                cache = self.__dict__.setdefault(cache_attr, default)
+            return cache
+
+        def get_condition(self):
+            condition = self.__dict__.get(condition_attr)
+            if condition is None:
+                condition = self.__dict__.setdefault(condition_attr, Condition())
+            return condition
+
+        return cachedmethod(get_cache, condition=get_condition)(method)
+
+    return decorator
+
 
 CacheKeyType = TypeVar("CacheKeyType")
 CacheItemType = TypeVar("CacheItemType")
@@ -42,7 +82,7 @@ class CacheItem(Generic[CacheItemType]):
 class LRU(Generic[CacheKeyType, CacheItemType]):
     def __init__(self, maxsize: int):
         self._lock = Lock()
-        self._cache: Dict[CacheKeyType, CacheItem[CacheItemType]] = {}
+        self._cache: dict[CacheKeyType, CacheItem[CacheItemType]] = {}
         self._maxsize = maxsize
         self._size = 0
 
@@ -50,7 +90,7 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
     def maxsize(self) -> int:
         return self._maxsize
 
-    def get(self, key: CacheKeyType) -> Optional[CacheItemType]:
+    def get(self, key: CacheKeyType) -> CacheItemType | None:
         with self._lock:
             item = self._cache.pop(key, None)
             if item is not None:
@@ -78,7 +118,7 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
 class FrameCache(Generic[CacheItemType]):
     def __init__(self, size: int):
         self._size = size
-        self._lru_cache = LRU[Tuple[int, int], CacheItemType](size)
+        self._lru_cache = LRU[tuple[int, int], CacheItemType](size)
 
     def get_tile_frame(
         self,

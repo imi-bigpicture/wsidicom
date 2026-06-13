@@ -13,12 +13,11 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from typing import Callable, Optional, Sequence, Union
-
-from pydicom.uid import UID
+from collections.abc import Sequence
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramids
 
 
@@ -28,31 +27,31 @@ class Target(metaclass=ABCMeta):
 
     def __init__(
         self,
-        uid_generator: Callable[..., UID],
+        uid_generator: UidGenerator,
         workers: int,
-        include_pyramids: Optional[Sequence[int]] = None,
-        include_levels: Optional[Sequence[int]] = None,
+        include_pyramids: Sequence[int] | None = None,
+        include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = False,
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
     ) -> None:
         """Initiate a target.
 
         Parameters
         ----------
-        uid_generator: Callable[..., UID]
-            Uid generator to use.
+        uid_generator: UidGenerator
+            Generator for producing UIDs.
         workers: int
             Maximum number of thread workers to use.
-        include_pyramids: Optional[Sequence[int]] = None
+        include_pyramids: Sequence[int] | None = None
             Optional list indices (in present pyramids) to include.
-        include_levels: Optional[Sequence[int]] = None
+        include_levels: Sequence[int] | None = None
             Optional list indices (in present levels) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indices can be used,
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None
+        transcoding: EncoderSettings | Encoder | None = None
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
         force_transcoding: bool = False
@@ -76,8 +75,8 @@ class Target(metaclass=ABCMeta):
     def save(
         self,
         pyramids: Pyramids,
-        labels: Optional[Labels],
-        overviews: Optional[Overviews],
+        labels: Labels | None,
+        overviews: Overviews | None,
         include_thumbnails: bool,
     ) -> None:
         """Save pyramids, labels, and overviews to the target.
@@ -86,9 +85,9 @@ class Target(metaclass=ABCMeta):
         ----------
         pyramids: Pyramids
             Pyramids to save.
-        labels: Optional[Labels]
+        labels: Labels | None
             Labels to save, or None to skip.
-        overviews: Optional[Overviews]
+        overviews: Overviews | None
             Overviews to save, or None to skip.
         include_thumbnails: bool
             If to include thumbnails from pyramids.

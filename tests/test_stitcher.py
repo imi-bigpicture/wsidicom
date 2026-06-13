@@ -14,7 +14,7 @@
 
 """Tests for PillowStitcher."""
 
-from typing import Iterator, Sequence
+from collections.abc import Iterator, Sequence
 
 import pytest
 from PIL import Image

@@ -14,11 +14,11 @@
 
 import logging
 import math
+from collections.abc import Sequence
 from copy import deepcopy
-from dataclasses import dataclass
-from enum import Enum, IntEnum, auto
+from enum import Enum
 from functools import cached_property
-from typing import Any, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, ClassVar
 
 from pydicom.dataset import Dataset
 from pydicom.multival import MultiValue
@@ -36,12 +36,11 @@ from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomError,
     WsiDicomFileError,
-    WsiDicomRequirementError,
-    WsiDicomStrictRequirementError,
     WsiDicomUidDuplicateError,
 )
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.image_data import ImageData
+from wsidicom.metadata.image import ImageType
 from wsidicom.tags import (
     LossyImageCompressionMethodTag,
     LossyImageCompressionRatioTag,
@@ -50,147 +49,6 @@ from wsidicom.tags import (
     PerFrameFunctionalGroupsSequenceTag,
 )
 from wsidicom.uid import FileUids, SlideUids
-
-
-class ImageType(Enum):
-    VOLUME = "VOLUME"
-    LABEL = "LABEL"
-    OVERVIEW = "OVERVIEW"
-    THUMBNAIL = "THUMBNAIL"
-
-
-class Requirement(IntEnum):
-    ALWAYS = auto()  # Always required, even if not in strict mode
-    STRICT = auto()  # Required if in strict mode
-    STANDARD = auto()  # Required or optional in standard, not (yet) needed
-
-
-@dataclass
-class WsiAttributeRequirement:
-    """Class for defining requirement and optionally default value for DICOM
-    WSI attribute. If image types is given, requirement is only checked for
-    images of matching image type.
-    """
-
-    requirement: Requirement
-    image_types: Tuple[ImageType, ...]
-    default: Any = None
-
-    def __init__(
-        self,
-        requirement: Requirement,
-        image_type: Optional[Union[ImageType, Sequence[ImageType]]] = None,
-        default: Any = None,
-    ) -> None:
-        self.requirement = requirement
-        if image_type is not None:
-            if not isinstance(image_type, Sequence):
-                self.image_types = (image_type,)
-            else:
-                self.image_types = tuple(image_type)
-        else:
-            self.image_types = ()
-        self.default = default
-
-    def get_default(self, image_type: ImageType) -> Any:
-        """Get default value for attribute. Raises WsiDicomRequirementError if
-        attribute is set as always required for image type. Raises
-        WsiDicomStrictRequirementError if attribute is set as always required
-        in strict mode."""
-        if self.requirement == Requirement.ALWAYS and image_type in self.image_types:
-            raise WsiDicomRequirementError(
-                f"Attribute is set as always required for {image_type}"
-            )
-        elif (
-            settings.strict_attribute_check
-            and self.requirement == Requirement.STRICT
-            and image_type in self.image_types
-        ):
-            raise WsiDicomStrictRequirementError(
-                f"Attribute is set as required for {image_type} " "and mode is strict"
-            )
-        return self.default
-
-    def evaluate(self, image_type: ImageType) -> bool:
-        """Evaluate if attribute is required for image type."""
-        if self.requirement == Requirement.ALWAYS or (
-            self.requirement == Requirement.STRICT and settings.strict_attribute_check
-        ):
-            if image_type in self.image_types:
-                return True
-        return False
-
-
-WSI_ATTRIBUTES = {
-    "SOPClassUID": WsiAttributeRequirement(Requirement.ALWAYS),
-    "SOPInstanceUID": WsiAttributeRequirement(Requirement.ALWAYS),
-    "StudyInstanceUID": WsiAttributeRequirement(Requirement.ALWAYS),
-    "SeriesInstanceUID": WsiAttributeRequirement(Requirement.ALWAYS),
-    "Rows": WsiAttributeRequirement(Requirement.ALWAYS),
-    "Columns": WsiAttributeRequirement(Requirement.ALWAYS),
-    "SamplesPerPixel": WsiAttributeRequirement(Requirement.ALWAYS),
-    "PhotometricInterpretation": WsiAttributeRequirement(Requirement.ALWAYS),
-    "TotalPixelMatrixColumns": WsiAttributeRequirement(Requirement.ALWAYS),
-    "TotalPixelMatrixRows": WsiAttributeRequirement(Requirement.ALWAYS),
-    "ImageType": WsiAttributeRequirement(Requirement.ALWAYS),
-    "SharedFunctionalGroupsSequence": WsiAttributeRequirement(
-        Requirement.STRICT, ImageType.VOLUME
-    ),
-    "FrameOfReferenceUID": WsiAttributeRequirement(Requirement.STRICT),
-    "FocusMethod": WsiAttributeRequirement(
-        Requirement.STRICT, ImageType.VOLUME, "AUTO"
-    ),
-    "ExtendedDepthOfField": WsiAttributeRequirement(
-        Requirement.STRICT, ImageType.VOLUME, "NO"
-    ),
-    "OpticalPathSequence": WsiAttributeRequirement(Requirement.STRICT),
-    "ImagedVolumeWidth": WsiAttributeRequirement(Requirement.STRICT, ImageType.VOLUME),
-    "ImagedVolumeHeight": WsiAttributeRequirement(Requirement.STRICT, ImageType.VOLUME),
-    "ImagedVolumeDepth": WsiAttributeRequirement(Requirement.STRICT, ImageType.VOLUME),
-    "TotalPixelMatrixFocalPlanes": WsiAttributeRequirement(
-        Requirement.STANDARD, default=1
-    ),
-    "NumberOfOpticalPaths": WsiAttributeRequirement(Requirement.STANDARD, default=1),
-    "NumberOfFrames": WsiAttributeRequirement(Requirement.STANDARD, default=1),
-    "Modality": WsiAttributeRequirement(Requirement.STANDARD, default="SM"),
-    "Manufacturer": WsiAttributeRequirement(Requirement.STANDARD),
-    "ManufacturerModelName": WsiAttributeRequirement(Requirement.STANDARD),
-    "DeviceSerialNumber": WsiAttributeRequirement(Requirement.STANDARD),
-    "SoftwareVersions": WsiAttributeRequirement(Requirement.STANDARD),
-    "BitsAllocated": WsiAttributeRequirement(Requirement.STANDARD),
-    "BitsStored": WsiAttributeRequirement(Requirement.STANDARD),
-    "HighBit": WsiAttributeRequirement(Requirement.STANDARD),
-    "PixelRepresentation": WsiAttributeRequirement(Requirement.STANDARD),
-    "TotalPixelMatrixOriginSequence": WsiAttributeRequirement(Requirement.STANDARD),
-    "ImageOrientationSlide": WsiAttributeRequirement(
-        Requirement.STANDARD, default=[0, 1, 0, 1, 0, 0]
-    ),
-    "AcquisitionDateTime": WsiAttributeRequirement(Requirement.STANDARD),
-    "LossyImageCompression": WsiAttributeRequirement(Requirement.STANDARD),
-    "VolumetricProperties": WsiAttributeRequirement(
-        Requirement.STANDARD, default="VOLUME"
-    ),
-    "SpecimenLabelInImage": WsiAttributeRequirement(Requirement.STANDARD, default="NO"),
-    "BurnedInAnnotation": WsiAttributeRequirement(Requirement.STANDARD, default="NO"),
-    "ContentDate": WsiAttributeRequirement(Requirement.STANDARD),
-    "ContentTime": WsiAttributeRequirement(Requirement.STANDARD),
-    "InstanceNumber": WsiAttributeRequirement(Requirement.STANDARD),
-    "DimensionOrganizationSequence": WsiAttributeRequirement(Requirement.STANDARD),
-    "ContainerIdentifier": WsiAttributeRequirement(Requirement.STANDARD),
-    "SpecimenDescriptionSequence": WsiAttributeRequirement(Requirement.STANDARD),
-    "SpacingBetweenSlices": WsiAttributeRequirement(Requirement.STANDARD, default=0.0),
-    "SOPInstanceUIDOfConcatenationSource": WsiAttributeRequirement(
-        Requirement.STANDARD
-    ),
-    "DimensionOrganizationType": WsiAttributeRequirement(
-        Requirement.STANDARD, default="TILED_SPARSE"
-    ),
-    "NumberOfFocalPlanes": WsiAttributeRequirement(Requirement.STANDARD, default=1),
-    "DistanceBetweenFocalPlanes": WsiAttributeRequirement(
-        Requirement.STANDARD, default=0.0
-    ),
-    "SliceThickness": WsiAttributeRequirement(Requirement.STANDARD),
-}
 
 
 class TileType(Enum):
@@ -203,6 +61,25 @@ class WsiDataset(Dataset):
     parsers for attributes specific for WSI. Use snake case to avoid name
     collision with dicom fields (that are handled by pydicom.dataset.Dataset).
     """
+
+    REQUIRED_ATTRIBUTES: ClassVar[tuple[str, ...]] = (
+        "SOPInstanceUID",
+        "StudyInstanceUID",
+        "SeriesInstanceUID",
+        "ImageType",
+        "Rows",
+        "Columns",
+        "TotalPixelMatrixColumns",
+        "TotalPixelMatrixRows",
+        "SamplesPerPixel",
+        "PhotometricInterpretation",
+        "BitsStored",
+    )
+    """DICOM attributes that must be present for the library to be able to read
+    an instance. These are the attributes that are dereferenced unconditionally
+    while opening a dataset (identity, image and tile geometry, and pixel
+    format). Datasets missing any of these are rejected by
+    :func:`is_supported_wsi_dicom`."""
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"
@@ -220,10 +97,8 @@ class WsiDataset(Dataset):
             Found UIDs from dataset.
         """
         instance_uid = UID(self.SOPInstanceUID)
-        concatenation_uid = self._get_dicom_attribute(
-            "SOPInstanceUIDOfConcatenationSource"
-        )
-        frame_of_reference_uid = self._get_dicom_attribute("FrameOfReferenceUID")
+        concatenation_uid = getattr(self, "SOPInstanceUIDOfConcatenationSource", None)
+        frame_of_reference_uid = getattr(self, "FrameOfReferenceUID", None)
 
         slide_uids = SlideUids(
             self.StudyInstanceUID,
@@ -250,14 +125,13 @@ class WsiDataset(Dataset):
             return int(self.ConcatenationFrameOffsetNumber)
         except AttributeError:
             raise WsiDicomError(
-                "Concatenated file missing concatenation frame offset" "number"
-            )
+                "Concatenated file missing concatenation frame offsetnumber"
+            ) from None
 
     @property
     def frame_count(self) -> int:
         """Return number of frames in instance."""
-        frame_count = self._get_dicom_attribute("NumberOfFrames")
-        return cast(int, frame_count)
+        return int(getattr(self, "NumberOfFrames", 1))
 
     @cached_property
     def tile_type(self) -> TileType:
@@ -269,7 +143,7 @@ class WsiDataset(Dataset):
         TileType
             Tiling type
         """
-        tile_type = self._get_dicom_attribute("DimensionOrganizationType")
+        tile_type = getattr(self, "DimensionOrganizationType", "TILED_SPARSE")
         if tile_type == "TILED_FULL":
             # By the standard it should be tiled full.
             return TileType.FULL
@@ -288,28 +162,26 @@ class WsiDataset(Dataset):
         raise WsiDicomError("Undetermined tile type.")
 
     @cached_property
-    def pixel_measure(self) -> Optional[Dataset]:
+    def pixel_measure(self) -> Dataset | None:
         """Return Pixel measure dataset from dataset if found.
 
         Returns
         -------
-        Optional[Dataset]
+        Dataset | None
             Found Pixel measure dataset.
         """
-        shared_functional_group = self._get_dicom_attribute(
-            "SharedFunctionalGroupsSequence"
-        )
+        shared_functional_group = getattr(self, "SharedFunctionalGroupsSequence", None)
         if shared_functional_group is None:
             return None
-        pixel_measure_sequence = self._get_dicom_attribute(
-            "PixelMeasuresSequence", shared_functional_group[0]
+        pixel_measure_sequence = getattr(
+            shared_functional_group[0], "PixelMeasuresSequence", None
         )
         if pixel_measure_sequence is None:
             return None
         return pixel_measure_sequence[0]
 
     @cached_property
-    def pixel_spacing(self) -> Optional[SizeMm]:
+    def pixel_spacing(self) -> SizeMm | None:
         """Read pixel spacing from dicom dataset.
 
         Parameters
@@ -333,7 +205,7 @@ class WsiDataset(Dataset):
         return None
 
     @cached_property
-    def spacing_between_slices(self) -> Optional[float]:
+    def spacing_between_slices(self) -> float | None:
         """Return spacing between slices."""
         if self.pixel_measure is None:
             return None
@@ -364,21 +236,20 @@ class WsiDataset(Dataset):
         return self._ext_depth_of_field[0]
 
     @property
-    def ext_depth_of_field_planes(self) -> Optional[int]:
+    def ext_depth_of_field_planes(self) -> int | None:
         """Return number of focal planes used for extended depth of
         field."""
         return self._ext_depth_of_field[1]
 
     @property
-    def ext_depth_of_field_plane_distance(self) -> Optional[float]:
+    def ext_depth_of_field_plane_distance(self) -> float | None:
         """Return total focal depth used for extended depth of field."""
         return self._ext_depth_of_field[2]
 
     @cached_property
     def focus_method(self) -> str:
         """Return focus method."""
-        focus_method = self._get_dicom_attribute("FocusMethod")
-        return str(focus_method)
+        return str(getattr(self, "FocusMethod", "AUTO"))
 
     @cached_property
     def image_size(self) -> Size:
@@ -424,7 +295,7 @@ class WsiDataset(Dataset):
         return image_size
 
     @cached_property
-    def mm_size(self) -> Optional[SizeMm]:
+    def mm_size(self) -> SizeMm | None:
         """Read mm size from dataset.
 
         Returns
@@ -432,8 +303,8 @@ class WsiDataset(Dataset):
         SizeMm
             The size of the image in mm
         """
-        mm_width = self._get_dicom_attribute("ImagedVolumeWidth")
-        mm_height = self._get_dicom_attribute("ImagedVolumeHeight")
+        mm_width = getattr(self, "ImagedVolumeWidth", None)
+        mm_height = getattr(self, "ImagedVolumeHeight", None)
         if mm_width is None or mm_height is None:
             mm_size = None
         else:
@@ -441,9 +312,9 @@ class WsiDataset(Dataset):
         return mm_size
 
     @cached_property
-    def mm_depth(self) -> Optional[float]:
+    def mm_depth(self) -> float | None:
         """Return depth of image in mm."""
-        return self._get_dicom_attribute("ImagedVolumeDepth")
+        return getattr(self, "ImagedVolumeDepth", None)
 
     @cached_property
     def tile_size(self) -> Size:
@@ -469,7 +340,7 @@ class WsiDataset(Dataset):
     @property
     def lossy_compressed(self) -> bool:
         """Return true if image has been lossy compressed."""
-        return self._get_dicom_attribute("LossyImageCompression") == "01"
+        return getattr(self, "LossyImageCompression", None) == "01"
 
     @property
     def photometric_interpretation(self) -> str:
@@ -477,9 +348,9 @@ class WsiDataset(Dataset):
         return self.PhotometricInterpretation
 
     @cached_property
-    def optical_path_sequence(self) -> Optional[DicomSequence]:
+    def optical_path_sequence(self) -> DicomSequence | None:
         """Return optical path sequence from dataset."""
-        return self._get_dicom_attribute("OpticalPathSequence")
+        return getattr(self, "OpticalPathSequence", None)
 
     @cached_property
     def z_offset(self) -> float:
@@ -506,20 +377,21 @@ class WsiDataset(Dataset):
         return self.get("TotalPixelMatrixFocalPlanes", 1)
 
     @property
-    def slice_thickness(self) -> Optional[float]:
+    def slice_thickness(self) -> float | None:
         """Return slice thickness spacing from pixel measure dataset.
 
         Returns
         -------
-        Optional[float]
+        float | None
             Slice thickess or None if unknown.
         """
-        try:
-            return self._get_dicom_attribute("SliceThickness", self.pixel_measure)
-        except AttributeError:
-            if self.mm_depth is not None:
-                number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
-                return self.mm_depth / number_of_focal_planes
+        if self.pixel_measure is not None:
+            slice_thickness = getattr(self.pixel_measure, "SliceThickness", None)
+            if slice_thickness is not None:
+                return slice_thickness
+        if self.mm_depth is not None:
+            number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
+            return self.mm_depth / number_of_focal_planes
         return None
 
     @cached_property
@@ -534,11 +406,14 @@ class WsiDataset(Dataset):
         return self._get_image_type(self.ImageType)
 
     @classmethod
-    def is_supported_wsi_dicom(cls, dataset: Dataset) -> Optional[ImageType]:
-        """Check if dataset is dicom wsi type and that required attributes
-        (for the function of the library) is available.
-        Warn if attribute listed as required in the library or required in the
-        standard is missing.
+    def is_supported_wsi_dicom(cls, dataset: Dataset) -> ImageType | None:
+        """Check if dataset is a DICOM WSI type that the library can read.
+
+        The dataset is rejected (``None`` returned) if it is not of the WSI SOP
+        class, if it is missing any attribute the library dereferences while
+        opening an instance (see ``REQUIRED_ATTRIBUTES``), if the image type is
+        not supported, or if the pixel representation or planar configuration is
+        unsupported.
 
         Parameters
         ----------
@@ -547,14 +422,19 @@ class WsiDataset(Dataset):
 
         Returns
         -------
-        Optional[ImageType]
-            WSI image flavor
+        ImageType | None
+            WSI image flavor, or None if the dataset is not a supported WSI.
         """
 
-        sop_class_uid: UID = getattr(dataset, "SOPClassUID")
+        sop_class_uid: UID | None = getattr(dataset, "SOPClassUID", None)
         if sop_class_uid != VLWholeSlideMicroscopyImageStorage:
-            logging.debug(f"Non-wsi image, SOP class {sop_class_uid.name}.")
+            logging.debug(f"Non-wsi image, SOP class {sop_class_uid}.")
             return None
+
+        for name in cls.REQUIRED_ATTRIBUTES:
+            if name not in dataset:
+                logging.debug(f"Missing required attribute {name}.")
+                return None
 
         try:
             image_type = cls._get_image_type(dataset.ImageType)
@@ -562,13 +442,9 @@ class WsiDataset(Dataset):
             logging.debug(f"Non-supported image type {dataset.ImageType}.")
             return None
 
-        for name, attribute in WSI_ATTRIBUTES.items():
-            if name not in dataset and attribute.evaluate(image_type):
-                logging.debug(f"Missing required attribute {name}.")
-                return None
-        pixel_represention = int(getattr(dataset, "PixelRepresentation", 0))
-        if pixel_represention != 0:
-            logging.debug(f"Unsupported pixel representation {pixel_represention}.")
+        pixel_representation = int(getattr(dataset, "PixelRepresentation", 0))
+        if pixel_representation != 0:
+            logging.debug(f"Unsupported pixel representation {pixel_representation}.")
             return None
         planar_configuration = int(getattr(dataset, "PlanarConfiguration", 0))
         if planar_configuration != 0:
@@ -591,7 +467,7 @@ class WsiDataset(Dataset):
         caller: Object
             Object that the files belongs to.
         """
-        instance_uids: List[UID] = []
+        instance_uids: list[UID] = []
 
         for dataset in datasets:
             instance_uid = UID(dataset.SOPInstanceUID)
@@ -625,7 +501,7 @@ class WsiDataset(Dataset):
             )
         )
 
-    def matches_series(self, uids: SlideUids, tile_size: Optional[Size] = None) -> bool:
+    def matches_series(self, uids: SlideUids, tile_size: Size | None = None) -> bool:
         """Check if instance is valid (Uids and tile size match).
         Base uids should match for instances in all types of series,
         tile size should only match for level series.
@@ -655,7 +531,7 @@ class WsiDataset(Dataset):
             return "0"
         return optical_path_identifier.value
 
-    def get_multi_value(self, tag: BaseTag) -> List[Any]:
+    def get_multi_value(self, tag: BaseTag) -> list[Any]:
         """Return values for tag as list of values. If tag is not found, return empty
         list. If tag is not multi value, return list with one value.
 
@@ -666,7 +542,7 @@ class WsiDataset(Dataset):
 
         Returns
         -------
-        List[Any]
+        list[Any]
             List of values.
         """
         element = self.get(tag)
@@ -781,7 +657,7 @@ class WsiDataset(Dataset):
         dataset: Dataset,
         image_type: ImageType,
         image_data: ImageData,
-        pyramid_index: Optional[int] = None,
+        pyramid_index: int | None = None,
     ) -> "WsiDataset":
         """Return instance dataset for image_data based on base dataset.
 
@@ -793,7 +669,7 @@ class WsiDataset(Dataset):
             Type of instance ('VOLUME', 'LABEL', 'OVERVIEW)
         image_data:
             Image data to create dataset for.
-        pyramid_index: Optional[int] = None
+        pyramid_index: int | None = None
             Pyramid index. of image data, if volume image.
 
         Returns
@@ -934,48 +810,22 @@ class WsiDataset(Dataset):
         )
         return WsiDataset(dataset)
 
-    def _get_dicom_attribute(
-        self, name: str, dataset: Optional[Dataset] = None
-    ) -> Optional[Any]:
-        """Return value for DICOM attribute by name. Optionally get it from
-        another dataset. Returns default value if possible when attribute
-        is missing.
-
-        Parameters
-        ----------
-        name: str
-            Name of attribute to get.
-        dataset: Optional[Dataset] = None
-            Optional other dataset to get attribute from.
-
-        Returns
-        -------
-        Optional[Any]
-            Value of attribute, or None.
-        """
-        if dataset is None:
-            dataset = self
-        value = getattr(dataset, name, None)
-        if value is None and name in WSI_ATTRIBUTES:
-            return WSI_ATTRIBUTES[name].get_default(self.image_type)
-        return value
-
     @cached_property
-    def _ext_depth_of_field(self) -> Tuple[bool, Optional[int], Optional[float]]:
+    def _ext_depth_of_field(self) -> tuple[bool, int | None, float | None]:
         """Return extended depth of field (enabled, number of focal planes,
         distance between focal planes) from dataset.
 
         Returns
         -------
-        Tuple[bool, Optional[int], Optional[float]]
+        tuple[bool, int | None, float | None]
             If extended depth of field is used, and if used number of focal
             planes and distance between focal planes.
         """
-        if self._get_dicom_attribute("ExtendedDepthOfField") != "YES":
+        if getattr(self, "ExtendedDepthOfField", "NO") != "YES":
             return False, None, None
 
-        planes = self._get_dicom_attribute("NumberOfFocalPlanes")
-        distance = self._get_dicom_attribute("DistanceBetweenFocalPlanes")
+        planes = getattr(self, "NumberOfFocalPlanes", 1)
+        distance = getattr(self, "DistanceBetweenFocalPlanes", 0.0)
         if planes is None or distance is None:
             raise WsiDicomFileError(
                 self.filepath,
@@ -986,7 +836,7 @@ class WsiDataset(Dataset):
     @staticmethod
     def _get_spacing_between_slices_for_focal_planes(
         focal_planes: Sequence[float],
-    ) -> Optional[float]:
+    ) -> float | None:
         """Return spacing between slices in mm for focal planes (defined in
         um). Spacing must be the same between all focal planes for TILED_FULL
         arrangement.
@@ -998,13 +848,13 @@ class WsiDataset(Dataset):
 
         Returns
         -------
-        Optional[float]
+        float | None
             Spacing between focal planes, or None if only one focal plane.
 
         """
         if len(focal_planes) == 1:
             return None
-        spacing: Optional[float] = None
+        spacing: float | None = None
         sorted_focal_planes = sorted(focal_planes)
         for index in range(len(sorted_focal_planes) - 1):
             this_spacing = sorted_focal_planes[index + 1] - sorted_focal_planes[index]
@@ -1022,7 +872,7 @@ class WsiDataset(Dataset):
         return spacing / 1000.0
 
     @staticmethod
-    def _get_image_type(wsi_type: Tuple[str, str, str, str]) -> ImageType:
+    def _get_image_type(wsi_type: tuple[str, str, str, str]) -> ImageType:
         """Return wsi flavour from wsi type tuple.
 
         Returns

@@ -117,10 +117,7 @@ class TestRle:
         # Arrange
         rows = expected_data.shape[0]
         columns = expected_data.shape[1]
-        if expected_data.dtype == np.uint8:
-            bits = 8
-        else:
-            bits = 16
+        bits = 8 if expected_data.dtype == np.uint8 else 16
 
         # Act
         decoded = RleCodec.decode(data, rows, columns, bits)

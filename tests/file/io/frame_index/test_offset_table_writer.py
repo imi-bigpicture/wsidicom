@@ -13,8 +13,8 @@
 #    limitations under the License.
 
 import struct
+from collections.abc import Sequence
 from io import BytesIO
-from typing import Sequence
 
 import pytest
 from pydicom.tag import ItemTag
@@ -66,7 +66,7 @@ class TestOffsetTableWriter:
         BOT_ITEM_LENGTH = 4
         length = buffer.read_tag_length(True)
         assert length == BOT_ITEM_LENGTH * frame_count
-        for frame in range(frame_count):
+        for _frame in range(frame_count):
             assert buffer.read_UL() == 0
         self.assertEndOfFile(buffer)
 
@@ -88,7 +88,7 @@ class TestOffsetTableWriter:
         EOT_ITEM_LENGTH = 8
         length = buffer.read_tag_length(True)
         assert length == EOT_ITEM_LENGTH * frame_count
-        for frame in range(frame_count):
+        for _frame in range(frame_count):
             assert struct.unpack("<Q", buffer.read(EOT_ITEM_LENGTH))[0] == 0
 
         tag = buffer.read_tag()
@@ -97,7 +97,7 @@ class TestOffsetTableWriter:
         length = buffer.read_tag_length(True)
         EOT_ITEM_LENGTH = 8
         assert length == EOT_ITEM_LENGTH * frame_count
-        for frame in range(frame_count):
+        for _frame in range(frame_count):
             assert struct.unpack("<Q", buffer.read(EOT_ITEM_LENGTH))[0] == 0
         self.assertEndOfFile(buffer)
 

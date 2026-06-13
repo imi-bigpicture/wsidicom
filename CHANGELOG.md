@@ -7,11 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Improved control of uid generation by use of an user-supplied `UidGenerator` (abstract) or `CallableUidGenerator` (default implementation).
+
 ### Changed
 
-- Pyramid writing now runs as a multi-threaded pipeline (source read →
-  downsample → encode → write). An error in any stage aborts the save promptly
-  and re-raises the original exception.
+- Pyramid writing now runs as a multi-threaded pipeline (source read → downsample → encode → write). An error in any stage aborts the save promptly and re-raises the original exception.
+- Relaxed the `imagecodecs` optional dependency upper bound from `<2025.0.0` to unbounded.
+- Default UID generation by `Study.default_uid`, `Series.default_uid`, `SlideSample.default_uid`, `WsiMetadata.default_frame_of_reference_uid`, and `WsiMetadata.default_dimension_organization_uids` have been removed.
+- Serializing a `WsiMetadata` (or its sub-models) to DICOM no longer silently mints UIDs for unset fields. `StudyInstanceUID`, `SeriesInstanceUID`, `FrameOfReferenceUID`, `DimensionOrganizationSequence`, `SpecimenDescriptionSequence`, `SpecimenUID`, and `PyramidUID` raise `ValidationError` on dump when their source field is `None`/empty.
+
+### Fixed
+
+- `add_missing_levels=True` in `WsiDicom.save()` now respects `include_levels`.
+
+## [0.30.0] - 2026-05-22
+
+### Added
+
+- `ImageCoordinateSystem.default_for()` for creating a default image coordinate system for a given rotation and image type, placing the image at the matching corner of a standard slide. Optional slide-size parameters support non-standard (e.g. large-format) slides.
+
+### Changed
+
+- `ImageType` is now exported from `wsidicom.metadata` instead of `wsidicom.instance`.
+- `WsiDataset.is_supported_wsi_dicom()` now rejects a dataset up front when it is missing any attribute the library dereferences while opening an instance (identity, image/tile geometry, and pixel format). Previously such datasets passed the check and failed later with an `AttributeError`.
+
+### Removed
+
+- `settings.strict_attribute_check`. It defaulted to disabled and, when enabled, only enforced a handful of volume-image attributes; the required-attribute check is now always applied (see Changed).
+- `WsiDicomRequirementError`, which was only raised by the removed attribute-requirement machinery. `WsiDicomStrictRequirementError` is unchanged (still used by `strict_uid_check`).
+
+## [0.29.1] - 2026-04-21
+
+### Fixed
+
+- Memory leak from `lru_cache` on instance methods (metadata, file readers, and tile-index lookups) keeping opened files alive for the lifetime of the process; these caches are now per-instance and released with the instance.
 
 ## [0.29.0] - 2025-12-09
 
@@ -553,7 +584,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.30.0..HEAD
+[0.30.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.1..v0.30.0
+[0.29.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.0..v0.29.1
 [0.29.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.1..v0.29.0
 [0.28.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.0..v0.28.1
 [0.28.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.27.1..v0.28.0

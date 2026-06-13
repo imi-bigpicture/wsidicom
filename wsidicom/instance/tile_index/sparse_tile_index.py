@@ -13,8 +13,8 @@
 #    limitations under the License.
 
 from collections import defaultdict
+from collections.abc import Sequence
 from functools import cached_property
-from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 
@@ -73,7 +73,7 @@ class SparseTilePlane:
         """
         self.plane[position.x, position.y] = frame_index
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         return "Sparse tile plane"
 
 
@@ -99,17 +99,17 @@ class SparseTileIndex(TileIndex):
         super().__init__(datasets)
 
     @cached_property
-    def planes(self) -> Dict[Tuple[float, str], SparseTilePlane]:
+    def planes(self) -> dict[tuple[float, str], SparseTilePlane]:
         return self._read_planes_from_datasets()
 
     @cached_property
-    def focal_planes(self) -> List[float]:
+    def focal_planes(self) -> list[float]:
         return self._get_focal_planes()
 
     def __str__(self) -> str:
         return self.pretty_str()
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         return (
             f"Sparse tile index tile size: {self.tile_size}, "
             f"plane size: {self.tiled_size}"
@@ -136,24 +136,26 @@ class SparseTileIndex(TileIndex):
         try:
             plane = self.planes[(z, path)]
         except KeyError:
-            raise WsiDicomNotFoundError(f"Plane with z {z}, path {path}", str(self))
+            raise WsiDicomNotFoundError(
+                f"Plane with z {z}, path {path}", str(self)
+            ) from None
         frame_index = plane[tile]
         return frame_index
 
-    def _get_focal_planes(self) -> List[float]:
+    def _get_focal_planes(self) -> list[float]:
         """Return list of focal planes defined in planes.
 
         Returns
         -------
-        List[float]
+        list[float]
             Focal planes, specified in um.
         """
-        focal_planes: Set[float] = set()
-        for z, _ in self.planes.keys():
+        focal_planes: set[float] = set()
+        for z, _ in self.planes:
             focal_planes.add(z)
         return sorted(list(focal_planes))
 
-    def _read_planes_from_datasets(self) -> Dict[Tuple[float, str], SparseTilePlane]:
+    def _read_planes_from_datasets(self) -> dict[tuple[float, str], SparseTilePlane]:
         """Return SparseTilePlane from planes in datasets.
 
         Parameters
@@ -163,16 +165,16 @@ class SparseTileIndex(TileIndex):
 
         Returns
         -------
-        Dict[Tuple[float, str], SparseTilePlane]
+        dict[tuple[float, str], SparseTilePlane]
             Dict of planes with focal plane and optical identifier as key.
         """
-        planes: Dict[Tuple[float, str], SparseTilePlane] = defaultdict(
+        planes: dict[tuple[float, str], SparseTilePlane] = defaultdict(
             lambda: SparseTilePlane(self.tiled_size)
         )
         for dataset in self._datasets:
             frame_sequence = dataset.frame_sequence
             for i, frame in enumerate(frame_sequence):
-                (tile, z) = self._read_frame_coordinates(frame)
+                tile, z = self._read_frame_coordinates(frame)
                 identifier = dataset.read_optical_path_identifier(frame)
                 planes[(z, identifier)][tile] = i + dataset.frame_offset
         return planes

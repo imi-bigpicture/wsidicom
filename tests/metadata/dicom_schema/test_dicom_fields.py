@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 import datetime
-from typing import Optional, Type
 
 import pytest
 from marshmallow import fields
@@ -52,7 +51,7 @@ class ChildFlattenOnDumpSchema(DicomSchema):
     value = fields.String(data_key="PatientID")
 
     @property
-    def load_type(self) -> Type[dict]:
+    def load_type(self) -> type[dict]:
         return dict
 
 
@@ -60,7 +59,7 @@ class ParentFlattenOnDumpSchema(DicomSchema):
     nested = FlattenOnDumpNestedDicomField(ChildFlattenOnDumpSchema())
 
     @property
-    def load_type(self) -> Type[dict]:
+    def load_type(self) -> type[dict]:
         return dict
 
 
@@ -220,7 +219,7 @@ class TestDicomFields:
         ],
     )
     def test_issuer_of_identifier_field_serialize(
-        self, issuer: Optional[IssuerOfIdentifier]
+        self, issuer: IssuerOfIdentifier | None
     ):
         # Arrange
         field = IssuerOfIdentifierDicomField()
@@ -272,7 +271,7 @@ class TestDicomFields:
         assert serialized == value[:maximum_allowed_length]
 
     @pytest.mark.parametrize("code_version", [None, "version"])
-    def test_code_field_serialize(self, code_version: Optional[str]):
+    def test_code_field_serialize(self, code_version: str | None):
         # Arrange
         code = Code("code", "scheme", "meaning", code_version)
         field = CodeDicomField(Code)
@@ -291,7 +290,7 @@ class TestDicomFields:
             assert "CodingSchemeVersion" not in serialized
 
     @pytest.mark.parametrize("code_version", [None, "version"])
-    def test_code_field_deserialize(self, code_version: Optional[str]):
+    def test_code_field_deserialize(self, code_version: str | None):
         # Arrange
         code = Code("code", "scheme", "meaning", code_version)
         dataset = Dataset()

@@ -16,7 +16,7 @@
 
 import threading
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Iterable, List, Optional, Tuple
+from collections.abc import Iterable
 
 from upath import UPath
 
@@ -90,7 +90,7 @@ class FileTileStore:
         self._dir_created = False
 
         # Maps (level, index) to the file path of the cached tile.
-        self._paths: Dict[Tuple[int, int], UPath] = {}
+        self._paths: dict[tuple[int, int], UPath] = {}
 
     def _ensure_dir(self) -> None:
         """Create the cache directory if it doesn't exist yet."""
@@ -108,7 +108,7 @@ class FileTileStore:
         filepath.write_bytes(tile)
         self._paths[(level, index)] = filepath
 
-    def load(self, level: int, index: int) -> Optional[bytes]:
+    def load(self, level: int, index: int) -> bytes | None:
         """Load and delete tile from disk cache."""
         filepath = self._paths.pop((level, index), None)
         if filepath is None:
@@ -154,7 +154,7 @@ class ByteBudgetMemoryTileStore:
         self._lock = threading.Lock()
 
         # Maps (level, index) to tile bytes.
-        self._cache: Dict[Tuple[int, int], bytes] = {}
+        self._cache: dict[tuple[int, int], bytes] = {}
 
     def try_save(self, level: int, index: int, tile: bytes) -> bool:
         """Try to save tile to memory cache.
@@ -168,7 +168,7 @@ class ByteBudgetMemoryTileStore:
             self._current_bytes += len(tile)
             return True
 
-    def load(self, level: int, index: int) -> Optional[bytes]:
+    def load(self, level: int, index: int) -> bytes | None:
         """Load and remove tile from memory cache."""
         with self._lock:
             tile = self._cache.pop((level, index), None)
@@ -209,7 +209,7 @@ class DictTileCache(TileCache):
 
     def __init__(self) -> None:
         # Maps (level, index) to tile bytes.
-        self._cache: Dict[Tuple[int, int], bytes] = {}
+        self._cache: dict[tuple[int, int], bytes] = {}
         self._lock = threading.Lock()
 
     def save_sequential(
@@ -222,7 +222,7 @@ class DictTileCache(TileCache):
                 count += 1
 
     def load_sequential(self, level: int, index: int) -> Iterable[bytes]:
-        result: List[bytes] = []
+        result: list[bytes] = []
         with self._lock:
             while (level, index) in self._cache:
                 result.append(self._cache.pop((level, index)))
@@ -283,7 +283,7 @@ class ByteBudgetTileCache(TileCache):
         self._memory_store.clear_level(level)
         self._file_store.clear_level(level)
 
-    def _load(self, level: int, index: int) -> Optional[bytes]:
+    def _load(self, level: int, index: int) -> bytes | None:
         """Load and remove tile from cache, checking memory first then disk."""
         tile = self._memory_store.load(level, index)
         if tile is not None:

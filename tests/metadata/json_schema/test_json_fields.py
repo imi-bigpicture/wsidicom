@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Any, Dict, Union
+from typing import Any
 
 import pytest
 from pydicom.sr.coding import Code
@@ -51,7 +51,7 @@ class TestFields:
         ],
     )
     def test_measurement_serialize(
-        self, measurement: Measurement, expected: Dict[str, Any]
+        self, measurement: Measurement, expected: dict[str, Any]
     ):
         # Arrange
 
@@ -74,7 +74,7 @@ class TestFields:
         ],
     )
     def test_measurement_deserialize(
-        self, measurement: Dict[str, Any], expected: Measurement
+        self, measurement: dict[str, Any], expected: Measurement
     ):
         # Arrange
 
@@ -99,9 +99,7 @@ class TestFields:
             ),
         ],
     )
-    def test_specimen_identifier_serialize(
-        self, identifier: Union[str, SpecimenIdentifier]
-    ):
+    def test_specimen_identifier_serialize(self, identifier: str | SpecimenIdentifier):
         # Arrange
 
         # Act
@@ -139,9 +137,7 @@ class TestFields:
             },
         ],
     )
-    def test_specimen_identifier_deserialize(
-        self, identifier: Union[str, Dict[str, Any]]
-    ):
+    def test_specimen_identifier_deserialize(self, identifier: str | dict[str, Any]):
         # Arrange
 
         # Act
@@ -245,7 +241,7 @@ class TestFields:
         assert_dict_equals_code(dumped, loaded)
 
     @pytest.mark.parametrize("value", ["value", Code("value", "scheme", "meaning")])
-    def test_string_or_code_serialize(self, value: Union[str, Code]):
+    def test_string_or_code_serialize(self, value: str | Code):
         # Arrange
 
         # Act
@@ -265,7 +261,7 @@ class TestFields:
             {"value": "value", "scheme_designator": "scheme", "meaning": "meaning"},
         ],
     )
-    def test_string_or_code_deserialize(self, dumped: Union[str, Dict[str, str]]):
+    def test_string_or_code_deserialize(self, dumped: str | dict[str, str]):
         # Arrange
 
         # Act
@@ -283,7 +279,7 @@ class TestFields:
         [10.0, IlluminationColorCode("Full Spectrum")],
     )
     def test_float_or_concept_code_serialize(
-        self, value: Union[float, IlluminationColorCode]
+        self, value: float | IlluminationColorCode
     ):
         # Arrange
         field = JsonFieldFactory.float_or_concept_code(IlluminationColorCode)
@@ -310,9 +306,7 @@ class TestFields:
             },
         ],
     )
-    def test_float_or_concept_code_deserialize(
-        self, dumped: Union[float, Dict[str, str]]
-    ):
+    def test_float_or_concept_code_deserialize(self, dumped: float | dict[str, str]):
         # Arrange
         field = JsonFieldFactory.float_or_concept_code(IlluminationColorCode)
 
@@ -332,9 +326,7 @@ class TestFields:
         "value",
         ["value", IlluminationColorCode("Full Spectrum")],
     )
-    def test_str_or_concept_code_serialize(
-        self, value: Union[str, IlluminationColorCode]
-    ):
+    def test_str_or_concept_code_serialize(self, value: str | IlluminationColorCode):
         # Arrange
         field = JsonFieldFactory.str_or_concept_code(IlluminationColorCode)
 
@@ -358,7 +350,7 @@ class TestFields:
             },
         ],
     )
-    def test_str_or_concept_code_deserialize(self, dumped: Union[str, Dict[str, str]]):
+    def test_str_or_concept_code_deserialize(self, dumped: str | dict[str, str]):
         # Arrange
         field = JsonFieldFactory.str_or_concept_code(IlluminationColorCode)
 

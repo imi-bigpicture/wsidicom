@@ -14,25 +14,19 @@
 
 import logging
 import os
-from functools import lru_cache
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import (
     Any,
     BinaryIO,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
     Union,
 )
 
 from PIL.Image import Image
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 from upath import UPath
 
+from wsidicom.cache import lru_cached_method
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.config import settings
@@ -49,6 +43,7 @@ from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.schema.dicom.label import LabelBaseDicomSchema
 from wsidicom.metadata.schema.dicom.wsi import BaseWsiMetadataDicomSchema
+from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -89,8 +84,8 @@ class WsiDicom:
     @classmethod
     def open(
         cls,
-        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
-        file_options: Optional[Dict[str, Any]] = None,
+        files: str | Path | UPath | Iterable[str | Path | UPath],
+        file_options: dict[str, Any] | None = None,
     ) -> "WsiDicom":
         """Open valid WSI DICOM files and return a WsiDicom object.
 
@@ -98,11 +93,11 @@ class WsiDicom:
 
         Parameters
         ----------
-        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+        files: str | Path | UPath | Iterable[str | Path | UPath]
             Files to open. Can be a path for a single file, a list of paths for multiple
             files, or a path to a folder containing files. Path can be local or an URL
             supported by fsspec.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Optional options for when opening files.
 
         Returns
@@ -115,7 +110,7 @@ class WsiDicom:
 
     @classmethod
     def open_dicomdir(
-        cls, path: UPath, file_options: Optional[Dict[str, Any]] = None
+        cls, path: UPath, file_options: dict[str, Any] | None = None
     ) -> "WsiDicom":
         """Open WSI DICOM files in DICOMDIR and return a WsiDicom object.
 
@@ -124,7 +119,7 @@ class WsiDicom:
         path: UPath
             Path to DICOMDIR file or directory with a DICOMDIR file. Path can be local
             or an URL supported by fsspec.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Optional options for when opening files.
 
         Returns
@@ -162,11 +157,9 @@ class WsiDicom:
     def open_web(
         cls,
         client: WsiDicomWebClient,
-        study_uid: Union[str, UID],
-        series_uids: Union[str, UID, Iterable[Union[str, UID]]],
-        requested_transfer_syntax: Optional[
-            Union[str, UID, Sequence[Union[str, UID]]]
-        ] = None,
+        study_uid: str | UID,
+        series_uids: str | UID | Iterable[str | UID],
+        requested_transfer_syntax: str | UID | Sequence[str | UID] | None = None,
     ) -> "WsiDicom":
         """Open WSI DICOM instances using DICOM web client.
 
@@ -174,13 +167,13 @@ class WsiDicom:
         ----------
         client: WsiDicomWebClient
             Configured DICOM web client.
-        study_uid: Union[str, UID]
+        study_uid: str | UID
             Study uid of wsi to open.
-        series_uids: Union[str, UID, Iterable[Union[str, UID]]]
+        series_uids: str | UID | Iterable[str | UID]
             Series uids of wsi to open
-        requested_transfer_syntax: Optional[
-            Union[str, UID, Sequence[Union[str, UID]]]
-        ] = JPEGBaseline8Bit
+        requested_transfer_syntax:
+            str | UID | Sequence[str | UID]
+         | None = JPEGBaseline8Bit
             Transfer syntax to request for image data, for example
             "1.2.840.10008.1.2.4.50" for JPEGBaseline8Bit. By default the first
             supported transfer syntax is requested.
@@ -209,22 +202,22 @@ class WsiDicom:
 
     def save(
         self,
-        output_path: Union[str, Path, UPath],
-        uid_generator: Callable[..., UID] = generate_uid,
-        workers: Optional[int] = None,
-        chunk_size: Optional[int] = None,
-        offset_table: Optional[Union["str", OffsetTableType]] = None,
-        include_pyramids: Optional[Sequence[int]] = None,
-        include_levels: Optional[Sequence[int]] = None,
+        output_path: str | Path | UPath,
+        uid_generator: Callable[[], UID] | UidGenerator | None = None,
+        workers: int | None = None,
+        chunk_size: int | None = None,
+        offset_table: Union["str", OffsetTableType] | None = None,
+        include_pyramids: Sequence[int] | None = None,
+        include_levels: Sequence[int] | None = None,
         include_labels: bool = True,
         include_overviews: bool = True,
         include_thumbnails: bool = True,
         add_missing_levels: bool = False,
-        label: Optional[Union[Image, Union[str, Path, UPath]]] = None,
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        label: Image | str | Path | UPath | None = None,
+        transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
-        file_options: Optional[Dict[str, Any]] = None,
-    ) -> List[UPath]:
+        file_options: dict[str, Any] | None = None,
+    ) -> list[UPath]:
         """
         Save wsi as DICOM-files in path. Instances for the same pyramid
         level will be combined when possible to one file (e.g. not split
@@ -234,24 +227,24 @@ class WsiDicom:
 
         Parameters
         ----------
-        output_path: Union[str, Path, UPath]
+        output_path: str | Path | UPath
             Output folder to write files to. Should preferably be an dedicated folder
             for the wsi. Path can be local or an URL supported by fsspec.
-        uid_generator: Callable[..., UID] = pydicom.uid.generate_uid
-            Function that can generate unique identifiers.
-        workers: Optional[int] = None
+        uid_generator: Callable[[], UID] | UidGenerator | None = None
+            Zero-arg callable or `UidGenerator` instance for producing UIDs.
+        workers: int | None = None
             Maximum number of thread workers to use.
-        chunk_size: Optional[int] = None
+        chunk_size: int | None = None
             Per-batch tile width hint for source tile reading. When None,
             each source's `ImageData.suggested_minimum_chunk_size` is used.
-        offset_table: Optional[Union["str", OffsetTableType]] = None,
+        offset_table: "str" | OffsetTableType | None = None,
             Offset table to use, defined either by string (`empty`, `bot`, `eot`, or
             `none`) or `OffsetTableType` enum. Default to None, which will use
             `bot` for encapsulated  syntaxes and `none` for non-encapsulated transfer
             syntaxes.
-        include_pyramids: Optional[Sequence[int]] = None
+        include_pyramids: Sequence[int] | None = None
             Optional list of indices (in present pyramids) to include.
-        include_levels: Optional[Sequence[int]] = None
+        include_levels: Sequence[int] | None = None
             Optional list of indices (in all pyramids) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indicies can be used,
             e.g. [-1, -2] includes the two highest levels.
@@ -263,30 +256,31 @@ class WsiDicom:
             If to include thumbnail series.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
-        label: Optional[Union[Image, Union[str, Path, UPath]]] = None
+        label: Image | str | Path | UPath | None = None
             Optional label image to use instead of present label (if any).
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        transcoding: EncoderSettings | Encoder | None = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
         force_transcoding: bool = False
             If to force transcoding even if transfer syntax already matches the encoding
             settings.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Optional options for saving files to output path.
 
         Returns
         -------
-        List[UPath]
+        list[UPath]
             List of paths of created files.
         """
         if workers is None:
             cpus = os.cpu_count()
-            if cpus is None:
-                workers = 1
-            else:
-                workers = cpus
+            workers = 1 if cpus is None else cpus
         if isinstance(offset_table, str):
             offset_table = OffsetTableType.from_string(offset_table)
+        if uid_generator is None:
+            uid_generator = CallableUidGenerator()
+        elif not isinstance(uid_generator, UidGenerator):
+            uid_generator = CallableUidGenerator(uid_generator)
         if include_labels:
             if label is not None:
                 label_instances = [
@@ -322,20 +316,20 @@ class WsiDicom:
     @classmethod
     def is_ready_for_viewing(
         cls,
-        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
-        file_options: Optional[Dict[str, Any]] = None,
-    ) -> Optional[bool]:
+        files: str | Path | UPath | Iterable[str | Path | UPath],
+        file_options: dict[str, Any] | None = None,
+    ) -> bool | None:
         """
         Return true if files in path are formatted for fast viewing, i.e.
         have TILED_FULL tile arrangement and have an offset table.
 
         Parameters
         ----------
-        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+        files: str | Path | UPath | Iterable[str | Path | UPath]
             Files to open. Can be a path for a single file, a list of paths for multiple
             files, or a path to a folder containing files. Path can be local or an URL
             supported by fsspec.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Optional options for when opening files.
 
         Returns
@@ -348,17 +342,17 @@ class WsiDicom:
     @classmethod
     def is_supported(
         cls,
-        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
-        file_options: Optional[Dict[str, Any]] = None,
+        files: str | Path | UPath | Iterable[str | Path | UPath],
+        file_options: dict[str, Any] | None = None,
     ) -> bool:
         """Return true if files in path have at least one level that can be read with
         WsiDicom.
 
         Parameters
         ----------
-        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]]
+        files: str | Path | UPath | Iterable[str | Path | UPath]
             Path to files to test. Path can be local or an URL supported by fsspec.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Optional options for when opening files.
 
         Returns
@@ -398,7 +392,7 @@ class WsiDicom:
         return self._selected_pyramid
 
     @property
-    def uids(self) -> Optional[SlideUids]:
+    def uids(self) -> SlideUids | None:
         return self._uids
 
     @property
@@ -419,23 +413,23 @@ class WsiDicom:
         return self.pyramid
 
     @property
-    def labels(self) -> Optional[Labels]:
+    def labels(self) -> Labels | None:
         """Return contained labels."""
         return self._labels
 
     @property
-    def overviews(self) -> Optional[Overviews]:
+    def overviews(self) -> Overviews | None:
         """Return contained overviews."""
         return self._overviews
 
     @property
-    def annotations(self) -> List[AnnotationInstance]:
+    def annotations(self) -> list[AnnotationInstance]:
         """Return contained annotations."""
         return self._annotations
 
     @property
-    def collection(self) -> List[Union[Pyramid, Labels, Overviews]]:
-        collection: List[Optional[Union[Pyramid, Labels, Overviews]]] = [
+    def collection(self) -> list[Pyramid | Labels | Overviews]:
+        collection: list[Pyramid | Labels | Overviews | None] = [
             self._labels,
             self._overviews,
         ]
@@ -447,13 +441,13 @@ class WsiDicom:
         return self._create_metadata(self._selected_pyramid)
 
     @property
-    def files(self) -> Optional[List[UPath]]:
+    def files(self) -> list[UPath] | None:
         """Return opened files if source is file-based."""
         if isinstance(self._source, WsiDicomFileSource):
             return self._source.files
         return None
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         string = self.__class__.__name__
         if depth is not None:
             depth -= 1
@@ -517,10 +511,10 @@ class WsiDicom:
 
     def read_thumbnail(
         self,
-        size: Union[int, Tuple[int, int]] = 512,
-        z: Optional[float] = None,
-        path: Optional[str] = None,
-        pyramid: Optional[int] = None,
+        size: int | tuple[int, int] = 512,
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
         force_generate: bool = False,
     ) -> Image:
         """Read thumbnail image of the whole slide with dimensions no larger than given
@@ -528,13 +522,13 @@ class WsiDicom:
 
         Parameters
         ----------
-        size: Union[int, Tuple[int, int]] = 512
+        size: int | tuple[int, int] = 512
             Upper size limit for thumbnail.
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional.
-        path: Optional[str] = None
+        path: str | None = None
             Optical path, optional.
-        pyramid: Optional[int] = None
+        pyramid: int | None = None
             Pyramid to read thumbnail from. If `None` the index in `selected_pyramid` is
             used.
         force_generate: bool = False
@@ -550,7 +544,7 @@ class WsiDicom:
             size = (size, size)
         thumbnail_size = Size.from_tuple(size)
         selected_pyramid = self.pyramids.get(pyramid or self.selected_pyramid)
-        thumbnail: Optional[Union[Thumbnail, Level]] = None
+        thumbnail: Thumbnail | Level | None = None
         if not force_generate and selected_pyramid.thumbnails is not None:
             thumbnail = selected_pyramid.thumbnails.get_closest_by_size(thumbnail_size)
         if selected_pyramid.thumbnails is None or thumbnail is None:
@@ -566,29 +560,29 @@ class WsiDicom:
 
     def read_region(
         self,
-        location: Tuple[int, int],
+        location: tuple[int, int],
         level: int,
-        size: Tuple[int, int],
-        z: Optional[float] = None,
-        path: Optional[str] = None,
-        pyramid: Optional[int] = None,
+        size: tuple[int, int],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
         threads: int = 1,
     ) -> Image:
         """Read region defined by pixels.
 
         Parameters
         ----------
-        location: Tuple[int, int]
+        location: tuple[int, int]
             Upper left corner of region in pixels.
         level: int
             Level in pyramid.
-        size: Tuple[int, int]
+        size: tuple[int, int]
             Size of region in pixels.
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional.
-        path: Optional[str] = None
+        path: str | None = None
             Optical path, optional.
-        pyramid: Optional[int] = None
+        pyramid: int | None = None
             Pyramid to read region from. If `None` the index in `selected_pyramid` is
             used.
         threads: int = 1
@@ -619,12 +613,12 @@ class WsiDicom:
 
     def read_region_mm(
         self,
-        location: Tuple[float, float],
+        location: tuple[float, float],
         level: int,
-        size: Tuple[float, float],
-        z: Optional[float] = None,
-        path: Optional[str] = None,
-        pyramid: Optional[int] = None,
+        size: tuple[float, float],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
         slide_origin: bool = False,
         threads: int = 1,
     ) -> Image:
@@ -632,18 +626,18 @@ class WsiDicom:
 
         Parameters
         ----------
-        location: Tuple[float, float]
+        location: tuple[float, float]
             Upper left corner of region in mm, or lower left corner if using slide
             origin.
         level: int
             Level in pyramid.
-        size: Tuple[float, float].
+        size: tuple[float, float].
             Size of region in mm.
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional.
-        path: Optional[str] = None
+        path: str | None = None
             Optical path, optional.
-        pyramid: Optional[int] = None
+        pyramid: int | None = None
             Pyramid to read region from. If `None` the index in `selected_pyramid` is
             used.
         slide_origin: bool = False
@@ -669,12 +663,12 @@ class WsiDicom:
 
     def read_region_mpp(
         self,
-        location: Tuple[float, float],
+        location: tuple[float, float],
         mpp: float,
-        size: Tuple[float, float],
-        z: Optional[float] = None,
-        path: Optional[str] = None,
-        pyramid: Optional[int] = None,
+        size: tuple[float, float],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
         slide_origin: bool = False,
         threads: int = 1,
     ) -> Image:
@@ -682,18 +676,18 @@ class WsiDicom:
 
         Parameters
         ----------
-        location: Tuple[float, float].
+        location: tuple[float, float].
             Upper left corner of region in mm, or lower left corner if using slide
             origin.
         mpp: float
             Requested pixel spacing (um/pixel).
-        size: Tuple[float, float].
+        size: tuple[float, float].
             Size of region in mm.
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional.
-        path: Optional[str] = None
+        path: str | None = None
             Optical path, optional.
-        pyramid: Optional[int] = None
+        pyramid: int | None = None
             Pyramid to read region from. If `None` the index in `selected_pyramid` is
             used.
         slide_origin: bool = False
@@ -722,10 +716,10 @@ class WsiDicom:
     def read_tile(
         self,
         level: int,
-        tile: Tuple[int, int],
-        z: Optional[float] = None,
-        path: Optional[str] = None,
-        pyramid: Optional[int] = None,
+        tile: tuple[int, int],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
         crop_to_image_boundary: bool = True,
     ) -> Image:
         """Read tile in pyramid level as Pillow image.
@@ -736,11 +730,11 @@ class WsiDicom:
             Pyramid level.
         tile: int, int
             tile xy coordinate.
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional.
-        path: Optional[str] = None
+        path: str | None = None
             Optical path, optional.
-        pyramid: Optional[int] = None
+        pyramid: int | None = None
             Pyramid to read tile from. If `None` the index in `selected_pyramid` is
             used.
         crop_to_image_boundary: bool = True
@@ -768,10 +762,10 @@ class WsiDicom:
     def read_encoded_tile(
         self,
         level: int,
-        tile: Tuple[int, int],
-        z: Optional[float] = None,
-        path: Optional[str] = None,
-        pyramid: Optional[int] = None,
+        tile: tuple[int, int],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
         crop_to_image_boundary: bool = True,
     ) -> bytes:
         """Read tile in pyramid level as encoded bytes. For non-existing levels
@@ -783,11 +777,11 @@ class WsiDicom:
             Pyramid level.
         tile: int, int
             Tile xy coordinate.
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional.
-        path: Optional[str] = None
+        path: str | None = None
             Optical path, optional.
-        pyramid: Optional[int] = None
+        pyramid: int | None = None
             Pyramid to read tile from. If `None` the index in `selected_pyramid` is
             used.
         crop_to_image_boundary: bool = True
@@ -817,9 +811,9 @@ class WsiDicom:
     def get_instance(
         self,
         level: int,
-        z: Optional[float] = None,
-        path: Optional[str] = None,
-        pyramid: Optional[int] = None,
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
     ) -> WsiInstance:
         """Return instance fulfilling level, z and/or path.
 
@@ -827,11 +821,11 @@ class WsiDicom:
         ----------
         level: int
             Pyramid level
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional.
-        path: Optional[str] = None
+        path: str | None = None
             Optical path, optional.
-        pyramid: Optional[int] = None
+        pyramid: int | None = None
             Pyramid to read tile from. If `None` the index in `selected_pyramid` is
             used.
 
@@ -910,7 +904,7 @@ class WsiDicom:
     def __str__(self) -> str:
         return self.pretty_str()
 
-    @lru_cache
+    @lru_cached_method()
     def _create_metadata(self, pyramid_index: int) -> WsiMetadata:
         pyramid = self.pyramids.get(pyramid_index)
 

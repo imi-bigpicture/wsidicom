@@ -17,8 +17,8 @@
 import os
 import tempfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, Optional
 
 import pytest
 from decoy import Decoy, matchers
@@ -28,10 +28,10 @@ from pydicom.uid import generate_uid
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
 from wsidicom.codec import Encoder
+from wsidicom.file import OffsetTableType
 from wsidicom.file.file_writer import (
     PyramidFileWriter,
 )
-from wsidicom.file import OffsetTableType
 from wsidicom.series import Pyramid
 
 
@@ -339,7 +339,7 @@ class TestPyramidFileWriterFailFast:
     def test_encoding_failure_fails_fast(
         self,
         wsi_name: str,
-        source_workers: Optional[int],
+        source_workers: int | None,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         decoy: Decoy,
@@ -396,7 +396,7 @@ class TestPyramidFileWriterFailFast:
 
         # Act — run write() on a daemon thread so a hang shows up as a join
         # timeout rather than wedging the whole test session.
-        outcome: Dict[str, BaseException] = {}
+        outcome: dict[str, BaseException] = {}
 
         def run_write() -> None:
             try:
@@ -420,7 +420,7 @@ class TestPyramidFileWriterFailFast:
     def test_source_read_failure_fails_fast(
         self,
         wsi_name: str,
-        source_workers: Optional[int],
+        source_workers: int | None,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -466,7 +466,7 @@ class TestPyramidFileWriterFailFast:
         )
 
         # Act
-        outcome: Dict[str, BaseException] = {}
+        outcome: dict[str, BaseException] = {}
 
         def run_write() -> None:
             try:

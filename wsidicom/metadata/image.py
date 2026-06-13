@@ -15,10 +15,11 @@
 """Image model."""
 
 import datetime
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 from math import sqrt
-from typing import Optional, Sequence, TypeVar
+from typing import ClassVar, Optional, TypeVar
 
 from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.geometry import Orientation, PointMm, RegionMm, SizeMm
@@ -29,6 +30,15 @@ class FocusMethod(Enum):
 
     AUTO = "auto"
     MANUAL = "manual"
+
+
+class ImageType(Enum):
+    """Type of WSI image."""
+
+    VOLUME = "VOLUME"
+    LABEL = "LABEL"
+    OVERVIEW = "OVERVIEW"
+    THUMBNAIL = "THUMBNAIL"
 
 
 @dataclass(frozen=True)
@@ -60,13 +70,19 @@ class ImageCoordinateSystem:
         The position of the top left pixel in the slide coorindate system.
     rotation : float
         The rotation of the image in degrees in the slide coordinate system.
-    z_offset : Optional[float]
+    z_offset : float | None
         The z offset of the image in the slide coordinate system.
     """
 
     origin: PointMm
     rotation: float
-    z_offset: Optional[float] = None
+    z_offset: float | None = None
+
+    # Standard glass microscope slide geometry. The label area occupies the top 25 mm
+    # of the slide, so the imaged (non-label) part is 25 x 50 mm and the full slide is
+    # 25 x 75 mm.
+    SLIDE_SIZE_WITHOUT_LABEL: ClassVar[SizeMm] = SizeMm(25, 50)
+    SLIDE_SIZE_WITH_LABEL: ClassVar[SizeMm] = SizeMm(25, 75)
 
     @property
     def orientation(self) -> Orientation:
@@ -148,7 +164,7 @@ class ImageCoordinateSystem:
         slide_middle: PointMm,
         image_size: SizeMm,
         rotation: float,
-        z_offset: Optional[float],
+        z_offset: float | None,
     ) -> "ImageCoordinateSystem":
         """Create an image coordinate system that places the image in the middle of the
         slide.
@@ -161,7 +177,7 @@ class ImageCoordinateSystem:
             The size of the image.
         rotation : float
             The rotation of the image in degrees.
-        z_offset : Optional[float]
+        z_offset : float | None
             The z offset of the image.
 
         Returns
@@ -180,6 +196,89 @@ class ImageCoordinateSystem:
             origin=image_coordinate_system_origin,
             rotation=rotation,
             z_offset=z_offset,
+        )
+
+    @classmethod
+    def default_for(
+        cls,
+        rotation: float,
+        image_type: ImageType,
+        z_offset: float | None = None,
+        slide_size_without_label: SizeMm | None = None,
+        slide_size_with_label: SizeMm | None = None,
+    ) -> "ImageCoordinateSystem":
+        """Create a default image coordinate system for an image of ``image_type``.
+
+        Best effort for images that do not specify a position: the image is assumed to
+        fill its area of a standard slide, with its first pixel at the corner matching
+        ``rotation``. The origin is therefore a canonical slide corner (e.g. ``(0, 0)``
+        or ``(25, 50)``), recognisable as a default rather than a measured position.
+
+        Parameters
+        ----------
+        rotation : float
+            The rotation of the image in degrees. One of 0, 90, 180 or 270.
+        image_type : ImageType
+            The type of image to place on the slide.
+        z_offset : float | None
+            The z offset of the image.
+        slide_size_without_label : SizeMm | None
+            Size of the non-label part of the slide. Defaults to a standard slide
+            (``SLIDE_SIZE_WITHOUT_LABEL``), e.g. for large-format scanners.
+        slide_size_with_label : SizeMm | None
+            Size of the full slide including the label area. Defaults to a standard
+            slide (``SLIDE_SIZE_WITH_LABEL``).
+
+        Returns
+        -------
+        ImageCoordinateSystem
+            The default image coordinate system.
+        """
+        region = cls._default_slide_region(
+            image_type,
+            slide_size_without_label or cls.SLIDE_SIZE_WITHOUT_LABEL,
+            slide_size_with_label or cls.SLIDE_SIZE_WITH_LABEL,
+        )
+        return cls(
+            origin=cls._corner_for_rotation(region, rotation),
+            rotation=rotation,
+            z_offset=z_offset,
+        )
+
+    @staticmethod
+    def _default_slide_region(
+        image_type: ImageType,
+        size_without_label: SizeMm,
+        size_with_label: SizeMm,
+    ) -> RegionMm:
+        """Return the slide area that a default image of ``image_type`` fills."""
+        if image_type == ImageType.OVERVIEW:
+            return RegionMm(PointMm(0, 0), size_with_label)
+        if image_type == ImageType.LABEL:
+            return RegionMm(
+                PointMm(0, size_without_label.height),
+                SizeMm(
+                    size_with_label.width,
+                    size_with_label.height - size_without_label.height,
+                ),
+            )
+        return RegionMm(PointMm(0, 0), size_without_label)
+
+    @staticmethod
+    def _corner_for_rotation(region: RegionMm, rotation: float) -> PointMm:
+        """Return the first-pixel position for an image filling ``region`` rotated by
+        ``rotation`` degrees, i.e. the region corner the top-left pixel maps to."""
+        if rotation == 0:
+            return region.start
+        if rotation == 90:
+            return PointMm(region.end.x, region.start.y)
+        if rotation == 180:
+            return region.end
+        if rotation == 270:
+            return PointMm(region.start.x, region.end.y)
+        raise ValueError(
+            f"Unsupported default image coordinate system rotation {rotation}; "
+            "expected 0, 90, 180 or 270."
         )
 
     def origin_and_rotation_match(
@@ -219,32 +318,32 @@ class Image:
 
     Parameters
     ----------
-    acquisition_datetime : Optional[datetime.datetime] = None
+    acquisition_datetime : datetime.datetime | None = None
         The acquisition datetime of the image.
-    focus_method : Optional[FocusMethod] = None
+    focus_method : FocusMethod | None = None
         The focus method used for imaging.
-    extended_depth_of_field : Optional[ExtendedDepthOfField] = None
+    extended_depth_of_field : ExtendedDepthOfField | None = None
         Describes if extended depth of field has been used for imaging.
-    image_coordinate_system : Optional[ImageCoordinateSystem] = None
+    image_coordinate_system : ImageCoordinateSystem | None = None
         The image coordinate system in relation the slide frame of reference.
-    pixel_spacing : Optional[SizeMm] = None
+    pixel_spacing : SizeMm | None = None
         The pixel spacing in mm per pixel.
-    focal_plane_spacing : Optional[float] = None
+    focal_plane_spacing : float | None = None
         The spacing between focal planes if image with multiple focal planes.
-    depth_of_field : Optional[float] = None
+    depth_of_field : float | None = None
         The depth of field of the image.
-    lossy_compressions : Optional[Sequence[LossyCompression]] = None
+    lossy_compressions : Sequence[LossyCompression] | None = None
         The lossy compressions method that has been applied to the image data.
     """
 
-    acquisition_datetime: Optional[datetime.datetime] = None
-    focus_method: Optional[FocusMethod] = None
-    extended_depth_of_field: Optional[ExtendedDepthOfField] = None
-    image_coordinate_system: Optional[ImageCoordinateSystem] = None
-    pixel_spacing: Optional[SizeMm] = None
-    focal_plane_spacing: Optional[float] = None
-    depth_of_field: Optional[float] = None
-    lossy_compressions: Optional[Sequence[LossyCompression]] = None
+    acquisition_datetime: datetime.datetime | None = None
+    focus_method: FocusMethod | None = None
+    extended_depth_of_field: ExtendedDepthOfField | None = None
+    image_coordinate_system: ImageCoordinateSystem | None = None
+    pixel_spacing: SizeMm | None = None
+    focal_plane_spacing: float | None = None
+    depth_of_field: float | None = None
+    lossy_compressions: Sequence[LossyCompression] | None = None
 
     def remove_confidential(self) -> "Image":
         return replace(

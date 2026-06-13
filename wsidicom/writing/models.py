@@ -15,7 +15,6 @@
 """Shared data models for the write pipeline."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from PIL import Image
 
@@ -109,7 +108,7 @@ class EncodingTaskResult:
     """
 
     coordinates: PyramidTilePosition = field(compare=True)
-    tiles: List[bytes] = field(compare=False, default_factory=list)
+    tiles: list[bytes] = field(compare=False, default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -146,7 +145,7 @@ class EncodeTask(CoordinatePriority):
         Queue to put the encoded result on.
     """
 
-    tiles: List[Image.Image]
+    tiles: list[Image.Image]
     output_queue: WriteOnlyQueue[EncodingTaskResult]
 
 
@@ -169,7 +168,7 @@ class DownsampleEncodeTask(CoordinatePriority):
         accumulator, or None if this is the top of the cascade.
     """
 
-    tiles: List[List[Image.Image]]
+    tiles: list[list[Image.Image]]
     output_queue: WriteOnlyQueue[EncodingTaskResult]
     cascade_tracker: CompletionTracker
-    cascade_queue: Optional[WriteOnlyQueue[CascadedTile]] = None
+    cascade_queue: WriteOnlyQueue[CascadedTile] | None = None

@@ -14,7 +14,7 @@
 
 """Module with codec supporting different formats."""
 
-from typing import Iterable, Optional, Union
+from collections.abc import Iterable
 
 import numpy as np
 from PIL.Image import Image
@@ -45,7 +45,7 @@ class Codec:
         samples_per_pixel: int,
         bits: int,
         photometric_interpretation: str,
-        possible_transfer_syntaxes: Optional[Iterable[UID]] = None,
+        possible_transfer_syntaxes: Iterable[UID] | None = None,
     ) -> Iterable[UID]:
         """Return supported transfer syntaxes for the given parameters.
 
@@ -57,7 +57,7 @@ class Codec:
             Bits per sample of the image.
         photometric_interpretation: str
             Photometric interpretation of the image.
-        possible_transfer_syntaxes: Optional[Iterable[UID]]
+        possible_transfer_syntaxes: Iterable[UID] | None
             Possible transfer syntaxes to check for support.
 
         Returns
@@ -82,7 +82,7 @@ class Codec:
     def decode(self, data: bytes) -> Image:
         return self.decoder.decode(data)
 
-    def encode(self, image: Union[Image, np.ndarray]) -> bytes:
+    def encode(self, image: Image | np.ndarray) -> bytes:
         return self.encoder.encode(image)
 
     @classmethod

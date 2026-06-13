@@ -17,19 +17,12 @@
 import datetime
 import logging
 from abc import abstractmethod
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
-    Dict,
     Generic,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
     TypeVar,
-    Union,
 )
 
 from marshmallow import ValidationError, post_dump, pre_load
@@ -52,12 +45,12 @@ class BaseDicomSchema(LoadingSchema[LoadType], Generic[LoadType, DumpType]):
 
     @property
     @abstractmethod
-    def dump_type(self) -> Type[DumpType]:
+    def dump_type(self) -> type[DumpType]:
         raise NotImplementedError()
 
-    def load(self, dataset: DumpType, **kwargs) -> LoadType:
+    def load(self, data: DumpType, **kwargs) -> LoadType:
         """Load object from DumpType."""
-        item = super().load(dataset, **kwargs)  # type: ignore
+        item = super().load(data, **kwargs)  # type: ignore
         assert isinstance(item, self.load_type)
         return item
 
@@ -72,11 +65,11 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
     """Base DICOM schema for attributes in a dataset."""
 
     @property
-    def dump_type(self) -> Type[Dataset]:
+    def dump_type(self) -> type[Dataset]:
         return Dataset
 
     @post_dump
-    def post_dump(self, data: Dict[str, Any], many: bool, **kwargs) -> Dataset:
+    def post_dump(self, data: dict[str, Any], many: bool, **kwargs) -> Dataset:
         """Create pydicom Dataset from attributes in dictionary."""
         for field in self.fields.values():
             if isinstance(field, FlattenOnDumpNestedDicomField):
@@ -97,7 +90,7 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
         return dataset
 
     @pre_load
-    def pre_load(self, dataset: Dataset, many: bool, **kwargs) -> Dict[str, Any]:
+    def pre_load(self, dataset: Dataset, many: bool, **kwargs) -> dict[str, Any]:
         """Return dictionary of attributes from dataset."""
         attributes = {}
         for key, field in self.fields.items():
@@ -121,10 +114,10 @@ class ModuleDicomSchema(DicomSchema[LoadType]):
     def module_name(self) -> str:
         raise NotImplementedError()
 
-    def load(self, dataset: Dataset, **kwargs) -> LoadType:
+    def load(self, data: Dataset, **kwargs) -> LoadType:
         """Load dataset to LoadType. Return default LoadType if validation error."""
         try:
-            return super().load(dataset, **kwargs)  # type: ignore
+            return super().load(data, **kwargs)  # type: ignore
         except ValidationError:
             logging.warning(
                 f"Failed to load module {self.module_name} with schema {self}.",
@@ -136,27 +129,27 @@ class ModuleDicomSchema(DicomSchema[LoadType]):
 @dataclass(frozen=True)
 class ItemField:
     name: Code
-    value_types: Tuple[Type, ...]
+    value_types: tuple[type, ...]
     many: bool
 
 
 class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
     """Base DICOM schema for sequence of content items (each a dataset)."""
 
-    _dump_only_fields: List[str] = []
+    _dump_only_fields: list[str] = []
 
     @property
     @abstractmethod
-    def load_type(self) -> Type[LoadType]:
+    def load_type(self) -> type[LoadType]:
         raise NotImplementedError()
 
     @property
-    def dump_type(self) -> Type[Iterable[Dataset]]:
+    def dump_type(self) -> type[Iterable[Dataset]]:
         return list
 
     @property
     @abstractmethod
-    def item_fields(self) -> Dict[str, ItemField]:
+    def item_fields(self) -> dict[str, ItemField]:
         """Describe the fields in the schema.
 
         Fields should be ordered as in TID if applicable. The key is the python name of
@@ -167,8 +160,8 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
 
     @post_dump
     def post_dump(
-        self, data: Dict[str, Union[Dataset, Sequence[Dataset]]], many: bool, **kwargs
-    ) -> List[Dataset]:
+        self, data: dict[str, Dataset | Sequence[Dataset]], many: bool, **kwargs
+    ) -> list[Dataset]:
         """Format content items into sequence in a dataset."""
         return [
             self._name_item(flatten_item, name)
@@ -183,7 +176,7 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
     @pre_load
     def pre_load(
         self, sequence: Sequence[Dataset], many: bool, **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Parse the sequence items from a dataset into a dictionary."""
         data = {
             key: self._get_item(sequence, description)
@@ -207,7 +200,7 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
 
     def _get_item(
         self, sequence: Iterable[Dataset], field: ItemField
-    ) -> Optional[Union[Dataset, List[Dataset]]]:
+    ) -> Dataset | list[Dataset] | None:
         """Get item dataset from dataset content item sequence.
 
         Parameters
@@ -219,7 +212,7 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
 
         Returns
         -------
-        Optional[Union[Dataset, List[Dataset]]]
+        Dataset | list[Dataset] | None
             Item dataset or datasets or None if not found.
         """
         items = (
@@ -233,7 +226,7 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
         return next(items, None)
 
     @staticmethod
-    def dataset_to_type(dataset: Dataset) -> Type:
+    def dataset_to_type(dataset: Dataset) -> type:
         value_type = dataset.ValueType
         if value_type == "CODE":
             return Code

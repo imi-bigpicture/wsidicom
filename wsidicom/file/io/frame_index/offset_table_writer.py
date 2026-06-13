@@ -15,7 +15,7 @@
 """Module for writing offset tables to file."""
 
 from abc import ABCMeta, abstractmethod
-from typing import Sequence
+from collections.abc import Sequence
 
 from pydicom.tag import ItemTag
 

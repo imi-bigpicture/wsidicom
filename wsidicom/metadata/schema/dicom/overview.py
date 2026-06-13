@@ -14,16 +14,13 @@
 
 """DICOM schema for Label model."""
 
-from typing import Type
-
+from marshmallow import fields
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.image import Image
-from wsidicom.metadata.optical_path import OpticalPath
 from wsidicom.metadata.overview import Overview
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
-    DefaultingListDicomField,
     FlattenOnDumpNestedDicomField,
     StringDicomField,
 )
@@ -33,13 +30,10 @@ from wsidicom.metadata.schema.dicom.schema import DicomSchema
 
 
 class OverviewDicomSchema(DicomSchema[Overview]):
-    image = FlattenOnDumpNestedDicomField(
-        ImageDicomSchema(), dump_default=Image(), load_default=Image()
-    )
-    optical_paths = DefaultingListDicomField(
+    image = FlattenOnDumpNestedDicomField(ImageDicomSchema(), load_default=Image())
+    optical_paths = fields.List(
         FlattenOnDumpNestedDicomField(OpticalPathDicomSchema()),
         data_key="OpticalPathSequence",
-        dump_default=[OpticalPath()],
         load_default=[],
     )
     contains_phi = BooleanDicomField(data_key="BurnedInAnnotation", allow_none=True)
@@ -51,5 +45,5 @@ class OverviewDicomSchema(DicomSchema[Overview]):
     )
 
     @property
-    def load_type(self) -> Type[Overview]:
+    def load_type(self) -> type[Overview]:
         return Overview

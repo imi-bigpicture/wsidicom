@@ -13,12 +13,12 @@
 #    limitations under the License.
 
 from pydicom.uid import (
-    RLELossless,
-    ExplicitVRLittleEndian,
     UID,
-    JPEGTransferSyntaxes,
-    JPEGLSTransferSyntaxes,
+    ExplicitVRLittleEndian,
     JPEG2000TransferSyntaxes,
+    JPEGLSTransferSyntaxes,
+    JPEGTransferSyntaxes,
+    RLELossless,
 )
 
 

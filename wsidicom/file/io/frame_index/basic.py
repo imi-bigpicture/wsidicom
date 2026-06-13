@@ -14,8 +14,6 @@
 
 """Frame index for BOT, parsing the positions from the BOT."""
 
-from typing import List, Optional, Tuple
-
 from wsidicom.file.io.frame_index.offset_table import OffsetTableFrameIndexParser
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 
@@ -39,27 +37,27 @@ class BasicOffsetTableFrameIndexParser(OffsetTableFrameIndexParser):
     def mode(self) -> str:
         return "<L"
 
-    def _get_index(self) -> List[Tuple[int, int]]:
+    def _get_index(self) -> list[tuple[int, int]]:
         """Get frame positions and length from bot."""
-        self._validate_pixel_data_start()
+        self._validate_pixel_data_start(None)
         table = self._read_table()
         pixels_start = self._file.tell()
         assert table is not None
         return self._parse_table(table, pixels_start)
 
     def _get_pixels_start(self) -> int:
-        self._validate_pixel_data_start()
+        self._validate_pixel_data_start(None)
         bot_length = self._read_bot_length()
         if bot_length is None:
             raise EmptyBasicTableOffsetException()
         return self._file.tell()
 
-    def _read_table(self) -> Optional[bytes]:
+    def _read_table(self) -> bytes | None:
         """Read basic table offset (BOT). Returns None if BOT is empty.
 
         Returns
         -------
-        Optional[bytes]
+        bytes | None
             BOT in bytes.
         """
         bot_length = self._read_bot_length()

@@ -1,13 +1,15 @@
-from typing import Optional, Sequence, Union
+from collections.abc import Sequence
 
 import pytest
 from pydicom import Dataset
 from pydicom.dataelem import DataElement
 from pydicom.uid import UID, generate_uid
 
+from tests.data_gen import create_main_dataset
 from wsidicom.geometry import SizeMm
 from wsidicom.instance import ImageData, TileType
-from wsidicom.instance.dataset import ImageType, WsiDataset
+from wsidicom.instance.dataset import WsiDataset
+from wsidicom.metadata import ImageType
 from wsidicom.tags import LossyImageCompressionRatioTag
 
 
@@ -72,9 +74,7 @@ def spacing_between_slices():
 
 
 @pytest.fixture
-def pixel_measure(
-    pixel_spacing: Optional[SizeMm], spacing_between_slices: Optional[float]
-):
+def pixel_measure(pixel_spacing: SizeMm | None, spacing_between_slices: float | None):
     pixel_measure = Dataset()
     if pixel_spacing is not None:
         pixel_measure.PixelSpacing = [pixel_spacing.height, pixel_spacing.width]
@@ -98,7 +98,7 @@ class TestWsiDataset:
     def test_get_multi_value(
         self,
         dataset: WsiDataset,
-        values: Optional[Union[str, Sequence[str]]],
+        values: str | Sequence[str] | None,
         expected_values: Sequence[str],
     ):
         # Arrange
@@ -145,7 +145,7 @@ class TestWsiDataset:
     def test_frame_offset(
         self,
         dataset: WsiDataset,
-        concatenation: Optional[int],
+        concatenation: int | None,
         expected_frame_offset: int,
     ):
         # Arrange
@@ -162,7 +162,7 @@ class TestWsiDataset:
         ["frame_count", "expected_frame_count"], [(None, 1), (1, 1), (100, 100)]
     )
     def test_frame_count(
-        self, dataset: WsiDataset, frame_count: Optional[int], expected_frame_count: int
+        self, dataset: WsiDataset, frame_count: int | None, expected_frame_count: int
     ):
         # Arrange
         if frame_count is not None:
@@ -239,7 +239,7 @@ class TestWsiDataset:
         self,
         dataset: WsiDataset,
         shared_functional_group: Dataset,
-        expected_pixel_spacing: Optional[SizeMm],
+        expected_pixel_spacing: SizeMm | None,
     ):
         # Arrange
         dataset.SharedFunctionalGroupsSequence = [shared_functional_group]
@@ -255,7 +255,7 @@ class TestWsiDataset:
         self,
         dataset: WsiDataset,
         shared_functional_group: Dataset,
-        spacing_between_slices: Optional[float],
+        spacing_between_slices: float | None,
     ):
         # Arrange
         dataset.SharedFunctionalGroupsSequence = [shared_functional_group]
@@ -279,7 +279,7 @@ class TestWsiDataset:
         self,
         image_data: ImageData,
         image_type: ImageType,
-        pyramid_index: Optional[int],
+        pyramid_index: int | None,
         expected_image_type: Sequence[str],
     ):
         # Arrange
@@ -292,3 +292,75 @@ class TestWsiDataset:
 
         # Assert
         assert instance_dataset.ImageType == expected_image_type
+
+
+class TestIsSupportedWsiDicom:
+    def test_supported_volume_returns_image_type(self):
+        # Arrange
+        dataset = create_main_dataset()
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type == ImageType.VOLUME
+
+    @pytest.mark.parametrize("attribute", WsiDataset.REQUIRED_ATTRIBUTES)
+    def test_missing_required_attribute_returns_none(self, attribute: str):
+        # Arrange
+        dataset = create_main_dataset()
+        delattr(dataset, attribute)
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
+
+    def test_missing_sop_class_uid_returns_none(self):
+        # Arrange
+        dataset = create_main_dataset()
+        del dataset.SOPClassUID
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
+
+    def test_non_wsi_sop_class_returns_none(self):
+        # Arrange
+        dataset = create_main_dataset()
+        dataset.SOPClassUID = "1.2.840.10008.5.1.4.1.1.2"  # CT Image Storage
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
+
+    def test_unsupported_image_type_returns_none(self):
+        # Arrange
+        dataset = create_main_dataset()
+        dataset.ImageType = ["DERIVED", "PRIMARY", "BADFLAVOR", "NONE"]
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None
+
+    @pytest.mark.parametrize(
+        ["attribute", "value"],
+        [("PixelRepresentation", 1), ("PlanarConfiguration", 1)],
+    )
+    def test_unsupported_pixel_format_returns_none(self, attribute: str, value: int):
+        # Arrange
+        dataset = create_main_dataset()
+        setattr(dataset, attribute, value)
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type is None

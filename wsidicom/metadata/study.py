@@ -16,10 +16,8 @@
 
 import datetime
 from dataclasses import dataclass
-from functools import cached_property
-from typing import Optional
 
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 
 
 @dataclass(frozen=True)
@@ -33,32 +31,26 @@ class Study:
 
     Parameters
     ----------
-    uid : Optional[UID] = None
+    uid : UID | None = None
         The study instance UID.
-    identifier : Optional[str] = None
+    identifier : str | None = None
         The study identifier (study ID).
-    date : Optional[datetime.date] = None
+    date : datetime.date | None = None
         The date the study was performed.
-    time : Optional[datetime.time] = None
+    time : datetime.time | None = None
         The time the study was performed.
-    accession_number : Optional[str] = None
+    accession_number : str | None = None
         The accession number of the study.
-    referring_physician_name : Optional[str] = None
+    referring_physician_name : str | None = None
         The name of the referring physician.
-    description : Optional[str] = None
+    description : str | None = None
         The description of the study.
     """
 
-    uid: Optional[UID] = None
-    identifier: Optional[str] = None
-    date: Optional[datetime.date] = None
-    time: Optional[datetime.time] = None
-    accession_number: Optional[str] = None
-    referring_physician_name: Optional[str] = None
-    description: Optional[str] = None
-
-    @cached_property
-    def default_uid(self) -> UID:
-        if self.uid is not None:
-            return self.uid
-        return generate_uid()
+    uid: UID | None = None
+    identifier: str | None = None
+    date: datetime.date | None = None
+    time: datetime.time | None = None
+    accession_number: str | None = None
+    referring_physician_name: str | None = None
+    description: str | None = None

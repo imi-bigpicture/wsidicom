@@ -14,14 +14,11 @@
 
 """DICOM schema for Study model."""
 
-from typing import Type
-
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.schema.dicom.fields import (
     DateDicomField,
     DefaultingNoneDicomField,
-    DefaultingTagDicomField,
     PersonNameDicomField,
     StringDicomField,
     TimeDicomField,
@@ -32,8 +29,8 @@ from wsidicom.metadata.study import Study
 
 
 class StudyDicomSchema(ModuleDicomSchema[Study]):
-    uid = DefaultingTagDicomField(
-        UidDicomField(), tag="default_uid", data_key="StudyInstanceUID", allow_none=True
+    uid = UidDicomField(
+        data_key="StudyInstanceUID", allow_none=True, dump_required=True
     )
     identifier = DefaultingNoneDicomField(
         StringDicomField(value_representation=VR.ST),
@@ -59,7 +56,7 @@ class StudyDicomSchema(ModuleDicomSchema[Study]):
     )
 
     @property
-    def load_type(self) -> Type[Study]:
+    def load_type(self) -> type[Study]:
         return Study
 
     @property

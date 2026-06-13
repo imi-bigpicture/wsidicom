@@ -14,7 +14,6 @@
 
 from functools import cached_property
 from pathlib import Path
-from typing import List, Optional, Union
 
 from PIL import Image as Pillow
 from PIL.Image import Image
@@ -42,7 +41,7 @@ class PillowImageData(ImageData):
         super().__init__(encoder)
 
     @classmethod
-    def from_file(cls, file: Union[str, Path, UPath]) -> "PillowImageData":
+    def from_file(cls, file: str | Path | UPath) -> "PillowImageData":
         image = Pillow.open(UPath(file).open("rb"))  # type: ignore
         return cls(image)
 
@@ -59,11 +58,11 @@ class PillowImageData(ImageData):
         return self.image_size
 
     @property
-    def pixel_spacing(self) -> Optional[SizeMm]:
+    def pixel_spacing(self) -> SizeMm | None:
         return None
 
     @property
-    def imaged_size(self) -> Optional[SizeMm]:
+    def imaged_size(self) -> SizeMm | None:
         return None
 
     @property
@@ -79,7 +78,7 @@ class PillowImageData(ImageData):
         return "YBR_FULL_422"
 
     @property
-    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+    def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         return None
 
     @property
@@ -87,7 +86,7 @@ class PillowImageData(ImageData):
         return True
 
     @property
-    def lossy_compression(self) -> Optional[List[LossyCompression]]:
+    def lossy_compression(self) -> list[LossyCompression] | None:
         iso = LossyCompressionIsoStandard.transfer_syntax_to_iso(self.transfer_syntax)
         if iso is None:
             return None
@@ -98,7 +97,7 @@ class PillowImageData(ImageData):
         return [LossyCompression(iso, uncompressed_size / compressed_size)]
 
     @property
-    def transcoder(self) -> Optional[Encoder]:
+    def transcoder(self) -> Encoder | None:
         return None
 
     def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:

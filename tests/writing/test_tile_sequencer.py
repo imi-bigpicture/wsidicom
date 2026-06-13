@@ -14,7 +14,7 @@
 
 """Tests for TileSequencer."""
 
-from typing import Dict, Iterable, List, Sequence, Union
+from collections.abc import Iterable, Sequence
 
 import pytest
 from decoy import Decoy
@@ -22,6 +22,7 @@ from decoy.matchers import Anything
 from upath import UPath
 
 from wsidicom.file.io.wsidicom_writer import WsiDicomWriter
+from wsidicom.geometry import Size
 from wsidicom.thread import (
     CancellationToken,
     FifoCancelableQueue,
@@ -31,7 +32,6 @@ from wsidicom.thread import (
 from wsidicom.writing.models import EncodingTaskResult, PyramidTilePosition
 from wsidicom.writing.tile_cache import ByteBudgetTileCache, DictTileCache
 from wsidicom.writing.tile_sequencer import TileSequencer
-from wsidicom.geometry import Size
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def decoy() -> Decoy:
 
 
 @pytest.fixture
-def input_queue() -> "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]":
+def input_queue() -> "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]":
     """Create the priority queue feeding the sequencer."""
     return PriorityCancelableQueue()
 
@@ -95,12 +95,12 @@ class TestTileSequencer:
         decoy: Decoy,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """Test writing tiles in sequential order."""
         # Arrange
-        written_data: List[bytes] = []
+        written_data: list[bytes] = []
 
         def capture_write(tiles: Iterable[bytes]) -> int:
             tiles_list = list(tiles)
@@ -149,12 +149,12 @@ class TestTileSequencer:
         decoy: Decoy,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """Test writing tiles out of order."""
         # Arrange
-        written_data: List[bytes] = []
+        written_data: list[bytes] = []
         cached_data: dict[int, bytes] = {}
 
         def capture_write(tiles: Iterable[bytes]) -> int:
@@ -162,11 +162,11 @@ class TestTileSequencer:
             written_data.extend(tiles_list)
             return len(tiles_list)
 
-        def save_to_cache(level: int, index: int, tiles: List[bytes]) -> None:
+        def save_to_cache(level: int, index: int, tiles: list[bytes]) -> None:
             for i, tile in enumerate(tiles):
                 cached_data[index + i] = tile
 
-        def load_from_cache(level: int, index: int) -> List[bytes]:
+        def load_from_cache(level: int, index: int) -> list[bytes]:
             result = []
             while index in cached_data:
                 result.append(cached_data.pop(index))
@@ -217,12 +217,12 @@ class TestTileSequencer:
         decoy: Decoy,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """Test that finalizing with missing tiles raises error."""
         # Arrange
-        written_data: List[bytes] = []
+        written_data: list[bytes] = []
 
         def capture_write(tiles: Iterable[bytes]) -> int:
             tiles_list = list(tiles)
@@ -273,12 +273,12 @@ class TestTileSequencer:
         decoy: Decoy,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """Test writing tiles with multiple z-planes."""
         # Arrange
-        written_data: List[bytes] = []
+        written_data: list[bytes] = []
 
         def capture_write(tiles: Iterable[bytes]) -> int:
             tiles_list = list(tiles)
@@ -290,11 +290,11 @@ class TestTileSequencer:
         optical_paths = ["0"]
         cached_data: dict[int, bytes] = {}
 
-        def save_to_cache(level: int, index: int, tiles: List[bytes]) -> None:
+        def save_to_cache(level: int, index: int, tiles: list[bytes]) -> None:
             for i, tile in enumerate(tiles):
                 cached_data[index + i] = tile
 
-        def load_from_cache(level: int, index: int) -> List[bytes]:
+        def load_from_cache(level: int, index: int) -> list[bytes]:
             result = []
             while index in cached_data:
                 result.append(cached_data.pop(index))
@@ -345,12 +345,12 @@ class TestTileSequencer:
         decoy: Decoy,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """Test writing tiles with multiple optical paths."""
         # Arrange
-        written_data: List[bytes] = []
+        written_data: list[bytes] = []
 
         def capture_write(tiles: Iterable[bytes]) -> int:
             tiles_list = list(tiles)
@@ -359,11 +359,11 @@ class TestTileSequencer:
 
         cached_data: dict[int, bytes] = {}
 
-        def save_to_cache(level: int, index: int, tiles: List[bytes]) -> None:
+        def save_to_cache(level: int, index: int, tiles: list[bytes]) -> None:
             for i, tile in enumerate(tiles):
                 cached_data[index + i] = tile
 
-        def load_from_cache(level: int, index: int) -> List[bytes]:
+        def load_from_cache(level: int, index: int) -> list[bytes]:
             result = []
             while index in cached_data:
                 result.append(cached_data.pop(index))
@@ -417,12 +417,12 @@ class TestTileSequencer:
         decoy: Decoy,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """Test submitting multiple tiles in a batch."""
         # Arrange
-        written_data: List[bytes] = []
+        written_data: list[bytes] = []
 
         def capture_write(tiles: Iterable[bytes]) -> int:
             tiles_list = list(tiles)
@@ -467,7 +467,7 @@ class TestTileSequencer:
         decoy: Decoy,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """Test that shutdown clears the level's cache."""
@@ -499,7 +499,7 @@ class TestTileSequencer:
         decoy: Decoy,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """A tile_writer failure (the worker's own work) surfaces on finalize and
@@ -534,7 +534,7 @@ class TestTileSequencer:
         self,
         tile_writer: WsiDicomWriter,
         tile_cache: DictTileCache,
-        input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]",
+        input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
     ):
         """Test that starting twice raises error."""
@@ -568,9 +568,9 @@ def _run_with_real_cache(
     tiled_size: Size,
     focal_planes: Sequence[float],
     optical_paths: Sequence[str],
-    batches: Dict[int, EncodingTaskResult],
-    submission_order: List[int],
-) -> List[bytes]:
+    batches: dict[int, EncodingTaskResult],
+    submission_order: list[int],
+) -> list[bytes]:
     """Helper to run TileSequencer with a real DictTileCache.
 
     Parameters
@@ -593,7 +593,7 @@ def _run_with_real_cache(
     List[bytes]
         Tiles in the order they were written.
     """
-    written_data: List[bytes] = []
+    written_data: list[bytes] = []
     tile_writer = decoy.mock(cls=WsiDicomWriter)
 
     def capture_write(tiles: Iterable[bytes]) -> int:
@@ -604,7 +604,7 @@ def _run_with_real_cache(
     decoy.when(tile_writer.write_tiles(Anything())).then_do(capture_write)
 
     real_cache = DictTileCache()
-    input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]" = PriorityCancelableQueue()
+    input_queue: PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel] = PriorityCancelableQueue()
     token = CancellationToken()
 
     sequencer = TileSequencer(
@@ -823,10 +823,10 @@ def _run_with_byte_budget_cache(
     tiled_size: Size,
     focal_planes: Sequence[float],
     optical_paths: Sequence[str],
-    batches: Dict[int, EncodingTaskResult],
-    submission_order: List[int],
+    batches: dict[int, EncodingTaskResult],
+    submission_order: list[int],
     memory_budget_bytes: int = 1024 * 1024,
-) -> List[bytes]:
+) -> list[bytes]:
     """Helper to run TileSequencer with a ByteBudgetTileCache.
 
     Parameters
@@ -853,7 +853,7 @@ def _run_with_byte_budget_cache(
     List[bytes]
         Tiles in the order they were written.
     """
-    written_data: List[bytes] = []
+    written_data: list[bytes] = []
     tile_writer = decoy.mock(cls=WsiDicomWriter)
 
     def capture_write(tiles: Iterable[bytes]) -> int:
@@ -867,7 +867,7 @@ def _run_with_byte_budget_cache(
         cache_dir=UPath(tmp_path / "byte_budget_cache"),
         memory_budget_bytes=memory_budget_bytes,
     )
-    input_queue: "PriorityCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]" = PriorityCancelableQueue()
+    input_queue: PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel] = PriorityCancelableQueue()
     token = CancellationToken()
 
     sequencer = TileSequencer(
@@ -1010,9 +1010,9 @@ def _run_with_dict_cache_fifo(
     tiled_size: Size,
     focal_planes: Sequence[float],
     optical_paths: Sequence[str],
-    batches: Dict[int, EncodingTaskResult],
-    submission_order: List[int],
-) -> List[bytes]:
+    batches: dict[int, EncodingTaskResult],
+    submission_order: list[int],
+) -> list[bytes]:
     """Helper to run TileSequencer with DictTileCache + FIFO Queue.
 
     Parameters
@@ -1035,7 +1035,7 @@ def _run_with_dict_cache_fifo(
     List[bytes]
         Tiles in the order they were written.
     """
-    written_data: List[bytes] = []
+    written_data: list[bytes] = []
     tile_writer = decoy.mock(cls=WsiDicomWriter)
 
     def capture_write(tiles: Iterable[bytes]) -> int:
@@ -1046,7 +1046,7 @@ def _run_with_dict_cache_fifo(
     decoy.when(tile_writer.write_tiles(Anything())).then_do(capture_write)
 
     dict_cache = DictTileCache()
-    input_queue: "FifoCancelableQueue[Union[EncodingTaskResult, ShutdownSentinel]]" = FifoCancelableQueue()
+    input_queue: FifoCancelableQueue[EncodingTaskResult | ShutdownSentinel] = FifoCancelableQueue()
     token = CancellationToken()
 
     sequencer = TileSequencer(

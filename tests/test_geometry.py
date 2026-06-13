@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Union
 
 import pytest
 
@@ -25,7 +24,7 @@ from wsidicom.geometry import (
     Size,
     SizeMm,
 )
-from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem, ImageType
 
 
 @pytest.mark.unittest
@@ -239,9 +238,7 @@ class TestWsiDicomGeomtry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(30, 20)), (Size(3, 2), Point(30, 20)), (2, Point(20, 20))],
     )
-    def test_point_multiplication(
-        self, by: Union[Point, Size, int], expected_result: Point
-    ):
+    def test_point_multiplication(self, by: Point | Size | int, expected_result: Point):
         # Arrange
         point = Point(10, 10)
 
@@ -271,7 +268,7 @@ class TestWsiDicomGeomtry:
             (Size(2, 2), Point(0, 0)),
         ],
     )
-    def test_point_mod(self, by: Union[Point, Size], expected_result: Point):
+    def test_point_mod(self, by: Point | Size, expected_result: Point):
         # Arrange
         point = Point(10, 10)
 
@@ -285,7 +282,7 @@ class TestWsiDicomGeomtry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(13, 12)), (2, Point(12, 12)), (Size(3, 2), Point(13, 12))],
     )
-    def test_point_addition(self, by: Union[Point, Size, int], expected_result: Point):
+    def test_point_addition(self, by: Point | Size | int, expected_result: Point):
         # Arrange
         point = Point(10, 10)
 
@@ -299,9 +296,7 @@ class TestWsiDicomGeomtry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(7, 8)), (2, Point(8, 8)), (Size(3, 2), Point(7, 8))],
     )
-    def test_point_subtraction(
-        self, by: Union[Point, Size, int], expected_result: Point
-    ):
+    def test_point_subtraction(self, by: Point | Size | int, expected_result: Point):
         # Arrange
         point = Point(10, 10)
 
@@ -506,3 +501,70 @@ class TestWsiDicomGeomtry:
 
         # Assert
         assert cropped_region == expected_result
+
+
+@pytest.mark.unittest
+class TestImageCoordinateSystemDefaultFor:
+    @pytest.mark.parametrize(
+        ["rotation", "image_type", "expected_origin"],
+        [
+            (0, ImageType.VOLUME, PointMm(0, 0)),
+            (90, ImageType.VOLUME, PointMm(25, 0)),
+            (180, ImageType.VOLUME, PointMm(25, 50)),
+            (270, ImageType.VOLUME, PointMm(0, 50)),
+            (0, ImageType.THUMBNAIL, PointMm(0, 0)),
+            (90, ImageType.THUMBNAIL, PointMm(25, 0)),
+            (180, ImageType.THUMBNAIL, PointMm(25, 50)),
+            (270, ImageType.THUMBNAIL, PointMm(0, 50)),
+            (0, ImageType.OVERVIEW, PointMm(0, 0)),
+            (90, ImageType.OVERVIEW, PointMm(25, 0)),
+            (180, ImageType.OVERVIEW, PointMm(25, 75)),
+            (270, ImageType.OVERVIEW, PointMm(0, 75)),
+            (0, ImageType.LABEL, PointMm(0, 50)),
+            (90, ImageType.LABEL, PointMm(25, 50)),
+            (180, ImageType.LABEL, PointMm(25, 75)),
+            (270, ImageType.LABEL, PointMm(0, 75)),
+        ],
+    )
+    def test_default_for_standard_slide(self, rotation, image_type, expected_origin):
+        # Act
+        system = ImageCoordinateSystem.default_for(rotation, image_type)
+
+        # Assert
+        assert system.origin == expected_origin
+        assert system.rotation == rotation
+
+    @pytest.mark.parametrize(
+        ["rotation", "image_type", "expected_origin"],
+        [
+            (0, ImageType.VOLUME, PointMm(0, 0)),
+            (180, ImageType.VOLUME, PointMm(30, 60)),
+            (180, ImageType.OVERVIEW, PointMm(30, 90)),
+            (0, ImageType.LABEL, PointMm(0, 60)),
+            (180, ImageType.LABEL, PointMm(30, 90)),
+        ],
+    )
+    def test_default_for_custom_slide_size(self, rotation, image_type, expected_origin):
+        # Act
+        system = ImageCoordinateSystem.default_for(
+            rotation,
+            image_type,
+            slide_size_without_label=SizeMm(30, 60),
+            slide_size_with_label=SizeMm(30, 90),
+        )
+
+        # Assert
+        assert system.origin == expected_origin
+
+    def test_default_for_passes_z_offset(self):
+        # Act
+        system = ImageCoordinateSystem.default_for(0, ImageType.VOLUME, z_offset=5.0)
+
+        # Assert
+        assert system.z_offset == 5.0
+
+    @pytest.mark.parametrize("rotation", [1, 45, 360, -90])
+    def test_default_for_unsupported_rotation_raises(self, rotation):
+        # Act & Assert
+        with pytest.raises(ValueError):
+            ImageCoordinateSystem.default_for(rotation, ImageType.VOLUME)

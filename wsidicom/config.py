@@ -13,8 +13,6 @@
 #    limitations under the License.
 
 
-from typing import Optional
-
 from PIL import Image as Pillow
 
 
@@ -25,12 +23,11 @@ class Settings:
     def __init__(self) -> None:
         self._strict_uid_check = False
         self._strict_tile_size_check = True
-        self._strict_attribute_check = False
         self._strict_specimen_identifier_check = True
         self._focal_plane_distance_threshold = 0.000001
         self._pyramids_origin_threshold = 0.02
-        self._prefered_decoder: Optional[str] = None
-        self._open_web_theads: Optional[int] = None
+        self._prefered_decoder: str | None = None
+        self._open_web_theads: int | None = None
         self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
         self._ignore_specimen_preparation_step_on_validation_error = True
         self._truncate_long_dicom_strings = False
@@ -46,15 +43,6 @@ class Settings:
     @strict_uid_check.setter
     def strict_uid_check(self, value: bool) -> None:
         self._strict_uid_check = value
-
-    @property
-    def strict_attribute_check(self) -> bool:
-        """If attribute marked with Requirement.STRICT is required."""
-        return self._strict_attribute_check
-
-    @strict_attribute_check.setter
-    def strict_attribute_check(self, value: bool) -> None:
-        self._strict_attribute_check = value
 
     @property
     def strict_specimen_identifier_check(self) -> bool:
@@ -101,21 +89,21 @@ class Settings:
         self._pyramids_origin_threshold = value
 
     @property
-    def prefered_decoder(self) -> Optional[str]:
+    def prefered_decoder(self) -> str | None:
         """Name of preferred decoder to use."""
         return self._prefered_decoder
 
     @prefered_decoder.setter
-    def prefered_decoder(self, value: Optional[str]) -> None:
+    def prefered_decoder(self, value: str | None) -> None:
         self._prefered_decoder = value
 
     @property
-    def open_web_theads(self) -> Optional[int]:
+    def open_web_theads(self) -> int | None:
         """Number of threads to use when opening web instances."""
         return self._open_web_theads
 
     @open_web_theads.setter
-    def open_web_theads(self, value: Optional[int]) -> None:
+    def open_web_theads(self, value: int | None) -> None:
         self._open_web_theads = value
 
     @property

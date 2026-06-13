@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from typing import Type
 
 import pytest
 from PIL import ImageChops, ImageStat
@@ -152,7 +151,7 @@ class TestEncoder:
         self,
         image: Image,
         decoder: Decoder,
-        encoder_type: Type[Encoder],
+        encoder_type: type[Encoder],
         settings: Settings,
         allowed_rms: float,
     ):

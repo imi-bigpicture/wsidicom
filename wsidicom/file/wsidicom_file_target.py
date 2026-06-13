@@ -14,19 +14,12 @@
 
 """A target for writing WSI DICOM files to disk."""
 
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import (
     Any,
-    Callable,
-    Dict,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Union,
 )
 
-from pydicom.uid import UID
 from upath import UPath
 
 from wsidicom.codec import Encoder
@@ -38,6 +31,7 @@ from wsidicom.file.file_writer import (
 )
 from wsidicom.file.io import OffsetTableType
 from wsidicom.group import Label, Level, Overview, Thumbnail
+from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramids
 from wsidicom.target import Target
 
@@ -47,27 +41,27 @@ class WsiDicomFileTarget(Target):
 
     def __init__(
         self,
-        output_path: Union[str, Path, UPath],
-        uid_generator: Callable[..., UID],
+        output_path: str | Path | UPath,
+        uid_generator: UidGenerator,
         workers: int,
-        chunk_size: Optional[int] = None,
-        offset_table: Optional[OffsetTableType] = None,
-        include_pyramids: Optional[Sequence[int]] = None,
-        include_levels: Optional[Sequence[int]] = None,
+        chunk_size: int | None = None,
+        offset_table: OffsetTableType | None = None,
+        include_pyramids: Sequence[int] | None = None,
+        include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = False,
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ):
         """
         Create a WsiDicomFileTarget.
 
         Parameters
         ----------
-        output_path: Union[str, Path, UPath]
+        output_path: str | Path | UPath
             Folder path to save files to.
-        uid_generator: Callable[..., UID]
-            Uid generator to use.
+        uid_generator: UidGenerator
+            Generator for producing UIDs.
         workers: int
             Maximum number of thread workers to use.
         chunk_size: Optional[int] = None
@@ -77,24 +71,24 @@ class WsiDicomFileTarget(Target):
             Offset table to use. If None, determined automatically.
         include_pyramids: Optional[Sequence[int]] = None
             Optional list indices (in present pyramids) to include.
-        include_levels: Optional[Sequence[int]] = None
+        include_levels: Sequence[int] | None = None
             Optional list indices (in all pyramids) to include, e.g. [0, 1]
             includes the two lowest levels. Negative indicies can be used,
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
-        transcoding: Optional[Union[EncoderSettings, Encoder]] = None,
+        transcoding: EncoderSettings | Encoder | None = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
         force_transcoding: bool
             If to force transcoding even if transfer syntax already matches the encoding
             settings.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Keyword arguments for saving files to output path.
         """
         self._output_path = UPath(output_path)
         self._offset_table = offset_table
-        self._filepaths: List[UPath] = []
+        self._filepaths: list[UPath] = []
         self._file_options = file_options
         self._chunk_size = chunk_size
         super().__init__(
@@ -108,15 +102,15 @@ class WsiDicomFileTarget(Target):
         )
 
     @property
-    def filepaths(self) -> List[UPath]:
+    def filepaths(self) -> list[UPath]:
         """Return filepaths for created files."""
         return self._filepaths
 
     def save(
         self,
         pyramids: Pyramids,
-        labels: Optional[Labels],
-        overviews: Optional[Overviews],
+        labels: Labels | None,
+        overviews: Overviews | None,
         include_thumbnails: bool,
     ) -> None:
         """Save pyramids, labels, and overviews to target.
@@ -145,8 +139,8 @@ class WsiDicomFileTarget(Target):
     def _collect_writers(
         self,
         pyramids: Pyramids,
-        labels: Optional[Labels],
-        overviews: Optional[Overviews],
+        labels: Labels | None,
+        overviews: Overviews | None,
         include_thumbnails: bool,
     ) -> Iterator[BaseFileWriter]:
         """Collect all writers needed for the save operation."""
@@ -183,7 +177,7 @@ class WsiDicomFileTarget(Target):
                 yield self._make_group_writer(label)
 
     def _make_group_writer(
-        self, group: Union[Label, Level, Overview, Thumbnail]
+        self, group: Label | Level | Overview | Thumbnail
     ) -> GroupFileWriter:
         """Create a GroupFileWriter for a group."""
         return GroupFileWriter(

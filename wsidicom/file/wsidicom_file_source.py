@@ -16,15 +16,11 @@
 
 import logging
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 from typing import (
     Any,
     BinaryIO,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Union,
 )
 
 from pydicom.fileset import FileSet
@@ -47,7 +43,8 @@ from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size
 from wsidicom.graphical_annotations import AnnotationInstance
-from wsidicom.instance import ImageType, TileType, WsiDataset, WsiInstance
+from wsidicom.instance import TileType, WsiDataset, WsiInstance
+from wsidicom.metadata import ImageType
 from wsidicom.source import Source
 from wsidicom.uid import SlideUids
 
@@ -64,11 +61,11 @@ class WsiDicomFileSource(Source):
             Opened streams to read from.
         """
         super().__init__()
-        self._levels: List[WsiDicomReader] = []
-        self._labels: List[WsiDicomReader] = []
-        self._overviews: List[WsiDicomReader] = []
-        self._thumbnails: List[WsiDicomReader] = []
-        self._annotations: List[WsiDicomIO] = []
+        self._levels: list[WsiDicomReader] = []
+        self._labels: list[WsiDicomReader] = []
+        self._overviews: list[WsiDicomReader] = []
+        self._thumbnails: list[WsiDicomReader] = []
+        self._annotations: list[WsiDicomIO] = []
         for stream in streams:
             try:
                 if (
@@ -143,9 +140,9 @@ class WsiDicomFileSource(Source):
         )
 
     @property
-    def readers(self) -> List[WsiDicomReader]:
+    def readers(self) -> list[WsiDicomReader]:
         """Return the readers in the source."""
-        reader_lists: List[List[WsiDicomReader]] = [
+        reader_lists: list[list[WsiDicomReader]] = [
             self._levels,
             self._labels,
             self._overviews,
@@ -154,7 +151,7 @@ class WsiDicomFileSource(Source):
         return [reader for reader_list in reader_lists for reader in reader_list]
 
     @property
-    def files(self) -> Optional[List[UPath]]:
+    def files(self) -> list[UPath] | None:
         """Return the files in the source, if any."""
         if all(reader.filepath is None for reader in self.readers):
             return None
@@ -163,7 +160,7 @@ class WsiDicomFileSource(Source):
         ]
 
     @property
-    def is_ready_for_viewing(self) -> Optional[bool]:
+    def is_ready_for_viewing(self) -> bool | None:
         """
         Returns True if files in source are formatted for fast viewing.
 
@@ -191,8 +188,8 @@ class WsiDicomFileSource(Source):
     @classmethod
     def open(
         cls,
-        files: Union[str, Path, UPath, Iterable[Union[str, Path, UPath]]],
-        file_options: Optional[Dict[str, Any]] = None,
+        files: str | Path | UPath | Iterable[str | Path | UPath],
+        file_options: dict[str, Any] | None = None,
     ) -> "WsiDicomFileSource":
         streams = WsiDicomStreamOpener(file_options).open(
             files,
@@ -208,21 +205,21 @@ class WsiDicomFileSource(Source):
         cls,
         streams: Iterable[BinaryIO],
     ) -> "WsiDicomFileSource":
-        return cls((WsiDicomIO(stream) for stream in streams))
+        return cls(WsiDicomIO(stream) for stream in streams)
 
     @classmethod
     def open_dicomdir(
         cls,
-        path: Union[str, Path, UPath],
-        file_options: Optional[Dict[str, Any]] = None,
+        path: str | Path | UPath,
+        file_options: dict[str, Any] | None = None,
     ) -> "WsiDicomFileSource":
         """Open a DICOMDIR file and return a WsiDicomFileSource for contained files.
 
         Parameters
         ----------
-        path: Union[str, Path, UPath]
+        path: str | Path | UPath
             Path to DICOMDIR file.
-        file_options: Optional[Dict[str, Any]] = None
+        file_options: dict[str, Any] | None = None
             Keyword arguments for opening files.
 
         Returns
@@ -230,7 +227,7 @@ class WsiDicomFileSource(Source):
         WsiDicomFileSource
             Source for files in DICOMDIR.
         """
-        files: List[str] = []
+        files: list[str] = []
         for stream in WsiDicomStreamOpener().open(path, MediaStorageDirectoryStorage):
             dicomdir = stream.read_dataset()
             fileset = FileSet(dicomdir)
@@ -276,7 +273,7 @@ class WsiDicomFileSource(Source):
         self,
         files: Iterable[WsiDicomReader],
         series_uids: SlideUids,
-        series_tile_size: Optional[Size] = None,
+        series_tile_size: Size | None = None,
     ) -> Iterable[WsiInstance]:
         """
         Create instances from Dicom files.
@@ -290,7 +287,7 @@ class WsiDicomFileSource(Source):
             Files to create instances from.
         series_uids: SlideUids
             Uid to match against.
-        series_tile_size: Optional[Size]
+        series_tile_size: Size | None
             Tile size to match against (for level instances).
 
         Returns
@@ -314,7 +311,7 @@ class WsiDicomFileSource(Source):
     def _filter_files(
         files: Iterable[WsiDicomReader],
         series_uids: SlideUids,
-        series_tile_size: Optional[Size] = None,
+        series_tile_size: Size | None = None,
     ) -> Iterable[WsiDicomReader]:
         """
         Filter list of wsi dicom files on uids and tile size if defined.
@@ -325,7 +322,7 @@ class WsiDicomFileSource(Source):
             Wsi files to filter.
         series_uids: Uids
             Uids to check against.
-        series_tile_size: Optional[Size] = None
+        series_tile_size: Size | None = None
             Tile size to check against.
 
         Returns
@@ -347,7 +344,7 @@ class WsiDicomFileSource(Source):
     @staticmethod
     def _group_files(
         files: Iterable[WsiDicomReader],
-    ) -> Dict[UID, List[WsiDicomReader]]:
+    ) -> dict[UID, list[WsiDicomReader]]:
         """
         Return files grouped by instance identifier (instances).
 
@@ -358,10 +355,10 @@ class WsiDicomFileSource(Source):
 
         Returns
         -------
-        Dict[UID, List[WsiDicomReader]]
+        dict[UID, list[WsiDicomReader]]
             Files grouped by instance, with instance identifier as key.
         """
-        grouped_files: Dict[UID, List[WsiDicomReader]] = defaultdict(list)
+        grouped_files: dict[UID, list[WsiDicomReader]] = defaultdict(list)
         for file in files:
             grouped_files[file.uids.identifier].append(file)
         return grouped_files

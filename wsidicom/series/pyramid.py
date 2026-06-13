@@ -12,8 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections import OrderedDict
+from collections.abc import Iterable
 from functools import cached_property
-from typing import Iterable, List, Optional, OrderedDict
 
 from wsidicom.errors import (
     WsiDicomNotFoundError,
@@ -22,8 +23,8 @@ from wsidicom.errors import (
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.group import Level, Thumbnail
 from wsidicom.group.level import BaseLevel
-from wsidicom.instance import ImageType, WsiInstance
-from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.instance import WsiInstance
+from wsidicom.metadata import ImageCoordinateSystem, ImageType
 from wsidicom.metadata import Pyramid as PyramidMetadata
 from wsidicom.metadata.schema.dicom.pyramid import PyramidDicomSchema
 from wsidicom.series.series import Series, Thumbnails
@@ -62,8 +63,7 @@ class Pyramid(Series[Level]):
         )
         if mm_size is None:
             raise ValueError(
-                "ImagedVolumeWidth and ImagedVolumeHeight must be set for "
-                '"Volume" type'
+                'ImagedVolumeWidth and ImagedVolumeHeight must be set for "Volume" type'
             )
         self._mm_size = mm_size
         self._thumbnails = Thumbnails(thumbnails)
@@ -101,7 +101,7 @@ class Pyramid(Series[Level]):
                 return self._levels[index]
             return self[index]
         except (KeyError, IndexError):
-            raise WsiDicomNotFoundError(f"Level index {index}", "pyramid")
+            raise WsiDicomNotFoundError(f"Level index {index}", "pyramid") from None
 
     @property
     def image_type(self) -> ImageType:
@@ -124,7 +124,7 @@ class Pyramid(Series[Level]):
         return self.base_level.tile_size
 
     @property
-    def thumbnails(self) -> Optional[Thumbnails]:
+    def thumbnails(self) -> Thumbnails | None:
         return self._thumbnails
 
     @cached_property
@@ -154,7 +154,7 @@ class Pyramid(Series[Level]):
         """
         level_instances_grouped_by_size = cls._group_instances_by_size(level_instances)
         base_level = BaseLevel(next(level_instances_grouped_by_size))
-        levels: List[Level] = [base_level]
+        levels: list[Level] = [base_level]
         levels.extend(
             [
                 Level(instances, base_level.pixel_spacing)
@@ -167,7 +167,7 @@ class Pyramid(Series[Level]):
         )
         return cls(levels, thumbnails)
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         """Return string representation of pyramid."""
         string = self.__class__.__name__
         if depth is not None:
@@ -181,12 +181,12 @@ class Pyramid(Series[Level]):
         )
 
     @property
-    def levels(self) -> List[Level]:
+    def levels(self) -> list[Level]:
         """Return contained levels."""
         return list(self._levels.values())
 
     @property
-    def pyramid_indices(self) -> List[int]:
+    def pyramid_indices(self) -> list[int]:
         """Return contained levels."""
         return list(self._levels.keys())
 
@@ -210,7 +210,7 @@ class Pyramid(Series[Level]):
         return self._mm_size
 
     @property
-    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+    def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         return self.base_level.image_coordinate_system
 
     def valid_level(self, level: int) -> bool:

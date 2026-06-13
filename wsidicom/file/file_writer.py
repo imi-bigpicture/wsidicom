@@ -20,18 +20,12 @@ import shutil
 import tempfile
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Thread
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
 )
 
 from pydicom.uid import UID
@@ -43,9 +37,10 @@ from wsidicom.downsampler import PillowDownsampler
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
 from wsidicom.instance import ImageData, WsiInstance
+from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Pyramid
 from wsidicom.stitcher import PillowStitcher
-from wsidicom.thread import Cancelled, CancellationToken, ConditionalThreadPoolExecutor
+from wsidicom.thread import CancellationToken, Cancelled, ConditionalThreadPoolExecutor
 from wsidicom.writing.encoder_pool import EncoderPool
 from wsidicom.writing.instance_writers import (
     GeneratedPyramidLevelWriter,
@@ -69,12 +64,12 @@ class BaseFileWriter(metaclass=ABCMeta):
 
     def __init__(
         self,
-        output_path: Union[str, Path, UPath],
-        uid_generator: Callable[..., UID],
-        transcoder: Optional[Encoder],
+        output_path: str | Path | UPath,
+        uid_generator: UidGenerator,
+        transcoder: Encoder | None,
         force_transcoding: bool,
-        offset_table: Optional[OffsetTableType],
-        file_options: Optional[Dict[str, Any]],
+        offset_table: OffsetTableType | None,
+        file_options: dict[str, Any] | None,
         instance_number_start: int,
     ):
         """Initialize shared writer state.
@@ -83,7 +78,7 @@ class BaseFileWriter(metaclass=ABCMeta):
         ----------
         output_path: Union[str, Path, UPath]
             Directory to write output files to.
-        uid_generator: Callable[..., UID]
+        uid_generator: UidGenerator
             UID generator for new instances.
         transcoder: Optional[Encoder]
             Encoder for transcoding. If None, source encoding is preserved.
@@ -105,13 +100,13 @@ class BaseFileWriter(metaclass=ABCMeta):
         self._instance_number = instance_number_start
 
     @abstractmethod
-    def write(self) -> List[UPath]:
+    def write(self) -> list[UPath]:
         """Write DICOM files and return paths to created files."""
         raise NotImplementedError()
 
     def _resolve_transcoding(
         self, source_image_data: ImageData
-    ) -> Tuple[Encoder, bool]:
+    ) -> tuple[Encoder, bool]:
         """Resolve encoder and whether transcoding is needed.
 
         Returns
@@ -169,20 +164,20 @@ class PyramidFileWriter(BaseFileWriter):
     def __init__(
         self,
         pyramid: Pyramid,
-        output_path: Union[str, Path, UPath],
-        uid_generator: Callable[..., UID],
+        output_path: str | Path | UPath,
+        uid_generator: UidGenerator,
         max_threads: int = 16,
-        offset_table: Optional[OffsetTableType] = None,
-        transcoder: Optional[Encoder] = None,
+        offset_table: OffsetTableType | None = None,
+        transcoder: Encoder | None = None,
         force_transcoding: bool = False,
-        include_levels: Optional[Sequence[int]] = None,
+        include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = True,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
         instance_number_start: int = 0,
         queue_maxsize: int = 100,
-        memory_budget_bytes: Optional[int] = None,
-        source_workers: Optional[int] = None,
-        chunk_size: Optional[int] = None,
+        memory_budget_bytes: int | None = None,
+        source_workers: int | None = None,
+        chunk_size: int | None = None,
     ):
         """Create a pull-based pyramid writer.
 
@@ -192,7 +187,7 @@ class PyramidFileWriter(BaseFileWriter):
             Source pyramid to generate from.
         output_path: Union[str, Path, UPath]
             Directory to write output files to.
-        uid_generator: Callable[..., UID]
+        uid_generator: UidGenerator
             UID generator for new instances.
         max_threads: int
             Maximum threads in the shared pool across all levels.
@@ -245,7 +240,7 @@ class PyramidFileWriter(BaseFileWriter):
         self._source_workers = source_workers
         self._chunk_size = chunk_size
 
-    def write(self) -> List[UPath]:
+    def write(self) -> list[UPath]:
         """Write the pyramid files.
 
         Returns
@@ -275,8 +270,8 @@ class PyramidFileWriter(BaseFileWriter):
         )
         offset_table = self._resolve_offset_table(encoder.transfer_syntax)
         try:
-            level_writers: List[PyramidLevelWriter] = []
-            file_writers: List[WsiDicomWriter] = []
+            level_writers: list[PyramidLevelWriter] = []
+            file_writers: list[WsiDicomWriter] = []
             try:
                 level_writers = self._build_level_writers(
                     self._pyramid.pyramid_indices,
@@ -344,7 +339,7 @@ class PyramidFileWriter(BaseFileWriter):
         encoder_pool: EncoderPool,
         temp_dir: UPath,
         token: CancellationToken,
-    ) -> List[PyramidLevelWriter]:
+    ) -> list[PyramidLevelWriter]:
         """Build PyramidLevelWriters for all included levels.
 
         Iterates levels from highest to lowest. Generated levels are created
@@ -356,24 +351,24 @@ class PyramidFileWriter(BaseFileWriter):
         if self._add_missing_levels:
             lowest_single_tile = self._pyramid.lowest_single_tile_level
             highest_level = max(highest_in_file, lowest_single_tile)
+            candidate_levels = list(range(highest_level + 1))
         else:
             highest_level = highest_in_file
+            candidate_levels = list(present_levels)
+        selected_levels = self._select_included_levels(
+            candidate_levels, self._include_levels
+        )
         included_levels = [
             level_index
             for level_index in range(highest_level + 1)
-            if self._is_included_level(
-                level_index,
-                present_levels,
-                self._add_missing_levels,
-                self._include_levels,
-            )
+            if level_index in selected_levels
         ]
 
         # Single reversed pass: build all level writers top-down.
         # Track the last accumulator for cascade chain wiring.
         tile_cache = self._create_tile_cache(temp_dir)
-        level_writers: List[PyramidLevelWriter] = []
-        next_accumulator: Optional[PyramidTileAccumulator] = None
+        level_writers: list[PyramidLevelWriter] = []
+        next_accumulator: PyramidTileAccumulator | None = None
 
         for level_index in reversed(included_levels):
             in_source = level_index in present_levels
@@ -491,7 +486,7 @@ class PyramidFileWriter(BaseFileWriter):
         Mutates `level_writer.dataset` to set `SOPInstanceUID` and
         `InstanceNumber`, then writes the file header and pixel-data preamble.
         """
-        uid = self._uid_generator()
+        uid = self._uid_generator.sop_uid(level_writer.dataset)
         filepath = self._output_path.joinpath(uid + ".dcm")
         file_writer = WsiDicomWriter.open(
             filepath, transfer_syntax, offset_table, self._file_options
@@ -508,10 +503,10 @@ class PyramidFileWriter(BaseFileWriter):
 
     @staticmethod
     def _finalize_writers(
-        level_writers: List[PyramidLevelWriter],
-        file_writers: List[WsiDicomWriter],
+        level_writers: list[PyramidLevelWriter],
+        file_writers: list[WsiDicomWriter],
         encoder_pool: EncoderPool,
-        transcoder: Optional[Encoder],
+        transcoder: Encoder | None,
         token: CancellationToken,
     ) -> None:
         """Shut down pipeline in correct order and finalize all levels."""
@@ -531,8 +526,8 @@ class PyramidFileWriter(BaseFileWriter):
 
     @staticmethod
     def _cleanup_writers(
-        level_writers: List[PyramidLevelWriter],
-        file_writers: List[WsiDicomWriter],
+        level_writers: list[PyramidLevelWriter],
+        file_writers: list[WsiDicomWriter],
         encoder_pool: EncoderPool,
     ) -> None:
         """Clean up all resources on error."""
@@ -550,7 +545,7 @@ class PyramidFileWriter(BaseFileWriter):
 
     def _run_source_level_writers_in_threads(
         self,
-        source_level_writers: List[SourcePyramidLevelWriter],
+        source_level_writers: list[SourcePyramidLevelWriter],
         pool: ThreadPoolExecutor,
         token: CancellationToken,
     ) -> None:
@@ -603,44 +598,40 @@ class PyramidFileWriter(BaseFileWriter):
                 pass
 
     @staticmethod
-    def _is_included_level(
-        level: int,
-        present_levels: Sequence[int],
-        allow_missing: bool,
-        include_indices: Optional[Sequence[int]] = None,
-    ) -> bool:
-        """Return true if pyramid level is in included levels.
+    def _select_included_levels(
+        candidate_levels: Sequence[int],
+        include_indices: Sequence[int] | None = None,
+    ) -> set[int]:
+        """Return the set of pyramid levels to include from candidate_levels.
 
         Parameters
         ----------
-        level: int
-            Pyramid level to check.
-        present_levels: Sequence[int]
-            List of pyramid levels present.
-        allow_missing: bool
-            If to include missing levels (not in present_levels).
+        candidate_levels: Sequence[int]
+            Pyramid levels eligible for inclusion. When missing levels may be
+            generated, this is the extended level list (``range(0,
+            highest_level + 1)``) so that ``include_indices`` selects from
+            generated levels too; otherwise it is the natively present levels.
         include_indices: Optional[Sequence[int]] = None
-            Optional list indices (in present levels) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indices can be used,
-            e.g. [-1, -2] includes the two highest levels. Default of None
-            will not limit the selection. An empty sequence will exclude all
-            levels.
+            Optional list of indices (into ``candidate_levels``) to include,
+            e.g. ``[0, 1]`` includes the two lowest. Negative indices can be
+            used, e.g. ``[-1, -2]`` includes the two highest. Out-of-range
+            indices are silently ignored. ``None`` selects all candidates; an
+            empty sequence selects none.
 
         Returns
         -------
-        bool
-            True if level should be included.
+        set[int]
+            Set of pyramid levels to include.
         """
-        if level not in present_levels:
-            return allow_missing
         if include_indices is None:
-            return True
-        absolute_levels = [
-            present_levels[idx]
-            for idx in include_indices
-            if -len(present_levels) <= idx < len(present_levels)
+            return set(candidate_levels)
+        candidate_count = len(candidate_levels)
+        valid_indices = [
+            index
+            for index in include_indices
+            if -candidate_count <= index < candidate_count
         ]
-        return level in absolute_levels
+        return {candidate_levels[index] for index in valid_indices}
 
 
 class GroupFileWriter(BaseFileWriter):
@@ -652,13 +643,13 @@ class GroupFileWriter(BaseFileWriter):
 
     def __init__(
         self,
-        group: Union[Label, Level, Overview, Thumbnail],
-        output_path: Union[str, Path, UPath],
-        uid_generator: Callable[..., UID],
-        transcoder: Optional[Encoder],
+        group: Label | Level | Overview | Thumbnail,
+        output_path: str | Path | UPath,
+        uid_generator: UidGenerator,
+        transcoder: Encoder | None,
         force_transcoding: bool,
-        offset_table: Optional[OffsetTableType] = None,
-        file_options: Optional[Dict[str, Any]] = None,
+        offset_table: OffsetTableType | None = None,
+        file_options: dict[str, Any] | None = None,
         instance_number_start: int = 0,
     ):
         """Create a GroupFileWriter.
@@ -669,7 +660,7 @@ class GroupFileWriter(BaseFileWriter):
             Group to write.
         output_path: Union[str, Path, UPath]
             Folder path to save files to.
-        uid_generator: Callable[..., UID]
+        uid_generator: UidGenerator
             UID generator to use.
         transcoder: Optional[Encoder]
             Encoder for transcoding. If None, source encoding is preserved.
@@ -693,7 +684,7 @@ class GroupFileWriter(BaseFileWriter):
         )
         self._group = group
 
-    def write(self) -> List[UPath]:
+    def write(self) -> list[UPath]:
         """Write group to DICOM files.
 
         Returns
@@ -701,7 +692,7 @@ class GroupFileWriter(BaseFileWriter):
         List[UPath]
             Paths to created DICOM files.
         """
-        filepaths: List[UPath] = []
+        filepaths: list[UPath] = []
         for sub_group in self._group_instances_to_file(self._group):
             source_image_data = sub_group[0].image_data
             sub_instances = Instances(sub_group)
@@ -725,7 +716,7 @@ class GroupFileWriter(BaseFileWriter):
                 encoder=encoder,
                 transcode=transcode,
             )
-            uid = self._uid_generator()
+            uid = self._uid_generator.sop_uid(dataset)
             filepath = self._output_path.joinpath(uid + ".dcm")
             with WsiDicomWriter.open(
                 filepath, encoder.transfer_syntax, offset_table, self._file_options
@@ -742,8 +733,8 @@ class GroupFileWriter(BaseFileWriter):
 
     @staticmethod
     def _group_instances_to_file(
-        group: Union[Label, Level, Overview, Thumbnail],
-    ) -> List[List[WsiInstance]]:
+        group: Label | Level | Overview | Thumbnail,
+    ) -> list[list[WsiInstance]]:
         """Group instances by properties that can't differ in a DICOM-file.
 
         Parameters
@@ -756,9 +747,9 @@ class GroupFileWriter(BaseFileWriter):
         List[List[WsiInstance]]
             Instances grouped by common properties.
         """
-        groups: Dict[
-            Tuple[str, UID, bool, Optional[int], Optional[float], str],
-            List[WsiInstance],
+        groups: dict[
+            tuple[str, UID, bool, int | None, float | None, str],
+            list[WsiInstance],
         ] = defaultdict(list)
 
         for instance in group.instances.values():

@@ -15,17 +15,18 @@
 """DICOM schema for Slide model."""
 
 import logging
-from typing import Any, Dict, Type
+from typing import Any
 
 from marshmallow import fields, post_load, pre_dump
 from pydicom.valuerep import VR
 
 from wsidicom.conceptcode import ContainerTypeCode
-from wsidicom.metadata.sample import SlideSample, SpecimenIdentifier
+from wsidicom.metadata.sample import SpecimenIdentifier
 from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
     DefaultingDicomField,
     IssuerOfIdentifierDicomField,
+    ListDicomField,
     SingleCodeSequenceField,
     StringDicomField,
 )
@@ -50,10 +51,11 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         data_key="IssuerOfTheContainerIdentifierSequence",
         allow_none=True,
     )
-    samples = fields.List(
+    samples = ListDicomField(
         fields.Nested(SpecimenDescriptionDicomSchema()),
         data_key="SpecimenDescriptionSequence",
         allow_none=True,
+        dump_required=True,
     )
     container_type = SingleCodeSequenceField(
         ContainerTypeCode,
@@ -63,19 +65,15 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
     )
 
     @property
-    def load_type(self) -> Type[Slide]:
+    def load_type(self) -> type[Slide]:
         return Slide
 
     @pre_dump
     def pre_dump(self, slide: Slide, **kwargs):
-        # Move staining to samples so that sample field can serialize both
-        if slide.samples is None:
-            samples = [SlideSample(identifier=defaults.string)]
-        else:
-            samples = slide.samples
+        # Move staining onto samples so that the sample field can serialize both.
         dicom_samples = [
             SpecimenDicomFormatter.to_dicom(slide_sample, slide.stainings)
-            for slide_sample in samples
+            for slide_sample in (slide.samples or [])
         ]
         if isinstance(slide.identifier, SpecimenIdentifier):
             identifier = slide.identifier.value
@@ -90,7 +88,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         }
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs):
         dicom_samples = data.pop("samples", None)
         if dicom_samples is not None:
             try:

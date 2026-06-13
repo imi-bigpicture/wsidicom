@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 import datetime
-from typing import Optional, Sequence, Union
+from collections.abc import Sequence
 
 import numpy as np
 import pytest
@@ -37,7 +37,6 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
 )
 from wsidicom.geometry import PointMm, SizeMm
-from wsidicom.instance.dataset import ImageType
 from wsidicom.metadata import (
     Collection,
     ConstantLutSegment,
@@ -49,6 +48,7 @@ from wsidicom.metadata import (
     Image,
     ImageCoordinateSystem,
     ImagePathFilter,
+    ImageType,
     Label,
     LightPathFilter,
     LinearLutSegment,
@@ -106,10 +106,10 @@ def versions():
 
 @pytest.fixture()
 def equipment(
-    manufacturer: Optional[str],
-    model_name: Optional[str],
-    serial_number: Optional[str],
-    versions: Optional[Sequence[str]],
+    manufacturer: str | None,
+    model_name: str | None,
+    serial_number: str | None,
+    versions: Sequence[str] | None,
 ):
     yield Equipment(
         manufacturer,
@@ -136,14 +136,14 @@ def image_contains_phi():
 
 @pytest.fixture()
 def image(
-    acquisition_datetime: Optional[datetime.datetime],
-    focus_method: Optional[FocusMethod],
-    extended_depth_of_field: Optional[ExtendedDepthOfField],
-    image_coordinate_system: Optional[ImageCoordinateSystem],
-    pixel_spacing: Optional[SizeMm],
-    focal_plane_spacing: Optional[float],
-    depth_of_field: Optional[float],
-    lossy_compressions: Optional[Sequence[LossyCompression]],
+    acquisition_datetime: datetime.datetime | None,
+    focus_method: FocusMethod | None,
+    extended_depth_of_field: ExtendedDepthOfField | None,
+    image_coordinate_system: ImageCoordinateSystem | None,
+    pixel_spacing: SizeMm | None,
+    focal_plane_spacing: float | None,
+    depth_of_field: float | None,
+    lossy_compressions: Sequence[LossyCompression] | None,
 ):
     yield Image(
         acquisition_datetime,
@@ -180,7 +180,7 @@ def pyramid(
     pyramid_description: str,
     pyramid_label: str,
     image_contains_phi: bool,
-    image_comments: Optional[str],
+    image_comments: str | None,
 ):
     yield Pyramid(
         image,
@@ -220,9 +220,9 @@ def label_lossy_compressions():
 
 @pytest.fixture()
 def label_image(
-    label_image_coordinate_system: Optional[ImageCoordinateSystem],
-    label_pixel_spacing: Optional[SizeMm],
-    label_lossy_compressions: Optional[Sequence[LossyCompression]],
+    label_image_coordinate_system: ImageCoordinateSystem | None,
+    label_pixel_spacing: SizeMm | None,
+    label_lossy_compressions: Sequence[LossyCompression] | None,
 ):
     yield Image(
         None,
@@ -255,12 +255,12 @@ def label_image_comments():
 
 @pytest.fixture()
 def label(
-    label_text: Optional[str],
-    label_barcode: Optional[str],
+    label_text: str | None,
+    label_barcode: str | None,
     label_contains_phi: bool,
     label_image: Image,
     label_optical_path: OpticalPath,
-    label_image_comments: Optional[str],
+    label_image_comments: str | None,
 ):
     yield Label(
         label_text,
@@ -294,9 +294,9 @@ def overview_image_contains_slide_label():
 
 @pytest.fixture()
 def overview_image(
-    overview_image_coordinate_system: Optional[ImageCoordinateSystem],
-    overview_pixel_spacing: Optional[SizeMm],
-    overview_lossy_compressions: Optional[Sequence[LossyCompression]],
+    overview_image_coordinate_system: ImageCoordinateSystem | None,
+    overview_pixel_spacing: SizeMm | None,
+    overview_lossy_compressions: Sequence[LossyCompression] | None,
 ):
     yield Image(
         None,
@@ -333,7 +333,7 @@ def overview(
     overview_image_contains_slide_label: bool,
     overview_image: Image,
     overview_optical_path: OpticalPath,
-    overview_image_comments: Optional[str],
+    overview_image_comments: str | None,
 ):
     yield Overview(
         overview_image,
@@ -388,7 +388,7 @@ def icc_profile():
 
 @pytest.fixture()
 def optical_path(
-    illumination: Union[IlluminationColorCode, float],
+    illumination: IlluminationColorCode | float,
     light_path_filter: LightPathFilter,
     image_path_filter: ImagePathFilter,
     objectives: Objectives,
@@ -420,8 +420,8 @@ def patient_deidentification_method():
 
 @pytest.fixture()
 def patient(
-    species_description: Union[str, Code],
-    patient_deidentification_method: Optional[Union[str, Code]],
+    species_description: str | Code,
+    patient_deidentification_method: str | Code | None,
 ):
 
     yield Patient(
@@ -557,7 +557,7 @@ def substances():
 
 @pytest.fixture()
 def staining(
-    substances: Union[str, Sequence[SpecimenStainsCode]],
+    substances: str | Sequence[SpecimenStainsCode],
     date_time: datetime.datetime,
     description: str,
 ):
@@ -585,9 +585,7 @@ def receiving(date_time: datetime.datetime, description: str):
 
 
 @pytest.fixture()
-def extracted_specimen(
-    collection: Collection, identifier: Union[str, SpecimenIdentifier]
-):
+def extracted_specimen(collection: Collection, identifier: str | SpecimenIdentifier):
     yield Specimen(
         identifier,
         collection,
@@ -633,7 +631,7 @@ def slide_sample(sample: Sample):
 
 
 @pytest.fixture()
-def slide(slide_identifier: Union[str, SpecimenIdentifier], staining: Staining):
+def slide(slide_identifier: str | SpecimenIdentifier, staining: Staining):
     part_1 = Specimen(
         "part 1",
         Collection(
@@ -799,6 +797,16 @@ def image_type():
 
 
 @pytest.fixture()
+def frame_of_reference_uid() -> UID:
+    return UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445425")
+
+
+@pytest.fixture()
+def dimension_organization_uids() -> list[UID]:
+    return [UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445426")]
+
+
+@pytest.fixture()
 def wsi_metadata(
     study: Study,
     series: Series,
@@ -808,6 +816,8 @@ def wsi_metadata(
     pyramid: Pyramid,
     label: Label,
     overview: Overview,
+    frame_of_reference_uid: UID,
+    dimension_organization_uids: list[UID],
 ):
     yield WsiMetadata(
         study=study,
@@ -818,4 +828,6 @@ def wsi_metadata(
         pyramid=pyramid,
         label=label,
         overview=overview,
+        frame_of_reference_uid=frame_of_reference_uid,
+        dimension_organization_uids=dimension_organization_uids,
     )

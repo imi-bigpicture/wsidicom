@@ -16,13 +16,13 @@
 
 import datetime
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from functools import cached_property
-from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Union
 
 from pydicom.sr.coding import Code
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
@@ -104,13 +104,13 @@ class UniversalIssuerOfIdentifier(IssuerOfIdentifier):
         The identifier of the universal issuer.
     issuer_type: UniversalIssuerType
         The type of the universal issuer.
-    local_identifier: Optional[str] = None
+    local_identifier: str | None = None
         Optional local identifier of the universal issuer.
     """
 
     identifier: str
     issuer_type: UniversalIssuerType
-    local_identifier: Optional[str] = None
+    local_identifier: str | None = None
 
     def to_hl7v2(self) -> str:
         identifier = self.local_identifier or ""
@@ -140,24 +140,24 @@ class SamplingLocation:
 
     Parameters
     ----------
-    reference: Optional[str] = None
+    reference: str | None = None
         Description of coordinate system and origin reference point used for the
         location.
-    description: Optional[str] = None
+    description: str | None = None
         Description of the location.
-    x: Optional[Measurement] = None
+    x: Measurement | None = None
         The x-coordinate of the location.
-    y: Optional[Measurement] = None
+    y: Measurement | None = None
         The y-coordinate of the location.
-    z: Optional[Measurement] = None
+    z: Measurement | None = None
         The z-coordinate of the location.
     """
 
-    reference: Optional[str] = None
-    description: Optional[str] = None
-    x: Optional[Measurement] = None
-    y: Optional[Measurement] = None
-    z: Optional[Measurement] = None
+    reference: str | None = None
+    description: str | None = None
+    x: Measurement | None = None
+    y: Measurement | None = None
+    z: Measurement | None = None
 
 
 @dataclass(frozen=True)
@@ -166,22 +166,22 @@ class SampleLocalization(SamplingLocation):
 
     Parameters
     ----------
-    reference: Optional[str] = None
+    reference: str | None = None
         Description of coordinate system and origin reference point used for the
         location.
-    description: Optional[str] = None
+    description: str | None = None
         Description of the location.
-    x: Optional[Measurement] = None
+    x: Measurement | None = None
         The x-coordinate of the location.
-    y: Optional[Measurement] = None
+    y: Measurement | None = None
         The y-coordinate of the location.
-    z: Optional[Measurement] = None
+    z: Measurement | None = None
         The z-coordinate of the location.
-    visual_marking: Optional[str] = None
+    visual_marking: str | None = None
         Description of visual marking of the sample, for example ink or shape.
     """
 
-    visual_marking: Optional[str] = None
+    visual_marking: str | None = None
 
 
 @dataclass(frozen=True)
@@ -192,12 +192,12 @@ class SpecimenIdentifier:
     ----------
     value: str
         The value of the identifier.
-    issuer: Optional[IssuerOfIdentifier] = None
+    issuer: IssuerOfIdentifier | None = None
         Optional issuer of the identifier.
     """
 
     value: str
-    issuer: Optional[IssuerOfIdentifier] = None
+    issuer: IssuerOfIdentifier | None = None
 
     def __eq__(self, other: object) -> bool:
         """Determine if other specimen identifiers is equal to this."""
@@ -207,7 +207,7 @@ class SpecimenIdentifier:
             return self.value == other.value and self.issuer == other.issuer
         return False
 
-    def to_string_identifier_and_issuer(self) -> Tuple[str, Optional[str]]:
+    def to_string_identifier_and_issuer(self) -> tuple[str, str | None]:
         """Format into string identifier and IssuerOfIdentifier."""
         if self.issuer is None:
             return self.value, None
@@ -216,7 +216,7 @@ class SpecimenIdentifier:
     @classmethod
     def get_string_identifier_and_issuer(
         cls, identifier: Union[str, "SpecimenIdentifier"]
-    ) -> Tuple[str, Optional[str]]:
+    ) -> tuple[str, str | None]:
         """Return string identifier and optional issuer of identifier object."""
         if isinstance(identifier, str):
             return identifier, None
@@ -225,7 +225,7 @@ class SpecimenIdentifier:
     @classmethod
     def get_identifier_and_issuer(
         cls, identifier: Union[str, "SpecimenIdentifier"]
-    ) -> Tuple[str, Optional[IssuerOfIdentifier]]:
+    ) -> tuple[str, IssuerOfIdentifier | None]:
         """Return string identifier and optional issuer of identifier object."""
         if isinstance(identifier, str):
             return identifier, None
@@ -247,7 +247,7 @@ class SpecimenIdentifier:
         return self.issuer is None or other.issuer is None
 
 
-class PreparationStep(metaclass=ABCMeta):
+class PreparationStep:
     """
     Metaclass for a preparation step for a specimen.
 
@@ -259,7 +259,7 @@ class BaseSampling(PreparationStep, metaclass=ABCMeta):
     """Either a `Sampling` or a `UnknownSampling`."""
 
     specimen: "BaseSpecimen"
-    sampling_constraints: Optional[Sequence["BaseSampling"]]
+    sampling_constraints: Sequence["BaseSampling"] | None
 
 
 @dataclass(frozen=True)
@@ -279,24 +279,24 @@ class Sampling(BaseSampling):
         The type of the specimen. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8103.html
          or `AnatomicPathologySpecimenTypesCode.meanings` for allowed specimen types.
-    sampling_constraints: Optional[Sequence[BaseSampling]] = None
+    sampling_constraints: Sequence[BaseSampling] | None = None
         Optional constraints on the sampling tree. The constraints can be used to
         define a single branch from the sample to a end specimen in the sampling tree.
-    date_time: Optional[datetime.datetime] = None
+    date_time: datetime.datetime | None = None
         Optional date and time when the sampling was performed.
-    description: Optional[str] = None
+    description: str | None = None
         Optional description of the sampling.
-    location: Optional[SamplingLocation] = None
+    location: SamplingLocation | None = None
         Optional location of the sampling in the parent specimen.
     """
 
     specimen: "BaseSpecimen"
     method: SpecimenSamplingProcedureCode
     specimen_type: AnatomicPathologySpecimenTypesCode = field(repr=False)
-    sampling_constraints: Optional[Sequence[BaseSampling]] = None
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
-    location: Optional[SamplingLocation] = None
+    sampling_constraints: Sequence[BaseSampling] | None = None
+    date_time: datetime.datetime | None = None
+    description: str | None = None
+    location: SamplingLocation | None = None
 
 
 @dataclass(frozen=True)
@@ -312,13 +312,13 @@ class UnknownSampling(BaseSampling):
     ----------
     specimen: BaseSpecimen
         The specimen that was sampled.
-    sampling_constraints: Optional[Sequence[BaseSampling]] = None
+    sampling_constraints: Sequence[BaseSampling] | None = None
         Optional constraints on the sampling tree. The constraints should be used to
         define a single branch for the sample in the sampling tree.
     """
 
     specimen: "BaseSpecimen"
-    sampling_constraints: Optional[Sequence[BaseSampling]] = None
+    sampling_constraints: Sequence[BaseSampling] | None = None
 
 
 @dataclass(frozen=True)
@@ -332,15 +332,15 @@ class Collection(PreparationStep):
         Method used for collection. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8109.html
         or `SpecimenCollectionProcedureCode.meanings` for allowed collection methods.
-    date_time: Optional[datetime.datetime] = None
+    date_time: datetime.datetime | None = None
         Optional date and time when the collection was performed.
-    description: Optional[str] = None
+    description: str | None = None
         Optional description of the collection.
     """
 
     method: SpecimenCollectionProcedureCode
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
+    date_time: datetime.datetime | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -354,15 +354,15 @@ class Processing(PreparationStep):
         Method used for processing. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8113.html
         or `SpecimenPreparationStepsCode.meanings` for allowed processing methods.
-    date_time: Optional[datetime.datetime] = None
+    date_time: datetime.datetime | None = None
         Optional date and time when the processing was performed.
-    description: Optional[str] = None
+    description: str | None = None
         Optional description of the processing.
     """
 
-    method: Optional[SpecimenPreparationStepsCode] = None
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
+    method: SpecimenPreparationStepsCode | None = None
+    date_time: datetime.datetime | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -376,15 +376,15 @@ class Embedding(PreparationStep):
         The medium used for embedding. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8115.html
         or `SpecimenEmbeddingMediaCode.meanings` for allowed mediums.
-    date_time: Optional[datetime.datetime] = None
+    date_time: datetime.datetime | None = None
         Optional date and time when the embedding was performed.
-    description: Optional[str] = None
+    description: str | None = None
         Optional description of the embedding.
     """
 
     medium: SpecimenEmbeddingMediaCode
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
+    date_time: datetime.datetime | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -398,15 +398,15 @@ class Fixation(PreparationStep):
         The fixative used for fixation. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8114.html
         or `SpecimenFixativesCode.meanings` for allowed fixatives.
-    date_time: Optional[datetime.datetime] = None
+    date_time: datetime.datetime | None = None
         Optional date and time when the fixation was performed.
-    description: Optional[str] = None
+    description: str | None = None
         Optional description of the fixation.
     """
 
     fixative: SpecimenFixativesCode
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
+    date_time: datetime.datetime | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -416,19 +416,19 @@ class Staining(PreparationStep):
 
     Parameters
     ----------
-    substances: Union[str, Sequence[SpecimenStainsCode]]
+    substances: str | Sequence[SpecimenStainsCode]
         The substances used for staining. Either a single string or a list of codes. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8112.html
         or SpecimenStainsCode.meanings` for allowed stain codes.
-    date_time: Optional[datetime.datetime] = None
+    date_time: datetime.datetime | None = None
         Optional date and time when the staining was performed.
-    description: Optional[str] = None
+    description: str | None = None
         Optional description of the staining.
     """
 
-    substances: Union[str, Sequence[SpecimenStainsCode]]
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
+    substances: str | Sequence[SpecimenStainsCode]
+    date_time: datetime.datetime | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -438,14 +438,14 @@ class Receiving(PreparationStep):
 
     Parameters
     ----------
-    date_time: Optional[datetime.datetime] = None
+    date_time: datetime.datetime | None = None
         Optional date and time when the reception was performed.
-    description: Optional[str] = None
+    description: str | None = None
         Optional description of the reception.
     """
 
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
+    date_time: datetime.datetime | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -455,49 +455,48 @@ class Storage(PreparationStep):
 
     Parameters
     ----------
-    date_time: Optional[datetime.datetime] = None
+    date_time: datetime.datetime | None = None
         Optional date and time when the storage was performed.
-    description: Optional[str] = None
+    description: str | None = None
         Optional description of the storage.
     """
 
-    date_time: Optional[datetime.datetime] = None
-    description: Optional[str] = None
+    date_time: datetime.datetime | None = None
+    description: str | None = None
 
 
 class BaseSpecimen(metaclass=ABCMeta):
     """Metaclass for a specimen."""
 
-    steps: List[PreparationStep]
-    identifier: Union[str, SpecimenIdentifier]
-    type: Optional[AnatomicPathologySpecimenTypesCode]
-    container: Optional[ContainerTypeCode]
+    steps: list[PreparationStep]
+    identifier: str | SpecimenIdentifier
+    type: AnatomicPathologySpecimenTypesCode | None
+    container: ContainerTypeCode | None
 
     @property
-    def samplings(self) -> List[Sampling]:
+    def samplings(self) -> list[Sampling]:
         """Return list of samplings done on the specimen."""
         return [step for step in self.steps if isinstance(step, Sampling)]
 
     def add(self, step: PreparationStep) -> None:
         """Add a preparation step to the sequence of steps for the specimen."""
-        if not isinstance(step, BaseSampling):
-            if any(
-                isinstance(present_step, BaseSampling) for present_step in self.steps
-            ):
-                raise ValueError(
-                    "Only additional samplings can be added to a specimen that has "
-                    "been sampled."
-                )
+        if not isinstance(step, BaseSampling) and any(
+            isinstance(present_step, BaseSampling) for present_step in self.steps
+        ):
+            raise ValueError(
+                "Only additional samplings can be added to a specimen that has "
+                "been sampled."
+            )
         self.steps.append(step)
 
 
 class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
     """Metaclass for a specimen thas has been sampled from one or more specimens."""
 
-    sampled_from: Optional[Union[BaseSampling, List[BaseSampling]]]
+    sampled_from: BaseSampling | list[BaseSampling] | None
 
     @property
-    def sampled_from_list(self) -> List[BaseSampling]:
+    def sampled_from_list(self) -> list[BaseSampling]:
         if self.sampled_from is None:
             return []
         if isinstance(self.sampled_from, BaseSampling):
@@ -512,7 +511,7 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
         super().add(step)
 
     def _check_sampling_constraints_in_sampling_tree(
-        self, constraints: Optional[Sequence[BaseSampling]]
+        self, constraints: Sequence[BaseSampling] | None
     ) -> None:
         """Check that the sampling tree for the specimen contains the constraints."""
         if constraints is None:
@@ -538,7 +537,7 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
 
     def is_sampling_constraint_is_unambiguous(
         self,
-        constraints: Iterable[Union[str, SpecimenIdentifier]],
+        constraints: Iterable[str | SpecimenIdentifier],
     ):
         """Check that the sampling tree for the specimen is is not branching when
         following the constraints."""
@@ -587,37 +586,37 @@ class Specimen(BaseSpecimen):
 
     Parameters
     ----------
-    identifier: Union[str, SpecimenIdentifier]
+    identifier: str | SpecimenIdentifier
         The identifier of the specimen.
-    extraction_step: Optional[Collection] = None
+    extraction_step: Collection | None = None
         Optional collection step for the specimen.
-    type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    type: AnatomicPathologySpecimenTypesCode | None = None
         Optional type of the specimen. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8103.html
         or `AnatomicPathologySpecimenTypesCode.meanings` for allowed specimen types.
     steps: Sequence[PreparationStep] = []
         Optional sequence of preparation steps for the specimen.
-    container: Optional[ContainerTypeCode] = None
+    container: ContainerTypeCode | None = None
         Optional container type of the specimen. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8101.html
         or `ContainerTypeCode.meanings` for allowed container types.
     """
 
-    identifier: Union[str, SpecimenIdentifier]
-    extraction_step: Optional[Collection] = None
-    type: Optional[AnatomicPathologySpecimenTypesCode] = None
-    steps: List[PreparationStep] = field(default_factory=list)
-    container: Optional[ContainerTypeCode] = None
+    identifier: str | SpecimenIdentifier
+    extraction_step: Collection | None = None
+    type: AnatomicPathologySpecimenTypesCode | None = None
+    steps: list[PreparationStep] = field(default_factory=list)
+    container: ContainerTypeCode | None = None
 
     def __post_init__(self):
-        if self.extraction_step is not None:
-            if len(self.steps) == 0 or (
-                len(self.steps) > 0 and self.steps[0] != self.extraction_step
-            ):
-                self.steps.insert(
-                    0,
-                    self.extraction_step,
-                )
+        if self.extraction_step is not None and (
+            len(self.steps) == 0
+            or (len(self.steps) > 0 and self.steps[0] != self.extraction_step)
+        ):
+            self.steps.insert(
+                0,
+                self.extraction_step,
+            )
 
     def add(self, step: PreparationStep) -> None:
         if isinstance(step, Collection) and len(self.steps) != 0:
@@ -626,10 +625,10 @@ class Specimen(BaseSpecimen):
 
     def sample(
         self,
-        method: Optional[SpecimenSamplingProcedureCode] = None,
-        date_time: Optional[datetime.datetime] = None,
-        description: Optional[str] = None,
-        location: Optional[SamplingLocation] = None,
+        method: SpecimenSamplingProcedureCode | None = None,
+        date_time: datetime.datetime | None = None,
+        description: str | None = None,
+        location: SamplingLocation | None = None,
     ) -> BaseSampling:
         """Create a sampling from the specimen that can be used to create a new
         sample."""
@@ -658,35 +657,35 @@ class Sample(SampledSpecimen):
 
     Parameters
     ----------
-    identifier: Union[str, SpecimenIdentifier]
+    identifier: str | SpecimenIdentifier
         The identifier of the sample.
     sampled_from: Sequence[BaseSampling]
         Sequence of samplings that the sample was made from.
-    type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    type: AnatomicPathologySpecimenTypesCode | None = None
         Optional type of the sample. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8103.html
         or `AnatomicPathologySpecimenTypesCode.meanings` for allowed specimen types.
     steps: Sequence[PreparationStep] = []
         Optional sequence of preparation steps for the sample.
-    container: Optional[ContainerTypeCode] = None
+    container: ContainerTypeCode | None = None
         Optional container type of the sample. See
         https://dicom.nema.org/medical/Dicom/current/output/chtml/part16/sect_CID_8101.html
         or `ContainerTypeCode.meanings` for allowed container types.
     """
 
-    identifier: Union[str, SpecimenIdentifier]
+    identifier: str | SpecimenIdentifier
     sampled_from: Sequence[BaseSampling]
-    type: Optional[AnatomicPathologySpecimenTypesCode] = None
+    type: AnatomicPathologySpecimenTypesCode | None = None
     steps: Sequence[PreparationStep] = field(default_factory=list)
-    container: Optional[ContainerTypeCode] = None
+    container: ContainerTypeCode | None = None
 
     def sample(
         self,
-        method: Optional[SpecimenSamplingProcedureCode] = None,
-        date_time: Optional[datetime.datetime] = None,
-        description: Optional[str] = None,
-        sampling_constraints: Optional[Sequence[BaseSampling]] = None,
-        location: Optional[SamplingLocation] = None,
+        method: SpecimenSamplingProcedureCode | None = None,
+        date_time: datetime.datetime | None = None,
+        description: str | None = None,
+        sampling_constraints: Sequence[BaseSampling] | None = None,
+        location: SamplingLocation | None = None,
     ) -> BaseSampling:
         """Create a sampling from the specimen that can be used to create a new
         sample."""
@@ -720,32 +719,32 @@ class SlideSample(SampledSpecimen):
 
     Parameters
     ----------
-    identifier: Union[str, SpecimenIdentifier]
+    identifier: str | SpecimenIdentifier
         The identifier of the slide sample.
-    anatomical_sites: Optional[Sequence[Code]] = None
+    anatomical_sites: Sequence[Code] | None = None
         Optional primary anatomic structures of interest in the slide sample.
-    sampled_from: Optional[BaseSampling] = None
+    sampled_from: BaseSampling | None = None
         Optional sampling that the slide sample was made from.
-    uid: Optional[UID] = None
+    uid: UID | None = None
         Optional UID of the slide sample.
-    localization: Optional[SampleLocalization] = None
+    localization: SampleLocalization | None = None
         Optional localization of the slide sample on the slide.
     steps: Sequence[PreparationStep] = []
         Optional sequence of preparation steps for the slide sample.
-    short_description: Optional[str] = None
+    short_description: str | None = None
         Optional short description of the slide sample. Should max be 64 characters.
-    detailed_description: Optional[str] = None
+    detailed_description: str | None = None
         Optional detailed description of the slide sample.
     """
 
-    identifier: Union[str, SpecimenIdentifier]
-    anatomical_sites: Optional[Sequence[Code]] = None
-    sampled_from: Optional[BaseSampling] = None
-    uid: Optional[UID] = None
-    localization: Optional[SampleLocalization] = None
-    steps: List[PreparationStep] = field(default_factory=list)
-    short_description: Optional[str] = None
-    detailed_description: Optional[str] = None
+    identifier: str | SpecimenIdentifier
+    anatomical_sites: Sequence[Code] | None = None
+    sampled_from: BaseSampling | None = None
+    uid: UID | None = None
+    localization: SampleLocalization | None = None
+    steps: list[PreparationStep] = field(default_factory=list)
+    short_description: str | None = None
+    detailed_description: str | None = None
     container: ContainerTypeCode = field(
         init=False, default=ContainerTypeCode("Microscope slide")
     )
@@ -772,10 +771,3 @@ class SlideSample(SampledSpecimen):
             else []
         ):
             raise ValueError("Sampling constraints for slide sample are ambiguous.")
-
-    @cached_property
-    def default_uid(self) -> UID:
-        """Uid used if not set."""
-        if self.uid is not None:
-            return self.uid
-        return generate_uid()

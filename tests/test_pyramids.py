@@ -1,13 +1,11 @@
-from typing import List, Optional, Tuple
-
 import pytest
 from pydicom import Dataset
 from pydicom.uid import UID, generate_uid
 
 from wsidicom.geometry import Orientation, PointMm, Size, SizeMm
-from wsidicom.instance.dataset import ImageType, WsiDataset
+from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.instance import WsiInstance
-from wsidicom.metadata.image import ImageCoordinateSystem
+from wsidicom.metadata.image import ImageCoordinateSystem, ImageType
 from wsidicom.series.pyramids import Pyramids
 from wsidicom.uid import SlideUids
 
@@ -22,7 +20,7 @@ class WsiTestInstance(WsiInstance):
         series_instance_uid: UID,
         frame_of_reference_uid: UID,
         image_coordinate_system: ImageCoordinateSystem,
-        ext_depth_of_field: Optional[Tuple[int, float]],
+        ext_depth_of_field: tuple[int, float] | None,
     ):
         self._size = size
         self._tile_size = tile_size
@@ -71,17 +69,17 @@ class WsiTestInstance(WsiInstance):
         return self._ext_depth_of_field
 
     @property
-    def ext_depth_of_field_planes(self) -> Optional[int]:
+    def ext_depth_of_field_planes(self) -> int | None:
         return self._ext_depth_of_field_planes
 
     @property
-    def ext_depth_of_field_plane_distance(self) -> Optional[float]:
+    def ext_depth_of_field_plane_distance(self) -> float | None:
         return self._ext_depth_of_field_plane_distance
 
 
 def create_pyramid_instance(
     image_coordinate_system: ImageCoordinateSystem,
-    ext_depth_of_field: Optional[Tuple[int, float]],
+    ext_depth_of_field: tuple[int, float] | None,
     study_instance_uid: UID,
     series_instance_uid: UID,
     frame_of_reference_uid: UID,
@@ -162,8 +160,8 @@ class TestPyramids:
     )
     def test_open_number_of_created_pyramids(
         self,
-        instance_definitions: List[
-            Tuple[PointMm, Orientation, Optional[Tuple[int, float]]]
+        instance_definitions: list[
+            tuple[PointMm, Orientation, tuple[int, float] | None]
         ],
         study_instance_uid: UID,
         series_instance_uid: UID,

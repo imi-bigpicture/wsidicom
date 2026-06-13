@@ -14,10 +14,11 @@
 
 """Priority-based encoder pool for parallel tile encoding."""
 
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 from types import TracebackType
-from typing import Any, Optional, Sequence, Type, Union
+from typing import Any
 
 from PIL import Image
 
@@ -27,8 +28,8 @@ from wsidicom.geometry import Size
 from wsidicom.stitcher import Stitcher
 from wsidicom.thread import (
     CancelableQueue,
-    Cancelled,
     CancellationToken,
+    Cancelled,
     PriorityCancelableQueue,
     ShutdownSentinel,
     WriteOnlyQueue,
@@ -82,7 +83,7 @@ class EncoderPool:
         self._tile_size = tile_size
         self._token = token
         self._input_queue: CancelableQueue[
-            Union[EncodeTask, DownsampleEncodeTask, ShutdownSentinel]
+            EncodeTask | DownsampleEncodeTask | ShutdownSentinel
         ] = PriorityCancelableQueue(maxsize=input_queue_maxsize)
         self._executor = ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="EncoderWorker"
@@ -98,7 +99,7 @@ class EncoderPool:
         self._dispatcher_thread.start()
 
     @property
-    def queue(self) -> WriteOnlyQueue[Union[EncodeTask, DownsampleEncodeTask]]:
+    def queue(self) -> WriteOnlyQueue[EncodeTask | DownsampleEncodeTask]:
         """The queue for submitting encoding tasks."""
         return self._input_queue
 
@@ -135,7 +136,7 @@ class EncoderPool:
         except Cancelled:
             return
 
-    def _dispatch_task(self, task: Union[EncodeTask, DownsampleEncodeTask]) -> None:
+    def _dispatch_task(self, task: EncodeTask | DownsampleEncodeTask) -> None:
         """Dispatch a task to the appropriate handler."""
         if isinstance(task, DownsampleEncodeTask):
             self._downsample_and_encode(task)
@@ -225,9 +226,9 @@ class EncoderPool:
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> bool:
         """Context manager exit."""
         self.shutdown(wait=True)

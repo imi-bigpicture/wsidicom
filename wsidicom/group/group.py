@@ -13,8 +13,9 @@
 #    limitations under the License.
 
 
+from collections import defaultdict
+from collections.abc import Iterable, Iterator
 from functools import cached_property
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 from PIL.Image import Image
 from pydicom.uid import UID
@@ -29,11 +30,10 @@ from wsidicom.errors import (
 from wsidicom.geometry import Point, Region, RegionMm, Size, SizeMm
 from wsidicom.instance import (
     ImageData,
-    ImageType,
     WsiDataset,
     WsiInstance,
 )
-from wsidicom.metadata import ImageCoordinateSystem
+from wsidicom.metadata import ImageCoordinateSystem, ImageType
 from wsidicom.stringprinting import dict_pretty_str
 from wsidicom.uid import SlideUids
 
@@ -70,7 +70,7 @@ class Instances:
     def __str__(self) -> str:
         return self.pretty_str()
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         string = f"Image: size: {self.size} px, mpp: {self.mpp} um/px"
         if depth is not None:
             depth -= 1
@@ -98,19 +98,19 @@ class Instances:
         return self._size
 
     @property
-    def mpp(self) -> Optional[SizeMm]:
+    def mpp(self) -> SizeMm | None:
         """Return pixel spacing in um/pixel"""
         if self.pixel_spacing is None:
             return None
         return self.pixel_spacing * 1000.0
 
     @property
-    def pixel_spacing(self) -> Optional[SizeMm]:
+    def pixel_spacing(self) -> SizeMm | None:
         """Return pixel spacing in mm/pixel"""
         return self._pixel_spacing
 
     @property
-    def instances(self) -> Dict[UID, WsiInstance]:
+    def instances(self) -> dict[UID, WsiInstance]:
         """Return contained instances"""
         return self._instances
 
@@ -120,7 +120,7 @@ class Instances:
         return self.instances[self._default_instance_uid]
 
     @cached_property
-    def image_data_map(self) -> Dict[Tuple[str, float], ImageData]:
+    def image_data_map(self) -> dict[tuple[str, float], ImageData]:
         """Return mapping from (optical_path, focal_plane) to ImageData."""
         return {
             (optical_path, z): instance.image_data
@@ -136,13 +136,13 @@ class Instances:
 
 
     @property
-    def datasets(self) -> List[WsiDataset]:
+    def datasets(self) -> list[WsiDataset]:
         """Return contained datasets."""
         instance_datasets = [instance.datasets for instance in self.instances.values()]
         return [dataset for sublist in instance_datasets for dataset in sublist]
 
     @property
-    def optical_paths(self) -> List[str]:
+    def optical_paths(self) -> list[str]:
         return list(
             {
                 path
@@ -152,7 +152,7 @@ class Instances:
         )
 
     @property
-    def focal_planes(self) -> List[float]:
+    def focal_planes(self) -> list[float]:
         return sorted(
             {
                 focal_plane
@@ -162,7 +162,7 @@ class Instances:
         )
 
     @property
-    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+    def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         return self.default_instance.image_coordinate_system
 
     def matches(self, other_group: "Instances") -> bool:
@@ -202,7 +202,7 @@ class Instances:
         return region.is_inside(image_region)
 
     def get_instance(
-        self, z: Optional[float] = None, path: Optional[str] = None
+        self, z: float | None = None, path: str | None = None
     ) -> WsiInstance:
         """Search for instance fulfilling the parameters.
         The behavior when z and/or path is none could be made more
@@ -210,9 +210,9 @@ class Instances:
 
         Parameters
         ----------
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate of the searched instance
-        path: Optional[str] = None
+        path: str | None = None
             Optical path of the searched instance
 
         Returns
@@ -295,7 +295,7 @@ class Instances:
 
     def _iter_tile_chunks(
         self,
-    ) -> Iterator[Tuple[ImageData, float, str, List[Point]]]:
+    ) -> Iterator[tuple[ImageData, float, str, list[Point]]]:
         """Iterate tile position chunks in raster order.
 
         Chunk size is determined per image data from its
@@ -319,8 +319,8 @@ class Instances:
     def get_region(
         self,
         region: Region,
-        z: Optional[float] = None,
-        path: Optional[str] = None,
+        z: float | None = None,
+        path: str | None = None,
         threads: int = 1,
     ) -> Image:
         """Read region defined by pixels.
@@ -331,9 +331,9 @@ class Instances:
             Upper left corner of region in pixels
         size: int
             Size of region in pixels
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional
-        path: Optional[str] = None
+        path: str | None = None
             optical path, optional
         threads: int = 1
             Number of threads to use for read.
@@ -355,8 +355,8 @@ class Instances:
     def get_region_mm(
         self,
         region: RegionMm,
-        z: Optional[float] = None,
-        path: Optional[str] = None,
+        z: float | None = None,
+        path: str | None = None,
         slide_origin: bool = False,
         threads: int = 1,
     ) -> Image:
@@ -366,9 +366,9 @@ class Instances:
         ----------
         region: RegionMm
             Region defining upper left corner and size in mm.
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate, optional.
-        path: Optional[str] = None
+        path: str | None = None
             optical path, optional.
         slide_origin: bool = False.
             If to use the slide origin instead of image origin.
@@ -402,8 +402,8 @@ class Instances:
     def get_tile(
         self,
         tile: Point,
-        z: Optional[float] = None,
-        path: Optional[str] = None,
+        z: float | None = None,
+        path: str | None = None,
         crop_to_image_boundary: bool = True,
     ) -> Image:
         """Return tile at tile coordinate x, y as image.
@@ -412,9 +412,9 @@ class Instances:
         ----------
         tile: Point
             Tile x, y coordinate
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate
-        path: Optional[str] = None
+        path: str | None = None
             Optical path
         crop_to_image_boundary: bool = True
             Whether to crop tiles that exceed image boundary.
@@ -435,8 +435,8 @@ class Instances:
     def get_encoded_tile(
         self,
         tile: Point,
-        z: Optional[float] = None,
-        path: Optional[str] = None,
+        z: float | None = None,
+        path: str | None = None,
         crop_to_image_boundary: bool = True,
     ) -> bytes:
         """Return tile at tile coordinate x, y as bytes.
@@ -445,9 +445,9 @@ class Instances:
         ----------
         tile: Point
             Tile x, y coordinate
-        z: Optional[float] = None
+        z: float | None = None
             Z coordinate
-        path: Optional[str] = None
+        path: str | None = None
             Optical path
         crop_to_image_boundary: bool = True
             Whether to crop tiles that exceed image boundary.
@@ -504,6 +504,34 @@ class Instances:
         WsiDataset.check_duplicate_dataset(self.datasets, self)
         WsiInstance.check_duplicate_instance(instances, self)
 
+    @staticmethod
+    def _get_frame_information(
+        data: dict[tuple[str, float], ImageData],
+    ) -> tuple[list[float], list[str], Size]:
+        """Return optical_paths, focal planes, and tiled size."""
+        focal_planes_by_optical_path: dict[str, set[float]] = defaultdict(set)
+        all_focal_planes: set[float] = set()
+        tiled_sizes: set[Size] = set()
+        for (optical_path, focal_plane), image_data in data.items():
+            focal_planes_by_optical_path[optical_path].add(focal_plane)
+            all_focal_planes.add(focal_plane)
+            tiled_sizes.add(image_data.tiled_size)
+
+        focal_planes_sparse_by_optical_path = any(
+            optical_path_focal_planes != all_focal_planes
+            for optical_path_focal_planes in focal_planes_by_optical_path.values()
+        )
+        if focal_planes_sparse_by_optical_path:
+            raise ValueError("Each optical path must have the same focal planes.")
+
+        if len(tiled_sizes) != 1:
+            raise ValueError("Expected only one tiled size")
+        tiled_size = list(tiled_sizes)[0]
+        return (
+            sorted(list(all_focal_planes)),
+            sorted(list(focal_planes_by_optical_path.keys())),
+            tiled_size,
+        )
 
 class Overview(Instances):
     pass

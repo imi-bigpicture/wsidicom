@@ -15,14 +15,14 @@
 """Accumulator for cascaded tiles in pyramid generation."""
 
 from threading import Thread
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional
 
 from PIL import Image
 
 from wsidicom.geometry import Size
 from wsidicom.thread import (
-    Cancelled,
     CancellationToken,
+    Cancelled,
     CompletionTracker,
     FifoCancelableQueue,
     PriorityCancelableQueue,
@@ -116,17 +116,17 @@ class PyramidTileAccumulator:
         self._is_chain_start = is_chain_start
         self._token = token
         self._cascade_tracker = CompletionTracker()
-        self._cascade_queue: Optional[WriteOnlyQueue[CascadedTile]] = (
+        self._cascade_queue: WriteOnlyQueue[CascadedTile] | None = (
             next_accumulator.input_queue if next_accumulator is not None else None
         )
-        self._buffer: Dict[Tuple[int, int, int, int], Image.Image] = {}
+        self._buffer: dict[tuple[int, int, int, int], Image.Image] = {}
         self._input_queue: FifoCancelableQueue[
-            Union[CascadedTile, ShutdownSentinel]
+            CascadedTile | ShutdownSentinel
         ] = FifoCancelableQueue(maxsize=queue_maxsize)
         self._output_queue: PriorityCancelableQueue[
-            Union[EncodingTaskResult, ShutdownSentinel]
+            EncodingTaskResult | ShutdownSentinel
         ] = PriorityCancelableQueue(maxsize=queue_maxsize)
-        self._failure: Optional[BaseException] = None
+        self._failure: BaseException | None = None
         self._consumer_thread = Thread(
             target=self._consumer_loop,
             name=f"Accumulator-L{level_index}",
@@ -136,7 +136,7 @@ class PyramidTileAccumulator:
     @property
     def output_queue(
         self,
-    ) -> ReadOnlyQueue[Union[EncodingTaskResult, ShutdownSentinel]]:
+    ) -> ReadOnlyQueue[EncodingTaskResult | ShutdownSentinel]:
         """Queue where encoder pool results land for this level.
 
         Exposed as read-only because the accumulator owns the queue and
@@ -146,7 +146,7 @@ class PyramidTileAccumulator:
         return self._output_queue
 
     @property
-    def input_queue(self) -> WriteOnlyQueue[Union[CascadedTile, ShutdownSentinel]]:
+    def input_queue(self) -> WriteOnlyQueue[CascadedTile | ShutdownSentinel]:
         """Queue producers write decoded tiles (or the shutdown sentinel) to.
 
         Exposed as write-only because the accumulator owns the queue and
@@ -307,8 +307,8 @@ class PyramidTileAccumulator:
 
     def _block_positions(
         self, output_x: int, output_y: int
-    ) -> List[List[Tuple[int, int]]]:
-        rows: List[List[Tuple[int, int]]] = []
+    ) -> list[list[tuple[int, int]]]:
+        rows: list[list[tuple[int, int]]] = []
         for py in [output_y * 2, output_y * 2 + 1]:
             if py >= self._input_tiled_size.height:
                 break

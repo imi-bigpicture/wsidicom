@@ -15,7 +15,7 @@
 """Tests for tile cache implementations."""
 
 import tempfile
-from typing import Generator
+from collections.abc import Generator
 
 import pytest
 from upath import UPath

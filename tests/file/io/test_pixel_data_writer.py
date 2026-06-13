@@ -37,7 +37,6 @@ from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size
 from wsidicom.instance.dataset import WsiDataset
 
-
 ITEM_HEADER_SIZE = 8  # 4-byte tag + 4-byte length
 
 

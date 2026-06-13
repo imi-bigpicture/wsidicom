@@ -14,12 +14,7 @@
 
 """Module with DICOM specimen description formatter."""
 
-from typing import (
-    Iterable,
-    Iterator,
-    Optional,
-    Sequence,
-)
+from collections.abc import Iterable, Iterator, Sequence
 
 from wsidicom.metadata.sample import (
     BaseSampling,
@@ -50,7 +45,7 @@ class SpecimenDicomFormatter:
     def to_dicom(
         cls,
         slide_sample: SlideSample,
-        stains: Optional[Sequence[Staining]] = None,
+        stains: Sequence[Staining] | None = None,
     ) -> SpecimenDescriptionDicomModel:
         """Create a DICOM specimen description for slide sample.
 
@@ -58,7 +53,7 @@ class SpecimenDicomFormatter:
         ----------
         slide_sample : SlideSample
             The slide sample to convert to DICOM.
-        stains : Optional[Sequence[Staining]], optional
+        stains : Sequence[Staining] | None, optional
             Stainings performed on the slide sample.
 
         Returns
@@ -68,10 +63,7 @@ class SpecimenDicomFormatter:
         """
         if stains is None:
             stains = []
-        if slide_sample.uid is None:
-            sample_uid = slide_sample.default_uid
-        else:
-            sample_uid = slide_sample.uid
+        sample_uid = slide_sample.uid
         sample_preparation_steps = cls._get_steps(slide_sample, stains)
         identifier, issuer = SpecimenIdentifier.get_identifier_and_issuer(
             slide_sample.identifier
@@ -93,7 +85,7 @@ class SpecimenDicomFormatter:
 
     @classmethod
     def _get_steps(
-        cls, slide_sample: SlideSample, stainings: Optional[Iterable[Staining]]
+        cls, slide_sample: SlideSample, stainings: Iterable[Staining] | None
     ) -> Iterator[SpecimenPreparationStepDicomModel]:
         """Get all the steps performed on the slide sample, following the sampling
         branch specified in the sampling constraints.
@@ -102,7 +94,7 @@ class SpecimenDicomFormatter:
         ----------
         slide_sample : SlideSample
             The slide sample to get steps for
-        stainings: Optional[Iterable[Staining]]
+        stainings: Iterable[Staining] | None
             Stainings performed on the slide sample.
 
         Returns

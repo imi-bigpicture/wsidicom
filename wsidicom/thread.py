@@ -18,9 +18,8 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from heapq import heappop, heappush
 from itertools import count
 from threading import Condition, Lock
-from typing import Any, Generic, Optional, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar
 
-IterableType = TypeVar("IterableType")
 ReturnType = TypeVar("ReturnType")
 QueueItemType = TypeVar("QueueItemType", contravariant=True)
 QueueItemTypeOut = TypeVar("QueueItemTypeOut", covariant=True)
@@ -122,7 +121,7 @@ class CancellationToken:
 
     def __init__(self) -> None:
         self._lock = Lock()
-        self._exception: Optional[BaseException] = None
+        self._exception: BaseException | None = None
         self._conditions: set[Condition] = set()
 
     def cancel(self, exception: BaseException) -> None:
@@ -149,7 +148,7 @@ class CancellationToken:
         return self._exception is not None
 
     @property
-    def exception(self) -> Optional[BaseException]:
+    def exception(self) -> BaseException | None:
         """The first recorded cause, or None if not cancelled."""
         return self._exception
 
@@ -266,7 +265,7 @@ class ConditionalThreadPoolExecutor(ThreadPoolExecutor):
     """ThreadPoolExecutor that uses a single thread if max workers is 1."""
 
     def __init__(
-        self, max_workers: Optional[int] = None, force_iteration: bool = False, **kwargs
+        self, max_workers: int | None = None, force_iteration: bool = False, **kwargs
     ) -> None:
         self._force_iteration = force_iteration
         super().__init__(max_workers, **kwargs)
@@ -286,9 +285,9 @@ class ConditionalThreadPoolExecutor(ThreadPoolExecutor):
 
     def map(
         self,
-        fn: Callable[[IterableType], ReturnType],
-        *iterables: Iterable[IterableType],
-        timeout: Optional[float] = None,
+        fn: Callable[..., ReturnType],
+        *iterables: Iterable[Any],
+        timeout: float | None = None,
         chunksize: int = 1,
     ) -> Iterator[ReturnType]:
         if self._max_workers == 1:

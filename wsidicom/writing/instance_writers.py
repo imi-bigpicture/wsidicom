@@ -16,9 +16,9 @@
 (a pyramid level or an ancillary group) and hand them to an injected `TileWriter`.
 """
 
+from collections.abc import Iterable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Semaphore
-from typing import Iterable, List, Optional, Sequence, Union
 
 from wsidicom.codec.encoder import Encoder
 from wsidicom.geometry import Point, Size
@@ -81,7 +81,7 @@ class PyramidLevelWriter:
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
         tiled_size: Size,
-        tile_queue: ReadOnlyQueue[Union[EncodingTaskResult, ShutdownSentinel]],
+        tile_queue: ReadOnlyQueue[EncodingTaskResult | ShutdownSentinel],
         token: CancellationToken,
     ):
         """Create a pyramid-level orchestrator.
@@ -115,7 +115,7 @@ class PyramidLevelWriter:
         self._tiled_size = tiled_size
         self._tile_queue = tile_queue
         self._token = token
-        self._tile_sequencer: Optional[TileSequencer] = None
+        self._tile_sequencer: TileSequencer | None = None
 
     @property
     def level_index(self) -> int:
@@ -169,12 +169,12 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         tiled_size: Size,
         tile_reader: TileReader,
         queue_maxsize: int = 100,
-        chunk_size: Optional[int] = None,
+        chunk_size: int | None = None,
         *,
         token: CancellationToken,
     ):
         self._owned_tile_queue: PriorityCancelableQueue[
-            Union[EncodingTaskResult, ShutdownSentinel]
+            EncodingTaskResult | ShutdownSentinel
         ] = PriorityCancelableQueue(maxsize=queue_maxsize)
         super().__init__(
             level_index=level_index,
@@ -211,7 +211,7 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         """
         inflight = Semaphore(max_inflight)
 
-        futures: List[Future[None]] = []
+        futures: list[Future[None]] = []
         for path_index, path in enumerate(self._source_group.optical_paths):
             for z_index, z in enumerate(self._source_group.focal_planes):
                 image_data = self._source_group.image_data_map[(path, z)]
@@ -244,7 +244,7 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
     def _process_batch(
         self,
         image_data: ImageData,
-        positions: List[Point],
+        positions: list[Point],
         z: float,
         z_index: int,
         path: str,
@@ -268,7 +268,7 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         self,
         image_data: ImageData,
         tiled_size: Size,
-    ) -> Iterable[List[Point]]:
+    ) -> Iterable[list[Point]]:
         """Generate tile position batches in Z-order or raster order."""
         height = tiled_size.height
         width = tiled_size.width
@@ -303,7 +303,7 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         end_y: int,
         chunk_width: int,
         depth: int,
-    ) -> Iterable[List[Point]]:
+    ) -> Iterable[list[Point]]:
         """Recursively yield batches in Z-order."""
         if start_x >= end_x or start_y >= end_y:
             return
@@ -313,7 +313,7 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
                 has_second_row = y + 1 < end_y
                 for x in range(start_x, end_x, chunk_width):
                     batch_end_x = min(x + chunk_width, end_x)
-                    positions: List[Point] = []
+                    positions: list[Point] = []
                     for xi in range(x, batch_end_x, 2):
                         xi_end = min(xi + 2, batch_end_x)
                         for yi in [y, y + 1] if has_second_row else [y]:

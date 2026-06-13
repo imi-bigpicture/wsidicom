@@ -15,10 +15,8 @@
 """Series model."""
 
 from dataclasses import dataclass
-from functools import cached_property
-from typing import Optional
 
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID
 
 
 @dataclass(frozen=True)
@@ -33,23 +31,17 @@ class Series:
 
     Parameters
     ----------
-    uid : Optional[UID] = None
+    uid : UID | None = None
         The series instance UID.
-    number : Optional[int] = None
+    number : int | None = None
         The series number.
-    description : Optional[str] = None
+    description : str | None = None
         The series description.
-    body_part_examined : Optional[str] = None
+    body_part_examined : str | None = None
         The body part examined.
     """
 
-    uid: Optional[UID] = None
-    number: Optional[int] = None
-    description: Optional[str] = None
-    body_part_examined: Optional[str] = None
-
-    @cached_property
-    def default_uid(self) -> UID:
-        if self.uid is not None:
-            return self.uid
-        return generate_uid()
+    uid: UID | None = None
+    number: int | None = None
+    description: str | None = None
+    body_part_examined: str | None = None

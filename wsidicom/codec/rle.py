@@ -15,8 +15,8 @@
 """Module for handling DICOM RLE data with imagecodecs PackBits codec."""
 
 import io
+from collections.abc import Sequence
 from struct import pack
-from typing import List, Sequence
 
 import numpy as np
 
@@ -73,7 +73,7 @@ class RleCodec:
         if data.ndim == 2:
             data = data.reshape((data.shape[0], data.shape[1], 1))
         channel_count = data.shape[2]
-        segment_positions: List[int] = []
+        segment_positions: list[int] = []
         with io.BytesIO() as buffer:
             # For each channel
             for channel_index in range(channel_count):

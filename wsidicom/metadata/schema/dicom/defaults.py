@@ -22,8 +22,7 @@ from wsidicom.conceptcode import (
     IlluminationCode,
     IlluminationColorCode,
 )
-from wsidicom.geometry import SizeMm
-from wsidicom.metadata.image import FocusMethod
+from wsidicom.metadata.image import FocusMethod, ImageCoordinateSystem
 
 
 class Defaults:
@@ -36,8 +35,8 @@ class Defaults:
     slide_component_type = ContainerComponentTypeCode("Microscope slide cover slip")
     slide_material = "GLASS"
     focus_method = FocusMethod.AUTO
-    slide_size_without_label = SizeMm(25, 50)
-    slide_size_with_label = SizeMm(25, 75)
+    slide_size_without_label = ImageCoordinateSystem.SLIDE_SIZE_WITHOUT_LABEL
+    slide_size_with_label = ImageCoordinateSystem.SLIDE_SIZE_WITH_LABEL
     image_coordinate_system_rotation: float = 180
 
 

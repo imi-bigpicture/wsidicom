@@ -20,8 +20,8 @@ from threading import Thread
 import pytest
 
 from wsidicom.thread import (
-    Cancelled,
     CancellationToken,
+    Cancelled,
     CompletionTracker,
     FifoCancelableQueue,
     PriorityCancelableQueue,

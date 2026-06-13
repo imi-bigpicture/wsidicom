@@ -15,7 +15,6 @@
 """Module for reading DICOM WSI files."""
 
 import threading
-from typing import List, Optional, Tuple
 
 from pydicom.tag import Tag
 from pydicom.uid import UID
@@ -37,7 +36,8 @@ from wsidicom.file.io.frame_index.tiff import (
     TiffFrameIndexParser,
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
-from wsidicom.instance import ImageType, WsiDataset
+from wsidicom.instance import WsiDataset
+from wsidicom.metadata import ImageType
 from wsidicom.tags import ExtendedOffsetTableTag
 from wsidicom.uid import FileUids
 
@@ -77,8 +77,8 @@ class WsiDicomReader:
             raise WsiDicomNotSupportedError(
                 f"Non-supported transfer syntax {self.transfer_syntax}"
             )
-        self._frame_index_parser: Optional[FrameIndexParser] = None
-        self._frame_index: Optional[List[Tuple[int, int]]] = None
+        self._frame_index_parser: FrameIndexParser | None = None
+        self._frame_index: list[tuple[int, int]] | None = None
 
     def __enter__(self):
         return self
@@ -102,7 +102,7 @@ class WsiDicomReader:
         return self._dataset
 
     @property
-    def image_type(self) -> Optional[ImageType]:
+    def image_type(self) -> ImageType | None:
         return self._image_type
 
     @property
@@ -121,7 +121,7 @@ class WsiDicomReader:
         return self.dataset.frame_offset
 
     @property
-    def frame_index(self) -> List[Tuple[int, int]]:
+    def frame_index(self) -> list[tuple[int, int]]:
         """Return frame positions and lengths."""
         if self._frame_index is None:
             with self._lock:
@@ -137,7 +137,7 @@ class WsiDicomReader:
         return self.dataset.frame_count
 
     @property
-    def filepath(self) -> Optional[UPath]:
+    def filepath(self) -> UPath | None:
         """Return filename if stream is file."""
         return self._stream.filepath
 
@@ -194,6 +194,6 @@ class WsiDicomReader:
                 self._stream, self._pixel_data_position, self.frame_count
             )
 
-    def close(self, force: Optional[bool] = False) -> None:
+    def close(self, force: bool | None = False) -> None:
         """Close stream."""
         self._stream.close(force)

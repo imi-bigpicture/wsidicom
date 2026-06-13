@@ -15,8 +15,8 @@
 import math
 import os
 import threading
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
 
 import pytest
 from PIL.Image import Image
@@ -75,8 +75,8 @@ class WsiDicomTestReader(WsiDicomReader):
         dataset.NumberOfFrames = frame_count
         dataset.ImageType = ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]
         self._dataset = WsiDataset(dataset)
-        self._frame_index_parser: Optional[FrameIndexParser] = None
-        self._frame_index: Optional[List[Tuple[int, int]]] = None
+        self._frame_index_parser: FrameIndexParser | None = None
+        self._frame_index: list[tuple[int, int]] | None = None
         self._lock = threading.Lock()
 
     @property
@@ -146,15 +146,15 @@ class WsiDicomTestImageData(ImageData):
         return "RGB"
 
     @property
-    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+    def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         return None
 
     @property
-    def lossy_compression(self) -> Optional[List[LossyCompression]]:
+    def lossy_compression(self) -> list[LossyCompression] | None:
         return None
 
     @property
-    def transcoder(self) -> Optional[Encoder]:
+    def transcoder(self) -> Encoder | None:
         return None
 
     @property
@@ -232,7 +232,7 @@ class TestWsiDicomWriter:
         self,
         dataset: Dataset,
         image_data: ImageData,
-        frames: List[bytes],
+        frames: list[bytes],
         frame_count: int,
         writen_table_type: OffsetTableType,
         transfer_syntax: UID,
@@ -279,7 +279,8 @@ class TestWsiDicomWriter:
             2 * math.ceil(len(frame) / 2) for frame in frames
         ]
         expected_frame_positons = [
-            (offset, length) for offset, length in zip(frame_offsets, frame_lengths)
+            (offset, length)
+            for offset, length in zip(frame_offsets, frame_lengths, strict=False)
         ]
         assert expected_frame_positons == read_frame_positions
         assert writen_table_type == read_table_type
@@ -296,7 +297,7 @@ class TestWsiDicomWriter:
         self,
         dataset: Dataset,
         image_data: ImageData,
-        frames: List[bytes],
+        frames: list[bytes],
         frame_count: int,
         transfer_syntax: UID,
         tmp_path: Path,
@@ -323,10 +324,7 @@ class TestWsiDicomWriter:
             read_table_type = read_file.offset_table_type
             read_frame_positions = read_file.frame_index
         assert read_table_type == OffsetTableType.NONE
-        if transfer_syntax == ImplicitVRLittleEndian:
-            offset = 8
-        else:
-            offset = 12
+        offset = 8 if transfer_syntax == ImplicitVRLittleEndian else 12
         for index, frame_position in enumerate(read_frame_positions):
             assert (
                 frame_position[0]
@@ -358,7 +356,7 @@ class TestWsiDicomWriter:
     def test_write_tiles(
         self,
         image_data: ImageData,
-        frames: List[bytes],
+        frames: list[bytes],
         tmp_path: Path,
         transfer_syntax: UID,
     ):
@@ -395,7 +393,7 @@ class TestWsiDicomWriter:
         self,
         image_data: ImageData,
         dataset: Dataset,
-        frames: List[bytes],
+        frames: list[bytes],
         tmp_path: Path,
         table_type: OffsetTableType,
         transfer_syntax: UID,
@@ -433,7 +431,7 @@ class TestWsiDicomWriter:
 class _FakePixelDataWriter:
     """Minimal PixelDataWriter for testing write_tiles/frame_positions."""
 
-    def __init__(self, positions: List[int]):
+    def __init__(self, positions: list[int]):
         self._positions_iter = iter(positions)
 
     def write_tile(self, tile: bytes) -> int:
@@ -443,8 +441,8 @@ class _FakePixelDataWriter:
 class _FakeWriter(WsiDicomWriter):
     """Minimal concrete WsiDicomWriter for testing write_tiles/frame_positions."""
 
-    def __init__(self, positions: List[int]):
-        self._frame_positions: List[int] = []
+    def __init__(self, positions: list[int]):
+        self._frame_positions: list[int] = []
         self._pixel_data_writer = _FakePixelDataWriter(positions)
 
     def close(self, force=False):

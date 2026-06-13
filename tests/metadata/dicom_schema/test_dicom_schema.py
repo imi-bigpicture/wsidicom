@@ -13,9 +13,9 @@
 #    limitations under the License.
 
 from datetime import datetime
-from typing import Optional
 
 import pytest
+from marshmallow import ValidationError
 from pydicom import Dataset
 
 from tests.metadata.dicom_schema.helpers import (
@@ -40,7 +40,6 @@ from wsidicom.conceptcode import (
     LightPathFilterCode,
 )
 from wsidicom.geometry import Orientation, PointMm, SizeMm
-from wsidicom.instance import ImageType
 from wsidicom.metadata import (
     Equipment,
     ExtendedDepthOfField,
@@ -48,6 +47,7 @@ from wsidicom.metadata import (
     Image,
     ImageCoordinateSystem,
     ImagePathFilter,
+    ImageType,
     Label,
     LightPathFilter,
     LocalIssuerOfIdentifier,
@@ -533,13 +533,11 @@ class TestDicomSchema:
         series = Series()
         schema = SeriesDicomSchema()
 
-        # Act
-        serialized = schema.dump(series)
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert serialized.SeriesInstanceUID == series.default_uid
-        assert serialized.SeriesNumber == 1
+        # Act / Assert: SeriesInstanceUID is Type 1 — dumping with `uid=None`
+        # must raise so unresolved metadata can't silently produce a
+        # non-conforming DICOM.
+        with pytest.raises(ValidationError, match="SeriesInstanceUID"):
+            schema.dump(series)
 
     def test_deserialize_series(self, dicom_series: Dataset, series: Series):
         # Arrange
@@ -569,18 +567,11 @@ class TestDicomSchema:
         study = Study()
         schema = StudyDicomSchema()
 
-        # Act
-        serialized = schema.dump(study)
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert serialized.StudyInstanceUID == study.default_uid
-        assert serialized.StudyID is None
-        assert serialized.StudyDate is None
-        assert serialized.StudyTime is None
-        assert serialized.AccessionNumber is None
-        assert serialized.ReferringPhysicianName is None
-        assert "StudyDescription" not in serialized
+        # Act / Assert: StudyInstanceUID is Type 1 — dumping with `uid=None`
+        # must raise so unresolved metadata can't silently produce a
+        # non-conforming DICOM.
+        with pytest.raises(ValidationError, match="StudyInstanceUID"):
+            schema.dump(study)
 
     def test_deserialize_study(self, dicom_study: Dataset, study: Study):
         # Arrange
@@ -637,31 +628,20 @@ class TestDicomSchema:
         )
         assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
         for specimen_description, sample in zip(
-            serialized.SpecimenDescriptionSequence, expected_samples
+            serialized.SpecimenDescriptionSequence, expected_samples, strict=False
         ):
             assert specimen_description.SpecimenIdentifier == sample.identifier
             assert specimen_description.SpecimenUID == sample.uid
 
-    def test_serialize_default_slide(self):
-        # Arrange
+    def test_serialize_default_slide_raises(self):
+        # Arrange: an unset slide has no samples.
         slide = Slide()
         schema = SlideDicomSchema()
-        expected_samples = [SlideSample(identifier=defaults.string)]
 
-        # Act
-        serialized = schema.dump(slide)
-
-        # Assert
-        assert isinstance(serialized, Dataset)
-        assert serialized.ContainerIdentifier == defaults.string
-        assert_dicom_code_dataset_equals_code(
-            serialized.ContainerTypeCodeSequence[0], defaults.slide_container_type
-        )
-        assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
-        for specimen_description, sample in zip(
-            serialized.SpecimenDescriptionSequence, expected_samples
-        ):
-            assert specimen_description.SpecimenIdentifier == sample.identifier
+        # Act / Assert: SpecimenDescriptionSequence is Type 1 with VM >= 1 —
+        # dumping a slide with no samples must raise.
+        with pytest.raises(ValidationError, match="SpecimenDescriptionSequence"):
+            schema.dump(slide)
 
     @pytest.mark.parametrize(
         "slide_identifier",
@@ -778,7 +758,7 @@ class TestDicomSchema:
             else:
                 assert len(serialized.OpticalPathSequence) == len(label.optical_paths)
                 for dicom_optical_path, optical_path in zip(
-                    serialized.OpticalPathSequence, label.optical_paths
+                    serialized.OpticalPathSequence, label.optical_paths, strict=False
                 ):
                     assert_dicom_optical_path_equals_optical_path(
                         dicom_optical_path,
@@ -812,18 +792,11 @@ class TestDicomSchema:
         )
         schema = WsiMetadataDicomSchema()
 
-        # Act
-        serialized = schema.dump(
-            wsi_metadata, image_type=image_type, require_icc_profile=False
-        )
-
-        # Assert
-        assert "DimensionOrganizationSequence" in serialized
-        assert len(serialized.DimensionOrganizationSequence) == 1
-        assert (
-            serialized.DimensionOrganizationSequence[0].DimensionOrganizationUID
-            == wsi_metadata.default_dimension_organization_uids[0]
-        )
+        # Act / Assert: dumping unresolved metadata must raise — Type-1
+        # attributes such as FrameOfReferenceUID and SpecimenDescriptionSequence
+        # are required.
+        with pytest.raises(ValidationError, match="Type 1"):
+            schema.dump(wsi_metadata, image_type=image_type, require_icc_profile=False)
 
     def test_deserialize_wsi_metadata_from_multiple_datasets(
         self,
@@ -856,11 +829,11 @@ class TestDicomSchema:
         assert deserialized.patient == patient
         assert (
             deserialized.frame_of_reference_uid
-            == wsi_metadata.default_frame_of_reference_uid
+            == wsi_metadata.frame_of_reference_uid
         )
         assert (
             deserialized.dimension_organization_uids
-            == wsi_metadata.default_dimension_organization_uids
+            == wsi_metadata.dimension_organization_uids
         )
 
     def test_deserialize_wsi_metadata_from_empty_dataset(
@@ -879,7 +852,7 @@ class TestDicomSchema:
     @pytest.mark.parametrize("z_offset", [1.0, None])
     def test_serialize_image_coordinate_system(
         self,
-        z_offset: Optional[float],
+        z_offset: float | None,
     ):
         # Arrange
         image_coordinate_system = ImageCoordinateSystem(
@@ -919,9 +892,9 @@ class TestDicomSchema:
     @pytest.mark.parametrize("z_offset", [1.0, None])
     def test_deserialize_image_coordinate_system(
         self,
-        origin: Optional[PointMm],
-        orientation: Optional[Orientation],
-        z_offset: Optional[float],
+        origin: PointMm | None,
+        orientation: Orientation | None,
+        z_offset: float | None,
     ):
         # Arrange
         dataset = Dataset()
@@ -949,41 +922,3 @@ class TestDicomSchema:
             assert deserialized.z_offset == z_offset
         else:
             assert deserialized is None
-
-    @pytest.mark.parametrize(
-        ["image_type", "default_rotation", "expected_origin"],
-        [
-            (ImageType.VOLUME, 0, PointMm(0, 0)),
-            (ImageType.VOLUME, 90, PointMm(25, 0)),
-            (ImageType.VOLUME, 180, PointMm(25, 50)),
-            (ImageType.VOLUME, 270, PointMm(0, 50)),
-            (ImageType.THUMBNAIL, 0, PointMm(0, 0)),
-            (ImageType.THUMBNAIL, 90, PointMm(25, 0)),
-            (ImageType.THUMBNAIL, 180, PointMm(25, 50)),
-            (ImageType.THUMBNAIL, 270, PointMm(0, 50)),
-            (ImageType.OVERVIEW, 0, PointMm(0, 0)),
-            (ImageType.OVERVIEW, 90, PointMm(25, 0)),
-            (ImageType.OVERVIEW, 180, PointMm(25, 75)),
-            (ImageType.OVERVIEW, 270, PointMm(0, 75)),
-            (ImageType.LABEL, 0, PointMm(0, 50)),
-            (ImageType.LABEL, 90, PointMm(25, 50)),
-            (ImageType.LABEL, 180, PointMm(25, 75)),
-            (ImageType.LABEL, 270, PointMm(0, 75)),
-        ],
-    )
-    def test_insert_default_image_coordinate_system(
-        self, image_type: ImageType, default_rotation: int, expected_origin: PointMm
-    ):
-        # Arrange
-        image = Image()
-        defaults.image_coordinate_system_rotation = default_rotation
-
-        # Act
-        result = WsiMetadataDicomSchema._insert_default_image_coordinate_system(
-            image, image_type
-        )
-
-        # Assert
-        assert result.image_coordinate_system is not None
-        assert result.image_coordinate_system.origin == expected_origin
-        assert result.image_coordinate_system.rotation == default_rotation

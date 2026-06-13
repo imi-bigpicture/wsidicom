@@ -12,13 +12,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from functools import lru_cache
-from typing import List, Sequence, Union
+from collections.abc import Sequence
 
 from pydicom.uid import UID
 from upath import UPath
 
-from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
+from wsidicom.cache import DecodedFrameCache, EncodedFrameCache, lru_cached_method
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.io import WsiDicomReader
@@ -34,7 +33,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
 
     def __init__(
         self,
-        readers: Union[WsiDicomReader, Sequence[WsiDicomReader]],
+        readers: WsiDicomReader | Sequence[WsiDicomReader],
         decoded_frame_cache: DecodedFrameCache,
         encoded_frame_cache: EncodedFrameCache,
     ) -> None:
@@ -43,7 +42,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
 
         Parameters
         ----------
-        readers: Union[WsiDicomReader, Sequence[WsiDicomReader]]
+        readers: WsiDicomReader | Sequence[WsiDicomReader]
             Single or list of WsiDicomReader containing frame data.
         """
         if not isinstance(readers, Sequence):
@@ -75,7 +74,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         return f"{type(self).__name__} of files {self._readers}"
 
     @property
-    def files(self) -> List[UPath]:
+    def files(self) -> list[UPath]:
         return [
             reader.filepath for reader in self._readers if reader.filepath is not None
         ]
@@ -85,7 +84,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         """The uid of the transfer syntax of the image."""
         return self._transfer_syntax
 
-    @lru_cache
+    @lru_cached_method()
     def _get_reader(self, frame_index: int) -> WsiDicomReader:
         """
         Return file containing frame index.
@@ -110,7 +109,9 @@ class WsiDicomFileImageData(WsiDicomImageData):
                 and frame_index < file.frame_offset + file.frame_count
             )
         except StopIteration:
-            raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
+            raise WsiDicomNotFoundError(
+                f"Frame index {frame_index}", "instance"
+            ) from None
 
     def _get_tile_frame(self, frame_index: int) -> bytes:
         """Return tile frame for frame index.

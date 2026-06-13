@@ -14,8 +14,9 @@
 
 import logging
 import math
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
-from typing import Callable, Iterable, Iterator, Sequence, Tuple, Union
+from typing import Union
 
 
 @dataclass(frozen=True)
@@ -48,18 +49,18 @@ class SizeMm:
             )
         return NotImplemented
 
-    def to_int_tuple(self) -> Tuple[int, int]:
+    def to_int_tuple(self) -> tuple[int, int]:
         return int(self.width), int(self.height)
 
-    def to_tuple(self) -> Tuple[float, float]:
+    def to_tuple(self) -> tuple[float, float]:
         return self.width, self.height
 
     @classmethod
-    def from_tuple(cls, input: Union[Tuple[float, float], Sequence[float]]) -> "SizeMm":
+    def from_tuple(cls, input: tuple[float, float] | Sequence[float]) -> "SizeMm":
         try:
             return cls(input[0], input[1])
         except IndexError:
-            raise ValueError("input did not contain two values")
+            raise ValueError("input did not contain two values") from None
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,7 @@ class PointMm:
     x: float
     y: float
 
-    def __mul__(self, factor: Union[int, float]) -> "PointMm":
+    def __mul__(self, factor: int | float) -> "PointMm":
         if isinstance(factor, (int, float)):
             return PointMm(factor * self.x, factor * self.y)
         return NotImplemented
@@ -112,15 +113,13 @@ class PointMm:
         return PointMm(-self.x, -self.y)
 
     @classmethod
-    def from_tuple(
-        cls, input: Union[Tuple[float, float], Sequence[float]]
-    ) -> "PointMm":
+    def from_tuple(cls, input: tuple[float, float] | Sequence[float]) -> "PointMm":
         try:
             return cls(input[0], input[1])
         except IndexError:
-            raise ValueError("input did not contain two values")
+            raise ValueError("input did not contain two values") from None
 
-    def to_tuple(self) -> Tuple[float, float]:
+    def to_tuple(self) -> tuple[float, float]:
         return (self.x, self.y)
 
 
@@ -221,7 +220,7 @@ class Size:
         return (
             operation(dimension, other_dimension)
             for (dimension, other_dimension) in zip(
-                [self.width, self.height], [item.width, item.height]
+                [self.width, self.height], [item.width, item.height], strict=False
             )
         )
 
@@ -229,15 +228,15 @@ class Size:
     def from_points(cls, point_1: "Point", point_2: "Point") -> "Size":
         return cls(point_2.x - point_1.x, point_2.y - point_1.y)
 
-    def to_tuple(self) -> Tuple[int, int]:
+    def to_tuple(self) -> tuple[int, int]:
         return (self.width, self.height)
 
     @classmethod
-    def from_tuple(cls, input: Union[Tuple[int, int], Sequence[int]]) -> "Size":
+    def from_tuple(cls, input: tuple[int, int] | Sequence[int]) -> "Size":
         try:
             return cls(input[0], input[1])
         except IndexError:
-            raise ValueError("input did not contain two values")
+            raise ValueError("input did not contain two values") from None
 
     @classmethod
     def max(cls, size_1: "Size", size_2: "Size") -> "Size":
@@ -287,7 +286,7 @@ class Point:
             return Point(int(self.x / divider.width), int(self.y / divider.height))
         return NotImplemented
 
-    def ceil_div(self, divider: Union[int, float, Size, SizeMm]) -> "Point":
+    def ceil_div(self, divider: int | float | Size | SizeMm) -> "Point":
         if isinstance(divider, (int, float)):
             return Point(math.ceil(self.x / divider), math.ceil(self.y / divider))
         elif isinstance(divider, (Size, SizeMm)):
@@ -329,15 +328,15 @@ class Point:
     def min(cls, point_1: "Point", point_2: "Point") -> "Point":
         return cls(x=min(point_1.x, point_2.x), y=min(point_1.y, point_2.y))
 
-    def to_tuple(self) -> Tuple[int, int]:
+    def to_tuple(self) -> tuple[int, int]:
         return (self.x, self.y)
 
     @classmethod
-    def from_tuple(cls, input: Union[Tuple[int, int], Sequence[int]]) -> "Point":
+    def from_tuple(cls, input: tuple[int, int] | Sequence[int]) -> "Point":
         try:
             return cls(input[0], input[1])
         except IndexError:
-            raise ValueError("input did not contain two values")
+            raise ValueError("input did not contain two values") from None
 
 
 @dataclass(frozen=True)
@@ -360,11 +359,11 @@ class Region:
         return NotImplemented
 
     @property
-    def box(self) -> Tuple[int, int, int, int]:
+    def box(self) -> tuple[int, int, int, int]:
         return self.start.x, self.start.y, self.end.x, self.end.y
 
     @property
-    def box_from_origin(self) -> Tuple[int, int, int, int]:
+    def box_from_origin(self) -> tuple[int, int, int, int]:
         return 0, 0, self.size.width, self.size.height
 
     def iterate_all(self) -> Iterator[Point]:
@@ -408,7 +407,7 @@ class Region:
 
         Parameters
         ----------
-        other_region: Union[Size, 'Region']
+        other_region: Size | 'Region'
             Region to be cropped.
 
         Returns
@@ -525,7 +524,7 @@ class RegionMm:
 
 
 class Orientation:
-    def __init__(self, orientation: Tuple[float, float, float, float, float, float]):
+    def __init__(self, orientation: tuple[float, float, float, float, float, float]):
         if orientation[0] != -orientation[4] or orientation[1] != orientation[3]:
             logging.warning(
                 f"Orientation {orientation} is not "
@@ -550,7 +549,7 @@ class Orientation:
         return cls((-x, y, 0, y, x, 0))
 
     @property
-    def values(self) -> Tuple[float, float, float, float, float, float]:
+    def values(self) -> tuple[float, float, float, float, float, float]:
         return self._orientation
 
     def apply_transform(self, point: PointMm):
@@ -567,10 +566,10 @@ class Orientation:
 
     @staticmethod
     def _create_transform(
-        orientation: Tuple[float, float, float, float, float, float],
-    ) -> Tuple[
-        Tuple[float, float],
-        Tuple[float, float],
+        orientation: tuple[float, float, float, float, float, float],
+    ) -> tuple[
+        tuple[float, float],
+        tuple[float, float],
     ]:
         return (
             (orientation[0], orientation[3]),
@@ -579,13 +578,13 @@ class Orientation:
 
     @staticmethod
     def _create_reverse(
-        transform: Tuple[
-            Tuple[float, float],
-            Tuple[float, float],
+        transform: tuple[
+            tuple[float, float],
+            tuple[float, float],
         ],
-    ) -> Tuple[
-        Tuple[float, float],
-        Tuple[float, float],
+    ) -> tuple[
+        tuple[float, float],
+        tuple[float, float],
     ]:
         determinant = 1 / (
             transform[0][0] * transform[1][1] - transform[0][1] * transform[1][0]

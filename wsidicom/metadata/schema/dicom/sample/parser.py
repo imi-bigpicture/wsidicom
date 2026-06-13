@@ -15,17 +15,8 @@
 """Module with DICOM specimen description parser."""
 
 import logging
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import (
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-)
 
 from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
@@ -64,28 +55,28 @@ from wsidicom.metadata.schema.dicom.sample.model import (
 class ParsedSpecimen:
     """Parsed specimen steps."""
 
-    preparation_steps: List[PreparationStep]
-    sampling: Optional[BaseSampling]
-    container: Optional[ContainerTypeCode]
-    specimen_type: Optional[AnatomicPathologySpecimenTypesCode]
+    preparation_steps: list[PreparationStep]
+    sampling: BaseSampling | None
+    container: ContainerTypeCode | None
+    specimen_type: AnatomicPathologySpecimenTypesCode | None
 
 
 class StepsDirectory:
     """Class for holding specimen preparation steps ordered by specimen identifier."""
 
-    def __init__(self, steps: List[SpecimenPreparationStepDicomModel]):
+    def __init__(self, steps: list[SpecimenPreparationStepDicomModel]):
         """Initialize StepsDirectory.
 
         Parameters
         ----------
-        steps: List[SpecimenPreparationStepDicomModel]
+        steps: list[SpecimenPreparationStepDicomModel]
             Steps to order.
         """
         self._steps_by_identifier = self._order_steps_by_identifier(steps)
 
     def get(
         self, identifier: SpecimenIdentifier
-    ) -> List[SpecimenPreparationStepDicomModel]:
+    ) -> list[SpecimenPreparationStepDicomModel]:
         """Get steps matching identifier.
 
         Parameters
@@ -95,14 +86,14 @@ class StepsDirectory:
 
         Returns
         -------
-        List[SpecimenPreparationStepDicomModel]
+        list[SpecimenPreparationStepDicomModel]
             Steps for specimen.
         """
         return self._get_and_clear_steps_for_identifier(identifier)
 
     def get_previous_specimen_identifier(
         self, identifier: SpecimenIdentifier
-    ) -> Optional[SpecimenIdentifier]:
+    ) -> SpecimenIdentifier | None:
         """Get identifier of previous specimen.
 
         Parameters
@@ -112,7 +103,7 @@ class StepsDirectory:
 
         Returns
         -------
-        Optional[SpecimenIdentifier]
+        SpecimenIdentifier | None
             Identifier of previous specimen, if any.
         """
         matching_identifier = self._get_identifier(
@@ -133,28 +124,31 @@ class StepsDirectory:
 
     def _order_steps_by_identifier(
         self,
-        steps: List[SpecimenPreparationStepDicomModel],
-    ) -> Dict[SpecimenIdentifier, Optional[List[SpecimenPreparationStepDicomModel]]]:
+        steps: list[SpecimenPreparationStepDicomModel],
+    ) -> dict[SpecimenIdentifier, list[SpecimenPreparationStepDicomModel] | None]:
         """
         Parse steps into dictionary of steps by specimen identifier.
 
         Parameters
         ----------
-        steps: List[SpecimenPreparationStepDicomModel]
+        steps: list[SpecimenPreparationStepDicomModel]
             Steps to parse.
 
         Returns
         -------
-        Dict[SpecimenIdentifier, Optional[List[SpecimenPreparationStepDicomModel]]]:
+        dict[SpecimenIdentifier, list[SpecimenPreparationStepDicomModel] | None]:
             Steps ordered by specimen identifier.
         """
-        steps_by_identifier: Dict[
-            SpecimenIdentifier, Optional[List[SpecimenPreparationStepDicomModel]]
+        steps_by_identifier: dict[
+            SpecimenIdentifier, list[SpecimenPreparationStepDicomModel] | None
         ] = {}
         for step in steps:
             identifier = step.specimen_identifier
             matching_identifier = self._get_identifier(identifier, steps_by_identifier)
-            if matching_identifier not in steps_by_identifier:
+            if (
+                matching_identifier is None
+                or matching_identifier not in steps_by_identifier
+            ):
                 steps_by_identifier[identifier] = [step]
             else:
                 existing_steps = steps_by_identifier[matching_identifier]
@@ -167,7 +161,7 @@ class StepsDirectory:
     def _get_and_clear_steps_for_identifier(
         self,
         identifier: SpecimenIdentifier,
-    ) -> List[SpecimenPreparationStepDicomModel]:
+    ) -> list[SpecimenPreparationStepDicomModel]:
         """Return and clear steps matching identifier.
 
         If strict matching return steps by key. Otherwise return steps with relaxed
@@ -184,13 +178,16 @@ class StepsDirectory:
 
         Returns
         -------
-        List[SpecimenPreparationStepDicomModel]
+        list[SpecimenPreparationStepDicomModel]
             Steps matching identifier.
         """
         matching_identifier = self._get_identifier(
             identifier, self._steps_by_identifier
         )
-        if matching_identifier not in self._steps_by_identifier:
+        if (
+            matching_identifier is None
+            or matching_identifier not in self._steps_by_identifier
+        ):
             # Specimen does not have any describing preparation steps
             return []
         steps = self._steps_by_identifier[matching_identifier]
@@ -206,25 +203,25 @@ class StepsDirectory:
     @staticmethod
     def _get_identifier(
         identifier: SpecimenIdentifier,
-        steps_by_identifier: Dict[
-            SpecimenIdentifier, Optional[List[SpecimenPreparationStepDicomModel]]
+        steps_by_identifier: dict[
+            SpecimenIdentifier, list[SpecimenPreparationStepDicomModel] | None
         ],
-    ) -> Optional[SpecimenIdentifier]:
+    ) -> SpecimenIdentifier | None:
         """Get identifier matching identifier.
 
         Parameters
         ----------
         identifier: SpecimenIdentifier
             Identifier to match.
-        steps_by_identifier: Dict[
+        steps_by_identifier: dict[
             SpecimenIdentifier,
-            Optional[List[SpecimenPreparationStepDicomModel]]
+            list[SpecimenPreparationStepDicomModel] | None
         ]
             Steps ordered by identifier.
 
         Returns
         -------
-        Optional[SpecimenIdentifier]
+        SpecimenIdentifier | None
             Identifier matching identifier.
         """
 
@@ -236,7 +233,7 @@ class StepsDirectory:
         return next(
             (
                 existing_identifier
-                for existing_identifier in steps_by_identifier.keys()
+                for existing_identifier in steps_by_identifier
                 if existing_identifier.relaxed_matching(identifier)
             ),
             None,
@@ -283,12 +280,12 @@ class SpecimenDicomParser:
     """
 
     def __init__(self):
-        self._parsed_specimens: Dict[SpecimenIdentifier, BaseSpecimen] = {}
-        self._parsed_stainings: List[Staining] = []
+        self._parsed_specimens: dict[SpecimenIdentifier, BaseSpecimen] = {}
+        self._parsed_stainings: list[Staining] = []
 
     def parse_descriptions(
         self, specimen_descriptions: Iterable[SpecimenDescriptionDicomModel]
-    ) -> Tuple[List[SlideSample], List[Staining]]:
+    ) -> tuple[list[SlideSample], list[Staining]]:
         """
         Parse specimen descriptions into samples and stainings.
 
@@ -299,7 +296,7 @@ class SpecimenDicomParser:
 
         Returns
         ----------
-        Tuple[List[SlideSample], List[Staining]]
+        tuple[list[SlideSample], list[Staining]]
             Samples and stainings parsed from descriptions.
 
         """
@@ -357,14 +354,14 @@ class SpecimenDicomParser:
 
     def _parse_stainings(
         self,
-        steps: List[SpecimenPreparationStepDicomModel],
+        steps: list[SpecimenPreparationStepDicomModel],
     ) -> Iterator[Staining]:
         """
         Parse stainings from steps.
 
         Parameters
         ----------
-        steps: List[SpecimenPreparationStepDicomModel]
+        steps: list[SpecimenPreparationStepDicomModel]
             Steps to parse.
 
         Returns
@@ -402,10 +399,10 @@ class SpecimenDicomParser:
             Parsed steps for specimen.
 
         """
-        container: Optional[ContainerTypeCode] = None
-        specimen_type: Optional[AnatomicPathologySpecimenTypesCode] = None
-        sampling: Optional[BaseSampling] = None
-        preparation_steps: List[PreparationStep] = []
+        container: ContainerTypeCode | None = None
+        specimen_type: AnatomicPathologySpecimenTypesCode | None = None
+        sampling: BaseSampling | None = None
+        preparation_steps: list[PreparationStep] = []
         steps = steps_directory.get(identifier)
         for index, step in enumerate(steps):
             parsed_step = self._parse_step(
@@ -447,7 +444,7 @@ class SpecimenDicomParser:
         step: SpecimenPreparationStepDicomModel,
         identifier: SpecimenIdentifier,
         steps_directory: StepsDirectory,
-        steps: List[SpecimenPreparationStepDicomModel],
+        steps: list[SpecimenPreparationStepDicomModel],
     ) -> ParsedSpecimen:
         """Parse step and return nested preparation steps and samplings.
 
@@ -461,7 +458,7 @@ class SpecimenDicomParser:
             Identifier of specimen to parse.
         steps_directory: StepsDirectory
             DICOM preparation steps ordered by specimen identifier.
-        steps: List[SpecimenPreparationStepDicomModel]
+        steps: list[SpecimenPreparationStepDicomModel]
             All steps for this identifier.
 
         Returns
@@ -469,8 +466,8 @@ class SpecimenDicomParser:
         ParsedSpecimen
             Parsed step for specimen.
         """
-        preparation_steps: List[PreparationStep] = []
-        sampling: Optional[BaseSampling] = None
+        preparation_steps: list[PreparationStep] = []
+        sampling: BaseSampling | None = None
         # First handle collection and sampling steps that should be on index 0
         if index == 0:
             if isinstance(step, CollectionDicomModel):
@@ -543,7 +540,7 @@ class SpecimenDicomParser:
         self,
         step: CollectionDicomModel,
         identifier: SpecimenIdentifier,
-        steps: List[SpecimenPreparationStepDicomModel],
+        steps: list[SpecimenPreparationStepDicomModel],
     ) -> Collection:
         """Create collection step from collection model.
 
@@ -555,7 +552,7 @@ class SpecimenDicomParser:
             Identifier of the specimen the collection belongs to.
         steps_directory: StepsDirectory
             DICOM preparation steps ordered by specimen identifier.
-        steps: List[SpecimenPreparationStepDicomModel]
+        steps: list[SpecimenPreparationStepDicomModel]
             All steps for this identifier.
 
         Returns
@@ -572,10 +569,8 @@ class SpecimenDicomParser:
         )
         if any_sampling_steps:
             raise ValueError(
-                (
-                    "Collection step should be first step and there should not "
-                    "be any sampling steps."
-                )
+                "Collection step should be first step and there should not "
+                "be any sampling steps."
             )
         return Collection(
             step.method,
@@ -630,7 +625,7 @@ class SpecimenDicomParser:
         self,
         sampling: SamplingDicomModel,
         steps_directory: StepsDirectory,
-    ) -> Tuple[BaseSpecimen, Optional[Sequence[BaseSampling]]]:
+    ) -> tuple[BaseSpecimen, Sequence[BaseSampling] | None]:
         """Get parent specimen and any sampling constraints for sampling.
 
         Creates any needed parent specimens.
@@ -644,11 +639,11 @@ class SpecimenDicomParser:
 
         Returns
         -------
-        Tuple[BaseSpecimen, Optional[Sequence[BaseSampling]]]
+        tuple[BaseSpecimen, Sequence[BaseSampling] | None]
             Parent specimen and any sampling constraints.
         """
         parent_identifier = sampling.parent_identifier
-        sampling_constraints: Optional[Sequence[BaseSampling]] = None
+        sampling_constraints: Sequence[BaseSampling] | None = None
         if parent_identifier not in self._parsed_specimens:
             # Parent does not exist, create it.
             parent = self._create_specimen(
@@ -693,7 +688,7 @@ class SpecimenDicomParser:
         self,
         identifier: SpecimenIdentifier,
         steps_directory: StepsDirectory,
-    ) -> Optional[BaseSampling]:
+    ) -> BaseSampling | None:
         """Create unknown sampling from previous specimen.
 
         Creates any needed parent specimens.
@@ -707,7 +702,7 @@ class SpecimenDicomParser:
 
         Returns
         -------
-        Optional[BaseSampling]
+        BaseSampling | None
             Unknown sampling created from previous specimen.
         """
 
@@ -721,7 +716,7 @@ class SpecimenDicomParser:
         self,
         identifier: SpecimenIdentifier,
         steps_directory: StepsDirectory,
-    ) -> Optional[Union[Specimen, Sample]]:
+    ) -> Specimen | Sample | None:
         """Get previous described specimen.
 
         Will create any needed parent specimens.
@@ -735,7 +730,7 @@ class SpecimenDicomParser:
 
         Returns
         -------
-        Optional[Union[Specimen, Sample]]
+        Specimen | Sample | None
             Previous specimen, if any.
         """
         previous_specimen_identifier = steps_directory.get_previous_specimen_identifier(
@@ -752,9 +747,9 @@ class SpecimenDicomParser:
     def _create_specimen(
         self,
         identifier: SpecimenIdentifier,
-        specimen_type: Optional[AnatomicPathologySpecimenTypesCode],
+        specimen_type: AnatomicPathologySpecimenTypesCode | None,
         steps_directory: StepsDirectory,
-    ) -> Union[Specimen, Sample]:
+    ) -> Specimen | Sample:
         """
         Create an Specimen or Sample.
 
@@ -770,7 +765,7 @@ class SpecimenDicomParser:
 
         Returns
         ----------
-        Union[Specimen, Sample]
+        Specimen | Sample
             Created Specimen, if the specimen has no parents, or Specimen.
 
         """

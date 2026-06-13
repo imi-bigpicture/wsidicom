@@ -15,18 +15,12 @@
 """Stitcher for assembling a grid of tiles into one image."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import as_completed
 from itertools import chain
 from threading import Event
 from typing import (
-    Callable,
-    Iterable,
-    Iterator,
     Literal,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
 )
 
 from PIL import Image
@@ -43,7 +37,7 @@ class Stitcher(ABC):
         self,
         tiles: Iterable[Image.Image],
         grid_size: Size,
-        fill: Optional[Union[int, Tuple[int, int, int]]] = None,
+        fill: int | tuple[int, int, int] | None = None,
     ) -> Image.Image:
         """Stitch tiles laid out as a row-major grid into one image.
 
@@ -79,8 +73,8 @@ class Stitcher(ABC):
         fetch: Callable[[Sequence[Point]], Iterator[Image.Image]],
         tile_size: Size,
         mode: Literal["L", "I", "RGB"],
-        canvas_grid_size: Optional[Size] = None,
-        fill: Optional[Union[int, Tuple[int, int, int]]] = None,
+        canvas_grid_size: Size | None = None,
+        fill: int | tuple[int, int, int] | None = None,
         threads: int = 1,
     ) -> Image.Image:
         """Stitch with internal parallelism; workers fetch and paste.
@@ -132,7 +126,7 @@ class Stitcher(ABC):
     def stitch_grid(
         self,
         tiles: Sequence[Sequence[Image.Image]],
-        fill: Optional[Union[int, Tuple[int, int, int]]] = None,
+        fill: int | tuple[int, int, int] | None = None,
     ) -> Image.Image:
         """Stitch tiles given as a row-major 2D sequence.
 
@@ -170,7 +164,7 @@ class PillowStitcher(Stitcher):
         self,
         tiles: Iterable[Image.Image],
         grid_size: Size,
-        fill: Optional[Union[int, Tuple[int, int, int]]] = None,
+        fill: int | tuple[int, int, int] | None = None,
     ) -> Image.Image:
         tile_iterator = iter(tiles)
         try:
@@ -192,8 +186,8 @@ class PillowStitcher(Stitcher):
         fetch: Callable[[Sequence[Point]], Iterator[Image.Image]],
         tile_size: Size,
         mode: Literal["L", "I", "RGB"],
-        canvas_grid_size: Optional[Size] = None,
-        fill: Optional[Union[int, Tuple[int, int, int]]] = None,
+        canvas_grid_size: Size | None = None,
+        fill: int | tuple[int, int, int] | None = None,
         threads: int = 1,
     ) -> Image.Image:
         if canvas_grid_size is None:
@@ -228,7 +222,7 @@ class PillowStitcher(Stitcher):
                 pool.submit(worker, chunk)
                 for chunk in tile_region.chunked_iterate_all(threads)
             ]
-            first_error: Optional[BaseException] = None
+            first_error: BaseException | None = None
             for future in as_completed(futures):
                 exception = future.exception()
                 if exception is not None and first_error is None:
@@ -243,7 +237,7 @@ class PillowStitcher(Stitcher):
         mode: str,
         grid_size: Size,
         tile_size: Size,
-        fill: Optional[Union[int, Tuple[int, int, int]]],
+        fill: int | tuple[int, int, int] | None,
     ) -> Image.Image:
         canvas_size = Size(
             grid_size.width * tile_size.width,

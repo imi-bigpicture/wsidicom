@@ -14,18 +14,17 @@
 
 """DICOM schema for complete WsiMetadata model."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Optional, Sequence, Type, TypeVar
+from typing import TypeVar
 
 from marshmallow import fields
 from PIL import ImageCms
 from pydicom import Dataset
 from pydicom.uid import UID, VLWholeSlideMicroscopyImageStorage
 
-from wsidicom.geometry import PointMm
-from wsidicom.instance.dataset import ImageType
 from wsidicom.metadata.equipment import Equipment
-from wsidicom.metadata.image import Image, ImageCoordinateSystem
+from wsidicom.metadata.image import Image, ImageCoordinateSystem, ImageType
 from wsidicom.metadata.label import Label
 from wsidicom.metadata.optical_path import OpticalPath
 from wsidicom.metadata.overview import Overview
@@ -35,6 +34,7 @@ from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.fields import (
     FlattenOnDumpNestedDicomField,
+    ListDicomField,
     UidDatasetDicomField,
     UidDicomField,
 )
@@ -64,35 +64,30 @@ class BaseWsiMetadata:
     patient: Patient
     equipment: Equipment
     slide: Slide
-    frame_of_reference_uid: Optional[UID] = None
-    dimension_organization_uids: Optional[Sequence[UID]] = None
+    frame_of_reference_uid: UID | None = None
+    dimension_organization_uids: Sequence[UID] | None = None
 
 
 class BaseWsiMetadataDicomSchema(DicomSchema[BaseWsiMetadata]):
     """Schema to load and dump BaseWsiMetadata to and from DICOM dataset."""
 
-    study = FlattenOnDumpNestedDicomField(
-        StudyDicomSchema(), dump_default=Study(), load_default=Study()
-    )
-    series = FlattenOnDumpNestedDicomField(
-        SeriesDicomSchema(), dump_default=Series(), load_default=Series()
-    )
+    study = FlattenOnDumpNestedDicomField(StudyDicomSchema(), load_default=Study())
+    series = FlattenOnDumpNestedDicomField(SeriesDicomSchema(), load_default=Series())
     patient = FlattenOnDumpNestedDicomField(
-        PatientDicomSchema(), dump_default=Patient(), load_default=Patient()
+        PatientDicomSchema(), load_default=Patient()
     )
     equipment = FlattenOnDumpNestedDicomField(
-        EquipmentDicomSchema(), dump_default=Equipment(), load_default=Equipment()
+        EquipmentDicomSchema(), load_default=Equipment()
     )
-    slide = FlattenOnDumpNestedDicomField(
-        SlideDicomSchema(), dump_default=Slide(), load_default=Slide()
-    )
+    slide = FlattenOnDumpNestedDicomField(SlideDicomSchema(), load_default=Slide())
     frame_of_reference_uid = UidDicomField(
-        data_key="FrameOfReferenceUID", load_default=None
+        data_key="FrameOfReferenceUID", load_default=None, dump_required=True
     )
-    dimension_organization_uids = fields.List(
+    dimension_organization_uids = ListDicomField(
         UidDatasetDicomField(data_key="DimensionOrganizationUID"),
         data_key="DimensionOrganizationSequence",
         load_default=None,
+        dump_required=True,
     )
     sop_class_uid = fields.Constant(
         VLWholeSlideMicroscopyImageStorage, dump_only=True, data_key="SOPClassUID"
@@ -109,7 +104,7 @@ class BaseWsiMetadataDicomSchema(DicomSchema[BaseWsiMetadata]):
     )
 
     @property
-    def load_type(self) -> Type[BaseWsiMetadata]:
+    def load_type(self) -> type[BaseWsiMetadata]:
         return BaseWsiMetadata
 
 
@@ -133,16 +128,8 @@ class WsiMetadataDicomSchema:
                 patient=metadata.patient,
                 equipment=metadata.equipment,
                 slide=metadata.slide,
-                frame_of_reference_uid=(
-                    metadata.frame_of_reference_uid
-                    if metadata.frame_of_reference_uid
-                    else metadata.default_frame_of_reference_uid
-                ),
-                dimension_organization_uids=(
-                    metadata.dimension_organization_uids
-                    if metadata.dimension_organization_uids
-                    else metadata.default_dimension_organization_uids
-                ),
+                frame_of_reference_uid=metadata.frame_of_reference_uid,
+                dimension_organization_uids=metadata.dimension_organization_uids,
             )
         )
         if image_type == ImageType.VOLUME or image_type == ImageType.THUMBNAIL:
@@ -204,8 +191,8 @@ class WsiMetadataDicomSchema:
     def load(
         self,
         pyramid_dataset: Dataset,
-        label_dataset: Optional[Dataset] = None,
-        overview_dataset: Optional[Dataset] = None,
+        label_dataset: Dataset | None = None,
+        overview_dataset: Dataset | None = None,
         **kwargs,
     ) -> WsiMetadata:
         metadata = BaseWsiMetadataDicomSchema().load(pyramid_dataset)
@@ -265,61 +252,12 @@ class WsiMetadataDicomSchema:
     def _insert_default_image_coordinate_system(
         image: Image, image_type: ImageType
     ) -> Image:
-        if (
-            image_type == ImageType.VOLUME
-            or image_type == ImageType.THUMBNAIL
-            or image_type == ImageType.OVERVIEW
-        ):
-            if image_type == ImageType.OVERVIEW:
-                # Place origin at the corners of the slide
-                default_size = defaults.slide_size_with_label
-            else:
-                # Place the origin at the corners of the non-label part of the slide
-                default_size = defaults.slide_size_without_label
-
-            if defaults.image_coordinate_system_rotation == 0:
-                x = 0
-                y = 0
-            elif defaults.image_coordinate_system_rotation == 90:
-                x = default_size.width
-                y = 0
-            elif defaults.image_coordinate_system_rotation == 180:
-                x = default_size.width
-                y = default_size.height
-            elif defaults.image_coordinate_system_rotation == 270:
-                x = 0
-                y = default_size.height
-            else:
-                raise ValueError(
-                    f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"
-                )
-        elif image_type == ImageType.LABEL:
-            # Place the origin at the corners of the label area of the slide
-            if defaults.image_coordinate_system_rotation == 0:
-                x = 0
-                y = defaults.slide_size_without_label.height
-            elif defaults.image_coordinate_system_rotation == 90:
-                x = defaults.slide_size_with_label.width
-                y = defaults.slide_size_without_label.height
-            elif defaults.image_coordinate_system_rotation == 180:
-                x = defaults.slide_size_with_label.width
-                y = defaults.slide_size_with_label.height
-            elif defaults.image_coordinate_system_rotation == 270:
-                x = 0
-                y = defaults.slide_size_with_label.height
-            else:
-                raise ValueError(
-                    f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"
-                )
-        else:
-            raise ValueError(
-                f"Unsupported default image coordinate system rotation {defaults.image_coordinate_system_rotation}"
-            )
         return replace(
             image,
-            image_coordinate_system=ImageCoordinateSystem(
-                origin=PointMm(x, y),
-                rotation=defaults.image_coordinate_system_rotation,
-                z_offset=None,
+            image_coordinate_system=ImageCoordinateSystem.default_for(
+                defaults.image_coordinate_system_rotation,
+                image_type,
+                slide_size_without_label=defaults.slide_size_without_label,
+                slide_size_with_label=defaults.slide_size_with_label,
             ),
         )

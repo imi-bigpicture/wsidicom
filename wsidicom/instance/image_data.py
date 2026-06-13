@@ -15,16 +15,10 @@
 """Module implementing generic ImageData for accessing image data."""
 
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 from typing import (
-    Iterable,
-    Iterator,
-    List,
     Literal,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
 )
 
 from PIL import Image as Pillow
@@ -55,8 +49,8 @@ class ImageData(metaclass=ABCMeta):
     overridden if multiple focal planes or optical paths are implemented.
     """
 
-    _default_z: Optional[float] = None
-    _blank_tile: Optional[Image] = None
+    _default_z: float | None = None
+    _blank_tile: Image | None = None
 
     def __init__(self, encoder: Encoder):
         self._encoder = encoder
@@ -81,13 +75,13 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def pixel_spacing(self) -> Optional[SizeMm]:
+    def pixel_spacing(self) -> SizeMm | None:
         """Return the size of the pixels in mm/pixel."""
         raise NotImplementedError()
 
     @property
     @abstractmethod
-    def imaged_size(self) -> Optional[SizeMm]:
+    def imaged_size(self) -> SizeMm | None:
         """Return the imaged width and height of the slide in mm."""
         raise NotImplementedError()
 
@@ -111,7 +105,7 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def image_coordinate_system(self) -> Optional[ImageCoordinateSystem]:
+    def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         """Should return the image origin of the image data."""
         raise NotImplementedError()
 
@@ -125,7 +119,7 @@ class ImageData(metaclass=ABCMeta):
     @abstractmethod
     def lossy_compression(
         self,
-    ) -> Optional[List[LossyCompression]]:
+    ) -> list[LossyCompression] | None:
         """Should return None if the image has never been lossy compressed, otherwise a
         list of the lossy compression method and ratio (30.0 means 30:1  compression)
         or an empty list if compression method is not in DICOM standard or ratio is
@@ -134,7 +128,7 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def transcoder(self) -> Optional[Encoder]:
+    def transcoder(self) -> Encoder | None:
         """Return transcoder used for image data if image data can't read encoded data
         directly. Return None if no transcoder is needed."""
         raise NotImplementedError()
@@ -183,7 +177,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_encoded_and_decoded_tile(
         self, tile: Point, z: float, path: str
-    ) -> Tuple[bytes, Image]:
+    ) -> tuple[bytes, Image]:
         """Return both encoded bytes and decoded image for a tile.
 
         Default implementation calls _get_encoded_tile and _get_decoded_tile
@@ -210,7 +204,7 @@ class ImageData(metaclass=ABCMeta):
 
     def get_encoded_and_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[Tuple[bytes, Image]]:
+    ) -> Iterator[tuple[bytes, Image]]:
         """Return both encoded bytes and decoded image for multiple tiles.
 
         Default implementation calls get_encoded_and_decoded_tile per tile.
@@ -247,12 +241,12 @@ class ImageData(metaclass=ABCMeta):
         return Region(Point(0, 0), self.image_size)
 
     @property
-    def focal_planes(self) -> List[float]:
+    def focal_planes(self) -> list[float]:
         """Focal planes available in the image defined in um."""
         return [0.0]
 
     @property
-    def optical_paths(self) -> List[str]:
+    def optical_paths(self) -> list[str]:
         """Optical paths available in the image."""
         return ["0"]
 
@@ -278,7 +272,7 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @property
-    def blank_color(self) -> Union[int, Tuple[int, int, int]]:
+    def blank_color(self) -> int | tuple[int, int, int]:
         """Return grey level or RGB background color."""
         return self._get_blank_color(self.photometric_interpretation)
 
@@ -292,7 +286,7 @@ class ImageData(metaclass=ABCMeta):
         """Downsampler used when producing virtual downscaled tiles."""
         return PillowDownsampler(resample=settings.pillow_resampling_filter)
 
-    def pretty_str(self, indent: int = 0, depth: Optional[int] = None) -> str:
+    def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         """Return pretty string of object."""
         return str(self)
 
@@ -350,7 +344,7 @@ class ImageData(metaclass=ABCMeta):
         z: float,
         path: str,
         scale: int = 1,
-        reencoder: Optional[Encoder] = None,
+        reencoder: Encoder | None = None,
     ) -> Iterator[bytes]:
         """
         Return bytes for tiles.
@@ -365,7 +359,7 @@ class ImageData(metaclass=ABCMeta):
             Optical path.
         scale: int = 1
             Scale to use for downscaling.
-        reencoder: Optional[Encoder] = None
+        reencoder: Encoder | None = None
             Encoder to use for re-encoding. If None do not re-encode tiles.
 
         Returns
@@ -486,7 +480,7 @@ class ImageData(metaclass=ABCMeta):
             return decoded_tiles
         return (
             self._crop_tile(tile_point, tile)
-            for tile_point, tile in zip(tiles, decoded_tiles)
+            for tile_point, tile in zip(tiles, decoded_tiles, strict=False)
         )
 
     def get_scaled_encoded_tile(
@@ -708,7 +702,7 @@ class ImageData(metaclass=ABCMeta):
     @staticmethod
     def _get_blank_color(
         photometric_interpretation: str,
-    ) -> Union[int, Tuple[int, int, int]]:
+    ) -> int | tuple[int, int, int]:
         """Return color to use blank tiles.
 
         Parameters
@@ -718,7 +712,7 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         -------
-        Union[int, Tuple[int, int, int]]
+        int | tuple[int, int, int]
             Grey level or RGB color,
 
         """

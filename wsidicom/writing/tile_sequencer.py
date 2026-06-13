@@ -14,13 +14,14 @@
 
 """Tile sequencer that reorders tiles for sequential writing."""
 
+from collections.abc import Iterable, Sequence
 from threading import Thread
-from typing import Iterable, Optional, Protocol, Sequence, Union
+from typing import Protocol
 
 from wsidicom.geometry import Size
 from wsidicom.thread import (
-    Cancelled,
     CancellationToken,
+    Cancelled,
     ReadOnlyQueue,
     ShutdownSentinel,
 )
@@ -59,7 +60,7 @@ class TileSequencer:
         tiled_size: Size,
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
-        input_queue: ReadOnlyQueue[Union[EncodingTaskResult, ShutdownSentinel]],
+        input_queue: ReadOnlyQueue[EncodingTaskResult | ShutdownSentinel],
         token: CancellationToken,
     ):
         """Create a tile sequencer.
@@ -94,7 +95,7 @@ class TileSequencer:
         self._optical_paths = optical_paths
         self._total_tiles = tiled_size.area * len(focal_planes) * len(optical_paths)
         self._written_tiles = 0
-        self._worker_exception: Optional[BaseException] = None
+        self._worker_exception: BaseException | None = None
         self._token = token
         self._queue = input_queue
         self._worker_thread = Thread(target=self._writer_loop, daemon=False)
@@ -129,7 +130,7 @@ class TileSequencer:
                 f"{self._written_tiles} tiles"
             )
 
-    def shutdown(self, timeout: Optional[float] = 10.0) -> None:
+    def shutdown(self, timeout: float | None = 10.0) -> None:
         """Join the worker thread (if alive) and clear the level's cache.
 
         Does not verify tile count or emit a sentinel; the worker stops

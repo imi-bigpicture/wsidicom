@@ -15,17 +15,11 @@
 
 import os
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import (
     Any,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
 )
 
 from pydicom.encaps import itemize_frame
@@ -58,7 +52,7 @@ class PixelDataWriter(metaclass=ABCMeta):
     @abstractmethod
     def write_pixel_data_start(
         self, dataset: WsiDataset
-    ) -> Tuple[int, Optional[OffsetTableWriter]]:
+    ) -> tuple[int, OffsetTableWriter | None]:
         """Write tags starting the pixel data section.
 
         Returns
@@ -82,13 +76,13 @@ class PixelDataWriter(metaclass=ABCMeta):
     @abstractmethod
     def write_pixel_data_end(
         self,
-        offset_writer: Optional[OffsetTableWriter],
+        offset_writer: OffsetTableWriter | None,
         pixels_start: int,
         dataset_start: int,
         dataset_end: int,
         dataset: WsiDataset,
         frame_positions: Sequence[int],
-        transcoder: Optional[Encoder],
+        transcoder: Encoder | None,
     ) -> None:
         """Finalize the pixel data section."""
         raise NotImplementedError()
@@ -102,7 +96,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
         file: WsiDicomIO,
         offset_table: OffsetTableType,
         transfer_syntax: UID,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ) -> None:
         self._file = file
         self._offset_table = offset_table
@@ -111,7 +105,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 
     def write_pixel_data_start(
         self, dataset: WsiDataset
-    ) -> Tuple[int, Optional[OffsetTableWriter]]:
+    ) -> tuple[int, OffsetTableWriter | None]:
         return self._write_pixel_data_start(dataset.frame_count)
 
     def write_tile(self, tile: bytes) -> int:
@@ -122,13 +116,13 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 
     def write_pixel_data_end(
         self,
-        offset_writer: Optional[OffsetTableWriter],
+        offset_writer: OffsetTableWriter | None,
         pixels_start: int,
         dataset_start: int,
         dataset_end: int,
         dataset: WsiDataset,
         frame_positions: Sequence[int],
-        transcoder: Optional[Encoder],
+        transcoder: Encoder | None,
     ) -> None:
         last_frame_end = self._file.tell()
         if transcoder is not None and transcoder.lossy:
@@ -144,7 +138,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 
     def _write_pixel_data_start(
         self, frame_count: int
-    ) -> Tuple[int, Optional[OffsetTableWriter]]:
+    ) -> tuple[int, OffsetTableWriter | None]:
         table_writer = None
         if self._offset_table == OffsetTableType.EXTENDED:
             table_writer = EotWriter(self._file)
@@ -166,7 +160,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 
     def _finalize_pixel_data(
         self,
-        offset_writer: Optional[OffsetTableWriter],
+        offset_writer: OffsetTableWriter | None,
         pixels_start: int,
         last_frame_end: int,
         dataset_end: int,
@@ -283,7 +277,7 @@ class NativePixelDataWriter(PixelDataWriter):
 
     def write_pixel_data_start(
         self, dataset: WsiDataset
-    ) -> Tuple[int, Optional[OffsetTableWriter]]:
+    ) -> tuple[int, OffsetTableWriter | None]:
         length = (
             dataset.tile_size.area
             * dataset.samples_per_pixel
@@ -300,13 +294,13 @@ class NativePixelDataWriter(PixelDataWriter):
 
     def write_pixel_data_end(
         self,
-        offset_writer: Optional[OffsetTableWriter],
+        offset_writer: OffsetTableWriter | None,
         pixels_start: int,
         dataset_start: int,
         dataset_end: int,
         dataset: WsiDataset,
         frame_positions: Sequence[int],
-        transcoder: Optional[Encoder],
+        transcoder: Encoder | None,
     ) -> None:
         pass  # Native format has no closing tags
 
@@ -326,19 +320,19 @@ class WsiDicomWriter:
         self._file = file
         self._transfer_syntax = transfer_syntax
         self._pixel_data_writer = pixel_data_writer
-        self._frame_positions: List[int] = []
-        self._dataset_start: Optional[int] = None
-        self._dataset_end: Optional[int] = None
-        self._pixels_start: Optional[int] = None
-        self._offset_writer: Optional[OffsetTableWriter] = None
+        self._frame_positions: list[int] = []
+        self._dataset_start: int | None = None
+        self._dataset_end: int | None = None
+        self._pixels_start: int | None = None
+        self._offset_writer: OffsetTableWriter | None = None
 
     @property
-    def filepath(self) -> Optional[UPath]:
+    def filepath(self) -> UPath | None:
         """File path of the output file, if available."""
         return self._file.filepath
 
     @property
-    def frame_positions(self) -> List[int]:
+    def frame_positions(self) -> list[int]:
         """Frame positions collected from write_tiles() calls."""
         return self._frame_positions
 
@@ -373,7 +367,7 @@ class WsiDicomWriter:
     def finalize(
         self,
         dataset: WsiDataset,
-        transcoder: Optional[Encoder] = None,
+        transcoder: Encoder | None = None,
     ) -> None:
         """Finalize pixel data and close the writer."""
         if self._dataset_start is None or self._dataset_end is None:
@@ -391,7 +385,7 @@ class WsiDicomWriter:
         )
         self.close()
 
-    def close(self, force: Optional[bool] = False) -> None:
+    def close(self, force: bool | None = False) -> None:
         self._file.close(force)
 
     def __enter__(self):
@@ -403,10 +397,10 @@ class WsiDicomWriter:
     @classmethod
     def open(
         cls,
-        file: Union[str, Path, UPath],
+        file: str | Path | UPath,
         transfer_syntax: UID,
         offset_table: OffsetTableType,
-        file_options: Optional[Dict[str, Any]] = None,
+        file_options: dict[str, Any] | None = None,
     ) -> "WsiDicomWriter":
         """Open file and create a WsiDicomWriter with the right pixel data writer."""
         stream = _open_stream(file, transfer_syntax, file_options)
@@ -420,9 +414,9 @@ class WsiDicomWriter:
 
 
 def _open_stream(
-    file: Union[str, Path, UPath],
+    file: str | Path | UPath,
     transfer_syntax: UID,
-    file_options: Optional[Dict[str, Any]] = None,
+    file_options: dict[str, Any] | None = None,
 ) -> WsiDicomIO:
     """Open file for writing."""
     return WsiDicomStreamOpener(file_options).open_for_writing(

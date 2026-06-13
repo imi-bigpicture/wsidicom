@@ -17,7 +17,7 @@
 import dataclasses
 import logging
 from abc import abstractmethod
-from typing import Any, Dict, Generic, Type, TypeVar
+from typing import Any, Generic, TypeVar
 
 from marshmallow import Schema, ValidationError, fields, post_load
 
@@ -29,12 +29,12 @@ class LoadingSchema(Schema, Generic[LoadType]):
 
     @property
     @abstractmethod
-    def load_type(self) -> Type[LoadType]:
+    def load_type(self) -> type[LoadType]:
         """Return the specimen type to use for deserialization."""
         raise NotImplementedError()
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs) -> LoadType:
+    def post_load(self, data: dict[str, Any], **kwargs) -> LoadType:
         """Load object from dictionary."""
         return self.load_type(**data)
 
@@ -43,7 +43,7 @@ class DataclassLoadingSchema(LoadingSchema[LoadType]):
     """Schema for loading metadata"""
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs) -> LoadType:
+    def post_load(self, data: dict[str, Any], **kwargs) -> LoadType:
         """Return a object of given load class using the defined dataclass fields."""
         assert dataclasses.is_dataclass(self.load_type)
         return self.load_type(

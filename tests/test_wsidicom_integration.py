@@ -13,9 +13,10 @@
 #    limitations under the License.
 
 import platform
+from collections.abc import Callable
 from hashlib import md5
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 import numpy as np
 import pytest
@@ -46,7 +47,7 @@ class TestWsiDicomIntegration:
         transfer_syntax: UID,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-        region: Dict[str, Any],
+        region: dict[str, Any],
     ):
         # Arrange
         self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
@@ -72,7 +73,7 @@ class TestWsiDicomIntegration:
         transfer_syntax: UID,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-        region: Dict[str, Any],
+        region: dict[str, Any],
     ):
         # Arrange
         self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
@@ -98,7 +99,7 @@ class TestWsiDicomIntegration:
         transfer_syntax: UID,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-        region: Dict[str, Any],
+        region: dict[str, Any],
     ):
         # Arrange
         self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
@@ -124,7 +125,7 @@ class TestWsiDicomIntegration:
         transfer_syntax: UID,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-        region: Dict[str, Any],
+        region: dict[str, Any],
     ):
         # Arrange
         self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
@@ -151,7 +152,7 @@ class TestWsiDicomIntegration:
         transfer_syntax: UID,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-        region: Dict[str, Any],
+        region: dict[str, Any],
     ):
         # Arrange
         self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
@@ -177,7 +178,7 @@ class TestWsiDicomIntegration:
         transfer_syntax: UID,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-        region: Dict[str, Any],
+        region: dict[str, Any],
     ):
         # Arrange
         self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
@@ -221,7 +222,7 @@ class TestWsiDicomIntegration:
         transfer_syntax: UID,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-        expected_label_hash: Optional[bool],
+        expected_label_hash: bool | None,
     ):
         # Arrange
         self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
@@ -246,7 +247,7 @@ class TestWsiDicomIntegration:
         transfer_syntax: UID,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-        expected_overview_hash: Optional[str],
+        expected_overview_hash: str | None,
     ):
         # Arrange
         self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)

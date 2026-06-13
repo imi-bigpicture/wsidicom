@@ -15,7 +15,8 @@
 """Json schema for Optical path model."""
 
 import dataclasses
-from typing import Any, Dict, Iterable, Mapping, Type, Union
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from marshmallow import Schema, fields, post_load
 
@@ -46,10 +47,10 @@ from wsidicom.metadata.schema.json.fields import (
 
 
 class BaseLutSegmentJsonSchema(Schema):
-    _load_class: Type[Union[LinearLutSegment, ConstantLutSegment, DiscreteLutSegment]]
+    _load_class: type[LinearLutSegment | ConstantLutSegment | DiscreteLutSegment]
 
     @post_load
-    def post_load(self, data: Dict[str, Any], **kwargs) -> LutSegment:
+    def post_load(self, data: dict[str, Any], **kwargs) -> LutSegment:
         """Return a object of given load class using the defined dataclass fields."""
         return self._load_class(
             **{
@@ -81,14 +82,14 @@ class ConstantLutSegmentJsonSchema(BaseLutSegmentJsonSchema):
 class LutSegmentJsonSchema(Schema):
     """Mapping segment type to schema."""
 
-    _type_to_schema_mapping: Dict[Type[LutSegment], Type[Schema]] = {
+    _type_to_schema_mapping: dict[type[LutSegment], type[Schema]] = {
         DiscreteLutSegment: DiscreteLutSegmentJsonSchema,
         LinearLutSegment: LinearLutSegmentJsonSchema,
         ConstantLutSegment: ConstantLutSegmentJsonSchema,
     }
 
     """Mapping key in serialized segment to schema."""
-    _key_to_schema_mapping: Dict[str, Type[Schema]] = {
+    _key_to_schema_mapping: dict[str, type[Schema]] = {
         "values": DiscreteLutSegmentJsonSchema,
         "start_value": LinearLutSegmentJsonSchema,
         "value": ConstantLutSegmentJsonSchema,
@@ -96,16 +97,16 @@ class LutSegmentJsonSchema(Schema):
 
     def dump(
         self,
-        data: Union[LutSegment, Iterable[LutSegment]],
+        obj: LutSegment | Iterable[LutSegment],
         **kwargs,
     ):
-        if isinstance(data, LutSegment):
-            return self._subschema_dump(data)
-        return [self._subschema_dump(item) for item in data]
+        if isinstance(obj, LutSegment):
+            return self._subschema_dump(obj)
+        return [self._subschema_dump(item) for item in obj]
 
     def load(
         self,
-        data: Union[Mapping[str, Any], Iterable[Mapping[str, Any]]],
+        data: Mapping[str, Any] | Iterable[Mapping[str, Any]],
         **kwargs,
     ):
         if isinstance(data, Mapping):
@@ -121,7 +122,7 @@ class LutSegmentJsonSchema(Schema):
                 if key in segment
             )
         except StopIteration:
-            raise NotImplementedError()
+            raise NotImplementedError() from None
         loaded = schema().load(segment, many=False)
         assert isinstance(loaded, LutSegment)
         return loaded
@@ -179,7 +180,10 @@ class ObjectivesJsonSchema(LoadingSchema[Objectives]):
 
 
 class OpticalPathJsonSchema(LoadingSchema[OpticalPath]):
-    """Optical path. Icc profile is not included but can be loaded from context."""
+    """Optical path.
+
+    Icc profile is not included but is loaded via the icc_profile field.
+    """
 
     identifier = fields.String(allow_none=True)
     description = fields.String(allow_none=True)
@@ -196,5 +200,5 @@ class OpticalPathJsonSchema(LoadingSchema[OpticalPath]):
     objective = fields.Nested(ObjectivesJsonSchema(), allow_none=True)
 
     @property
-    def load_type(self) -> Type[OpticalPath]:
+    def load_type(self) -> type[OpticalPath]:
         return OpticalPath

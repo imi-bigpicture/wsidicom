@@ -15,7 +15,6 @@
 """Class for reading frame positions from non-encapsulated data."""
 
 import math
-from typing import List, Tuple
 
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
@@ -42,35 +41,9 @@ class NativePixelDataFrameIndexParser(FrameIndexParser):
     def offset_table_type(self) -> OffsetTableType:
         return OffsetTableType.NONE
 
-    def _get_pixels_start(self) -> int:
-        self._validate_pixel_data_start()
-        return self._file.tell()
-
-    def _get_index(self) -> List[Tuple[int, int]]:
-        """Create frame positions for uncapsulated data.
-
-        Parameters
-        ----------
-        pixel_data_start: int
-            Offset to first frame in pixel data.
-
-        Returns
-        -------
-        List[Tuple[int, int]]
-            A list with frame positions and frame lengths.
-        """
-        frame_size = self._tile_size.area * self._samples_per_pixel * (self._bits // 8)
-        return [
-            (self._pixels_start + index * frame_size, frame_size)
-            for index in range(self._frame_count)
-        ]
-
-    def _validate_pixel_data_start(self):
-        """Check that pixel data tag is present and that the tag length is equal to
-        expected count. Raises WsiDicomFileError otherwise.
-
-        """
-        expected_length = (
+    @property
+    def expected_length(self) -> int:
+        return (
             math.ceil(
                 self._tile_size.area
                 * self._samples_per_pixel
@@ -80,4 +53,26 @@ class NativePixelDataFrameIndexParser(FrameIndexParser):
             )
             * 2
         )
-        super()._validate_pixel_data_start(expected_length)
+
+    def _get_pixels_start(self) -> int:
+        self._validate_pixel_data_start(self.expected_length)
+        return self._file.tell()
+
+    def _get_index(self) -> list[tuple[int, int]]:
+        """Create frame positions for uncapsulated data.
+
+        Parameters
+        ----------
+        pixel_data_start: int
+            Offset to first frame in pixel data.
+
+        Returns
+        -------
+        list[tuple[int, int]]
+            A list with frame positions and frame lengths.
+        """
+        frame_size = self._tile_size.area * self._samples_per_pixel * (self._bits // 8)
+        return [
+            (self._pixels_start + index * frame_size, frame_size)
+            for index in range(self._frame_count)
+        ]

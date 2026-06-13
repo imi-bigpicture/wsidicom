@@ -22,7 +22,8 @@ Each reader reads tiles from source ImageData and dispatches them:
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Optional, Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 from PIL import Image
 
@@ -96,7 +97,7 @@ class TileReader(metaclass=ABCMeta):
         self,
         output_queue: WriteOnlyQueue[EncodingTaskResult],
         row_start: Point,
-        tiles: List[bytes],
+        tiles: list[bytes],
         z_index: int,
         path_index: int,
     ) -> None:
@@ -123,8 +124,8 @@ class PassthroughTileReader(TileReader):
         path_index: int,
         output_queue: WriteOnlyQueue[EncodingTaskResult],
     ) -> None:
-        row_start: Optional[Point] = None
-        row_tiles: List[bytes] = []
+        row_start: Point | None = None
+        row_tiles: list[bytes] = []
         for position, encoded in zip(
             positions, image_data.get_encoded_tiles(positions, z, path)
         ):
@@ -166,8 +167,8 @@ class CascadingPassthroughTileReader(TileReader):
         path_index: int,
         output_queue: WriteOnlyQueue[EncodingTaskResult],
     ) -> None:
-        row_start: Optional[Point] = None
-        row_tiles: List[bytes] = []
+        row_start: Point | None = None
+        row_tiles: list[bytes] = []
         for position, (encoded, decoded) in zip(
             positions,
             image_data.get_encoded_and_decoded_tiles(positions, z, path),
@@ -209,8 +210,8 @@ class TranscodeTileReader(TileReader):
         path_index: int,
         output_queue: WriteOnlyQueue[EncodingTaskResult],
     ) -> None:
-        row_start: Optional[Point] = None
-        row_tiles: List[Image.Image] = []
+        row_start: Point | None = None
+        row_tiles: list[Image.Image] = []
         for position, decoded in zip(
             positions,
             image_data.get_tiles(positions, z, path, crop_to_image_boundary=False),
@@ -269,8 +270,8 @@ class CascadingTranscodeTileReader(TileReader):
         path_index: int,
         output_queue: WriteOnlyQueue[EncodingTaskResult],
     ) -> None:
-        row_start: Optional[Point] = None
-        row_tiles: List[Image.Image] = []
+        row_start: Point | None = None
+        row_tiles: list[Image.Image] = []
         for position, decoded in zip(
             positions,
             image_data.get_tiles(positions, z, path, crop_to_image_boundary=False),

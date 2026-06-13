@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 """Module containing image codecs."""
+
 from wsidicom.codec.codec import Codec
 from wsidicom.codec.decoder import Decoder
 from wsidicom.codec.encoder import Encoder, LossyCompressionIsoStandard

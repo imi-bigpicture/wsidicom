@@ -21,6 +21,7 @@ from wsidicom.metadata.image import (
     FocusMethod,
     Image,
     ImageCoordinateSystem,
+    ImageType,
     LossyCompression,
 )
 from wsidicom.metadata.label import Label
@@ -61,6 +62,7 @@ from wsidicom.metadata.sample import (
 from wsidicom.metadata.series import Series
 from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study
+from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.metadata.wsi import WsiMetadata
 
 __all__ = [
@@ -69,6 +71,7 @@ __all__ = [
     "FocusMethod",
     "Image",
     "ImageCoordinateSystem",
+    "ImageType",
     "Label",
     "ConstantLutSegment",
     "DiscreteLutSegment",
@@ -106,5 +109,7 @@ __all__ = [
     "Series",
     "Slide",
     "Study",
+    "CallableUidGenerator",
+    "UidGenerator",
     "WsiMetadata",
 ]

@@ -14,8 +14,8 @@
 
 """Slide model."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional, Sequence, Union
 
 from wsidicom.metadata.sample import SlideSample, SpecimenIdentifier, Staining
 
@@ -33,14 +33,14 @@ class Slide:
 
     Parameters
     ----------
-    identifier : Optional[Union[str, SpecimenIdentifier]] = None
+    identifier : str | SpecimenIdentifier | None = None
         The identifier of the slide (Container Identifier).
-    stainings : Optional[Sequence[Staining]] = None
+    stainings : Sequence[Staining] | None = None
         List of stainings used on the slide.
-    samples : Optional[Sequence[SlideSample]] = None
+    samples : Sequence[SlideSample] | None = None
         List of samples on the slide.
     """
 
-    identifier: Optional[Union[str, SpecimenIdentifier]] = None
-    stainings: Optional[Sequence[Staining]] = None
-    samples: Optional[Sequence[SlideSample]] = None
+    identifier: str | SpecimenIdentifier | None = None
+    stainings: Sequence[Staining] | None = None
+    samples: Sequence[SlideSample] | None = None
