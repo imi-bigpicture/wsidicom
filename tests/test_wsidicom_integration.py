@@ -25,6 +25,7 @@ from pydicom.uid import JPEG2000, UID
 
 from tests.conftest import WsiInputType, WsiTestDefinitions
 from wsidicom import WsiDicom
+from wsidicom.geometry import Point
 from wsidicom.series.pyramid import Pyramid
 
 
@@ -84,6 +85,7 @@ class TestWsiDicomIntegration:
             (region["location"]["x"], region["location"]["y"]),
             region["level"],
             (region["size"]["width"], region["size"]["height"]),
+            slide_origin=region.get("slide_origin", False),
         )
 
         # Assert
@@ -110,11 +112,52 @@ class TestWsiDicomIntegration:
             (region["location"]["x"], region["location"]["y"]),
             region["mpp"],
             (region["size"]["width"], region["size"]["height"]),
+            slide_origin=region.get("slide_origin", False),
         )
 
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
         assert checksum == region["md5"], (region, checksum)
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_get_scaled_tile_pads_to_tile_size_when_not_cropping(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        base_level = wsi.pyramids[0].base_level
+        target_level = base_level.level + 1
+        tile_size = base_level.tile_size
+        # Bottom-right tile of the (generated) target level is an edge tile.
+        target_tiled_size = (base_level.size // 2).ceil_div(tile_size)
+        edge_tile = Point(target_tiled_size.width - 1, target_tiled_size.height - 1)
+        # The background tile is cached and shared; padding must not mutate it.
+        blank_before = base_level.default_instance.image_data.blank_tile.tobytes()
+
+        # Act
+        cropped = base_level.get_scaled_tile(
+            edge_tile, target_level, crop_to_image_boundary=True
+        )
+        padded = base_level.get_scaled_tile(
+            edge_tile, target_level, crop_to_image_boundary=False
+        )
+
+        # Assert
+        assert padded.size == (tile_size.width, tile_size.height)
+        assert cropped.size[0] <= tile_size.width
+        assert cropped.size[1] <= tile_size.height
+        # The padded tile holds the cropped tile at the origin, padded elsewhere.
+        assert (
+            padded.crop((0, 0, cropped.size[0], cropped.size[1])).tobytes()
+            == cropped.tobytes()
+        )
+        # Padding copied the background tile rather than mutating the shared one.
+        assert (
+            base_level.default_instance.image_data.blank_tile.tobytes() == blank_before
+        )
 
     @pytest.mark.parametrize(
         ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_tile()

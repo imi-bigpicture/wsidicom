@@ -162,10 +162,10 @@ class WsiDicomTestImageData(ImageData):
     def thread_safe(self) -> bool:
         return True
 
-    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         raise NotImplementedError()
 
-    def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         return self._data[tile.x + tile.y * self.tiled_size.width]
 
 

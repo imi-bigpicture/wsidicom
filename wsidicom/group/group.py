@@ -288,9 +288,7 @@ class Instances:
             Decoded tile image.
         """
         for image_data, z, path, chunk in self._iter_tile_chunks():
-            yield from image_data.get_tiles(
-                chunk, z, path, crop_to_image_boundary=False
-            )
+            yield from image_data.get_decoded_tiles(chunk, z, path)
 
     def _iter_tile_chunks(
         self,
@@ -320,20 +318,22 @@ class Instances:
         region: Region,
         z: float | None = None,
         path: str | None = None,
+        output_size: Size | None = None,
         threads: int = 1,
     ) -> Image:
         """Read region defined by pixels.
 
         Parameters
         ----------
-        location: int, int
-            Upper left corner of region in pixels
-        size: int
-            Size of region in pixels
+        region: Region
+            Pixel region to read.
         z: float | None = None
             Z coordinate, optional
         path: str | None = None
             optical path, optional
+        output_size: Size | None = None
+            If given and different from the region size, the read region is
+            downsampled to this size.
         threads: int = 1
             Number of threads to use for read.
 
@@ -348,7 +348,85 @@ class Instances:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        image = instance.image_data.stitch_tiles(region, path, z, threads)
+        return instance.get_region(region, z, path, output_size, threads)
+
+    def _resolve_slide_origin(
+        self, region: RegionMm, slide_origin: bool
+    ) -> tuple[RegionMm, ImageCoordinateSystem | None]:
+        """Map a mm region to image origin if reading from the slide origin.
+
+        Parameters
+        ----------
+        region: RegionMm
+            Region in mm, defined relative to the slide origin if
+            ``slide_origin`` is True, otherwise the image origin.
+        slide_origin: bool
+            If the region is defined relative to the slide origin.
+
+        Returns
+        -------
+        tuple[RegionMm, ImageCoordinateSystem | None]
+            The (possibly mapped) region together with the coordinate system
+            that must rotate the read image back to the slide orientation, or
+            ``None`` when reading from the image origin (no rotation needed).
+        """
+        if not slide_origin:
+            return region, None
+        if self.image_coordinate_system is None:
+            raise ValueError(
+                "Can't map to slide region as image coordinate system is not defined."
+            )
+        to_coordinate_system = self.image_coordinate_system
+        return to_coordinate_system.slide_to_image(region), to_coordinate_system
+
+    def _read_and_rotate(
+        self,
+        pixel_region: Region,
+        z: float | None,
+        path: str | None,
+        output_size: Size | None,
+        to_coordinate_system: ImageCoordinateSystem | None,
+        threads: int,
+    ) -> Image:
+        """Read a pixel region (downsampling to ``output_size``), then rotate.
+
+        The downsample is applied pre-rotate at the single downsampling site
+        (``get_region``); both an integer downsample and an absolute resample
+        commute with the orthogonal slide-origin rotation, so the result is
+        identical to resampling after the rotation.
+
+        Parameters
+        ----------
+        pixel_region: Region
+            Pixel region to read, in image orientation.
+        z: float | None
+            Z coordinate, optional.
+        path: str | None
+            Optical path, optional.
+        output_size: Size | None
+            If given and different from the region size, the read region is
+            downsampled to this size.
+        to_coordinate_system: ImageCoordinateSystem | None
+            Coordinate system to rotate the read image back to the slide
+            orientation, or ``None`` to skip rotation.
+        threads: int
+            Number of threads to use for read.
+
+        Returns
+        -------
+        Image
+            Region as image, rotated to the slide orientation if a coordinate
+            system was given.
+        """
+        image = self.get_region(
+            pixel_region, z, path, output_size=output_size, threads=threads
+        )
+        if to_coordinate_system is not None:
+            image = image.rotate(
+                to_coordinate_system.rotation,
+                resample=settings.pillow_resampling_filter,
+                expand=True,
+            )
         return image
 
     def get_region_mm(
@@ -357,6 +435,7 @@ class Instances:
         z: float | None = None,
         path: str | None = None,
         slide_origin: bool = False,
+        scale: int = 1,
         threads: int = 1,
     ) -> Image:
         """Read region defined by mm.
@@ -371,6 +450,10 @@ class Instances:
             optical path, optional.
         slide_origin: bool = False.
             If to use the slide origin instead of image origin.
+        scale: int = 1
+            Integer factor by which the returned image is downsampled.
+            ``scale=1`` returns full resolution, ``scale=2`` halves each
+            dimension.
         threads: int = 1
             Number of threads to use for read.
 
@@ -379,24 +462,90 @@ class Instances:
         Image
             Region as image
         """
-        to_coordinate_system = None
-        if slide_origin:
-            if self.image_coordinate_system is None:
-                raise ValueError(
-                    "Can't map to slide region as image coordinate "
-                    "system is not defined."
-                )
-            to_coordinate_system = self.image_coordinate_system
-            region = to_coordinate_system.slide_to_image(region)
-        pixel_region = self.mm_to_pixel(region)
-        image = self.get_region(pixel_region, z, path, threads)
-        if to_coordinate_system:
-            image = image.rotate(
-                to_coordinate_system.rotation,
-                resample=settings.pillow_resampling_filter,
-                expand=True,
-            )
-        return image
+        image_region, to_coordinate_system = self._resolve_slide_origin(
+            region, slide_origin
+        )
+        pixel_region = self._mm_to_pixel(image_region)
+        output_size = pixel_region.size // scale if scale != 1 else None
+        return self._read_and_rotate(
+            pixel_region, z, path, output_size, to_coordinate_system, threads
+        )
+
+    def get_region_mpp(
+        self,
+        region: RegionMm,
+        pixel_spacing: float,
+        z: float | None = None,
+        path: str | None = None,
+        slide_origin: bool = False,
+        threads: int = 1,
+    ) -> Image:
+        """Read region defined by mm, resampled to a requested pixel spacing.
+
+        Like ``get_region_mm`` but resampling to an absolute pixel spacing
+        rather than an integer level scale: the returned image has the
+        requested ``pixel_spacing``.
+
+        Parameters
+        ----------
+        region: RegionMm
+            Region defining upper left corner and size in mm.
+        pixel_spacing: float
+            Requested pixel spacing (mm/pixel) of the returned image.
+        z: float | None = None
+            Z coordinate, optional.
+        path: str | None = None
+            optical path, optional.
+        slide_origin: bool = False.
+            If to use the slide origin instead of image origin.
+        threads: int = 1
+            Number of threads to use for read.
+
+        Returns
+        -------
+        Image
+            Region as image
+        """
+        image_region, to_coordinate_system = self._resolve_slide_origin(
+            region, slide_origin
+        )
+        pixel_region = self._mm_to_pixel(image_region)
+        output_size = image_region.size // pixel_spacing
+        return self._read_and_rotate(
+            pixel_region, z, path, output_size, to_coordinate_system, threads
+        )
+
+    def get_thumbnail(
+        self,
+        max_size: Size,
+        z: float | None = None,
+        path: str | None = None,
+        threads: int = 1,
+    ) -> Image:
+        """Read the full image, resampled to fit within ``max_size``.
+
+        Parameters
+        ----------
+        max_size: Size
+            Upper size limit of the thumbnail in pixels.
+        z: float | None = None
+            Z coordinate, optional.
+        path: str | None = None
+            optical path, optional.
+        threads: int = 1
+            Number of threads to use for read.
+
+        Returns
+        -------
+        Image
+            The thumbnail image.
+        """
+        instance = self.get_instance(z, path)
+        if z is None:
+            z = instance.default_z
+        if path is None:
+            path = instance.default_path
+        return instance.get_thumbnail(max_size, z, path, threads)
 
     def get_tile(
         self,
@@ -429,7 +578,7 @@ class Instances:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        return instance.image_data.get_tile(tile, z, path, crop_to_image_boundary)
+        return instance.get_tile(tile, z, path, crop_to_image_boundary)
 
     def get_encoded_tile(
         self,
@@ -461,11 +610,9 @@ class Instances:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        return instance.image_data.get_encoded_tile(
-            tile, z, path, crop_to_image_boundary
-        )
+        return instance.get_encoded_tile(tile, z, path, crop_to_image_boundary)
 
-    def mm_to_pixel(self, region: RegionMm) -> Region:
+    def _mm_to_pixel(self, region: RegionMm) -> Region:
         """Convert region in mm to pixel region.
 
         Parameters

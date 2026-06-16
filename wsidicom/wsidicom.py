@@ -29,7 +29,6 @@ from upath import UPath
 from wsidicom.cache import lru_cached_method
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
-from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
@@ -553,10 +552,7 @@ class WsiDicom:
             raise WsiDicomNotFoundError(
                 f"Image for generating thumbnail of size {thumbnail_size}", "levels"
             )
-        region = Region(position=Point(0, 0), size=thumbnail.size)
-        image = thumbnail.get_region(region, z, path)
-        image.thumbnail((size), resample=settings.pillow_resampling_filter)
-        return image
+        return thumbnail.get_thumbnail(thumbnail_size, z, path)
 
     def read_region(
         self,
@@ -606,10 +602,13 @@ class WsiDicom:
             raise WsiDicomOutOfBoundsError(
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
-        image = wsi_level.get_region(scaled_region, z, path, threads)
-        if scale_factor != 1:
-            image = image.resize((size), resample=settings.pillow_resampling_filter)
-        return image
+        return wsi_level.get_region(
+            scaled_region,
+            z,
+            path,
+            output_size=Size.from_tuple(size),
+            threads=threads,
+        )
 
     def read_region_mm(
         self,
@@ -655,10 +654,8 @@ class WsiDicom:
         wsi_level = self.pyramids.get(pyramid).get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
-        image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
-        image_size = Size(width=image.size[0], height=image.size[1]) // scale_factor
-        return image.resize(
-            image_size.to_tuple(), resample=settings.pillow_resampling_filter
+        return wsi_level.get_region_mm(
+            region, z, path, slide_origin, scale=scale_factor, threads=threads
         )
 
     def read_region_mpp(
@@ -707,10 +704,8 @@ class WsiDicom:
             SizeMm(pixel_spacing, pixel_spacing)
         )
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
-        image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
-        image_size = SizeMm.from_tuple(size) // pixel_spacing
-        return image.resize(
-            image_size.to_tuple(), resample=settings.pillow_resampling_filter
+        return wsi_level.get_region_mpp(
+            region, pixel_spacing, z, path, slide_origin, threads=threads
         )
 
     def read_tile(

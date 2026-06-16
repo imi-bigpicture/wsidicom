@@ -162,7 +162,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     def decoder(self) -> Decoder:
         return self._decoder
 
-    def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         """
         Return bytes for tile.
 
@@ -188,7 +188,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             id(self), frame_index, self._get_tile_frame
         )
 
-    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         """
         Return Pillow image for tile.
 

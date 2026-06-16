@@ -444,7 +444,7 @@ class TestPyramidFileWriterFailFast:
 
         for instance in pyramid.base_level.instances.values():
             for read_method in (
-                "get_tiles",
+                "get_decoded_tiles",
                 "get_encoded_tiles",
                 "get_encoded_and_decoded_tiles",
             ):

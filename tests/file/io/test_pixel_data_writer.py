@@ -44,9 +44,7 @@ def _open_stream(filepath: Path, transfer_syntax) -> WsiDicomIO:
     return WsiDicomStreamOpener().open_for_writing(filepath, "w+b", transfer_syntax)
 
 
-def _make_dataset(
-    frame_count: int, tile_size: Size | None = None
-) -> WsiDataset:
+def _make_dataset(frame_count: int, tile_size: Size | None = None) -> WsiDataset:
     """Create a minimal WsiDataset for testing."""
     if tile_size is None:
         tile_size = Size(10, 10)

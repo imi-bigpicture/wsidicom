@@ -30,7 +30,7 @@ class TestWsiDicomLevels:
         new_size = int(1 / 0.1242353)
 
         # Act
-        pixel_region = wsi_level.mm_to_pixel(mm_region)
+        pixel_region = wsi_level._mm_to_pixel(mm_region)
 
         # Assert
         assert pixel_region.position == Point(0, 0)
@@ -74,7 +74,7 @@ class TestWsiDicomLevels:
         # Arrange
         base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
-        image_data = instance._image_data
+        image_data = instance.image_data
         assert isinstance(image_data, WsiDicomFileImageData)
 
         # Act
@@ -99,7 +99,7 @@ class TestWsiDicomLevels:
         # Arrange
         base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
-        image_data = instance._image_data
+        image_data = instance.image_data
         assert isinstance(image_data, WsiDicomFileImageData)
 
         # Act
@@ -112,7 +112,7 @@ class TestWsiDicomLevels:
         # Arrange
         base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
-        image_data = instance._image_data
+        image_data = instance.image_data
         assert isinstance(image_data, WsiDicomFileImageData)
 
         # Act & Assert
@@ -134,7 +134,7 @@ class TestWsiDicomLevels:
         # Arrange
         base_level = wsi.pyramids[0].get(0)
         instance = base_level.get_instance()
-        image_data = instance._image_data
+        image_data = instance.image_data
 
         # Act
         test = image_data.valid_tiles(region, z, path)
@@ -167,7 +167,7 @@ class TestWsiDicomLevels:
         instance = base_level.get_instance()
 
         # Act
-        tile_range = instance.image_data._get_tile_range(region, 0, "0")
+        tile_range = instance._get_tile_range(region, 0, "0")
 
         # Assert
         assert tile_range == expected_result

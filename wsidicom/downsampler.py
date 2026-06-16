@@ -47,6 +47,31 @@ class Downsampler(ABC):
         """
         raise NotImplementedError()
 
+    @abstractmethod
+    def thumbnail(self, image: Image.Image, max_size: Size) -> Image.Image:
+        """Resample an image to fit within ``max_size``.
+
+        Unlike ``downsample`` (which resamples to an exact size), this fits the
+        image within ``max_size`` while preserving aspect ratio and never
+        upscaling.
+
+        The input ``image`` may be modified in place; callers should use the
+        returned image and not reuse the argument afterwards.
+
+        Parameters
+        ----------
+        image: Image.Image
+            Input image to resample. May be modified in place.
+        max_size: Size
+            Upper size limit in pixels.
+
+        Returns
+        -------
+        Image.Image
+            Resampled image, no larger than ``max_size`` in either dimension.
+        """
+        raise NotImplementedError()
+
 
 class PillowDownsampler(Downsampler):
     """Downsampler using Pillow's resize with configurable resampling filter."""
@@ -79,3 +104,8 @@ class PillowDownsampler(Downsampler):
             (output_size.width, output_size.height),
             resample=self._resample,
         )
+
+    def thumbnail(self, image: Image.Image, max_size: Size) -> Image.Image:
+        # PIL's Image.thumbnail resamples in place and returns None.
+        image.thumbnail((max_size.width, max_size.height), resample=self._resample)
+        return image

@@ -213,7 +213,7 @@ class TranscodeTileReader(TileReader):
         row_tiles: list[Image.Image] = []
         for position, decoded in zip(
             positions,
-            image_data.get_tiles(positions, z, path, crop_to_image_boundary=False),
+            image_data.get_decoded_tiles(positions, z, path),
             strict=True,
         ):
             if row_start is not None and position.y != row_start.y:
@@ -274,7 +274,7 @@ class CascadingTranscodeTileReader(TileReader):
         row_tiles: list[Image.Image] = []
         for position, decoded in zip(
             positions,
-            image_data.get_tiles(positions, z, path, crop_to_image_boundary=False),
+            image_data.get_decoded_tiles(positions, z, path),
             strict=True,
         ):
             if row_start is not None and position.y != row_start.y:

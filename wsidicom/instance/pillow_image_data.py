@@ -93,19 +93,19 @@ class PillowImageData(ImageData):
         uncompressed_size = (
             self.image_size.area * self.samples_per_pixel * self.bits / 8
         )
-        compressed_size = len(self._get_encoded_tile(Point(0, 0), 0, ""))
+        compressed_size = len(self.get_encoded_tile(Point(0, 0), 0, ""))
         return [LossyCompression(iso, uncompressed_size / compressed_size)]
 
     @property
     def transcoder(self) -> Encoder | None:
         return None
 
-    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         if tile_point != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
         return self._image
 
-    def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         if tile != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
         return self._encoded_image

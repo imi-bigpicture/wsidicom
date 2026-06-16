@@ -100,6 +100,30 @@ class TestPillowDownsampler:
         assert bilinear.size == (256, 256)
         assert nearest.tobytes() != bilinear.tobytes()
 
+    def test_thumbnail_preserves_aspect_ratio(self, downsampler: PillowDownsampler):
+        """Thumbnail fits within max_size while preserving aspect ratio."""
+        # Arrange
+        image = Image.new("RGB", (512, 256), color=(0, 255, 0))
+        max_size = Size(128, 128)
+
+        # Act
+        result = downsampler.thumbnail(image, max_size)
+
+        # Assert — fits within the box, aspect ratio preserved (2:1)
+        assert result.size == (128, 64)
+
+    def test_thumbnail_does_not_upscale(self, downsampler: PillowDownsampler):
+        """Thumbnail never upscales an image smaller than max_size."""
+        # Arrange
+        image = Image.new("RGB", (64, 64), color=(0, 0, 255))
+        max_size = Size(256, 256)
+
+        # Act
+        result = downsampler.thumbnail(image, max_size)
+
+        # Assert
+        assert result.size == (64, 64)
+
     def test_commutes_with_stitch_true_for_box(self):
         """Test commutes_with_stitch is True for BOX filter."""
         # Arrange
