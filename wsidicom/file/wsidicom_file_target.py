@@ -31,6 +31,7 @@ from wsidicom.file.file_writer import (
 )
 from wsidicom.file.io import OffsetTableType
 from wsidicom.group import Label, Level, Overview, Thumbnail
+from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramids
 from wsidicom.target import Target
@@ -52,6 +53,8 @@ class WsiDicomFileTarget(Target):
         transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
         file_options: dict[str, Any] | None = None,
+        metadata: WsiMetadata | None = None,
+        replace_metadata: bool = True,
     ):
         """
         Create a WsiDicomFileTarget.
@@ -85,12 +88,23 @@ class WsiDicomFileTarget(Target):
             settings.
         file_options: dict[str, Any] | None = None
             Keyword arguments for saving files to output path.
+        metadata: WsiMetadata | None = None
+            Optional metadata to apply to the written files. See
+            `replace_metadata` for how it is applied.
+        replace_metadata: bool = True
+            Only used when `metadata` is set. If True (default), the output
+            datasets are rebuilt from `metadata` combined with the technical
+            attributes of the source image data, dropping any attributes not
+            modeled by the metadata schema (e.g. private tags). If False,
+            `metadata` is overlaid on the source datasets instead.
         """
         self._output_path = UPath(output_path)
         self._offset_table = offset_table
         self._filepaths: list[UPath] = []
         self._file_options = file_options
         self._chunk_size = chunk_size
+        self._metadata = metadata
+        self._replace_metadata = replace_metadata
         super().__init__(
             uid_generator,
             workers,
@@ -163,6 +177,8 @@ class WsiDicomFileTarget(Target):
                 file_options=self._file_options,
                 instance_number_start=self._instance_number,
                 chunk_size=self._chunk_size,
+                metadata=self._metadata,
+                replace_metadata=self._replace_metadata,
             )
             if include_thumbnails and pyramid.thumbnails is not None:
                 for group in pyramid.thumbnails.groups:
@@ -189,4 +205,6 @@ class WsiDicomFileTarget(Target):
             offset_table=self._offset_table,
             file_options=self._file_options,
             instance_number_start=self._instance_number,
+            metadata=self._metadata,
+            replace_metadata=self._replace_metadata,
         )

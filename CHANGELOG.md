@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Improved control of uid generation by use of an user-supplied `UidGenerator` (abstract) or `CallableUidGenerator` (default implementation).
+- `WsiDicom.save()` can rewrite the output metadata via a `metadata` parameter. With `replace_metadata=True` (default) the output datasets are rebuilt from the supplied `WsiMetadata` together with the technical attributes of the source image data, so attributes not modeled by the metadata schema (e.g. private tags) are dropped; with `replace_metadata=False` the metadata is instead overlaid on the source datasets, preserving any attributes it does not set. A default ICC profile is inserted when the standard requires one (Photometric Interpretation not MONOCHROME2) and none is present in the metadata.
 
 ### Changed
 

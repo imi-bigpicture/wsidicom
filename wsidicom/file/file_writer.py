@@ -23,6 +23,7 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from pathlib import Path
 from threading import Thread
 from typing import Any
@@ -35,7 +36,9 @@ from wsidicom.config import settings
 from wsidicom.downsampler import PillowDownsampler
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
-from wsidicom.instance import ImageData, WsiInstance
+from wsidicom.instance import ImageData, WsiDataset, WsiInstance
+from wsidicom.metadata import ImageType, WsiMetadata
+from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Pyramid
 from wsidicom.stitcher import PillowStitcher
@@ -70,6 +73,8 @@ class BaseFileWriter(metaclass=ABCMeta):
         offset_table: OffsetTableType | None,
         file_options: dict[str, Any] | None,
         instance_number_start: int,
+        metadata: WsiMetadata | None = None,
+        replace_metadata: bool = True,
     ):
         """Initialize shared writer state.
 
@@ -89,6 +94,18 @@ class BaseFileWriter(metaclass=ABCMeta):
             Keyword arguments for file operations.
         instance_number_start: int
             Starting instance number for output files.
+        metadata: WsiMetadata | None = None
+            Optional metadata to use for the written files. See
+            `replace_metadata` for how it is applied. When None, the source
+            datasets are used as is.
+        replace_metadata: bool = True
+            Only used when `metadata` is set. If True (default), the output
+            datasets are rebuilt from `metadata` combined with the technical
+            attributes of the source image data, so that attributes not modeled
+            by the metadata schema (including private tags and other unhandled
+            attributes) are dropped. If False, `metadata` is instead overlaid on
+            top of the source datasets, preserving any attributes it does not
+            set.
         """
         self._output_path = UPath(output_path)
         self._uid_generator = uid_generator
@@ -97,11 +114,70 @@ class BaseFileWriter(metaclass=ABCMeta):
         self._offset_table = offset_table
         self._file_options = file_options
         self._instance_number = instance_number_start
+        self._metadata = metadata
+        self._replace_metadata = replace_metadata
 
     @abstractmethod
     def write(self) -> list[UPath]:
         """Write DICOM files and return paths to created files."""
         raise NotImplementedError()
+
+    def _build_base_dataset(
+        self,
+        source_instance: WsiInstance,
+        image_type: ImageType,
+        pyramid_index: int | None = None,
+    ) -> WsiDataset:
+        """Return the base dataset for an output instance.
+
+        When no metadata is set, the source dataset is returned unchanged.
+
+        When metadata is set and `replace_metadata` is True, the dataset is
+        rebuilt from that metadata combined with the technical attributes of the
+        source image data. The rebuilt dataset only contains attributes emitted
+        by the metadata schema and the technical attributes set from the image
+        data; any other attributes present in the source dataset (e.g. private
+        tags or unhandled attributes) are not carried over.
+
+        When metadata is set and `replace_metadata` is False, the metadata is
+        instead overlaid on top of a copy of the source dataset, preserving any
+        attributes the metadata does not set.
+
+        Parameters
+        ----------
+        source_instance: WsiInstance
+            Instance to take the source dataset and image data from.
+        image_type: ImageType
+            Type of instance to create.
+        pyramid_index: int | None = None
+            Pyramid index of the image data, required for volume images.
+
+        Returns
+        -------
+        WsiDataset
+            Base dataset to create the output instance from.
+        """
+        if self._metadata is None:
+            return source_instance.dataset
+        image_data = source_instance.image_data
+        # ICC Profile (0028,2000) is Type 1C in the Optical Path Module, required
+        # when Photometric Interpretation is not MONOCHROME2 (DICOM PS3.3
+        # C.8.12.5). Insert a default profile where it is required but missing; a
+        # profile already present in the metadata is kept.
+        require_icc_profile = image_data.photometric_interpretation != "MONOCHROME2"
+        dumped = WsiMetadataDicomSchema().dump(
+            self._metadata, image_type, require_icc_profile
+        )
+        if self._replace_metadata:
+            return WsiDataset.create_instance_dataset(
+                dumped, image_type, image_data, pyramid_index
+            )
+        # Overlay the supplied metadata on a copy of the source dataset. Wrapping
+        # the copy in a new WsiDataset resets cached properties so they reflect
+        # the updated attributes.
+        dataset = WsiDataset(deepcopy(source_instance.dataset))
+        dataset.update(dumped)
+        return dataset
 
     def _resolve_transcoding(
         self, source_image_data: ImageData
@@ -177,6 +253,8 @@ class PyramidFileWriter(BaseFileWriter):
         memory_budget_bytes: int | None = None,
         source_workers: int | None = None,
         chunk_size: int | None = None,
+        metadata: WsiMetadata | None = None,
+        replace_metadata: bool = True,
     ):
         """Create a pull-based pyramid writer.
 
@@ -220,6 +298,12 @@ class PyramidFileWriter(BaseFileWriter):
             Per-batch tile width hint for source tile reading. When None,
             each source's `ImageData.suggested_minimum_chunk_size` is used.
             Hard floor of 2.
+        metadata: WsiMetadata | None = None
+            Optional metadata to apply to the output datasets. See
+            `BaseFileWriter`.
+        replace_metadata: bool = True
+            Whether to replace or overlay the source datasets with `metadata`.
+            See `BaseFileWriter`.
         """
         super().__init__(
             output_path=output_path,
@@ -229,6 +313,8 @@ class PyramidFileWriter(BaseFileWriter):
             offset_table=offset_table,
             file_options=file_options,
             instance_number_start=instance_number_start,
+            metadata=metadata,
+            replace_metadata=replace_metadata,
         )
         self._pyramid = pyramid
         self._max_threads = max_threads
@@ -385,7 +471,10 @@ class PyramidFileWriter(BaseFileWriter):
 
             tiled_size = source_group.tiled_size.ceil_div(scale)
             base_instance = next(iter(source_group.instances.values()))
-            dataset = base_instance.dataset.as_tiled_full(
+            base_dataset = self._build_base_dataset(
+                base_instance, ImageType.VOLUME, level_index
+            )
+            dataset = base_dataset.as_tiled_full(
                 source_group.focal_planes,
                 source_group.optical_paths,
                 source_group.tiled_size,
@@ -649,6 +738,8 @@ class GroupFileWriter(BaseFileWriter):
         offset_table: OffsetTableType | None = None,
         file_options: dict[str, Any] | None = None,
         instance_number_start: int = 0,
+        metadata: WsiMetadata | None = None,
+        replace_metadata: bool = True,
     ):
         """Create a GroupFileWriter.
 
@@ -670,6 +761,12 @@ class GroupFileWriter(BaseFileWriter):
             Keyword arguments for file operations.
         instance_number_start: int
             Starting instance number for output files.
+        metadata: WsiMetadata | None = None
+            Optional metadata to apply to the output datasets. See
+            `BaseFileWriter`.
+        replace_metadata: bool = True
+            Whether to replace or overlay the source datasets with `metadata`.
+            See `BaseFileWriter`.
         """
         super().__init__(
             output_path=output_path,
@@ -679,6 +776,8 @@ class GroupFileWriter(BaseFileWriter):
             offset_table=offset_table,
             file_options=file_options,
             instance_number_start=instance_number_start,
+            metadata=metadata,
+            replace_metadata=replace_metadata,
         )
         self._group = group
 
@@ -697,7 +796,10 @@ class GroupFileWriter(BaseFileWriter):
 
             encoder, transcode = self._resolve_transcoding(source_image_data)
 
-            dataset = sub_group[0].dataset.as_tiled_full(
+            base_dataset = self._build_base_dataset(
+                sub_group[0], sub_group[0].dataset.image_type
+            )
+            dataset = base_dataset.as_tiled_full(
                 sub_instances.focal_planes,
                 sub_instances.optical_paths,
                 sub_instances.tiled_size,

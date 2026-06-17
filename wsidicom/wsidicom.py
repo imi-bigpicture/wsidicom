@@ -216,6 +216,8 @@ class WsiDicom:
         transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
         file_options: dict[str, Any] | None = None,
+        metadata: WsiMetadata | None = None,
+        replace_metadata: bool = True,
     ) -> list[UPath]:
         """
         Save wsi as DICOM-files in path. Instances for the same pyramid
@@ -265,11 +267,30 @@ class WsiDicom:
             settings.
         file_options: dict[str, Any] | None = None
             Optional options for saving files to output path.
+        metadata: WsiMetadata | None = None
+            Optional metadata to use for the written files. See
+            `replace_metadata` for how it is applied. When None, the source
+            datasets are used as is.
+        replace_metadata: bool = True
+            Only used when `metadata` is set. If True (default), the output
+            datasets are rebuilt from `metadata` combined with the technical
+            attributes of the source image data, so that attributes not modeled
+            by the metadata schema (including private tags and other unhandled
+            attributes) are dropped. If False, `metadata` is overlaid on top of
+            the source datasets, preserving any attributes it does not set.
 
         Returns
         -------
         list[UPath]
             List of paths of created files.
+
+        Notes
+        -----
+        To de-identify, compose `metadata` from the source metadata and replace
+        the identity-bearing modules, e.g.::
+
+            deid = dataclasses.replace(wsi.metadata, patient=Patient(name="Anon"))
+            wsi.save(path, metadata=deid)
         """
         if workers is None:
             cpus = os.cpu_count()
@@ -308,6 +329,8 @@ class WsiDicom:
             transcoding,
             force_transcoding,
             file_options,
+            metadata,
+            replace_metadata,
         ) as target:
             target.save(self.pyramids, labels, overviews, include_thumbnails)
             return target.filepaths
