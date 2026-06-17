@@ -130,7 +130,9 @@ class SpecimenDicomFormatter:
         yield from (
             dicom_step
             for dicom_step in [
-                SpecimenPreparationStepDicomModel.from_step(step, sampling.specimen)
+                SpecimenPreparationStepDicomModel.create_from_step(
+                    step, sampling.specimen
+                )
                 for step in sampling.specimen.steps
                 if not isinstance(step, BaseSampling)
             ]

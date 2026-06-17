@@ -94,13 +94,13 @@ class Level(Instances):
             raise WsiDicomNoResolutionError()
         return self._pixel_spacing
 
-    def matches(self, other_group: "Level") -> bool:
+    def matches(self, other_group: "Instances") -> bool:
         """Check if level matches other level. If strict common Uids should
         match. Wsi type and tile size should always match.
 
         Parameters
         ----------
-        other_level: Group
+        other_group: Instances
             Other level to match against.
 
         Returns
@@ -108,13 +108,11 @@ class Level(Instances):
         bool
             True if other level matches.
         """
-        other_level = other_group
-        return (
-            self.uids.matches(other_level.uids)
-            and other_level.image_type == self.image_type
-            and (
-                not settings.strict_tile_size_check
-                or other_level.tile_size == self.tile_size
+        return super().matches(other_group) and (
+            not settings.strict_tile_size_check
+            or (
+                isinstance(other_group, Level)
+                and other_group.tile_size == self.tile_size
             )
         )
 

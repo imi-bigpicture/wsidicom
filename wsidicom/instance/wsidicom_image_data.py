@@ -120,9 +120,13 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         """Return samples per pixel (1 or 3)."""
         return self._datasets[0].samples_per_pixel
 
-    @cached_property
+    @property
     def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         """Return the image origin of the image data."""
+        return self._image_coordinate_system
+
+    @cached_property
+    def _image_coordinate_system(self) -> ImageCoordinateSystem | None:
         try:
             schema = ImageCoordinateSystemDicomSchema()
             return schema.load(self._datasets[0])

@@ -135,8 +135,8 @@ class Pyramid(Series[Level]):
     @classmethod
     def open(
         cls,
-        level_instances: Iterable[WsiInstance],
-        thumbnail_instances: Iterable[WsiInstance],
+        instances: Iterable[WsiInstance],
+        thumbnail_instances: Iterable[WsiInstance] = (),
     ) -> "Pyramid":
         """Return pyramid created from wsi instances.
 
@@ -152,7 +152,7 @@ class Pyramid(Series[Level]):
         Pyramid
             Created pyramid.
         """
-        level_instances_grouped_by_size = cls._group_instances_by_size(level_instances)
+        level_instances_grouped_by_size = cls._group_instances_by_size(instances)
         base_level = BaseLevel(next(level_instances_grouped_by_size))
         levels: list[Level] = [base_level]
         levels.extend(

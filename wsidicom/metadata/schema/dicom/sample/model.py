@@ -78,7 +78,7 @@ class SpecimenPreparationStepDicomModel:
         self.container = container
 
     @classmethod
-    def from_step(
+    def create_from_step(
         cls,
         step: PreparationStep,
         specimen: BaseSpecimen,

@@ -102,8 +102,12 @@ class SparseTileIndex(TileIndex):
     def planes(self) -> dict[tuple[float, str], SparseTilePlane]:
         return self._read_planes_from_datasets()
 
-    @cached_property
+    @property
     def focal_planes(self) -> list[float]:
+        return self._focal_planes
+
+    @cached_property
+    def _focal_planes(self) -> list[float]:
         return self._get_focal_planes()
 
     def __str__(self) -> str:

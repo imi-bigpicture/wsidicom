@@ -413,7 +413,7 @@ class SingleCodeSequenceField(CodeDicomField):
     def _serialize(self, nested_obj: CodeType, attr: str | None, obj: Any, **kwargs):
         return [super()._serialize(nested_obj, attr, obj, **kwargs)]
 
-    def _deserialize(
+    def _deserialize(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         value: Sequence[Dataset],
         attr: str | None,
@@ -495,7 +495,9 @@ class PersonNameDicomField(fields.String):
     def _deserialize(self, value: PersonName, attr, data, **kwargs) -> str:
         return str(value)
 
-    def _serialize(self, value: str, attr, obj, **kwargs) -> PersonName | None:
+    def _serialize(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, value: str, attr, obj, **kwargs
+    ) -> PersonName | None:
         return PersonName(value)
 
 
@@ -644,7 +646,7 @@ class NestedDatasetDicomField(fields.Nested, Generic[ValueType]):
         setattr(dataset, self._nested_data_key, [nested_value])
         return [dataset]
 
-    def _deserialize(
+    def _deserialize(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, value: Sequence[Dataset], attr, data, **kwargs
     ) -> ValueType | None:
         nested_value = getattr(value[0], self._nested_data_key, None)
@@ -688,7 +690,9 @@ class CodeItemDicomField(ContentItemDicomField[Code]):
         dataset.ConceptCodeSequence = [code_dataset]
         return dataset
 
-    def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
+    def _deserialize(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, value: Dataset, attr: str | None, data: Any, **kwargs
+    ):
         dataset = value
         version = dataset.ConceptCodeSequence[0].get("CodingSchemeVersion", None)
         if version == "":
