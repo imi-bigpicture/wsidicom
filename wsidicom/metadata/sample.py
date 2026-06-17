@@ -674,9 +674,12 @@ class Sample(SampledSpecimen):
     """
 
     identifier: str | SpecimenIdentifier
-    sampled_from: Sequence[BaseSampling]
+    # A sample is always sampled from a sequence of samplings: intentional
+    # narrowing of the base's broader type that pyright's invariant
+    # variable-override rule cannot express.
+    sampled_from: Sequence[BaseSampling]  # pyright: ignore
     type: AnatomicPathologySpecimenTypesCode | None = None
-    steps: Sequence[PreparationStep] = field(default_factory=list)
+    steps: list[PreparationStep] = field(default_factory=list)
     container: ContainerTypeCode | None = None
 
     def sample(
@@ -739,16 +742,19 @@ class SlideSample(SampledSpecimen):
 
     identifier: str | SpecimenIdentifier
     anatomical_sites: Sequence[Code] | None = None
-    sampled_from: BaseSampling | None = None
+    # A slide sample is sampled from at most one sampling, and always has a fixed
+    # slide container and type: intentional narrowing of the base's broader types
+    # that pyright's invariant variable-override rule cannot express.
+    sampled_from: BaseSampling | None = None  # pyright: ignore
     uid: UID | None = None
     localization: SampleLocalization | None = None
     steps: list[PreparationStep] = field(default_factory=list)
     short_description: str | None = None
     detailed_description: str | None = None
-    container: ContainerTypeCode = field(
+    container: ContainerTypeCode = field(  # pyright: ignore
         init=False, default=ContainerTypeCode("Microscope slide")
     )
-    type: AnatomicPathologySpecimenTypesCode = field(
+    type: AnatomicPathologySpecimenTypesCode = field(  # pyright: ignore
         init=False, default=AnatomicPathologySpecimenTypesCode("Slide")
     )
 

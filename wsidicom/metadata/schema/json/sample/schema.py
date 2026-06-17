@@ -225,7 +225,7 @@ class PreparationStepJsonSchema(Schema):
             return self._subschema_dump(obj)
         return [self._subschema_dump(item) for item in obj]
 
-    def load(
+    def load(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         data: dict[str, Any] | Iterable[dict[str, Any]],
         **kwargs,
@@ -281,7 +281,7 @@ class StainingJsonSchema(DataclassLoadingSchema[Staining]):
         return Staining
 
 
-class SpecimenJsonSchema(LoadingSchema[Specimen]):
+class SpecimenJsonSchema(LoadingSchema[SpecimenJsonModel]):
     """Schema for extracted specimen that has not been sampled from other specimen."""
 
     identifier = SpecimenIdentifierJsonField()
@@ -368,7 +368,7 @@ class BaseSpecimenJsonSchema(Schema):
 
         return [self._subschema_dump(specimen) for specimen in all_specimens.values()]
 
-    def load(
+    def load(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         data: dict[str, Any] | Iterable[dict[str, Any]],
         **kwargs,

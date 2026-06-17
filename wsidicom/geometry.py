@@ -220,7 +220,7 @@ class Size:
         return (
             operation(dimension, other_dimension)
             for (dimension, other_dimension) in zip(
-                [self.width, self.height], [item.width, item.height], strict=False
+                [self.width, self.height], [item.width, item.height], strict=True
             )
         )
 
@@ -373,14 +373,14 @@ class Region:
             for x in range(self.start.x, self.end.x)
         )
 
-    def chunked_iterate_all(self, chunks: int) -> Iterator[Iterator[Point]]:
+    def chunked_iterate_all(self, chunks: int) -> Iterator[Sequence[Point]]:
         points = list(self.iterate_all())
         points_count = len(points)
         chunk_size = math.ceil(points_count / chunks)
         for chunk_index in range(chunks):
             chunk_start = chunk_index * chunk_size
             chunk_end = min((chunk_index + 1) * chunk_size, points_count)
-            yield (point for point in points[chunk_start:chunk_end])
+            yield points[chunk_start:chunk_end]
 
     @classmethod
     def from_points(cls, point_1: "Point", point_2: "Point") -> "Region":

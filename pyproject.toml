@@ -1,6 +1,6 @@
 [project]
 name = "wsidicom"
-version = "0.30.0"
+version = "0.31.0"
 description = "Tools for handling DICOM based whole scan images"
 authors = [
     {name = "Erik O Gabrielsson", email = "erik.o.gabrielsson@sectra.com"}
@@ -36,8 +36,7 @@ pylibjpeg-openjpeg = ["pylibjpeg-openjpeg>=2.1.1,<3.0.0"]
 
 [dependency-groups]
 dev = [
-    "pytest>=7.2.0,<10.0.0",
-    "pytest-watch>=4.2.0,<5.0.0",
+    "pytest>=7.2.0,<8.0.0",
     "xmltodict>=0.12.0,<0.13.0",
     "shapely>=2.0.2,<3.0.0",
     "ruff>=0.15.14",
@@ -45,6 +44,8 @@ dev = [
     "codespell>=2.2.5,<3.0.0",
     "wsidicom-data>=0.3.0,<0.4.0",
     "decoy>=2.2.0,<3.0.0",
+    "pytest-testmon>=2.2.0",
+    "pytest-watcher>=0.6.3",
 ]
 
 [project.urls]
@@ -72,3 +73,9 @@ ignore = ["S101"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest-watcher]
+now = true
+runner = "pytest"
+runner_args = ["--testmon"]
+ignore_patterns = [".venv/*"]

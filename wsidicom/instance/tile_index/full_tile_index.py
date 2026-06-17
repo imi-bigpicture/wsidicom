@@ -38,8 +38,12 @@ class FullTileIndex(TileIndex):
         """
         super().__init__(datasets)
 
-    @cached_property
+    @property
     def focal_planes(self) -> list[float]:
+        return self._focal_planes
+
+    @cached_property
+    def _focal_planes(self) -> list[float]:
         return self._read_focal_planes_from_datasets()
 
     def __str__(self) -> str:

@@ -144,7 +144,7 @@ class TestSampleDicom:
         descriptions: list[Dataset] = []
         dataset = Dataset()
         for slide_sample_id, slide_sample_uid, specimen_id in zip(
-            slide_sample_ids, slide_sample_uids, specimen_ids, strict=False
+            slide_sample_ids, slide_sample_uids, specimen_ids, strict=True
         ):
             preparation_steps = create_specimen_preparation_sequence(
                 slide_sample_id,
@@ -300,7 +300,7 @@ class TestSampleDicom:
         # Arrange
         slide_samples = []
         for slide_sample_id, slide_sample_uid, specimen_id in zip(
-            slide_sample_ids, slide_sample_uids, specimen_ids, strict=False
+            slide_sample_ids, slide_sample_uids, specimen_ids, strict=True
         ):
             specimen = Specimen(
                 identifier=specimen_id,
@@ -353,7 +353,7 @@ class TestSampleDicom:
 
         # Assert
         for index, (slide_sample_id, slide_sample_uid, specimen_id) in enumerate(
-            zip(slide_sample_ids, slide_sample_uids, specimen_ids, strict=False)
+            zip(slide_sample_ids, slide_sample_uids, specimen_ids, strict=True)
         ):
             description = dataset.SpecimenDescriptionSequence[index]
             assert isinstance(description, Dataset)

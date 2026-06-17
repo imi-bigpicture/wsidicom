@@ -118,7 +118,7 @@ class WsiMetadataDicomSchema:
         self,
         metadata: WsiMetadata,
         image_type: ImageType,
-        require_icc_profile,
+        require_icc_profile: bool = False,
         **kwargs,
     ) -> Dataset:
         base_dataset = BaseWsiMetadataDicomSchema().dump(

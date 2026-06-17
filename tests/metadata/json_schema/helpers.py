@@ -44,10 +44,10 @@ def assert_lut_is_equal(dumped: dict[str, Any], lut: Lut):
     for dumped_component, component in zip(
         (dumped["red"], dumped["green"], dumped["blue"]),
         (lut.red, lut.green, lut.blue),
-        strict=False,
+        strict=True,
     ):
         assert len(dumped_component) == len(component)
-        for dumped_segment, segment in zip(dumped_component, component, strict=False):
+        for dumped_segment, segment in zip(dumped_component, component, strict=True):
             assert_lut_segment_is_equal(dumped_segment, segment)
 
 
@@ -102,7 +102,7 @@ def assert_lossy_compression_is_equal(
     assert dumped is not None
     assert len(dumped) == len(lossy_compression)
     for dumped_compression, expected_compression in zip(
-        dumped, lossy_compression, strict=False
+        dumped, lossy_compression, strict=True
     ):
         assert dumped_compression["method"] == expected_compression.method.value
         assert dumped_compression["ratio"] == expected_compression.ratio
@@ -155,7 +155,7 @@ def assert_optical_path_is_equal(dumped: dict[str, Any], optical_path: OpticalPa
     else:
         assert len(dumped["illumination_types"]) == len(optical_path.illumination_types)
         for dumped_type, expected_type in zip(
-            dumped["illumination_types"], optical_path.illumination_types, strict=False
+            dumped["illumination_types"], optical_path.illumination_types, strict=True
         ):
             assert_dict_equals_code(dumped_type, expected_type)
     if optical_path.light_path_filter is None or optical_path.light_path_filter is None:
