@@ -628,7 +628,7 @@ class TestDicomSchema:
         )
         assert len(serialized.SpecimenDescriptionSequence) == len(expected_samples)
         for specimen_description, sample in zip(
-            serialized.SpecimenDescriptionSequence, expected_samples, strict=False
+            serialized.SpecimenDescriptionSequence, expected_samples, strict=True
         ):
             assert specimen_description.SpecimenIdentifier == sample.identifier
             assert specimen_description.SpecimenUID == sample.uid
@@ -758,7 +758,7 @@ class TestDicomSchema:
             else:
                 assert len(serialized.OpticalPathSequence) == len(label.optical_paths)
                 for dicom_optical_path, optical_path in zip(
-                    serialized.OpticalPathSequence, label.optical_paths, strict=False
+                    serialized.OpticalPathSequence, label.optical_paths, strict=True
                 ):
                     assert_dicom_optical_path_equals_optical_path(
                         dicom_optical_path,
@@ -828,8 +828,7 @@ class TestDicomSchema:
         assert deserialized.series == series
         assert deserialized.patient == patient
         assert (
-            deserialized.frame_of_reference_uid
-            == wsi_metadata.frame_of_reference_uid
+            deserialized.frame_of_reference_uid == wsi_metadata.frame_of_reference_uid
         )
         assert (
             deserialized.dimension_organization_uids

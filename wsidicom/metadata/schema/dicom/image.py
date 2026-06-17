@@ -171,7 +171,7 @@ class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):
             )
         return [
             LossyCompression(method, ratio)
-            for method, ratio in zip(methods, ratios, strict=False)
+            for method, ratio in zip(methods, ratios, strict=True)
         ]
 
 

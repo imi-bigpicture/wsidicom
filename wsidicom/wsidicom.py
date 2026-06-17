@@ -29,7 +29,6 @@ from upath import UPath
 from wsidicom.cache import lru_cached_method
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
-from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
@@ -217,6 +216,8 @@ class WsiDicom:
         transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
         file_options: dict[str, Any] | None = None,
+        metadata: WsiMetadata | None = None,
+        replace_metadata: bool = True,
     ) -> list[UPath]:
         """
         Save wsi as DICOM-files in path. Instances for the same pyramid
@@ -235,8 +236,8 @@ class WsiDicom:
         workers: int | None = None
             Maximum number of thread workers to use.
         chunk_size: int | None = None
-            Chunk size (number of tiles) to process at a time. Actual chunk
-            size also depends on minimun_chunk_size from image_data.
+            Per-batch tile width hint for source tile reading. When None,
+            each source's `ImageData.suggested_minimum_chunk_size` is used.
         offset_table: "str" | OffsetTableType | None = None,
             Offset table to use, defined either by string (`empty`, `bot`, `eot`, or
             `none`) or `OffsetTableType` enum. Default to None, which will use
@@ -266,23 +267,56 @@ class WsiDicom:
             settings.
         file_options: dict[str, Any] | None = None
             Optional options for saving files to output path.
+        metadata: WsiMetadata | None = None
+            Optional metadata to use for the written files. See
+            `replace_metadata` for how it is applied. When None, the source
+            datasets are used as is.
+        replace_metadata: bool = True
+            Only used when `metadata` is set. If True (default), the output
+            datasets are rebuilt from `metadata` combined with the technical
+            attributes of the source image data, so that attributes not modeled
+            by the metadata schema (including private tags and other unhandled
+            attributes) are dropped. If False, `metadata` is overlaid on top of
+            the source datasets, preserving any attributes it does not set.
 
         Returns
         -------
         list[UPath]
             List of paths of created files.
+
+        Notes
+        -----
+        To de-identify, compose `metadata` from the source metadata and replace
+        the identity-bearing modules, e.g.::
+
+            deid = dataclasses.replace(wsi.metadata, patient=Patient(name="Anon"))
+            wsi.save(path, metadata=deid)
         """
         if workers is None:
             cpus = os.cpu_count()
             workers = 1 if cpus is None else cpus
-        if chunk_size is None:
-            chunk_size = 16
         if isinstance(offset_table, str):
             offset_table = OffsetTableType.from_string(offset_table)
         if uid_generator is None:
             uid_generator = CallableUidGenerator()
         elif not isinstance(uid_generator, UidGenerator):
             uid_generator = CallableUidGenerator(uid_generator)
+        if include_labels:
+            if label is not None:
+                label_instances = [
+                    WsiInstance.create_label(
+                        label,
+                        self._source.base_dataset,
+                    )
+                ]
+                labels = Labels.open(label_instances)
+            else:
+                labels = self.labels
+        else:
+            labels = None
+
+        overviews = self.overviews if include_overviews else None
+
         with WsiDicomFileTarget(
             output_path,
             uid_generator,
@@ -295,23 +329,10 @@ class WsiDicom:
             transcoding,
             force_transcoding,
             file_options,
+            metadata,
+            replace_metadata,
         ) as target:
-            target.save_pyramids(self.pyramids, include_thumbnails)
-            if include_overviews and self.overviews is not None:
-                target.save_overviews(self.overviews)
-            if include_labels:
-                if label is not None:
-                    label_instances = [
-                        WsiInstance.create_label(
-                            label,
-                            self._source.base_dataset,
-                        )
-                    ]
-                    labels = Labels.open(label_instances)
-                else:
-                    labels = self.labels
-                if labels is not None:
-                    target.save_labels(labels)
+            target.save(self.pyramids, labels, overviews, include_thumbnails)
             return target.filepaths
 
     @classmethod
@@ -554,10 +575,7 @@ class WsiDicom:
             raise WsiDicomNotFoundError(
                 f"Image for generating thumbnail of size {thumbnail_size}", "levels"
             )
-        region = Region(position=Point(0, 0), size=thumbnail.size)
-        image = thumbnail.get_region(region, z, path)
-        image.thumbnail((size), resample=settings.pillow_resampling_filter)
-        return image
+        return thumbnail.get_thumbnail(thumbnail_size, z, path)
 
     def read_region(
         self,
@@ -607,10 +625,13 @@ class WsiDicom:
             raise WsiDicomOutOfBoundsError(
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
-        image = wsi_level.get_region(scaled_region, z, path, threads)
-        if scale_factor != 1:
-            image = image.resize((size), resample=settings.pillow_resampling_filter)
-        return image
+        return wsi_level.get_region(
+            scaled_region,
+            z,
+            path,
+            output_size=Size.from_tuple(size),
+            threads=threads,
+        )
 
     def read_region_mm(
         self,
@@ -656,10 +677,8 @@ class WsiDicom:
         wsi_level = self.pyramids.get(pyramid).get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
-        image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
-        image_size = Size(width=image.size[0], height=image.size[1]) // scale_factor
-        return image.resize(
-            image_size.to_tuple(), resample=settings.pillow_resampling_filter
+        return wsi_level.get_region_mm(
+            region, z, path, slide_origin, scale=scale_factor, threads=threads
         )
 
     def read_region_mpp(
@@ -708,10 +727,8 @@ class WsiDicom:
             SizeMm(pixel_spacing, pixel_spacing)
         )
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
-        image = wsi_level.get_region_mm(region, z, path, slide_origin, threads)
-        image_size = SizeMm.from_tuple(size) // pixel_spacing
-        return image.resize(
-            image_size.to_tuple(), resample=settings.pillow_resampling_filter
+        return wsi_level.get_region_mpp(
+            region, pixel_spacing, z, path, slide_origin, threads=threads
         )
 
     def read_tile(

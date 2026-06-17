@@ -16,7 +16,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from wsidicom.file import WsiDicomFileTarget
+from wsidicom.file.file_writer import PyramidFileWriter
 
 
 @pytest.mark.unittest
@@ -30,7 +30,7 @@ class TestWsiDicomFileTarget:
         candidate_levels: Sequence[int],
     ):
         # Act
-        selected = WsiDicomFileTarget._select_included_levels(candidate_levels, None)
+        selected = PyramidFileWriter._select_included_levels(candidate_levels, None)
 
         # Assert
         assert selected == set(candidate_levels)
@@ -68,7 +68,7 @@ class TestWsiDicomFileTarget:
         expected: set[int],
     ):
         # Act
-        selected = WsiDicomFileTarget._select_included_levels(
+        selected = PyramidFileWriter._select_included_levels(
             candidate_levels, include_indices
         )
 
@@ -77,7 +77,7 @@ class TestWsiDicomFileTarget:
 
     def test_select_included_levels_empty_indices_returns_empty(self):
         # Act
-        selected = WsiDicomFileTarget._select_included_levels([0, 1, 2], [])
+        selected = PyramidFileWriter._select_included_levels([0, 1, 2], [])
 
         # Assert
         assert selected == set()
@@ -107,7 +107,7 @@ class TestWsiDicomFileTarget:
         expected: set[int],
     ):
         # Act
-        selected = WsiDicomFileTarget._select_included_levels(
+        selected = PyramidFileWriter._select_included_levels(
             candidate_levels, include_indices
         )
 

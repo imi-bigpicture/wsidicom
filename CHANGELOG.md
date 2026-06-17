@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-06-17
+
 ### Added
 
 - Improved control of uid generation by use of an user-supplied `UidGenerator` (abstract) or `CallableUidGenerator` (default implementation).
+- `WsiDicom.save()` can rewrite the output metadata via a `metadata` parameter. With `replace_metadata=True` (default) the output datasets are rebuilt from the supplied `WsiMetadata` together with the technical attributes of the source image data, so attributes not modeled by the metadata schema (e.g. private tags) are dropped; with `replace_metadata=False` the metadata is instead overlaid on the source datasets, preserving any attributes it does not set. A default ICC profile is inserted when the standard requires one (Photometric Interpretation not MONOCHROME2) and none is present in the metadata.
 
 ### Changed
 
+- Pyramid writing now runs as a multi-threaded pipeline (source read → downsample → encode → write). An error in any stage aborts the save promptly and re-raises the original exception.
 - Relaxed the `imagecodecs` optional dependency upper bound from `<2025.0.0` to unbounded.
 - Default UID generation by `Study.default_uid`, `Series.default_uid`, `SlideSample.default_uid`, `WsiMetadata.default_frame_of_reference_uid`, and `WsiMetadata.default_dimension_organization_uids` have been removed.
 - Serializing a `WsiMetadata` (or its sub-models) to DICOM no longer silently mints UIDs for unset fields. `StudyInstanceUID`, `SeriesInstanceUID`, `FrameOfReferenceUID`, `DimensionOrganizationSequence`, `SpecimenDescriptionSequence`, `SpecimenUID`, and `PyramidUID` raise `ValidationError` on dump when their source field is `None`/empty.
@@ -583,7 +587,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.30.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.31.0..HEAD
+[0.31.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.30.0..v0.31.0
 [0.30.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.1..v0.30.0
 [0.29.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.0..v0.29.1
 [0.29.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.1..v0.29.0

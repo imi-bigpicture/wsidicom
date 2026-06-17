@@ -338,7 +338,7 @@ class TestWsiDicomAnnotation:
         # Assert
         assert input_annotations == group.annotations
         for input_annotation, annotation in zip(
-            input_annotations, group.annotations, strict=False
+            input_annotations, group.annotations, strict=True
         ):
             assert annotation == input_annotation
 
@@ -375,7 +375,7 @@ class TestWsiDicomAnnotation:
         # Assert
         assert input_annotations == group.annotations
         for input_annotation, annotation in zip(
-            input_annotations, group.annotations, strict=False
+            input_annotations, group.annotations, strict=True
         ):
             assert annotation == input_annotation
 

@@ -18,4 +18,4 @@ from wsidicom.file.io.frame_index import OffsetTableType
 from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
 from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
 
-__all__ = ["WsiDicomFileSource", "WsiDicomFileTarget", "OffsetTableType"]
+__all__ = ["OffsetTableType", "WsiDicomFileSource", "WsiDicomFileTarget"]

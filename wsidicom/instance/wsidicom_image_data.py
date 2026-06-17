@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 
 from PIL.Image import Image
@@ -120,9 +120,13 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         """Return samples per pixel (1 or 3)."""
         return self._datasets[0].samples_per_pixel
 
-    @cached_property
+    @property
     def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         """Return the image origin of the image data."""
+        return self._image_coordinate_system
+
+    @cached_property
+    def _image_coordinate_system(self) -> ImageCoordinateSystem | None:
         try:
             schema = ImageCoordinateSystemDicomSchema()
             return schema.load(self._datasets[0])
@@ -162,7 +166,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     def decoder(self) -> Decoder:
         return self._decoder
 
-    def _get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
+    def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         """
         Return bytes for tile.
 
@@ -188,7 +192,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             id(self), frame_index, self._get_tile_frame
         )
 
-    def _get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
         """
         Return Pillow image for tile.
 
@@ -212,6 +216,30 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return self._decoded_frame_cache.get_tile_frame(
             id(self), frame_index, self._get_decoded_tile_frame
         )
+
+    def get_encoded_and_decoded_tile(
+        self, tile: Point, z: float, path: str
+    ) -> tuple[bytes, Image]:
+        frame_index = self._get_frame_index(tile, z, path)
+        return self._get_encoded_and_decoded_tile(frame_index)
+
+    def get_encoded_and_decoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[tuple[bytes, Image]]:
+        frame_indices = (self._get_frame_index(tile, z, path) for tile in tiles)
+        return (
+            self._get_encoded_and_decoded_tile(frame_index)
+            for frame_index in frame_indices
+        )
+
+    def _get_encoded_and_decoded_tile(self, frame_index: int) -> tuple[bytes, Image]:
+        if frame_index == -1:
+            return self.blank_encoded_tile, self.blank_tile
+        encoded = self._encoded_frame_cache.get_tile_frame(
+            id(self), frame_index, self._get_tile_frame
+        )
+        decoded = self.decoder.decode(encoded)
+        return encoded, decoded
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """

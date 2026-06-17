@@ -14,6 +14,33 @@
 
 """Module with imports for optional codec packages."""
 
+__all__ = [
+    "PYLIBJPEGRLE_AVAILABLE",
+    "rle_decode_frame",
+    "rle_encode_frame",
+    "IMAGE_CODECS_AVAILABLE",
+    "JPEG2K",
+    "JPEG8",
+    "JPEGLS",
+    "JPEGXL",
+    "dicomrle_decode",
+    "jpeg2k_decode",
+    "jpeg2k_encode",
+    "jpeg8_decode",
+    "jpeg8_encode",
+    "jpegls_decode",
+    "jpegls_encode",
+    "jpegxl_decode",
+    "jpegxl_encode",
+    "packbits_encode",
+    "PYLIBJPEGLS_AVAILABLE",
+    "pylibjpeg_ls_decode",
+    "pylibjpeg_ls_encode",
+    "PYLIBJPEGOPENJPEG_AVAILABLE",
+    "pylibjpeg_openjpeg_decode",
+    "pylibjpeg_openjpeg_encode",
+]
+
 try:
     from rle.utils import decode_frame as rle_decode_frame
     from rle.utils import encode_frame as rle_encode_frame

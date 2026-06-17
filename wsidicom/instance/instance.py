@@ -20,12 +20,19 @@ from pydicom import Dataset
 from pydicom.uid import UID
 from upath import UPath
 
-from wsidicom.errors import WsiDicomError, WsiDicomUidDuplicateError
-from wsidicom.geometry import Size, SizeMm
+from wsidicom.config import settings
+from wsidicom.downsampler import Downsampler, PillowDownsampler
+from wsidicom.errors import (
+    WsiDicomError,
+    WsiDicomOutOfBoundsError,
+    WsiDicomUidDuplicateError,
+)
+from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.pillow_image_data import PillowImageData
 from wsidicom.metadata.image import ImageCoordinateSystem, ImageType
+from wsidicom.stitcher import PillowStitcher, Stitcher
 from wsidicom.uid import SlideUids
 
 
@@ -43,7 +50,6 @@ class WsiInstance:
         datasets: WsiDataset | Sequence[WsiDataset]
             Single dataset or list of datasets.
         image_data: ImageData
-            Image data.
         """
         if not isinstance(datasets, Sequence):
             datasets = [datasets]
@@ -51,6 +57,10 @@ class WsiInstance:
         self._image_data = image_data
         self._identifier, self._uids = self._validate_instance(self.datasets)
         self._image_type = self.dataset.image_type
+        self._stitcher: Stitcher = PillowStitcher()
+        self._downsampler: Downsampler = PillowDownsampler(
+            resample=settings.pillow_resampling_filter
+        )
 
         if self.ext_depth_of_field:
             if self.ext_depth_of_field_planes is None:
@@ -183,6 +193,223 @@ class WsiInstance:
     def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         return self.image_data.image_coordinate_system
 
+    def get_tile(
+        self,
+        tile_point: Point,
+        z: float,
+        path: str,
+        crop_to_image_boundary: bool = True,
+    ) -> Image:
+        """Get a tile as a Pillow image.
+
+        Parameters
+        ----------
+        tile_point: Point
+            Tile to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        crop_to_image_boundary: bool = True
+            If True, an edge tile is cropped to remove the part outside the
+            image.
+
+        Returns
+        -------
+        Image
+            The tile as a Pillow image.
+        """
+        tile = self._image_data.get_decoded_tile(tile_point, z, path)
+        if not crop_to_image_boundary:
+            return tile
+        return self._crop_tile(tile_point, tile)
+
+    def get_encoded_tile(
+        self, tile: Point, z: float, path: str, crop_to_image_boundary: bool = True
+    ) -> bytes:
+        """Get a tile as encoded bytes.
+
+        Parameters
+        ----------
+        tile: Point
+            Tile to get.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        crop_to_image_boundary: bool = True
+            If True, an edge tile is cropped to remove the part outside the
+            image, which requires re-encoding the cropped tile.
+
+        Returns
+        -------
+        bytes
+            The tile as encoded bytes.
+        """
+        if not crop_to_image_boundary:
+            return self._image_data.get_encoded_tile(tile, z, path)
+        # Check if tile is an edge tile that should be cropped
+        cropped_tile_region = self._image_data.image_region.inside_crop(
+            tile, self._image_data.tile_size
+        )
+        if cropped_tile_region.size == self._image_data.tile_size:
+            return self._image_data.get_encoded_tile(tile, z, path)
+        image = self._image_data.get_decoded_tile(tile, z, path)
+        image = image.crop(box=cropped_tile_region.box_from_origin)
+        return self._image_data.encoder.encode(image)
+
+    def get_region(
+        self,
+        region: Region,
+        z: float,
+        path: str,
+        output_size: Size | None = None,
+        threads: int = 1,
+    ) -> Image:
+        """Read ``region`` from this instance, optionally scaled to a size.
+
+        Assembles the pixels covering ``region`` and, if ``output_size`` is
+        given, downsamples the result to it.
+
+        Parameters
+        ----------
+        region: Region
+            Pixel region to read.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        output_size: Size | None = None
+            If given and different from the region size, the assembled region is
+            downsampled to this size.
+        threads: int
+            Number of threads to use for read.
+
+        Returns
+        -------
+        Image
+            The region image.
+        """
+        image_data = self._image_data
+        tile_region = self._get_tile_range(region, z, path)
+        if tile_region.size.area == 1:
+            # Only one tile, no need to stitch
+            tile = image_data.get_decoded_tile(tile_region.start, z, path)
+            tile_crop = region.inside_crop(tile_region.start, image_data.tile_size)
+            if tile_crop.size != image_data.tile_size:
+                tile = tile.crop(box=tile_crop.box)
+            image = tile
+        else:
+            canvas = self._stitcher.stitch_parallel(
+                tile_region=tile_region,
+                fetch=lambda chunk: image_data.get_decoded_tiles(chunk, z, path),
+                tile_size=image_data.tile_size,
+                mode=image_data.image_mode,
+                threads=threads,
+            )
+            crop_origin = region.start - tile_region.start * image_data.tile_size
+            image = canvas.crop(
+                (
+                    crop_origin.x,
+                    crop_origin.y,
+                    crop_origin.x + region.size.width,
+                    crop_origin.y + region.size.height,
+                )
+            )
+        if output_size is None or output_size == region.size:
+            return image
+        return self._downsampler.downsample(image, output_size)
+
+    def get_thumbnail(
+        self,
+        max_size: Size,
+        z: float,
+        path: str,
+        threads: int = 1,
+    ) -> Image:
+        """Read the full image, resampled to fit within ``max_size``.
+
+        Reads the whole image region, then resamples (via the instance's
+        downsampler) to fit within ``max_size`` preserving aspect ratio,
+        without upscaling.
+
+        Parameters
+        ----------
+        max_size: Size
+            Upper size limit of the thumbnail in pixels.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        threads: int
+            Number of threads to use for read.
+
+        Returns
+        -------
+        Image
+            The thumbnail image.
+        """
+        region = Region(position=Point(0, 0), size=self.size)
+        image = self.get_region(region, z, path, threads=threads)
+        return self._downsampler.thumbnail(image, max_size)
+
+    def _crop_tile(self, tile_point: Point, tile: Image) -> Image:
+        """Crop a tile to the image boundary if it is an edge tile.
+
+        Parameters
+        ----------
+        tile_point: Point
+            Tile coordinate of the tile.
+        tile: Image
+            Decoded tile image to crop.
+
+        Returns
+        -------
+        Image
+            The tile cropped to the image boundary if it is an edge tile,
+            otherwise an unmodified copy of the tile.
+        """
+        tile_crop = self._image_data.image_region.inside_crop(
+            tile_point, self._image_data.tile_size
+        )
+        # Check if tile is an edge tile that should be cropped
+        if tile_crop.size != self._image_data.tile_size:
+            return tile.crop(box=tile_crop.box)
+        return tile.copy()
+
+    def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:
+        """Return range of tiles to cover the pixel region.
+
+        Parameters
+        ----------
+        pixel_region: Region
+            Pixel region to cover.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        -------
+        Region
+            Tile region, in tile coordinates, covering the pixel region.
+
+        Raises
+        ------
+        WsiDicomOutOfBoundsError
+            If the tile region falls outside the tiled image.
+        """
+        image_data = self._image_data
+        tile_region = Region.from_points(
+            pixel_region.start // image_data.tile_size,
+            (pixel_region.end - 1) // image_data.tile_size + 1,
+        )
+        if not image_data.valid_tiles(tile_region, z, path):
+            raise WsiDicomOutOfBoundsError(
+                f"Tile region {tile_region}", f"tiled size {image_data.tiled_size}"
+            )
+        return tile_region
+
     @classmethod
     def create_label(
         cls, image: Image | str | Path | UPath, base_dataset: Dataset
@@ -205,7 +432,10 @@ class WsiInstance:
             image_data = PillowImageData(image)
         else:
             image_data = PillowImageData.from_file(image)
-        return cls.create_instance(image_data, base_dataset, ImageType.LABEL)
+        instance_dataset = WsiDataset.create_instance_dataset(
+            base_dataset, ImageType.LABEL, image_data
+        )
+        return cls(instance_dataset, image_data)
 
     @classmethod
     def create_instance(
@@ -215,18 +445,21 @@ class WsiInstance:
         image_type: ImageType,
         pyramid_index: int | None = None,
     ) -> "WsiInstance":
-        """Create WsiInstance from ImageData.
+        """Create a WsiInstance from image data.
+
+        Builds the instance dataset from the image data's metadata and composes
+        the instance.
 
         Parameters
         ----------
         image_data: ImageData
-            Image data and metadata.
+            Format-specific image data for the instance.
         base_dataset: Dataset
             Base dataset to include.
         image_type: ImageType
             Type of instance to create.
         pyramid_index: int | None = None
-            Pyramid index. of image data, if volume image.
+            Pyramid index of image data, if volume image.
 
         Returns
         -------
@@ -236,7 +469,6 @@ class WsiInstance:
         instance_dataset = WsiDataset.create_instance_dataset(
             base_dataset, image_type, image_data, pyramid_index
         )
-
         return cls(instance_dataset, image_data)
 
     @staticmethod

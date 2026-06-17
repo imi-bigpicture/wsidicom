@@ -94,13 +94,13 @@ class Level(Instances):
             raise WsiDicomNoResolutionError()
         return self._pixel_spacing
 
-    def matches(self, other_group: "Level") -> bool:
+    def matches(self, other_group: "Instances") -> bool:
         """Check if level matches other level. If strict common Uids should
         match. Wsi type and tile size should always match.
 
         Parameters
         ----------
-        other_level: Group
+        other_group: Instances
             Other level to match against.
 
         Returns
@@ -108,13 +108,11 @@ class Level(Instances):
         bool
             True if other level matches.
         """
-        other_level = other_group
-        return (
-            self.uids.matches(other_level.uids)
-            and other_level.image_type == self.image_type
-            and (
-                not settings.strict_tile_size_check
-                or other_level.tile_size == self.tile_size
+        return super().matches(other_group) and (
+            not settings.strict_tile_size_check
+            or (
+                isinstance(other_group, Level)
+                and other_group.tile_size == self.tile_size
             )
         )
 
@@ -154,8 +152,6 @@ class Level(Instances):
         crop_to_image_boundary: bool = True,
     ) -> Image:
         """Return tile in another level by scaling a region.
-        If the tile is an edge tile, the resulting tile is croped
-        to remove part outside of the image (as defined by level size).
 
         Parameters
         ----------
@@ -168,7 +164,9 @@ class Level(Instances):
         path: str | None = None
             Optical path
         crop_to_image_boundary: bool = True
-            If to crop tile to image boundary.
+            If True, edge tiles are cropped to remove the part outside the image
+            (as defined by the level size). If False, the cropped tile is padded
+            back to the full tile size with the background color.
 
         Returns
         -------
@@ -183,17 +181,22 @@ class Level(Instances):
             raise WsiDicomOutOfBoundsError(
                 f"Region {cropped_region}", f"level size {self.size}"
             )
-        image = self.get_region(cropped_region, z, path, crop_to_image_boundary)
-        tile_size = cropped_region.size.ceil_div(scale)
-        image = image.resize(
-            tile_size.to_tuple(), resample=settings.pillow_resampling_filter
+        image = self.get_region(
+            cropped_region,
+            z,
+            path,
+            output_size=cropped_region.size.ceil_div(scale),
         )
-        return image
+        if crop_to_image_boundary:
+            return image
+        canvas = instance.image_data.blank_tile.copy()
+        canvas.paste(image, (0, 0))
+        return canvas
 
     def get_scaled_encoded_tile(
         self,
         tile: Point,
-        scale: int,
+        level: int,
         z: float | None = None,
         path: str | None = None,
         crop_to_image_boundary: bool = True,
@@ -211,14 +214,16 @@ class Level(Instances):
         path: str | None = None
             Optical path
         crop_to_image_boundary: bool = True
-            If to crop tile to image boundary.
+            If True, edge tiles are cropped to remove the part outside the image.
+            If False, the cropped tile is padded back to the full tile size with
+            the background color.
 
         Returns
         -------
         bytes
             A transfer syntax encoded tile
         """
-        image = self.get_scaled_tile(tile, scale, z, path, crop_to_image_boundary)
+        image = self.get_scaled_tile(tile, level, z, path, crop_to_image_boundary)
         instance = self.get_instance(z, path)
         return instance.image_data.encoder.encode(image)
 

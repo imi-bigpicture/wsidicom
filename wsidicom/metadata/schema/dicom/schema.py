@@ -48,7 +48,9 @@ class BaseDicomSchema(LoadingSchema[LoadType], Generic[LoadType, DumpType]):
     def dump_type(self) -> type[DumpType]:
         raise NotImplementedError()
 
-    def load(self, data: DumpType, **kwargs) -> LoadType:
+    def load(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, data: DumpType, **kwargs
+    ) -> LoadType:
         """Load object from DumpType."""
         item = super().load(data, **kwargs)  # type: ignore
         assert isinstance(item, self.load_type)
