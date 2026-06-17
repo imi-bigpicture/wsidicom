@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-06-17
+
 ### Added
 
 - Improved control of uid generation by use of an user-supplied `UidGenerator` (abstract) or `CallableUidGenerator` (default implementation).
@@ -585,7 +587,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.30.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.31.0..HEAD
+[0.31.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.30.0..v0.31.0
 [0.30.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.1..v0.30.0
 [0.29.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.0..v0.29.1
 [0.29.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.28.1..v0.29.0

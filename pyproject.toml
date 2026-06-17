@@ -1,6 +1,6 @@
 [project]
 name = "wsidicom"
-version = "0.30.0"
+version = "0.31.0"
 description = "Tools for handling DICOM based whole scan images"
 authors = [
     {name = "Erik O Gabrielsson", email = "erik.o.gabrielsson@sectra.com"}
