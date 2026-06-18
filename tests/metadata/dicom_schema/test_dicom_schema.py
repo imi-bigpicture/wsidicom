@@ -782,7 +782,9 @@ class TestDicomSchema:
         )
 
         # Act
-        serialized = WsiMetadataDicomSchema().dump(metadata, image_type=ImageType.VOLUME)
+        serialized = WsiMetadataDicomSchema().dump(
+            metadata, image_type=ImageType.VOLUME
+        )
 
         # Assert
         assert serialized.SpecificCharacterSet == "ISO_IR 192"
