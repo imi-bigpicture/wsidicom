@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -766,6 +767,26 @@ class TestDicomSchema:
                     )
         assert_dicom_label_equals_label(serialized, label)
         assert_dicom_patient_equals_patient(serialized, patient)
+
+    def test_serialize_wsi_metadata_sets_utf8_character_set(
+        self,
+        wsi_metadata: WsiMetadata,
+    ):
+        # Regression test for wsidicomizer#162: without SpecificCharacterSet a
+        # non-ASCII PatientName (ideographic + phonetic groups) corrupts or
+        # crashes on write.
+        # Arrange
+        name = "ﾔﾏﾀﾞ^ﾀﾛｳ=山田^太郎=やまだ^たろう"
+        metadata = replace(
+            wsi_metadata, patient=replace(wsi_metadata.patient, name=name)
+        )
+
+        # Act
+        serialized = WsiMetadataDicomSchema().dump(metadata, image_type=ImageType.VOLUME)
+
+        # Assert
+        assert serialized.SpecificCharacterSet == "ISO_IR 192"
+        assert str(serialized.PatientName) == name
 
     def test_serialize_wsi_metadata_without_uids(
         self,
