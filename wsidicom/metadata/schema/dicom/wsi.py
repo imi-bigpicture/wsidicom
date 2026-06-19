@@ -229,7 +229,12 @@ class WsiMetadataDicomSchema:
             return module
         if len(module.optical_paths) == 0:
             # No optical paths defined, add one with icc profile
-            optical_paths = [OpticalPath(icc_profile=cls._create_default_icc_profile())]
+            optical_paths = [
+                OpticalPath(
+                    icc_profile=cls._create_default_icc_profile(),
+                    color_space="SRGB",
+                )
+            ]
         else:
             # Optical paths defined, add icc profile if missing
             optical_paths = [
@@ -237,6 +242,7 @@ class WsiMetadataDicomSchema:
                     replace(
                         optical_path,
                         icc_profile=cls._create_default_icc_profile(),
+                        color_space="SRGB",
                     )
                     if optical_path.icc_profile is None
                     else optical_path

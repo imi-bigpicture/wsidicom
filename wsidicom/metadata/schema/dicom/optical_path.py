@@ -607,6 +607,9 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
     )
 
     icc_profile = fields.Raw(data_key="ICCProfile", load_default=None)
+    color_space = StringDicomField(
+        value_representation=VR.CS, data_key="ColorSpace", load_default=None
+    )
     lut = LutDicomField(data_key="PaletteColorLookupTableSequence", load_default=None)
     light_path_filter = FlattenOnDumpNestedDicomField(
         LightPathFilterDicomSchema(), load_default=None
@@ -634,6 +637,8 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
             fields["description"] = optical_path.description
         if optical_path.icc_profile is not None:
             fields["icc_profile"] = optical_path.icc_profile
+        if optical_path.color_space is not None:
+            fields["color_space"] = optical_path.color_space
         if isinstance(optical_path.illumination, float):
             fields["illumination_wavelength"] = optical_path.illumination
         if isinstance(optical_path.illumination, Code):
