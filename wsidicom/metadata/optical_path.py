@@ -318,6 +318,9 @@ class OpticalPath:
         Image path filter used in the optical path.
     objective : Objectives | None = None
         Objectives used in the optical path.
+    color_space : str | None = None
+        Name of a well-known color space described by `icc_profile`, e.g. "SRGB",
+        "ADOBERGB", or "ROMMRGB". Only valid when `icc_profile` is that color space.
     """
 
     identifier: str | None = None
@@ -329,3 +332,4 @@ class OpticalPath:
     light_path_filter: LightPathFilter | None = None
     image_path_filter: ImagePathFilter | None = None
     objective: Objectives | None = None
+    color_space: str | None = None

@@ -195,6 +195,7 @@ class OpticalPathJsonSchema(LoadingSchema[OpticalPath]):
     )
     lut = fields.Nested(LutJsonSchema(), allow_none=True)
     icc_profile = FileLoadingField(load_only=True, load_default=None)
+    color_space = fields.String(allow_none=True)
     light_path_filter = fields.Nested(LightPathFilterJsonSchema(), allow_none=True)
     image_path_filter = fields.Nested(ImagePathFilterJsonSchema(), allow_none=True)
     objective = fields.Nested(ObjectivesJsonSchema(), allow_none=True)

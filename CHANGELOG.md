@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `OpticalPath.color_space` maps to the DICOM `ColorSpace` attribute (0028,2002) in the Optical Path Sequence.
+
 ### Changed
 
 - `InstanceNumber` now starts at 1 instead of 0, following the DICOM convention of 1-based indexing.
+- The default ICC profile inserted by `WsiDicom.save()` is now labelled with `ColorSpace` `SRGB`, since it describes the sRGB color space.
 
 ### Fixed
 
