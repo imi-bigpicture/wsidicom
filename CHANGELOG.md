@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The file creation timestamp is now written as `InstanceCreationDate`/`InstanceCreationTime` instead of `ContentDate`/`ContentTime`. `ContentDate`/`ContentTime` are no longer overwritten with the creation time and reflect the source image content.
 - Written datasets now declare `SpecificCharacterSet` (defaults to `ISO_IR 192`/UTF-8), so non-ASCII metadata such as ideographic/phonetic `PatientName` groups is encoded correctly instead of being corrupted or failing to write. A `SpecificCharacterSet` already present in the supplied metadata is respected.
 
 ## [0.31.0] - 2026-06-17

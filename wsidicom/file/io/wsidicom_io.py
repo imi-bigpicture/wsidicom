@@ -333,17 +333,24 @@ class WsiDicomIO:
         validate_file_meta(meta)
         write_file_meta_info(self._dicom_io, meta)
 
-    def write_dataset(self, dataset: Dataset, content_datetime: datetime):
+    def write_dataset(self, dataset: Dataset, creation_datetime: datetime):
         """Write dataset to stream.
 
         Parameters
         ----------
         dataset: Dataset
             Dataset to write.
+        creation_datetime: datetime
+            Time this instance is created, written as InstanceCreationDate/Time.
+            ContentDate/Time describe the image content and are left untouched.
 
         """
-        dataset.ContentDate = datetime.date(content_datetime).strftime("%Y%m%d")
-        dataset.ContentTime = datetime.time(content_datetime).strftime("%H%M%S.%f")
+        dataset.InstanceCreationDate = datetime.date(creation_datetime).strftime(
+            "%Y%m%d"
+        )
+        dataset.InstanceCreationTime = datetime.time(creation_datetime).strftime(
+            "%H%M%S.%f"
+        )
         write_dataset(self._dicom_io, dataset)
 
     def close(self, force: bool | None = False) -> None:
