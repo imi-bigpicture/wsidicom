@@ -63,7 +63,7 @@ class Target(metaclass=ABCMeta):
         self._include_pyramids = include_pyramids
         self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
-        self._instance_number = 0
+        self._instance_number = 1
         self._force_transcoding = force_transcoding
         if isinstance(transcoding, EncoderSettings):
             self._transcoder = Encoder.create_for_settings(transcoding)

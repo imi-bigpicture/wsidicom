@@ -737,7 +737,7 @@ class GroupFileWriter(BaseFileWriter):
         force_transcoding: bool,
         offset_table: OffsetTableType | None = None,
         file_options: dict[str, Any] | None = None,
-        instance_number_start: int = 0,
+        instance_number_start: int = 1,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
     ):
