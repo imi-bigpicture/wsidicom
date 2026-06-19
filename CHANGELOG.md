@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `InstanceNumber` now starts at 1 instead of 0, following the DICOM convention of 1-based indexing.
+
 ### Fixed
 
 - Written datasets now declare `SpecificCharacterSet` (defaults to `ISO_IR 192`/UTF-8), so non-ASCII metadata such as ideographic/phonetic `PatientName` groups is encoded correctly instead of being corrupted or failing to write. A `SpecificCharacterSet` already present in the supplied metadata is respected.
