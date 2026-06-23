@@ -21,6 +21,7 @@ from collections.abc import Callable
 import numpy as np
 from PIL import Image as Pillow
 from PIL.Image import Image
+from PIL.JpegImagePlugin import JpegImageFile
 from pydicom import config as pydicom_config
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.encaps import encapsulate
@@ -158,9 +159,9 @@ class Decoder(metaclass=ABCMeta):
         if decoder is None:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
         if decoder == PillowDecoder:
-            return PillowDecoder()
+            return PillowDecoder(photometric_interpretation)
         elif decoder == ImageCodecsDecoder:
-            return ImageCodecsDecoder(transfer_syntax)
+            return ImageCodecsDecoder(transfer_syntax, photometric_interpretation)
         elif decoder == PylibjpegRleDecoder:
             return PylibjpegRleDecoder(size, samples_per_pixel, bits)
         elif decoder == ImageCodecsRleDecoder:
@@ -255,10 +256,49 @@ class PillowDecoder(Decoder):
         HTJ2KLosslessRPCL,
     ]
 
+    # ASCII 'R', 'G', 'B'. A baseline JPEG with these component ids is treated
+    # as RGB by Pillow without an Adobe APP14 marker.
+    _RGB_COMPONENT_IDS = (0x52, 0x47, 0x42)
+
+    def __init__(self, photometric_interpretation: str | None = None) -> None:
+        """Initialize decoder.
+
+        Parameters
+        ----------
+        photometric_interpretation: str | None = None
+            Photometric interpretation from the DICOM metadata. When ``"RGB"``,
+            a baseline JPEG frame that does not itself signal RGB (no Adobe
+            APP14 marker and no 'R','G','B' component ids) is decoded without
+            applying a YCbCr to RGB color transform.
+        """
+        self._photometric_interpretation = photometric_interpretation
+
     def decode(self, frame: bytes) -> Image:
         image = Pillow.open(io.BytesIO(frame))
+        if not self._should_suppress_color_transform(image):
+            image.load()
+            return self._set_mode(image)
+        image.draft("YCbCr", image.size)  # skip Pillow's YCbCr to RGB transform
         image.load()
-        return self._set_mode(image)
+        # Re-tag the (already RGB) samples as RGB; frombuffer wraps the bytes
+        # in place instead of copying them again.
+        rgb = Pillow.frombuffer("RGB", image.size, image.tobytes(), "raw", "RGB", 0, 1)
+        return self._set_mode(rgb)
+
+    def _should_suppress_color_transform(self, image: Image) -> bool:
+        """Return True if Pillow's YCbCr to RGB transform should be suppressed:
+        the metadata declares RGB but the JPEG itself signals no RGB color space
+        (no Adobe APP14 marker and no 'R','G','B' component ids). Reads only
+        fields Pillow already parsed from the header."""
+        if self._photometric_interpretation != "RGB" or not isinstance(
+            image, JpegImageFile
+        ):
+            return False
+        header_signals_rgb = (
+            image.info.get("adobe_transform") == 0
+            or tuple(layer[0] for layer in image.layer) == self._RGB_COMPONENT_IDS
+        )
+        return not header_signals_rgb
 
     @classmethod
     def is_supported(
@@ -417,23 +457,34 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
         JPEGXLLossless: (jpegxl_decode, JPEGXLCodec),
     }
 
-    def __init__(self, transfer_syntax: UID) -> None:
+    def __init__(
+        self, transfer_syntax: UID, photometric_interpretation: str | None = None
+    ) -> None:
         """Initialize decoder.
 
         Parameters
         ----------
         transfer_syntax : UID
             Transfer syntax.
+        photometric_interpretation : str | None = None
+            Photometric interpretation from the DICOM metadata. When ``"RGB"``,
+            a JPEG frame is decoded as RGB (no YCbCr to RGB transform),
+            regardless of whether the stream carries an Adobe APP14 marker or
+            'R','G','B' component ids.
         """
         decoder = self._get_decoder(transfer_syntax)
         if decoder is None:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
         self._decoder = decoder
+        if photometric_interpretation == "RGB" and decoder is jpeg8_decode:
+            self._decode_kwargs = {"colorspace": "RGB", "outcolorspace": "RGB"}
+        else:
+            self._decode_kwargs = {}
 
     def _decode(self, frame: bytes) -> np.ndarray:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
-        return self._decoder(frame)
+        return self._decoder(frame, **self._decode_kwargs)
 
     @classmethod
     def is_supported(
