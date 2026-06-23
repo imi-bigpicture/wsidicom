@@ -12,9 +12,15 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import io
+
+import numpy as np
 import pytest
+from PIL import Image as Pillow
 from PIL import ImageChops, ImageStat
 from PIL.Image import Image
+from PIL.JpegImagePlugin import JpegImageFile
+from pydicom import config as pydicom_config
 from pydicom.uid import (
     HTJ2K,
     JPEG2000,
@@ -34,6 +40,7 @@ from pydicom.uid import (
     JPEGLSNearLossless,
     RLELossless,
 )
+from wsidicom_data import TestData
 
 from wsidicom.codec import (
     Channels,
@@ -59,8 +66,88 @@ from wsidicom.codec.optionals import (
     IMAGE_CODECS_AVAILABLE,
     PYLIBJPEGLS_AVAILABLE,
     PYLIBJPEGOPENJPEG_AVAILABLE,
+    jpeg8_encode,
 )
 from wsidicom.geometry import Size
+
+
+def _pydicom_can_decode(transfer_syntax: UID) -> bool:
+    """Whether any available pydicom pixel data handler supports the transfer
+    syntax. Support for e.g. JPEG Lossless depends on optional extras such as
+    gdcm or pylibjpeg-libjpeg being installed."""
+    return any(
+        handler.is_available() and handler.supports_transfer_syntax(transfer_syntax)
+        for handler in pydicom_config.pixel_data_handlers
+    )
+
+
+def _find_jpeg_marker(frame: bytes | bytearray, marker: int) -> int:
+    """Return index of the 0xFF byte of the first `marker` in the header."""
+    i = 0
+    while i < len(frame) - 1:
+        if frame[i] == 0xFF and frame[i + 1] == marker:
+            return i
+        if frame[i] == 0xFF and frame[i + 1] == 0xDA:
+            return i if marker == 0xDA else -1
+        if (
+            frame[i] == 0xFF
+            and frame[i + 1] not in (0x00, 0xD8)
+            and not (0xD0 <= frame[i + 1] <= 0xD7)
+        ):
+            i += 2 + ((frame[i + 2] << 8) | frame[i + 3])
+            continue
+        i += 1
+    return -1
+
+
+@pytest.fixture
+def rgb_image() -> Image:
+    return TestData.image(8, 3)
+
+
+@pytest.fixture
+def rgb_jpeg_without_rgb_signal(rgb_image: Image) -> bytes:
+    """An RGB (untransformed) baseline JPEG with the Adobe APP14 marker stripped
+    and the component ids reset to 1, 2, 3, so the stream carries no in-band RGB
+    signal (decoders default to YCbCr)."""
+    if jpeg8_encode is None:
+        pytest.skip("imagecodecs required")
+    frame = bytearray(
+        jpeg8_encode(
+            np.asarray(rgb_image),
+            colorspace="RGB",
+            outcolorspace="RGB",
+            subsampling="444",
+            level=95,
+        )
+    )
+    # Reset SOF component ids and SOS selectors to 1, 2, 3.
+    sof = _find_jpeg_marker(frame, 0xC0)
+    for c in range(3):
+        frame[sof + 10 + c * 3] = c + 1
+    sos = _find_jpeg_marker(frame, 0xDA)
+    for c in range(frame[sos + 4]):
+        frame[sos + 5 + c * 2] = c + 1
+    # Strip the Adobe APP14 marker.
+    app14 = _find_jpeg_marker(frame, 0xEE)
+    if app14 != -1:
+        length = (frame[app14 + 2] << 8) | frame[app14 + 3]
+        del frame[app14 : app14 + 2 + length]
+    # Postcondition (checked via Pillow's own header parse): the stream must not
+    # itself signal RGB, otherwise a decoder would produce RGB without the
+    # metadata hint and the tests would pass without exercising it.
+    header = Pillow.open(io.BytesIO(bytes(frame)))
+    assert isinstance(header, JpegImageFile)
+    assert "adobe_transform" not in header.info  # no Adobe APP14 marker
+    component_ids = [layer[0] for layer in header.layer]
+    assert component_ids == [1, 2, 3]  # default ids, not 'R', 'G', 'B'
+    return bytes(frame)
+
+
+def _max_rms(decoded: Image, image: Image) -> float:
+    """Maximum per-band RMS difference between two images."""
+    diff = ImageChops.difference(decoded.convert("RGB"), image.convert("RGB"))
+    return max(ImageStat.Stat(diff).rms)
 
 
 @pytest.mark.unittest
@@ -138,6 +225,49 @@ class TestPillowDecoder:
         for band_rms in ImageStat.Stat(diff).rms:
             assert band_rms <= allowed_rms
 
+    def test_uses_photometric_interpretation(
+        self, rgb_image: Image, rgb_jpeg_without_rgb_signal: bytes
+    ):
+        # A stream storing RGB samples but signalling no color space (no APP14,
+        # ids 1, 2, 3) must decode as RGB when the metadata declares RGB.
+        # Arrange
+        decoder = PillowDecoder("RGB")
+
+        # Act
+        decoded = decoder.decode(rgb_jpeg_without_rgb_signal)
+
+        # Assert
+        assert _max_rms(decoded, rgb_image) <= 2
+
+    def test_rgb_metadata_does_not_break_stream_signalling_rgb_by_ids(
+        self, rgb_image: Image
+    ):
+        # The RGB hint must not corrupt a stream that already signals RGB via
+        # 'R', 'G', 'B' component ids (regression for the draft hack).
+        # Arrange
+        if jpeg8_encode is None:
+            pytest.skip("imagecodecs required")
+        # RGB encode keeps APP14 + R, G, B ids; strip only APP14 to leave the ids.
+        frame = bytearray(
+            jpeg8_encode(
+                np.asarray(rgb_image),
+                colorspace="RGB",
+                outcolorspace="RGB",
+                subsampling="444",
+                level=95,
+            )
+        )
+        app14 = _find_jpeg_marker(frame, 0xEE)
+        length = (frame[app14 + 2] << 8) | frame[app14 + 3]
+        del frame[app14 : app14 + 2 + length]
+        decoder = PillowDecoder("RGB")
+
+        # Act
+        decoded = decoder.decode(bytes(frame))
+
+        # Assert
+        assert _max_rms(decoded, rgb_image) <= 2
+
 
 @pytest.mark.unittest
 class TestPydicomDecoder:
@@ -151,8 +281,8 @@ class TestPydicomDecoder:
             (RLELossless, True),
             (JPEGBaseline8Bit, True),
             (JPEGExtended12Bit, True),
-            (JPEGLossless, False),
-            (JPEGLosslessSV1, False),
+            (JPEGLossless, _pydicom_can_decode(JPEGLossless)),
+            (JPEGLosslessSV1, _pydicom_can_decode(JPEGLosslessSV1)),
             (JPEGLSLossless, PYLIBJPEGLS_AVAILABLE),
             (JPEGLSNearLossless, PYLIBJPEGLS_AVAILABLE),
             (JPEG2000Lossless, True),
@@ -297,6 +427,20 @@ class TestImageCodecsDecoder:
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:
             assert band_rms <= allowed_rms
+
+    def test_uses_photometric_interpretation(
+        self, rgb_image: Image, rgb_jpeg_without_rgb_signal: bytes
+    ):
+        # A stream storing RGB samples but signalling no color space (no APP14,
+        # ids 1, 2, 3) must decode as RGB when the metadata declares RGB.
+        # Arrange
+        decoder = ImageCodecsDecoder(JPEGBaseline8Bit, "RGB")
+
+        # Act
+        decoded = decoder.decode(rgb_jpeg_without_rgb_signal)
+
+        # Assert
+        assert _max_rms(decoded, rgb_image) <= 2
 
 
 @pytest.mark.unittest
@@ -538,3 +682,5 @@ class TestPyLibJpegOpenJpegDecoder:
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:
             assert band_rms <= allowed_rms
+
+
