@@ -391,6 +391,10 @@ def assert_dicom_optical_path_equals_optical_path(
         assert dicom_optical_path.ICCProfile == optical_path.icc_profile
     else:
         assert "ICCProfile" not in dicom_optical_path
+    if optical_path.color_space is not None:
+        assert dicom_optical_path.ColorSpace == optical_path.color_space
+    else:
+        assert "ColorSpace" not in dicom_optical_path
 
 
 def assert_dicom_patient_equals_patient(dicom_patient: Dataset, patient: Patient):

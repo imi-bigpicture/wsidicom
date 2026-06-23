@@ -768,6 +768,27 @@ class TestDicomSchema:
         assert_dicom_label_equals_label(serialized, label)
         assert_dicom_patient_equals_patient(serialized, patient)
 
+    def test_require_icc_profile_sets_srgb_color_space(
+        self,
+        wsi_metadata: WsiMetadata,
+    ):
+        # Arrange: no optical paths, so require_icc_profile inserts the default one
+        metadata = replace(
+            wsi_metadata, pyramid=replace(wsi_metadata.pyramid, optical_paths=[])
+        )
+        schema = WsiMetadataDicomSchema()
+
+        # Act
+        serialized = schema.dump(
+            metadata, image_type=ImageType.VOLUME, require_icc_profile=True
+        )
+
+        # Assert: the inserted default sRGB profile is labelled SRGB (C.11.15.1.2)
+        assert isinstance(serialized, Dataset)
+        optical_path = serialized.OpticalPathSequence[0]
+        assert "ICCProfile" in optical_path
+        assert optical_path.ColorSpace == "SRGB"
+
     def test_serialize_wsi_metadata_sets_utf8_character_set(
         self,
         wsi_metadata: WsiMetadata,
