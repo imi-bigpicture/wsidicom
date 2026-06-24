@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-06-24
+
 ### Added
 
 - `OpticalPath.color_space` maps to the DICOM `ColorSpace` attribute (0028,2002) in the Optical Path Sequence.
