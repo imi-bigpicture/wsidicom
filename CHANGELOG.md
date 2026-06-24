@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The file creation timestamp is now written as `InstanceCreationDate`/`InstanceCreationTime` instead of `ContentDate`/`ContentTime`. `ContentDate`/`ContentTime` are no longer overwritten with the creation time and reflect the source image content.
 - Written datasets now declare `SpecificCharacterSet` (defaults to `ISO_IR 192`/UTF-8), so non-ASCII metadata such as ideographic/phonetic `PatientName` groups is encoded correctly instead of being corrupted or failing to write. A `SpecificCharacterSet` already present in the supplied metadata is respected.
 - `PillowDecoder` and `ImageCodecsDecoder` now honor a `PhotometricInterpretation` of `RGB` when decoding baseline JPEG frames that store RGB samples without signalling RGB in the stream (no Adobe APP14 marker and no `R`, `G`, `B` component ids). Such frames are decoded as RGB instead of being misinterpreted as YCbCr and producing wrong colors.
+- Optical path identifiers are now read in the order of the items in the Optical Path Sequence (DICOM PS3.3 C.7.6.17.3), which defines the optical path frame order for `TILED_FULL`. Previously they were read in an arbitrary set order, which could attribute frames to the wrong optical path in instances with multiple optical paths (non-deterministically between processes).
 
 ## [0.31.0] - 2026-06-17
 

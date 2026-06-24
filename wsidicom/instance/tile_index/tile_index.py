@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
@@ -126,22 +126,22 @@ class TileIndex(metaclass=ABCMeta):
         Returns
         -------
         list[str]
-            Optical identifiers.
+            Optical identifiers, in Optical Path Sequence order.
 
         """
-        paths: set[str] = set()
-        for dataset in datasets:
-            paths.update(cls._get_path_identifers(dataset.optical_path_sequence))
-        if len(paths) == 0:
-            return ["0"]
-        return list(paths)
+        paths = dict.fromkeys(
+            path
+            for dataset in datasets
+            for path in cls._get_path_identifers(dataset.optical_path_sequence)
+        )
+        return list(paths) if paths else ["0"]
 
     @staticmethod
     def _get_path_identifers(
         optical_path_sequence: DicomSequence | None,
-    ) -> list[str]:
+    ) -> Iterable[str]:
         """Parse optical path sequence and return list of optical path
-        identifiers
+        identifiers, in Optical Path Sequence order.
 
         Parameters
         ----------
@@ -150,16 +150,14 @@ class TileIndex(metaclass=ABCMeta):
 
         Returns
         -------
-        list[str]
-            List of optical path identifiers.
+        Iterable[str]
+            List of optical path identifiers, in Optical Path Sequence order.
         """
         if optical_path_sequence is None:
             return ["0"]
-        return list(
-            {
-                str(optical_ds[OpticalPathIdentifierTag].value)
-                for optical_ds in optical_path_sequence
-            }
+        return dict.fromkeys(
+            str(optical_ds[OpticalPathIdentifierTag].value)
+            for optical_ds in optical_path_sequence
         )
 
     def _read_frame_coordinates(self, frame: Dataset) -> tuple[Point, float]:
