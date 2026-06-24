@@ -29,6 +29,7 @@ from wsidicom.file.file_writer import (
     GroupFileWriter,
     PyramidFileWriter,
 )
+from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.file.io import OffsetTableType
 from wsidicom.group import Label, Level, Overview, Thumbnail
 from wsidicom.metadata import WsiMetadata
@@ -55,6 +56,7 @@ class WsiDicomFileTarget(Target):
         file_options: dict[str, Any] | None = None,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
+        instance_split: InstanceSplit = InstanceSplit.NONE,
     ):
         """
         Create a WsiDicomFileTarget.
@@ -97,6 +99,9 @@ class WsiDicomFileTarget(Target):
             attributes of the source image data, dropping any attributes not
             modeled by the metadata schema (e.g. private tags). If False,
             `metadata` is overlaid on the source datasets instead.
+        instance_split: InstanceSplit = InstanceSplit.NONE
+            Controls how optical paths and focal planes are split across output
+            instances. See `InstanceSplit`.
         """
         self._output_path = UPath(output_path)
         self._offset_table = offset_table
@@ -105,6 +110,7 @@ class WsiDicomFileTarget(Target):
         self._chunk_size = chunk_size
         self._metadata = metadata
         self._replace_metadata = replace_metadata
+        self._instance_split = instance_split
         super().__init__(
             uid_generator,
             workers,
@@ -179,6 +185,7 @@ class WsiDicomFileTarget(Target):
                 chunk_size=self._chunk_size,
                 metadata=self._metadata,
                 replace_metadata=self._replace_metadata,
+                instance_split=self._instance_split,
             )
             if include_thumbnails and pyramid.thumbnails is not None:
                 for group in pyramid.thumbnails.groups:
@@ -207,4 +214,5 @@ class WsiDicomFileTarget(Target):
             instance_number_start=self._instance_number,
             metadata=self._metadata,
             replace_metadata=self._replace_metadata,
+            instance_split=self._instance_split,
         )

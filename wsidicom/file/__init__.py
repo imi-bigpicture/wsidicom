@@ -14,8 +14,14 @@
 
 """Module for handling DICOM WSI instances read from file."""
 
+from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.file.io.frame_index import OffsetTableType
 from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
 from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
 
-__all__ = ["OffsetTableType", "WsiDicomFileSource", "WsiDicomFileTarget"]
+__all__ = [
+    "InstanceSplit",
+    "OffsetTableType",
+    "WsiDicomFileSource",
+    "WsiDicomFileTarget",
+]

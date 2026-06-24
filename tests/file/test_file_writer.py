@@ -29,8 +29,10 @@ from wsidicom import WsiDicom
 from wsidicom.codec import Encoder
 from wsidicom.file import OffsetTableType
 from wsidicom.file.file_writer import (
+    BaseFileWriter,
     PyramidFileWriter,
 )
+from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Pyramid
 
@@ -41,9 +43,124 @@ def decoy() -> Decoy:
     return Decoy()
 
 
+class SplitOnlyWriter(BaseFileWriter):
+    """Minimal concrete writer to exercise `_split_planes_paths` in isolation."""
+
+    def __init__(self, instance_split: InstanceSplit):
+        super().__init__(
+            output_path=".",
+            uid_generator=None,  # type: ignore[arg-type]
+            transcoder=None,
+            force_transcoding=False,
+            offset_table=None,
+            file_options=None,
+            instance_number_start=0,
+            instance_split=instance_split,
+        )
+
+    def write(self):  # pragma: no cover - not exercised
+        raise NotImplementedError()
+
+
 @pytest.mark.unittest
 class TestPyramidFileWriterHelpers:
     """Tests for PyramidFileWriter static helper methods."""
+
+
+@pytest.mark.unittest
+class TestBaseFileWriterSplit:
+    """Tests for `BaseFileWriter._split_planes_paths`."""
+
+    @pytest.mark.parametrize(
+        ["split", "expected"],
+        [
+            (
+                InstanceSplit.NONE,
+                [([0.0, 1.0], ["0", "1"])],
+            ),
+            (
+                InstanceSplit.FOCAL_PLANE,
+                [([0.0], ["0", "1"]), ([1.0], ["0", "1"])],
+            ),
+            (
+                InstanceSplit.OPTICAL_PATH,
+                [([0.0, 1.0], ["0"]), ([0.0, 1.0], ["1"])],
+            ),
+            (
+                InstanceSplit.FOCAL_PLANE | InstanceSplit.OPTICAL_PATH,
+                [([0.0], ["0"]), ([1.0], ["0"]), ([0.0], ["1"]), ([1.0], ["1"])],
+            ),
+        ],
+    )
+    def test_split_planes_paths_buckets(
+        self,
+        split: InstanceSplit,
+        expected: list[tuple[list[float], list[str]]],
+    ):
+        # Arrange — a complete grid: both optical paths have both focal planes.
+        writer = SplitOnlyWriter(split)
+
+        # Act
+        buckets = writer._split_planes_paths({"0": [0.0, 1.0], "1": [0.0, 1.0]})
+
+        # Assert
+        assert buckets == expected
+
+    def test_unequally_spaced_focal_planes_split_even_without_flag(self):
+        # Arrange — unequally spaced focal planes cannot share one TILED_FULL
+        # instance, so they are split per plane even with InstanceSplit.NONE.
+        writer = SplitOnlyWriter(InstanceSplit.NONE)
+
+        # Act
+        buckets = writer._split_planes_paths({"0": [0.0, 0.5, 2.0]})
+
+        # Assert
+        assert buckets == [([0.0], ["0"]), ([0.5], ["0"]), ([2.0], ["0"])]
+
+    def test_equally_spaced_focal_planes_stay_combined(self):
+        # Arrange
+        writer = SplitOnlyWriter(InstanceSplit.NONE)
+
+        # Act
+        buckets = writer._split_planes_paths({"0": [0.0, 1.0, 2.0]})
+
+        # Assert
+        assert buckets == [([0.0, 1.0, 2.0], ["0"])]
+
+    def test_sparse_grid_splits_optical_paths_even_without_flag(self):
+        # Arrange — optical path "1" is missing focal plane 1.0, so the grid is
+        # sparse and the optical paths must be split into separate instances.
+        writer = SplitOnlyWriter(InstanceSplit.NONE)
+
+        # Act
+        buckets = writer._split_planes_paths({"0": [0.0, 1.0], "1": [0.0]})
+
+        # Assert — each bucket is a complete grid.
+        assert buckets == [([0.0, 1.0], ["0"]), ([0.0], ["1"])]
+
+    def test_split_covers_every_present_cell_exactly_once(self):
+        # Arrange — a sparse grid.
+        focal_planes_by_optical_path = {"a": [0.0, 1.0, 2.0], "b": [0.0]}
+        writer = SplitOnlyWriter(InstanceSplit.NONE)
+
+        # Act
+        buckets = writer._split_planes_paths(focal_planes_by_optical_path)
+
+        # Assert — every present (plane, path) cell is covered exactly once and
+        # no absent cell is introduced.
+        pairs = [
+            (focal_plane, path)
+            for planes, paths in buckets
+            for focal_plane in planes
+            for path in paths
+        ]
+        expected_pairs = [
+            (focal_plane, path)
+            for path, planes in focal_planes_by_optical_path.items()
+            for focal_plane in planes
+        ]
+        assert sorted(pairs) == sorted(expected_pairs)
+        assert len(pairs) == len(set(pairs))
 
 
 @pytest.mark.integration

@@ -49,11 +49,15 @@ class GroupInstanceWriter:
         instances: Instances,
         encoder: Encoder,
         transcode: bool,
+        focal_planes: Sequence[float],
+        optical_paths: Sequence[str],
     ):
         self._dataset = dataset
         self._instances = instances
         self._encoder = encoder
         self._transcode = transcode
+        self._focal_planes = focal_planes
+        self._optical_paths = optical_paths
 
     @property
     def dataset(self) -> WsiDataset:
@@ -64,10 +68,14 @@ class GroupInstanceWriter:
         if self._transcode:
             tiles: Iterable[bytes] = (
                 self._encoder.encode(decoded)
-                for decoded in self._instances.iter_decoded_tiles()
+                for decoded in self._instances.iter_decoded_tiles(
+                    self._focal_planes, self._optical_paths
+                )
             )
         else:
-            tiles = self._instances.iter_encoded_tiles()
+            tiles = self._instances.iter_encoded_tiles(
+                self._focal_planes, self._optical_paths
+            )
         tile_writer.write_tiles(tiles)
 
 
@@ -170,6 +178,8 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         queue_maxsize: int = 100,
         chunk_size: int | None = None,
         *,
+        focal_planes: Sequence[float],
+        optical_paths: Sequence[str],
         token: CancellationToken,
     ):
         self._owned_tile_queue: PriorityCancelableQueue[
@@ -179,8 +189,8 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
             level_index=level_index,
             dataset=dataset,
             tile_cache=tile_cache,
-            focal_planes=source_group.focal_planes,
-            optical_paths=source_group.optical_paths,
+            focal_planes=focal_planes,
+            optical_paths=optical_paths,
             tiled_size=tiled_size,
             tile_queue=self._owned_tile_queue,
             token=token,
@@ -214,8 +224,8 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         inflight = Semaphore(max_inflight)
 
         futures: list[Future[None]] = []
-        for path_index, path in enumerate(self._source_group.optical_paths):
-            for z_index, z in enumerate(self._source_group.focal_planes):
+        for path_index, path in enumerate(self._optical_paths):
+            for z_index, z in enumerate(self._focal_planes):
                 image_data = self._source_group.image_data_map[(path, z)]
                 for positions in self._iter_batches(
                     image_data,

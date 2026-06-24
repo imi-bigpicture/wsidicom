@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from wsidicom.config import settings
+from wsidicom.file import InstanceSplit
 from wsidicom.graphical_annotations import (
     Annotation,
     AnnotationGroup,
@@ -45,6 +46,7 @@ __all__ = [
     "Polyline",
     "PolylineAnnotationGroup",
     "ImageData",
+    "InstanceSplit",
     "WsiDataset",
     "WsiInstance",
     "Labels",

@@ -34,7 +34,12 @@ from wsidicom.errors import (
     WsiDicomNotFoundError,
     WsiDicomOutOfBoundsError,
 )
-from wsidicom.file import OffsetTableType, WsiDicomFileSource, WsiDicomFileTarget
+from wsidicom.file import (
+    InstanceSplit,
+    OffsetTableType,
+    WsiDicomFileSource,
+    WsiDicomFileTarget,
+)
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level, Thumbnail
@@ -218,13 +223,15 @@ class WsiDicom:
         file_options: dict[str, Any] | None = None,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
+        instance_split: InstanceSplit = InstanceSplit.NONE,
     ) -> list[UPath]:
         """
-        Save wsi as DICOM-files in path. Instances for the same pyramid
-        level will be combined when possible to one file (e.g. not split
-        for optical paths or focal planes). If instances are sparse tiled they
-        will be converted to full tiled by inserting blank tiles. All instance uids will
-        be changed.
+        Save wsi as DICOM-files in path. By default instances for the same
+        pyramid level are combined when possible to one file (e.g. not split
+        for optical paths or focal planes); use `instance_split` to write a
+        separate instance per focal plane and/or optical path instead. If
+        instances are sparse tiled they will be converted to full tiled by
+        inserting blank tiles. All instance uids will be changed.
 
         Parameters
         ----------
@@ -278,6 +285,14 @@ class WsiDicom:
             by the metadata schema (including private tags and other unhandled
             attributes) are dropped. If False, `metadata` is overlaid on top of
             the source datasets, preserving any attributes it does not set.
+        instance_split: InstanceSplit = InstanceSplit.NONE
+            Controls how optical paths and focal planes are split across output
+            instances. Default (`InstanceSplit.NONE`) combines all into one
+            instance per level. `InstanceSplit.FOCAL_PLANE` and/or
+            `InstanceSplit.OPTICAL_PATH` write a separate instance per focal
+            plane and/or optical path. Unequally spaced focal planes cannot
+            share one instance and are always split per focal plane, regardless
+            of this setting.
 
         Returns
         -------
@@ -331,6 +346,7 @@ class WsiDicom:
             file_options,
             metadata,
             replace_metadata,
+            instance_split,
         ) as target:
             target.save(self.pyramids, labels, overviews, include_thumbnails)
             return target.filepaths
