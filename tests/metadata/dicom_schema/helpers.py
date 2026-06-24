@@ -151,6 +151,9 @@ def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
         assert dicom_image.AcquisitionDateTime == defaults.date_time
     else:
         assert dicom_image.AcquisitionDateTime == image.acquisition_datetime
+    # ContentDate/Time mirror the acquisition datetime (#206).
+    assert dicom_image.ContentDate == dicom_image.AcquisitionDateTime.date()
+    assert dicom_image.ContentTime == dicom_image.AcquisitionDateTime.time()
     if image.focus_method is None:
         assert dicom_image.FocusMethod == defaults.focus_method.name
     else:

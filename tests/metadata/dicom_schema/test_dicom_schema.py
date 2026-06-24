@@ -205,6 +205,8 @@ class TestDicomSchema:
         # Assert
         assert isinstance(serialized, Dataset)
         assert serialized.AcquisitionDateTime == defaults.date_time
+        assert serialized.ContentDate == defaults.date_time.date()
+        assert serialized.ContentTime == defaults.date_time.time()
         assert serialized.FocusMethod == defaults.focus_method.name
         assert serialized.ExtendedDepthOfField == "NO"
         assert "LossyImageCompressionMethod" not in serialized
