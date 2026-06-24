@@ -189,6 +189,11 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         self._tile_reader = tile_reader
         self._chunk_size = chunk_size
 
+    @property
+    def source_image_data(self) -> Iterable[ImageData]:
+        """The source ImageData objects this writer reads tiles from."""
+        return self._source_group.image_data_map.values()
+
     def finalize_writers(self) -> None:
         """Emit the shutdown sentinel, then finalize the sequencer.
 
