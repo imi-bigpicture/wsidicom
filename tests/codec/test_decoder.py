@@ -682,5 +682,3 @@ class TestPyLibJpegOpenJpegDecoder:
         diff = ImageChops.difference(decoded, image)
         for band_rms in ImageStat.Stat(diff).rms:
             assert band_rms <= allowed_rms
-
-
