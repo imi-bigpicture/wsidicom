@@ -121,6 +121,7 @@ class TestWsiDicomFileTargetIntegration:
             None,
             [-1],
             False,
+            False,
             transcoder,
             force_transcoding,
         ) as target:
