@@ -378,16 +378,22 @@ class PyramidFileWriter(BaseFileWriter):
                     level_writer.start(file_writer)
                 encoder_pool.start()
 
+                source_level_writers = [
+                    level_writer
+                    for level_writer in level_writers
+                    if isinstance(level_writer, SourcePyramidLevelWriter)
+                ]
                 source_pool_workers = self._source_workers or self._max_threads
+                if not all(
+                    image_data.thread_safe
+                    for level_writer in source_level_writers
+                    for image_data in level_writer.source_image_data
+                ):
+                    source_pool_workers = 1
                 with ConditionalThreadPoolExecutor(
                     max_workers=source_pool_workers,
                     thread_name_prefix="SourceReader",
                 ) as pool:
-                    source_level_writers = [
-                        level_writer
-                        for level_writer in level_writers
-                        if isinstance(level_writer, SourcePyramidLevelWriter)
-                    ]
                     if source_pool_workers == 1:
                         for level_writer in source_level_writers:
                             level_writer.run(pool, self._max_threads * 2)
