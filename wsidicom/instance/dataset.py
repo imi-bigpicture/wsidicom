@@ -605,6 +605,10 @@ class WsiDataset(Dataset):
         )
         if focal_plane_spacing is not None:
             pixel_measure[0].SpacingBetweenSlices = DSfloat(focal_plane_spacing, True)
+        elif "SpacingBetweenSlices" in pixel_measure[0]:
+            # A single focal plane has no spacing; drop any spacing carried over
+            # from a multi-plane source that has been split per focal plane.
+            del pixel_measure[0].SpacingBetweenSlices
 
         if self.slice_thickness is not None:
             pixel_measure[0].SliceThickness = DSfloat(dataset.slice_thickness, True)
@@ -625,6 +629,38 @@ class WsiDataset(Dataset):
             * len(focal_planes)
             * len(optical_paths)
         )
+
+        # Keep only the optical paths written to this instance, so the optical
+        # path identity is preserved when the paths have been split across
+        # instances (e.g. one instance per optical path).
+        optical_path_sequence = getattr(dataset, "OpticalPathSequence", None)
+        if optical_path_sequence is not None:
+            kept_optical_paths = DicomSequence(
+                item
+                for item in optical_path_sequence
+                if str(item[OpticalPathIdentifierTag].value) in optical_paths
+            )
+            if len(kept_optical_paths) != 0:
+                dataset.OpticalPathSequence = kept_optical_paths
+
+        # Encode the focal plane origin (z) so the planes can be reconstructed
+        # on read as ``z_offset + index * spacing``. This is the source z offset
+        # for the full set of planes, but differs when the planes have been
+        # split across instances (e.g. one instance per focal plane). Preserve
+        # the in-plane (x, y) origin when present. Only create a new origin
+        # sequence when there is a non-zero z to encode, since x and y are
+        # required in the sequence item; a zero z is the default on read.
+        focal_plane_origin = getattr(dataset, "TotalPixelMatrixOriginSequence", None)
+        if focal_plane_origin is not None:
+            focal_plane_origin[0].ZOffsetInSlideCoordinateSystem = DSfloat(
+                focal_planes[0], True
+            )
+        elif focal_planes[0] != 0.0:
+            origin_item = Dataset()
+            origin_item.XOffsetInSlideCoordinateSystem = DSfloat(0.0, True)
+            origin_item.YOffsetInSlideCoordinateSystem = DSfloat(0.0, True)
+            origin_item.ZOffsetInSlideCoordinateSystem = DSfloat(focal_planes[0], True)
+            dataset.TotalPixelMatrixOriginSequence = DicomSequence([origin_item])
 
         return dataset
 
@@ -834,6 +870,29 @@ class WsiDataset(Dataset):
         return True, planes, distance
 
     @staticmethod
+    def focal_planes_equally_spaced(focal_planes: Sequence[float]) -> bool:
+        """Return whether the focal planes can share one TILED_FULL instance.
+
+        Focal planes can only be encoded in a single TILED_FULL instance if they
+        are a single plane or (approximately) equally spaced.
+
+        Parameters
+        ----------
+        focal_planes: Sequence[float]
+            Focal planes to check.
+
+        Returns
+        -------
+        bool
+            True if the focal planes are a single plane or equally spaced.
+        """
+        try:
+            WsiDataset._get_spacing_between_slices_for_focal_planes(focal_planes)
+            return True
+        except NotImplementedError:
+            return False
+
+    @staticmethod
     def _get_spacing_between_slices_for_focal_planes(
         focal_planes: Sequence[float],
     ) -> float | None:
@@ -865,7 +924,10 @@ class WsiDataset(Dataset):
                     "Image data has non-equal spacing between slices: "
                     f"{spacing, this_spacing}, difference threshold: "
                     f"{settings.focal_plane_distance_threshold}, "
-                    "not possible to encode as TILED_FULL"
+                    "not possible to encode several focal planes in one "
+                    "TILED_FULL instance. Split the focal planes into separate "
+                    "instances (InstanceSplit.FOCAL_PLANE) to write unequally "
+                    "spaced focal planes."
                 )
         if spacing is None:
             raise ValueError("Could not calculate spacings.")

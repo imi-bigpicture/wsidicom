@@ -6,7 +6,7 @@ from pydicom.dataelem import DataElement
 from pydicom.uid import UID, generate_uid
 
 from tests.data_gen import create_main_dataset
-from wsidicom.geometry import SizeMm
+from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance import ImageData, TileType
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.metadata import ImageType
@@ -293,9 +293,7 @@ class TestWsiDataset:
         # Assert
         assert instance_dataset.ImageType == expected_image_type
 
-
-class TestIsSupportedWsiDicom:
-    def test_supported_volume_returns_image_type(self):
+    def test_is_supported_wsi_dicom_supported_volume_returns_image_type(self):
         # Arrange
         dataset = create_main_dataset()
 
@@ -306,7 +304,9 @@ class TestIsSupportedWsiDicom:
         assert image_type == ImageType.VOLUME
 
     @pytest.mark.parametrize("attribute", WsiDataset.REQUIRED_ATTRIBUTES)
-    def test_missing_required_attribute_returns_none(self, attribute: str):
+    def test_is_supported_wsi_dicom_missing_required_attribute_returns_none(
+        self, attribute: str
+    ):
         # Arrange
         dataset = create_main_dataset()
         delattr(dataset, attribute)
@@ -317,7 +317,7 @@ class TestIsSupportedWsiDicom:
         # Assert
         assert image_type is None
 
-    def test_missing_sop_class_uid_returns_none(self):
+    def test_is_supported_wsi_dicom_missing_sop_class_uid_returns_none(self):
         # Arrange
         dataset = create_main_dataset()
         del dataset.SOPClassUID
@@ -328,7 +328,7 @@ class TestIsSupportedWsiDicom:
         # Assert
         assert image_type is None
 
-    def test_non_wsi_sop_class_returns_none(self):
+    def test_is_supported_wsi_dicom_non_wsi_sop_class_returns_none(self):
         # Arrange
         dataset = create_main_dataset()
         dataset.SOPClassUID = "1.2.840.10008.5.1.4.1.1.2"  # CT Image Storage
@@ -339,7 +339,7 @@ class TestIsSupportedWsiDicom:
         # Assert
         assert image_type is None
 
-    def test_unsupported_image_type_returns_none(self):
+    def test_is_supported_wsi_dicom_unsupported_image_type_returns_none(self):
         # Arrange
         dataset = create_main_dataset()
         dataset.ImageType = ["DERIVED", "PRIMARY", "BADFLAVOR", "NONE"]
@@ -354,7 +354,9 @@ class TestIsSupportedWsiDicom:
         ["attribute", "value"],
         [("PixelRepresentation", 1), ("PlanarConfiguration", 1)],
     )
-    def test_unsupported_pixel_format_returns_none(self, attribute: str, value: int):
+    def test_is_supported_wsi_dicom_unsupported_pixel_format_returns_none(
+        self, attribute: str, value: int
+    ):
         # Arrange
         dataset = create_main_dataset()
         setattr(dataset, attribute, value)
@@ -364,3 +366,78 @@ class TestIsSupportedWsiDicom:
 
         # Assert
         assert image_type is None
+
+    def test_as_tiled_full_preserves_xy_origin_and_sets_z(self):
+        # Arrange — create_main_dataset has an origin with x=60, y=10, no z.
+        dataset = WsiDataset(create_main_dataset())
+
+        # Act
+        result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
+
+        # Assert
+        origin = result.TotalPixelMatrixOriginSequence[0]
+        assert float(origin.XOffsetInSlideCoordinateSystem) == 60.0
+        assert float(origin.YOffsetInSlideCoordinateSystem) == 10.0
+        assert float(origin.ZOffsetInSlideCoordinateSystem) == 5.0
+
+    def test_as_tiled_full_no_spurious_origin_when_absent_and_z_zero(self):
+        # Arrange — a single plane at z=0 with no origin sequence.
+        source = create_main_dataset()
+        del source.TotalPixelMatrixOriginSequence
+        dataset = WsiDataset(source)
+
+        # Act
+        result = dataset.as_tiled_full([0.0], ["0"], Size(2, 2), 1)
+
+        # Assert — no invalid (x/y-less) origin item is created.
+        assert "TotalPixelMatrixOriginSequence" not in result
+
+    def test_as_tiled_full_creates_valid_origin_when_absent_and_z_nonzero(self):
+        # Arrange — a non-zero focal plane with no origin sequence.
+        source = create_main_dataset()
+        del source.TotalPixelMatrixOriginSequence
+        dataset = WsiDataset(source)
+
+        # Act
+        result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
+
+        # Assert — required x/y are present (defaulted) alongside z.
+        origin = result.TotalPixelMatrixOriginSequence[0]
+        assert float(origin.XOffsetInSlideCoordinateSystem) == 0.0
+        assert float(origin.YOffsetInSlideCoordinateSystem) == 0.0
+        assert float(origin.ZOffsetInSlideCoordinateSystem) == 5.0
+
+    def test_as_tiled_full_filters_optical_path_sequence_to_written_paths(self):
+        # Arrange — add a second optical path "1" to the source.
+        source = create_main_dataset()
+        second_path = Dataset()
+        second_path.OpticalPathIdentifier = "1"
+        source.OpticalPathSequence.append(second_path)
+        dataset = WsiDataset(source)
+
+        # Act — write only optical path "1".
+        result = dataset.as_tiled_full([0.0], ["1"], Size(2, 2), 1)
+
+        # Assert
+        identifiers = [
+            str(item.OpticalPathIdentifier) for item in result.OpticalPathSequence
+        ]
+        assert identifiers == ["1"]
+        assert result.NumberOfOpticalPaths == 1
+
+    def test_as_tiled_full_drops_slice_spacing_for_single_focal_plane(self):
+        # Arrange — a source with multi-plane slice spacing set.
+        source = create_main_dataset()
+        source.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[
+            0
+        ].SpacingBetweenSlices = "2.0"
+        dataset = WsiDataset(source)
+
+        # Act — split to a single focal plane.
+        result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
+
+        # Assert — stale spacing is removed.
+        pixel_measure = result.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[
+            0
+        ]
+        assert "SpacingBetweenSlices" not in pixel_measure
