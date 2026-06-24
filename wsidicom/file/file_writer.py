@@ -353,7 +353,6 @@ class PyramidFileWriter(BaseFileWriter):
             tile_size=self._pyramid.base_level.tile_size,
             token=token,
         )
-        offset_table = self._resolve_offset_table(encoder.transfer_syntax)
         try:
             level_writers: list[PyramidLevelWriter] = []
             file_writers: list[WsiDicomWriter] = []
@@ -368,11 +367,18 @@ class PyramidFileWriter(BaseFileWriter):
                 )
                 instance_counter = itertools.count(self._instance_number)
                 for level_writer in level_writers:
+                    if (
+                        isinstance(level_writer, SourcePyramidLevelWriter)
+                        and not transcode
+                    ):
+                        level_transfer_syntax = source_image_data.transfer_syntax
+                    else:
+                        level_transfer_syntax = encoder.transfer_syntax
                     file_writer = self._prepare_writer(
                         level_writer,
                         next(instance_counter),
-                        encoder.transfer_syntax,
-                        offset_table,
+                        level_transfer_syntax,
+                        self._resolve_offset_table(level_transfer_syntax),
                     )
                     file_writers.append(file_writer)
                     level_writer.start(file_writer)
@@ -814,7 +820,12 @@ class GroupFileWriter(BaseFileWriter):
             transcoder = encoder if transcode else None
             if transcoder is not None:
                 dataset.update_for_transcoding(transcoder, 1)
-            offset_table = self._resolve_offset_table(encoder.transfer_syntax)
+            transfer_syntax = (
+                encoder.transfer_syntax
+                if transcode
+                else source_image_data.transfer_syntax
+            )
+            offset_table = self._resolve_offset_table(transfer_syntax)
 
             instance_writer = GroupInstanceWriter(
                 dataset=dataset,
@@ -825,7 +836,7 @@ class GroupFileWriter(BaseFileWriter):
             uid = self._uid_generator.sop_uid(dataset)
             filepath = self._output_path.joinpath(uid + ".dcm")
             with WsiDicomWriter.open(
-                filepath, encoder.transfer_syntax, offset_table, self._file_options
+                filepath, transfer_syntax, offset_table, self._file_options
             ) as file_writer:
                 dataset.SOPInstanceUID = uid
                 dataset.InstanceNumber = self._instance_number
