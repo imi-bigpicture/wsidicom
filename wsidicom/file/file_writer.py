@@ -248,7 +248,7 @@ class PyramidFileWriter(BaseFileWriter):
         include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = True,
         file_options: dict[str, Any] | None = None,
-        instance_number_start: int = 0,
+        instance_number_start: int = 1,
         queue_maxsize: int = 100,
         memory_budget_bytes: int | None = None,
         source_workers: int | None = None,
