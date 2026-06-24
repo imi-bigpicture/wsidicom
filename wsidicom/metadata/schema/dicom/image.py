@@ -18,9 +18,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from marshmallow import fields, post_load, pre_dump
+from marshmallow import fields, post_dump, post_load, pre_dump
 from pydicom.dataset import Dataset
-from pydicom.valuerep import VR
+from pydicom.valuerep import DA, TM, VR
 
 from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.geometry import SizeMm
@@ -233,6 +233,14 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
                 image.lossy_compressions if image.lossy_compressions else []
             ),
         }
+
+    @post_dump
+    def post_dump(self, data: dict[str, Any], **kwargs):
+        acquisition = data.get("AcquisitionDateTime")
+        if acquisition is not None:
+            data["ContentDate"] = DA(acquisition.date())
+            data["ContentTime"] = TM(acquisition.time())
+        return super().post_dump(data, **kwargs)
 
     @post_load
     def post_load(self, data: dict[str, Any], **kwargs):
