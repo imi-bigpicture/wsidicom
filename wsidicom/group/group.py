@@ -14,7 +14,7 @@
 
 
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 
 from PIL.Image import Image
@@ -161,6 +161,35 @@ class Instances:
         )
 
     @property
+    def focal_planes_by_optical_path(self) -> dict[str, list[float]]:
+        """Return the focal planes present for each optical path.
+
+        The (optical path, focal plane) grid may be sparse, i.e. an optical path
+        is not required to have every focal plane.
+        """
+        focal_planes_by_optical_path: dict[str, list[float]] = defaultdict(list)
+        for optical_path, focal_plane in self.image_data_map:
+            focal_planes_by_optical_path[optical_path].append(focal_plane)
+        return {
+            optical_path: sorted(focal_planes)
+            for optical_path, focal_planes in focal_planes_by_optical_path.items()
+        }
+
+    @cached_property
+    def _instance_map(self) -> dict[tuple[str, float], WsiInstance]:
+        """Return mapping from (optical_path, focal_plane) to its instance."""
+        return {
+            (optical_path, z): instance
+            for instance in self._instances.values()
+            for optical_path in instance.optical_paths
+            for z in instance.focal_planes
+        }
+
+    def instance_at(self, optical_path: str, focal_plane: float) -> WsiInstance:
+        """Return the instance providing the given optical path and focal plane."""
+        return self._instance_map[(optical_path, focal_plane)]
+
+    @property
     def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         return self.default_instance.image_coordinate_system
 
@@ -268,43 +297,78 @@ class Instances:
         image = self.get_region(region, z, path)
         return image
 
-    def iter_encoded_tiles(self) -> Iterator[bytes]:
+    def iter_encoded_tiles(
+        self,
+        focal_planes: Sequence[float] | None = None,
+        optical_paths: Sequence[str] | None = None,
+    ) -> Iterator[bytes]:
         """Iterate all tiles in raster order, yielding encoded tile data.
+
+        Parameters
+        ----------
+        focal_planes: Sequence[float] | None = None
+            Optional subset of focal planes to iterate. Defaults to all.
+        optical_paths: Sequence[str] | None = None
+            Optional subset of optical paths to iterate. Defaults to all.
 
         Yields
         ------
         bytes
             Encoded tile data.
         """
-        for image_data, z, path, chunk in self._iter_tile_chunks():
+        for image_data, z, path, chunk in self._iter_tile_chunks(
+            focal_planes, optical_paths
+        ):
             yield from image_data.get_encoded_tiles(chunk, z, path)
 
-    def iter_decoded_tiles(self) -> Iterator[Image]:
+    def iter_decoded_tiles(
+        self,
+        focal_planes: Sequence[float] | None = None,
+        optical_paths: Sequence[str] | None = None,
+    ) -> Iterator[Image]:
         """Iterate all tiles in raster order, yielding decoded tile images.
+
+        Parameters
+        ----------
+        focal_planes: Sequence[float] | None = None
+            Optional subset of focal planes to iterate. Defaults to all.
+        optical_paths: Sequence[str] | None = None
+            Optional subset of optical paths to iterate. Defaults to all.
 
         Yields
         ------
         Image
             Decoded tile image.
         """
-        for image_data, z, path, chunk in self._iter_tile_chunks():
+        for image_data, z, path, chunk in self._iter_tile_chunks(
+            focal_planes, optical_paths
+        ):
             yield from image_data.get_decoded_tiles(chunk, z, path)
 
     def _iter_tile_chunks(
         self,
+        focal_planes: Sequence[float] | None = None,
+        optical_paths: Sequence[str] | None = None,
     ) -> Iterator[tuple[ImageData, float, str, list[Point]]]:
         """Iterate tile position chunks in raster order.
 
         Chunk size is determined per image data from its
         suggested_minimum_chunk_size.
 
+        Parameters
+        ----------
+        focal_planes: Sequence[float] | None = None
+            Optional subset of focal planes to iterate. Defaults to all.
+        optical_paths: Sequence[str] | None = None
+            Optional subset of optical paths to iterate. Defaults to all.
+
         Yields
         ------
         Tuple[ImageData, float, str, List[Point]]
             Image data, focal plane, optical path, and chunk of tile positions.
         """
-        for path in self.optical_paths:
-            for z in self.focal_planes:
+        for path in optical_paths if optical_paths is not None else self.optical_paths:
+            for z in focal_planes if focal_planes is not None else self.focal_planes:
                 image_data = self.image_data_map[(path, z)]
                 chunk_size = image_data.suggested_minimum_chunk_size
                 for y in range(self.tiled_size.height):
@@ -649,35 +713,6 @@ class Instances:
 
         WsiDataset.check_duplicate_dataset(self.datasets, self)
         WsiInstance.check_duplicate_instance(instances, self)
-
-    @staticmethod
-    def _get_frame_information(
-        data: dict[tuple[str, float], ImageData],
-    ) -> tuple[list[float], list[str], Size]:
-        """Return optical_paths, focal planes, and tiled size."""
-        focal_planes_by_optical_path: dict[str, set[float]] = defaultdict(set)
-        all_focal_planes: set[float] = set()
-        tiled_sizes: set[Size] = set()
-        for (optical_path, focal_plane), image_data in data.items():
-            focal_planes_by_optical_path[optical_path].add(focal_plane)
-            all_focal_planes.add(focal_plane)
-            tiled_sizes.add(image_data.tiled_size)
-
-        focal_planes_sparse_by_optical_path = any(
-            optical_path_focal_planes != all_focal_planes
-            for optical_path_focal_planes in focal_planes_by_optical_path.values()
-        )
-        if focal_planes_sparse_by_optical_path:
-            raise ValueError("Each optical path must have the same focal planes.")
-
-        if len(tiled_sizes) != 1:
-            raise ValueError("Expected only one tiled size")
-        tiled_size = list(tiled_sizes)[0]
-        return (
-            sorted(list(all_focal_planes)),
-            sorted(list(focal_planes_by_optical_path.keys())),
-            tiled_size,
-        )
 
 
 class Overview(Instances):
