@@ -51,6 +51,7 @@ class WsiDicomFileTarget(Target):
         include_pyramids: Sequence[int] | None = None,
         include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = False,
+        regenerate_pyramid: bool = False,
         transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
         file_options: dict[str, Any] | None = None,
@@ -82,6 +83,10 @@ class WsiDicomFileTarget(Target):
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool
             If to add missing dyadic levels up to the single tile level.
+        regenerate_pyramid: bool
+            If to re-derive every non-base level by downsampling from the base
+            level instead of reading the source's stored pyramid. Orthogonal to
+            `add_missing_levels`.
         transcoding: EncoderSettings | Encoder | None = None,
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
@@ -117,6 +122,7 @@ class WsiDicomFileTarget(Target):
             include_pyramids,
             include_levels,
             add_missing_levels,
+            regenerate_pyramid,
             transcoding,
             force_transcoding,
         )
@@ -180,6 +186,7 @@ class WsiDicomFileTarget(Target):
                 force_transcoding=self._force_transcoding,
                 include_levels=self._include_levels,
                 add_missing_levels=self._add_missing_levels,
+                regenerate_pyramid=self._regenerate_pyramid,
                 file_options=self._file_options,
                 instance_number_start=self._instance_number,
                 chunk_size=self._chunk_size,

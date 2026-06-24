@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `OpticalPath.color_space` maps to the DICOM `ColorSpace` attribute (0028,2002) in the Optical Path Sequence.
 - `WsiDicom.save()` gained an `instance_split` parameter (`InstanceSplit` flag) controlling how optical paths and focal planes are split across output instances: all combined into one instance per pyramid level (`InstanceSplit.NONE`, default), one instance per focal plane (`InstanceSplit.FOCAL_PLANE`), one per optical path (`InstanceSplit.OPTICAL_PATH`), or both. Unequally-spaced focal planes and sparse (optical path × focal plane) grids are always split as needed to produce valid `TILED_FULL` instances.
+- `WsiDicom.save()` gained a `regenerate_pyramid` parameter. When `True`, only the base level is read from the source and every other written level is re-derived by downsampling from the base instead of being read from the source's stored pyramid. Orthogonal to `add_missing_levels`: combine the two to rebuild a complete pyramid up to the single tile level, e.g. to replace a source's stored levels with consistently downsampled ones. The base level must be among the selected `include_levels`.
 
 ### Changed
 

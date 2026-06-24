@@ -32,6 +32,7 @@ class Target(metaclass=ABCMeta):
         include_pyramids: Sequence[int] | None = None,
         include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = False,
+        regenerate_pyramid: bool = False,
         transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
     ) -> None:
@@ -51,6 +52,10 @@ class Target(metaclass=ABCMeta):
             e.g. [-1, -2] includes the two highest levels.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
+        regenerate_pyramid: bool = False
+            If to re-derive every non-base level by downsampling from the base
+            level instead of reading the source's stored pyramid. Orthogonal to
+            `add_missing_levels`.
         transcoding: EncoderSettings | Encoder | None = None
             Optional settings or encoder for transcoding image data. If None, image data
             will be copied as is.
@@ -63,6 +68,7 @@ class Target(metaclass=ABCMeta):
         self._include_pyramids = include_pyramids
         self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
+        self._regenerate_pyramid = regenerate_pyramid
         self._instance_number = 1
         self._force_transcoding = force_transcoding
         if isinstance(transcoding, EncoderSettings):

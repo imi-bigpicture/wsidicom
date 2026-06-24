@@ -307,6 +307,7 @@ class PyramidFileWriter(BaseFileWriter):
         force_transcoding: bool = False,
         include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = True,
+        regenerate_pyramid: bool = False,
         file_options: dict[str, Any] | None = None,
         instance_number_start: int = 1,
         queue_maxsize: int = 100,
@@ -340,6 +341,12 @@ class PyramidFileWriter(BaseFileWriter):
         add_missing_levels: bool
             If True, generate missing dyadic levels up to the single tile
             level. If False, only write levels present in the source pyramid.
+        regenerate_pyramid: bool
+            If True, only the base level is read from the source; every other
+            written level is re-derived by downsampling from the base instead
+            of being read from the source's stored pyramid. Orthogonal to
+            `add_missing_levels`, which independently controls whether the
+            output extends up to the single tile level.
         file_options: Optional[Dict[str, Any]]
             Keyword arguments for file operations.
         instance_number_start: int
@@ -385,6 +392,7 @@ class PyramidFileWriter(BaseFileWriter):
         self._max_threads = max_threads
         self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
+        self._regenerate_pyramid = regenerate_pyramid
         self._queue_maxsize = queue_maxsize
         self._memory_budget_bytes = memory_budget_bytes
         self._source_workers = source_workers
@@ -555,6 +563,27 @@ class PyramidFileWriter(BaseFileWriter):
             if level_index in selected_levels
         ]
 
+        # Which levels are read from the source. Normally every natively
+        # present level; when regenerating, only the base, so all other written
+        # levels are re-derived by downsampling from it. The base must be read
+        # to feed that downsampling, so it has to be among the included levels
+        # whenever any higher level is written (we only read what we write).
+        base_level_index = present_levels[0]
+        if self._regenerate_pyramid:
+            source_levels = {base_level_index}
+            if (
+                any(level != base_level_index for level in included_levels)
+                and base_level_index not in included_levels
+            ):
+                raise ValueError(
+                    "regenerate_pyramid requires the base level to be included "
+                    "(it is the source every other level is downsampled from); "
+                    f"include_levels selected {included_levels} without the "
+                    f"base level {base_level_index}."
+                )
+        else:
+            source_levels = set(present_levels)
+
         # One reversed pass per instance-split bucket. Each bucket holds a
         # subset of the focal planes / optical paths and gets its own
         # independent cascade chain, producing one instance per level.
@@ -567,10 +596,15 @@ class PyramidFileWriter(BaseFileWriter):
             next_accumulator: PyramidTileAccumulator | None = None
             bucket_writers: list[PyramidLevelWriter] = []
             for level_index in reversed(included_levels):
-                in_source = level_index in present_levels
+                in_source = level_index in source_levels
                 if in_source:
                     source_group = self._pyramid.get(level_index)
                     scale = 1
+                elif self._regenerate_pyramid:
+                    # Re-derive from the base, not from any native intermediate
+                    # level the source happens to store.
+                    source_group = self._pyramid.get(base_level_index)
+                    scale = int(2 ** (level_index - base_level_index))
                 else:
                     source_group = self._pyramid.get_closest_by_level(level_index)
                     scale = int(2 ** (level_index - source_group.level))
@@ -641,7 +675,7 @@ class PyramidFileWriter(BaseFileWriter):
                     )
                     is_chain_start = (
                         level_index - 1 not in included_levels
-                        or level_index - 1 in present_levels
+                        or level_index - 1 in source_levels
                     )
                     accumulator = PyramidTileAccumulator(
                         level_index=level_index,

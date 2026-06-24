@@ -217,6 +217,7 @@ class WsiDicom:
         include_overviews: bool = True,
         include_thumbnails: bool = True,
         add_missing_levels: bool = False,
+        regenerate_pyramid: bool = False,
         label: Image | str | Path | UPath | None = None,
         transcoding: EncoderSettings | Encoder | None = None,
         force_transcoding: bool = False,
@@ -264,6 +265,14 @@ class WsiDicom:
             If to include thumbnail series.
         add_missing_levels: bool = False
             If to add missing dyadic levels up to the single tile level.
+        regenerate_pyramid: bool = False
+            If True, only the base level is read from the source and every
+            other written level is re-derived by downsampling from the base,
+            instead of being read from the source's stored pyramid. Orthogonal
+            to `add_missing_levels`: combine with it to rebuild a complete
+            pyramid up to the single tile level (e.g. to replace a source's
+            pyramid with consistently downsampled levels). When set, the base
+            level must be among the selected `include_levels`.
         label: Image | str | Path | UPath | None = None
             Optional label image to use instead of present label (if any).
         transcoding: EncoderSettings | Encoder | None = None,
@@ -341,6 +350,7 @@ class WsiDicom:
             include_pyramids,
             include_levels,
             add_missing_levels,
+            regenerate_pyramid,
             transcoding,
             force_transcoding,
             file_options,
