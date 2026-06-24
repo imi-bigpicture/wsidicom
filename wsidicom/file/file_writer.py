@@ -34,6 +34,7 @@ from upath import UPath
 from wsidicom.codec import Encoder
 from wsidicom.config import settings
 from wsidicom.downsampler import PillowDownsampler
+from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
 from wsidicom.instance import ImageData, WsiDataset, WsiInstance
@@ -75,6 +76,7 @@ class BaseFileWriter(metaclass=ABCMeta):
         instance_number_start: int,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
+        instance_split: InstanceSplit = InstanceSplit.NONE,
     ):
         """Initialize shared writer state.
 
@@ -106,6 +108,9 @@ class BaseFileWriter(metaclass=ABCMeta):
             attributes) are dropped. If False, `metadata` is instead overlaid on
             top of the source datasets, preserving any attributes it does not
             set.
+        instance_split: InstanceSplit = InstanceSplit.NONE
+            Controls how optical paths and focal planes are split across output
+            instances. See `InstanceSplit`.
         """
         self._output_path = UPath(output_path)
         self._uid_generator = uid_generator
@@ -116,6 +121,7 @@ class BaseFileWriter(metaclass=ABCMeta):
         self._instance_number = instance_number_start
         self._metadata = metadata
         self._replace_metadata = replace_metadata
+        self._instance_split = instance_split
 
     @abstractmethod
     def write(self) -> list[UPath]:
@@ -219,6 +225,60 @@ class BaseFileWriter(metaclass=ABCMeta):
             return OffsetTableType.BASIC
         return OffsetTableType.NONE
 
+    def _split_planes_paths(
+        self,
+        focal_planes_by_optical_path: dict[str, list[float]],
+    ) -> list[tuple[list[float], list[str]]]:
+        """Split planes and paths into one (planes, paths) bucket per instance.
+
+        The split is determined by the configured `InstanceSplit`, but each
+        bucket is always a complete and encodable TILED_FULL grid: optical paths
+        are split when they do not all share the same focal planes (a sparse
+        grid), and focal planes are split when they are not equally spaced.
+
+        Parameters
+        ----------
+        focal_planes_by_optical_path: dict[str, list[float]]
+            The focal planes present for each optical path of the source group.
+
+        Returns
+        -------
+        list[tuple[list[float], list[str]]]
+            One (focal planes, optical paths) pair per instance to write.
+        """
+        optical_paths = list(focal_planes_by_optical_path)
+        # A sparse grid (optical paths with differing focal planes) cannot share
+        # one TILED_FULL instance, so split optical paths even if not requested.
+        grid_is_sparse = any(
+            focal_planes_by_optical_path[optical_path]
+            != focal_planes_by_optical_path[optical_paths[0]]
+            for optical_path in optical_paths
+        )
+        split_optical_paths = (
+            bool(self._instance_split & InstanceSplit.OPTICAL_PATH) or grid_is_sparse
+        )
+        if split_optical_paths:
+            path_groups = [
+                ([optical_path], focal_planes_by_optical_path[optical_path])
+                for optical_path in optical_paths
+            ]
+        else:
+            path_groups = [
+                (optical_paths, focal_planes_by_optical_path[optical_paths[0]])
+            ]
+
+        # Unequally spaced focal planes cannot share one TILED_FULL instance, so
+        # split them per focal plane even if not requested.
+        buckets: list[tuple[list[float], list[str]]] = []
+        for paths, focal_planes in path_groups:
+            if self._instance_split & InstanceSplit.FOCAL_PLANE or (
+                not WsiDataset.focal_planes_equally_spaced(focal_planes)
+            ):
+                buckets.extend(([focal_plane], paths) for focal_plane in focal_planes)
+            else:
+                buckets.append((focal_planes, paths))
+        return buckets
+
 
 class PyramidFileWriter(BaseFileWriter):
     """Writes pyramid levels to DICOM files, generating missing levels on demand.
@@ -255,6 +315,7 @@ class PyramidFileWriter(BaseFileWriter):
         chunk_size: int | None = None,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
+        instance_split: InstanceSplit = InstanceSplit.NONE,
     ):
         """Create a pull-based pyramid writer.
 
@@ -304,6 +365,9 @@ class PyramidFileWriter(BaseFileWriter):
         replace_metadata: bool = True
             Whether to replace or overlay the source datasets with `metadata`.
             See `BaseFileWriter`.
+        instance_split: InstanceSplit = InstanceSplit.NONE
+            How optical paths and focal planes are split across output instances.
+            See `BaseFileWriter`.
         """
         super().__init__(
             output_path=output_path,
@@ -315,6 +379,7 @@ class PyramidFileWriter(BaseFileWriter):
             instance_number_start=instance_number_start,
             metadata=metadata,
             replace_metadata=replace_metadata,
+            instance_split=instance_split,
         )
         self._pyramid = pyramid
         self._max_threads = max_threads
@@ -433,6 +498,28 @@ class PyramidFileWriter(BaseFileWriter):
         finally:
             self._cleanup_temp(temp_dir)
 
+    def _validate_uniform_levels(self, present_levels: Sequence[int]) -> None:
+        """Raise if present levels differ in optical paths / focal planes.
+
+        Instance splitting builds one cascade chain per (optical path, focal
+        plane) bucket spanning all levels, so every present level must share the
+        same membership. Thumbnails, labels, and overviews are separate groups
+        and are not affected.
+
+        Parameters
+        ----------
+        present_levels: Sequence[int]
+            Indices of the levels present in the source pyramid.
+        """
+        base_membership = self._pyramid.base_level.focal_planes_by_optical_path
+        for level_index in present_levels:
+            membership = self._pyramid.get(level_index).focal_planes_by_optical_path
+            if membership != base_membership:
+                raise NotImplementedError(
+                    "Pyramid levels have differing optical paths / focal planes; "
+                    "instance splitting across non-uniform levels is not supported."
+                )
+
     def _build_level_writers(
         self,
         present_levels: Sequence[int],
@@ -448,6 +535,8 @@ class PyramidFileWriter(BaseFileWriter):
         first (with accumulator chain wiring), then source levels get tile
         readers referencing the next generated level above them.
         """
+        self._validate_uniform_levels(present_levels)
+
         # Determine which levels to build
         highest_in_file = present_levels[-1]
         if self._add_missing_levels:
@@ -466,108 +555,119 @@ class PyramidFileWriter(BaseFileWriter):
             if level_index in selected_levels
         ]
 
-        # Single reversed pass: build all level writers top-down.
-        # Track the last accumulator for cascade chain wiring.
+        # One reversed pass per instance-split bucket. Each bucket holds a
+        # subset of the focal planes / optical paths and gets its own
+        # independent cascade chain, producing one instance per level.
         tile_cache = self._create_tile_cache(temp_dir)
         level_writers: list[PyramidLevelWriter] = []
-        next_accumulator: PyramidTileAccumulator | None = None
-
-        for level_index in reversed(included_levels):
-            in_source = level_index in present_levels
-            if in_source:
-                source_group = self._pyramid.get(level_index)
-                scale = 1
-            else:
-                source_group = self._pyramid.get_closest_by_level(level_index)
-                scale = int(2 ** (level_index - source_group.level))
-
-            tiled_size = source_group.tiled_size.ceil_div(scale)
-            base_instance = next(iter(source_group.instances.values()))
-            base_dataset = self._build_base_dataset(
-                base_instance, ImageType.VOLUME, level_index
-            )
-            dataset = base_dataset.as_tiled_full(
-                source_group.focal_planes,
-                source_group.optical_paths,
-                source_group.tiled_size,
-                scale,
-            )
-            transcoder = encoder if transcode else None
-            if transcoder is not None:
-                dataset.update_for_transcoding(transcoder, scale)
-
-            if in_source:
-                # Source level: create tile reader, referencing next
-                # accumulator for cascading if present
-                tile_reader: TileReader
-                if transcode and next_accumulator is not None:
-                    tile_reader = CascadingTranscodeTileReader(
-                        level_index,
-                        encoder_pool.queue,
-                        next_accumulator,
-                        token,
-                    )
-                elif transcode:
-                    tile_reader = TranscodeTileReader(
-                        level_index,
-                        encoder_pool.queue,
-                        token,
-                    )
-                elif next_accumulator is not None:
-                    tile_reader = CascadingPassthroughTileReader(
-                        level_index,
-                        next_accumulator,
-                        token,
-                    )
+        base_group = self._pyramid.base_level
+        for planes, paths in self._split_planes_paths(
+            base_group.focal_planes_by_optical_path
+        ):
+            next_accumulator: PyramidTileAccumulator | None = None
+            bucket_writers: list[PyramidLevelWriter] = []
+            for level_index in reversed(included_levels):
+                in_source = level_index in present_levels
+                if in_source:
+                    source_group = self._pyramid.get(level_index)
+                    scale = 1
                 else:
-                    tile_reader = PassthroughTileReader(level_index, token)
-                level_writers.append(
-                    SourcePyramidLevelWriter(
+                    source_group = self._pyramid.get_closest_by_level(level_index)
+                    scale = int(2 ** (level_index - source_group.level))
+
+                tiled_size = source_group.tiled_size.ceil_div(scale)
+                base_instance = source_group.instance_at(paths[0], planes[0])
+                base_dataset = self._build_base_dataset(
+                    base_instance, ImageType.VOLUME, level_index
+                )
+                dataset = base_dataset.as_tiled_full(
+                    planes,
+                    paths,
+                    source_group.tiled_size,
+                    scale,
+                )
+                transcoder = encoder if transcode else None
+                if transcoder is not None:
+                    dataset.update_for_transcoding(transcoder, scale)
+
+                if in_source:
+                    # Source level: create tile reader, referencing next
+                    # accumulator for cascading if present
+                    tile_reader: TileReader
+                    if transcode and next_accumulator is not None:
+                        tile_reader = CascadingTranscodeTileReader(
+                            level_index,
+                            encoder_pool.queue,
+                            next_accumulator,
+                            token,
+                        )
+                    elif transcode:
+                        tile_reader = TranscodeTileReader(
+                            level_index,
+                            encoder_pool.queue,
+                            token,
+                        )
+                    elif next_accumulator is not None:
+                        tile_reader = CascadingPassthroughTileReader(
+                            level_index,
+                            next_accumulator,
+                            token,
+                        )
+                    else:
+                        tile_reader = PassthroughTileReader(level_index, token)
+                    bucket_writers.append(
+                        SourcePyramidLevelWriter(
+                            level_index=level_index,
+                            dataset=dataset,
+                            tile_cache=tile_cache,
+                            source_group=source_group,
+                            tiled_size=tiled_size,
+                            tile_reader=tile_reader,
+                            queue_maxsize=self._queue_maxsize,
+                            chunk_size=self._chunk_size,
+                            focal_planes=planes,
+                            optical_paths=paths,
+                            token=token,
+                        )
+                    )
+                    next_accumulator = None
+                else:
+                    # Generated level: create the accumulator first, then the
+                    # level writer that composes it. Cascade chains to the
+                    # previously-created accumulator (one level above in the
+                    # pyramid). Input tiled size is the level below (scale / 2).
+                    input_tiled_size = source_group.tiled_size.ceil_div(
+                        max(scale // 2, 1)
+                    )
+                    is_chain_start = (
+                        level_index - 1 not in included_levels
+                        or level_index - 1 in present_levels
+                    )
+                    accumulator = PyramidTileAccumulator(
+                        level_index=level_index,
+                        input_tiled_size=input_tiled_size,
+                        encoder_pool_queue=encoder_pool.queue,
+                        next_accumulator=next_accumulator,
+                        is_chain_start=is_chain_start,
+                        queue_maxsize=self._queue_maxsize,
+                        token=token,
+                    )
+                    generated_writer = GeneratedPyramidLevelWriter(
                         level_index=level_index,
                         dataset=dataset,
                         tile_cache=tile_cache,
-                        source_group=source_group,
+                        focal_planes=planes,
+                        optical_paths=paths,
                         tiled_size=tiled_size,
-                        tile_reader=tile_reader,
-                        queue_maxsize=self._queue_maxsize,
-                        chunk_size=self._chunk_size,
+                        accumulator=accumulator,
                         token=token,
                     )
-                )
-                next_accumulator = None
-            else:
-                # Generated level: create the accumulator first, then the
-                # level writer that composes it. Cascade chains to the
-                # previously-created accumulator (one level above in the
-                # pyramid). Input tiled size is the level below (scale / 2).
-                input_tiled_size = source_group.tiled_size.ceil_div(max(scale // 2, 1))
-                is_chain_start = (
-                    level_index - 1 not in included_levels
-                    or level_index - 1 in present_levels
-                )
-                accumulator = PyramidTileAccumulator(
-                    level_index=level_index,
-                    input_tiled_size=input_tiled_size,
-                    encoder_pool_queue=encoder_pool.queue,
-                    next_accumulator=next_accumulator,
-                    is_chain_start=is_chain_start,
-                    queue_maxsize=self._queue_maxsize,
-                    token=token,
-                )
-                generated_writer = GeneratedPyramidLevelWriter(
-                    level_index=level_index,
-                    dataset=dataset,
-                    tile_cache=tile_cache,
-                    focal_planes=source_group.focal_planes,
-                    optical_paths=source_group.optical_paths,
-                    tiled_size=tiled_size,
-                    accumulator=accumulator,
-                    token=token,
-                )
-                level_writers.append(generated_writer)
-                next_accumulator = accumulator
+                    bucket_writers.append(generated_writer)
+                    next_accumulator = accumulator
 
-        level_writers.reverse()
+            bucket_writers.reverse()
+            level_writers.extend(bucket_writers)
+
         return level_writers
 
     def _create_tile_cache(self, temp_dir: UPath) -> TileCache:
@@ -752,6 +852,7 @@ class GroupFileWriter(BaseFileWriter):
         instance_number_start: int = 1,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
+        instance_split: InstanceSplit = InstanceSplit.NONE,
     ):
         """Create a GroupFileWriter.
 
@@ -779,6 +880,9 @@ class GroupFileWriter(BaseFileWriter):
         replace_metadata: bool = True
             Whether to replace or overlay the source datasets with `metadata`.
             See `BaseFileWriter`.
+        instance_split: InstanceSplit = InstanceSplit.NONE
+            How optical paths and focal planes are split across output instances.
+            See `BaseFileWriter`.
         """
         super().__init__(
             output_path=output_path,
@@ -790,6 +894,7 @@ class GroupFileWriter(BaseFileWriter):
             instance_number_start=instance_number_start,
             metadata=metadata,
             replace_metadata=replace_metadata,
+            instance_split=instance_split,
         )
         self._group = group
 
@@ -807,19 +912,7 @@ class GroupFileWriter(BaseFileWriter):
             sub_instances = Instances(sub_group)
 
             encoder, transcode = self._resolve_transcoding(source_image_data)
-
-            base_dataset = self._build_base_dataset(
-                sub_group[0], sub_group[0].dataset.image_type
-            )
-            dataset = base_dataset.as_tiled_full(
-                sub_instances.focal_planes,
-                sub_instances.optical_paths,
-                sub_instances.tiled_size,
-                1,
-            )
             transcoder = encoder if transcode else None
-            if transcoder is not None:
-                dataset.update_for_transcoding(transcoder, 1)
             transfer_syntax = (
                 encoder.transfer_syntax
                 if transcode
@@ -827,25 +920,43 @@ class GroupFileWriter(BaseFileWriter):
             )
             offset_table = self._resolve_offset_table(transfer_syntax)
 
-            instance_writer = GroupInstanceWriter(
-                dataset=dataset,
-                instances=sub_instances,
-                encoder=encoder,
-                transcode=transcode,
-            )
-            uid = self._uid_generator.sop_uid(dataset)
-            filepath = self._output_path.joinpath(uid + ".dcm")
-            with WsiDicomWriter.open(
-                filepath, transfer_syntax, offset_table, self._file_options
-            ) as file_writer:
-                dataset.SOPInstanceUID = uid
-                dataset.InstanceNumber = self._instance_number
-                file_writer.write_header(dataset)
-                file_writer.start_pixel_data(dataset)
-                instance_writer.write(file_writer)
-                file_writer.finalize(dataset, transcoder)
-            self._instance_number += 1
-            filepaths.append(filepath)
+            for planes, paths in self._split_planes_paths(
+                sub_instances.focal_planes_by_optical_path
+            ):
+                base_instance = sub_instances.instance_at(paths[0], planes[0])
+                base_dataset = self._build_base_dataset(
+                    base_instance, base_instance.dataset.image_type
+                )
+                dataset = base_dataset.as_tiled_full(
+                    planes,
+                    paths,
+                    sub_instances.tiled_size,
+                    1,
+                )
+                if transcoder is not None:
+                    dataset.update_for_transcoding(transcoder, 1)
+
+                instance_writer = GroupInstanceWriter(
+                    dataset=dataset,
+                    instances=sub_instances,
+                    encoder=encoder,
+                    transcode=transcode,
+                    focal_planes=planes,
+                    optical_paths=paths,
+                )
+                uid = self._uid_generator.sop_uid(dataset)
+                filepath = self._output_path.joinpath(uid + ".dcm")
+                with WsiDicomWriter.open(
+                    filepath, transfer_syntax, offset_table, self._file_options
+                ) as file_writer:
+                    dataset.SOPInstanceUID = uid
+                    dataset.InstanceNumber = self._instance_number
+                    file_writer.write_header(dataset)
+                    file_writer.start_pixel_data(dataset)
+                    instance_writer.write(file_writer)
+                    file_writer.finalize(dataset, transcoder)
+                self._instance_number += 1
+                filepaths.append(filepath)
         return filepaths
 
     @staticmethod
