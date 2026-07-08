@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 from pydicom.uid import UID
 
+from wsidicom.metadata.contributing_equipment import ContributingEquipment
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.label import Label
 from wsidicom.metadata.overview import Overview
@@ -55,6 +56,9 @@ class WsiMetadata:
         The frame of reference uid of the image.
     dimension_organization_uids: Sequence[UID] | None = None
         The dimension organization uids of the image.
+    contributing_equipment: Sequence[ContributingEquipment] = ()
+        Equipment that contributed to the creation of the image, other than the
+        acquisition equipment (e.g. a format converter).
     """
 
     study: Study
@@ -67,3 +71,4 @@ class WsiMetadata:
     overview: Overview | None = None
     frame_of_reference_uid: UID | None = None
     dimension_organization_uids: Sequence[UID] | None = None
+    contributing_equipment: Sequence[ContributingEquipment] = ()

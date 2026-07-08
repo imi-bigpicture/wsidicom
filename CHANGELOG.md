@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ContributingEquipment` metadata model (`ContributingEquipmentSequence`, `(0018,A001)`) with `purpose` (`ContributingEquipmentPurposeCode`, CID 7005), `manufacturer`, `model_name`, `software_versions`, `description`, and `contribution_datetime`. Exposed as `WsiMetadata.contributing_equipment` and loaded/dumped for both DICOM and JSON, so equipment that contributed to an instance (e.g. a format converter) is available as structured metadata.
+
 ### Changed
 
 - The default `OpticalPathIdentifier` now starts at `1` instead of `0`, following the DICOM convention of 1-based indexing.

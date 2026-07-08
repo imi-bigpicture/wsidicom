@@ -24,6 +24,7 @@ from PIL import ImageCms
 from pydicom import Dataset
 from pydicom.uid import UID, VLWholeSlideMicroscopyImageStorage
 
+from wsidicom.metadata.contributing_equipment import ContributingEquipment
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import Image, ImageCoordinateSystem, ImageType
 from wsidicom.metadata.label import Label
@@ -31,6 +32,9 @@ from wsidicom.metadata.optical_path import OpticalPath
 from wsidicom.metadata.overview import Overview
 from wsidicom.metadata.patient import Patient
 from wsidicom.metadata.pyramid import Pyramid
+from wsidicom.metadata.schema.dicom.contributing_equipment import (
+    ContributingEquipmentDicomSchema,
+)
 from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.fields import (
@@ -67,6 +71,7 @@ class BaseWsiMetadata:
     slide: Slide
     frame_of_reference_uid: UID | None = None
     dimension_organization_uids: Sequence[UID] | None = None
+    contributing_equipment: Sequence[ContributingEquipment] = ()
 
 
 class BaseWsiMetadataDicomSchema(DicomSchema[BaseWsiMetadata]):
@@ -89,6 +94,12 @@ class BaseWsiMetadataDicomSchema(DicomSchema[BaseWsiMetadata]):
         data_key="DimensionOrganizationSequence",
         load_default=None,
         dump_required=True,
+    )
+    contributing_equipment = ListDicomField(
+        fields.Nested(ContributingEquipmentDicomSchema()),
+        data_key="ContributingEquipmentSequence",
+        dump_none_if_empty=True,
+        load_default=(),
     )
     sop_class_uid = fields.Constant(
         VLWholeSlideMicroscopyImageStorage, dump_only=True, data_key="SOPClassUID"
@@ -131,6 +142,7 @@ class WsiMetadataDicomSchema:
                 slide=metadata.slide,
                 frame_of_reference_uid=metadata.frame_of_reference_uid,
                 dimension_organization_uids=metadata.dimension_organization_uids,
+                contributing_equipment=metadata.contributing_equipment,
             )
         )
         # Default text to UTF-8 so non-ASCII metadata (e.g. ideographic/phonetic
@@ -222,6 +234,7 @@ class WsiMetadataDicomSchema:
             overview=overview,
             frame_of_reference_uid=metadata.frame_of_reference_uid,
             dimension_organization_uids=metadata.dimension_organization_uids,
+            contributing_equipment=metadata.contributing_equipment,
         )
 
     @classmethod
@@ -258,7 +271,6 @@ class WsiMetadataDicomSchema:
     @staticmethod
     @lru_cache(maxsize=1)
     def _create_default_icc_profile() -> bytes:
-        return ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
         # createProfile stamps the current time into the ICC header (bytes 24:36),
         # making output non-reproducible. Zero the date and cache so the default
         # profile is byte-identical across runs and generated only once.
