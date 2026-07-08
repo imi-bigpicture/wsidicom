@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The default `OpticalPathIdentifier` now starts at `1` instead of `0`, following the DICOM convention of 1-based indexing.
+- The generated default sRGB ICC profile is now reproducible. Previously `ImageCms.createProfile` stamped the current time into the profile header, so identical inputs produced byte-different output; the header creation date is now zeroed.
 
 ## [0.32.1] - 2026-06-24
 
