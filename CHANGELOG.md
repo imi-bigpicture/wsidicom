@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The default `OpticalPathIdentifier` now starts at `1` instead of `0`, following the DICOM convention of 1-based indexing.
+
 ## [0.32.1] - 2026-06-24
 
 ### Fixed

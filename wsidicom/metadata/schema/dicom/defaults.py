@@ -28,7 +28,7 @@ from wsidicom.metadata.image import FocusMethod, ImageCoordinateSystem
 class Defaults:
     string = "Unknown"
     date_time = datetime.datetime.fromtimestamp(0, datetime.timezone.utc)
-    optical_path_identifier = "0"
+    optical_path_identifier = "1"
     illumination_type = IlluminationCode("Brightfield illumination")
     illumination = IlluminationColorCode("Full Spectrum")
     slide_container_type = ContainerTypeCode("Microscope slide")
