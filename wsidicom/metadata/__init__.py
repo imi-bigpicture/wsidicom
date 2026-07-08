@@ -15,6 +15,7 @@
 """Module with metadata models and schemas for serialization to and from DICOM or
 json."""
 
+from wsidicom.metadata.contributing_equipment import ContributingEquipment
 from wsidicom.metadata.equipment import Equipment
 from wsidicom.metadata.image import (
     ExtendedDepthOfField,
@@ -66,6 +67,7 @@ from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.metadata.wsi import WsiMetadata
 
 __all__ = [
+    "ContributingEquipment",
     "Equipment",
     "ExtendedDepthOfField",
     "FocusMethod",

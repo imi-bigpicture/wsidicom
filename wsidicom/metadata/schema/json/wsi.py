@@ -22,6 +22,9 @@ from wsidicom.metadata.label import Label
 from wsidicom.metadata.patient import Patient
 from wsidicom.metadata.pyramid import Pyramid
 from wsidicom.metadata.schema.common import LoadingSchema
+from wsidicom.metadata.schema.json.contributing_equipment import (
+    ContributingEquipmentJsonSchema,
+)
 from wsidicom.metadata.schema.json.equipment import EquipmentJsonSchema
 from wsidicom.metadata.schema.json.fields import UidJsonField
 from wsidicom.metadata.schema.json.label import LabelJsonSchema
@@ -50,6 +53,9 @@ class WsiMetadataJsonSchema(LoadingSchema[WsiMetadata]):
     overview = fields.Nested(OverviewJsonSchema(), load_default=None, allow_none=True)
     frame_of_reference_uid = UidJsonField(allow_none=True)
     dimension_organization_uids = fields.List(UidJsonField(), allow_none=True)
+    contributing_equipment = fields.List(
+        fields.Nested(ContributingEquipmentJsonSchema()), load_default=()
+    )
 
     @property
     def load_type(self):

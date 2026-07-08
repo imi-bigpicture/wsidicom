@@ -480,6 +480,11 @@ class ContainerTypeCode(CidConceptCode, SingleConceptCode):
     cid = codes.cid8101.concepts  # type: ignore
 
 
+class ContributingEquipmentPurposeCode(CidConceptCode, SingleConceptCode):
+    sequence_name = "PurposeOfReferenceCodeSequence"
+    cid = codes.cid7005.concepts  # type: ignore
+
+
 class ConceptNameCode(SingleConceptCode):
     sequence_name = "ConceptNameCodeSequence"
 
