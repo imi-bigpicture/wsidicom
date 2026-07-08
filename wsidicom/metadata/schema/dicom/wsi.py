@@ -16,6 +16,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import TypeVar
 
 from marshmallow import fields
@@ -255,8 +256,17 @@ class WsiMetadataDicomSchema:
         )
 
     @staticmethod
+    @lru_cache(maxsize=1)
     def _create_default_icc_profile() -> bytes:
         return ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        # createProfile stamps the current time into the ICC header (bytes 24:36),
+        # making output non-reproducible. Zero the date and cache so the default
+        # profile is byte-identical across runs and generated only once.
+        profile = bytearray(
+            ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        )
+        profile[24:36] = bytes(12)
+        return bytes(profile)
 
     @staticmethod
     def _insert_default_image_coordinate_system(
