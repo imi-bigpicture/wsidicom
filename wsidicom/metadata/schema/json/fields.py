@@ -169,7 +169,7 @@ class SizeMmJsonField(fields.Field):
         try:
             return SizeMm(**value)
         except ValueError as error:
-            raise ValidationError("Could not deserialize PointMm.") from error
+            raise ValidationError("Could not deserialize SizeMm.") from error
 
 
 class UidJsonField(fields.Field):
