@@ -95,13 +95,13 @@ class StringDicomField(StringLikeDicomField):
             and pydicom_config.settings.writing_validation_mode == pydicom_config.RAISE
             and config.settings.truncate_long_dicom_strings_on_validation_error
         ):
-            maximum_allowed_legth = MAX_VALUE_LEN[self._value_representation]
+            maximum_allowed_length = MAX_VALUE_LEN[self._value_representation]
             logging.warning(
                 f"Truncating long DICOM string {value} of value representation "
                 f"{self._value_representation} with maximum allowed length "
-                f"{maximum_allowed_legth} to {value[:maximum_allowed_legth]}."
+                f"{maximum_allowed_length} to {value[:maximum_allowed_length]}."
             )
-            value = value[:maximum_allowed_legth]
+            value = value[:maximum_allowed_length]
         return super()._serialize(value, attr, obj, **kwargs)
 
 

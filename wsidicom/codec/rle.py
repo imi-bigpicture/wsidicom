@@ -30,7 +30,7 @@ from wsidicom.codec.optionals import (
 class RleCodec:
     """Codec for encoding and decoding DICOM RLE data with imagecodecs PackBits."""
 
-    _bits_to_compnents_per_channel = {
+    _bits_to_components_per_channel = {
         8: 1,
         16: 2,
     }

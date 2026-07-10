@@ -1516,7 +1516,7 @@ class AnnotationInstance:
         coordinate_type: str
             If coordinates are volume-related ('volume') or image-related
             ('image').
-        frame_of_referenc: Uid
+        frame_of_reference: Uid
             Frame of reference uid of image that the annotations belong to
         """
         self.groups = groups

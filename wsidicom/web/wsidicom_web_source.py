@@ -43,7 +43,7 @@ from wsidicom.web.wsidicom_web_image_data import WsiDicomWebImageData
 """A source for reading WSI DICOM files from DICOMWeb."""
 
 # Transfer syntaxes to try in order of preference.
-PREFERED_WEB_TRANSFER_SYNTAXES = [
+PREFERRED_WEB_TRANSFER_SYNTAXES = [
     JPEGBaseline8Bit,
     JPEG2000,
     JPEG2000Lossless,
@@ -137,7 +137,7 @@ class WsiDicomWebSource(Source):
             )
         )
 
-        with ConditionalThreadPoolExecutor(settings.open_web_theads) as pool:
+        with ConditionalThreadPoolExecutor(settings.open_web_threads) as pool:
             instances = pool.map(create_instance, instance_uids)
             for instance in instances:
                 if instance is None:
@@ -240,7 +240,7 @@ class WsiDicomWebSource(Source):
             syntax was found.
         """
         if requested_transfer_syntaxes is None:
-            requested_transfer_syntaxes = PREFERED_WEB_TRANSFER_SYNTAXES
+            requested_transfer_syntaxes = PREFERRED_WEB_TRANSFER_SYNTAXES
 
         supported_transfer_syntaxes = (
             transfer_syntax

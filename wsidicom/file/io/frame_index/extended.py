@@ -102,12 +102,12 @@ class ExtendedOffsetFrameIndexParser(OffsetTableFrameIndexParser):
 
     def _read_eot_lengths_tag(self):
         """Skip over the length of the extended table offset lengths tag."""
-        eot_lenths_tag = self._file.read_tag()
-        if eot_lenths_tag != ExtendedOffsetTableLengthsTag:
+        eot_lengths_tag = self._file.read_tag()
+        if eot_lengths_tag != ExtendedOffsetTableLengthsTag:
             raise WsiDicomFileError(
                 str(self._file),
                 "Expected Extended offset table lengths tag after reading "
-                f"Extended offset table, found {eot_lenths_tag}",
+                f"Extended offset table, found {eot_lengths_tag}",
             )
         self._file.read_tag_vr()
         length = self._file.read_tag_length(True)

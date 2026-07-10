@@ -28,8 +28,8 @@ from wsidicom.metadata import ImageCoordinateSystem, ImageType
 
 
 @pytest.mark.unittest
-class TestWsiDicomGeomtry:
-    def test_size_subraction(self):
+class TestWsiDicomGeometry:
+    def test_size_subtraction(self):
         # Arrange
         size_0 = Size(10, 10)
         size_1 = Size(1, 1)

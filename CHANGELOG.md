@@ -119,12 +119,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Moved `image` and `optical_paths` from `WsiMetadata` to `Pyramid`. The same metadata is thus now located unter at `pyramid.image` and `pyramid.optical_paths`.
+- Moved `image` and `optical_paths` from `WsiMetadata` to `Pyramid`. The same metadata is thus now located under at `pyramid.image` and `pyramid.optical_paths`.
 
 ### Fixed
 
 - Corrected `vr` for `PixelData` element from `OB` to `OW` when writing non-encapsulated pixel data.
-- Reseting `LossyImageCompressionRatio` and `LossyImageCompressionMethod` when creating scaled image data.
+- Resetting `LossyImageCompressionRatio` and `LossyImageCompressionMethod` when creating scaled image data.
 
 ## [0.27.1] - 2025-05-15
 
@@ -208,7 +208,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Parsing of native pixel data with padded lenght.
+- Parsing of native pixel data with padded length.
 - Check for supported transfer syntax when DICOMWeb client returns an iterable of frames.
 - Fix for order of transfer syntax to check.
 - Use `ImageType` `DERIVED` instead of `ORIGINAL` when saving resampled volume instances.
@@ -245,7 +245,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Support for pydicom 3.0. This requires Pyhton >3.10.
+- Support for pydicom 3.0. This requires Python >3.10.
 
 ### Removed
 
@@ -422,13 +422,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Support for additional transfer syntaxes both for reading and writing, using pydicom pixel handlers, (optional) image codecs, and (optional) pylibjpeg-rle.
-- Additional decoders and encoders to Pillow. Decoder and encoder is selected automatically. Decoder to use can be overridden with the `prefered_decoder`-setting.
+- Additional decoders and encoders to Pillow. Decoder and encoder is selected automatically. Decoder to use can be overridden with the `preferred_decoder`-setting.
 - Detection of suitable available transfer syntax when opening slide with DICOM web.
 - Support for opening DICOMDIR files using `open_dicomdir()`.
 
 ### Changed
 
-- Opening DICOM web instances in parallel. Configurable with `open_web_theads`-setting.
+- Opening DICOM web instances in parallel. Configurable with `open_web_threads`-setting.
 - `open_web()` now takes a list of requested transfer syntaxes to test if available from the server.
 - When fetching multiple frames from DICOM web, fetch multiple frames per request instead of making several requests.
 - Renamed `OffsetTableType` option `NONE` to `EMPTY`, and added type `NONE` for use with unencapsulated data.
@@ -520,7 +520,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Set TotalPixelMatrixOriginSequence and ImageOrientationSlide from ImageOrgin object.
+- Set TotalPixelMatrixOriginSequence and ImageOrientationSlide from ImageOrigin object.
 
 ## [0.7.0] - 2023-02-13
 

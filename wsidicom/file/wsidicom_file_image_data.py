@@ -28,7 +28,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
     """
     Represents image data read from dicom file(s).
 
-    Image data can be sparsly or fully tiled and/or concatenated.
+    Image data can be sparsely or fully tiled and/or concatenated.
     """
 
     def __init__(

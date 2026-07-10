@@ -210,7 +210,7 @@ def wsi_factory():
         if input_type == WsiInputType.FILE:
             wsi = WsiDicom.open(folder)
         elif input_type == WsiInputType.WEB:
-            settings.open_web_theads = 1
+            settings.open_web_threads = 1
             client = WsiDicomWebClient(
                 DICOMfileClient(f"file://{folder.absolute().as_posix()}")
             )

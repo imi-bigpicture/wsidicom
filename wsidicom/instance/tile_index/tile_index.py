@@ -132,12 +132,12 @@ class TileIndex(metaclass=ABCMeta):
         paths = dict.fromkeys(
             path
             for dataset in datasets
-            for path in cls._get_path_identifers(dataset.optical_path_sequence)
+            for path in cls._get_path_identifiers(dataset.optical_path_sequence)
         )
         return list(paths) if paths else ["0"]
 
     @staticmethod
-    def _get_path_identifers(
+    def _get_path_identifiers(
         optical_path_sequence: DicomSequence | None,
     ) -> Iterable[str]:
         """Parse optical path sequence and return list of optical path
