@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-07-10
+
 ### Added
 
 - `OpticalPath.add_color_space_from_icc()` returns a copy with `color_space` populated from the embedded ICC profile's profile description.
@@ -625,7 +627,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.31.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.0..HEAD
+[0.33.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.32.1..v0.33.0
+[0.32.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.32.0..v0.32.1
+[0.32.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.31.0..v0.32.0
 [0.31.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.30.0..v0.31.0
 [0.30.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.1..v0.30.0
 [0.29.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.29.0..v0.29.1

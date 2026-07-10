@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from importlib.metadata import version
+
 from wsidicom.config import settings
 from wsidicom.file import InstanceSplit
 from wsidicom.graphical_annotations import (
@@ -31,7 +33,7 @@ from wsidicom.series import Labels, Overviews, Pyramid
 from wsidicom.web import WsiDicomWebClient
 from wsidicom.wsidicom import WsiDicom
 
-__version__ = "0.32.1"
+__version__ = version("wsidicom")
 
 __all__ = [
     "settings",
