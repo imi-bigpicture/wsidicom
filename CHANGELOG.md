@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.1] - 2026-07-10
+
+### Fixed
+
+- Non-label instances no longer emit a Slide Label module missing the required Type 2 `BarcodeValue`. `LabelText` and `BarcodeValue` are now written together when either is set (the unset one empty), and omitted only when both are empty.
+
 ## [0.33.0] - 2026-07-10
 
 ### Added
@@ -627,7 +633,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.1..HEAD
+[0.33.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.0..v0.33.1
 [0.33.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.32.1..v0.33.0
 [0.32.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.32.0..v0.32.1
 [0.32.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.31.0..v0.32.0
