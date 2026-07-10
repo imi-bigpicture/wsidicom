@@ -252,7 +252,7 @@ class TestDicomFields:
         # Assert
         assert serialized == value
 
-    @pytest.mark.parametrize("value_representation", (VR(vr) for vr in MAX_VALUE_LEN))
+    @pytest.mark.parametrize("value_representation", [VR(vr) for vr in MAX_VALUE_LEN])
     def test_string_field_serialize_truncate_long_strings(
         self, value_representation: VR
     ):

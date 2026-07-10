@@ -61,11 +61,11 @@ class WsiTestDefinitions:
 
     @classmethod
     def folders(cls) -> Iterable[Path]:
-        return (SLIDE_FOLDER.joinpath(path) for _, path in cls._get_parameter("path"))
+        return [SLIDE_FOLDER.joinpath(path) for _, path in cls._get_parameter("path")]
 
     @classmethod
     def folders_and_counts(cls) -> Iterable[tuple[Path, int, bool, bool]]:
-        return (
+        return [
             (
                 SLIDE_FOLDER.joinpath(wsi_definition["path"]),
                 wsi_definition["levels"],
@@ -73,25 +73,25 @@ class WsiTestDefinitions:
                 wsi_definition["overview"],
             )
             for wsi_definition in cls.test_definitions.values()
-        )
+        ]
 
     @classmethod
     def folders_and_instance_counts(cls) -> Iterable[tuple[Path, int]]:
-        return (
+        return [
             (
                 SLIDE_FOLDER.joinpath(wsi_definition["path"]),
                 wsi_definition["instances"],
             )
             for wsi_definition in cls.test_definitions.values()
-        )
+        ]
 
     @classmethod
     def wsi_names(cls, tiling: str | None = None) -> Iterable[str]:
-        return (
+        return [
             key
             for key, value in cls.test_definitions.items()
             if tiling is None or value["tiled"] == tiling
-        )
+        ]
 
     @classmethod
     def read_region(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
