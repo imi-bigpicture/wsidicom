@@ -22,14 +22,14 @@ from wsidicom.conceptcode import CidConceptCode, Code
 class TestWsiDicomCode:
     @pytest.mark.parametrize(
         ["code_class", "code"],
-        (
+        [
             (
                 code_class,
                 code,
             )
             for code_class in CidConceptCode.__subclasses__()
             for code in code_class.cid.values()
-        ),
+        ],
     )
     @pytest.mark.parametrize("case", [None, "lower", "upper"])
     def test_create_code_from_meaning(
