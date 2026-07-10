@@ -315,7 +315,7 @@ class TestSampleJsonSchema:
             UnitCode(dumped["location"]["z"]["unit"]),
         )
 
-    def test_unkown_sampling_serialize(self):
+    def test_unknown_sampling_serialize(self):
         # Arrange
         specimen = Specimen(
             "specimen",
@@ -348,7 +348,7 @@ class TestSampleJsonSchema:
         assert dumped["sampling_constraints"][0]["sampling_step_index"] == 0
         assert "location" not in dumped
 
-    def test_unkown_sampling_deserialize(self):
+    def test_unknown_sampling_deserialize(self):
         # Arrange
         dumped = {
             "action": "sampling",
@@ -966,7 +966,7 @@ class TestSampleJsonSchema:
         assert isinstance(specimen, Specimen)
         assert specimen.identifier == dumped[2]["identifier"]
 
-    def test_slide_sample_rountrip(self, slide_sample: SlideSample):
+    def test_slide_sample_roundtrip(self, slide_sample: SlideSample):
         # Arrange
 
         # Act

@@ -383,7 +383,7 @@ class WsiDataset(Dataset):
         Returns
         -------
         float | None
-            Slice thickess or None if unknown.
+            Slice thickness or None if unknown.
         """
         if self.pixel_measure is not None:
             slice_thickness = getattr(self.pixel_measure, "SliceThickness", None)

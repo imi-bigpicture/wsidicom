@@ -216,7 +216,7 @@ def dataset(image_data: ImageData, frame_count: int):
 @pytest.mark.unittest
 class TestWsiDicomWriter:
     @pytest.mark.parametrize(
-        "writen_table_type",
+        "written_table_type",
         [
             OffsetTableType.EMPTY,
             OffsetTableType.BASIC,
@@ -235,7 +235,7 @@ class TestWsiDicomWriter:
         image_data: ImageData,
         frames: list[bytes],
         frame_count: int,
-        writen_table_type: OffsetTableType,
+        written_table_type: OffsetTableType,
         transfer_syntax: UID,
         tmp_path: Path,
         bits: int,
@@ -243,12 +243,12 @@ class TestWsiDicomWriter:
         samples_per_pixel: int,
     ):
         # Arrange
-        filepath = tmp_path.joinpath(str(writen_table_type))
+        filepath = tmp_path.joinpath(str(written_table_type))
         wsi_dataset = WsiDataset(dataset)
 
         # Act
         with WsiDicomWriter.open(
-            filepath, transfer_syntax, writen_table_type
+            filepath, transfer_syntax, written_table_type
         ) as writer:
             pixels_start, offset_writer = (
                 writer._pixel_data_writer.write_pixel_data_start(wsi_dataset)
@@ -279,12 +279,12 @@ class TestWsiDicomWriter:
         frame_lengths = [  # Lengths are divisible with 2
             2 * math.ceil(len(frame) / 2) for frame in frames
         ]
-        expected_frame_positons = [
+        expected_frame_positions = [
             (offset, length)
             for offset, length in zip(frame_offsets, frame_lengths, strict=True)
         ]
-        assert expected_frame_positons == read_frame_positions
-        assert writen_table_type == read_table_type
+        assert expected_frame_positions == read_frame_positions
+        assert written_table_type == read_table_type
 
     @pytest.mark.parametrize(
         "transfer_syntax",

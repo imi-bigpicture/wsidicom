@@ -75,9 +75,9 @@ class Subsampling(Enum):
     """JPEG chroma subsampling settings."""
 
     R444 = "Full horizontal, full vertical (4:4:4)"
-    R422 = "Half horisontal, full vertical (4:2:2)"
-    R420 = "Half horisontal, half vertical (4:2:0)"
-    R411 = "Quarter horisontal, full vertical (4:1:1)"
+    R422 = "Half horizontal, full vertical (4:2:2)"
+    R420 = "Half horizontal, half vertical (4:2:0)"
+    R411 = "Quarter horizontal, full vertical (4:1:1)"
     R440 = "Full horizontal, half vertical (4:4:0)"
 
     @classmethod

@@ -214,12 +214,12 @@ class Decoder(metaclass=ABCMeta):
             "pylibjpeg_openjpeg": PyLibJpegOpenJpegDecoder,
             "pydicom": PydicomDecoder,
         }
-        if config.settings.prefered_decoder is not None:
-            if config.settings.prefered_decoder not in decoders:
+        if config.settings.preferred_decoder is not None:
+            if config.settings.preferred_decoder not in decoders:
                 raise ValueError(
-                    f"Unknown preferred decoder: {config.settings.prefered_decoder}."
+                    f"Unknown preferred decoder: {config.settings.preferred_decoder}."
                 )
-            decoder = decoders[config.settings.prefered_decoder]
+            decoder = decoders[config.settings.preferred_decoder]
             if not decoder.is_available() or not decoder.is_supported(
                 transfer_syntax, samples_per_pixel, bits
             ):

@@ -393,7 +393,7 @@ from wsidicom import conceptcode, Measurement
 area = ConceptCode.MeasurementCode("Area")
 pixels = ConceptCode.UnitCode("Pixels")
 measurement = Measurement(area, 25.0, pixels)
-point_annotation_with_measurment = Annotation(Point(10.0, 20.0), [measurement])
+point_annotation_with_measurement = Annotation(Point(10.0, 20.0), [measurement])
 ```
 
 ***Create a group of the annotations.***
@@ -402,7 +402,7 @@ point_annotation_with_measurment = Annotation(Point(10.0, 20.0), [measurement])
 from wsidicom import PointAnnotationGroup
 # The 222 supplement requires groups to have a label, a category and a type
 group = PointAnnotationGroup(
-    annotations=[point_annotation, point_annotation_with_measurment],
+    annotations=[point_annotation, point_annotation_with_measurement],
     label='group label',
     category_code=ConceptCode.AnnotationCategoryCode('Tissue'),
     type_code=ConceptCode.AnnotationTypeCode('Nucleus'),
@@ -469,7 +469,7 @@ A WSI DICOM pyramid is in *wsidicom* represented by a hierarchy of objects of di
 - *WsiInstance*, represents image data and image metadata.
 - *Level*, represents a group of instances with the same image size, i.e. of the same level.
 - *Pyramid*, represents a group of levels, i.e. the pyrimidal structure.
-- *Pyramids*, represents a collection of pyramids, each with different image coordate system or extended depth of field.
+- *Pyramids*, represents a collection of pyramids, each with different image coordinate system or extended depth of field.
 - *WsiDicom*, represents a collection of pyramids, labels and overviews.
 
 Labels and overviews are structured similarly to levels, but with somewhat different properties and restrictions. For DICOMWeb the WsiDicomFile\* classes are replaced with WsiDicomWeb\* classes.
@@ -485,7 +485,7 @@ slide = WsiDicom.open("path_to_folder")
 - [codec](wsidicom/codec) - Encoders and decoders for image pixel data.
 - [file](wsidicom/file) - Implementation for reading and writing DICOM WSI files.
 - [group](wsidicom/group) - Group implementations, e.g. Level.
-- [instance](wsidicom/instance) - Instance implementations WsiIsntance and WsiDataset, the metaclass ImageData and ImageData implementations WsiDicomImageData and PillowImageData.
+- [instance](wsidicom/instance) - Instance implementations WsiInstance and WsiDataset, the metaclass ImageData and ImageData implementations WsiDicomImageData and PillowImageData.
 - [metadata](wsidicom/metadata) - Metadata models and schema for serializing and deserializing to DICOM and json.
 - [series](wsidicom/series) - Series implementations Levels, Labels, and Overview.
 - [web](wsidicom/web) - Implementation for reading DICOM WSI from DICOMWeb.

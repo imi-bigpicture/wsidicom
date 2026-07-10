@@ -104,7 +104,7 @@ class WsiDicomWebClient:
             Iterator of series and instance uid and optionally available transfer syntax
              uids for WSI instances in the study and series.
         """
-        return self._get_intances(
+        return self._get_instances(
             study_uid, series_uids, VLWholeSlideMicroscopyImageStorage, WSI_MODALITY
         )
 
@@ -127,7 +127,7 @@ class WsiDicomWebClient:
             Iterator of series and instance uid and optionally available transfer syntax
             uids for Annotation instances in the study and series.
         """
-        return self._get_intances(
+        return self._get_instances(
             study_uid,
             series_uids,
             MicroscopyBulkSimpleAnnotationsStorage,
@@ -239,7 +239,7 @@ class WsiDicomWebClient:
         )
         return True
 
-    def _get_intances(
+    def _get_instances(
         self,
         study_uid: UID,
         series_uids: Iterable[UID],

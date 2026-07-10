@@ -255,7 +255,7 @@ class WsiDicom:
             Optional list of indices (in present pyramids) to include.
         include_levels: Sequence[int] | None = None
             Optional list of indices (in all pyramids) to include, e.g. [0, 1]
-            includes the two lowest levels. Negative indicies can be used,
+            includes the two lowest levels. Negative indices can be used,
             e.g. [-1, -2] includes the two highest levels.
         include_labels: bool = True
             If to include label series.

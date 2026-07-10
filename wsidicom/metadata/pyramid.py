@@ -39,7 +39,7 @@ class Pyramid:
     description: str | None = None
         Description of the pyramid image.
     label: str | None = None
-        User-defind label of the pyramid image.
+        User-defined label of the pyramid image.
     contains_phi : bool = False
         Whether the pyramid image contains personal health information.
     comments: str | None = None

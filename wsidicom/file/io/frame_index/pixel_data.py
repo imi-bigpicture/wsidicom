@@ -25,7 +25,7 @@ from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 
 
 class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
-    """Frame index parsed from reading the sequence of pixel data delimeters."""
+    """Frame index parsed from reading the sequence of pixel data delimiters."""
 
     @property
     def offset_table_type(self) -> OffsetTableType:

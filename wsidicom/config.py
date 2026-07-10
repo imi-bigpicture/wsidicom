@@ -26,8 +26,8 @@ class Settings:
         self._strict_specimen_identifier_check = True
         self._focal_plane_distance_threshold = 0.000001
         self._pyramids_origin_threshold = 0.02
-        self._prefered_decoder: str | None = None
-        self._open_web_theads: int | None = None
+        self._preferred_decoder: str | None = None
+        self._open_web_threads: int | None = None
         self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
         self._ignore_specimen_preparation_step_on_validation_error = True
         self._truncate_long_dicom_strings = False
@@ -57,7 +57,7 @@ class Settings:
 
     @property
     def strict_tile_size_check(self) -> bool:
-        """If tile size need to match for levels. If `False` the tile size accross
+        """If tile size need to match for levels. If `False` the tile size across
         levels are allowed to be non-uniform."""
         return self._strict_tile_size_check
 
@@ -89,22 +89,22 @@ class Settings:
         self._pyramids_origin_threshold = value
 
     @property
-    def prefered_decoder(self) -> str | None:
+    def preferred_decoder(self) -> str | None:
         """Name of preferred decoder to use."""
-        return self._prefered_decoder
+        return self._preferred_decoder
 
-    @prefered_decoder.setter
-    def prefered_decoder(self, value: str | None) -> None:
-        self._prefered_decoder = value
+    @preferred_decoder.setter
+    def preferred_decoder(self, value: str | None) -> None:
+        self._preferred_decoder = value
 
     @property
-    def open_web_theads(self) -> int | None:
+    def open_web_threads(self) -> int | None:
         """Number of threads to use when opening web instances."""
-        return self._open_web_theads
+        return self._open_web_threads
 
-    @open_web_theads.setter
-    def open_web_theads(self, value: int | None) -> None:
-        self._open_web_theads = value
+    @open_web_threads.setter
+    def open_web_threads(self, value: int | None) -> None:
+        self._open_web_threads = value
 
     @property
     def pillow_resampling_filter(self) -> Pillow.Resampling:
