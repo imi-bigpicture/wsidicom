@@ -270,6 +270,28 @@ class TestDicomFields:
         # Assert
         assert serialized == value[:maximum_allowed_length]
 
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            ("ScanScope v1", "SCANSCOPE V1"),
+            ("Segue_v3", "SEGUE_V3"),
+            ("a-b.c/d", "A_B_C_D"),
+            ("  padded  ", "PADDED"),
+            ("SRGB", "SRGB"),
+        ],
+    )
+    def test_string_field_serialize_coerces_cs_repertoire(
+        self, value: str, expected: str
+    ):
+        # Arrange
+        field = StringDicomField(VR.CS)
+
+        # Act
+        serialized = field.serialize("attribute", {"attribute": value})
+
+        # Assert
+        assert serialized == expected
+
     @pytest.mark.parametrize("code_version", [None, "version"])
     def test_code_field_serialize(self, code_version: str | None):
         # Arrange

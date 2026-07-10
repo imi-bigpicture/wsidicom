@@ -14,13 +14,84 @@
 
 import numpy as np
 import pytest
+from PIL import ImageCms
 
 from wsidicom.metadata.optical_path import (
     ConstantLutSegment,
     DiscreteLutSegment,
     LinearLutSegment,
     Lut,
+    OpticalPath,
 )
+
+
+class TestAddColorSpaceFromIcc:
+    def test_sets_color_space_from_stripped_profile_description(self):
+        # Arrange
+        profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
+        expected = ImageCms.getProfileDescription(profile).strip()
+        optical_path = OpticalPath(icc_profile=profile.tobytes())
+
+        # Act
+        updated = optical_path.add_color_space_from_icc()
+
+        # Assert
+        assert updated.color_space == expected
+        assert updated.color_space == expected.strip()
+
+    def test_does_not_overwrite_existing_color_space(self):
+        # Arrange
+        profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
+        optical_path = OpticalPath(
+            icc_profile=profile.tobytes(), color_space="EXISTING"
+        )
+
+        # Act
+        updated = optical_path.add_color_space_from_icc()
+
+        # Assert
+        assert updated is optical_path
+
+    def test_force_overwrites_existing_color_space(self):
+        # Arrange
+        profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
+        expected = ImageCms.getProfileDescription(profile).strip()
+        optical_path = OpticalPath(
+            icc_profile=profile.tobytes(), color_space="EXISTING"
+        )
+
+        # Act
+        updated = optical_path.add_color_space_from_icc(force=True)
+
+        # Assert
+        assert updated.color_space == expected
+
+    def test_force_keeps_existing_color_space_when_profile_unreadable(self):
+        # Arrange
+        optical_path = OpticalPath(
+            icc_profile=b"not an icc profile", color_space="EXISTING"
+        )
+
+        # Act
+        updated = optical_path.add_color_space_from_icc(force=True)
+
+        # Assert
+        assert updated is optical_path
+        assert updated.color_space == "EXISTING"
+
+    @pytest.mark.parametrize("icc_profile", [None, b"", b"not an icc profile"])
+    def test_returns_unchanged_for_missing_or_invalid_profile(
+        self, icc_profile: bytes | None
+    ):
+        # Arrange
+        optical_path = OpticalPath(icc_profile=icc_profile)
+
+        # Act
+        updated = optical_path.add_color_space_from_icc()
+
+        # Assert
+        assert updated is optical_path
+        assert updated.color_space is None
 
 
 class TestDicomLut:
