@@ -143,7 +143,8 @@ class FrameCache(Generic[CacheItemType]):
         frames_getter: Callable[[Iterable[int]], Iterator[CacheItemType]],
     ) -> Iterator[CacheItemType]:
         if self._lru_cache.maxsize < 1:
-            return frames_getter(frame_indices)
+            yield from frames_getter(frame_indices)
+            return
         cached_frames = {
             frame_index: frame
             for (frame_index, frame) in (

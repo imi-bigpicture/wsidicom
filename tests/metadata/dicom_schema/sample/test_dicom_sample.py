@@ -371,21 +371,25 @@ class TestSampleDicom:
                 assert len(description.PrimaryAnatomicStructureSequence) == len(
                     primary_anatomic_structures
                 )
-                for index, primary_anatomic_structure in enumerate(
+                for structure_index, primary_anatomic_structure in enumerate(
                     primary_anatomic_structures
                 ):
                     assert (
-                        description.PrimaryAnatomicStructureSequence[index].CodeValue
+                        description.PrimaryAnatomicStructureSequence[
+                            structure_index
+                        ].CodeValue
                         == primary_anatomic_structure.value
                     )
                     assert (
                         description.PrimaryAnatomicStructureSequence[
-                            index
+                            structure_index
                         ].CodingSchemeDesignator
                         == primary_anatomic_structure.scheme_designator
                     )
                     assert (
-                        description.PrimaryAnatomicStructureSequence[index].CodeMeaning
+                        description.PrimaryAnatomicStructureSequence[
+                            structure_index
+                        ].CodeMeaning
                         == primary_anatomic_structure.meaning
                     )
             else:

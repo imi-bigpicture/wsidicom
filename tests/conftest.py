@@ -221,12 +221,13 @@ def wsi_factory():
                 [JPEGBaseline8Bit, JPEG2000, ExplicitVRLittleEndian],
             )
         elif input_type == WsiInputType.STREAM:
-            streams = [
+            new_streams = [
                 open(file, "rb")
                 for file in folder.iterdir()
                 if file.is_file() and is_dicom(file)
             ]
-            wsi = WsiDicom.open_streams(streams)
+            streams.extend(new_streams)
+            wsi = WsiDicom.open_streams(new_streams)
         else:
             raise NotImplementedError()
         wsis[(input_type, folder)] = wsi

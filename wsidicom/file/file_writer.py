@@ -799,8 +799,9 @@ class PyramidFileWriter(BaseFileWriter):
                 try:
                     level_writer.run(pool, self._max_threads * 2)
                 except Cancelled:
+                    # Token already cancelled by another worker; exit quietly.
                     pass
-                except BaseException as error:
+                except Exception as error:
                     logging.error(
                         f"Producer thread Producer-L{level_writer.level_index} "
                         f"failed: {error}"

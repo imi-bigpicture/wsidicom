@@ -153,8 +153,9 @@ class CancellationToken:
 
     def raise_if_cancelled(self) -> None:
         """Re-raise the recorded cause if the token has been cancelled."""
-        if self._exception is not None:
-            raise self._exception
+        exception = self._exception
+        if exception is not None:
+            raise exception
 
     def watch(self, condition: Condition) -> None:
         """Register a queue's condition to be woken when this token cancels."""

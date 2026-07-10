@@ -367,7 +367,6 @@ class TestPreparationStepDicomSchema:
         # Assert
         assert isinstance(serialized, list)
         item_iterator = iter(serialized)
-        item_iterator = iter(serialized)
         assert_initial_common_preparation_step_items(
             item_iterator, staining_dicom, identifier, SampleCodes.staining
         )

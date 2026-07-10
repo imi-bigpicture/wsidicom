@@ -98,7 +98,7 @@ class WsiDicomWebSource(Source):
             dataset = client.get_instance(study_uid, series_uid, instance_uid)
             if not WsiDataset.is_supported_wsi_dicom(dataset):
                 logging.info(f"Non-supported instance {instance_uid}.")
-                return
+                return None
             dataset = WsiDataset(dataset)
 
             transfer_syntax = self._determine_transfer_syntax(
@@ -112,7 +112,7 @@ class WsiDicomWebSource(Source):
                 logging.info(
                     f"No supported transfer syntax found for instance {uids[2]}."
                 )
-                return
+                return None
             detected_transfer_syntaxes_by_image_type[dataset.image_type].add(
                 transfer_syntax
             )
@@ -166,9 +166,9 @@ class WsiDicomWebSource(Source):
             )
 
         except StopIteration:
-            WsiDicomNotFoundError(
+            raise WsiDicomNotFoundError(
                 "No level instances found", f"{study_uid}, {series_uids}"
-            )
+            ) from None
         self._base_tile_size = self._base_dataset.tile_size
 
     @property
