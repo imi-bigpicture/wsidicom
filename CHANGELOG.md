@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `OpticalPath.add_color_space_from_icc()` returns a copy with `color_space` populated from the embedded ICC profile's profile description.
 - `ContributingEquipment` metadata model (`ContributingEquipmentSequence`, `(0018,A001)`) with `purpose` (`ContributingEquipmentPurposeCode`, CID 7005), `manufacturer`, `model_name`, `software_versions`, `description`, and `contribution_datetime`. Exposed as `WsiMetadata.contributing_equipment` and loaded/dumped for both DICOM and JSON, so equipment that contributed to an instance (e.g. a format converter) is available as structured metadata.
 
 ### Changed
 
+- DICOM `CS` (Code String) attributes are now coerced to the CS character repertoire on serialization: uppercased with any character outside `A-Z`, `0-9`, space and underscore replaced by `_`.
 - The default `OpticalPathIdentifier` now starts at `1` instead of `0`, following the DICOM convention of 1-based indexing.
 - The generated default sRGB ICC profile is now reproducible. Previously `ImageCms.createProfile` stamped the current time into the profile header, so identical inputs produced byte-different output; the header creation date is now zeroed.
 

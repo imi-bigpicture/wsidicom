@@ -16,10 +16,12 @@
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from io import BytesIO
 from typing import Generic, TypeVar
 
 import numpy as np
+from PIL import ImageCms
 
 from wsidicom.conceptcode import (
     IlluminationCode,
@@ -333,3 +335,37 @@ class OpticalPath:
     image_path_filter: ImagePathFilter | None = None
     objective: Objectives | None = None
     color_space: str | None = None
+
+    def add_color_space_from_icc(self, force: bool = False) -> "OpticalPath":
+        """Return a copy with `color_space` set from the ICC profile description.
+
+        The name is read from `icc_profile`'s profile description; coercion into
+        the DICOM CS repertoire happens on serialization. The optical path is
+        returned unchanged if `icc_profile` is missing or its description cannot
+        be read, so an existing `color_space` is never cleared.
+
+        Parameters
+        ----------
+        force : bool = False
+            If False, an existing `color_space` is kept and only a missing one is
+            filled. If True, an existing `color_space` is overwritten with the
+            profile description when one can be read.
+
+        Returns
+        -------
+        OpticalPath
+            A copy with `color_space` populated from `icc_profile`, or this
+            optical path unchanged.
+        """
+        if not self.icc_profile:
+            return self
+        if self.color_space is not None and not force:
+            return self
+        try:
+            profile = ImageCms.ImageCmsProfile(BytesIO(self.icc_profile))
+            color_space = ImageCms.getProfileDescription(profile).strip() or None
+        except Exception:
+            color_space = None
+        if color_space is None:
+            return self
+        return replace(self, color_space=color_space)

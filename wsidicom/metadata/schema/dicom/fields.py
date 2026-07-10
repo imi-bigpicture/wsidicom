@@ -17,6 +17,7 @@
 import datetime
 import logging
 import math
+import re
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import (
@@ -86,6 +87,8 @@ class StringDicomField(StringLikeDicomField):
     def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs):
         if value is None:
             return None
+        if self._value_representation == VR.CS:
+            value = re.sub(r"[^A-Z0-9 _]", "_", value.upper()).strip()
         valid, error = validate_vr_length(self._value_representation, value)
         if (
             not valid
