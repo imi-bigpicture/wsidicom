@@ -303,6 +303,27 @@ class TestDicomSchema:
         assert "SpecimenLabelInImage" not in serialized
         assert "BurnedInAnnotation" not in serialized
 
+    @pytest.mark.parametrize(
+        ["text", "barcode"],
+        [("text", None), (None, "barcode")],
+    )
+    def test_serialize_partial_label_base(self, text: str | None, barcode: str | None):
+        # Arrange
+        label = Label(text=text, barcode=barcode)
+        schema = LabelOnlyDicomSchema()
+
+        # Act
+        serialized = schema.dump(label)
+
+        # Assert
+        # Slide Label module attributes are Type 2: if either is set, both must be
+        # present (the unset one empty), so the module stays conformant.
+        assert isinstance(serialized, Dataset)
+        assert "LabelText" in serialized
+        assert "BarcodeValue" in serialized
+        assert serialized.LabelText == text
+        assert serialized.BarcodeValue == barcode
+
     def test_serialize_default_label_image(self):
         # Arrange
         label = Label()
