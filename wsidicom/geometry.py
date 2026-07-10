@@ -179,9 +179,6 @@ class Size:
             )
         return NotImplemented
 
-    def __hash__(self) -> int:
-        return hash((self.width, self.height))
-
     def all_less_than(self, item: "Size") -> bool:
         """If all dimensions is smaller than corresponding dimension in item."""
         return all(self._comparison_operation(item, int.__lt__))
@@ -262,9 +259,6 @@ class Point:
 
     def __str__(self) -> str:
         return f"{self.x},{self.y}"
-
-    def __hash__(self) -> int:
-        return hash((self.x, self.y))
 
     def __mul__(self, factor: Union[int, float, Size, "Point"]) -> "Point":
         if isinstance(factor, (int, float)):
@@ -464,26 +458,6 @@ class Region:
 class RegionMm:
     position: PointMm
     size: SizeMm
-
-    # def __init__(self, position: PointMm, size: SizeMm):
-    #     if size.width < 0:
-    #         size.width = -size.width
-    #         position.x -= size.width
-    #     if size.height < 0:
-    #         size.height = -size.height
-    #         position.y -= size.height
-    #     self.position = position
-    #     self.size = size
-
-    # @classmethod
-    # def create(cls, position: PointMm, size: SizeMm) -> "RegionMm":
-    #     if size.width < 0:
-    #         size.width = -size.width
-    #         position.x -= size.width
-    #     if size.height < 0:
-    #         size.height = -size.height
-    #         position.y -= size.height
-    #     return cls(position, size)
 
     @property
     def start(self) -> PointMm:

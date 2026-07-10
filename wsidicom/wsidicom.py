@@ -973,6 +973,3 @@ class WsiDicom:
             frame_of_reference_uid=base.frame_of_reference_uid,
             dimension_organization_uids=base.dimension_organization_uids,
         )
-        return WsiMetadata.merge_image_types(
-            pyramid.metadata, label_metadata, overview_metadata
-        )

@@ -236,6 +236,7 @@ class JsonFieldFactory:
                 return value
             if isinstance(value, (Code, CidConceptCode)):
                 return cls._serialize_code(value)
+            return None
 
         def deserialize(
             self,

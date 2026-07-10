@@ -15,6 +15,7 @@
 """Shared data models for the write pipeline."""
 
 from dataclasses import dataclass, field
+from functools import total_ordering
 
 from PIL import Image
 
@@ -46,6 +47,7 @@ class CascadedTile:
     tile: Image.Image
 
 
+@total_ordering
 @dataclass(frozen=True)
 class PyramidTilePosition:
     """Coordinates identifying a tile position in the pyramid.
@@ -111,6 +113,7 @@ class EncodingTaskResult:
     tiles: list[bytes] = field(compare=False, default_factory=list)
 
 
+@total_ordering
 @dataclass(frozen=True)
 class CoordinatePriority:
     """Base for priority-queue items ordered by their `coordinates`.

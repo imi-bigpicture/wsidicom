@@ -192,6 +192,7 @@ class WsiDicomIO:
         if not self._dicom_io.is_implicit_VR:
             vr = self.stream.read(4)
             return vr[0:2]
+        return None
 
     def read_UL(self) -> int:
         """Read unsigned long integer (32 bits)."""

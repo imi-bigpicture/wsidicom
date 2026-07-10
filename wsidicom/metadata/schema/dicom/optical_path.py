@@ -93,7 +93,6 @@ class LutDicomParser:
         _, blue_start, _ = dataset.BluePaletteColorLookupTableDescriptor
         if length == 0:
             length = 2**16
-        bits = bits
         data_type = np.uint8 if bits == 8 else np.uint16
 
         segmented_keys = (
@@ -249,7 +248,6 @@ class LutDicomParser:
         start_length, total_length: int, segments: list[LutSegment]
     ):
         """Create a end segment if needed."""
-        length = start_length
         last_segment = segments[-1]
         length = sum(len(segment) for segment in segments)
         segment_length = total_length - length
@@ -421,7 +419,6 @@ class LutDicomFormatter:
         data_format: str,
     ):
         values = list(segment.values)
-        next_segment = next_segment
         if isinstance(next_segment, LinearLutSegment):
             values.append(next_segment.start_value)
         cls._pack_discrete_data(buffer, values, data_format)

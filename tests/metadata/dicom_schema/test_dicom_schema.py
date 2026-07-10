@@ -387,16 +387,6 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(serialized, Dataset)
-        # if image_type == ImageType.LABEL:
-        #     assert serialized.LabelText is None
-        #     assert serialized.BarcodeValue is None
-        #     assert serialized.SpecimenLabelInImage == "YES"
-        #     assert serialized.BurnedInAnnotation == "YES"
-        # else:
-        #     assert "LabelText" not in serialized
-        #     assert "BarcodeValue" not in serialized
-        #     assert "SpecimenLabelInImage" not in serialized
-        #     assert "BurnedInAnnotation" not in serialized
 
     def test_deserialize_overview(self, dicom_overview: Dataset, overview: Overview):
         # Arrange
@@ -407,15 +397,6 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(deserialized, Overview)
-        # if image_type == ImageType.LABEL:
-        #     assert deserialized.text == label.text
-        #     assert deserialized.barcode == label.barcode
-        # elif image_type == ImageType.VOLUME:
-        #     assert deserialized.text is None
-        #     assert deserialized.barcode is None
-        # elif image_type == ImageType.OVERVIEW:
-        #     assert deserialized.text is None
-        #     assert deserialized.barcode is None
 
     @pytest.mark.parametrize(
         "illumination", [IlluminationColorCode("Full Spectrum"), 400.0]

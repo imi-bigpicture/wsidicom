@@ -210,8 +210,9 @@ class PyramidTileAccumulator:
             with contextlib.suppress(Cancelled):
                 self._input_queue.put(ShutdownSentinel(), self._token)
         self._consumer_thread.join()
-        if self._failure is not None:
-            raise self._failure
+        failure = self._failure
+        if failure is not None:
+            raise failure
 
     def cleanup(self) -> None:
         """Best-effort teardown on error.
@@ -234,7 +235,7 @@ class PyramidTileAccumulator:
             self._cascade_tracker.wait_for_zero()
         except Cancelled:
             return
-        except BaseException as exc:
+        except Exception as exc:
             self._failure = exc
             self._token.cancel(exc)
             return
@@ -254,6 +255,7 @@ class PyramidTileAccumulator:
             if self.next_accumulator is not None:
                 self.next_accumulator.input_queue.put(ShutdownSentinel(), self._token)
         except Cancelled:
+            # Token cancelled concurrently; downstream unwinds via the token.
             pass
 
     def _process_item(self, item: CascadedTile) -> None:

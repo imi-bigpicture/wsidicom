@@ -516,12 +516,12 @@ class TestPyramidFileWriterFailFast:
 
         # Act — run write() on a daemon thread so a hang shows up as a join
         # timeout rather than wedging the whole test session.
-        outcome: dict[str, BaseException] = {}
+        outcome: dict[str, Exception] = {}
 
         def run_write() -> None:
             try:
                 writer.write()
-            except BaseException as error:
+            except Exception as error:
                 outcome["error"] = error
 
         worker = threading.Thread(target=run_write, daemon=True)
@@ -587,12 +587,12 @@ class TestPyramidFileWriterFailFast:
         )
 
         # Act
-        outcome: dict[str, BaseException] = {}
+        outcome: dict[str, Exception] = {}
 
         def run_write() -> None:
             try:
                 writer.write()
-            except BaseException as error:
+            except Exception as error:
                 outcome["error"] = error
 
         worker = threading.Thread(target=run_write, daemon=True)

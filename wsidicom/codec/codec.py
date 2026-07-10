@@ -70,7 +70,7 @@ class Codec:
             possible_transfer_syntaxes = AllTransferSyntaxes
         return (
             transfer_syntax
-            for transfer_syntax in AllTransferSyntaxes
+            for transfer_syntax in possible_transfer_syntaxes
             if cls.is_supported(
                 transfer_syntax,
                 samples_per_pixel,
