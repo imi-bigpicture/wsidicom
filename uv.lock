@@ -247,7 +247,7 @@ wheels = [
 
 [[package]]
 name = "dicomweb-client"
-version = "0.59.3"
+version = "0.61.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -257,9 +257,9 @@ dependencies = [
     { name = "requests" },
     { name = "retrying" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ba/dd/160c7670dcba8081c737404a3186ae219a8804d8cc087b29aa8d08c2c8fa/dicomweb_client-0.59.3.tar.gz", hash = "sha256:dd11604c99711d3fc9d223de960a1b64db3b2dcbc30592473d935e27b9243d46", size = 70995, upload-time = "2024-10-22T01:26:25.053Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/de/0f/b77437e5a9e33541eedccfbff9e954c15c8e8445e61d75727a6cd7fcf57e/dicomweb_client-0.61.0.tar.gz", hash = "sha256:24bc525322e72d215485c56acf0d0de218f284a1db73639ac8e0249822f93787", size = 82497, upload-time = "2026-04-21T21:56:49.411Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fd/77/e7ac701ad5ce4507d52ed5ace9f3c0c0129e6fbb29d108a0fd00362547c1/dicomweb_client-0.59.3-py3-none-any.whl", hash = "sha256:58ba2c9d4924ab3bc66d7a078b070b73562d321846f70f0050fb51d078897726", size = 61563, upload-time = "2024-10-22T01:26:23.109Z" },
+    { url = "https://files.pythonhosted.org/packages/13/e2/7c9ad1b1bc98dbb028549b02d853b0ab66ce065f7897064396797963bf8d/dicomweb_client-0.61.0-py3-none-any.whl", hash = "sha256:dc3385f5dbbeb167c521d04a70eac8bf219c4302c14574af05b5bc577a7e22c5", size = 62084, upload-time = "2026-04-21T21:56:48.055Z" },
 ]
 
 [[package]]
@@ -1151,7 +1151,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cachetools", specifier = ">=7.1.3" },
-    { name = "dicomweb-client", specifier = ">=0.59.2,<0.60.0" },
+    { name = "dicomweb-client", specifier = ">=0.61.0" },
     { name = "fsspec", specifier = ">=2024.2.0" },
     { name = "imagecodecs", marker = "extra == 'imagecodecs'", specifier = ">=2024.1.1,!=2024.9.22" },
     { name = "marshmallow", specifier = ">=3.20.1,<4.0.0" },
