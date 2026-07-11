@@ -62,11 +62,17 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def _get_tile_frames(self, frame_indices: Sequence[int]) -> Iterator[bytes]:
+    def _get_tile_frames(self, frame_indices: Iterable[int]) -> Iterator[bytes]:
         return (self._get_tile_frame(frame_index) for frame_index in frame_indices)
 
     def _get_decoded_tile_frame(self, frame_index: int) -> Image:
         return self.decoder.decode(self._get_tile_frame(frame_index))
+
+    def _get_decoded_tile_frames(
+        self, frame_indices: Iterable[int]
+    ) -> Iterator[Image]:
+        for frame in self._get_tile_frames(frame_indices):
+            yield self.decoder.decode(frame)
 
     @cached_property
     def tiles(self) -> TileIndex:
@@ -216,6 +222,38 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return self._decoded_frame_cache.get_tile_frame(
             id(self), frame_index, self._get_decoded_tile_frame
         )
+
+    def get_decoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[Image]:
+        """Return Pillow images for multiple tiles, fetching frames in a batch."""
+        frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
+        frames = self._decoded_frame_cache.get_tile_frames(
+            id(self),
+            [frame_index for frame_index in frame_indices if frame_index != -1],
+            self._get_decoded_tile_frames,
+        )
+        for frame_index in frame_indices:
+            if frame_index == -1:
+                yield self.blank_tile
+            else:
+                yield next(frames)
+
+    def get_encoded_tiles(
+        self, tiles: Iterable[Point], z: float, path: str
+    ) -> Iterator[bytes]:
+        """Return bytes for multiple tiles, fetching frames in a batch."""
+        frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
+        frames = self._encoded_frame_cache.get_tile_frames(
+            id(self),
+            [frame_index for frame_index in frame_indices if frame_index != -1],
+            self._get_tile_frames,
+        )
+        for frame_index in frame_indices:
+            if frame_index == -1:
+                yield self.blank_encoded_tile
+            else:
+                yield next(frames)
 
     def get_encoded_and_decoded_tile(
         self, tile: Point, z: float, path: str
