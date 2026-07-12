@@ -12,9 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from heapq import heappop, heappush
 from itertools import count
 from threading import Condition, Lock
@@ -261,38 +262,98 @@ class FifoCancelableQueue(CancelableQueue[ItemType]):
         return entry[1]
 
 
-class ConditionalThreadPoolExecutor(ThreadPoolExecutor):
-    """ThreadPoolExecutor that uses a single thread if max workers is 1."""
+class ReadExecutor:
+    """How many workers to use, and where submitted work runs.
+
+    A small policy object created once per read call: it bundles a worker budget
+    with an optional shared executor so the read is parameterized by a single
+    object.
+
+    ``workers`` is the number of chunks to split into — its parallelism ceiling.
+    ``submit`` runs work inline on the calling thread when ``workers`` is 1,
+    otherwise on the shared executor if one was supplied, otherwise on a per-read
+    pool created on first use. Only the per-read pool is owned: closing this
+    object shuts it down and leaves a supplied shared executor untouched.
+
+    The worker budget resolves from ``threads``: an explicit value is used as
+    given; ``None`` means single-threaded (1) unless a shared executor is
+    supplied, in which case the read fans out across ``os.cpu_count()`` — since
+    supplying an executor is itself an opt-in to parallel reads.
+    """
 
     def __init__(
-        self, max_workers: int | None = None, force_iteration: bool = False, **kwargs
+        self,
+        threads: int | None = None,
+        shared: Executor | None = None,
     ) -> None:
-        self._force_iteration = force_iteration
-        super().__init__(max_workers, **kwargs)
+        """Create a read executor.
+
+        Parameters
+        ----------
+        threads: int | None = None
+            Worker budget: the number of chunks a read may split into. ``None``
+            means single-threaded (1), unless ``shared`` is supplied, in which
+            case the read fans out across ``os.cpu_count()``.
+        shared: Executor | None = None
+            Optional executor to run work on. When given, it is borrowed (never
+            shut down by this object); when omitted and more than one worker is
+            used, an owned per-read pool is created on first submit and shut
+            down on close.
+        """
+        if threads is not None:
+            self._workers = threads
+        elif shared is not None:
+            self._workers = os.cpu_count() or 1
+        else:
+            self._workers = 1
+        self._shared = shared
+        self._own: ThreadPoolExecutor | None = None
+
+    @property
+    def workers(self) -> int:
+        """Number of chunks a read should split into (its parallelism ceiling)."""
+        return self._workers
 
     def submit(
         self, fn: Callable[..., ReturnType], /, *args: Any, **kwargs: Any
     ) -> Future[ReturnType]:
-        if self._max_workers == 1:
+        """Run ``fn`` inline, on the shared executor, or on an owned pool.
+
+        Not safe for concurrent calls: a ``ReadExecutor`` is scoped to a single
+        read and submitted to from one thread (the lazy per-read-pool creation
+        below is unguarded on that assumption). Create one per read rather than
+        sharing an instance across threads.
+        """
+        if self._workers == 1:
             future: Future[ReturnType] = Future()
             try:
-                result = fn(*args, **kwargs)
-                future.set_result(result)
-            except Exception as e:
-                future.set_exception(e)
+                future.set_result(fn(*args, **kwargs))
+            except Exception as exception:
+                future.set_exception(exception)
             return future
-        return super().submit(fn, *args, **kwargs)
+        if self._shared is not None:
+            return self._shared.submit(fn, *args, **kwargs)
+        if self._own is None:
+            self._own = ThreadPoolExecutor(max_workers=self._workers)
+        return self._own.submit(fn, *args, **kwargs)
 
     def map(
-        self,
-        fn: Callable[..., ReturnType],
-        *iterables: Iterable[Any],
-        timeout: float | None = None,
-        chunksize: int = 1,
+        self, fn: Callable[..., ReturnType], *iterables: Iterable[Any]
     ) -> Iterator[ReturnType]:
-        if self._max_workers == 1:
-            if self._force_iteration:
-                # Make sure items are iterated through
-                return iter(list(map(fn, *iterables)))
-            return map(fn, *iterables)
-        return super().map(fn, *iterables, timeout=timeout, chunksize=chunksize)
+        """Apply ``fn`` across ``iterables``, yielding results in input order.
+
+        Reuses ``submit``, so the inline / shared / owned dispatch applies
+        unchanged — in particular ``workers == 1`` runs each call inline on the
+        calling thread (safe for thread-affine sources).
+        """
+        futures = [self.submit(fn, *args) for args in zip(*iterables, strict=False)]
+        for future in futures:
+            yield future.result()
+
+    def __enter__(self) -> "ReadExecutor":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self._own is not None:
+            self._own.shutdown()
+            self._own = None

@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import platform
 from collections.abc import Callable
 from hashlib import md5
 from pathlib import Path
@@ -21,12 +20,18 @@ from typing import Any
 import numpy as np
 import pytest
 from PIL import Image as Pillow
-from pydicom.uid import JPEG2000, UID
+from pydicom.uid import UID
 
-from tests.conftest import WsiInputType, WsiTestDefinitions
+from tests.conftest import (
+    WsiInputType,
+    WsiTestDefinitions,
+    skip_if_hash_unstable,
+    skip_if_shared_pool_unsupported,
+)
 from wsidicom import WsiDicom
 from wsidicom.geometry import Point
 from wsidicom.series.pyramid import Pyramid
+from wsidicom.thread import ReadExecutor
 
 
 @pytest.mark.integration
@@ -40,6 +45,14 @@ from wsidicom.series.pyramid import Pyramid
 )
 class TestWsiDicomIntegration:
     @pytest.mark.parametrize(
+        ["threads", "use_shared"],
+        [
+            pytest.param(None, False, id="inline"),
+            pytest.param(4, False, id="per_call_pool"),
+            pytest.param(None, True, id="shared_pool"),
+        ],
+    )
+    @pytest.mark.parametrize(
         ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_region()
     )
     def test_read_region(
@@ -47,24 +60,29 @@ class TestWsiDicomIntegration:
         wsi_name: str,
         transfer_syntax: UID,
         input_type: WsiInputType,
-        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+        wsi_factory: Callable[..., WsiDicom],
         region: dict[str, Any],
+        threads: int | None,
+        use_shared: bool,
     ):
         # Arrange
-        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
-        wsi = wsi_factory(wsi_name, input_type)
+        skip_if_hash_unstable(transfer_syntax)
+        skip_if_shared_pool_unsupported(input_type, use_shared)
+        wsi = wsi_factory(wsi_name, input_type, use_shared)
 
         # Act
         im = wsi.read_region(
             (region["location"]["x"], region["location"]["y"]),
             region["level"],
             (region["size"]["width"], region["size"]["height"]),
+            threads=threads,
         )
 
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
         assert checksum == region["md5"], (region, checksum)
 
+    @pytest.mark.parametrize("threads", [None, 4])
     @pytest.mark.parametrize(
         ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_region_mm()
     )
@@ -75,9 +93,10 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: dict[str, Any],
+        threads: int | None,
     ):
         # Arrange
-        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
+        skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -86,12 +105,14 @@ class TestWsiDicomIntegration:
             region["level"],
             (region["size"]["width"], region["size"]["height"]),
             slide_origin=region.get("slide_origin", False),
+            threads=threads,
         )
 
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
         assert checksum == region["md5"], (region, checksum)
 
+    @pytest.mark.parametrize("threads", [None, 4])
     @pytest.mark.parametrize(
         ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_region_mpp()
     )
@@ -102,9 +123,10 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: dict[str, Any],
+        threads: int | None,
     ):
         # Arrange
-        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
+        skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -113,6 +135,7 @@ class TestWsiDicomIntegration:
             region["mpp"],
             (region["size"]["width"], region["size"]["height"]),
             slide_origin=region.get("slide_origin", False),
+            threads=threads,
         )
 
         # Assert
@@ -125,6 +148,7 @@ class TestWsiDicomIntegration:
         wsi_name: str,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+        read_executor: ReadExecutor,
     ):
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
@@ -139,10 +163,13 @@ class TestWsiDicomIntegration:
 
         # Act
         cropped = base_level.get_scaled_tile(
-            edge_tile, target_level, crop_to_image_boundary=True
+            edge_tile, target_level, crop_to_image_boundary=True, executor=read_executor
         )
         padded = base_level.get_scaled_tile(
-            edge_tile, target_level, crop_to_image_boundary=False
+            edge_tile,
+            target_level,
+            crop_to_image_boundary=False,
+            executor=read_executor,
         )
 
         # Assert
@@ -171,7 +198,7 @@ class TestWsiDicomIntegration:
         region: dict[str, Any],
     ):
         # Arrange
-        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
+        skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -198,7 +225,7 @@ class TestWsiDicomIntegration:
         region: dict[str, Any],
     ):
         # Arrange
-        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
+        skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -224,7 +251,7 @@ class TestWsiDicomIntegration:
         region: dict[str, Any],
     ):
         # Arrange
-        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
+        skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -268,7 +295,7 @@ class TestWsiDicomIntegration:
         expected_label_hash: bool | None,
     ):
         # Arrange
-        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
+        skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -293,7 +320,7 @@ class TestWsiDicomIntegration:
         expected_overview_hash: str | None,
     ):
         # Arrange
-        self._skip_lossy_jpeg2000_tests_on_macos(transfer_syntax)
+        skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
 
         # Act
@@ -355,9 +382,3 @@ class TestWsiDicomIntegration:
 
         # Assert
         assert isinstance(pyramid, Pyramid)
-        assert pyramid == wsi.pyramids[wsi.selected_pyramid]
-
-    def _skip_lossy_jpeg2000_tests_on_macos(self, transfer_syntax: UID):
-        """Lossy Jpeg2000 does not produce same output on macOS."""
-        if platform.system() == "Darwin" and transfer_syntax == JPEG2000:
-            pytest.skip("Lossy JPEG2000 does not produce same output on macOS.")

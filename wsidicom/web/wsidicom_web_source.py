@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import logging
+import os
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
@@ -36,7 +37,7 @@ from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.metadata import ImageType
 from wsidicom.source import Source
-from wsidicom.thread import ConditionalThreadPoolExecutor
+from wsidicom.thread import ReadExecutor
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 from wsidicom.web.wsidicom_web_image_data import WsiDicomWebImageData
 
@@ -137,7 +138,8 @@ class WsiDicomWebSource(Source):
             )
         )
 
-        with ConditionalThreadPoolExecutor(settings.open_web_threads) as pool:
+        web_threads = settings.open_web_threads or (os.cpu_count() or 1)
+        with ReadExecutor(web_threads, None) as pool:
             instances = pool.map(create_instance, instance_uids)
             for instance in instances:
                 if instance is None:

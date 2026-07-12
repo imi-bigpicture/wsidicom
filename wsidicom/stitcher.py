@@ -26,7 +26,7 @@ from typing import (
 from PIL import Image
 
 from wsidicom.geometry import Point, Region, Size
-from wsidicom.thread import ConditionalThreadPoolExecutor
+from wsidicom.thread import ReadExecutor
 
 
 class Stitcher(ABC):
@@ -75,7 +75,8 @@ class Stitcher(ABC):
         mode: Literal["L", "I", "RGB"],
         canvas_grid_size: Size | None = None,
         fill: int | tuple[int, int, int] | None = None,
-        threads: int = 1,
+        *,
+        executor: ReadExecutor,
     ) -> Image.Image:
         """Stitch with internal parallelism; workers fetch and paste.
 
@@ -113,8 +114,9 @@ class Stitcher(ABC):
         fill: Optional[Union[int, Tuple[int, int, int]]]
             Optional background colour. ``None`` leaves the canvas
             uninitialised.
-        threads: int
-            Maximum number of worker threads.
+        executor: ReadExecutor
+            Executor the fetch-and-paste chunks are submitted to; its
+            ``workers`` count sets how many chunks the region is split into.
 
         Returns
         -------
@@ -188,7 +190,8 @@ class PillowStitcher(Stitcher):
         mode: Literal["L", "I", "RGB"],
         canvas_grid_size: Size | None = None,
         fill: int | tuple[int, int, int] | None = None,
-        threads: int = 1,
+        *,
+        executor: ReadExecutor,
     ) -> Image.Image:
         if canvas_grid_size is None:
             grid_size = tile_region.size
@@ -217,19 +220,16 @@ class PillowStitcher(Stitcher):
                 canvas_y = (point.y - grid_origin.y) * tile_size.height
                 canvas.paste(tile, (canvas_x, canvas_y))
 
-        with ConditionalThreadPoolExecutor(max_workers=threads) as pool:
-            futures = [
-                pool.submit(worker, chunk)
-                for chunk in tile_region.chunked_iterate_all(threads)
-            ]
-            first_error: BaseException | None = None
-            for future in as_completed(futures):
-                exception = future.exception()
-                if exception is not None and first_error is None:
-                    first_error = exception
-                    cancel.set()
-            if first_error is not None:
-                raise first_error
+        chunks = tile_region.chunked_iterate_all(executor.workers)
+        futures = [executor.submit(worker, chunk) for chunk in chunks]
+        first_error: BaseException | None = None
+        for future in as_completed(futures):
+            exception = future.exception()
+            if exception is not None and first_error is None:
+                first_error = exception
+                cancel.set()
+        if first_error is not None:
+            raise first_error
         return canvas
 
     def _create_canvas(

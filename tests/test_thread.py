@@ -15,9 +15,11 @@
 """Tests for wsidicom.thread."""
 
 import time
-from threading import Thread
+from concurrent.futures import Executor, Future
+from threading import Thread, get_ident
 
 import pytest
+from decoy import Decoy
 
 from wsidicom.thread import (
     CancellationToken,
@@ -25,6 +27,7 @@ from wsidicom.thread import (
     CompletionTracker,
     FifoCancelableQueue,
     PriorityCancelableQueue,
+    ReadExecutor,
     ShutdownSentinel,
 )
 
@@ -289,3 +292,124 @@ class TestCancelableQueue:
         # Assert — items come out in priority order, sentinel strictly last
         assert dequeued[:3] == [1, 2, 3]
         assert isinstance(dequeued[3], ShutdownSentinel)
+
+
+@pytest.mark.unittest
+class TestReadExecutor:
+    def test_workers_explicit_value(self):
+        """An explicit thread count is used as the worker budget."""
+        # Arrange
+        expected_workers = 4
+        read_executor = ReadExecutor(expected_workers, None)
+
+        # Act
+        workers = read_executor.workers
+
+        # Assert
+        assert workers == expected_workers
+
+    def test_workers_none_without_shared_is_one(self):
+        """No count and no shared executor reads single-threaded."""
+        # Arrange
+        expected_workers = 1
+        read_executor = ReadExecutor(None, None)
+
+        # Act
+        workers = read_executor.workers
+
+        # Assert
+        assert workers == expected_workers
+
+    def test_workers_none_with_shared_is_cpu_count(
+        self, decoy: Decoy, monkeypatch: pytest.MonkeyPatch
+    ):
+        """No count with a shared executor fans out across cpu_count."""
+        # Arrange
+        expected_workers = 7
+        monkeypatch.setattr("wsidicom.thread.os.cpu_count", lambda: expected_workers)
+        shared = decoy.mock(cls=Executor)
+        read_executor = ReadExecutor(None, shared)
+
+        # Act
+        workers = read_executor.workers
+
+        # Assert
+        assert workers == expected_workers
+
+    def test_single_worker_runs_inline_on_calling_thread(self):
+        """workers == 1 runs the callable on the calling thread, not a worker."""
+        # Arrange
+        this_thread_id = get_ident()
+        read_executor = ReadExecutor(1, None)
+
+        # Act — the callable reports the thread it ran on
+        future = read_executor.submit(get_ident)
+
+        # Assert — that thread is this (calling) thread, i.e. it ran inline
+        assert future.result() == this_thread_id
+
+    def test_inline_exception_is_captured_in_future(self):
+        """An inline callable's exception is delivered through the future."""
+
+        # Arrange
+        def boom():
+            raise ValueError("boom")
+
+        read_executor = ReadExecutor(1, None)
+
+        # Act
+        future = read_executor.submit(boom)
+
+        # Assert
+        with pytest.raises(ValueError, match="boom"):
+            future.result()
+
+    def test_delegates_to_shared_executor(self, decoy: Decoy):
+        """With workers > 1 and a shared executor, submit forwards the call and
+        returns the shared executor's future."""
+        # Arrange
+        shared = decoy.mock(cls=Executor)
+        read_executor = ReadExecutor(4, shared)
+        expected_future: Future = Future()
+
+        def work(value: int) -> int:
+            return value
+
+        argument = 7
+        decoy.when(shared.submit(work, argument)).then_return(expected_future)
+
+        # Act
+        result = read_executor.submit(work, argument)
+
+        # Assert — the shared executor's future is returned unchanged
+        assert result is expected_future
+
+    def test_does_not_shut_down_shared_executor(self, decoy: Decoy):
+        """Closing a ReadExecutor never shuts down a borrowed shared executor."""
+        # Arrange
+        shared = decoy.mock(cls=Executor)
+
+        # Act
+        with ReadExecutor(4, shared) as read_executor:
+            read_executor.submit(lambda: None)
+
+        # Assert
+        decoy.verify(shared.shutdown(), times=0)
+
+    def test_owns_and_shuts_down_per_read_pool(self):
+        """With workers > 1 and no shared executor, the owned pool is created and
+        shut down on close."""
+        # Arrange
+        read_executor = ReadExecutor(2, None)
+        expected = object()
+
+        # Act — use the executor (creating its pool), then close it
+        with read_executor:
+            result = read_executor.submit(lambda: expected).result()
+            own_pool = read_executor._own
+
+        # Assert — the pool ran the work, then rejects new work after close
+        assert result is expected
+        assert own_pool is not None
+        with pytest.raises(RuntimeError):
+            own_pool.submit(lambda: None)

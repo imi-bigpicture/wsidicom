@@ -15,6 +15,7 @@
 import logging
 import os
 from collections.abc import Callable, Iterable, Sequence
+from concurrent.futures import Executor
 from pathlib import Path
 from typing import (
     Any,
@@ -51,6 +52,7 @@ from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
+from wsidicom.thread import ReadExecutor
 from wsidicom.uid import SlideUids
 from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
 
@@ -62,6 +64,7 @@ class WsiDicom:
         self,
         source: Source,
         source_owned: bool = True,
+        read_executor: Executor | None = None,
     ):
         """Hold WSI DICOM levels, labels and overviews.
 
@@ -73,10 +76,15 @@ class WsiDicom:
             A source providing instances for the wsi to open.
         source_owned: bool = True
             If source should be closed by this instance if used in a context manager.
+        read_executor: Executor | None = None
+            Optional shared, thread-based executor reused across reads.
+            When supplied, reads parallelize across it by default unless ``threads=1``.
+            When ``None`` each parallel read uses a per-read pool when ``threads>1``.
         """
         self._selected_pyramid = 0
         self._source = source
         self._source_owned = source_owned
+        self._read_executor = read_executor
         self._pyramids = Pyramids.open(
             source.level_instances, source.thumbnail_instances
         )
@@ -90,6 +98,7 @@ class WsiDicom:
         cls,
         files: str | Path | UPath | Iterable[str | Path | UPath],
         file_options: dict[str, Any] | None = None,
+        read_executor: Executor | None = None,
     ) -> "WsiDicom":
         """Open valid WSI DICOM files and return a WsiDicom object.
 
@@ -103,6 +112,10 @@ class WsiDicom:
             supported by fsspec.
         file_options: dict[str, Any] | None = None
             Optional options for when opening files.
+        read_executor: Executor | None = None
+            Optional shared, thread-based executor reused across reads.
+            When supplied, reads parallelize across it by default unless ``threads=1``.
+            When ``None`` each parallel read uses a per-read pool when ``threads>1``.
 
         Returns
         -------
@@ -110,11 +123,14 @@ class WsiDicom:
             WsiDicom created from WSI DICOM files in path.
         """
         source = WsiDicomFileSource.open(files, file_options)
-        return cls(source, True)
+        return cls(source, True, read_executor)
 
     @classmethod
     def open_dicomdir(
-        cls, path: UPath, file_options: dict[str, Any] | None = None
+        cls,
+        path: UPath,
+        file_options: dict[str, Any] | None = None,
+        read_executor: Executor | None = None,
     ) -> "WsiDicom":
         """Open WSI DICOM files in DICOMDIR and return a WsiDicom object.
 
@@ -125,6 +141,10 @@ class WsiDicom:
             or an URL supported by fsspec.
         file_options: dict[str, Any] | None = None
             Optional options for when opening files.
+        read_executor: Executor | None = None
+            Optional shared, thread-based executor reused across reads.
+            When supplied, reads parallelize across it by default unless ``threads=1``.
+            When ``None`` each parallel read uses a per-read pool when ``threads>1``.
 
         Returns
         -------
@@ -132,12 +152,13 @@ class WsiDicom:
             WsiDicom created from WSI DICOM files in DICOMDIR.
         """
         source = WsiDicomFileSource.open_dicomdir(path, file_options)
-        return cls(source, True)
+        return cls(source, True, read_executor)
 
     @classmethod
     def open_streams(
         cls,
         streams: Iterable[BinaryIO],
+        read_executor: Executor | None = None,
     ) -> "WsiDicom":
         """Open valid WSI DICOM files in path or stream and return a WsiDicom object.
 
@@ -148,6 +169,10 @@ class WsiDicom:
         ----------
         streams: Iterable[BinaryIO],
             Streams to open.
+        read_executor: Executor | None = None
+            Optional shared, thread-based executor reused across reads.
+            When supplied, reads parallelize across it by default unless ``threads=1``.
+            When ``None`` each parallel read uses a per-read pool when ``threads>1``.
 
         Returns
         -------
@@ -155,7 +180,7 @@ class WsiDicom:
             WsiDicom created from WSI DICOM files in path.
         """
         source = WsiDicomFileSource.open_streams(streams)
-        return cls(source, False)
+        return cls(source, False, read_executor)
 
     @classmethod
     def open_web(
@@ -164,6 +189,7 @@ class WsiDicom:
         study_uid: str | UID,
         series_uids: str | UID | Iterable[str | UID],
         requested_transfer_syntax: str | UID | Sequence[str | UID] | None = None,
+        read_executor: Executor | None = None,
     ) -> "WsiDicom":
         """Open WSI DICOM instances using DICOM web client.
 
@@ -181,6 +207,11 @@ class WsiDicom:
             Transfer syntax to request for image data, for example
             "1.2.840.10008.1.2.4.50" for JPEGBaseline8Bit. By default the first
             supported transfer syntax is requested.
+        read_executor: Executor | None = None
+            Optional shared, thread-based executor reused across region reads.
+            When supplied, reads parallelize across it by default (never shut
+            down by the returned object); pass ``threads=1`` to a read to opt
+            out. When ``None``, each parallel read uses a per-read pool.
 
         Returns
         -------
@@ -202,7 +233,7 @@ class WsiDicom:
         source = WsiDicomWebSource(
             client, study_uid, series_uids, requested_transfer_syntax
         )
-        return cls(source, True)
+        return cls(source, True, read_executor)
 
     def save(
         self,
@@ -536,7 +567,8 @@ class WsiDicom:
         if self.labels is None:
             raise WsiDicomNotFoundError("label", str(self))
         label = self.labels.get(index)
-        return label.get_default_full()
+        with ReadExecutor() as executor:
+            return label.get_default_full(executor=executor)
 
     def read_overview(self, index: int = 0) -> Image:
         """Read overview image of the whole slide. If several overview
@@ -555,7 +587,8 @@ class WsiDicom:
         if self.overviews is None:
             raise WsiDicomNotFoundError("overview", str(self))
         overview = self.overviews.get(index)
-        return overview.get_default_full()
+        with ReadExecutor() as executor:
+            return overview.get_default_full(executor=executor)
 
     def read_thumbnail(
         self,
@@ -564,6 +597,7 @@ class WsiDicom:
         path: str | None = None,
         pyramid: int | None = None,
         force_generate: bool = False,
+        threads: int | None = None,
     ) -> Image:
         """Read thumbnail image of the whole slide with dimensions no larger than given
         size.
@@ -582,6 +616,11 @@ class WsiDicom:
         force_generate: bool = False
             If to force generation of thumbnail from levels, even if thumbnail image is
             present for levels.
+        threads: int | None = None
+            Number of chunks to split the read across. ``None`` (default) reads
+            single-threaded unless a ``read_executor`` was supplied at open, in
+            which case the read is parallelized across it. Pass ``1`` to force a
+            single-threaded read even when an executor is present.
 
         Returns
         -------
@@ -601,7 +640,8 @@ class WsiDicom:
             raise WsiDicomNotFoundError(
                 f"Image for generating thumbnail of size {thumbnail_size}", "levels"
             )
-        return thumbnail.get_thumbnail(thumbnail_size, z, path)
+        with ReadExecutor(threads, self._read_executor) as executor:
+            return thumbnail.get_thumbnail(thumbnail_size, z, path, executor=executor)
 
     def read_region(
         self,
@@ -611,7 +651,7 @@ class WsiDicom:
         z: float | None = None,
         path: str | None = None,
         pyramid: int | None = None,
-        threads: int = 1,
+        threads: int | None = None,
     ) -> Image:
         """Read region defined by pixels.
 
@@ -630,8 +670,11 @@ class WsiDicom:
         pyramid: int | None = None
             Pyramid to read region from. If `None` the index in `selected_pyramid` is
             used.
-        threads: int = 1
-            Number of threads to use for read.
+        threads: int | None = None
+            Number of chunks to split the read across. ``None`` (default) reads
+            single-threaded unless a ``read_executor`` was supplied at open, in
+            which case the read is parallelized across it. Pass ``1`` to force a
+            single-threaded read even when an executor is present.
 
         Returns
         -------
@@ -651,13 +694,14 @@ class WsiDicom:
             raise WsiDicomOutOfBoundsError(
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
-        return wsi_level.get_region(
-            scaled_region,
-            z,
-            path,
-            output_size=Size.from_tuple(size),
-            threads=threads,
-        )
+        with ReadExecutor(threads, self._read_executor) as executor:
+            return wsi_level.get_region(
+                scaled_region,
+                z,
+                path,
+                output_size=Size.from_tuple(size),
+                executor=executor,
+            )
 
     def read_region_mm(
         self,
@@ -668,7 +712,7 @@ class WsiDicom:
         path: str | None = None,
         pyramid: int | None = None,
         slide_origin: bool = False,
-        threads: int = 1,
+        threads: int | None = None,
     ) -> Image:
         """Read image from region defined in mm.
 
@@ -690,8 +734,11 @@ class WsiDicom:
             used.
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
-        threads: int = 1
-            Number of threads to use for read.
+        threads: int | None = None
+            Number of chunks to split the read across. ``None`` (default) reads
+            single-threaded unless a ``read_executor`` was supplied at open, in
+            which case the read is parallelized across it. Pass ``1`` to force a
+            single-threaded read even when an executor is present.
 
         Returns
         -------
@@ -703,9 +750,15 @@ class WsiDicom:
         wsi_level = self.pyramids.get(pyramid).get_closest_by_level(level)
         scale_factor = wsi_level.calculate_scale(level)
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
-        return wsi_level.get_region_mm(
-            region, z, path, slide_origin, scale=scale_factor, threads=threads
-        )
+        with ReadExecutor(threads, self._read_executor) as executor:
+            return wsi_level.get_region_mm(
+                region,
+                z,
+                path,
+                slide_origin,
+                scale=scale_factor,
+                executor=executor,
+            )
 
     def read_region_mpp(
         self,
@@ -716,7 +769,7 @@ class WsiDicom:
         path: str | None = None,
         pyramid: int | None = None,
         slide_origin: bool = False,
-        threads: int = 1,
+        threads: int | None = None,
     ) -> Image:
         """Read image from region defined in mm with set pixel spacing.
 
@@ -738,8 +791,11 @@ class WsiDicom:
             used.
         slide_origin: bool = False
             If to use the slide origin instead of image origin.
-        threads: int = 1
-            Number of threads to use for read.
+        threads: int | None = None
+            Number of chunks to split the read across. ``None`` (default) reads
+            single-threaded unless a ``read_executor`` was supplied at open, in
+            which case the read is parallelized across it. Pass ``1`` to force a
+            single-threaded read even when an executor is present.
 
         Returns
         --------
@@ -753,9 +809,15 @@ class WsiDicom:
             SizeMm(pixel_spacing, pixel_spacing)
         )
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
-        return wsi_level.get_region_mpp(
-            region, pixel_spacing, z, path, slide_origin, threads=threads
-        )
+        with ReadExecutor(threads, self._read_executor) as executor:
+            return wsi_level.get_region_mpp(
+                region,
+                pixel_spacing,
+                z,
+                path,
+                slide_origin,
+                executor=executor,
+            )
 
     def read_tile(
         self,
@@ -797,11 +859,17 @@ class WsiDicom:
             wsi_level = wsi_pyramid.get(level)
             return wsi_level.get_tile(tile_point, z, path, crop_to_image_boundary)
         except WsiDicomNotFoundError:
-            # Scale from closest level
+            # Scale from closest level, which reads a region and may fan out.
             wsi_level = wsi_pyramid.get_closest_by_level(level)
-            return wsi_level.get_scaled_tile(
-                tile_point, level, z, path, crop_to_image_boundary
-            )
+            with ReadExecutor(None, self._read_executor) as executor:
+                return wsi_level.get_scaled_tile(
+                    tile_point,
+                    level,
+                    z,
+                    path,
+                    crop_to_image_boundary,
+                    executor=executor,
+                )
 
     def read_encoded_tile(
         self,
@@ -846,11 +914,17 @@ class WsiDicom:
                 tile_point, z, path, crop_to_image_boundary
             )
         except WsiDicomNotFoundError:
-            # Scale from closest level
+            # Scale from closest level, which reads a region and may fan out.
             wsi_level = wsi_pyramid.get_closest_by_level(level)
-            return wsi_level.get_scaled_encoded_tile(
-                tile_point, level, z, path, crop_to_image_boundary
-            )
+            with ReadExecutor(None, self._read_executor) as executor:
+                return wsi_level.get_scaled_encoded_tile(
+                    tile_point,
+                    level,
+                    z,
+                    path,
+                    crop_to_image_boundary,
+                    executor=executor,
+                )
 
     def get_instance(
         self,

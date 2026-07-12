@@ -43,7 +43,7 @@ from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Pyramid
 from wsidicom.stitcher import PillowStitcher
-from wsidicom.thread import CancellationToken, Cancelled, ConditionalThreadPoolExecutor
+from wsidicom.thread import CancellationToken, Cancelled, ReadExecutor
 from wsidicom.writing.encoder_pool import EncoderPool
 from wsidicom.writing.instance_writers import (
     GeneratedPyramidLevelWriter,
@@ -469,10 +469,11 @@ class PyramidFileWriter(BaseFileWriter):
                     for image_data in level_writer.source_image_data
                 ):
                     source_pool_workers = 1
-                with ConditionalThreadPoolExecutor(
+                with ThreadPoolExecutor(
                     max_workers=source_pool_workers,
                     thread_name_prefix="SourceReader",
-                ) as pool:
+                ) as source_pool:
+                    pool = ReadExecutor(source_pool_workers, source_pool)
                     if source_pool_workers == 1:
                         for level_writer in source_level_writers:
                             level_writer.run(pool, self._max_threads * 2)
@@ -781,7 +782,7 @@ class PyramidFileWriter(BaseFileWriter):
     def _run_source_level_writers_in_threads(
         self,
         source_level_writers: list[SourcePyramidLevelWriter],
-        pool: ThreadPoolExecutor,
+        pool: ReadExecutor,
         token: CancellationToken,
     ) -> None:
         """Run each source level writer in its own thread.

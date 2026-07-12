@@ -35,6 +35,7 @@ from wsidicom.instance import (
 )
 from wsidicom.metadata import ImageCoordinateSystem, ImageType
 from wsidicom.stringprinting import dict_pretty_str
+from wsidicom.thread import ReadExecutor
 from wsidicom.uid import SlideUids
 
 
@@ -282,8 +283,13 @@ class Instances:
                 f"Instance for path: {path}, z: {z}", "group"
             ) from exception
 
-    def get_default_full(self) -> Image:
+    def get_default_full(self, *, executor: ReadExecutor) -> Image:
         """Read full image using default z coordinate and path.
+
+        Parameters
+        ----------
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -294,8 +300,7 @@ class Instances:
         z = instance.default_z
         path = instance.default_path
         region = Region(position=Point(x=0, y=0), size=self.size)
-        image = self.get_region(region, z, path)
-        return image
+        return self.get_region(region, z, path, executor=executor)
 
     def iter_encoded_tiles(
         self,
@@ -383,7 +388,8 @@ class Instances:
         z: float | None = None,
         path: str | None = None,
         output_size: Size | None = None,
-        threads: int = 1,
+        *,
+        executor: ReadExecutor,
     ) -> Image:
         """Read region defined by pixels.
 
@@ -398,8 +404,8 @@ class Instances:
         output_size: Size | None = None
             If given and different from the region size, the read region is
             downsampled to this size.
-        threads: int = 1
-            Number of threads to use for read.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -412,7 +418,7 @@ class Instances:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        return instance.get_region(region, z, path, output_size, threads)
+        return instance.get_region(region, z, path, output_size, executor=executor)
 
     def _resolve_slide_origin(
         self, region: RegionMm, slide_origin: bool
@@ -450,7 +456,7 @@ class Instances:
         path: str | None,
         output_size: Size | None,
         to_coordinate_system: ImageCoordinateSystem | None,
-        threads: int,
+        executor: ReadExecutor,
     ) -> Image:
         """Read a pixel region (downsampling to ``output_size``), then rotate.
 
@@ -473,8 +479,8 @@ class Instances:
         to_coordinate_system: ImageCoordinateSystem | None
             Coordinate system to rotate the read image back to the slide
             orientation, or ``None`` to skip rotation.
-        threads: int
-            Number of threads to use for read.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -483,7 +489,11 @@ class Instances:
             system was given.
         """
         image = self.get_region(
-            pixel_region, z, path, output_size=output_size, threads=threads
+            pixel_region,
+            z,
+            path,
+            output_size=output_size,
+            executor=executor,
         )
         if to_coordinate_system is not None:
             image = image.rotate(
@@ -500,7 +510,8 @@ class Instances:
         path: str | None = None,
         slide_origin: bool = False,
         scale: int = 1,
-        threads: int = 1,
+        *,
+        executor: ReadExecutor,
     ) -> Image:
         """Read region defined by mm.
 
@@ -518,8 +529,8 @@ class Instances:
             Integer factor by which the returned image is downsampled.
             ``scale=1`` returns full resolution, ``scale=2`` halves each
             dimension.
-        threads: int = 1
-            Number of threads to use for read.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -532,7 +543,7 @@ class Instances:
         pixel_region = self._mm_to_pixel(image_region)
         output_size = pixel_region.size // scale if scale != 1 else None
         return self._read_and_rotate(
-            pixel_region, z, path, output_size, to_coordinate_system, threads
+            pixel_region, z, path, output_size, to_coordinate_system, executor
         )
 
     def get_region_mpp(
@@ -542,7 +553,8 @@ class Instances:
         z: float | None = None,
         path: str | None = None,
         slide_origin: bool = False,
-        threads: int = 1,
+        *,
+        executor: ReadExecutor,
     ) -> Image:
         """Read region defined by mm, resampled to a requested pixel spacing.
 
@@ -562,8 +574,8 @@ class Instances:
             optical path, optional.
         slide_origin: bool = False.
             If to use the slide origin instead of image origin.
-        threads: int = 1
-            Number of threads to use for read.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -576,7 +588,7 @@ class Instances:
         pixel_region = self._mm_to_pixel(image_region)
         output_size = image_region.size // pixel_spacing
         return self._read_and_rotate(
-            pixel_region, z, path, output_size, to_coordinate_system, threads
+            pixel_region, z, path, output_size, to_coordinate_system, executor
         )
 
     def get_thumbnail(
@@ -584,7 +596,8 @@ class Instances:
         max_size: Size,
         z: float | None = None,
         path: str | None = None,
-        threads: int = 1,
+        *,
+        executor: ReadExecutor,
     ) -> Image:
         """Read the full image, resampled to fit within ``max_size``.
 
@@ -596,8 +609,8 @@ class Instances:
             Z coordinate, optional.
         path: str | None = None
             optical path, optional.
-        threads: int = 1
-            Number of threads to use for read.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -609,7 +622,7 @@ class Instances:
             z = instance.default_z
         if path is None:
             path = instance.default_path
-        return instance.get_thumbnail(max_size, z, path, threads)
+        return instance.get_thumbnail(max_size, z, path, executor=executor)
 
     def get_tile(
         self,
