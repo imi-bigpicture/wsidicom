@@ -18,7 +18,7 @@
 
 import contextlib
 from collections.abc import Iterable, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future
 from threading import Semaphore
 
 from wsidicom.codec.encoder import Encoder
@@ -30,6 +30,7 @@ from wsidicom.thread import (
     CancellationToken,
     Cancelled,
     PriorityCancelableQueue,
+    ReadExecutor,
     ReadOnlyQueue,
     ShutdownSentinel,
 )
@@ -214,7 +215,7 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
             self._owned_tile_queue.put(ShutdownSentinel(), self._token)
         super().finalize_writers()
 
-    def run(self, pool: ThreadPoolExecutor, max_inflight: int) -> None:
+    def run(self, pool: ReadExecutor, max_inflight: int) -> None:
         """Produce tiles by reading from source.
 
         Stops early if the token is cancelled (another stage failed); a batch

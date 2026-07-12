@@ -33,6 +33,7 @@ from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.pillow_image_data import PillowImageData
 from wsidicom.metadata.image import ImageCoordinateSystem, ImageType
 from wsidicom.stitcher import PillowStitcher, Stitcher
+from wsidicom.thread import ReadExecutor
 from wsidicom.uid import SlideUids
 
 
@@ -225,7 +226,11 @@ class WsiInstance:
         return self._crop_tile(tile_point, tile)
 
     def get_encoded_tile(
-        self, tile: Point, z: float, path: str, crop_to_image_boundary: bool = True
+        self,
+        tile: Point,
+        z: float,
+        path: str,
+        crop_to_image_boundary: bool = True,
     ) -> bytes:
         """Get a tile as encoded bytes.
 
@@ -264,7 +269,8 @@ class WsiInstance:
         z: float,
         path: str,
         output_size: Size | None = None,
-        threads: int = 1,
+        *,
+        executor: ReadExecutor,
     ) -> Image:
         """Read ``region`` from this instance, optionally scaled to a size.
 
@@ -282,8 +288,8 @@ class WsiInstance:
         output_size: Size | None = None
             If given and different from the region size, the assembled region is
             downsampled to this size.
-        threads: int
-            Number of threads to use for read.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -305,7 +311,7 @@ class WsiInstance:
                 fetch=lambda chunk: image_data.get_decoded_tiles(chunk, z, path),
                 tile_size=image_data.tile_size,
                 mode=image_data.image_mode,
-                threads=threads,
+                executor=executor,
             )
             crop_origin = region.start - tile_region.start * image_data.tile_size
             image = canvas.crop(
@@ -325,7 +331,8 @@ class WsiInstance:
         max_size: Size,
         z: float,
         path: str,
-        threads: int = 1,
+        *,
+        executor: ReadExecutor,
     ) -> Image:
         """Read the full image, resampled to fit within ``max_size``.
 
@@ -341,8 +348,8 @@ class WsiInstance:
             Z coordinate.
         path: str
             Optical path.
-        threads: int
-            Number of threads to use for read.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -350,7 +357,7 @@ class WsiInstance:
             The thumbnail image.
         """
         region = Region(position=Point(0, 0), size=self.size)
-        image = self.get_region(region, z, path, threads=threads)
+        image = self.get_region(region, z, path, executor=executor)
         return self._downsampler.thumbnail(image, max_size)
 
     def _crop_tile(self, tile_point: Point, tile: Image) -> Image:

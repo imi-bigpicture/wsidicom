@@ -21,6 +21,7 @@ from PIL import Image
 
 from wsidicom.geometry import Point, Region, Size
 from wsidicom.stitcher import PillowStitcher
+from wsidicom.thread import ReadExecutor
 
 TILE_SIZE = 4  # tile pixel size used in tests
 
@@ -42,6 +43,12 @@ def expected_2x2() -> dict[tuple[int, int], tuple[int, int, int]]:
 @pytest.fixture
 def stitcher() -> PillowStitcher:
     return PillowStitcher()
+
+
+@pytest.fixture
+def single_thread_executor() -> ReadExecutor:
+    """An inline, single-thread read executor."""
+    return ReadExecutor(1, None)
 
 
 @pytest.mark.unittest
@@ -159,7 +166,9 @@ class TestPillowStitcherStitchGrid:
 
 @pytest.mark.unittest
 class TestPillowStitcherStitchParallel:
-    def test_canvas_dimensions_default_grid_size(self, stitcher: PillowStitcher):
+    def test_canvas_dimensions_default_grid_size(
+        self, stitcher: PillowStitcher, single_thread_executor: ReadExecutor
+    ):
         """Default canvas size = tile_region.size * tile_size."""
         # Arrange
         tile_region = Region(Point(0, 0), Size(3, 2))
@@ -179,13 +188,15 @@ class TestPillowStitcherStitchParallel:
             fetch=fetch,
             tile_size=Size(TILE_SIZE, TILE_SIZE),
             mode="RGB",
-            threads=1,
+            executor=single_thread_executor,
         )
 
         # Assert
         assert result.size == (3 * TILE_SIZE, 2 * TILE_SIZE)
 
-    def test_canvas_positions_from_tile_region_start(self, stitcher: PillowStitcher):
+    def test_canvas_positions_from_tile_region_start(
+        self, stitcher: PillowStitcher, single_thread_executor: ReadExecutor
+    ):
         """Points are pasted at (point - tile_region.start) * tile_size."""
         # Arrange — tile_region anchored at (10, 20)
         tile_region = Region(Point(10, 20), Size(2, 2))
@@ -207,7 +218,7 @@ class TestPillowStitcherStitchParallel:
             fetch=fetch,
             tile_size=Size(TILE_SIZE, TILE_SIZE),
             mode="RGB",
-            threads=1,
+            executor=single_thread_executor,
         )
 
         # Assert
@@ -238,7 +249,7 @@ class TestPillowStitcherStitchParallel:
             fetch=fetch,
             tile_size=Size(TILE_SIZE, TILE_SIZE),
             mode="RGB",
-            threads=2,
+            executor=ReadExecutor(2, None),
         )
 
         # Assert
@@ -248,7 +259,7 @@ class TestPillowStitcherStitchParallel:
             )
 
     def test_canvas_grid_size_larger_than_region_fills_uncovered(
-        self, stitcher: PillowStitcher
+        self, stitcher: PillowStitcher, single_thread_executor: ReadExecutor
     ):
         """Explicit canvas_grid_size larger than tile_region embeds in a bigger canvas."""
         # Arrange — fetch covers a 1x1 region, but canvas is 2x2
@@ -268,7 +279,7 @@ class TestPillowStitcherStitchParallel:
             mode="RGB",
             canvas_grid_size=Size(2, 2),
             fill=fill,
-            threads=1,
+            executor=single_thread_executor,
         )
 
         # Assert — covered slot has target color, uncovered slots show fill
@@ -276,7 +287,9 @@ class TestPillowStitcherStitchParallel:
         assert result.getpixel((1, 1)) == target_color
         assert result.getpixel((TILE_SIZE + 1, TILE_SIZE + 1)) == fill
 
-    def test_smaller_tile_keeps_fill_in_remaining_slot(self, stitcher: PillowStitcher):
+    def test_smaller_tile_keeps_fill_in_remaining_slot(
+        self, stitcher: PillowStitcher, single_thread_executor: ReadExecutor
+    ):
         """A fetched tile smaller than tile_size leaves blank fill in its slot."""
         # Arrange — fetch returns a half-width tile
         tile_region = Region(Point(0, 0), Size(1, 1))
@@ -295,14 +308,16 @@ class TestPillowStitcherStitchParallel:
             tile_size=Size(TILE_SIZE, TILE_SIZE),
             mode="RGB",
             fill=fill,
-            threads=1,
+            executor=single_thread_executor,
         )
 
         # Assert — left half is the cropped tile, right half is fill
         assert result.getpixel((1, 1)) == target_color
         assert result.getpixel((TILE_SIZE - 1, 1)) == fill
 
-    def test_worker_exception_propagates(self, stitcher: PillowStitcher):
+    def test_worker_exception_propagates(
+        self, stitcher: PillowStitcher, single_thread_executor: ReadExecutor
+    ):
         """An exception from fetch propagates through stitch_parallel."""
 
         # Arrange
@@ -317,11 +332,11 @@ class TestPillowStitcherStitchParallel:
                 fetch=fetch,
                 tile_size=Size(TILE_SIZE, TILE_SIZE),
                 mode="RGB",
-                threads=1,
+                executor=single_thread_executor,
             )
 
     def test_canvas_grid_size_smaller_than_region_raises(
-        self, stitcher: PillowStitcher
+        self, stitcher: PillowStitcher, single_thread_executor: ReadExecutor
     ):
         """canvas_grid_size smaller than tile_region.size raises ValueError."""
 
@@ -338,10 +353,12 @@ class TestPillowStitcherStitchParallel:
                 tile_size=Size(TILE_SIZE, TILE_SIZE),
                 mode="RGB",
                 canvas_grid_size=Size(1, 1),
-                threads=1,
+                executor=single_thread_executor,
             )
 
-    def test_fetch_returns_too_few_tiles_raises(self, stitcher: PillowStitcher):
+    def test_fetch_returns_too_few_tiles_raises(
+        self, stitcher: PillowStitcher, single_thread_executor: ReadExecutor
+    ):
         """fetch yielding fewer tiles than points raises ValueError (strict zip)."""
 
         # Arrange
@@ -357,10 +374,12 @@ class TestPillowStitcherStitchParallel:
                 fetch=fetch,
                 tile_size=Size(TILE_SIZE, TILE_SIZE),
                 mode="RGB",
-                threads=1,
+                executor=single_thread_executor,
             )
 
-    def test_fetch_returns_too_many_tiles_raises(self, stitcher: PillowStitcher):
+    def test_fetch_returns_too_many_tiles_raises(
+        self, stitcher: PillowStitcher, single_thread_executor: ReadExecutor
+    ):
         """fetch yielding more tiles than points raises ValueError (strict zip)."""
 
         # Arrange
@@ -376,5 +395,5 @@ class TestPillowStitcherStitchParallel:
                 fetch=fetch,
                 tile_size=Size(TILE_SIZE, TILE_SIZE),
                 mode="RGB",
-                threads=1,
+                executor=single_thread_executor,
             )

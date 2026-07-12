@@ -26,6 +26,7 @@ from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.group.group import Instances
 from wsidicom.instance import WsiInstance
 from wsidicom.stringprinting import dict_pretty_str
+from wsidicom.thread import ReadExecutor
 
 
 class Level(Instances):
@@ -150,6 +151,8 @@ class Level(Instances):
         z: float | None = None,
         path: str | None = None,
         crop_to_image_boundary: bool = True,
+        *,
+        executor: ReadExecutor,
     ) -> Image:
         """Return tile in another level by scaling a region.
 
@@ -167,6 +170,8 @@ class Level(Instances):
             If True, edge tiles are cropped to remove the part outside the image
             (as defined by the level size). If False, the cropped tile is padded
             back to the full tile size with the background color.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
@@ -186,6 +191,7 @@ class Level(Instances):
             z,
             path,
             output_size=cropped_region.size.ceil_div(scale),
+            executor=executor,
         )
         if crop_to_image_boundary:
             return image
@@ -200,6 +206,8 @@ class Level(Instances):
         z: float | None = None,
         path: str | None = None,
         crop_to_image_boundary: bool = True,
+        *,
+        executor: ReadExecutor,
     ) -> bytes:
         """Return encoded tile in another level by scaling a region.
 
@@ -217,13 +225,17 @@ class Level(Instances):
             If True, edge tiles are cropped to remove the part outside the image.
             If False, the cropped tile is padded back to the full tile size with
             the background color.
+        executor: ReadExecutor
+            Executor that splits image data reads across worker threads.
 
         Returns
         -------
         bytes
             A transfer syntax encoded tile
         """
-        image = self.get_scaled_tile(tile, level, z, path, crop_to_image_boundary)
+        image = self.get_scaled_tile(
+            tile, level, z, path, crop_to_image_boundary, executor=executor
+        )
         instance = self.get_instance(z, path)
         return instance.image_data.encoder.encode(image)
 

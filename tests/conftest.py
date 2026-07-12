@@ -14,9 +14,10 @@
 
 import json
 import os
+import platform
 import random
 import sys
-from collections.abc import Iterable
+from concurrent.futures import Executor, ThreadPoolExecutor
 from enum import Enum
 from io import BufferedReader
 from pathlib import Path
@@ -39,10 +40,40 @@ from wsidicom import WsiDicom
 from wsidicom.config import settings
 from wsidicom.geometry import Size
 from wsidicom.metadata.uid_generator import CallableUidGenerator
+from wsidicom.thread import ReadExecutor
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
 REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
+
+
+def skip_if_hash_unstable(transfer_syntax: UID) -> None:
+    """Skip a pixel-hash test when the transfer syntax does not decode
+    byte-identically on the current platform, so its md5 comparison would
+    spuriously fail. Lossy JPEG2000 decodes differently on macOS.
+
+    Call at the top of a test that asserts an md5 checksum; tests that do not
+    hash simply never call it and so are never skipped.
+    """
+    if transfer_syntax == JPEG2000 and platform.system() == "Darwin":
+        pytest.skip("Lossy JPEG2000 does not produce identical output on macOS.")
+
+
+def skip_if_shared_pool_unsupported(
+    input_type: "WsiInputType", use_shared: bool
+) -> None:
+    """Skip a shared-executor read for web input, whose SQLite-backed
+    DICOMfileClient is not thread-safe across a persistent pool.
+
+    This is a limitation of the file-based test client only; a real DICOMweb
+    HTTP client reads safely across a shared pool.
+    """
+    if use_shared and input_type == WsiInputType.WEB:
+        pytest.skip(
+            "The SQLite-backed DICOMfileClient used for web tests is not "
+            "thread-safe across a persistent pool; a real DICOMweb HTTP client "
+            "would be."
+        )
 
 
 class WsiInputType(Enum):
@@ -60,11 +91,11 @@ class WsiTestDefinitions:
         pytest.skip("No test definition found, skipping.")
 
     @classmethod
-    def folders(cls) -> Iterable[Path]:
+    def folders(cls) -> list[Path]:
         return [SLIDE_FOLDER.joinpath(path) for _, path in cls._get_parameter("path")]
 
     @classmethod
-    def folders_and_counts(cls) -> Iterable[tuple[Path, int, bool, bool]]:
+    def folders_and_counts(cls) -> list[tuple[Path, int, bool, bool]]:
         return [
             (
                 SLIDE_FOLDER.joinpath(wsi_definition["path"]),
@@ -76,7 +107,7 @@ class WsiTestDefinitions:
         ]
 
     @classmethod
-    def folders_and_instance_counts(cls) -> Iterable[tuple[Path, int]]:
+    def folders_and_instance_counts(cls) -> list[tuple[Path, int]]:
         return [
             (
                 SLIDE_FOLDER.joinpath(wsi_definition["path"]),
@@ -86,7 +117,7 @@ class WsiTestDefinitions:
         ]
 
     @classmethod
-    def wsi_names(cls, tiling: str | None = None) -> Iterable[str]:
+    def wsi_names(cls, tiling: str | None = None) -> list[str]:
         return [
             key
             for key, value in cls.test_definitions.items()
@@ -94,51 +125,51 @@ class WsiTestDefinitions:
         ]
 
     @classmethod
-    def read_region(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
+    def read_region(cls) -> list[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_region", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_region_mm(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
+    def read_region_mm(cls) -> list[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_region_mm", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_region_mpp(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
+    def read_region_mpp(cls) -> list[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_region_mpp", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_tile(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
+    def read_tile(cls) -> list[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_tile", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_encoded_tile(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
+    def read_encoded_tile(cls) -> list[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_encoded_tile", "level_transfer_syntax"
         )
 
     @classmethod
-    def read_thumbnail(cls) -> Iterable[tuple[str, UID, dict[str, Any]]]:
+    def read_thumbnail(cls) -> list[tuple[str, UID, dict[str, Any]]]:
         return cls._get_test_values_and_transfer_syntax(
             "read_thumbnail", "level_transfer_syntax"
         )
 
     @classmethod
-    def levels(cls) -> Iterable[tuple[str, int]]:
+    def levels(cls) -> list[tuple[str, int]]:
         return cls._get_parameter("levels")
 
     @classmethod
-    def label_hash(cls) -> Iterable[tuple[str, UID, str | None]]:
+    def label_hash(cls) -> list[tuple[str, UID, str | None]]:
         return cls._get_parameter_and_transfer_syntax("label", "label_transfer_syntax")
 
     @classmethod
-    def overview_hash(cls) -> Iterable[tuple[str, UID, str | None]]:
+    def overview_hash(cls) -> list[tuple[str, UID, str | None]]:
         return cls._get_parameter_and_transfer_syntax(
             "overview", "overview_transfer_syntax"
         )
@@ -146,7 +177,7 @@ class WsiTestDefinitions:
     @classmethod
     def _get_test_values_and_transfer_syntax(
         cls, test_value_name: str, transfer_syntax_name: str
-    ) -> Iterable[tuple[str, UID, dict[str, Any]]]:
+    ) -> list[tuple[str, UID, dict[str, Any]]]:
         return [
             (wsi_name, UID(wsi_definition[transfer_syntax_name]), region)
             for wsi_name, wsi_definition in cls.test_definitions.items()
@@ -156,7 +187,7 @@ class WsiTestDefinitions:
     @classmethod
     def _get_parameter_and_transfer_syntax(
         cls, parameter_name: str, transfer_syntax_name: str
-    ) -> Iterable[tuple[str, UID, Any]]:
+    ) -> list[tuple[str, UID, Any]]:
         return [
             (
                 wsi_name,
@@ -167,7 +198,7 @@ class WsiTestDefinitions:
         ]
 
     @classmethod
-    def _get_parameter(cls, parameter_name: str) -> Iterable[tuple[str, Any]]:
+    def _get_parameter(cls, parameter_name: str) -> list[tuple[str, Any]]:
         return [
             (
                 wsi_name,
@@ -191,24 +222,45 @@ def wsi(wsi_file: Path):
 
 
 @pytest.fixture(scope="module")
-def wsi_factory():
+def shared_threadpool_executor():
+    """A shared thread pool for exercising the supplied-executor read path.
+
+    Module-scoped and requested by `wsi_factory` so it is torn down after the
+    wsis that read through it are closed.
+    """
+    with ThreadPoolExecutor(
+        max_workers=4, thread_name_prefix="TestSharedRead"
+    ) as executor:
+        yield executor
+
+
+@pytest.fixture(scope="module")
+def wsi_factory(shared_threadpool_executor: Executor):
     """Fixture providing a callable that takes a wsi name and input type and returns a
     WsiDicom object. Caches opened objects and closes when tests using fixture are done.
+
+    The callable also takes an optional `read_executor` so tests can exercise the
+    supplied-executor read path; wsis opened with and without one are cached
+    separately.
     """
     streams: list[BufferedReader] = []
-    wsis: dict[tuple[WsiInputType, Path], WsiDicom] = {}
+    wsis: dict[tuple[WsiInputType, Path, bool], WsiDicom] = {}
 
     def open_wsi(
-        wsi_name: str, input_type: WsiInputType = WsiInputType.FILE
+        wsi_name: str,
+        input_type: WsiInputType = WsiInputType.FILE,
+        use_shared_executor: bool = False,
     ) -> WsiDicom:
         test_definition = WsiTestDefinitions.test_definitions[wsi_name]
         folder = UPath(SLIDE_FOLDER).joinpath(test_definition["path"])
-        if (input_type, folder) in wsis:
-            return wsis[(input_type, folder)]
+        key = (input_type, folder, use_shared_executor)
+        if key in wsis:
+            return wsis[key]
+        read_executor = shared_threadpool_executor if use_shared_executor else None
         if not folder.exists():
             pytest.skip(f"Folder {folder} does not exist.")
         if input_type == WsiInputType.FILE:
-            wsi = WsiDicom.open(folder)
+            wsi = WsiDicom.open(folder, read_executor=read_executor)
         elif input_type == WsiInputType.WEB:
             settings.open_web_threads = 1
             client = WsiDicomWebClient(
@@ -219,6 +271,7 @@ def wsi_factory():
                 test_definition["study_instance_uid"],
                 test_definition["series_instance_uid"],
                 [JPEGBaseline8Bit, JPEG2000, ExplicitVRLittleEndian],
+                read_executor=read_executor,
             )
         elif input_type == WsiInputType.STREAM:
             new_streams = [
@@ -227,10 +280,10 @@ def wsi_factory():
                 if file.is_file() and is_dicom(file)
             ]
             streams.extend(new_streams)
-            wsi = WsiDicom.open_streams(new_streams)
+            wsi = WsiDicom.open_streams(new_streams, read_executor=read_executor)
         else:
             raise NotImplementedError()
-        wsis[(input_type, folder)] = wsi
+        wsis[key] = wsi
         return wsi
 
     yield open_wsi
@@ -238,6 +291,12 @@ def wsi_factory():
         wsi.close()
     for stream in streams:
         stream.close()
+
+
+@pytest.fixture()
+def read_executor():
+    """An inline (single-threaded) read executor for read methods under test."""
+    yield ReadExecutor(None, None)
 
 
 @pytest.fixture()
