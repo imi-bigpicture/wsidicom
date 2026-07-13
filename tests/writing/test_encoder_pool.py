@@ -19,9 +19,9 @@ from decoy import Decoy, matchers
 from PIL import Image
 
 from wsidicom.codec import Encoder
-from wsidicom.downsampler import Downsampler
+from wsidicom.downsampler import Downsampler, PillowDownsampler
 from wsidicom.geometry import Size
-from wsidicom.stitcher import Stitcher
+from wsidicom.stitcher import PillowStitcher, Stitcher
 from wsidicom.thread import (
     CancellationToken,
     CompletionTracker,
@@ -65,6 +65,12 @@ def stitcher(decoy: Decoy) -> Stitcher:
 def tile_size() -> Size:
     """Create a default tile size."""
     return Size(256, 256)
+
+
+@pytest.fixture
+def blank_tile() -> Image.Image:
+    """Background tile used to pad downsampled edge blocks to a full tile."""
+    return Image.new("RGB", (256, 256), color=(255, 255, 255))
 
 
 @pytest.fixture
@@ -223,6 +229,7 @@ class TestEncoderPool:
         downsampler: Downsampler,
         stitcher: Stitcher,
         tile_size: Size,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """Test that encoding works via the queue property."""
@@ -249,6 +256,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=tile_size,
+            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -264,6 +272,7 @@ class TestEncoderPool:
         downsampler: Downsampler,
         stitcher: Stitcher,
         tile_size: Size,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """Test that encoding works via the queue property."""
@@ -300,6 +309,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=tile_size,
+            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task_1, token)
@@ -318,6 +328,7 @@ class TestEncoderPool:
         downsampler: Downsampler,
         stitcher: Stitcher,
         tile_size: Size,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """Test encoding a batch with multiple tiles."""
@@ -348,6 +359,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=tile_size,
+            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -365,6 +377,7 @@ class TestEncoderPool:
         downsampler: Downsampler,
         stitcher: Stitcher,
         tile_size: Size,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """Test that starting twice raises an error."""
@@ -376,6 +389,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=tile_size,
+            blank_tile=blank_tile,
             token=token,
         )
         pool.start()
@@ -392,6 +406,7 @@ class TestEncoderPool:
         downsampler: Downsampler,
         stitcher: Stitcher,
         tile_size: Size,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """An encoding failure cancels the shared token instead of deadlocking."""
@@ -418,6 +433,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=tile_size,
+            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -433,6 +449,7 @@ class TestEncoderPool:
         downsampler: Downsampler,
         stitcher: Stitcher,
         tile_size: Size,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """Test that shutdown properly stops dispatcher and executor."""
@@ -444,6 +461,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=tile_size,
+            blank_tile=blank_tile,
             token=token,
         )
         pool.start()
@@ -459,6 +477,7 @@ class TestEncoderPool:
         decoy: Decoy,
         downsampler: Downsampler,
         stitcher: Stitcher,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """EncoderPool stitches input tiles, downsamples, encodes, and cascades."""
@@ -509,6 +528,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=Size(256, 256),
+            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -535,6 +555,7 @@ class TestEncoderPool:
         decoy: Decoy,
         downsampler: Downsampler,
         stitcher: Stitcher,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """When downsampler commutes with stitch, no downsample call is made."""
@@ -575,6 +596,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=Size(256, 256),
+            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)
@@ -590,11 +612,70 @@ class TestEncoderPool:
         # Assert - tracker decremented
         tracker.wait_for_zero()
 
+    def test_downsample_edge_block_is_padded_to_tile_size(
+        self,
+        decoy: Decoy,
+        tile_size: Size,
+        blank_tile: Image.Image,
+        token: CancellationToken,
+    ):
+        """A partial edge block is halved and padded back to a full tile.
+
+        Regression: the reduce-then-stitch fast path returned the stitched block
+        as-is, so an edge block (the level below has an odd number of tiles in a
+        dimension) produced a frame smaller than the Rows/Columns declared in the
+        dataset.
+        """
+        # Arrange - real downsampler and stitcher, so the sizes are real
+        encoder = decoy.mock(cls=Encoder)
+        encoded: list[Image.Image] = []
+        decoy.when(encoder.encode(matchers.Anything())).then_do(
+            lambda tile: encoded.append(tile) or b"encoded"
+        )
+        output_queue: PriorityCancelableQueue[EncodingTaskResult] = (
+            PriorityCancelableQueue()
+        )
+        tracker = CompletionTracker()
+        # 1x2 edge block: one row of two tiles, i.e. no tile row below it.
+        tiles = [[Image.new("RGB", (256, 256), color=(10, 20, 30)) for _ in range(2)]]
+        tracker.increment()
+        task = DownsampleEncodeTask(
+            coordinates=PyramidTilePosition(
+                level=1, x_index=0, y_index=0, z_index=0, optical_path_index=0
+            ),
+            tiles=tiles,
+            output_queue=output_queue,
+            cascade_tracker=tracker,
+        )
+
+        # Act
+        with EncoderPool(
+            encoder,
+            num_workers=1,
+            downsampler=PillowDownsampler(),
+            stitcher=PillowStitcher(),
+            tile_size=tile_size,
+            blank_tile=blank_tile,
+            token=token,
+        ) as pool:
+            pool.queue.put(task, token)
+
+        # Assert - the encoded tile is a full tile: halved block on top, and the
+        # part below (outside the image) filled with the background.
+        assert len(encoded) == 1
+        padded = encoded[0]
+        assert padded.size == (tile_size.width, tile_size.height)
+        assert padded.getpixel((0, 0)) == (10, 20, 30)
+        assert padded.getpixel((0, 200)) == (255, 255, 255)
+
+        tracker.wait_for_zero()
+
     def test_downsample_failure_cancels_token_and_decrements(
         self,
         decoy: Decoy,
         downsampler: Downsampler,
         stitcher: Stitcher,
+        blank_tile: Image.Image,
         token: CancellationToken,
     ):
         """A downsampler exception cancels the token and still decrements the tracker."""
@@ -633,6 +714,7 @@ class TestEncoderPool:
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=Size(256, 256),
+            blank_tile=blank_tile,
             token=token,
         ) as pool:
             pool.queue.put(task, token)

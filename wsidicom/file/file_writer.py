@@ -424,6 +424,7 @@ class PyramidFileWriter(BaseFileWriter):
             downsampler=downsampler,
             stitcher=stitcher,
             tile_size=self._pyramid.base_level.tile_size,
+            blank_tile=source_image_data.blank_tile,
             token=token,
         )
         try:
