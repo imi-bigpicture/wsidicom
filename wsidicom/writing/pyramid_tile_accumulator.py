@@ -266,6 +266,17 @@ class PyramidTileAccumulator:
             item.optical_path_index,
             item.tile,
         )
+        # A tile outside the input grid means the cascade is miswired (e.g. this
+        # accumulator was fed by a level other than the one below it). Fail here,
+        # where the offending coordinate is known: otherwise `_block_positions`
+        # returns no positions, the completeness check below passes vacuously
+        # (`all()` of nothing is True), and an empty block reaches the encoder
+        # pool as an unrelated stitching error.
+        if x >= self._input_tiled_size.width or y >= self._input_tiled_size.height:
+            raise ValueError(
+                f"Level {self._level_index} accumulator received tile ({x}, {y}), "
+                f"which is outside its input grid {self._input_tiled_size}"
+            )
         output_x, output_y = x // 2, y // 2
 
         self._buffer[(x, y, z, path)] = tile
