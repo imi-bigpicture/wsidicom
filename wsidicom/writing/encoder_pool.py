@@ -53,6 +53,7 @@ class EncoderPool:
         downsampler: Downsampler,
         stitcher: Stitcher,
         tile_size: Size,
+        blank_tile: Image.Image,
         input_queue_maxsize: int = 100,
         *,
         token: CancellationToken,
@@ -71,6 +72,9 @@ class EncoderPool:
             Stitcher used to combine input tile blocks before downsampling.
         tile_size: Size
             Output tile size for downsample+encode tasks.
+        blank_tile: Image.Image
+            Background tile of the output tile size, used to pad a downsampled
+            edge block back to a full tile. Treated as read-only.
         input_queue_maxsize: int
             Maximum size of input queue. Provides backpressure when full.
         token: CancellationToken
@@ -82,6 +86,7 @@ class EncoderPool:
         self._downsampler = downsampler
         self._stitcher = stitcher
         self._tile_size = tile_size
+        self._blank_tile = blank_tile
         self._token = token
         self._input_queue: CancelableQueue[
             EncodeTask | DownsampleEncodeTask | ShutdownSentinel
@@ -207,14 +212,53 @@ class EncoderPool:
     ) -> Image.Image:
         """Downsample a block of tiles into one output tile.
 
-        Chooses between reduce-each-then-stitch (fast path when downsampler
-        supports it) and stitch-then-resize (standard path).
+        Chooses between reduce-each-then-stitch (fast path when the downsampler
+        supports it) and stitch-then-halve (standard path). Both halve the block
+        by exactly 2x; the result is then padded to the full output tile size,
+        which matters at the right and bottom edges of a level where the input
+        block is smaller than 2x2.
         """
         if self._downsampler.commutes_with_stitch:
             reduced = [[tile.reduce(2) for tile in row] for row in tiles]
-            return self._stitcher.stitch_grid(reduced)
-        composite = self._stitcher.stitch_grid(tiles)
-        return self._downsampler.downsample(composite, self._tile_size)
+            block = self._stitcher.stitch_grid(reduced)
+        else:
+            composite = self._stitcher.stitch_grid(tiles)
+            # Halve the composite, rather than resizing it to the output tile
+            # size: a partial edge block is smaller than 2x2, and resizing it to
+            # a full tile would stretch it instead of downsampling it.
+            half = Size(composite.width // 2, composite.height // 2)
+            block = self._downsampler.downsample(composite, half)
+        return self._pad_to_tile(block)
+
+    def _pad_to_tile(self, block: Image.Image) -> Image.Image:
+        """Pad a downsampled block to the full output tile size.
+
+        At the right and bottom edges of a level the input block can be smaller
+        than 2x2 (the level below has an odd number of tiles), so the halved
+        block covers only part of the output tile. The remainder lies outside
+        the image and is filled with the background color, matching how source
+        edge tiles are padded. Without this the written frame is smaller than
+        the Rows/Columns declared in the dataset.
+
+        Parameters
+        ----------
+        block: Image.Image
+            The halved block, at most the output tile size.
+
+        Returns
+        -------
+        Image.Image
+            The block padded to the full output tile size.
+        """
+        if (block.width, block.height) == (
+            self._tile_size.width,
+            self._tile_size.height,
+        ):
+            return block
+        # blank_tile is a cached, shared image - copy before pasting into it.
+        canvas = self._blank_tile.copy()
+        canvas.paste(block, (0, 0))
+        return canvas
 
     def __enter__(self) -> "EncoderPool":
         """Context manager entry."""

@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `read_executor` parameter on `WsiDicom.open`, `open_dicomdir`, `open_streams`, and `open_web`: an optional shared, thread-based executor reused across region reads. When supplied, reads parallelize across it by default (pass `threads=1` to a read to opt out).
 - `threads` parameter on `read_thumbnail`, controlling how many worker threads the read fans its tile fetches across (matching `read_region`).
 
+### Fixed
+
+- Generated pyramid levels (`add_missing_levels`, `regenerate_pyramid`) mishandled partial edge blocks: with the default resampling filter the written frame was smaller than the `Rows`/`Columns` declared in the dataset, and with a non-commuting filter (e.g. `LANCZOS`) the block was stretched to fill the tile. The block is now halved by exactly 2x and padded to a full tile with the background color.
+
 ## [0.33.1] - 2026-07-10
 
 ### Fixed
