@@ -35,7 +35,10 @@ from wsidicom.thread import (
     ShutdownSentinel,
 )
 from wsidicom.writing.models import EncodingTaskResult
-from wsidicom.writing.pyramid_tile_accumulator import PyramidTileAccumulator
+from wsidicom.writing.pyramid_tile_accumulator import (
+    PyramidTileAccumulator,
+    WritingPyramidTileAccumulator,
+)
 from wsidicom.writing.tile_cache import TileCache
 from wsidicom.writing.tile_readers import TileReader
 from wsidicom.writing.tile_sequencer import TileSequencer, TileWriter
@@ -356,6 +359,13 @@ class GeneratedPyramidLevelWriter(PyramidLevelWriter):
 
     Composes an injected `PyramidTileAccumulator` and shares its output
     queue with the inherited `TileSequencer`.
+
+    May also own the intermediate accumulators immediately below it in the
+    cascade: levels that must be downsampled to reach this one, but that are not
+    themselves written (a gap in the source pyramid). They have no writer of
+    their own, so this writer drives their lifecycle. They are shut down before
+    this level's accumulator, because the chain start injects the shutdown
+    sentinel and every accumulator above it waits for that sentinel to arrive.
     """
 
     def __init__(
@@ -366,8 +376,9 @@ class GeneratedPyramidLevelWriter(PyramidLevelWriter):
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
         tiled_size: Size,
-        accumulator: PyramidTileAccumulator,
+        accumulator: WritingPyramidTileAccumulator,
         token: CancellationToken,
+        intermediate_accumulators: Sequence[PyramidTileAccumulator] = (),
     ):
         super().__init__(
             level_index=level_index,
@@ -380,20 +391,33 @@ class GeneratedPyramidLevelWriter(PyramidLevelWriter):
             token=token,
         )
         self._accumulator = accumulator
+        # Ordered from the lowest level upwards, i.e. shutdown order.
+        self._intermediate_accumulators = list(intermediate_accumulators)
 
     @property
-    def accumulator(self) -> PyramidTileAccumulator:
+    def accumulator(self) -> WritingPyramidTileAccumulator:
         return self._accumulator
+
+    @property
+    def intermediate_accumulators(self) -> Sequence[PyramidTileAccumulator]:
+        """Unwritten accumulators below this level, lowest level first."""
+        return self._intermediate_accumulators
 
     def start(self, tile_writer: TileWriter) -> None:
         super().start(tile_writer)
+        for accumulator in self._intermediate_accumulators:
+            accumulator.start()
         self._accumulator.start()
 
     def shutdown(self) -> None:
-        """Shut down the accumulator."""
+        """Shut down the intermediate accumulators, then this level's."""
+        for accumulator in self._intermediate_accumulators:
+            accumulator.shutdown()
         self._accumulator.shutdown()
 
     def cleanup(self) -> None:
         """Best-effort shutdown on error."""
+        for accumulator in self._intermediate_accumulators:
+            accumulator.cleanup()
         self._accumulator.cleanup()
         super().cleanup()

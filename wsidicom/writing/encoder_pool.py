@@ -160,38 +160,46 @@ class EncoderPool:
     def _encode(self, task: EncodeTask) -> None:
         """Encode tiles and submit the result to the output queue.
 
-        A failure cancels the token (the single failure channel) and the worker
-        returns; the pipeline then unwinds without a result.
+        Any failure, including one raised while handing the result off, cancels
+        the token (the single failure channel) and the pipeline unwinds without a
+        result. A put that raised outside it would be swallowed by the worker's
+        future and silently drop the tiles.
         """
         try:
-            encoded_tiles = [self._encoder.encode(tile) for tile in task.tiles]
-        except Exception as exception:
-            self._token.cancel(exception)
-            return
-        self._safe_put(
-            task.output_queue,
-            EncodingTaskResult(coordinates=task.coordinates, tiles=encoded_tiles),
-        )
-
-    def _downsample_and_encode(self, task: DownsampleEncodeTask) -> None:
-        """Stitch, downsample, encode, and submit to output and cascade queues.
-
-        A failure cancels the token and the worker returns. The cascade push
-        always precedes the tracker decrement so a level's shutdown (which
-        waits for the tracker to reach zero) cannot forward its sentinel ahead
-        of a cascaded tile.
-        """
-        try:
-            try:
-                downsampled = self._downsample_block(task.tiles)
-                encoded = self._encoder.encode(downsampled)
-            except Exception as exception:
-                self._token.cancel(exception)
-                return
             self._safe_put(
                 task.output_queue,
-                EncodingTaskResult(coordinates=task.coordinates, tiles=[encoded]),
+                EncodingTaskResult(
+                    coordinates=task.coordinates,
+                    tiles=[self._encoder.encode(tile) for tile in task.tiles],
+                ),
             )
+        except Exception as exception:
+            self._token.cancel(exception)
+
+    def _downsample_and_encode(self, task: DownsampleEncodeTask) -> None:
+        """Stitch and downsample a block, encode it, and cascade it.
+
+        A level with no output queue produces no output: it is downsampled and
+        cascaded to feed the level above, but never encoded.
+
+        Any failure, including one raised while handing a result off, cancels the
+        token: that is the single failure channel, and a put that raised outside
+        it would be swallowed by the worker's future and silently drop a tile. The
+        cascade push always precedes the tracker decrement so a level's shutdown
+        (which waits for the tracker to reach zero) cannot forward its sentinel
+        ahead of a cascaded tile.
+        """
+        try:
+            downsampled = self._downsample_block(task.tiles)
+            if task.output_queue is not None:
+                encoded = [self._encoder.encode(downsampled)]
+                self._safe_put(
+                    task.output_queue,
+                    EncodingTaskResult(
+                        coordinates=task.coordinates,
+                        tiles=encoded,
+                    ),
+                )
             if task.cascade_queue is not None:
                 self._safe_put(
                     task.cascade_queue,
@@ -203,6 +211,8 @@ class EncoderPool:
                         tile=downsampled,
                     ),
                 )
+        except Exception as exception:
+            self._token.cancel(exception)
         finally:
             task.cascade_tracker.decrement()
 

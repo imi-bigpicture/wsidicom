@@ -612,6 +612,57 @@ class TestEncoderPool:
         # Assert - tracker decremented
         tracker.wait_for_zero()
 
+    def test_downsample_without_output_queue_cascades_without_encoding(
+        self,
+        decoy: Decoy,
+        downsampler: Downsampler,
+        stitcher: Stitcher,
+        tile_size: Size,
+        blank_tile: Image.Image,
+        token: CancellationToken,
+    ):
+        """An intermediate level is downsampled and cascaded, but not encoded.
+
+        Such a level only exists to bridge a gap in a sparse pyramid, so nothing
+        is written for it and the encode would be wasted work.
+        """
+        # Arrange
+        encoder = decoy.mock(cls=Encoder)
+        decoy.when(downsampler.commutes_with_stitch).then_return(True)
+        stitched = Image.new("RGB", (256, 256), color=(80, 80, 80))
+        decoy.when(stitcher.stitch_grid(matchers.Anything())).then_return(stitched)
+
+        cascade_queue: FifoCancelableQueue = FifoCancelableQueue()
+        tracker = CompletionTracker()
+        tracker.increment()
+        task = DownsampleEncodeTask(
+            coordinates=PyramidTilePosition(
+                level=1, x_index=0, y_index=0, z_index=0, optical_path_index=0
+            ),
+            tiles=[[Image.new("RGB", (256, 256)) for _ in range(2)] for _ in range(2)],
+            output_queue=None,
+            cascade_tracker=tracker,
+            cascade_queue=cascade_queue,
+        )
+
+        # Act
+        with EncoderPool(
+            encoder,
+            num_workers=1,
+            downsampler=downsampler,
+            stitcher=stitcher,
+            tile_size=tile_size,
+            blank_tile=blank_tile,
+            token=token,
+        ) as pool:
+            pool.queue.put(task, token)
+
+        # Assert - the downsampled tile is cascaded, and never encoded
+        assert cascade_queue.qsize() == 1
+        assert cascade_queue.get(token).tile is stitched
+        decoy.verify(encoder.encode(matchers.Anything()), times=0)
+        tracker.wait_for_zero()
+
     def test_downsample_edge_block_is_padded_to_tile_size(
         self,
         decoy: Decoy,

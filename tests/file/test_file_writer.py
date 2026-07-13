@@ -66,6 +66,52 @@ class SplitOnlyWriter(BaseFileWriter):
 class TestPyramidFileWriterHelpers:
     """Tests for PyramidFileWriter static helper methods."""
 
+    def test_source_level_of_regenerating_is_always_the_base(self):
+        """Regenerating derives every level from the base, ignoring stored levels."""
+        # Act
+        source_level = PyramidFileWriter._source_level_of(
+            4, base_level_index=0, read_levels={0}, regenerate_pyramid=True
+        )
+
+        # Assert
+        assert source_level == 0
+
+    def test_source_level_of_is_the_closest_read_level_below(self):
+        """A level is derived from the closest level below that is read."""
+        # Arrange - the source stores 0, 2 and 4, and all of them are read
+        read_levels = {0, 2, 4}
+
+        # Act & Assert
+        for level_index, expected in [(5, 4), (3, 2), (1, 0)]:
+            assert (
+                PyramidFileWriter._source_level_of(
+                    level_index, 0, read_levels, regenerate_pyramid=False
+                )
+                == expected
+            )
+
+    def test_source_level_of_skips_a_stored_level_that_is_not_read(self):
+        """A stored level that is not written is not read, so is not derived from.
+
+        Regression: level 5 was derived from the stored level 4 even when level 4
+        was not among the written levels, so nothing ever fed its accumulator.
+        """
+        # Act - the source stores 0, 2 and 4, but only level 0 is read
+        source_level = PyramidFileWriter._source_level_of(
+            5, 0, read_levels={0}, regenerate_pyramid=False
+        )
+
+        # Assert - derived from 0, not from the unread stored level 4
+        assert source_level == 0
+
+    def test_source_level_of_without_a_level_below_raises(self):
+        """A generated level with nothing read below it cannot be derived."""
+        # Act & Assert
+        with pytest.raises(ValueError, match="no level below it is read"):
+            PyramidFileWriter._source_level_of(
+                3, 0, read_levels={4}, regenerate_pyramid=False
+            )
+
 
 @pytest.mark.unittest
 class TestBaseFileWriterSplit:
@@ -227,6 +273,49 @@ class TestPyramidFileWriterIntegration:
             assert saved_pyramid[-1].size.all_less_than_or_equal(
                 saved_pyramid.tile_size
             )
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_regenerate_from_sparse_pyramid(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+        uid_generator: UidGenerator,
+    ):
+        """Regenerating a pyramid whose levels are not consecutive.
+
+        A sparse pyramid (an SVS typically stores levels 0, 2, 4) leaves gaps, and
+        regenerating derives every level from the base. Level 2 is then two
+        downsample steps above its source, so the level 1 in between has to be
+        built to bridge the cascade — without being written.
+        """
+        # Arrange - a pyramid holding levels 0 and 2, but not 1
+        wsi = wsi_factory(wsi_name)
+        levels = wsi.pyramids[0]
+        if len(levels) < 3:
+            pytest.skip("needs at least three levels to build a sparse pyramid")
+        sparse = Pyramid([levels.get(0), levels.get(2)], [])
+
+        # Act
+        generator = PyramidFileWriter(
+            pyramid=sparse,
+            output_path=tmp_path,
+            uid_generator=uid_generator,
+            max_threads=4,
+            offset_table=OffsetTableType.BASIC,
+            add_missing_levels=False,
+            regenerate_pyramid=True,
+        )
+        generator.write()
+
+        # Assert - only levels 0 and 2 are written, and level 2 is readable
+        with WsiDicom.open(tmp_path) as saved_wsi:
+            saved_pyramid = saved_wsi.pyramids[0]
+            assert [level.level for level in saved_pyramid] == [0, 2]
+            size = saved_pyramid.get(2).size.to_tuple()
+            region_size = (min(64, size[0]), min(64, size[1]))
+            image = saved_wsi.read_region((0, 0), 2, region_size)
+            assert image.size == region_size
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_generate_output_is_readable(

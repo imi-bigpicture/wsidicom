@@ -50,6 +50,12 @@ class PyramidTileAccumulator:
     downsampled tile is forwarded to the next accumulator (one level lower
     in resolution) in the cascade chain.
 
+    A level with no `output_queue` produces no output: its blocks are downsampled
+    and cascaded to feed the level above, but never encoded. That is a level which
+    only bridges a gap in the pyramid to reach one that is written.
+    `WritingPyramidTileAccumulator` supplies the queue for a level that is written
+    and exposes it to that level's writer.
+
     Memory bound
     ------------
     The internal staging buffer (`_buffer`) holds decoded tiles whose 2x2
@@ -81,6 +87,9 @@ class PyramidTileAccumulator:
         encoder_pool_queue: WriteOnlyQueue[DownsampleEncodeTask],
         next_accumulator: Optional["PyramidTileAccumulator"] = None,
         is_chain_start: bool = False,
+        output_queue: (
+            PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel] | None
+        ) = None,
         queue_maxsize: int = 100,
         *,
         token: CancellationToken,
@@ -103,6 +112,11 @@ class PyramidTileAccumulator:
             True if this accumulator is the bottom of a cascade chain (the
             first generated level above a source level). The chain start
             is responsible for forwarding the shutdown sentinel.
+        output_queue: Optional[PriorityCancelableQueue]
+            Queue the encoded result of each downsampled block is put on, and
+            that this accumulator emits its shutdown sentinel to. None if this
+            level produces no output, in which case its blocks are downsampled
+            and cascaded but never encoded.
         queue_maxsize: int
             Maximum size of the internal input queue. Provides backpressure.
         token: CancellationToken
@@ -124,27 +138,13 @@ class PyramidTileAccumulator:
         self._input_queue: FifoCancelableQueue[CascadedTile | ShutdownSentinel] = (
             FifoCancelableQueue(maxsize=queue_maxsize)
         )
-        self._output_queue: PriorityCancelableQueue[
-            EncodingTaskResult | ShutdownSentinel
-        ] = PriorityCancelableQueue(maxsize=queue_maxsize)
+        self._output_queue = output_queue
         self._failure: BaseException | None = None
         self._consumer_thread = Thread(
             target=self._consumer_loop,
             name=f"Accumulator-L{level_index}",
             daemon=True,
         )
-
-    @property
-    def output_queue(
-        self,
-    ) -> ReadOnlyQueue[EncodingTaskResult | ShutdownSentinel]:
-        """Queue where encoder pool results land for this level.
-
-        Exposed as read-only because the accumulator owns the queue and
-        emits the shutdown sentinel itself; downstream consumers should
-        only read from it.
-        """
-        return self._output_queue
 
     @property
     def input_queue(self) -> WriteOnlyQueue[CascadedTile | ShutdownSentinel]:
@@ -251,7 +251,8 @@ class PyramidTileAccumulator:
         the token instead.
         """
         try:
-            self._output_queue.put(ShutdownSentinel(), self._token)
+            if self._output_queue is not None:
+                self._output_queue.put(ShutdownSentinel(), self._token)
             if self.next_accumulator is not None:
                 self.next_accumulator.input_queue.put(ShutdownSentinel(), self._token)
         except Cancelled:
@@ -330,3 +331,56 @@ class PyramidTileAccumulator:
             if row:
                 rows.append(row)
         return rows
+
+
+class WritingPyramidTileAccumulator(PyramidTileAccumulator):
+    """Accumulator for a generated pyramid level that is written.
+
+    Supplies the output queue the base cascade puts encoded blocks on, and
+    exposes it for the level's writer to drain into an instance. Creating the
+    queue here keeps it owned by the accumulator that emits its shutdown
+    sentinel, so a writer cannot be given a queue nothing writes to.
+    """
+
+    # Always present for a written level, unlike on the base.
+    _output_queue: PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]
+
+    def __init__(
+        self,
+        level_index: int,
+        input_tiled_size: Size,
+        encoder_pool_queue: WriteOnlyQueue[DownsampleEncodeTask],
+        next_accumulator: Optional["PyramidTileAccumulator"] = None,
+        is_chain_start: bool = False,
+        queue_maxsize: int = 100,
+        *,
+        token: CancellationToken,
+    ):
+        """Create an accumulator for one written pyramid level.
+
+        See `PyramidTileAccumulator` for the parameters. The output queue is
+        created here rather than passed in.
+        """
+        output_queue = PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel](
+            maxsize=queue_maxsize
+        )
+        super().__init__(
+            level_index=level_index,
+            input_tiled_size=input_tiled_size,
+            encoder_pool_queue=encoder_pool_queue,
+            next_accumulator=next_accumulator,
+            is_chain_start=is_chain_start,
+            output_queue=output_queue,
+            queue_maxsize=queue_maxsize,
+            token=token,
+        )
+
+    @property
+    def output_queue(self) -> ReadOnlyQueue[EncodingTaskResult | ShutdownSentinel]:
+        """Queue where encoder pool results for this level land.
+
+        Exposed as read-only because the accumulator owns the queue and emits
+        the shutdown sentinel itself; downstream consumers should only read
+        from it.
+        """
+        return self._output_queue

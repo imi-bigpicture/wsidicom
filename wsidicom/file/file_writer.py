@@ -36,6 +36,7 @@ from wsidicom.config import settings
 from wsidicom.downsampler import PillowDownsampler
 from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
+from wsidicom.geometry import Size
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
 from wsidicom.instance import ImageData, WsiDataset, WsiInstance
 from wsidicom.metadata import ImageType, WsiMetadata
@@ -51,7 +52,10 @@ from wsidicom.writing.instance_writers import (
     PyramidLevelWriter,
     SourcePyramidLevelWriter,
 )
-from wsidicom.writing.pyramid_tile_accumulator import PyramidTileAccumulator
+from wsidicom.writing.pyramid_tile_accumulator import (
+    PyramidTileAccumulator,
+    WritingPyramidTileAccumulator,
+)
 from wsidicom.writing.tile_cache import ByteBudgetTileCache, DictTileCache, TileCache
 from wsidicom.writing.tile_readers import (
     CascadingPassthroughTileReader,
@@ -586,9 +590,30 @@ class PyramidFileWriter(BaseFileWriter):
         else:
             source_levels = set(present_levels)
 
+        # Levels actually read from the source: those it stores natively that are
+        # also written. A stored level that is not written is not read either, and
+        # is re-derived by downsampling like any other generated level.
+        read_levels = source_levels & set(included_levels)
+
+        # Each generated level is downsampled from the level directly below it, so
+        # the cascade needs an accumulator for every level between a written level
+        # and the level it is derived from. A pyramid whose levels are not
+        # consecutive leaves gaps, and regenerating widens them further by always
+        # deriving from the base. The levels in the gaps are built to bridge the
+        # cascade but are not written.
+        cascade_levels: set[int] = set()
+        for level_index in included_levels:
+            if level_index in read_levels:
+                continue
+            source_level = self._source_level_of(
+                level_index, base_level_index, read_levels, self._regenerate_pyramid
+            )
+            cascade_levels.update(range(source_level + 1, level_index + 1))
+        build_levels = sorted(set(included_levels) | cascade_levels)
+
         # One reversed pass per instance-split bucket. Each bucket holds a
         # subset of the focal planes / optical paths and gets its own
-        # independent cascade chain, producing one instance per level.
+        # independent cascade chain, producing one instance per written level.
         tile_cache = self._create_tile_cache(temp_dir)
         level_writers: list[PyramidLevelWriter] = []
         base_group = self._pyramid.base_level
@@ -596,20 +621,49 @@ class PyramidFileWriter(BaseFileWriter):
             base_group.focal_planes_by_optical_path
         ):
             next_accumulator: PyramidTileAccumulator | None = None
-            bucket_writers: list[PyramidLevelWriter] = []
-            for level_index in reversed(included_levels):
-                in_source = level_index in source_levels
+            bucket_writers: dict[int, PyramidLevelWriter] = {}
+            # Accumulators for the levels that are written, and for the levels that
+            # only bridge a gap in the cascade to reach them.
+            writing_accumulators: dict[int, WritingPyramidTileAccumulator] = {}
+            intermediate_accumulators: dict[int, PyramidTileAccumulator] = {}
+            # Written generated levels, as (level_index, dataset, tiled_size). The
+            # writers are built after the loop, once every accumulator below them
+            # exists.
+            generated: list[tuple[int, WsiDataset, Size]] = []
+            for level_index in reversed(build_levels):
+                in_source = level_index in read_levels
+                is_written = level_index in included_levels
                 if in_source:
                     source_group = self._pyramid.get(level_index)
                     scale = 1
-                elif self._regenerate_pyramid:
-                    # Re-derive from the base, not from any native intermediate
-                    # level the source happens to store.
-                    source_group = self._pyramid.get(base_level_index)
-                    scale = int(2 ** (level_index - base_level_index))
                 else:
-                    source_group = self._pyramid.get_closest_by_level(level_index)
-                    scale = int(2 ** (level_index - source_group.level))
+                    source_level = self._source_level_of(
+                        level_index,
+                        base_level_index,
+                        read_levels,
+                        self._regenerate_pyramid,
+                    )
+                    source_group = self._pyramid.get(source_level)
+                    scale = int(2 ** (level_index - source_level))
+
+                if not is_written:
+                    # Bridges a gap in the cascade; no instance is written for it,
+                    # so it needs neither a dataset nor an output queue. It is
+                    # wired up below.
+                    intermediate = PyramidTileAccumulator(
+                        level_index=level_index,
+                        input_tiled_size=source_group.tiled_size.ceil_div(
+                            max(scale // 2, 1)
+                        ),
+                        encoder_pool_queue=encoder_pool.queue,
+                        next_accumulator=next_accumulator,
+                        is_chain_start=level_index - 1 in read_levels,
+                        queue_maxsize=self._queue_maxsize,
+                        token=token,
+                    )
+                    intermediate_accumulators[level_index] = intermediate
+                    next_accumulator = intermediate
+                    continue
 
                 tiled_size = source_group.tiled_size.ceil_div(scale)
                 base_instance = source_group.instance_at(paths[0], planes[0])
@@ -651,60 +705,138 @@ class PyramidFileWriter(BaseFileWriter):
                         )
                     else:
                         tile_reader = PassthroughTileReader(level_index, token)
-                    bucket_writers.append(
-                        SourcePyramidLevelWriter(
-                            level_index=level_index,
-                            dataset=dataset,
-                            tile_cache=tile_cache,
-                            source_group=source_group,
-                            tiled_size=tiled_size,
-                            tile_reader=tile_reader,
-                            queue_maxsize=self._queue_maxsize,
-                            chunk_size=self._chunk_size,
-                            focal_planes=planes,
-                            optical_paths=paths,
-                            token=token,
-                        )
-                    )
-                    next_accumulator = None
-                else:
-                    # Generated level: create the accumulator first, then the
-                    # level writer that composes it. Cascade chains to the
-                    # previously-created accumulator (one level above in the
-                    # pyramid). Input tiled size is the level below (scale / 2).
-                    input_tiled_size = source_group.tiled_size.ceil_div(
-                        max(scale // 2, 1)
-                    )
-                    is_chain_start = (
-                        level_index - 1 not in included_levels
-                        or level_index - 1 in source_levels
-                    )
-                    accumulator = PyramidTileAccumulator(
-                        level_index=level_index,
-                        input_tiled_size=input_tiled_size,
-                        encoder_pool_queue=encoder_pool.queue,
-                        next_accumulator=next_accumulator,
-                        is_chain_start=is_chain_start,
-                        queue_maxsize=self._queue_maxsize,
-                        token=token,
-                    )
-                    generated_writer = GeneratedPyramidLevelWriter(
+                    bucket_writers[level_index] = SourcePyramidLevelWriter(
                         level_index=level_index,
                         dataset=dataset,
                         tile_cache=tile_cache,
+                        source_group=source_group,
+                        tiled_size=tiled_size,
+                        tile_reader=tile_reader,
+                        queue_maxsize=self._queue_maxsize,
+                        chunk_size=self._chunk_size,
                         focal_planes=planes,
                         optical_paths=paths,
-                        tiled_size=tiled_size,
-                        accumulator=accumulator,
                         token=token,
                     )
-                    bucket_writers.append(generated_writer)
+                    next_accumulator = None
+                else:
+                    # Generated level: create the accumulator, chaining it to the
+                    # previously-created one (the level above in the pyramid). The
+                    # input tiled size is that of the level below (scale / 2). The
+                    # writer is built after the loop, once the accumulators for any
+                    # intermediate levels below it exist.
+                    accumulator = WritingPyramidTileAccumulator(
+                        level_index=level_index,
+                        input_tiled_size=source_group.tiled_size.ceil_div(
+                            max(scale // 2, 1)
+                        ),
+                        encoder_pool_queue=encoder_pool.queue,
+                        next_accumulator=next_accumulator,
+                        is_chain_start=level_index - 1 in read_levels,
+                        queue_maxsize=self._queue_maxsize,
+                        token=token,
+                    )
+                    writing_accumulators[level_index] = accumulator
+                    generated.append((level_index, dataset, tiled_size))
                     next_accumulator = accumulator
 
-            bucket_writers.reverse()
-            level_writers.extend(bucket_writers)
+            for generated_level, generated_dataset, generated_tiled_size in generated:
+                bucket_writers[generated_level] = GeneratedPyramidLevelWriter(
+                    level_index=generated_level,
+                    dataset=generated_dataset,
+                    tile_cache=tile_cache,
+                    focal_planes=planes,
+                    optical_paths=paths,
+                    tiled_size=generated_tiled_size,
+                    accumulator=writing_accumulators[generated_level],
+                    token=token,
+                    intermediate_accumulators=[
+                        intermediate_accumulators[level]
+                        for level in self._intermediate_levels_of(
+                            generated_level, intermediate_accumulators
+                        )
+                    ],
+                )
+
+            level_writers.extend(
+                bucket_writers[level_index] for level_index in sorted(bucket_writers)
+            )
 
         return level_writers
+
+    @staticmethod
+    def _source_level_of(
+        level_index: int,
+        base_level_index: int,
+        read_levels: set[int],
+        regenerate_pyramid: bool,
+    ) -> int:
+        """Return the level a generated level is downsampled from.
+
+        When regenerating, always the base. Otherwise the closest level below it
+        that is actually read from the source: a level the source stores but that
+        is not written is not read either, so it cannot be downsampled from.
+
+        Parameters
+        ----------
+        level_index: int
+            The generated level.
+        base_level_index: int
+            The lowest level present in the source.
+        read_levels: set[int]
+            Levels read from the source.
+        regenerate_pyramid: bool
+            If every level is re-derived from the base.
+
+        Returns
+        -------
+        int
+            Level to downsample `level_index` from.
+        """
+        if regenerate_pyramid:
+            return base_level_index
+        levels_below = [level for level in read_levels if level < level_index]
+        if not levels_below:
+            raise ValueError(
+                f"Level {level_index} is generated by downsampling, but no level "
+                "below it is read from the source to downsample from. Levels read: "
+                f"{sorted(read_levels)}."
+            )
+        return max(levels_below)
+
+    @staticmethod
+    def _intermediate_levels_of(
+        level_index: int,
+        intermediate_accumulators: dict[int, PyramidTileAccumulator],
+    ) -> list[int]:
+        """Return the unwritten cascade levels directly below `level_index`.
+
+        These bridge a gap between this level and the level it is derived from.
+        They have no writer of their own, so the writer for `level_index` owns
+        them. Returned lowest level first, which is the order they must be shut
+        down in: the chain start injects the shutdown sentinel, and every
+        accumulator above it waits for that sentinel to reach it.
+
+        Parameters
+        ----------
+        level_index: int
+            The written level to find the intermediate levels below.
+        intermediate_accumulators: dict[int, PyramidTileAccumulator]
+            Accumulators for the unwritten levels, by level.
+
+        Returns
+        -------
+        list[int]
+            Levels directly below `level_index` that are not written, lowest
+            first.
+        """
+        intermediates: list[int] = []
+        candidate = level_index - 1
+        while candidate in intermediate_accumulators:
+            intermediates.append(candidate)
+            candidate -= 1
+        intermediates.reverse()
+        return intermediates
 
     def _create_tile_cache(self, temp_dir: UPath) -> TileCache:
         """Create a shared tile cache for all levels."""

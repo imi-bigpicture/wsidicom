@@ -162,8 +162,9 @@ class DownsampleEncodeTask(CoordinatePriority):
     ----------
     tiles: List[List[Image.Image]]
         Decoded tiles forming the input block, as a row-major 2D matrix.
-    output_queue: WriteOnlyQueue[EncodingTaskResult]
-        Queue to put the encoded result on.
+    output_queue: Optional[WriteOnlyQueue[EncodingTaskResult]]
+        Queue to put the encoded result on. None if this level produces no
+        output: it is downsampled only to feed the cascade, and is not written.
     cascade_tracker: CompletionTracker
         Tracker to decrement when the task completes.
     cascade_queue: Optional[WriteOnlyQueue[CascadedTile]]
@@ -172,6 +173,6 @@ class DownsampleEncodeTask(CoordinatePriority):
     """
 
     tiles: list[list[Image.Image]]
-    output_queue: WriteOnlyQueue[EncodingTaskResult]
+    output_queue: WriteOnlyQueue[EncodingTaskResult] | None
     cascade_tracker: CompletionTracker
     cascade_queue: WriteOnlyQueue[CascadedTile] | None = None
