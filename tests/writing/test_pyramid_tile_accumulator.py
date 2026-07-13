@@ -237,6 +237,34 @@ class TestSingleAccumulatorDrain:
         # Assert — no task submitted because block never completed
         assert encoder_pool_queue.qsize() == 0
 
+    def test_tile_outside_input_grid_raises(self, token: CancellationToken):
+        """A tile outside the input grid fails loudly, naming the coordinate.
+
+        Regression: `_block_positions` returned no positions for such a tile, the
+        completeness check passed vacuously (`all()` of nothing is True), and an
+        empty block was submitted to the encoder pool, surfacing there as an
+        unrelated stitching error.
+        """
+        # Arrange
+        encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
+        accumulator = PyramidTileAccumulator(
+            token=token,
+            level_index=2,
+            input_tiled_size=Size(2, 2),
+            encoder_pool_queue=encoder_pool_queue,
+            is_chain_start=True,
+        )
+        accumulator.start()
+
+        # Act — column 5 is outside the 2x2 input grid
+        accumulator.add_tile(5, 0, 0, 0, make_tile())
+
+        # Assert — the consumer failure is re-raised on shutdown, and no empty
+        # block reached the encoder pool
+        with pytest.raises(ValueError, match="outside its input grid"):
+            accumulator.shutdown()
+        assert encoder_pool_queue.qsize() == 0
+
 
 @pytest.mark.unittest
 class TestCascadeShutdown:

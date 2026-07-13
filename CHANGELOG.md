@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Generated pyramid levels (`add_missing_levels`, `regenerate_pyramid`) mishandled partial edge blocks: with the default resampling filter the written frame was smaller than the `Rows`/`Columns` declared in the dataset, and with a non-commuting filter (e.g. `LANCZOS`) the block was stretched to fill the tile. The block is now halved by exactly 2x and padded to a full tile with the background color.
+- A tile cascaded to a level accumulator outside its input grid now raises, naming the coordinate. It previously produced an empty block, surfacing as an unrelated "Cannot stitch an empty tile grid" error.
 
 ## [0.33.1] - 2026-07-10
 
