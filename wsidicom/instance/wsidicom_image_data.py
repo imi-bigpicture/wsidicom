@@ -68,9 +68,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     def _get_decoded_tile_frame(self, frame_index: int) -> Image:
         return self.decoder.decode(self._get_tile_frame(frame_index))
 
-    def _get_decoded_tile_frames(
-        self, frame_indices: Iterable[int]
-    ) -> Iterator[Image]:
+    def _get_decoded_tile_frames(self, frame_indices: Iterable[int]) -> Iterator[Image]:
         for frame in self._get_tile_frames(frame_indices):
             yield self.decoder.decode(frame)
 

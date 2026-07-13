@@ -20,7 +20,10 @@ from PIL import Image
 from wsidicom.geometry import Size
 from wsidicom.thread import CancellationToken, PriorityCancelableQueue
 from wsidicom.writing.models import DownsampleEncodeTask
-from wsidicom.writing.pyramid_tile_accumulator import PyramidTileAccumulator
+from wsidicom.writing.pyramid_tile_accumulator import (
+    PyramidTileAccumulator,
+    WritingPyramidTileAccumulator,
+)
 
 
 def make_tile() -> Image.Image:
@@ -39,7 +42,7 @@ class TestChainDepth:
 
     def test_single_accumulator_has_depth_1(self, token: CancellationToken):
         # Arrange
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(4, 4),
@@ -55,13 +58,13 @@ class TestChainDepth:
     def test_two_level_chain(self, token: CancellationToken):
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
-        upper = PyramidTileAccumulator(
+        upper = WritingPyramidTileAccumulator(
             token=token,
             level_index=2,
             input_tiled_size=Size(2, 2),
             encoder_pool_queue=encoder_pool_queue,
         )
-        lower = PyramidTileAccumulator(
+        lower = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(4, 4),
@@ -80,20 +83,20 @@ class TestChainDepth:
     def test_three_level_chain(self, token: CancellationToken):
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
-        top = PyramidTileAccumulator(
+        top = WritingPyramidTileAccumulator(
             token=token,
             level_index=3,
             input_tiled_size=Size(1, 1),
             encoder_pool_queue=encoder_pool_queue,
         )
-        middle = PyramidTileAccumulator(
+        middle = WritingPyramidTileAccumulator(
             token=token,
             level_index=2,
             input_tiled_size=Size(2, 2),
             encoder_pool_queue=encoder_pool_queue,
             next_accumulator=top,
         )
-        bottom = PyramidTileAccumulator(
+        bottom = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(4, 4),
@@ -118,7 +121,7 @@ class TestBlockPositions:
 
     def test_full_2x2_block_interior(self, token: CancellationToken):
         # Arrange
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(10, 10),
@@ -133,7 +136,7 @@ class TestBlockPositions:
 
     def test_right_edge_block(self, token: CancellationToken):
         # Arrange — input width=5 means input column 5 is out of bounds
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(5, 10),
@@ -148,7 +151,7 @@ class TestBlockPositions:
 
     def test_bottom_edge_block(self, token: CancellationToken):
         # Arrange — input height=5 means input row 5 is out of bounds
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(10, 5),
@@ -163,7 +166,7 @@ class TestBlockPositions:
 
     def test_corner_1x1_block(self, token: CancellationToken):
         # Arrange
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(5, 5),
@@ -184,7 +187,7 @@ class TestSingleAccumulatorDrain:
     def test_full_2x2_block_submits_task(self, token: CancellationToken):
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(2, 2),
@@ -218,7 +221,7 @@ class TestSingleAccumulatorDrain:
     def test_partial_block_does_not_submit(self, token: CancellationToken):
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(2, 2),
@@ -237,6 +240,40 @@ class TestSingleAccumulatorDrain:
         # Assert — no task submitted because block never completed
         assert encoder_pool_queue.qsize() == 0
 
+    def test_unwritten_level_submits_task_without_output_queue(
+        self, token: CancellationToken
+    ):
+        """An intermediate level cascades but produces no output to encode.
+
+        Levels that only bridge a gap in a sparse pyramid are downsampled to feed
+        the level above, but no instance is written for them.
+        """
+        # Arrange - the base accumulator has no output queue
+        encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
+        accumulator = PyramidTileAccumulator(
+            token=token,
+            level_index=1,
+            input_tiled_size=Size(2, 2),
+            encoder_pool_queue=encoder_pool_queue,
+            is_chain_start=True,
+        )
+        accumulator.start()
+        try:
+            # Act — a full 2x2 block
+            accumulator.add_tile(0, 0, 0, 0, make_tile())
+            accumulator.add_tile(1, 0, 0, 0, make_tile())
+            accumulator.add_tile(0, 1, 0, 0, make_tile())
+            accumulator.add_tile(1, 1, 0, 0, make_tile())
+
+            # Assert — task carries no output queue, so it is not encoded
+            task = encoder_pool_queue.get(CancellationToken())
+            assert isinstance(task, DownsampleEncodeTask)
+            assert task.output_queue is None
+
+            task.cascade_tracker.decrement()
+        finally:
+            accumulator.shutdown()
+
     def test_tile_outside_input_grid_raises(self, token: CancellationToken):
         """A tile outside the input grid fails loudly, naming the coordinate.
 
@@ -247,7 +284,7 @@ class TestSingleAccumulatorDrain:
         """
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=2,
             input_tiled_size=Size(2, 2),
@@ -273,13 +310,13 @@ class TestCascadeShutdown:
     def test_shutdown_propagates_through_chain(self, token: CancellationToken):
         # Arrange — two-level chain: lower (chain start) → upper
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
-        upper = PyramidTileAccumulator(
+        upper = WritingPyramidTileAccumulator(
             token=token,
             level_index=2,
             input_tiled_size=Size(2, 2),
             encoder_pool_queue=encoder_pool_queue,
         )
-        lower = PyramidTileAccumulator(
+        lower = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(4, 4),
@@ -303,7 +340,7 @@ class TestCascadeShutdown:
     ):
         # Arrange — upper accumulator with is_chain_start=False
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
-        upper = PyramidTileAccumulator(
+        upper = WritingPyramidTileAccumulator(
             token=token,
             level_index=2,
             input_tiled_size=Size(2, 2),
@@ -330,7 +367,7 @@ class TestCleanup:
 
     def test_cleanup_unblocks_consumer_thread(self, token: CancellationToken):
         # Arrange — non-chain-start accumulator (cleanup must still unblock)
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(2, 2),
@@ -356,7 +393,7 @@ class TestConsumerFailureWatchdog:
             def put(self, item, token):
                 raise RuntimeError("encoder pool put failed")
 
-        accumulator = PyramidTileAccumulator(
+        accumulator = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(2, 2),
@@ -381,13 +418,13 @@ class TestConsumerFailureWatchdog:
             def put(self, item, token):
                 raise RuntimeError("encoder pool put failed")
 
-        upper = PyramidTileAccumulator(
+        upper = WritingPyramidTileAccumulator(
             token=token,
             level_index=2,
             input_tiled_size=Size(2, 2),
             encoder_pool_queue=PriorityCancelableQueue(),
         )
-        lower = PyramidTileAccumulator(
+        lower = WritingPyramidTileAccumulator(
             token=token,
             level_index=1,
             input_tiled_size=Size(4, 4),
