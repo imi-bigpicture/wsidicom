@@ -14,15 +14,15 @@ jobs:
     uses: ./.github/workflows/pytest.yml
 
   pypi:
-    needs: [lint, test]  # don't publish unless CI is green
+    needs: [lint, test] # don't publish unless CI is green
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       contents: read
-      id-token: write  # required for PyPI trusted publishing (OIDC)
+      id-token: write # required for PyPI trusted publishing (OIDC)
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
 
       - name: Check tag matches project version and changelog
         run: |
@@ -38,4 +38,4 @@ jobs:
           fi
 
       - run: uv build
-      - run: uv publish  # trusted publishing; no token needed in CI
+      - run: uv publish # trusted publishing; no token needed in CI
