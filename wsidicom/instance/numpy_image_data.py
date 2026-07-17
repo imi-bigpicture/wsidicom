@@ -1,4 +1,4 @@
-#    Copyright 2023 SECTRA AB
+#    Copyright 2023, 2026 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 from functools import cached_property
 from pathlib import Path
 
+import numpy as np
 from PIL import Image as Pillow
 from PIL.Image import Image
 from pydicom.uid import UID, JPEGBaseline8Bit
@@ -30,9 +31,16 @@ from wsidicom.instance.image_data import ImageData
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 
 
-class PillowImageData(ImageData):
-    def __init__(self, image: Image):
-        self._image = image.convert("RGB")
+class NumpyImageData(ImageData):
+    """ImageData for a single decoded RGB image held in memory.
+
+    Wraps an in-memory image, such as a label or an image file, as tile-less
+    image data. The array is the sole tile, so there is nothing to decode per
+    read.
+    """
+
+    def __init__(self, array: np.ndarray):
+        self._pixels = array
         encoder = Encoder.create(
             self.transfer_syntax,
             self.bits,
@@ -41,9 +49,15 @@ class PillowImageData(ImageData):
         super().__init__(encoder)
 
     @classmethod
-    def from_file(cls, file: str | Path | UPath) -> "PillowImageData":
+    def from_image(cls, image: Image) -> "NumpyImageData":
+        """Create from a Pillow image, decoding it to an RGB array."""
+        return cls(np.asarray(image.convert("RGB")))
+
+    @classmethod
+    def from_file(cls, file: str | Path | UPath) -> "NumpyImageData":
+        """Create from an image file, decoding it with Pillow."""
         image = Pillow.open(UPath(file).open("rb"))  # type: ignore
-        return cls(image)
+        return cls.from_image(image)
 
     @property
     def transfer_syntax(self) -> UID:
@@ -51,7 +65,7 @@ class PillowImageData(ImageData):
 
     @property
     def image_size(self) -> Size:
-        return Size.from_tuple(self._image.size)
+        return Size(self._pixels.shape[1], self._pixels.shape[0])
 
     @property
     def tile_size(self) -> Size:
@@ -100,16 +114,23 @@ class PillowImageData(ImageData):
     def transcoder(self) -> Encoder | None:
         return None
 
-    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_decoded_tile(
+        self,
+        tile_point: Point,
+        z: float,
+        path: str,
+        cache: bool = True,
+    ) -> np.ndarray:
+        # The array is already decoded and held, so there is nothing to cache.
         if tile_point != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
-        return self._image
+        return self._pixels
 
     def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:
         if tile != Point(0, 0):
             raise ValueError("Can only get Point(0, 0) from non-tiled image.")
-        return self._encoded_image
+        return self._encoded
 
     @cached_property
-    def _encoded_image(self):
-        return self.encoder.encode(self._image)
+    def _encoded(self) -> bytes:
+        return self.encoder.encode(self._pixels)

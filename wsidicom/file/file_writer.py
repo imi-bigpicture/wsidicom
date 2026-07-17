@@ -32,8 +32,7 @@ from pydicom.uid import UID
 from upath import UPath
 
 from wsidicom.codec import Encoder
-from wsidicom.config import settings
-from wsidicom.downsampler import PillowDownsampler
+from wsidicom.downsampler import Downsampler
 from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.geometry import Size
@@ -43,7 +42,7 @@ from wsidicom.metadata import ImageType, WsiMetadata
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Pyramid
-from wsidicom.stitcher import PillowStitcher
+from wsidicom.stitcher import NumpyStitcher
 from wsidicom.thread import CancellationToken, Cancelled, ReadExecutor
 from wsidicom.writing.encoder_pool import EncoderPool
 from wsidicom.writing.instance_writers import (
@@ -417,8 +416,8 @@ class PyramidFileWriter(BaseFileWriter):
         # Resolve encoder and whether transcoding is needed
         encoder, transcode = self._resolve_transcoding(source_image_data)
 
-        downsampler = PillowDownsampler(resample=settings.pillow_resampling_filter)
-        stitcher = PillowStitcher()
+        downsampler = Downsampler.create_for_pyramid()
+        stitcher = NumpyStitcher()
         temp_dir = UPath(tempfile.mkdtemp(prefix="wsidicom_pull_"))
 
         token = CancellationToken()

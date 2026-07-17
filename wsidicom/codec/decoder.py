@@ -63,13 +63,14 @@ from wsidicom.codec.optionals import (
 )
 from wsidicom.codec.rle import RleCodec
 from wsidicom.geometry import Size
+from wsidicom.options import DecoderOption
 from wsidicom.uid import JPEGXL, JPEGXLJPEGRecompression, JPEGXLLossless
 
 
 class Decoder(metaclass=ABCMeta):
     @abstractmethod
-    def decode(self, frame: bytes) -> Image:
-        """Decode frame into Pillow Image.
+    def decode(self, frame: bytes) -> np.ndarray:
+        """Decode frame into a numpy array.
 
         Parameters
         ----------
@@ -78,8 +79,8 @@ class Decoder(metaclass=ABCMeta):
 
         Returns
         -------
-        PIL.Image
-            Pillow Image.
+        np.ndarray
+            Decoded pixels as ``(rows, columns)`` or ``(rows, columns, samples)``.
         """
         raise NotImplementedError()
 
@@ -126,6 +127,7 @@ class Decoder(metaclass=ABCMeta):
         bits: int,
         size: Size,
         photometric_interpretation: str,
+        preferred: DecoderOption | None = None,
     ) -> "Decoder":
         """Create a decoder that supports the transfer syntax.
 
@@ -141,6 +143,9 @@ class Decoder(metaclass=ABCMeta):
             Size of image.
         photometric_interpretation : str
             Photometric interpretation.
+        preferred: DecoderOption | None = None
+            Decoder to prefer. Defaults to ``settings.preferred_decoder``; when
+            that is also None, the first supported decoder is used.
 
         Returns
         -------
@@ -155,7 +160,9 @@ class Decoder(metaclass=ABCMeta):
                 f"samples per pixel {samples_per_pixel}. "
                 "Non-8 bit images are only supported for grayscale images."
             )
-        decoder = cls.select_decoder(transfer_syntax, samples_per_pixel, bits)
+        decoder = cls.select_decoder(
+            transfer_syntax, samples_per_pixel, bits, preferred
+        )
         if decoder is None:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
         if decoder == PillowDecoder:
@@ -183,7 +190,11 @@ class Decoder(metaclass=ABCMeta):
 
     @classmethod
     def select_decoder(
-        cls, transfer_syntax: UID, samples_per_pixel: int, bits: int
+        cls,
+        transfer_syntax: UID,
+        samples_per_pixel: int,
+        bits: int,
+        preferred: DecoderOption | None = None,
     ) -> type["Decoder"] | None:
         """Select decoder based on transfer syntax.
 
@@ -195,6 +206,9 @@ class Decoder(metaclass=ABCMeta):
             Number of samples per pixel.
         bits : int
             Number of bits per sample.
+        preferred: DecoderOption | None = None
+            Decoder to prefer. Defaults to ``settings.preferred_decoder``; when
+            that is also None, the first supported decoder is used.
 
         Returns
         -------
@@ -205,21 +219,22 @@ class Decoder(metaclass=ABCMeta):
         if bits != 8 and samples_per_pixel != 1:
             # Pillow only supports 8 bit color images
             return None
-        decoders: dict[str, type[Decoder]] = {
-            "pillow": PillowDecoder,
-            "imagecodecs": ImageCodecsDecoder,
-            "pylibjpeg_rle": PylibjpegRleDecoder,
-            "imagecodecs_rle": ImageCodecsRleDecoder,
-            "pylibjpeg_ls": PyJpegLsDecoder,
-            "pylibjpeg_openjpeg": PyLibJpegOpenJpegDecoder,
-            "pydicom": PydicomDecoder,
+        # Ordered by preference. The pixel pipeline is numpy, so a decoder that
+        # decodes to numpy is preferred over Pillow, which decodes to an image
+        # and packs it to numpy per tile.
+        decoders: dict[DecoderOption, type[Decoder]] = {
+            DecoderOption.IMAGECODECS: ImageCodecsDecoder,
+            DecoderOption.PYLIBJPEG_OPENJPEG: PyLibJpegOpenJpegDecoder,
+            DecoderOption.PILLOW: PillowDecoder,
+            DecoderOption.PYLIBJPEG_RLE: PylibjpegRleDecoder,
+            DecoderOption.IMAGECODECS_RLE: ImageCodecsRleDecoder,
+            DecoderOption.PYLIBJPEG_LS: PyJpegLsDecoder,
+            DecoderOption.PYDICOM: PydicomDecoder,
         }
-        if config.settings.preferred_decoder is not None:
-            if config.settings.preferred_decoder not in decoders:
-                raise ValueError(
-                    f"Unknown preferred decoder: {config.settings.preferred_decoder}."
-                )
-            decoder = decoders[config.settings.preferred_decoder]
+        if preferred is None:
+            preferred = config.settings.preferred_decoder
+        if preferred is not None:
+            decoder = decoders[preferred]
             if not decoder.is_available() or not decoder.is_supported(
                 transfer_syntax, samples_per_pixel, bits
             ):
@@ -234,14 +249,6 @@ class Decoder(metaclass=ABCMeta):
             ),
             None,
         )
-
-    @staticmethod
-    def _set_mode(image: Image) -> Image:
-        """Convert image to mode that is fully supported by Pillow."""
-        if image.mode.startswith("I;16"):
-            # Pillow does not support scaling of 16 bit images
-            return image.convert("I")
-        return image
 
 
 class PillowDecoder(Decoder):
@@ -273,17 +280,19 @@ class PillowDecoder(Decoder):
         """
         self._photometric_interpretation = photometric_interpretation
 
-    def decode(self, frame: bytes) -> Image:
+    def decode(self, frame: bytes) -> np.ndarray:
+        return np.asarray(self._decode_to_image(frame))
+
+    def _decode_to_image(self, frame: bytes) -> Image:
         image = Pillow.open(io.BytesIO(frame))
         if not self._should_suppress_color_transform(image):
             image.load()
-            return self._set_mode(image)
+            return image
         image.draft("YCbCr", image.size)  # skip Pillow's YCbCr to RGB transform
         image.load()
         # Re-tag the (already RGB) samples as RGB; frombuffer wraps the bytes
         # in place instead of copying them again.
-        rgb = Pillow.frombuffer("RGB", image.size, image.tobytes(), "raw", "RGB", 0, 1)
-        return self._set_mode(rgb)
+        return Pillow.frombuffer("RGB", image.size, image.tobytes(), "raw", "RGB", 0, 1)
 
     def _should_suppress_color_transform(self, image: Image) -> bool:
         """Return True if Pillow's YCbCr to RGB transform should be suppressed:
@@ -317,31 +326,7 @@ class PillowDecoder(Decoder):
         return True
 
 
-class NumpyBasedDecoder(Decoder):
-    """Base for decoder that returns numpy array."""
-
-    def decode(self, frame: bytes) -> Image:
-        decoded = self._decode(frame)
-        image = Pillow.fromarray(decoded)
-        return self._set_mode(image)
-
-    @abstractmethod
-    def _decode(self, frame: bytes) -> np.ndarray:
-        """Decode frame into numpy array.
-
-        Parameters
-        ----------
-        frame : bytes
-            Encoded frame.
-
-        Returns
-        -------
-        np.ndarray
-            Numpy array of decoded image."""
-        raise NotImplementedError()
-
-
-class PydicomDecoder(NumpyBasedDecoder):
+class PydicomDecoder(Decoder):
     """Decoder that uses pydicom to decode images."""
 
     def __init__(
@@ -394,7 +379,7 @@ class PydicomDecoder(NumpyBasedDecoder):
             self._reshape_size = (size.height, size.width)
         self._dataset = dataset
 
-    def _decode(self, frame: bytes) -> np.ndarray:
+    def decode(self, frame: bytes) -> np.ndarray:
         if self._transfer_syntax.is_encapsulated:
             self._dataset.PixelData = encapsulate(frames=[frame])
         else:
@@ -437,7 +422,7 @@ class PydicomDecoder(NumpyBasedDecoder):
         return True
 
 
-class ImageCodecsDecoder(NumpyBasedDecoder):
+class ImageCodecsDecoder(Decoder):
     """Decoder that uses imagecodecs to decode images."""
 
     _supported_transfer_syntaxes = {
@@ -481,7 +466,7 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
         else:
             self._decode_kwargs = {}
 
-    def _decode(self, frame: bytes) -> np.ndarray:
+    def decode(self, frame: bytes) -> np.ndarray:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
         return self._decoder(frame, **self._decode_kwargs)
@@ -522,7 +507,7 @@ class ImageCodecsDecoder(NumpyBasedDecoder):
         return decoder
 
 
-class RleDecoder(NumpyBasedDecoder):
+class RleDecoder(Decoder):
     def __init__(self, size: Size, samples_per_pixel: int, bits: int):
         if not self.is_supported(RLELossless, samples_per_pixel, bits):
             raise ValueError(
@@ -559,7 +544,7 @@ class ImageCodecsRleDecoder(RleDecoder):
     def is_available(cls):
         return IMAGE_CODECS_AVAILABLE
 
-    def _decode(self, frame: bytes) -> np.ndarray:
+    def decode(self, frame: bytes) -> np.ndarray:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
         return RleCodec.decode(frame, self._size.height, self._size.width, self._bits)
@@ -572,7 +557,7 @@ class PylibjpegRleDecoder(RleDecoder):
     def is_available(cls) -> bool:
         return PYLIBJPEGRLE_AVAILABLE
 
-    def _decode(self, frame: bytes) -> np.ndarray:
+    def decode(self, frame: bytes) -> np.ndarray:
         if not self.is_available():
             raise RuntimeError("Pylibjpeg-rle not available.")
         decoded_data: bytes = rle_decode_frame(frame, self._size.area, self._bits, "<")
@@ -584,14 +569,14 @@ class PylibjpegRleDecoder(RleDecoder):
         return decoded
 
 
-class PyJpegLsDecoder(NumpyBasedDecoder):
+class PyJpegLsDecoder(Decoder):
     """Decoder that uses pyjpegls to decode images."""
 
     @classmethod
     def is_available(cls) -> bool:
         return PYLIBJPEGLS_AVAILABLE
 
-    def _decode(self, frame: bytes) -> np.ndarray:
+    def decode(self, frame: bytes) -> np.ndarray:
         if not self.is_available():
             raise RuntimeError("Pylibjpeg not available.")
         return pylibjpeg_ls_decode(np.frombuffer(frame, dtype=np.uint8))
@@ -605,14 +590,14 @@ class PyJpegLsDecoder(NumpyBasedDecoder):
         return transfer_syntax in [JPEGLSNearLossless, JPEGLSLossless]
 
 
-class PyLibJpegOpenJpegDecoder(NumpyBasedDecoder):
+class PyLibJpegOpenJpegDecoder(Decoder):
     """Decoder that uses pylibjpeg-openjpeg to decode images."""
 
     @classmethod
     def is_available(cls) -> bool:
         return PYLIBJPEGOPENJPEG_AVAILABLE
 
-    def _decode(self, frame: bytes) -> np.ndarray:
+    def decode(self, frame: bytes) -> np.ndarray:
         if not self.is_available():
             raise RuntimeError("Pylibjpeg-openjpeg not available.")
         return pylibjpeg_openjpeg_decode(frame)

@@ -20,10 +20,13 @@ from pathlib import Path
 from typing import (
     Any,
     BinaryIO,
+    Literal,
     Union,
+    overload,
 )
 
-from PIL.Image import Image
+import numpy as np
+from PIL.Image import Image, fromarray
 from pydicom.uid import UID
 from upath import UPath
 
@@ -550,7 +553,17 @@ class WsiDicom:
             raise WsiDicomNotFoundError(f"Pyramid {index}", str(self.pyramids))
         self._selected_pyramid = index
 
-    def read_label(self, index: int = 0) -> Image:
+    @overload
+    def read_label(
+        self, index: int = 0, *, as_array: Literal[False] = False
+    ) -> Image: ...
+
+    @overload
+    def read_label(self, index: int = 0, *, as_array: Literal[True]) -> np.ndarray: ...
+
+    def read_label(
+        self, index: int = 0, *, as_array: bool = False
+    ) -> Image | np.ndarray:
         """Read label image of the whole slide. If several label
         images are present, index can be used to select a specific image.
 
@@ -558,19 +571,36 @@ class WsiDicom:
         ----------
         index: int = 0
             Index of the label image to read.
+        as_array: bool = False
+            If to return the image as a numpy array instead of a Pillow image.
 
         Returns
         -------
-        Image
-            Label as Pillow image.
+        Union[Image, np.ndarray]
+            Label as Pillow image, or as a numpy array if `as_array`.
         """
         if self.labels is None:
             raise WsiDicomNotFoundError("label", str(self))
         label = self.labels.get(index)
         with ReadExecutor() as executor:
-            return label.get_default_full(executor=executor)
+            array = label.get_default_full(executor=executor)
+        if as_array:
+            return array
+        return self._to_image(array)
 
-    def read_overview(self, index: int = 0) -> Image:
+    @overload
+    def read_overview(
+        self, index: int = 0, *, as_array: Literal[False] = False
+    ) -> Image: ...
+
+    @overload
+    def read_overview(
+        self, index: int = 0, *, as_array: Literal[True]
+    ) -> np.ndarray: ...
+
+    def read_overview(
+        self, index: int = 0, *, as_array: bool = False
+    ) -> Image | np.ndarray:
         """Read overview image of the whole slide. If several overview
         images are present, index can be used to select a specific image.
 
@@ -578,17 +608,48 @@ class WsiDicom:
         ----------
         index: int = 0
             Index of the overview image to read.
+        as_array: bool = False
+            If to return the image as a numpy array instead of a Pillow image.
 
         Returns
         -------
-        Image
-            Overview as Pillow image.
+        Union[Image, np.ndarray]
+            Overview as Pillow image, or as a numpy array if `as_array`.
         """
         if self.overviews is None:
             raise WsiDicomNotFoundError("overview", str(self))
         overview = self.overviews.get(index)
         with ReadExecutor() as executor:
-            return overview.get_default_full(executor=executor)
+            array = overview.get_default_full(executor=executor)
+        if as_array:
+            return array
+        return self._to_image(array)
+
+    @overload
+    def read_thumbnail(
+        self,
+        size: int | tuple[int, int] = 512,
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        force_generate: bool = False,
+        threads: int | None = None,
+        *,
+        as_array: Literal[False] = False,
+    ) -> Image: ...
+
+    @overload
+    def read_thumbnail(
+        self,
+        size: int | tuple[int, int] = 512,
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        force_generate: bool = False,
+        threads: int | None = None,
+        *,
+        as_array: Literal[True],
+    ) -> np.ndarray: ...
 
     def read_thumbnail(
         self,
@@ -598,7 +659,9 @@ class WsiDicom:
         pyramid: int | None = None,
         force_generate: bool = False,
         threads: int | None = None,
-    ) -> Image:
+        *,
+        as_array: bool = False,
+    ) -> Image | np.ndarray:
         """Read thumbnail image of the whole slide with dimensions no larger than given
         size.
 
@@ -621,11 +684,13 @@ class WsiDicom:
             single-threaded unless a ``read_executor`` was supplied at open, in
             which case the read is parallelized across it. Pass ``1`` to force a
             single-threaded read even when an executor is present.
+        as_array: bool = False
+            If to return the image as a numpy array instead of a Pillow image.
 
         Returns
         -------
-        Image
-            Thumbnail as Pillow image,
+        Union[Image, np.ndarray]
+            Thumbnail as Pillow image, or as a numpy array if `as_array`.
         """
         if isinstance(size, int):
             size = (size, size)
@@ -641,7 +706,38 @@ class WsiDicom:
                 f"Image for generating thumbnail of size {thumbnail_size}", "levels"
             )
         with ReadExecutor(threads, self._read_executor) as executor:
-            return thumbnail.get_thumbnail(thumbnail_size, z, path, executor=executor)
+            array = thumbnail.get_thumbnail(thumbnail_size, z, path, executor=executor)
+        if as_array:
+            return array
+        return self._to_image(array)
+
+    @overload
+    def read_region(
+        self,
+        location: tuple[int, int],
+        level: int,
+        size: tuple[int, int],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        threads: int | None = None,
+        *,
+        as_array: Literal[False] = False,
+    ) -> Image: ...
+
+    @overload
+    def read_region(
+        self,
+        location: tuple[int, int],
+        level: int,
+        size: tuple[int, int],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        threads: int | None = None,
+        *,
+        as_array: Literal[True],
+    ) -> np.ndarray: ...
 
     def read_region(
         self,
@@ -652,7 +748,9 @@ class WsiDicom:
         path: str | None = None,
         pyramid: int | None = None,
         threads: int | None = None,
-    ) -> Image:
+        *,
+        as_array: bool = False,
+    ) -> Image | np.ndarray:
         """Read region defined by pixels.
 
         Parameters
@@ -675,11 +773,13 @@ class WsiDicom:
             single-threaded unless a ``read_executor`` was supplied at open, in
             which case the read is parallelized across it. Pass ``1`` to force a
             single-threaded read even when an executor is present.
+        as_array: bool = False
+            If to return the region as a numpy array instead of a Pillow image.
 
         Returns
         -------
-        Image
-            Region as Pillow image.
+        Union[Image, np.ndarray]
+            Region as Pillow image, or as a numpy array if `as_array`.
         """
         if pyramid is None:
             pyramid = self.selected_pyramid
@@ -695,13 +795,46 @@ class WsiDicom:
                 f"Region {scaled_region}", f"level size {wsi_level.size}"
             )
         with ReadExecutor(threads, self._read_executor) as executor:
-            return wsi_level.get_region(
+            array = wsi_level.get_region(
                 scaled_region,
                 z,
                 path,
                 output_size=Size.from_tuple(size),
                 executor=executor,
             )
+        if as_array:
+            return array
+        return self._to_image(array)
+
+    @overload
+    def read_region_mm(
+        self,
+        location: tuple[float, float],
+        level: int,
+        size: tuple[float, float],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        slide_origin: bool = False,
+        threads: int | None = None,
+        *,
+        as_array: Literal[False] = False,
+    ) -> Image: ...
+
+    @overload
+    def read_region_mm(
+        self,
+        location: tuple[float, float],
+        level: int,
+        size: tuple[float, float],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        slide_origin: bool = False,
+        threads: int | None = None,
+        *,
+        as_array: Literal[True],
+    ) -> np.ndarray: ...
 
     def read_region_mm(
         self,
@@ -713,7 +846,9 @@ class WsiDicom:
         pyramid: int | None = None,
         slide_origin: bool = False,
         threads: int | None = None,
-    ) -> Image:
+        *,
+        as_array: bool = False,
+    ) -> Image | np.ndarray:
         """Read image from region defined in mm.
 
         Parameters
@@ -739,11 +874,13 @@ class WsiDicom:
             single-threaded unless a ``read_executor`` was supplied at open, in
             which case the read is parallelized across it. Pass ``1`` to force a
             single-threaded read even when an executor is present.
+        as_array: bool = False
+            If to return the region as a numpy array instead of a Pillow image.
 
         Returns
         -------
-        Image
-            Region as Pillow image.
+        Union[Image, np.ndarray]
+            Region as Pillow image, or as a numpy array if `as_array`.
         """
         if pyramid is None:
             pyramid = self.selected_pyramid
@@ -751,7 +888,7 @@ class WsiDicom:
         scale_factor = wsi_level.calculate_scale(level)
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
         with ReadExecutor(threads, self._read_executor) as executor:
-            return wsi_level.get_region_mm(
+            array = wsi_level.get_region_mm(
                 region,
                 z,
                 path,
@@ -759,6 +896,39 @@ class WsiDicom:
                 scale=scale_factor,
                 executor=executor,
             )
+        if as_array:
+            return array
+        return self._to_image(array)
+
+    @overload
+    def read_region_mpp(
+        self,
+        location: tuple[float, float],
+        mpp: float,
+        size: tuple[float, float],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        slide_origin: bool = False,
+        threads: int | None = None,
+        *,
+        as_array: Literal[False] = False,
+    ) -> Image: ...
+
+    @overload
+    def read_region_mpp(
+        self,
+        location: tuple[float, float],
+        mpp: float,
+        size: tuple[float, float],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        slide_origin: bool = False,
+        threads: int | None = None,
+        *,
+        as_array: Literal[True],
+    ) -> np.ndarray: ...
 
     def read_region_mpp(
         self,
@@ -770,7 +940,9 @@ class WsiDicom:
         pyramid: int | None = None,
         slide_origin: bool = False,
         threads: int | None = None,
-    ) -> Image:
+        *,
+        as_array: bool = False,
+    ) -> Image | np.ndarray:
         """Read image from region defined in mm with set pixel spacing.
 
         Parameters
@@ -796,11 +968,13 @@ class WsiDicom:
             single-threaded unless a ``read_executor`` was supplied at open, in
             which case the read is parallelized across it. Pass ``1`` to force a
             single-threaded read even when an executor is present.
+        as_array: bool = False
+            If to return the region as a numpy array instead of a Pillow image.
 
         Returns
         --------
-        Image
-            Region as Pillow image.
+        Union[Image, np.ndarray]
+            Region as Pillow image, or as a numpy array if `as_array`.
         """
         pixel_spacing = mpp / 1000.0
         if pyramid is None:
@@ -810,7 +984,7 @@ class WsiDicom:
         )
         region = RegionMm(PointMm.from_tuple(location), SizeMm.from_tuple(size))
         with ReadExecutor(threads, self._read_executor) as executor:
-            return wsi_level.get_region_mpp(
+            array = wsi_level.get_region_mpp(
                 region,
                 pixel_spacing,
                 z,
@@ -818,6 +992,35 @@ class WsiDicom:
                 slide_origin,
                 executor=executor,
             )
+        if as_array:
+            return array
+        return self._to_image(array)
+
+    @overload
+    def read_tile(
+        self,
+        level: int,
+        tile: tuple[int, int],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        crop_to_image_boundary: bool = True,
+        *,
+        as_array: Literal[False] = False,
+    ) -> Image: ...
+
+    @overload
+    def read_tile(
+        self,
+        level: int,
+        tile: tuple[int, int],
+        z: float | None = None,
+        path: str | None = None,
+        pyramid: int | None = None,
+        crop_to_image_boundary: bool = True,
+        *,
+        as_array: Literal[True],
+    ) -> np.ndarray: ...
 
     def read_tile(
         self,
@@ -827,8 +1030,10 @@ class WsiDicom:
         path: str | None = None,
         pyramid: int | None = None,
         crop_to_image_boundary: bool = True,
-    ) -> Image:
-        """Read tile in pyramid level as Pillow image.
+        *,
+        as_array: bool = False,
+    ) -> Image | np.ndarray:
+        """Read tile in pyramid level.
 
         Parameters
         ----------
@@ -845,11 +1050,13 @@ class WsiDicom:
             used.
         crop_to_image_boundary: bool = True
             If to crop tile to image boundary.
+        as_array: bool = False
+            If to return the tile as a numpy array instead of a Pillow image.
 
         Returns
         -------
-        Image
-            Tile as Pillow image.
+        Union[Image, np.ndarray]
+            Tile as Pillow image, or as a numpy array if `as_array`.
         """
         tile_point = Point.from_tuple(tile)
         wsi_pyramid = self.pyramids.get(
@@ -857,12 +1064,12 @@ class WsiDicom:
         )
         try:
             wsi_level = wsi_pyramid.get(level)
-            return wsi_level.get_tile(tile_point, z, path, crop_to_image_boundary)
+            array = wsi_level.get_tile(tile_point, z, path, crop_to_image_boundary)
         except WsiDicomNotFoundError:
             # Scale from closest level, which reads a region and may fan out.
             wsi_level = wsi_pyramid.get_closest_by_level(level)
             with ReadExecutor(None, self._read_executor) as executor:
-                return wsi_level.get_scaled_tile(
+                array = wsi_level.get_scaled_tile(
                     tile_point,
                     level,
                     z,
@@ -870,6 +1077,9 @@ class WsiDicom:
                     crop_to_image_boundary,
                     executor=executor,
                 )
+        if as_array:
+            return array
+        return self._to_image(array)
 
     def read_encoded_tile(
         self,
@@ -969,6 +1179,14 @@ class WsiDicom:
     def resize_cache(self, size: int):
         """Resize cache of encoded and decoded tiles."""
         self._source.resize_cache(size)
+
+    @staticmethod
+    def _to_image(pixels: np.ndarray) -> Image:
+        """Derive a Pillow image from assembled pixels."""
+        image = fromarray(np.ascontiguousarray(pixels))
+        if image.mode.startswith("I;16"):
+            return image.convert("I")
+        return image
 
     def _validate_collection(self) -> SlideUids:
         """

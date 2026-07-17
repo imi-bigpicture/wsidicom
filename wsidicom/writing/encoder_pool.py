@@ -21,12 +21,12 @@ from threading import Thread
 from types import TracebackType
 from typing import Any
 
-from PIL import Image
+import numpy as np
 
 from wsidicom.codec import Encoder
 from wsidicom.downsampler import Downsampler
 from wsidicom.geometry import Size
-from wsidicom.stitcher import Stitcher
+from wsidicom.stitcher import NumpyStitcher
 from wsidicom.thread import (
     CancelableQueue,
     CancellationToken,
@@ -51,9 +51,9 @@ class EncoderPool:
         encoder: Encoder,
         num_workers: int,
         downsampler: Downsampler,
-        stitcher: Stitcher,
+        stitcher: NumpyStitcher,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         input_queue_maxsize: int = 100,
         *,
         token: CancellationToken,
@@ -68,11 +68,11 @@ class EncoderPool:
             Number of encoder worker threads.
         downsampler: Downsampler
             Downsampler for downsample+encode tasks.
-        stitcher: Stitcher
+        stitcher: NumpyStitcher
             Stitcher used to combine input tile blocks before downsampling.
         tile_size: Size
             Output tile size for downsample+encode tasks.
-        blank_tile: Image.Image
+        blank_tile: np.ndarray
             Background tile of the output tile size, used to pad a downsampled
             edge block back to a full tile. Treated as read-only.
         input_queue_maxsize: int
@@ -218,8 +218,8 @@ class EncoderPool:
 
     def _downsample_block(
         self,
-        tiles: Sequence[Sequence[Image.Image]],
-    ) -> Image.Image:
+        tiles: Sequence[Sequence[np.ndarray]],
+    ) -> np.ndarray:
         """Downsample a block of tiles into one output tile.
 
         Chooses between reduce-each-then-stitch (fast path when the downsampler
@@ -229,45 +229,45 @@ class EncoderPool:
         block is smaller than 2x2.
         """
         if self._downsampler.commutes_with_stitch:
-            reduced = [[tile.reduce(2) for tile in row] for row in tiles]
+            reduced = [
+                [self._downsampler.reduce_by_half(tile) for tile in row]
+                for row in tiles
+            ]
             block = self._stitcher.stitch_grid(reduced)
         else:
             composite = self._stitcher.stitch_grid(tiles)
             # Halve the composite, rather than resizing it to the output tile
             # size: a partial edge block is smaller than 2x2, and resizing it to
             # a full tile would stretch it instead of downsampling it.
-            half = Size(composite.width // 2, composite.height // 2)
+            half = Size(composite.shape[1] // 2, composite.shape[0] // 2)
             block = self._downsampler.downsample(composite, half)
         return self._pad_to_tile(block)
 
-    def _pad_to_tile(self, block: Image.Image) -> Image.Image:
+    def _pad_to_tile(self, block: np.ndarray) -> np.ndarray:
         """Pad a downsampled block to the full output tile size.
 
         At the right and bottom edges of a level the input block can be smaller
         than 2x2 (the level below has an odd number of tiles), so the halved
         block covers only part of the output tile. The remainder lies outside
         the image and is filled with the background color, matching how source
-        edge tiles are padded. Without this the written frame is smaller than
-        the Rows/Columns declared in the dataset.
+        edge tiles are padded.
 
         Parameters
         ----------
-        block: Image.Image
+        block: np.ndarray
             The halved block, at most the output tile size.
 
         Returns
         -------
-        Image.Image
+        np.ndarray
             The block padded to the full output tile size.
         """
-        if (block.width, block.height) == (
-            self._tile_size.width,
-            self._tile_size.height,
-        ):
+        height, width = block.shape[0], block.shape[1]
+        if (width, height) == (self._tile_size.width, self._tile_size.height):
             return block
-        # blank_tile is a cached, shared image - copy before pasting into it.
+        # blank_tile is a cached, shared array - copy before writing into it.
         canvas = self._blank_tile.copy()
-        canvas.paste(block, (0, 0))
+        canvas[:height, :width] = block
         return canvas
 
     def __enter__(self) -> "EncoderPool":

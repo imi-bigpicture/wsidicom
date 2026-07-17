@@ -17,8 +17,6 @@ import io
 import numpy as np
 import pytest
 from PIL import Image as Pillow
-from PIL import ImageChops, ImageStat
-from PIL.Image import Image
 from PIL.JpegImagePlugin import JpegImageFile
 from pydicom import config as pydicom_config
 from pydicom.uid import (
@@ -42,6 +40,8 @@ from pydicom.uid import (
 )
 from wsidicom_data import TestData
 
+from tests.codec.conftest import max_band_rms
+from wsidicom import config
 from wsidicom.codec import (
     Channels,
     Jpeg2kSettings,
@@ -54,6 +54,7 @@ from wsidicom.codec import (
     Subsampling,
 )
 from wsidicom.codec.decoder import (
+    Decoder,
     ImageCodecsDecoder,
     ImageCodecsRleDecoder,
     PillowDecoder,
@@ -69,6 +70,7 @@ from wsidicom.codec.optionals import (
     jpeg8_encode,
 )
 from wsidicom.geometry import Size
+from wsidicom.options import DecoderOption
 
 
 def _pydicom_can_decode(transfer_syntax: UID) -> bool:
@@ -101,12 +103,12 @@ def _find_jpeg_marker(frame: bytes | bytearray, marker: int) -> int:
 
 
 @pytest.fixture
-def rgb_image() -> Image:
-    return TestData.image(8, 3)
+def rgb_image() -> np.ndarray:
+    return np.asarray(TestData.image(8, 3))
 
 
 @pytest.fixture
-def rgb_jpeg_without_rgb_signal(rgb_image: Image) -> bytes:
+def rgb_jpeg_without_rgb_signal(rgb_image: np.ndarray) -> bytes:
     """An RGB (untransformed) baseline JPEG with the Adobe APP14 marker stripped
     and the component ids reset to 1, 2, 3, so the stream carries no in-band RGB
     signal (decoders default to YCbCr)."""
@@ -144,10 +146,37 @@ def rgb_jpeg_without_rgb_signal(rgb_image: Image) -> bytes:
     return bytes(frame)
 
 
-def _max_rms(decoded: Image, image: Image) -> float:
-    """Maximum per-band RMS difference between two images."""
-    diff = ImageChops.difference(decoded.convert("RGB"), image.convert("RGB"))
-    return max(ImageStat.Stat(diff).rms)
+@pytest.mark.unittest
+class TestDecoderSelection:
+    """select_decoder honors the preferred argument, falling back to
+    settings.preferred_decoder when it is None."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_preferred_decoder(self):
+        original = config.settings.preferred_decoder
+        yield
+        config.settings.preferred_decoder = original
+
+    def test_preferred_argument_selects_decoder(self):
+        # Act — Pillow is always available and supports JPEG baseline
+        selected = Decoder.select_decoder(
+            JPEGBaseline8Bit, 3, 8, preferred=DecoderOption.PILLOW
+        )
+
+        # Assert
+        assert selected is PillowDecoder
+
+    def test_preferred_argument_overrides_settings(self):
+        # Arrange — a different preference in settings
+        config.settings.preferred_decoder = DecoderOption.PYDICOM
+
+        # Act — the argument wins over the setting
+        selected = Decoder.select_decoder(
+            JPEGBaseline8Bit, 3, 8, preferred=DecoderOption.PILLOW
+        )
+
+        # Assert
+        assert selected is PillowDecoder
 
 
 @pytest.mark.unittest
@@ -206,7 +235,7 @@ class TestPillowDecoder:
     )
     def test_decode(
         self,
-        image: Image,
+        image: np.ndarray,
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
@@ -218,15 +247,10 @@ class TestPillowDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-            decoded = decoded.convert("L")
-        diff = ImageChops.difference(decoded, image)
-        for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms <= allowed_rms
+        assert max_band_rms(decoded, image) <= allowed_rms
 
     def test_uses_photometric_interpretation(
-        self, rgb_image: Image, rgb_jpeg_without_rgb_signal: bytes
+        self, rgb_image: np.ndarray, rgb_jpeg_without_rgb_signal: bytes
     ):
         # A stream storing RGB samples but signalling no color space (no APP14,
         # ids 1, 2, 3) must decode as RGB when the metadata declares RGB.
@@ -237,10 +261,10 @@ class TestPillowDecoder:
         decoded = decoder.decode(rgb_jpeg_without_rgb_signal)
 
         # Assert
-        assert _max_rms(decoded, rgb_image) <= 2
+        assert max_band_rms(decoded, rgb_image) <= 2
 
     def test_rgb_metadata_does_not_break_stream_signalling_rgb_by_ids(
-        self, rgb_image: Image
+        self, rgb_image: np.ndarray
     ):
         # The RGB hint must not corrupt a stream that already signals RGB via
         # 'R', 'G', 'B' component ids (regression for the draft hack).
@@ -250,7 +274,7 @@ class TestPillowDecoder:
         # RGB encode keeps APP14 + R, G, B ids; strip only APP14 to leave the ids.
         frame = bytearray(
             jpeg8_encode(
-                np.asarray(rgb_image),
+                rgb_image,
                 colorspace="RGB",
                 outcolorspace="RGB",
                 subsampling="444",
@@ -266,7 +290,7 @@ class TestPillowDecoder:
         decoded = decoder.decode(bytes(frame))
 
         # Assert
-        assert _max_rms(decoded, rgb_image) <= 2
+        assert max_band_rms(decoded, rgb_image) <= 2
 
 
 @pytest.mark.unittest
@@ -316,11 +340,11 @@ class TestPydicomDecoder:
             NumpySettings(8, Channels.RGB, False, True),
         ],
     )
-    def test_decode(self, image: Image, encoded: bytes, settings: Settings):
+    def test_decode(self, image: np.ndarray, encoded: bytes, settings: Settings):
         # Arrange
         decoder = PydicomDecoder(
             settings.transfer_syntax,
-            Size(image.width, image.height),
+            Size(image.shape[1], image.shape[0]),
             1 if settings.channels == Channels.GRAYSCALE else 3,
             settings.bits,
             settings.bits,
@@ -331,12 +355,7 @@ class TestPydicomDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-            decoded = decoded.convert("L")
-        diff = ImageChops.difference(decoded, image)
-        for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms == 0
+        assert max_band_rms(decoded, image) == 0
 
 
 @pytest.mark.unittest
@@ -407,7 +426,7 @@ class TestImageCodecsDecoder:
     )
     def test_decode(
         self,
-        image: Image,
+        image: np.ndarray,
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
@@ -421,15 +440,10 @@ class TestImageCodecsDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-            decoded = decoded.convert("L")
-        diff = ImageChops.difference(decoded, image)
-        for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms <= allowed_rms
+        assert max_band_rms(decoded, image) <= allowed_rms
 
     def test_uses_photometric_interpretation(
-        self, rgb_image: Image, rgb_jpeg_without_rgb_signal: bytes
+        self, rgb_image: np.ndarray, rgb_jpeg_without_rgb_signal: bytes
     ):
         # A stream storing RGB samples but signalling no color space (no APP14,
         # ids 1, 2, 3) must decode as RGB when the metadata declares RGB.
@@ -440,7 +454,7 @@ class TestImageCodecsDecoder:
         decoded = decoder.decode(rgb_jpeg_without_rgb_signal)
 
         # Assert
-        assert _max_rms(decoded, rgb_image) <= 2
+        assert max_band_rms(decoded, rgb_image) <= 2
 
 
 @pytest.mark.unittest
@@ -486,10 +500,10 @@ class TestPylibjpegRleDecoder:
             RleSettings(16, Channels.GRAYSCALE),
         ],
     )
-    def test_decode(self, image: Image, encoded: bytes, settings: Settings):
+    def test_decode(self, image: np.ndarray, encoded: bytes, settings: Settings):
         # Arrange
         decoder = PylibjpegRleDecoder(
-            Size(image.width, image.height),
+            Size(image.shape[1], image.shape[0]),
             1 if settings.channels == Channels.GRAYSCALE else 3,
             settings.bits,
         )
@@ -498,12 +512,7 @@ class TestPylibjpegRleDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-            decoded = decoded.convert("L")
-        diff = ImageChops.difference(decoded, image)
-        for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms == 0
+        assert max_band_rms(decoded, image) == 0
 
 
 @pytest.mark.unittest
@@ -546,10 +555,10 @@ class TestImagecodecsRleDecoder:
             RleSettings(16, Channels.GRAYSCALE),
         ],
     )
-    def test_decode(self, image: Image, encoded: bytes, settings: Settings):
+    def test_decode(self, image: np.ndarray, encoded: bytes, settings: Settings):
         # Arrange
         decoder = ImageCodecsRleDecoder(
-            Size(image.width, image.height),
+            Size(image.shape[1], image.shape[0]),
             1 if settings.channels == Channels.GRAYSCALE else 3,
             settings.bits,
         )
@@ -558,12 +567,7 @@ class TestImagecodecsRleDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-            decoded = decoded.convert("L")
-        diff = ImageChops.difference(decoded, image)
-        for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms == 0
+        assert max_band_rms(decoded, image) == 0
 
 
 @pytest.mark.unittest
@@ -600,7 +604,7 @@ class TestPyJpegLsDecoder:
     )
     def test_decode(
         self,
-        image: Image,
+        image: np.ndarray,
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
@@ -614,12 +618,7 @@ class TestPyJpegLsDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-            decoded = decoded.convert("L")
-        diff = ImageChops.difference(decoded, image)
-        for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms <= allowed_rms
+        assert max_band_rms(decoded, image) <= allowed_rms
 
 
 @pytest.mark.unittest
@@ -662,7 +661,7 @@ class TestPyLibJpegOpenJpegDecoder:
     )
     def test_decode(
         self,
-        image: Image,
+        image: np.ndarray,
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
@@ -676,9 +675,4 @@ class TestPyLibJpegOpenJpegDecoder:
         decoded = decoder.decode(encoded)
 
         # Assert
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-            decoded = decoded.convert("L")
-        diff = ImageChops.difference(decoded, image)
-        for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms <= allowed_rms
+        assert max_band_rms(decoded, image) <= allowed_rms

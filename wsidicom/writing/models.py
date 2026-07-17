@@ -17,7 +17,7 @@
 from dataclasses import dataclass, field
 from functools import total_ordering
 
-from PIL import Image
+import numpy as np
 
 from wsidicom.thread import CompletionTracker, WriteOnlyQueue
 
@@ -36,15 +36,15 @@ class CascadedTile:
         Focal plane index.
     optical_path_index: int
         Optical path index.
-    tile: Image.Image
-        The decoded tile image.
+    tile: np.ndarray
+        The tile pixels.
     """
 
     x_index: int
     y_index: int
     z_index: int
     optical_path_index: int
-    tile: Image.Image
+    tile: np.ndarray = field(compare=False)
 
 
 @total_ordering
@@ -142,14 +142,14 @@ class EncodeTask(CoordinatePriority):
 
     Parameters
     ----------
-    tiles: List[Image.Image]
+    tiles: List[np.ndarray]
         Decoded tiles to encode.
     output_queue: WriteOnlyQueue[EncodingTaskResult]
         Queue to put the encoded result on.
     """
 
-    tiles: list[Image.Image]
-    output_queue: WriteOnlyQueue[EncodingTaskResult]
+    tiles: list[np.ndarray] = field(compare=False)
+    output_queue: WriteOnlyQueue[EncodingTaskResult] = field(compare=False)
 
 
 @dataclass(frozen=True)
@@ -160,7 +160,7 @@ class DownsampleEncodeTask(CoordinatePriority):
 
     Parameters
     ----------
-    tiles: List[List[Image.Image]]
+    tiles: List[List[np.ndarray]]
         Decoded tiles forming the input block, as a row-major 2D matrix.
     output_queue: Optional[WriteOnlyQueue[EncodingTaskResult]]
         Queue to put the encoded result on. None if this level produces no
@@ -172,7 +172,9 @@ class DownsampleEncodeTask(CoordinatePriority):
         accumulator, or None if this is the top of the cascade.
     """
 
-    tiles: list[list[Image.Image]]
-    output_queue: WriteOnlyQueue[EncodingTaskResult] | None
-    cascade_tracker: CompletionTracker
-    cascade_queue: WriteOnlyQueue[CascadedTile] | None = None
+    tiles: list[list[np.ndarray]] = field(compare=False)
+    output_queue: WriteOnlyQueue[EncodingTaskResult] | None = field(compare=False)
+    cascade_tracker: CompletionTracker = field(compare=False)
+    cascade_queue: WriteOnlyQueue[CascadedTile] | None = field(
+        default=None, compare=False
+    )
