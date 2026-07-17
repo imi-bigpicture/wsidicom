@@ -17,7 +17,6 @@
 from collections.abc import Iterable
 
 import numpy as np
-from PIL.Image import Image
 from pydicom.uid import UID, AllTransferSyntaxes
 
 from wsidicom.codec.decoder import Decoder
@@ -79,11 +78,11 @@ class Codec:
             )
         )
 
-    def decode(self, data: bytes) -> Image:
+    def decode(self, data: bytes) -> np.ndarray:
         return self.decoder.decode(data)
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
-        return self.encoder.encode(image)
+    def encode(self, pixels: np.ndarray) -> bytes:
+        return self.encoder.encode(pixels)
 
     @classmethod
     def create(

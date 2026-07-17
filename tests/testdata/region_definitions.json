@@ -124,7 +124,10 @@
                     "width": 0.05,
                     "height": 0.05
                 },
-                "md5": "93e3262ef920de005a7f6538456d1a62"
+                "md5": {
+                    "pillow": "93e3262ef920de005a7f6538456d1a62",
+                    "opencv": "56fe7fb7eac477a76a50eaad6bc2c797"
+                }
             },
             {
                 "location": {
@@ -136,7 +139,10 @@
                     "width": 0.5,
                     "height": 0.5
                 },
-                "md5": "40f703eb10d34feb4add36f8d542e32e"
+                "md5": {
+                    "pillow": "40f703eb10d34feb4add36f8d542e32e",
+                    "opencv": "33e70770610722228d954d6739e77b3e"
+                }
             },
             {
                 "location": {
@@ -148,7 +154,10 @@
                     "width": 2.5,
                     "height": 2.5
                 },
-                "md5": "9ebfdbe2815c704fde0167f65023ef8a"
+                "md5": {
+                    "pillow": "9ebfdbe2815c704fde0167f65023ef8a",
+                    "opencv": "d95f350973816a887a50884b473ba6d2"
+                }
             },
             {
                 "location": {
@@ -161,7 +170,10 @@
                     "height": 0.05
                 },
                 "slide_origin": true,
-                "md5": "4bddd3274c1aa9edc903749745a2f6e0"
+                "md5": {
+                    "pillow": "4bddd3274c1aa9edc903749745a2f6e0",
+                    "opencv": "a087c2ddb9fabcc8da23c04c02a50091"
+                }
             }
         ],
         "read_tile": [
@@ -222,7 +234,10 @@
                     "width": 512,
                     "height": 512
                 },
-                "md5": "e0727aca5ad2a3dc39d1f525f72df084"
+                "md5": {
+                    "pillow": "e0727aca5ad2a3dc39d1f525f72df084",
+                    "opencv": "8fdc047b94a7cdb0503a724f952456c7"
+                }
             }
         ]
     },
@@ -325,7 +340,10 @@
                     "width": 0.1,
                     "height": 0.1
                 },
-                "md5": "a1eac63bdaeda88c008ece88878b3f81"
+                "md5": {
+                    "pillow": "a1eac63bdaeda88c008ece88878b3f81",
+                    "opencv": "059fed68616a6b6e002f1e0820a6fab9"
+                }
             },
             {
                 "location": {
@@ -337,7 +355,10 @@
                     "width": 1,
                     "height": 1
                 },
-                "md5": "29e63bc222d561f4f6e4ae248085bce1"
+                "md5": {
+                    "pillow": "29e63bc222d561f4f6e4ae248085bce1",
+                    "opencv": "521d0214de914563286b74dc115f0e38"
+                }
             },
             {
                 "location": {
@@ -349,7 +370,10 @@
                     "width": 5,
                     "height": 5
                 },
-                "md5": "1b335c34c9dcf91955c7413b5cc2a716"
+                "md5": {
+                    "pillow": "1b335c34c9dcf91955c7413b5cc2a716",
+                    "opencv": "d25fe9377bef6a50538418ae85c7c8d0"
+                }
             }
         ],
         "read_tile": [
@@ -444,7 +468,10 @@
                     "width": 512,
                     "height": 512
                 },
-                "md5": "8ff6df7578e4851706498ca8d58edee6"
+                "md5": {
+                    "pillow": "8ff6df7578e4851706498ca8d58edee6",
+                    "opencv": "75ae6192d29830d605427d2c8682708f"
+                }
             }
         ]
     },
@@ -499,7 +526,10 @@
                     "width": 0.2,
                     "height": 0.3
                 },
-                "md5": "a3f7c25200d7b7911a8a5ea3c31e9e84"
+                "md5": {
+                    "pillow": "a3f7c25200d7b7911a8a5ea3c31e9e84",
+                    "opencv": "8509b5b8f76e29bd5319ea4ae8725e29"
+                }
             }
         ],
         "read_tile": [
@@ -528,7 +558,10 @@
                     "width": 512,
                     "height": 512
                 },
-                "md5": "5cca2964e0b14466081d4149f360306e"
+                "md5": {
+                    "pillow": "5cca2964e0b14466081d4149f360306e",
+                    "opencv": "7305d977720cc46bbea541e150a07bdb"
+                }
             }
         ]
     },
@@ -555,7 +588,10 @@
                     "width": 400,
                     "height": 600
                 },
-                "md5": "535ef36080dd62ec36d2e619becb519a"
+                "md5": {
+                    "pillow": "535ef36080dd62ec36d2e619becb519a",
+                    "opencv": "fb44b6fae1900c123f9f90d2e1eaaa5e"
+                }
             }
         ],
         "read_region_mm": [
@@ -569,7 +605,10 @@
                     "width": 5,
                     "height": 4
                 },
-                "md5": "a78c5104a7ed97278f75b564f2d9a79c"
+                "md5": {
+                    "pillow": "a78c5104a7ed97278f75b564f2d9a79c",
+                    "opencv": "901c4925f728ec768fd6c937efdedd3b"
+                }
             }
         ],
         "read_region_mpp": [
@@ -583,7 +622,10 @@
                     "width": 5,
                     "height": 4
                 },
-                "md5": "da9155fdfc4b7862f52d1c93fd307be8"
+                "md5": {
+                    "pillow": "da9155fdfc4b7862f52d1c93fd307be8",
+                    "opencv": "4807ca3cf989b847227ae5ba5e906fc4"
+                }
             }
         ],
         "read_tile": [
@@ -612,7 +654,10 @@
                     "width": 512,
                     "height": 512
                 },
-                "md5": "cb0b85cd7662b7cc4433d5baf7a36f1d"
+                "md5": {
+                    "pillow": "cb0b85cd7662b7cc4433d5baf7a36f1d",
+                    "opencv": "5d1ec8d1c9db438619a377b32d16bac2"
+                }
             }
         ]
     },
@@ -639,7 +684,7 @@
                     "width": 300,
                     "height": 400
                 },
-                "md5": "2d52ac974430b0a2d9e44646bd83e1f8"
+                "md5": "fdf2f40a33a618371ac5c9898d580060"
             }
         ],
         "read_region_mm": [
@@ -653,7 +698,7 @@
                     "width": 0.3,
                     "height": 0.4
                 },
-                "md5": "1d9a4e85f3da11d03d46d438bd155981"
+                "md5": "58d7425248ca9c77ffda812c827d5eb8"
             }
         ],
         "read_region_mpp": [
@@ -667,7 +712,10 @@
                     "width": 0.3,
                     "height": 0.4
                 },
-                "md5": "ca45815d5f29b6503d93d480b38b0634"
+                "md5": {
+                    "pillow": "b412aeacb85deff7d838bf1af4c9e2a8",
+                    "opencv": "ebb79ade28cbd1b3f42e14a9ba94f38d"
+                }
             }
         ],
         "read_tile": [
@@ -677,7 +725,7 @@
                     "y": 4
                 },
                 "level": 2,
-                "md5": "07107f09d92c235a80cb057ad6fb9e04"
+                "md5": "2407d71c21bdda9b4de89c005b2323a1"
             }
         ],
         "read_encoded_tile": [
@@ -696,7 +744,10 @@
                     "width": 512,
                     "height": 512
                 },
-                "md5": "ee3c31ed08bb3604b2816fc633b1062e"
+                "md5": {
+                    "pillow": "ee3c31ed08bb3604b2816fc633b1062e",
+                    "opencv": "270a2b0ae07519f97edf20094ec066a0"
+                }
             }
         ]
     },
@@ -751,7 +802,10 @@
                     "width": 1.0,
                     "height": 2.0
                 },
-                "md5": "439021d08a2e2fb755b1b65519eb2836"
+                "md5": {
+                    "pillow": "439021d08a2e2fb755b1b65519eb2836",
+                    "opencv": "6726ca3a7d944ba71f06fa8556c6a714"
+                }
             }
         ],
         "read_tile": [
@@ -780,7 +834,10 @@
                     "width": 512,
                     "height": 512
                 },
-                "md5": "3a4d79e664225e1ea9b80c4e647f6b2c"
+                "md5": {
+                    "pillow": "3a4d79e664225e1ea9b80c4e647f6b2c",
+                    "opencv": "f1a7b86516bf87b2d194c6e03d4786ee"
+                }
             }
         ]
     }

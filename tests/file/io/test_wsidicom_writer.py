@@ -18,8 +18,8 @@ import threading
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
 import pytest
-from PIL.Image import Image
 from pydicom import Sequence as DicomSequence
 from pydicom.dataset import Dataset
 from pydicom.tag import ItemTag, SequenceDelimiterTag
@@ -162,7 +162,9 @@ class WsiDicomTestImageData(ImageData):
     def thread_safe(self) -> bool:
         return True
 
-    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_decoded_tile(
+        self, tile_point: Point, z: float, path: str, cache: bool = True
+    ) -> np.ndarray:
         raise NotImplementedError()
 
     def get_encoded_tile(self, tile: Point, z: float, path: str) -> bytes:

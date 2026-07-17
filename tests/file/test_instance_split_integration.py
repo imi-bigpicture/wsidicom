@@ -24,8 +24,8 @@ from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 
+import numpy as np
 import pytest
-from PIL.Image import Image
 from pydicom import Dataset, dcmread
 from pydicom.sequence import Sequence
 from pydicom.uid import UID, generate_uid
@@ -126,7 +126,9 @@ class MultiFocalPlaneImageData(ImageData):
             tile, self._source.default_z, self._source.default_path
         )
 
-    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_decoded_tile(
+        self, tile_point: Point, z: float, path: str, cache: bool = True
+    ) -> np.ndarray:
         return self._source.get_decoded_tile(
             tile_point, self._source.default_z, self._source.default_path
         )

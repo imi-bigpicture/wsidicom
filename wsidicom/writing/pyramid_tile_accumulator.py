@@ -18,7 +18,7 @@ import contextlib
 from threading import Thread
 from typing import Optional
 
-from PIL import Image
+import numpy as np
 
 from wsidicom.geometry import Size
 from wsidicom.thread import (
@@ -134,7 +134,7 @@ class PyramidTileAccumulator:
         self._cascade_queue: WriteOnlyQueue[CascadedTile] | None = (
             next_accumulator.input_queue if next_accumulator is not None else None
         )
-        self._buffer: dict[tuple[int, int, int, int], Image.Image] = {}
+        self._buffer: dict[tuple[int, int, int, int], np.ndarray] = {}
         self._input_queue: FifoCancelableQueue[CascadedTile | ShutdownSentinel] = (
             FifoCancelableQueue(maxsize=queue_maxsize)
         )
@@ -184,7 +184,7 @@ class PyramidTileAccumulator:
             current = current.next_accumulator
         return depth
 
-    def add_tile(self, x: int, y: int, z: int, path: int, tile: Image.Image) -> None:
+    def add_tile(self, x: int, y: int, z: int, path: int, tile: np.ndarray) -> None:
         """Submit a decoded tile for accumulation."""
         self._input_queue.put(
             CascadedTile(

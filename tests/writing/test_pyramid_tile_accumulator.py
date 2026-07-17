@@ -14,8 +14,8 @@
 
 """Tests for PyramidTileAccumulator."""
 
+import numpy as np
 import pytest
-from PIL import Image
 
 from wsidicom.geometry import Size
 from wsidicom.thread import CancellationToken, PriorityCancelableQueue
@@ -26,8 +26,8 @@ from wsidicom.writing.pyramid_tile_accumulator import (
 )
 
 
-def make_tile() -> Image.Image:
-    return Image.new("RGB", (256, 256))
+def make_tile() -> np.ndarray:
+    return np.zeros((256, 256, 3), dtype=np.uint8)
 
 
 @pytest.fixture
@@ -210,7 +210,11 @@ class TestSingleAccumulatorDrain:
             assert task.coordinates.level == 1
             assert task.coordinates.x_index == 0
             assert task.coordinates.y_index == 0
-            assert task.tiles == [[tiles[0], tiles[1]], [tiles[2], tiles[3]]]
+            # Arrays compare elementwise, so assert pass-through identity.
+            assert task.tiles[0][0] is tiles[0]
+            assert task.tiles[0][1] is tiles[1]
+            assert task.tiles[1][0] is tiles[2]
+            assert task.tiles[1][1] is tiles[3]
             assert task.output_queue is accumulator.output_queue
 
             # Simulate encoder worker completion so wait_for_zero unblocks shutdown

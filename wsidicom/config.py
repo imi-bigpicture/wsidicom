@@ -13,7 +13,7 @@
 #    limitations under the License.
 
 
-from PIL import Image as Pillow
+from wsidicom.options import DecoderOption, DownsamplerOption, ResampleFilterOption
 
 
 class Settings:
@@ -26,9 +26,10 @@ class Settings:
         self._strict_specimen_identifier_check = True
         self._focal_plane_distance_threshold = 0.000001
         self._pyramids_origin_threshold = 0.02
-        self._preferred_decoder: str | None = None
+        self._preferred_decoder: DecoderOption | None = None
+        self._preferred_downsampler: DownsamplerOption | None = None
         self._open_web_threads: int | None = None
-        self._pillow_resampling_filter = Pillow.Resampling.BILINEAR
+        self._resampling_filter = ResampleFilterOption.BILINEAR
         self._ignore_specimen_preparation_step_on_validation_error = True
         self._truncate_long_dicom_strings = False
         self._decoded_frame_cache_size = 100 * 1024 * 1024
@@ -89,13 +90,13 @@ class Settings:
         self._pyramids_origin_threshold = value
 
     @property
-    def preferred_decoder(self) -> str | None:
-        """Name of preferred decoder to use."""
+    def preferred_decoder(self) -> DecoderOption | None:
+        """Preferred decoder to use."""
         return self._preferred_decoder
 
     @preferred_decoder.setter
-    def preferred_decoder(self, value: str | None) -> None:
-        self._preferred_decoder = value
+    def preferred_decoder(self, value: DecoderOption | str | None) -> None:
+        self._preferred_decoder = DecoderOption.coerce(value)
 
     @property
     def open_web_threads(self) -> int | None:
@@ -107,13 +108,23 @@ class Settings:
         self._open_web_threads = value
 
     @property
-    def pillow_resampling_filter(self) -> Pillow.Resampling:
-        """The resampling filter to use when rescaling images."""
-        return self._pillow_resampling_filter
+    def preferred_downsampler(self) -> DownsamplerOption | None:
+        """Preferred downsampler to use. None selects the fastest available
+        (opencv when installed, else pillow)."""
+        return self._preferred_downsampler
 
-    @pillow_resampling_filter.setter
-    def pillow_resampling_filter(self, value: Pillow.Resampling) -> None:
-        self._pillow_resampling_filter = value
+    @preferred_downsampler.setter
+    def preferred_downsampler(self, value: DownsamplerOption | str | None) -> None:
+        self._preferred_downsampler = DownsamplerOption.coerce(value)
+
+    @property
+    def resampling_filter(self) -> ResampleFilterOption:
+        """The resampling filter to use when rescaling images."""
+        return self._resampling_filter
+
+    @resampling_filter.setter
+    def resampling_filter(self, value: ResampleFilterOption | str) -> None:
+        self._resampling_filter = ResampleFilterOption(value)
 
     @property
     def ignore_specimen_preparation_step_on_validation_error(self) -> bool:

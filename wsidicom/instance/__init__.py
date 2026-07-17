@@ -17,7 +17,7 @@
 from wsidicom.instance.dataset import TileType, WsiDataset
 from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.instance import WsiInstance
-from wsidicom.instance.pillow_image_data import PillowImageData
+from wsidicom.instance.numpy_image_data import NumpyImageData
 from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
 
 __all__ = [
@@ -26,5 +26,5 @@ __all__ = [
     "TileType",
     "ImageData",
     "WsiDicomImageData",
-    "PillowImageData",
+    "NumpyImageData",
 ]

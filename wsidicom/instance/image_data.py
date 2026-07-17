@@ -16,10 +16,8 @@
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Iterator
 from functools import cached_property
-from typing import Literal
 
-from PIL import Image as Pillow
-from PIL.Image import Image
+import numpy as np
 from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
@@ -40,7 +38,6 @@ class ImageData(metaclass=ABCMeta):
     """
 
     _default_z: float | None = None
-    _blank_tile: Image | None = None
 
     def __init__(self, encoder: Encoder):
         self._encoder = encoder
@@ -127,8 +124,17 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
-        """Return Pillow image for tile.
+    def get_decoded_tile(
+        self,
+        tile_point: Point,
+        z: float,
+        path: str,
+        cache: bool = True,
+    ) -> np.ndarray:
+        """Return the pixels of a tile.
+
+        The tile-read primitive. Format adapters decode to numpy; Pillow, when
+        needed, is derived at the read boundary.
 
         Parameters
         ----------
@@ -138,11 +144,13 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
+        cache: bool = True
+            Whether to cache the decoded tile.
 
         Returns
         -------
-        Image
-            Tile as Pillow Image.
+        np.ndarray
+            Tile as ``(rows, columns)`` or ``(rows, columns, samples)``.
         """
         raise NotImplementedError()
 
@@ -167,12 +175,15 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     def get_decoded_tiles(
-        self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[Image]:
-        """Return Pillow images for multiple tiles.
+        self,
+        tiles: Iterable[Point],
+        z: float,
+        path: str,
+        cache: bool = True,
+    ) -> Iterator[np.ndarray]:
+        """Return the pixels for multiple tiles.
 
-        Implementations can override this with a more efficient method for
-        getting multiple tiles.
+        Implementations can override this with a more efficient batch method.
 
         Parameters
         ----------
@@ -182,13 +193,15 @@ class ImageData(metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
+        cache: bool = True
+            Whether to cache the decoded tiles.
 
         Returns
         -------
-        Iterator[Image]
-            Tiles as Pillow images, in the order of ``tiles``.
+        Iterator[np.ndarray]
+            Tiles as pixels, in the order of ``tiles``.
         """
-        return (self.get_decoded_tile(tile, z, path) for tile in tiles)
+        return (self.get_decoded_tile(tile, z, path, cache) for tile in tiles)
 
     def get_encoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
@@ -216,8 +229,8 @@ class ImageData(metaclass=ABCMeta):
 
     def get_encoded_and_decoded_tile(
         self, tile: Point, z: float, path: str
-    ) -> tuple[bytes, Image]:
-        """Return both encoded bytes and decoded image for a tile.
+    ) -> tuple[bytes, np.ndarray]:
+        """Return both the encoded bytes and the pixels for a tile.
 
         Default implementation calls ``get_encoded_tile`` and
         ``get_decoded_tile`` separately. Subclasses can override to read from
@@ -234,8 +247,8 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         -------
-        tuple[bytes, Image]
-            The tile as encoded bytes and as a decoded Pillow image.
+        tuple[bytes, np.ndarray]
+            The encoded bytes and the pixels of the tile.
         """
         return (
             self.get_encoded_tile(tile, z, path),
@@ -244,8 +257,8 @@ class ImageData(metaclass=ABCMeta):
 
     def get_encoded_and_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[tuple[bytes, Image]]:
-        """Return both encoded bytes and decoded image for multiple tiles.
+    ) -> Iterator[tuple[bytes, np.ndarray]]:
+        """Return both the encoded bytes and the pixels for multiple tiles.
 
         Default implementation calls ``get_encoded_and_decoded_tile`` per tile.
         Subclasses can override for batch-efficient reading.
@@ -261,9 +274,9 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         -------
-        Iterator[tuple[bytes, Image]]
-            For each tile, the encoded bytes and decoded Pillow image, in the
-            order of ``tiles``.
+        Iterator[tuple[bytes, np.ndarray]]
+            For each tile, the encoded bytes and pixels, in the order of
+            ``tiles``.
         """
         return (self.get_encoded_and_decoded_tile(tile, z, path) for tile in tiles)
 
@@ -305,28 +318,27 @@ class ImageData(metaclass=ABCMeta):
         return Region(position=Point(0, 0), size=self.tiled_size)
 
     @property
-    def image_mode(self) -> Literal["L", "I", "RGB"]:
-        """Return Pillow image mode for image data."""
-        if self.samples_per_pixel == 1:
-            if self.bits == 8:
-                return "L"
-            elif self.bits == 16:
-                return "I"
-        elif self.samples_per_pixel == 3:
-            return "RGB"
-        raise NotImplementedError()
-
-    @property
     def blank_color(self) -> int | tuple[int, int, int]:
         """Return grey level or RGB background color."""
         return self._get_blank_color(self.photometric_interpretation)
 
     @property
-    def blank_tile(self) -> Image:
-        """Return background tile."""
-        if self._blank_tile is None:
-            self._blank_tile = self._create_blank_tile()
-        return self._blank_tile
+    def dtype(self) -> np.dtype:
+        """Return the numpy dtype of the image data: uint8 for up to 8 bits per
+        sample, uint16 for up to 16."""
+        if self.bits <= 8:
+            return np.dtype(np.uint8)
+        if self.bits <= 16:
+            return np.dtype(np.uint16)
+        raise ValueError(f"Unsupported bits per sample: {self.bits}.")
+
+    @cached_property
+    def blank_tile(self) -> np.ndarray:
+        """Return the background tile pixels."""
+        shape: tuple[int, ...] = (self.tile_size.height, self.tile_size.width)
+        if self.samples_per_pixel != 1:
+            shape = shape + (self.samples_per_pixel,)
+        return np.full(shape, self.blank_color, self.dtype)
 
     @cached_property
     def blank_encoded_tile(self) -> bytes:
@@ -404,14 +416,6 @@ class ImageData(metaclass=ABCMeta):
         if photometric_interpretation == "MONOCHROME2":
             return BLACK
         return (WHITE, WHITE, WHITE)
-
-    def _create_blank_tile(self) -> Image:
-        """Create blank tile for instance."""
-        return Pillow.new(
-            mode=self.image_mode,
-            size=self.tile_size.to_tuple(),
-            color=self.blank_color,
-        )
 
     def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         """Return pretty string of object."""

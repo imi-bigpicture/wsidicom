@@ -21,7 +21,6 @@ from typing import Generic, Optional, TypeVar
 
 import numpy as np
 from PIL import Image as Pillow
-from PIL.Image import Image
 from pydicom import Dataset, FileMetaDataset
 from pydicom.pixels.utils import pixel_dtype
 from pydicom.uid import (
@@ -104,13 +103,13 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
         self._settings = settings
 
     @abstractmethod
-    def encode(self, image: Image | np.ndarray) -> bytes:
-        """Encode image into bytes.
+    def encode(self, pixels: np.ndarray) -> bytes:
+        """Encode pixels into bytes.
 
         Parameters
         ----------
-        image: Image | np.ndarray
-            Image to encode.
+        pixels: np.ndarray
+            Decoded pixels to encode.
 
         Returns
         -------
@@ -305,9 +304,8 @@ class PillowEncoder(Encoder[JpegSettings | Jpeg2kSettings]):
             isinstance(self.settings, Jpeg2kSettings) and not self.settings.lossless
         )
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
-        if not isinstance(image, Image):
-            image = Pillow.fromarray(image)
+    def encode(self, pixels: np.ndarray) -> bytes:
+        image = Pillow.fromarray(pixels)
         with io.BytesIO() as buffer:
             image.save(
                 buffer,
@@ -383,12 +381,12 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
     def lossy(self) -> bool:
         return not self._lossless
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
+    def encode(self, pixels: np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
         return bytes(
             jpeg8_encode(
-                np.array(image).astype(self._dtype),
+                np.array(pixels).astype(self._dtype),
                 level=self._level,
                 lossless=self._lossless,
                 bitspersample=self._bits,
@@ -432,13 +430,11 @@ class JpegLsEncoder(Encoder[JpegLsSettings]):
     def lossy(self) -> bool:
         return self._level != 0
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
-        """Encode image into bytes."""
+    def encode(self, pixels: np.ndarray) -> bytes:
+        """Encode into bytes."""
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
-        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
-            raise ValueError(f"Unsupported mode: {image.mode}.")
-        return bytes(jpegls_encode(np.array(image), level=self._level))
+        return bytes(jpegls_encode(np.array(pixels), level=self._level))
 
     @classmethod
     def is_available(cls) -> bool:
@@ -479,14 +475,12 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings | HTJpeg2000Settings]):
     def lossy(self) -> bool:
         return not self.settings.lossless
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
+    def encode(self, pixels: np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
-        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
-            raise ValueError(f"Unsupported mode: {image.mode}.")
         return bytes(
             jpeg2k_encode(
-                np.array(image),
+                np.array(pixels),
                 level=self._level,
                 reversible=self._reversible,
                 bitspersample=self._bits,
@@ -522,14 +516,12 @@ class JpegXlEncoder(Encoder[JpegXlSettings]):
     def lossy(self) -> bool:
         return not self.settings.lossless
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
+    def encode(self, pixels: np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
-        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
-            raise ValueError(f"Unsupported mode: {image.mode}.")
         return bytes(
             jpegxl_encode(
-                np.array(image),
+                np.array(pixels),
                 level=self._level,
                 lossless=self._lossless,
                 bitspersample=self._bits,
@@ -568,10 +560,8 @@ class NumpyEncoder(Encoder[NumpySettings]):
     def lossy(self) -> bool:
         return False
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
-        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
-            raise ValueError(f"Unsupported mode: {image.mode}.")
-        return np.array(image).astype(self._dtype).tobytes()
+    def encode(self, pixels: np.ndarray) -> bytes:
+        return np.array(pixels).astype(self._dtype).tobytes()
 
     @classmethod
     def is_available(cls) -> bool:
@@ -602,10 +592,8 @@ class RleEncoder(Encoder[RleSettings]):
             self._samples_per_pixel = 3
         super().__init__(settings)
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
-        if isinstance(image, Image) and image.mode not in ("L", "RGB", "I;16", "I;16L"):
-            raise ValueError(f"Unsupported mode: {image.mode}.")
-        return self._encode(np.array(image).astype(self._dtype))
+    def encode(self, pixels: np.ndarray) -> bytes:
+        return self._rle_encode(np.array(pixels).astype(self._dtype))
 
     @property
     def lossy(self) -> bool:
@@ -616,17 +604,19 @@ class RleEncoder(Encoder[RleSettings]):
         return isinstance(settings, RleSettings)
 
     @abstractmethod
-    def _encode(self, image: np.ndarray) -> bytes:
+    def _rle_encode(self, pixels: np.ndarray) -> bytes:
+        """Run-length encode the pixels. Called by `encode` with the pixels
+        already converted and cast to the encoded dtype."""
         raise NotImplementedError()
 
 
 class ImageCodecsRleEncoder(RleEncoder):
-    """Encoder that uses image codecs PackBits to encode image."""
+    """Encoder that uses imagecodecs PackBits to encode image."""
 
-    def _encode(self, image: np.ndarray):
+    def _rle_encode(self, pixels: np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
-        return RleCodec.encode(image)
+        return RleCodec.encode(pixels)
 
     @classmethod
     def supports_settings(cls, settings: Settings) -> bool:
@@ -642,12 +632,12 @@ class ImageCodecsRleEncoder(RleEncoder):
 class PylibjpegRleEncoder(RleEncoder):
     """Encoder that uses pylibjpeg-rle to encode image."""
 
-    def _encode(self, image: np.ndarray) -> bytes:
+    def _rle_encode(self, pixels: np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Pylibjpeg-rle not available.")
-        rows, cols = image.shape[0:2]
+        rows, cols = pixels.shape[0:2]
         return rle_encode_frame(
-            np.array(image).astype(self._dtype).tobytes(),
+            np.array(pixels).astype(self._dtype).tobytes(),
             rows=rows,
             cols=cols,
             bpp=self._bits,
@@ -684,12 +674,12 @@ class PyJpegLsEncoder(Encoder[JpegLsSettings]):
     def lossy(self) -> bool:
         return False
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
+    def encode(self, pixels: np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Pylibjpeg-ls not available.")
         return bytes(
             pylibjpeg_ls_encode(
-                np.asarray(image),
+                np.asarray(pixels),
                 lossy_error=self.settings.level,
                 interleave_mode=self._interleave_mode,
             )
@@ -734,11 +724,11 @@ class PyLibJpegOpenJpegEncoder(Encoder[Jpeg2kSettings]):
     def lossy(self) -> bool:
         return not self.settings.lossless
 
-    def encode(self, image: Image | np.ndarray) -> bytes:
+    def encode(self, pixels: np.ndarray) -> bytes:
         if not self.is_available():
             raise RuntimeError("Pylibjpeg-openjpeg not available.")
         return pylibjpeg_openjpeg_encode(
-            np.asarray(image),
+            np.asarray(pixels),
             self.bits,
             self._color_space,
             self._multiple_component_transform,

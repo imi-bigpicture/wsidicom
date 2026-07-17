@@ -61,8 +61,6 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 - Optical path identifiers needs to be unique across instances.
 
-- Only one pyramid (i.e. offset from slide corner) per frame of reference is supported.
-
 ## Basic usage
 
 ***Load a WSI dataset from files in folder.***
@@ -485,21 +483,33 @@ slide = WsiDicom.open("path_to_folder")
 - [codec](wsidicom/codec) - Encoders and decoders for image pixel data.
 - [file](wsidicom/file) - Implementation for reading and writing DICOM WSI files.
 - [group](wsidicom/group) - Group implementations, e.g. Level.
-- [instance](wsidicom/instance) - Instance implementations WsiInstance and WsiDataset, the metaclass ImageData and ImageData implementations WsiDicomImageData and PillowImageData.
+- [instance](wsidicom/instance) - Instance implementations WsiInstance and WsiDataset, the metaclass ImageData and ImageData implementations WsiDicomImageData and NumpyImageData.
 - [metadata](wsidicom/metadata) - Metadata models and schema for serializing and deserializing to DICOM and json.
 - [series](wsidicom/series) - Series implementations Levels, Labels, and Overview.
 - [web](wsidicom/web) - Implementation for reading DICOM WSI from DICOMWeb.
+- [writing](wsidicom/writing) - Pipeline for writing pyramids (tile reading, downsampling, encoding, and tile accumulation).
+- [cache.py](wsidicom/cache.py) - Per-instance LRU caching of method return values.
 - [conceptcode.py](wsidicom/conceptcode.py) - Handling of DICOM concept codes.
 - [config.py](wsidicom/config.py) - Handles configuration settings.
+- [downsampler.py](wsidicom/downsampler.py) - Downsampling of image pixels.
 - [errors.py](wsidicom/errors.py) - Custom errors.
 - [geometry.py](wsidicom/geometry.py) - Classes for geometry handling.
 - [graphical_annotations](wsidicom/graphical_annotations.py) - Handling graphical annotations.
+- [options.py](wsidicom/options.py) - Option enums for settings.
 - [source.py](wsidicom/source.py) - Metaclass Source for serving WsiInstances to WsiDicom.
+- [stitcher.py](wsidicom/stitcher.py) - Assembling a grid of tile pixels into one array.
 - [stringprinting.py](wsidicom/stringprinting.py) - For nicer string printing of objects.
 - [tags.py](wsidicom/tags.py) - Definition of commonly used DICOM tags.
-- [threads.py](wsidicom/thread.py) - Implementation of ThreadPoolExecutor that does not use a pool when only single worker.
+- [target.py](wsidicom/target.py) - Metaclass Target for saving WsiDicom.
+- [thread.py](wsidicom/thread.py) - Read executor and cancelable queues for the read and write pipelines.
 - [uid.py](wsidicom/uid.py) - Handles DICOM uids.
 - [wsidicom.py](wsidicom/wsidicom.py) - Main class with methods to open DICOM WSI objects.
+
+## Pixel pipeline
+
+Pillow was used throughout the pixel pipeline from version 0.1.0, as it was the go-to Python imaging library at the time. As the image-processing ecosystem matured, it became clear that the pixel operations — decoding, stitching tiles, and downsampling — run faster with numpy than with Pillow. Further, converting between the two is not free, so a pipeline that mixes them pays for repeated round-trips.
+
+From version 0.34.0 the pipeline handles pixels as numpy arrays throughout for best performance. For backwards compatibility, a Pillow image is still derived at the `WsiDicom` read boundary, at the cost of a single conversion. Passing `as_array=True` to a read returns the numpy array directly instead of a Pillow image, skipping even that conversion. The write path (`save()`) works entirely in numpy.
 
 ## Adding support for other file formats
 

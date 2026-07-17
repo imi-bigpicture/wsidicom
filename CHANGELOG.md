@@ -9,14 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `as_array` parameter on `WsiDicom.read_region`, `read_region_mm`, `read_region_mpp`, `read_tile`, `read_thumbnail`, `read_label` and `read_overview`, returning the pixels as a numpy array instead of a Pillow image, typically faster.
+- `opencv` optional extra. When installed, pyramid generation and region/thumbnail reads can downsample with OpenCV (`Cv2Downsampler`), typically faster than the Pillow downsampler. The backend is selected by the new `settings.preferred_downsampler` (a `DownsamplerOption`, or its string value `"opencv"`/`"pillow"`, or `None` to pick the fastest available).  Because cv2 and Pillow resampling differ for non-2x resizes, `read_region_mm`/`read_region_mpp`/`read_thumbnail` output depends on this setting.
 - `read_executor` parameter on `WsiDicom.open`, `open_dicomdir`, `open_streams`, and `open_web`: an optional shared, thread-based executor reused across region reads. When supplied, reads parallelize across it by default (pass `threads=1` to a read to opt out).
 - `threads` parameter on `read_thumbnail`, controlling how many worker threads the read fans its tile fetches across (matching `read_region`).
 
+### Changed
+
+- imagecodecs is now preferred over Pillow when both can decode a transfer syntax (`settings.preferred_decoder` still overrides).
+- `settings.pillow_resampling_filter` is renamed to `settings.resampling_filter` and is now a backend-neutral `ResampleFilterOption` enum instead of Pillow's `Image.Resampling`.
+- `settings.preferred_decoder` is now a `DecoderOption` enum rather than a plain string (the string name is still accepted).
+
 ### Fixed
 
-- Generated pyramid levels (`add_missing_levels`, `regenerate_pyramid`) mishandled partial edge blocks: with the default resampling filter the written frame was smaller than the `Rows`/`Columns` declared in the dataset, and with a non-commuting filter (e.g. `LANCZOS`) the block was stretched to fill the tile. The block is now halved by exactly 2x and padded to a full tile with the background color.
+- Generated pyramid levels (`add_missing_levels`, `regenerate_pyramid`) mishandled partial edge blocks: with the default resampling filter the written frame was smaller than the `Rows`/`Columns` declared in the dataset, and with a non-commuting filter the block was stretched to fill the tile. The block is now halved by exactly 2x and padded to a full tile with the background color.
 - Generating a level more than one downsample step above the level it derives from failed, which could happen when regenerating a pyramid with non-consecutive levels, or when `include_levels` omitted the level below a generated one. The levels in between are now built to bridge the cascade: downsampled and cascaded, but not encoded or written.
-- A tile cascaded to a level accumulator outside its input grid now raises, naming the coordinate. It previously produced an empty block, surfacing as an unrelated "Cannot stitch an empty tile grid" error.
 
 ## [0.33.1] - 2026-07-10
 

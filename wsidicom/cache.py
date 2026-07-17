@@ -16,13 +16,10 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from threading import Condition, Lock
-from typing import (
-    Generic,
-    TypeVar,
-)
+from typing import Generic, TypeVar
 
+import numpy as np
 from cachetools import LRUCache, cachedmethod
-from PIL.Image import Image
 
 
 def lru_cached_method(
@@ -116,6 +113,8 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
 
 
 class FrameCache(Generic[CacheItemType]):
+    """Cache of frames, keyed by image data and frame index."""
+
     def __init__(self, size: int):
         self._size = size
         self._lru_cache = LRU[tuple[int, int], CacheItemType](size)
@@ -128,12 +127,11 @@ class FrameCache(Generic[CacheItemType]):
     ) -> CacheItemType:
         if self._lru_cache.maxsize < 1:
             return frame_getter(frame_index)
-        frame = self._lru_cache.get((image_data_id, frame_index))
+        key = (image_data_id, frame_index)
+        frame = self._lru_cache.get(key)
         if frame is None:
             frame = frame_getter(frame_index)
-            self._lru_cache.put(
-                (image_data_id, frame_index), self._to_cache_item(frame)
-            )
+            self._lru_cache.put(key, self._to_cache_item(frame))
         return frame
 
     def get_tile_frames(
@@ -185,15 +183,9 @@ class EncodedFrameCache(FrameCache[bytes]):
         return CacheItem(value, len(value))
 
 
-class DecodedFrameCache(FrameCache[Image]):
-    _mode_to_bytes = {
-        "L": 1,
-        "RGB": 3,
-        "I": 4,
-    }
+class DecodedFrameCache(FrameCache[np.ndarray]):
+    """Caches decoded tiles as numpy arrays."""
 
     @classmethod
-    def _to_cache_item(cls, value: Image) -> CacheItem[Image]:
-        return CacheItem(
-            value, value.size[0] * value.size[1] * cls._mode_to_bytes[value.mode]
-        )
+    def _to_cache_item(cls, value: np.ndarray) -> CacheItem[np.ndarray]:
+        return CacheItem(value, value.nbytes)

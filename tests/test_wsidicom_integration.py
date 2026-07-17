@@ -29,9 +29,38 @@ from tests.conftest import (
     skip_if_shared_pool_unsupported,
 )
 from wsidicom import WsiDicom
+from wsidicom.config import settings
+from wsidicom.downsampler import Cv2Downsampler
 from wsidicom.geometry import Point
 from wsidicom.series.pyramid import Pyramid
 from wsidicom.thread import ReadExecutor
+
+
+@pytest.fixture(
+    params=[
+        "pillow",
+        pytest.param(
+            "opencv",
+            marks=pytest.mark.skipif(
+                not Cv2Downsampler.is_available(), reason="opencv not installed"
+            ),
+        ),
+    ]
+)
+def downsampler_backend(request: pytest.FixtureRequest) -> Any:
+    """Run a read-golden test under each downsampler backend, pinning it for the
+    test and restoring the setting afterwards."""
+    original = settings.preferred_downsampler
+    settings.preferred_downsampler = request.param
+    yield request.param
+    settings.preferred_downsampler = original
+
+
+def expected_md5(region: dict[str, Any], backend: str) -> str:
+    """The golden md5 for a region: a plain string when backend-independent, or
+    the per-downsampler value when the read downsamples and backends differ."""
+    md5 = region["md5"]
+    return md5 if isinstance(md5, str) else md5[backend]
 
 
 @pytest.mark.integration
@@ -57,6 +86,7 @@ class TestWsiDicomIntegration:
     )
     def test_read_region(
         self,
+        downsampler_backend: str,
         wsi_name: str,
         transfer_syntax: UID,
         input_type: WsiInputType,
@@ -80,7 +110,7 @@ class TestWsiDicomIntegration:
 
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
-        assert checksum == region["md5"], (region, checksum)
+        assert checksum == expected_md5(region, downsampler_backend), (region, checksum)
 
     @pytest.mark.parametrize("threads", [None, 4])
     @pytest.mark.parametrize(
@@ -88,6 +118,7 @@ class TestWsiDicomIntegration:
     )
     def test_read_region_mm(
         self,
+        downsampler_backend: str,
         wsi_name: str,
         transfer_syntax: UID,
         input_type: WsiInputType,
@@ -110,7 +141,7 @@ class TestWsiDicomIntegration:
 
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
-        assert checksum == region["md5"], (region, checksum)
+        assert checksum == expected_md5(region, downsampler_backend), (region, checksum)
 
     @pytest.mark.parametrize("threads", [None, 4])
     @pytest.mark.parametrize(
@@ -118,6 +149,7 @@ class TestWsiDicomIntegration:
     )
     def test_read_region_mpp(
         self,
+        downsampler_backend: str,
         wsi_name: str,
         transfer_syntax: UID,
         input_type: WsiInputType,
@@ -140,7 +172,30 @@ class TestWsiDicomIntegration:
 
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
-        assert checksum == region["md5"], (region, checksum)
+        assert checksum == expected_md5(region, downsampler_backend), (region, checksum)
+
+    @pytest.mark.parametrize(
+        ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_region()
+    )
+    def test_read_region_as_array_matches_read_region(
+        self,
+        wsi_name: str,
+        transfer_syntax: UID,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+        region: dict[str, Any],
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        location = (region["location"]["x"], region["location"]["y"])
+        size = (region["size"]["width"], region["size"]["height"])
+
+        # Act — the numpy read and the PIL read of the same region
+        array = wsi.read_region(location, region["level"], size, as_array=True)
+        image = wsi.read_region(location, region["level"], size)
+
+        # Assert — pixel-for-pixel identical
+        assert np.array_equal(array, np.asarray(image))
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_get_scaled_tile_pads_to_tile_size_when_not_cropping(
@@ -172,13 +227,13 @@ class TestWsiDicomIntegration:
             executor=read_executor,
         )
 
-        # Assert
-        assert padded.size == (tile_size.width, tile_size.height)
-        assert cropped.size[0] <= tile_size.width
-        assert cropped.size[1] <= tile_size.height
+        # Assert (arrays are (rows, columns, ...) = (height, width, ...))
+        assert padded.shape[:2] == (tile_size.height, tile_size.width)
+        assert cropped.shape[1] <= tile_size.width
+        assert cropped.shape[0] <= tile_size.height
         # The padded tile holds the cropped tile at the origin, padded elsewhere.
         assert (
-            padded.crop((0, 0, cropped.size[0], cropped.size[1])).tobytes()
+            padded[: cropped.shape[0], : cropped.shape[1]].tobytes()
             == cropped.tobytes()
         )
         # Padding copied the background tile rather than mutating the shared one.
@@ -191,6 +246,7 @@ class TestWsiDicomIntegration:
     )
     def test_read_tile(
         self,
+        downsampler_backend: str,
         wsi_name: str,
         transfer_syntax: UID,
         input_type: WsiInputType,
@@ -210,7 +266,7 @@ class TestWsiDicomIntegration:
 
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
-        assert checksum == region["md5"], (region, checksum)
+        assert checksum == expected_md5(region, downsampler_backend), (region, checksum)
 
     @pytest.mark.parametrize(
         ["wsi_name", "transfer_syntax", "region"],
@@ -218,6 +274,7 @@ class TestWsiDicomIntegration:
     )
     def test_read_encoded_tile(
         self,
+        downsampler_backend: str,
         wsi_name: str,
         transfer_syntax: UID,
         input_type: WsiInputType,
@@ -237,13 +294,14 @@ class TestWsiDicomIntegration:
 
         # Assert
         checksum = md5(im).hexdigest()
-        assert checksum == region["md5"], (region, checksum)
+        assert checksum == expected_md5(region, downsampler_backend), (region, checksum)
 
     @pytest.mark.parametrize(
         ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_thumbnail()
     )
     def test_read_thumbnail(
         self,
+        downsampler_backend: str,
         wsi_name: str,
         transfer_syntax: UID,
         input_type: WsiInputType,
@@ -259,7 +317,7 @@ class TestWsiDicomIntegration:
 
         # Assert
         checksum = md5(im.tobytes()).hexdigest()
-        assert checksum == region["md5"], (region, checksum)
+        assert checksum == expected_md5(region, downsampler_backend), (region, checksum)
         assert im.size[0] <= region["size"]["width"]
         assert im.size[1] <= region["size"]["height"]
 

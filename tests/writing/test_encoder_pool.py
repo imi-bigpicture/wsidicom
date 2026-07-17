@@ -14,14 +14,16 @@
 
 """Tests for EncoderPool."""
 
+from typing import cast
+
+import numpy as np
 import pytest
 from decoy import Decoy, matchers
-from PIL import Image
 
 from wsidicom.codec import Encoder
 from wsidicom.downsampler import Downsampler, PillowDownsampler
 from wsidicom.geometry import Size
-from wsidicom.stitcher import PillowStitcher, Stitcher
+from wsidicom.stitcher import NumpyStitcher
 from wsidicom.thread import (
     CancellationToken,
     CompletionTracker,
@@ -37,6 +39,36 @@ from wsidicom.writing.models import (
 )
 
 
+class ArrayEq:
+    """Argument matcher for a numpy array.
+
+    Decoy matches recorded call arguments by equality, but `==` on a numpy array
+    is elementwise and yields an array, which is ambiguous as a bool. Setting
+    `__array_ufunc__` to None makes numpy defer the comparison to this class,
+    which then compares by value.
+    """
+
+    __array_ufunc__ = None
+
+    def __init__(self, array: np.ndarray) -> None:
+        self._array = array
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, np.ndarray) and np.array_equal(other, self._array)
+
+    def __hash__(self) -> int:
+        return hash(self._array.tobytes())
+
+    def __repr__(self) -> str:
+        return f"ArrayEq(shape={self._array.shape})"
+
+
+def array_eq(array: np.ndarray) -> np.ndarray:
+    """An ``ArrayEq`` matcher typed as ``np.ndarray`` so decoy call sites, which
+    pass a matcher where the real argument type is expected, type-check."""
+    return cast(np.ndarray, ArrayEq(array))
+
+
 @pytest.fixture
 def decoy() -> Decoy:
     """Create a Decoy instance for mocking."""
@@ -44,9 +76,15 @@ def decoy() -> Decoy:
 
 
 @pytest.fixture
-def test_tile() -> Image.Image:
-    """Create a test tile image."""
-    return Image.new("RGB", (256, 256), color=(255, 0, 0))
+def dtype() -> np.dtype:
+    """Pixel dtype for building test arrays."""
+    return np.dtype(np.uint8)
+
+
+@pytest.fixture
+def test_tile(dtype: np.dtype) -> np.ndarray:
+    """Create a test tile array."""
+    return np.full((256, 256, 3), (255, 0, 0), dtype=dtype)
 
 
 @pytest.fixture
@@ -56,9 +94,9 @@ def downsampler(decoy: Decoy) -> Downsampler:
 
 
 @pytest.fixture
-def stitcher(decoy: Decoy) -> Stitcher:
-    """Mock Stitcher; downsample tests configure return values."""
-    return decoy.mock(cls=Stitcher)
+def stitcher(decoy: Decoy) -> NumpyStitcher:
+    """Mock NumpyStitcher; downsample tests configure return values."""
+    return decoy.mock(cls=NumpyStitcher)
 
 
 @pytest.fixture
@@ -68,9 +106,9 @@ def tile_size() -> Size:
 
 
 @pytest.fixture
-def blank_tile() -> Image.Image:
+def blank_tile(dtype: np.dtype) -> np.ndarray:
     """Background tile used to pad downsampled edge blocks to a full tile."""
-    return Image.new("RGB", (256, 256), color=(255, 255, 255))
+    return np.full((256, 256, 3), 255, dtype=dtype)
 
 
 @pytest.fixture
@@ -225,11 +263,11 @@ class TestEncoderPool:
     def test_encode_one_task(
         self,
         decoy: Decoy,
-        test_tile: Image.Image,
+        test_tile: np.ndarray,
         downsampler: Downsampler,
-        stitcher: Stitcher,
+        stitcher: NumpyStitcher,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """Test that encoding works via the queue property."""
@@ -269,22 +307,23 @@ class TestEncoderPool:
     def test_encode_two_tasks(
         self,
         decoy: Decoy,
+        dtype: np.dtype,
         downsampler: Downsampler,
-        stitcher: Stitcher,
+        stitcher: NumpyStitcher,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """Test that encoding works via the queue property."""
         # Arrange
-        test_tile_1 = Image.new("RGB", (256, 256), color=(255, 0, 0))
-        test_tile_2 = Image.new("RGB", (256, 256), color=(0, 255, 0))
+        test_tile_1 = np.full((256, 256, 3), (255, 0, 0), dtype=dtype)
+        test_tile_2 = np.full((256, 256, 3), (0, 255, 0), dtype=dtype)
         expected_bytes_1 = b"encoded_data_1"
         expected_bytes_2 = b"encoded_data_2"
         encoder = decoy.mock(cls=Encoder)
 
-        decoy.when(encoder.encode(test_tile_1)).then_return(expected_bytes_1)
-        decoy.when(encoder.encode(test_tile_2)).then_return(expected_bytes_2)
+        decoy.when(encoder.encode(array_eq(test_tile_1))).then_return(expected_bytes_1)
+        decoy.when(encoder.encode(array_eq(test_tile_2))).then_return(expected_bytes_2)
         output_queue: PriorityCancelableQueue[EncodingTaskResult] = (
             PriorityCancelableQueue()
         )
@@ -325,21 +364,24 @@ class TestEncoderPool:
     def test_encode_batch_with_multiple_tiles(
         self,
         decoy: Decoy,
+        dtype: np.dtype,
         downsampler: Downsampler,
-        stitcher: Stitcher,
+        stitcher: NumpyStitcher,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """Test encoding a batch with multiple tiles."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
-        tiles = [Image.new("RGB", (256, 256), color=(i * 50, 0, 0)) for i in range(4)]
+        tiles = [
+            np.full((256, 256, 3), (i * 50, 0, 0), dtype=dtype) for i in range(4)
+        ]
         expected_results = [f"encoded_{i}".encode() for i in range(4)]
         for _, (tile, expected_result) in enumerate(
             zip(tiles, expected_results, strict=True)
         ):
-            decoy.when(encoder.encode(tile)).then_return(expected_result)
+            decoy.when(encoder.encode(array_eq(tile))).then_return(expected_result)
         output_queue: PriorityCancelableQueue[EncodingTaskResult] = (
             PriorityCancelableQueue()
         )
@@ -375,9 +417,9 @@ class TestEncoderPool:
         self,
         decoy: Decoy,
         downsampler: Downsampler,
-        stitcher: Stitcher,
+        stitcher: NumpyStitcher,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """Test that starting twice raises an error."""
@@ -403,16 +445,17 @@ class TestEncoderPool:
     def test_encoding_failure_cancels_token(
         self,
         decoy: Decoy,
+        dtype: np.dtype,
         downsampler: Downsampler,
-        stitcher: Stitcher,
+        stitcher: NumpyStitcher,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """An encoding failure cancels the shared token instead of deadlocking."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
-        test_tile = Image.new("RGB", (256, 256), color=(255, 0, 0))
+        test_tile = np.full((256, 256, 3), (255, 0, 0), dtype=dtype)
         decoy.when(encoder.encode(test_tile)).then_raise(ValueError("Encoding failed"))
         output_queue: PriorityCancelableQueue[EncodingTaskResult] = (
             PriorityCancelableQueue()
@@ -447,9 +490,9 @@ class TestEncoderPool:
         self,
         decoy: Decoy,
         downsampler: Downsampler,
-        stitcher: Stitcher,
+        stitcher: NumpyStitcher,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """Test that shutdown properly stops dispatcher and executor."""
@@ -475,9 +518,10 @@ class TestEncoderPool:
     def test_downsample_and_encode(
         self,
         decoy: Decoy,
+        dtype: np.dtype,
         downsampler: Downsampler,
-        stitcher: Stitcher,
-        blank_tile: Image.Image,
+        stitcher: NumpyStitcher,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """EncoderPool stitches input tiles, downsamples, encodes, and cascades."""
@@ -485,8 +529,8 @@ class TestEncoderPool:
         encoder = decoy.mock(cls=Encoder)
         decoy.when(downsampler.commutes_with_stitch).then_return(False)
 
-        composite = Image.new("RGB", (512, 512), color=(10, 20, 30))
-        downsampled = Image.new("RGB", (256, 256), color=(50, 50, 50))
+        composite = np.full((512, 512, 3), (10, 20, 30), dtype=dtype)
+        downsampled = np.full((256, 256, 3), (50, 50, 50), dtype=dtype)
         decoy.when(stitcher.stitch_grid(matchers.Anything())).then_return(composite)
         decoy.when(downsampler.downsample(composite, Size(256, 256))).then_return(
             downsampled
@@ -504,12 +548,12 @@ class TestEncoderPool:
         )
         tiles = [
             [
-                Image.new("RGB", (256, 256), color=(0, 0, 0)),
-                Image.new("RGB", (256, 256), color=(50, 0, 0)),
+                np.full((256, 256, 3), (0, 0, 0), dtype=dtype),
+                np.full((256, 256, 3), (50, 0, 0), dtype=dtype),
             ],
             [
-                Image.new("RGB", (256, 256), color=(100, 0, 0)),
-                Image.new("RGB", (256, 256), color=(150, 0, 0)),
+                np.full((256, 256, 3), (100, 0, 0), dtype=dtype),
+                np.full((256, 256, 3), (150, 0, 0), dtype=dtype),
             ],
         ]
         tracker.increment()
@@ -553,9 +597,10 @@ class TestEncoderPool:
     def test_downsample_uses_reduce_fast_path(
         self,
         decoy: Decoy,
+        dtype: np.dtype,
         downsampler: Downsampler,
-        stitcher: Stitcher,
-        blank_tile: Image.Image,
+        stitcher: NumpyStitcher,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """When downsampler commutes with stitch, no downsample call is made."""
@@ -563,7 +608,7 @@ class TestEncoderPool:
         encoder = decoy.mock(cls=Encoder)
         decoy.when(downsampler.commutes_with_stitch).then_return(True)
 
-        stitched = Image.new("RGB", (256, 256), color=(80, 80, 80))
+        stitched = np.full((256, 256, 3), (80, 80, 80), dtype=dtype)
         decoy.when(stitcher.stitch_grid(matchers.Anything())).then_return(stitched)
         decoy.when(encoder.encode(stitched)).then_return(b"enc")
 
@@ -577,8 +622,8 @@ class TestEncoderPool:
         )
         # 1x2 edge block (1 column, 2 rows)
         tiles = [
-            [Image.new("RGB", (256, 256), color=(100, 0, 0))],
-            [Image.new("RGB", (256, 256), color=(200, 0, 0))],
+            [np.full((256, 256, 3), (100, 0, 0), dtype=dtype)],
+            [np.full((256, 256, 3), (200, 0, 0), dtype=dtype)],
         ]
         tracker.increment()
         task = DownsampleEncodeTask(
@@ -615,10 +660,11 @@ class TestEncoderPool:
     def test_downsample_without_output_queue_cascades_without_encoding(
         self,
         decoy: Decoy,
+        dtype: np.dtype,
         downsampler: Downsampler,
-        stitcher: Stitcher,
+        stitcher: NumpyStitcher,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """An intermediate level is downsampled and cascaded, but not encoded.
@@ -629,7 +675,7 @@ class TestEncoderPool:
         # Arrange
         encoder = decoy.mock(cls=Encoder)
         decoy.when(downsampler.commutes_with_stitch).then_return(True)
-        stitched = Image.new("RGB", (256, 256), color=(80, 80, 80))
+        stitched = np.full((256, 256, 3), (80, 80, 80), dtype=dtype)
         decoy.when(stitcher.stitch_grid(matchers.Anything())).then_return(stitched)
 
         cascade_queue: FifoCancelableQueue = FifoCancelableQueue()
@@ -639,7 +685,10 @@ class TestEncoderPool:
             coordinates=PyramidTilePosition(
                 level=1, x_index=0, y_index=0, z_index=0, optical_path_index=0
             ),
-            tiles=[[Image.new("RGB", (256, 256)) for _ in range(2)] for _ in range(2)],
+            tiles=[
+                [np.zeros((256, 256, 3), dtype=dtype) for _ in range(2)]
+                for _ in range(2)
+            ],
             output_queue=None,
             cascade_tracker=tracker,
             cascade_queue=cascade_queue,
@@ -666,8 +715,9 @@ class TestEncoderPool:
     def test_downsample_edge_block_is_padded_to_tile_size(
         self,
         decoy: Decoy,
+        dtype: np.dtype,
         tile_size: Size,
-        blank_tile: Image.Image,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """A partial edge block is halved and padded back to a full tile.
@@ -679,7 +729,7 @@ class TestEncoderPool:
         """
         # Arrange - real downsampler and stitcher, so the sizes are real
         encoder = decoy.mock(cls=Encoder)
-        encoded: list[Image.Image] = []
+        encoded: list[np.ndarray] = []
         decoy.when(encoder.encode(matchers.Anything())).then_do(
             lambda tile: encoded.append(tile) or b"encoded"
         )
@@ -688,7 +738,9 @@ class TestEncoderPool:
         )
         tracker = CompletionTracker()
         # 1x2 edge block: one row of two tiles, i.e. no tile row below it.
-        tiles = [[Image.new("RGB", (256, 256), color=(10, 20, 30)) for _ in range(2)]]
+        tiles = [
+            [np.full((256, 256, 3), (10, 20, 30), dtype=dtype) for _ in range(2)]
+        ]
         tracker.increment()
         task = DownsampleEncodeTask(
             coordinates=PyramidTilePosition(
@@ -704,7 +756,7 @@ class TestEncoderPool:
             encoder,
             num_workers=1,
             downsampler=PillowDownsampler(),
-            stitcher=PillowStitcher(),
+            stitcher=NumpyStitcher(),
             tile_size=tile_size,
             blank_tile=blank_tile,
             token=token,
@@ -715,18 +767,19 @@ class TestEncoderPool:
         # part below (outside the image) filled with the background.
         assert len(encoded) == 1
         padded = encoded[0]
-        assert padded.size == (tile_size.width, tile_size.height)
-        assert padded.getpixel((0, 0)) == (10, 20, 30)
-        assert padded.getpixel((0, 200)) == (255, 255, 255)
+        assert padded.shape == (tile_size.height, tile_size.width, 3)
+        assert np.array_equal(padded[0, 0], np.array([10, 20, 30], dtype))
+        assert np.array_equal(padded[200, 0], np.array([255, 255, 255], dtype))
 
         tracker.wait_for_zero()
 
     def test_downsample_failure_cancels_token_and_decrements(
         self,
         decoy: Decoy,
+        dtype: np.dtype,
         downsampler: Downsampler,
-        stitcher: Stitcher,
-        blank_tile: Image.Image,
+        stitcher: NumpyStitcher,
+        blank_tile: np.ndarray,
         token: CancellationToken,
     ):
         """A downsampler exception cancels the token and still decrements the tracker."""
@@ -734,7 +787,7 @@ class TestEncoderPool:
         encoder = decoy.mock(cls=Encoder)
         decoy.when(downsampler.commutes_with_stitch).then_return(False)
 
-        composite = Image.new("RGB", (512, 512))
+        composite = np.zeros((512, 512, 3), dtype=dtype)
         decoy.when(stitcher.stitch_grid(matchers.Anything())).then_return(composite)
         decoy.when(
             downsampler.downsample(matchers.Anything(), matchers.Anything())
@@ -748,7 +801,10 @@ class TestEncoderPool:
         coordinates = PyramidTilePosition(
             level=1, x_index=0, y_index=0, z_index=0, optical_path_index=0
         )
-        tiles = [[Image.new("RGB", (256, 256)) for _ in range(2)] for _ in range(2)]
+        tiles = [
+            [np.zeros((256, 256, 3), dtype=dtype) for _ in range(2)]
+            for _ in range(2)
+        ]
         tracker.increment()
         task = DownsampleEncodeTask(
             coordinates=coordinates,

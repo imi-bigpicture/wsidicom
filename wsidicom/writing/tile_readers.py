@@ -25,7 +25,7 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
-from PIL import Image
+import numpy as np
 
 from wsidicom.geometry import Point
 from wsidicom.instance import ImageData
@@ -45,7 +45,7 @@ class TileAccumulator(Protocol):
         """Number of generated levels in the cascade starting from this one."""
         ...
 
-    def add_tile(self, x: int, y: int, z: int, path: int, tile: Image.Image) -> None:
+    def add_tile(self, x: int, y: int, z: int, path: int, tile: np.ndarray) -> None:
         """Submit a decoded tile for accumulation."""
         ...
 
@@ -210,10 +210,10 @@ class TranscodeTileReader(TileReader):
         output_queue: WriteOnlyQueue[EncodingTaskResult],
     ) -> None:
         row_start: Point | None = None
-        row_tiles: list[Image.Image] = []
+        row_tiles: list[np.ndarray] = []
         for position, decoded in zip(
             positions,
-            image_data.get_decoded_tiles(positions, z, path),
+            image_data.get_decoded_tiles(positions, z, path, cache=False),
             strict=True,
         ):
             if row_start is not None and position.y != row_start.y:
@@ -271,10 +271,10 @@ class CascadingTranscodeTileReader(TileReader):
         output_queue: WriteOnlyQueue[EncodingTaskResult],
     ) -> None:
         row_start: Point | None = None
-        row_tiles: list[Image.Image] = []
+        row_tiles: list[np.ndarray] = []
         for position, decoded in zip(
             positions,
-            image_data.get_decoded_tiles(positions, z, path),
+            image_data.get_decoded_tiles(positions, z, path, cache=False),
             strict=True,
         ):
             if row_start is not None and position.y != row_start.y:
