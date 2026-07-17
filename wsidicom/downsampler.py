@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from PIL import Image
 
-from wsidicom.config import settings
+from wsidicom.config import get_settings, use_settings
 from wsidicom.geometry import Size
 from wsidicom.options import DownsamplerOption, ResampleFilterOption
 
@@ -42,8 +42,8 @@ class Downsampler(ABC):
 
         Selects an available backend for the filter, honoring the backend
         preference and falling back when a backend does not support the filter.
-        Both arguments default to settings when None, so callers (and tests) can
-        override the filter or the backend without touching global settings.
+        Both arguments default to the active settings when None, so callers (and
+        tests) can override the filter or the backend without touching settings.
 
         Parameters
         ----------
@@ -58,10 +58,11 @@ class Downsampler(ABC):
         Downsampler
             Downsampler for the filter.
         """
-        if resample is None:
-            resample = settings.resampling_filter
-        if preferred is None:
-            preferred = settings.preferred_downsampler
+        with use_settings() as settings:
+            if resample is None:
+                resample = settings.resampling_filter
+            if preferred is None:
+                preferred = settings.preferred_downsampler
         if preferred != DownsamplerOption.PILLOW:
             cv2_downsampler = Cv2Downsampler.from_filter(resample)
             if cv2_downsampler is not None:
@@ -72,13 +73,13 @@ class Downsampler(ABC):
     def create_for_read(cls) -> "Downsampler":
         """Create the downsampler for rescaling on read, using the configured
         read filter (``settings.resampling_filter``)."""
-        return cls.create(resample=settings.resampling_filter)
+        return cls.create(resample=get_settings().resampling_filter)
 
     @classmethod
     def create_for_pyramid(cls) -> "Downsampler":
         """Create the downsampler for generating pyramid levels, using the
         configured pyramid filter (``settings.pyramid_resampling_filter``)."""
-        return cls.create(resample=settings.pyramid_resampling_filter)
+        return cls.create(resample=get_settings().pyramid_resampling_filter)
 
     @property
     def commutes_with_stitch(self) -> bool:

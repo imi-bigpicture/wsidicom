@@ -22,7 +22,7 @@ from wsidicom.conceptcode import (
     AnatomicPathologySpecimenTypesCode,
     ContainerTypeCode,
 )
-from wsidicom.config import settings
+from wsidicom.config import get_settings
 from wsidicom.metadata.sample import (
     BaseSampling,
     BaseSpecimen,
@@ -226,7 +226,7 @@ class StepsDirectory:
         """
 
         if (
-            settings.strict_specimen_identifier_check
+            get_settings().strict_specimen_identifier_check
             or identifier in steps_by_identifier
         ):
             return identifier

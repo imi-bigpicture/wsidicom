@@ -31,7 +31,7 @@ from pydicom.uid import (
 )
 
 from wsidicom.codec import Codec
-from wsidicom.config import settings
+from wsidicom.config import get_settings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -138,7 +138,7 @@ class WsiDicomWebSource(Source):
             )
         )
 
-        web_threads = settings.open_web_threads or (os.cpu_count() or 1)
+        web_threads = get_settings().open_web_threads or (os.cpu_count() or 1)
         with ReadExecutor(web_threads, None) as pool:
             instances = pool.map(create_instance, instance_uids)
             for instance in instances:
@@ -181,7 +181,7 @@ class WsiDicomWebSource(Source):
     @property
     def level_instances(self) -> list[WsiInstance]:
         """The level instances parsed from the source."""
-        if settings.strict_tile_size_check:
+        if get_settings().strict_tile_size_check:
             return [
                 level
                 for level in self._level_instances

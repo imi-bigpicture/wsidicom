@@ -54,8 +54,8 @@ from pydicom.valuerep import (
     validate_vr_length,
 )
 
-from wsidicom import config
 from wsidicom.conceptcode import ConceptCode, UnitCode
+from wsidicom.config import get_settings
 from wsidicom.geometry import Orientation, PointMm, SizeMm
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
@@ -93,7 +93,7 @@ class StringDicomField(StringLikeDicomField):
         if (
             not valid
             and pydicom_config.settings.writing_validation_mode == pydicom_config.RAISE
-            and config.settings.truncate_long_dicom_strings_on_validation_error
+            and get_settings().truncate_long_dicom_strings_on_validation_error
         ):
             maximum_allowed_length = MAX_VALUE_LEN[self._value_representation]
             logging.warning(

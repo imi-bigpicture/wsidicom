@@ -17,7 +17,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from wsidicom.config import settings
+from wsidicom.config import get_settings
 from wsidicom.errors import (
     WsiDicomNoResolutionError,
     WsiDicomOutOfBoundsError,
@@ -110,7 +110,7 @@ class Level(Instances):
             True if other level matches.
         """
         return super().matches(other_group) and (
-            not settings.strict_tile_size_check
+            not get_settings().strict_tile_size_check
             or (
                 isinstance(other_group, Level)
                 and other_group.tile_size == self.tile_size
@@ -273,7 +273,7 @@ class Level(Instances):
         """
         float_level = math.log2(self.pixel_spacing.width / base_pixel_spacing.width)
         level = int(round(float_level))
-        tolerance = settings.level_scale_tolerance
+        tolerance = get_settings().level_scale_tolerance
         if not math.isclose(float_level, level, abs_tol=tolerance):
             raise NotImplementedError(
                 f"Levels needs to be integer. Got {float_level} that is more than set"

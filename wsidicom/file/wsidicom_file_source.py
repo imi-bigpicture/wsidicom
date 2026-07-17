@@ -32,7 +32,7 @@ from pydicom.uid import (
 )
 from upath import UPath
 
-from wsidicom.config import settings
+from wsidicom.config import get_settings
 from wsidicom.errors import (
     WsiDicomNotFoundError,
     WsiDicomNotSupportedError,
@@ -113,7 +113,7 @@ class WsiDicomFileSource(Source):
         return self._create_instances(
             self._levels,
             self._slide_uids,
-            self._base_tile_size if settings.strict_tile_size_check else None,
+            self._base_tile_size if get_settings().strict_tile_size_check else None,
         )
 
     @property

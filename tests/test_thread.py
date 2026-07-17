@@ -14,12 +14,13 @@
 
 """Tests for wsidicom.thread."""
 
+import contextvars
 import time
 from concurrent.futures import Executor, Future
 from threading import Thread, get_ident
 
 import pytest
-from decoy import Decoy
+from decoy import Decoy, matchers
 
 from wsidicom.thread import (
     CancellationToken,
@@ -376,13 +377,37 @@ class TestReadExecutor:
             return value
 
         argument = 7
-        decoy.when(shared.submit(work, argument)).then_return(expected_future)
+        # submit wraps the call in the caller's context (matchers.Anything() is
+        # that copy_context().run wrapper) for context-local settings propagation.
+        decoy.when(
+            shared.submit(matchers.Anything(), work, argument)
+        ).then_return(expected_future)
 
         # Act
         result = read_executor.submit(work, argument)
 
         # Assert — the shared executor's future is returned unchanged
         assert result is expected_future
+
+    def test_propagates_context_to_workers(self):
+        """A context-local value set by the caller is visible in pool workers.
+
+        Guards the copy_context wrap in submit: without it, worker threads start
+        with an empty context and context-local settings silently fall back to
+        the process default.
+        """
+        # Arrange
+        variable: contextvars.ContextVar[str] = contextvars.ContextVar(
+            "test", default="default"
+        )
+        variable.set("scoped")
+
+        # Act — read the variable inside real pool worker threads
+        with ReadExecutor(4) as read_executor:
+            results = list(read_executor.map(lambda _: variable.get(), range(8)))
+
+        # Assert
+        assert set(results) == {"scoped"}
 
     def test_does_not_shut_down_shared_executor(self, decoy: Decoy):
         """Closing a ReadExecutor never shuts down a borrowed shared executor."""

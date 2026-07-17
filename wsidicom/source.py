@@ -16,7 +16,7 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
 
 from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
-from wsidicom.config import settings
+from wsidicom.config import use_settings
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
 
@@ -33,8 +33,13 @@ class Source(metaclass=ABCMeta):
     """
 
     def __init__(self):
-        self._decoded_frame_cache = DecodedFrameCache(settings.decoded_frame_cache_size)
-        self._encoded_frame_cache = EncodedFrameCache(settings.encoded_frame_cache_size)
+        with use_settings() as settings:
+            self._decoded_frame_cache = DecodedFrameCache(
+                settings.decoded_frame_cache_size
+            )
+            self._encoded_frame_cache = EncodedFrameCache(
+                settings.encoded_frame_cache_size
+            )
 
     def __enter__(self):
         return self

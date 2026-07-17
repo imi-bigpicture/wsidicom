@@ -41,7 +41,6 @@ from pydicom.uid import (
     RLELossless,
 )
 
-from wsidicom import config
 from wsidicom.codec.optionals import (
     IMAGE_CODECS_AVAILABLE,
     JPEG2K,
@@ -62,6 +61,7 @@ from wsidicom.codec.optionals import (
     JPEGXL as JPEGXLCodec,
 )
 from wsidicom.codec.rle import RleCodec
+from wsidicom.config import get_settings
 from wsidicom.geometry import Size
 from wsidicom.options import DecoderOption
 from wsidicom.uid import JPEGXL, JPEGXLJPEGRecompression, JPEGXLLossless
@@ -232,7 +232,7 @@ class Decoder(metaclass=ABCMeta):
             DecoderOption.PYDICOM: PydicomDecoder,
         }
         if preferred is None:
-            preferred = config.settings.preferred_decoder
+            preferred = get_settings().preferred_decoder
         if preferred is not None:
             decoder = decoders[preferred]
             if not decoder.is_available() or not decoder.is_supported(

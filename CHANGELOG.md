@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Keyword-only `settings` parameter on `WsiDicom.open`, `open_dicomdir`, `open_streams` and `open_web`, taking a `Settings` used for that slide instead of the process-wide `settings`.
+- `use_settings`, a context manager that applies a `Settings` to a block of code.
+
 ## [0.34.0] - 2026-07-17
 
 ### Added
