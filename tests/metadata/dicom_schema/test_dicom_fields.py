@@ -25,8 +25,8 @@ from tests.metadata.dicom_schema.helpers import (
     assert_dicom_issuer_of_identifier_equals_issuer_of_identifier,
     create_code_dataset,
 )
-from wsidicom import config
 from wsidicom.conceptcode import UnitCode
+from wsidicom.config import Settings, use_settings
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
@@ -258,14 +258,16 @@ class TestDicomFields:
     ):
         # Arrange
         pydicom_config.settings.writing_validation_mode = pydicom_config.RAISE
-        config.settings.truncate_long_dicom_strings_on_validation_error = True
         maximum_allowed_length = MAX_VALUE_LEN[value_representation.name]
         length = maximum_allowed_length + 1
         value = "A" * length
         field = StringDicomField(value_representation)
 
         # Act
-        serialized = field.serialize("attribute", {"attribute": value})
+        with use_settings(
+            Settings(truncate_long_dicom_strings_on_validation_error=True)
+        ):
+            serialized = field.serialize("attribute", {"attribute": value})
 
         # Assert
         assert serialized == value[:maximum_allowed_length]

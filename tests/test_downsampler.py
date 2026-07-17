@@ -20,11 +20,13 @@ skipped when opencv is absent). Behaviour specific to one backend lives in its
 own class.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 from wsidicom_data import TestData
 
-from wsidicom.config import settings
+from wsidicom.config import Settings, use_settings
 from wsidicom.downsampler import (
     Cv2Downsampler,
     Downsampler,
@@ -272,12 +274,6 @@ class TestDownsamplerCreate:
     """Downsampler.create selects the backend from the preference argument,
     falling back to settings.preferred_downsampler when it is None."""
 
-    @pytest.fixture(autouse=True)
-    def _restore_setting(self):
-        original = settings.preferred_downsampler
-        yield
-        settings.preferred_downsampler = original
-
     def test_pillow_argument_forces_pillow(self):
         # Act & Assert
         assert isinstance(
@@ -310,40 +306,38 @@ class TestDownsamplerCreate:
         not Cv2Downsampler.is_available(), reason="opencv not installed"
     )
     def test_argument_overrides_settings(self):
-        # Arrange
-        settings.preferred_downsampler = DownsamplerOption.PILLOW
-
         # Act & Assert — the argument wins over the setting
-        assert isinstance(
-            Downsampler.create(
-                resample=ResampleFilterOption.BOX, preferred=DownsamplerOption.OPENCV
-            ),
-            Cv2Downsampler,
-        )
+        with use_settings(Settings(preferred_downsampler=DownsamplerOption.PILLOW)):
+            assert isinstance(
+                Downsampler.create(
+                    resample=ResampleFilterOption.BOX,
+                    preferred=DownsamplerOption.OPENCV,
+                ),
+                Cv2Downsampler,
+            )
 
     def test_defaults_to_settings(self):
-        # Arrange
-        settings.preferred_downsampler = DownsamplerOption.PILLOW
-
         # Act & Assert — no argument falls back to the setting
-        assert isinstance(Downsampler.create(), PillowDownsampler)
+        with use_settings(Settings(preferred_downsampler=DownsamplerOption.PILLOW)):
+            assert isinstance(Downsampler.create(), PillowDownsampler)
 
     @pytest.mark.skipif(
         not Cv2Downsampler.is_available(), reason="opencv not installed"
     )
     def test_none_setting_prefers_cv2_when_available(self):
-        # Arrange
-        settings.preferred_downsampler = None
-
         # Act & Assert
-        assert isinstance(
-            Downsampler.create(resample=ResampleFilterOption.BOX), Cv2Downsampler
-        )
+        with use_settings(Settings(preferred_downsampler=None)):
+            assert isinstance(
+                Downsampler.create(resample=ResampleFilterOption.BOX), Cv2Downsampler
+            )
 
     def test_unknown_name_raises(self):
-        # Act & Assert
+        # Arrange — an invalid value (cast so the test targets runtime coercion)
+        bogus = cast(DownsamplerOption, "bogus")
+
+        # Act & Assert — rejected by __post_init__ coercion
         with pytest.raises(ValueError):
-            settings.preferred_downsampler = "bogus"
+            Settings(preferred_downsampler=bogus)
 
 
 @pytest.mark.unittest

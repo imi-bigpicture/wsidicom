@@ -14,7 +14,13 @@
 
 from importlib.metadata import version
 
-from wsidicom.config import settings
+from wsidicom.config import (
+    Settings,
+    get_settings,
+    replace_default_setting,
+    set_default_settings,
+    use_settings,
+)
 from wsidicom.file import InstanceSplit
 from wsidicom.graphical_annotations import (
     Annotation,
@@ -36,7 +42,11 @@ from wsidicom.wsidicom import WsiDicom
 __version__ = version("wsidicom")
 
 __all__ = [
-    "settings",
+    "Settings",
+    "get_settings",
+    "set_default_settings",
+    "replace_default_setting",
+    "use_settings",
     "Annotation",
     "AnnotationGroup",
     "AnnotationInstance",

@@ -17,7 +17,7 @@ import contextvars
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from typing import cast
+from typing import Any
 
 from wsidicom.options import DecoderOption, DownsamplerOption, ResampleFilterOption
 
@@ -27,10 +27,10 @@ class Settings:
     """Immutable settings for a WsiDicom.
 
     Construct with the desired values and pass to ``WsiDicom.open(settings=...)``
-    for per-object settings. To change the process-wide default instead, mutate
-    the global ``settings`` (e.g. ``settings.resampling_filter = ...``). The
-    option-enum fields accept their string value (e.g. ``"box"``) as well as the
-    enum member.
+    for per-object settings. To change the process-wide default instead, use
+    ``set_default_settings(Settings(...))`` or ``replace_default_setting(...)``.
+    The option-enum fields accept their string value (e.g. ``"box"``) as well as
+    the enum member.
     """
 
     strict_uid_check: bool = False
@@ -80,8 +80,8 @@ class Settings:
     """Tolerance for level scale comparison. Default is 1e-2."""
 
     def __post_init__(self) -> None:
-        # Accept the string form of the option enums (e.g. "box") and coerce to
-        # the enum member; idempotent when already a member.
+        # Accept the string form of the option enums (e.g. "box") at construction
+        # and coerce to the enum member; idempotent when already a member.
         object.__setattr__(
             self, "resampling_filter", ResampleFilterOption(self.resampling_filter)
         )
@@ -116,30 +116,25 @@ def get_settings() -> Settings:
     return _active_settings.get() or _default_settings
 
 
-class _SettingsProxy:
-    """The mutable process-default surface exposed as the global ``settings``.
+def set_default_settings(new_settings: Settings) -> None:
+    """Replace the process-wide default settings.
 
-    Reads resolve to the settings active in the current context (or the default);
-    writes replace the process default, since ``Settings`` is immutable. So
-    ``settings.resampling_filter = ...`` keeps configuring the default, while
-    reads honor any per-operation ``Settings`` activated by ``use_settings``.
+    Changes what is used when no per-call ``settings`` (see ``WsiDicom.open``)
+    and no active scope (see ``use_settings``) override it.
     """
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(_active_settings.get() or _default_settings, name)
-
-    def __setattr__(self, name: str, value: object) -> None:
-        global _default_settings
-        _default_settings = replace(_default_settings, **{name: value})
+    global _default_settings
+    _default_settings = new_settings
 
 
-# Typed as ``Settings`` so attribute access stays fully typed; at runtime it is
-# the proxy, which reads the context-active settings and writes the default.
-settings: Settings = cast(Settings, _SettingsProxy())
-"""Process-wide default settings. Mutate to change the default (e.g.
-``settings.resampling_filter = ...``); reads reflect the settings active in the
-current context. Pass a ``Settings`` to ``WsiDicom.open(settings=...)`` for
-per-call settings instead."""
+def replace_default_setting(**changes: Any) -> Settings:
+    """Replace individual fields of the process-wide default settings, like
+    ``dataclasses.replace``, and return the new default.
+
+        replace_default_setting(strict_uid_check=True)
+    """
+    global _default_settings
+    _default_settings = replace(_default_settings, **changes)
+    return _default_settings
 
 
 @contextmanager
@@ -160,7 +155,7 @@ def use_settings(active: Settings | None = None) -> Iterator[Settings]:
             ...  # settings is active here and for nested reads
     """
     if active is None:
-        yield _active_settings.get() or _default_settings
+        yield get_settings()
         return
     token = _active_settings.set(active)
     try:

@@ -13,11 +13,18 @@
 #    limitations under the License.
 
 from dataclasses import FrozenInstanceError
+from typing import cast
 
 import pytest
 
 from wsidicom import config
-from wsidicom.config import Settings, settings, use_settings
+from wsidicom.config import (
+    Settings,
+    get_settings,
+    replace_default_setting,
+    set_default_settings,
+    use_settings,
+)
 from wsidicom.options import ResampleFilterOption
 
 
@@ -47,8 +54,11 @@ class TestSettings:
         assert configured.pyramid_resampling_filter == ResampleFilterOption.BOX
 
     def test_option_field_accepts_its_string_value(self):
-        # Act
-        configured = Settings(resampling_filter="box")
+        # Arrange — the string form (cast since the field is typed as the enum)
+        string_value = cast(ResampleFilterOption, "box")
+
+        # Act — coerced in __post_init__
+        configured = Settings(resampling_filter=string_value)
 
         # Assert — coerced to the enum member
         assert configured.resampling_filter == ResampleFilterOption.BOX
@@ -63,50 +73,62 @@ class TestSettings:
 
 
 @pytest.mark.unittest
-class TestSettingsContext:
-    """The global `settings`: reads resolve to the context-active `Settings` (via
-    `use_settings`) or the default; writes replace the process default."""
+class TestDefaultSettings:
+    """The process-wide default and the `use_settings` scope: `get_settings`
+    returns the scope-active `Settings` when one is active, else the default;
+    `set_default_settings`/`replace_default_setting` change the default."""
 
     @pytest.fixture(autouse=True)
     def _restore_default_settings(self):
-        # Proxy writes replace the process default; snapshot and restore it so
-        # a test writing through `settings` does not leak into the others.
+        # The default is an immutable Settings that the setters rebind; snapshot
+        # and restore the reference so a test does not leak into the others.
         original = config._default_settings
         yield
         config._default_settings = original
 
-    def test_resolves_to_default_outside_a_context(self):
+    def test_resolves_to_default_outside_a_scope(self):
         # Act
-        resampling_filter = settings.resampling_filter
+        resampling_filter = get_settings().resampling_filter
 
         # Assert
         assert resampling_filter == ResampleFilterOption.BILINEAR
 
-    def test_use_settings_overrides_within_scope_and_restores_after(self):
+    def test_use_settings_activates_within_scope_and_restores_after(self):
         # Arrange
         custom = Settings(resampling_filter=ResampleFilterOption.LANCZOS)
 
         # Act & Assert — active inside the scope, default again after
         with use_settings(custom):
-            assert settings.resampling_filter == ResampleFilterOption.LANCZOS
-        assert settings.resampling_filter == ResampleFilterOption.BILINEAR
+            assert get_settings().resampling_filter == ResampleFilterOption.LANCZOS
+        assert get_settings().resampling_filter == ResampleFilterOption.BILINEAR
 
-    def test_proxy_write_replaces_the_default(self):
-        # Act — writing through the proxy configures the process default
-        settings.resampling_filter = ResampleFilterOption.BOX
+    def test_set_default_settings_replaces_the_default(self):
+        # Act
+        set_default_settings(Settings(resampling_filter=ResampleFilterOption.BOX))
 
         # Assert
-        assert settings.resampling_filter == ResampleFilterOption.BOX
+        assert get_settings().resampling_filter == ResampleFilterOption.BOX
 
-    def test_proxy_write_targets_the_default_not_the_active_settings(self):
+    def test_replace_default_setting_changes_only_the_given_field(self):
+        # Act
+        returned = replace_default_setting(resampling_filter=ResampleFilterOption.BOX)
+
+        # Assert — the field changed, others kept their default, and the new
+        # default is returned
+        assert get_settings().resampling_filter == ResampleFilterOption.BOX
+        assert get_settings().pyramid_resampling_filter == ResampleFilterOption.BOX
+        assert get_settings().strict_uid_check is False
+        assert returned is get_settings()
+
+    def test_default_change_targets_the_default_not_the_active_scope(self):
         # Arrange
         custom = Settings(resampling_filter=ResampleFilterOption.LANCZOS)
 
-        # Act — a proxy write inside a context still targets the default
+        # Act — changing the default inside a scope still targets the default
         with use_settings(custom):
-            settings.resampling_filter = ResampleFilterOption.BOX
-            active = settings.resampling_filter
+            replace_default_setting(resampling_filter=ResampleFilterOption.BOX)
+            active = get_settings().resampling_filter
 
-        # Assert — reads honoured the active `custom`; the default took the write
+        # Assert — reads honoured the active `custom`; the default took the change
         assert active == ResampleFilterOption.LANCZOS
-        assert settings.resampling_filter == ResampleFilterOption.BOX
+        assert get_settings().resampling_filter == ResampleFilterOption.BOX

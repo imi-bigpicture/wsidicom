@@ -41,7 +41,7 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
     UnitCode,
 )
-from wsidicom.config import settings
+from wsidicom.config import Settings, use_settings
 from wsidicom.metadata.sample import (
     LocalIssuerOfIdentifier,
     Measurement,
@@ -516,13 +516,17 @@ class TestPreparationStepDicomErrorHandling:
         self, invalid_preparation_step_dataset: Dataset
     ):
         # Arrange
-        settings.ignore_specimen_preparation_step_on_validation_error = True
         field = PreparationStepDicomField(
             data_key="SpecimenPreparationStepContentItemSequence"
         )
 
         # Act
-        deserialized = field._deserialize(invalid_preparation_step_dataset, None, {})
+        with use_settings(
+            Settings(ignore_specimen_preparation_step_on_validation_error=True)
+        ):
+            deserialized = field._deserialize(
+                invalid_preparation_step_dataset, None, {}
+            )
 
         # Assert
         assert deserialized is None
@@ -531,13 +535,17 @@ class TestPreparationStepDicomErrorHandling:
         self, invalid_preparation_step_dataset: Dataset
     ):
         # Arrange
-        settings.ignore_specimen_preparation_step_on_validation_error = False
         field = PreparationStepDicomField(
             data_key="SpecimenPreparationStepContentItemSequence"
         )
 
         # Act & Assert
-        with pytest.raises(marshmallow.ValidationError):
+        with (
+            use_settings(
+                Settings(ignore_specimen_preparation_step_on_validation_error=False)
+            ),
+            pytest.raises(marshmallow.ValidationError),
+        ):
             field._deserialize(invalid_preparation_step_dataset, None, {})
 
     def test_deserialize_steps_validation_error_with_ignore_setting(
@@ -548,7 +556,6 @@ class TestPreparationStepDicomErrorHandling:
         staining_dataset: Dataset,
     ):
         # Arrange
-        settings.ignore_specimen_preparation_step_on_validation_error = True
         description = create_description_dataset(
             slide_sample_id,
             slide_sample_uid,
@@ -563,10 +570,13 @@ class TestPreparationStepDicomErrorHandling:
         schema = SpecimenDescriptionDicomSchema()
 
         # Act
-        models = [
-            schema.load(description)
-            for description in dataset.SpecimenDescriptionSequence
-        ]
+        with use_settings(
+            Settings(ignore_specimen_preparation_step_on_validation_error=True)
+        ):
+            models = [
+                schema.load(description)
+                for description in dataset.SpecimenDescriptionSequence
+            ]
 
         # Assert
         assert len(models) == 1
@@ -585,7 +595,6 @@ class TestPreparationStepDicomErrorHandling:
         staining_dataset: Dataset,
     ):
         # Arrange
-        settings.ignore_specimen_preparation_step_on_validation_error = False
         description = create_description_dataset(
             slide_sample_id,
             slide_sample_uid,
@@ -600,10 +609,13 @@ class TestPreparationStepDicomErrorHandling:
         schema = SpecimenDescriptionDicomSchema()
 
         # Act
-        models = [
-            schema.load(description)
-            for description in dataset.SpecimenDescriptionSequence
-        ]
+        with use_settings(
+            Settings(ignore_specimen_preparation_step_on_validation_error=False)
+        ):
+            models = [
+                schema.load(description)
+                for description in dataset.SpecimenDescriptionSequence
+            ]
 
         # Assert
         assert len(models) == 1

@@ -38,7 +38,7 @@ from wsidicom.conceptcode import (
     SpecimenSamplingProcedureCode,
     SpecimenStainsCode,
 )
-from wsidicom.config import settings
+from wsidicom.config import Settings, use_settings
 from wsidicom.metadata.sample import (
     Collection,
     Embedding,
@@ -663,7 +663,6 @@ class TestSampleDicom:
         processing_expected: bool,
     ):
         # Arrange
-        settings.strict_specimen_identifier_check = setting
         if slide_sample_issuer is not None:
             local_slide_sample_issuer = LocalIssuerOfIdentifier(slide_sample_issuer)
             slide_sample_identifier = SpecimenIdentifier(
@@ -712,7 +711,8 @@ class TestSampleDicom:
             schema.load(description)
             for description in dataset.SpecimenDescriptionSequence
         ]
-        slide_samples, stainings = SpecimenDicomParser().parse_descriptions(models)
+        with use_settings(Settings(strict_specimen_identifier_check=setting)):
+            slide_samples, stainings = SpecimenDicomParser().parse_descriptions(models)
 
         # Assert
         assert len(slide_samples) == 1
