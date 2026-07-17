@@ -32,7 +32,7 @@ from pydicom.uid import (
 from pydicom.valuerep import MAX_VALUE_LEN, DSfloat
 
 from wsidicom.codec import Encoder
-from wsidicom.config import settings
+from wsidicom.config import get_settings
 from wsidicom.errors import (
     WsiDicomError,
     WsiDicomFileError,
@@ -915,15 +915,16 @@ class WsiDataset(Dataset):
             return None
         spacing: float | None = None
         sorted_focal_planes = sorted(focal_planes)
+        distance_threshold = get_settings().focal_plane_distance_threshold
         for index in range(len(sorted_focal_planes) - 1):
             this_spacing = sorted_focal_planes[index + 1] - sorted_focal_planes[index]
             if spacing is None:
                 spacing = this_spacing
-            elif abs(spacing - this_spacing) > settings.focal_plane_distance_threshold:
+            elif abs(spacing - this_spacing) > distance_threshold:
                 raise NotImplementedError(
                     "Image data has non-equal spacing between slices: "
                     f"{spacing, this_spacing}, difference threshold: "
-                    f"{settings.focal_plane_distance_threshold}, "
+                    f"{distance_threshold}, "
                     "not possible to encode several focal planes in one "
                     "TILED_FULL instance. Split the focal planes into separate "
                     "instances (InstanceSplit.FOCAL_PLANE) to write unequally "

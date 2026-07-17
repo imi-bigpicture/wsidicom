@@ -39,7 +39,7 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
     dataset_to_code,
 )
-from wsidicom.config import settings
+from wsidicom.config import get_settings
 from wsidicom.metadata.sample import Measurement, SampleLocalization
 from wsidicom.metadata.schema.common import DefaultOnValidationExceptionField
 from wsidicom.metadata.schema.dicom.fields import (
@@ -467,7 +467,7 @@ class PreparationStepDicomField(fields.Field):
             loaded = schema().load(sequence, many=False)
         except ValidationError as exception:
             error = "Failed to load processing step due to validation error."
-            if settings.ignore_specimen_preparation_step_on_validation_error:
+            if get_settings().ignore_specimen_preparation_step_on_validation_error:
                 logging.warning(error, exc_info=True)
                 return None
             raise ValidationError(

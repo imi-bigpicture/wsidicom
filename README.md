@@ -347,11 +347,29 @@ with WsiDicom.open("path_to_folder") as slide:
 
 ## Settings
 
-*wsidicom* can be configured with the settings variable. For example, set the parsing of files to strict:
+*wsidicom* can be configured process-wide through the `settings` variable. For example, set the parsing of files to strict:
 
 ```python
 from wsidicom import settings
 settings.strict_uid_check = True
+```
+
+To configure a single opened slide instead of the whole process, construct a `Settings` and pass it as the keyword-only `settings` argument to `open` (also available on `open_dicomdir`, `open_streams` and `open_web`):
+
+```python
+from wsidicom import WsiDicom
+from wsidicom.config import Settings
+
+slide = WsiDicom.open("path_to_files", settings=Settings(strict_uid_check=True))
+```
+
+`Settings` is immutable; the given settings stay in effect for that slide's reads and saves, while the global `settings` keeps the default for everything else. To apply settings to a block of your own code, use the `use_settings` context manager:
+
+```python
+from wsidicom.config import Settings, use_settings
+
+with use_settings(Settings(resampling_filter="box")):
+    ...  # code here (and threads it starts) sees these settings
 ```
 
 ## Annotation usage

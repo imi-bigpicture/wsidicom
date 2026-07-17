@@ -1,7 +1,7 @@
 from collections import defaultdict
 from collections.abc import Iterable
 
-from wsidicom.config import settings
+from wsidicom.config import get_settings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.instance.instance import WsiInstance
 from wsidicom.series.pyramid import Pyramid
@@ -114,6 +114,7 @@ class Pyramids:
             tuple[tuple[float, float, float] | None, tuple[int, float] | None],
             list[WsiInstance],
         ] = defaultdict(list)
+        origin_threshold = get_settings().pyramids_origin_threshold
         for instance in sorted(
             instances, key=lambda x: x.size.to_tuple(), reverse=True
         ):
@@ -144,7 +145,7 @@ class Pyramids:
                             all(
                                 instance.image_coordinate_system.origin_and_rotation_match(
                                     instance_in_group.image_coordinate_system,
-                                    origin_threshold=settings.pyramids_origin_threshold,
+                                    origin_threshold=origin_threshold,
                                 )
                                 for instance_in_group in group
                             )

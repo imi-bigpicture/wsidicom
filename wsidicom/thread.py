@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import contextvars
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
@@ -331,11 +332,12 @@ class ReadExecutor:
             except Exception as exception:
                 future.set_exception(exception)
             return future
+        context = contextvars.copy_context()
         if self._shared is not None:
-            return self._shared.submit(fn, *args, **kwargs)
+            return self._shared.submit(context.run, fn, *args, **kwargs)
         if self._own is None:
             self._own = ThreadPoolExecutor(max_workers=self._workers)
-        return self._own.submit(fn, *args, **kwargs)
+        return self._own.submit(context.run, fn, *args, **kwargs)
 
     def map(
         self, fn: Callable[..., ReturnType], *iterables: Iterable[Any]

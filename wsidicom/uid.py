@@ -20,7 +20,7 @@ from pydicom.uid import (
     UID_dictionary,  # type: ignore[import-untyped]
 )
 
-from wsidicom.config import settings
+from wsidicom.config import get_settings
 from wsidicom.errors import WsiDicomStrictRequirementError
 
 # JPEG XL Transfer Syntax UIDs not yet defined in pydicom
@@ -72,7 +72,7 @@ class SlideUids:
     frame_of_reference: UID | None = None
 
     def __post_init__(self) -> None:
-        if settings.strict_uid_check and self.frame_of_reference is None:
+        if get_settings().strict_uid_check and self.frame_of_reference is None:
             raise WsiDicomStrictRequirementError(
                 "Frame of reference uid is missing and strict uid check is enabled"
             )
@@ -98,7 +98,7 @@ class SlideUids:
         return NotImplemented
 
     def matches(self, other: "SlideUids") -> bool:
-        if settings.strict_uid_check:
+        if get_settings().strict_uid_check:
             return (
                 self.study_instance == other.study_instance
                 and self.frame_of_reference == other.frame_of_reference

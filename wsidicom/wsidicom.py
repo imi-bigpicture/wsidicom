@@ -33,6 +33,7 @@ from upath import UPath
 from wsidicom.cache import lru_cached_method
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.config import Settings, use_settings
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNotFoundError,
@@ -68,6 +69,8 @@ class WsiDicom:
         source: Source,
         source_owned: bool = True,
         read_executor: Executor | None = None,
+        *,
+        settings: Settings | None = None,
     ):
         """Hold WSI DICOM levels, labels and overviews.
 
@@ -83,18 +86,24 @@ class WsiDicom:
             Optional shared, thread-based executor reused across reads.
             When supplied, reads parallelize across it by default unless ``threads=1``.
             When ``None`` each parallel read uses a per-read pool when ``threads>1``.
+        settings: Settings | None = None
+            Settings to use for this object instead of the process-wide default.
+            Captured now (the per-instance downsampler and decoder are resolved
+            here) and reapplied for operations that read settings at call time.
         """
         self._selected_pyramid = 0
         self._source = source
         self._source_owned = source_owned
         self._read_executor = read_executor
-        self._pyramids = Pyramids.open(
-            source.level_instances, source.thumbnail_instances
-        )
-        self._labels = Labels.open(source.label_instances)
-        self._overviews = Overviews.open(source.overview_instances)
-        self._annotations = list(source.annotation_instances)
-        self._uids = self._validate_collection()
+        self._settings = settings
+        with use_settings(settings):
+            self._pyramids = Pyramids.open(
+                source.level_instances, source.thumbnail_instances
+            )
+            self._labels = Labels.open(source.label_instances)
+            self._overviews = Overviews.open(source.overview_instances)
+            self._annotations = list(source.annotation_instances)
+            self._uids = self._validate_collection()
 
     @classmethod
     def open(
@@ -102,6 +111,8 @@ class WsiDicom:
         files: str | Path | UPath | Iterable[str | Path | UPath],
         file_options: dict[str, Any] | None = None,
         read_executor: Executor | None = None,
+        *,
+        settings: Settings | None = None,
     ) -> "WsiDicom":
         """Open valid WSI DICOM files and return a WsiDicom object.
 
@@ -119,14 +130,17 @@ class WsiDicom:
             Optional shared, thread-based executor reused across reads.
             When supplied, reads parallelize across it by default unless ``threads=1``.
             When ``None`` each parallel read uses a per-read pool when ``threads>1``.
+        settings: Settings | None = None
+            Settings to use for this object instead of the process-wide default.
 
         Returns
         -------
         WsiDicom
             WsiDicom created from WSI DICOM files in path.
         """
-        source = WsiDicomFileSource.open(files, file_options)
-        return cls(source, True, read_executor)
+        with use_settings(settings):
+            source = WsiDicomFileSource.open(files, file_options)
+            return cls(source, True, read_executor, settings=settings)
 
     @classmethod
     def open_dicomdir(
@@ -134,6 +148,8 @@ class WsiDicom:
         path: UPath,
         file_options: dict[str, Any] | None = None,
         read_executor: Executor | None = None,
+        *,
+        settings: Settings | None = None,
     ) -> "WsiDicom":
         """Open WSI DICOM files in DICOMDIR and return a WsiDicom object.
 
@@ -149,19 +165,25 @@ class WsiDicom:
             When supplied, reads parallelize across it by default unless ``threads=1``.
             When ``None`` each parallel read uses a per-read pool when ``threads>1``.
 
+        settings: Settings | None = None
+            Settings to use for this object instead of the process-wide default.
+
         Returns
         -------
         WsiDicom
             WsiDicom created from WSI DICOM files in DICOMDIR.
         """
-        source = WsiDicomFileSource.open_dicomdir(path, file_options)
-        return cls(source, True, read_executor)
+        with use_settings(settings):
+            source = WsiDicomFileSource.open_dicomdir(path, file_options)
+            return cls(source, True, read_executor, settings=settings)
 
     @classmethod
     def open_streams(
         cls,
         streams: Iterable[BinaryIO],
         read_executor: Executor | None = None,
+        *,
+        settings: Settings | None = None,
     ) -> "WsiDicom":
         """Open valid WSI DICOM files in path or stream and return a WsiDicom object.
 
@@ -177,13 +199,17 @@ class WsiDicom:
             When supplied, reads parallelize across it by default unless ``threads=1``.
             When ``None`` each parallel read uses a per-read pool when ``threads>1``.
 
+        settings: Settings | None = None
+            Settings to use for this object instead of the process-wide default.
+
         Returns
         -------
         WsiDicom
             WsiDicom created from WSI DICOM files in path.
         """
-        source = WsiDicomFileSource.open_streams(streams)
-        return cls(source, False, read_executor)
+        with use_settings(settings):
+            source = WsiDicomFileSource.open_streams(streams)
+            return cls(source, False, read_executor, settings=settings)
 
     @classmethod
     def open_web(
@@ -193,6 +219,8 @@ class WsiDicom:
         series_uids: str | UID | Iterable[str | UID],
         requested_transfer_syntax: str | UID | Sequence[str | UID] | None = None,
         read_executor: Executor | None = None,
+        *,
+        settings: Settings | None = None,
     ) -> "WsiDicom":
         """Open WSI DICOM instances using DICOM web client.
 
@@ -216,6 +244,9 @@ class WsiDicom:
             down by the returned object); pass ``threads=1`` to a read to opt
             out. When ``None``, each parallel read uses a per-read pool.
 
+        settings: Settings | None = None
+            Settings to use for this object instead of the process-wide default.
+
         Returns
         -------
         WsiDicom
@@ -233,10 +264,11 @@ class WsiDicom:
                 UID(transfer_syntax) for transfer_syntax in requested_transfer_syntax
             ]
 
-        source = WsiDicomWebSource(
-            client, study_uid, series_uids, requested_transfer_syntax
-        )
-        return cls(source, True, read_executor)
+        with use_settings(settings):
+            source = WsiDicomWebSource(
+                client, study_uid, series_uids, requested_transfer_syntax
+            )
+            return cls(source, True, read_executor, settings=settings)
 
     def save(
         self,
@@ -375,7 +407,7 @@ class WsiDicom:
 
         overviews = self.overviews if include_overviews else None
 
-        with WsiDicomFileTarget(
+        with use_settings(self._settings), WsiDicomFileTarget(
             output_path,
             uid_generator,
             workers,
