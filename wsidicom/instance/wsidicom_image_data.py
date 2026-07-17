@@ -16,7 +16,7 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 
-from PIL.Image import Image
+import numpy as np
 
 from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
 from wsidicom.codec import Codec, Decoder, Encoder, LossyCompressionIsoStandard
@@ -65,10 +65,12 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     def _get_tile_frames(self, frame_indices: Iterable[int]) -> Iterator[bytes]:
         return (self._get_tile_frame(frame_index) for frame_index in frame_indices)
 
-    def _get_decoded_tile_frame(self, frame_index: int) -> Image:
+    def _get_decoded_tile_frame(self, frame_index: int) -> np.ndarray:
         return self.decoder.decode(self._get_tile_frame(frame_index))
 
-    def _get_decoded_tile_frames(self, frame_indices: Iterable[int]) -> Iterator[Image]:
+    def _get_decoded_tile_frames(
+        self, frame_indices: Iterable[int]
+    ) -> Iterator[np.ndarray]:
         for frame in self._get_tile_frames(frame_indices):
             yield self.decoder.decode(frame)
 
@@ -196,9 +198,15 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             id(self), frame_index, self._get_tile_frame
         )
 
-    def get_decoded_tile(self, tile_point: Point, z: float, path: str) -> Image:
+    def get_decoded_tile(
+        self,
+        tile_point: Point,
+        z: float,
+        path: str,
+        cache: bool = True,
+    ) -> np.ndarray:
         """
-        Return Pillow image for tile.
+        Return the pixels of a tile.
 
         Parameters
         ----------
@@ -208,29 +216,43 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             Z coordinate.
         path: str
             Optical path.
+        cache: bool = True
+            Whether to cache the decoded tile.
 
         Returns
         -------
-        Image
-            Tile as Pillow Image.
+        np.ndarray
+            Tile pixels.
         """
         frame_index = self._get_frame_index(tile_point, z, path)
         if frame_index == -1:
             return self.blank_tile
+        if not cache:
+            return self._get_decoded_tile_frame(frame_index)
         return self._decoded_frame_cache.get_tile_frame(
-            id(self), frame_index, self._get_decoded_tile_frame
+            id(self),
+            frame_index,
+            self._get_decoded_tile_frame,
         )
 
     def get_decoded_tiles(
-        self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[Image]:
-        """Return Pillow images for multiple tiles, fetching frames in a batch."""
+        self,
+        tiles: Iterable[Point],
+        z: float,
+        path: str,
+        cache: bool = True,
+    ) -> Iterator[np.ndarray]:
+        """Return the pixels for multiple tiles, fetching frames in a batch."""
         frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
-        frames = self._decoded_frame_cache.get_tile_frames(
-            id(self),
-            [frame_index for frame_index in frame_indices if frame_index != -1],
-            self._get_decoded_tile_frames,
-        )
+        wanted = [frame_index for frame_index in frame_indices if frame_index != -1]
+        if cache:
+            frames = self._decoded_frame_cache.get_tile_frames(
+                id(self),
+                wanted,
+                self._get_decoded_tile_frames,
+            )
+        else:
+            frames = self._get_decoded_tile_frames(wanted)
         for frame_index in frame_indices:
             if frame_index == -1:
                 yield self.blank_tile
@@ -255,20 +277,22 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
 
     def get_encoded_and_decoded_tile(
         self, tile: Point, z: float, path: str
-    ) -> tuple[bytes, Image]:
+    ) -> tuple[bytes, np.ndarray]:
         frame_index = self._get_frame_index(tile, z, path)
         return self._get_encoded_and_decoded_tile(frame_index)
 
     def get_encoded_and_decoded_tiles(
         self, tiles: Iterable[Point], z: float, path: str
-    ) -> Iterator[tuple[bytes, Image]]:
+    ) -> Iterator[tuple[bytes, np.ndarray]]:
         frame_indices = (self._get_frame_index(tile, z, path) for tile in tiles)
         return (
             self._get_encoded_and_decoded_tile(frame_index)
             for frame_index in frame_indices
         )
 
-    def _get_encoded_and_decoded_tile(self, frame_index: int) -> tuple[bytes, Image]:
+    def _get_encoded_and_decoded_tile(
+        self, frame_index: int
+    ) -> tuple[bytes, np.ndarray]:
         if frame_index == -1:
             return self.blank_encoded_tile, self.blank_tile
         encoded = self._encoded_frame_cache.get_tile_frame(

@@ -12,15 +12,26 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import numpy as np
 import pytest
 from wsidicom_data import EncodedTestData, TestData
 
 from wsidicom.codec import Settings
 
 
+def max_band_rms(a: np.ndarray, b: np.ndarray) -> float:
+    """Maximum per-channel RMS difference between two images, normalized to an
+    8-bit (0-255) scale so the same tolerance applies at any bit depth."""
+    scale = 255.0 / np.iinfo(a.dtype).max if np.issubdtype(a.dtype, np.integer) else 1.0
+    diff = (a.astype(np.float64) - b.astype(np.float64)) * scale
+    if diff.ndim == 3:
+        return float(np.sqrt(np.mean(diff**2, axis=(0, 1))).max())
+    return float(np.sqrt(np.mean(diff**2)))
+
+
 @pytest.fixture
-def image(settings: Settings):
-    return TestData.image(settings.bits, settings.samples_per_pixel)
+def image(settings: Settings) -> np.ndarray:
+    return np.asarray(TestData.image(settings.bits, settings.samples_per_pixel))
 
 
 @pytest.fixture

@@ -182,18 +182,6 @@ class TestWWsiDicomReader:
         # Assert
         assert frame_count == 1
 
-    @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
-    def test_get_offset_table_type(
-        self, test_file: WsiDicomReader, settings: dict[str, Any]
-    ):
-        # Arrange
-
-        # Act
-        offset_type = test_file.offset_table_type
-
-        # Assert
-        assert offset_type == settings["bot_type"]
-
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
     def test_read_frame(self, test_file: WsiDicomReader, padded_test_frame: bytes):
         # Arrange

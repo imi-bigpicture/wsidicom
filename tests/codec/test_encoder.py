@@ -13,11 +13,11 @@
 #    limitations under the License.
 
 
+import numpy as np
 import pytest
-from PIL import ImageChops, ImageStat
-from PIL.Image import Image
 from pydicom import Dataset
 
+from tests.codec.conftest import max_band_rms
 from wsidicom.codec import (
     Channels,
     Decoder,
@@ -46,13 +46,13 @@ from wsidicom.instance.dataset import WsiDataset
 
 
 @pytest.fixture
-def dataset(image: Image, settings: Settings):
+def dataset(image: np.ndarray, settings: Settings):
     dataset = Dataset()
     dataset.PhotometricInterpretation = settings.photometric_interpretation
     dataset.BitsStored = settings.bits
     dataset.BitsAllocated = settings.allocated_bits
-    dataset.Rows = image.height
-    dataset.Columns = image.width
+    dataset.Rows = image.shape[0]
+    dataset.Columns = image.shape[1]
     dataset.SamplesPerPixel = settings.samples_per_pixel
     dataset.PixelRepresentation = 0
     dataset.PlanarConfiguration = 0
@@ -149,7 +149,7 @@ class TestEncoder:
     )
     def test_encode(
         self,
-        image: Image,
+        image: np.ndarray,
         decoder: Decoder,
         encoder_type: type[Encoder],
         settings: Settings,
@@ -165,9 +165,4 @@ class TestEncoder:
 
         # Assert
         decoded = decoder.decode(encoded)
-        if settings.channels == Channels.GRAYSCALE:
-            image = image.convert("L")
-            decoded = decoded.convert("L")
-        diff = ImageChops.difference(decoded, image)
-        for band_rms in ImageStat.Stat(diff).rms:
-            assert band_rms <= allowed_rms
+        assert max_band_rms(decoded, image) <= allowed_rms

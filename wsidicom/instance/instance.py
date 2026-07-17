@@ -15,13 +15,13 @@
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
 from PIL.Image import Image
 from pydicom import Dataset
 from pydicom.uid import UID
 from upath import UPath
 
-from wsidicom.config import settings
-from wsidicom.downsampler import Downsampler, PillowDownsampler
+from wsidicom.downsampler import Downsampler
 from wsidicom.errors import (
     WsiDicomError,
     WsiDicomOutOfBoundsError,
@@ -30,9 +30,9 @@ from wsidicom.errors import (
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.image_data import ImageData
-from wsidicom.instance.pillow_image_data import PillowImageData
+from wsidicom.instance.numpy_image_data import NumpyImageData
 from wsidicom.metadata.image import ImageCoordinateSystem, ImageType
-from wsidicom.stitcher import PillowStitcher, Stitcher
+from wsidicom.stitcher import NumpyStitcher
 from wsidicom.thread import ReadExecutor
 from wsidicom.uid import SlideUids
 
@@ -58,10 +58,8 @@ class WsiInstance:
         self._image_data = image_data
         self._identifier, self._uids = self._validate_instance(self.datasets)
         self._image_type = self.dataset.image_type
-        self._stitcher: Stitcher = PillowStitcher()
-        self._downsampler: Downsampler = PillowDownsampler(
-            resample=settings.pillow_resampling_filter
-        )
+        self._stitcher = NumpyStitcher()
+        self._downsampler: Downsampler = Downsampler.create_for_read()
 
         if self.ext_depth_of_field:
             if self.ext_depth_of_field_planes is None:
@@ -200,8 +198,8 @@ class WsiInstance:
         z: float,
         path: str,
         crop_to_image_boundary: bool = True,
-    ) -> Image:
-        """Get a tile as a Pillow image.
+    ) -> np.ndarray:
+        """Get the pixels of a tile.
 
         Parameters
         ----------
@@ -217,13 +215,13 @@ class WsiInstance:
 
         Returns
         -------
-        Image
-            The tile as a Pillow image.
+        np.ndarray
+            The tile pixels.
         """
-        tile = self._image_data.get_decoded_tile(tile_point, z, path)
-        if not crop_to_image_boundary:
-            return tile
-        return self._crop_tile(tile_point, tile)
+        array = self._image_data.get_decoded_tile(tile_point, z, path)
+        if crop_to_image_boundary:
+            array = self._crop_tile(tile_point, array)
+        return array
 
     def get_encoded_tile(
         self,
@@ -259,9 +257,9 @@ class WsiInstance:
         )
         if cropped_tile_region.size == self._image_data.tile_size:
             return self._image_data.get_encoded_tile(tile, z, path)
-        image = self._image_data.get_decoded_tile(tile, z, path)
-        image = image.crop(box=cropped_tile_region.box_from_origin)
-        return self._image_data.encoder.encode(image)
+        array = self._image_data.get_decoded_tile(tile, z, path)
+        left, upper, right, lower = cropped_tile_region.box_from_origin
+        return self._image_data.encoder.encode(array[upper:lower, left:right])
 
     def get_region(
         self,
@@ -271,11 +269,12 @@ class WsiInstance:
         output_size: Size | None = None,
         *,
         executor: ReadExecutor,
-    ) -> Image:
-        """Read ``region`` from this instance, optionally scaled to a size.
+    ) -> np.ndarray:
+        """Read the pixels of ``region`` from this instance.
 
         Assembles the pixels covering ``region`` and, if ``output_size`` is
-        given, downsamples the result to it.
+        given, downsamples the result to it. Pillow is derived by the caller
+        (``WsiDicom``) at the outermost boundary.
 
         Parameters
         ----------
@@ -289,42 +288,46 @@ class WsiInstance:
             If given and different from the region size, the assembled region is
             downsampled to this size.
         executor: ReadExecutor
-            Executor that splits image data reads across worker threads.
+            Executor that splits the read's tile fetches across worker threads.
 
         Returns
         -------
-        Image
-            The region image.
+        np.ndarray
+            The region as ``(rows, columns)`` or ``(rows, columns, samples)``.
         """
+        array = self._assemble_region(region, z, path, executor=executor)
+        if output_size is None or output_size == region.size:
+            return array
+        return self._downsampler.downsample(array, output_size)
+
+    def _assemble_region(
+        self,
+        region: Region,
+        z: float,
+        path: str,
+        *,
+        executor: ReadExecutor,
+    ) -> np.ndarray:
+        """Assemble the full-resolution pixels covering ``region``."""
         image_data = self._image_data
         tile_region = self._get_tile_range(region, z, path)
         if tile_region.size.area == 1:
             # Only one tile, no need to stitch
-            tile = image_data.get_decoded_tile(tile_region.start, z, path)
+            array = image_data.get_decoded_tile(tile_region.start, z, path)
             tile_crop = region.inside_crop(tile_region.start, image_data.tile_size)
             if tile_crop.size != image_data.tile_size:
-                tile = tile.crop(box=tile_crop.box)
-            image = tile
-        else:
-            canvas = self._stitcher.stitch_parallel(
-                tile_region=tile_region,
-                fetch=lambda chunk: image_data.get_decoded_tiles(chunk, z, path),
-                tile_size=image_data.tile_size,
-                mode=image_data.image_mode,
-                executor=executor,
-            )
-            crop_origin = region.start - tile_region.start * image_data.tile_size
-            image = canvas.crop(
-                (
-                    crop_origin.x,
-                    crop_origin.y,
-                    crop_origin.x + region.size.width,
-                    crop_origin.y + region.size.height,
-                )
-            )
-        if output_size is None or output_size == region.size:
-            return image
-        return self._downsampler.downsample(image, output_size)
+                left, upper, right, lower = tile_crop.box
+                array = array[upper:lower, left:right]
+            return array
+        return self._stitcher.stitch_parallel(
+            region=region,
+            tile_region=tile_region,
+            fetch=lambda chunk: image_data.get_decoded_tiles(chunk, z, path),
+            tile_size=image_data.tile_size,
+            dtype=image_data.dtype,
+            samples_per_pixel=image_data.samples_per_pixel,
+            executor=executor,
+        )
 
     def get_thumbnail(
         self,
@@ -333,7 +336,7 @@ class WsiInstance:
         path: str,
         *,
         executor: ReadExecutor,
-    ) -> Image:
+    ) -> np.ndarray:
         """Read the full image, resampled to fit within ``max_size``.
 
         Reads the whole image region, then resamples (via the instance's
@@ -353,36 +356,37 @@ class WsiInstance:
 
         Returns
         -------
-        Image
-            The thumbnail image.
+        np.ndarray
+            The thumbnail pixels.
         """
         region = Region(position=Point(0, 0), size=self.size)
-        image = self.get_region(region, z, path, executor=executor)
-        return self._downsampler.thumbnail(image, max_size)
+        array = self.get_region(region, z, path, executor=executor)
+        return self._downsampler.thumbnail(array, max_size)
 
-    def _crop_tile(self, tile_point: Point, tile: Image) -> Image:
+    def _crop_tile(self, tile_point: Point, tile: np.ndarray) -> np.ndarray:
         """Crop a tile to the image boundary if it is an edge tile.
 
         Parameters
         ----------
         tile_point: Point
             Tile coordinate of the tile.
-        tile: Image
-            Decoded tile image to crop.
+        tile: np.ndarray
+            Tile pixels to crop.
 
         Returns
         -------
-        Image
+        np.ndarray
             The tile cropped to the image boundary if it is an edge tile,
-            otherwise an unmodified copy of the tile.
+            otherwise the tile unmodified.
         """
         tile_crop = self._image_data.image_region.inside_crop(
             tile_point, self._image_data.tile_size
         )
         # Check if tile is an edge tile that should be cropped
         if tile_crop.size != self._image_data.tile_size:
-            return tile.crop(box=tile_crop.box)
-        return tile.copy()
+            left, upper, right, lower = tile_crop.box
+            return tile[upper:lower, left:right]
+        return tile
 
     def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:
         """Return range of tiles to cover the pixel region.
@@ -436,9 +440,9 @@ class WsiInstance:
             Created label WsiInstance.
         """
         if isinstance(image, Image):
-            image_data = PillowImageData(image)
+            image_data = NumpyImageData.from_image(image)
         else:
-            image_data = PillowImageData.from_file(image)
+            image_data = NumpyImageData.from_file(image)
         instance_dataset = WsiDataset.create_instance_dataset(
             base_dataset, ImageType.LABEL, image_data
         )

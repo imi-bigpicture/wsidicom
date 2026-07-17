@@ -15,7 +15,7 @@
 import math
 from collections.abc import Iterable
 
-from PIL.Image import Image
+import numpy as np
 
 from wsidicom.config import settings
 from wsidicom.errors import (
@@ -153,7 +153,7 @@ class Level(Instances):
         crop_to_image_boundary: bool = True,
         *,
         executor: ReadExecutor,
-    ) -> Image:
+    ) -> np.ndarray:
         """Return tile in another level by scaling a region.
 
         Parameters
@@ -175,8 +175,8 @@ class Level(Instances):
 
         Returns
         -------
-        Image
-            A tile image
+        np.ndarray
+            Tile pixels.
         """
         scale = self.calculate_scale(level)
         instance = self.get_instance(z, path)
@@ -186,7 +186,7 @@ class Level(Instances):
             raise WsiDicomOutOfBoundsError(
                 f"Region {cropped_region}", f"level size {self.size}"
             )
-        image = self.get_region(
+        array = self.get_region(
             cropped_region,
             z,
             path,
@@ -194,9 +194,12 @@ class Level(Instances):
             executor=executor,
         )
         if crop_to_image_boundary:
-            return image
-        canvas = instance.image_data.blank_tile.copy()
-        canvas.paste(image, (0, 0))
+            return array
+        # Pad the cropped edge tile back to full tile size with the background.
+        # Blank tile is cached and shared, so copy before writing.
+        image_data = instance.image_data
+        canvas = image_data.blank_tile.copy()
+        canvas[: array.shape[0], : array.shape[1]] = array
         return canvas
 
     def get_scaled_encoded_tile(

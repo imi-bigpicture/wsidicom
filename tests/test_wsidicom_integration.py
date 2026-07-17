@@ -29,9 +29,21 @@ from tests.conftest import (
     skip_if_shared_pool_unsupported,
 )
 from wsidicom import WsiDicom
+from wsidicom.config import settings
 from wsidicom.geometry import Point
+from wsidicom.options import DownsamplerOption
 from wsidicom.series.pyramid import Pyramid
 from wsidicom.thread import ReadExecutor
+
+
+@pytest.fixture(autouse=True)
+def pin_pillow_downsampler():
+    """Pin the Pillow downsampler for read goldens. Pillow's resampling is stable
+    across platforms, so its checksums are the golden values."""
+    original = settings.preferred_downsampler
+    settings.preferred_downsampler = DownsamplerOption.PILLOW
+    yield
+    settings.preferred_downsampler = original
 
 
 @pytest.mark.integration
@@ -142,6 +154,29 @@ class TestWsiDicomIntegration:
         checksum = md5(im.tobytes()).hexdigest()
         assert checksum == region["md5"], (region, checksum)
 
+    @pytest.mark.parametrize(
+        ["wsi_name", "transfer_syntax", "region"], WsiTestDefinitions.read_region()
+    )
+    def test_read_region_as_array_matches_read_region(
+        self,
+        wsi_name: str,
+        transfer_syntax: UID,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+        region: dict[str, Any],
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        location = (region["location"]["x"], region["location"]["y"])
+        size = (region["size"]["width"], region["size"]["height"])
+
+        # Act — the numpy read and the PIL read of the same region
+        array = wsi.read_region(location, region["level"], size, as_array=True)
+        image = wsi.read_region(location, region["level"], size)
+
+        # Assert — pixel-for-pixel identical
+        assert np.array_equal(array, np.asarray(image))
+
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_get_scaled_tile_pads_to_tile_size_when_not_cropping(
         self,
@@ -172,13 +207,13 @@ class TestWsiDicomIntegration:
             executor=read_executor,
         )
 
-        # Assert
-        assert padded.size == (tile_size.width, tile_size.height)
-        assert cropped.size[0] <= tile_size.width
-        assert cropped.size[1] <= tile_size.height
+        # Assert (arrays are (rows, columns, ...) = (height, width, ...))
+        assert padded.shape[:2] == (tile_size.height, tile_size.width)
+        assert cropped.shape[1] <= tile_size.width
+        assert cropped.shape[0] <= tile_size.height
         # The padded tile holds the cropped tile at the origin, padded elsewhere.
         assert (
-            padded.crop((0, 0, cropped.size[0], cropped.size[1])).tobytes()
+            padded[: cropped.shape[0], : cropped.shape[1]].tobytes()
             == cropped.tobytes()
         )
         # Padding copied the background tile rather than mutating the shared one.

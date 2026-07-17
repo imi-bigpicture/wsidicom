@@ -17,10 +17,9 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 
-from PIL.Image import Image
+import numpy as np
 from pydicom.uid import UID
 
-from wsidicom.config import settings
 from wsidicom.errors import (
     WsiDicomMatchError,
     WsiDicomNoResolutionError,
@@ -283,7 +282,7 @@ class Instances:
                 f"Instance for path: {path}, z: {z}", "group"
             ) from exception
 
-    def get_default_full(self, *, executor: ReadExecutor) -> Image:
+    def get_default_full(self, *, executor: ReadExecutor) -> np.ndarray:
         """Read full image using default z coordinate and path.
 
         Parameters
@@ -330,8 +329,8 @@ class Instances:
         self,
         focal_planes: Sequence[float] | None = None,
         optical_paths: Sequence[str] | None = None,
-    ) -> Iterator[Image]:
-        """Iterate all tiles in raster order, yielding decoded tile images.
+    ) -> Iterator[np.ndarray]:
+        """Iterate all tiles in raster order, yielding tile pixels.
 
         Parameters
         ----------
@@ -342,8 +341,8 @@ class Instances:
 
         Yields
         ------
-        Image
-            Decoded tile image.
+        np.ndarray
+            Tile pixels.
         """
         for image_data, z, path, chunk in self._iter_tile_chunks(
             focal_planes, optical_paths
@@ -390,7 +389,7 @@ class Instances:
         output_size: Size | None = None,
         *,
         executor: ReadExecutor,
-    ) -> Image:
+    ) -> np.ndarray:
         """Read region defined by pixels.
 
         Parameters
@@ -457,7 +456,7 @@ class Instances:
         output_size: Size | None,
         to_coordinate_system: ImageCoordinateSystem | None,
         executor: ReadExecutor,
-    ) -> Image:
+    ) -> np.ndarray:
         """Read a pixel region (downsampling to ``output_size``), then rotate.
 
         The downsample is applied pre-rotate at the single downsampling site
@@ -484,11 +483,11 @@ class Instances:
 
         Returns
         -------
-        Image
-            Region as image, rotated to the slide orientation if a coordinate
+        np.ndarray
+            Region pixels, rotated to the slide orientation if a coordinate
             system was given.
         """
-        image = self.get_region(
+        array = self.get_region(
             pixel_region,
             z,
             path,
@@ -496,12 +495,35 @@ class Instances:
             executor=executor,
         )
         if to_coordinate_system is not None:
-            image = image.rotate(
-                to_coordinate_system.rotation,
-                resample=settings.pillow_resampling_filter,
-                expand=True,
+            array = self._rotate(array, to_coordinate_system.rotation)
+        return array
+
+    def _rotate(self, array: np.ndarray, rotation: float) -> np.ndarray:
+        """Rotate an assembled region back to the slide orientation.
+
+        Slide-origin rotations are 90-degree multiples, for which ``np.rot90``
+        is a bit-exact, in-numpy rotation (matching Pillow's counter-clockwise
+        rotate with ``expand``), keeping the read path free of a Pillow
+        round-trip.
+
+        Parameters
+        ----------
+        array: np.ndarray
+            Region to rotate, in image orientation.
+        rotation: float
+            Rotation in degrees to apply to reach the slide orientation. Must be
+            a multiple of 90 degrees.
+
+        Returns
+        -------
+        np.ndarray
+            The rotated region.
+        """
+        if rotation % 90 != 0:
+            raise NotImplementedError(
+                f"Only 90-degree slide rotations are supported, got {rotation}."
             )
-        return image
+        return np.rot90(array, k=int(rotation // 90) % 4)
 
     def get_region_mm(
         self,
@@ -512,7 +534,7 @@ class Instances:
         scale: int = 1,
         *,
         executor: ReadExecutor,
-    ) -> Image:
+    ) -> np.ndarray:
         """Read region defined by mm.
 
         Parameters
@@ -543,7 +565,12 @@ class Instances:
         pixel_region = self._mm_to_pixel(image_region)
         output_size = pixel_region.size // scale if scale != 1 else None
         return self._read_and_rotate(
-            pixel_region, z, path, output_size, to_coordinate_system, executor
+            pixel_region,
+            z,
+            path,
+            output_size,
+            to_coordinate_system,
+            executor,
         )
 
     def get_region_mpp(
@@ -555,7 +582,7 @@ class Instances:
         slide_origin: bool = False,
         *,
         executor: ReadExecutor,
-    ) -> Image:
+    ) -> np.ndarray:
         """Read region defined by mm, resampled to a requested pixel spacing.
 
         Like ``get_region_mm`` but resampling to an absolute pixel spacing
@@ -588,7 +615,12 @@ class Instances:
         pixel_region = self._mm_to_pixel(image_region)
         output_size = image_region.size // pixel_spacing
         return self._read_and_rotate(
-            pixel_region, z, path, output_size, to_coordinate_system, executor
+            pixel_region,
+            z,
+            path,
+            output_size,
+            to_coordinate_system,
+            executor,
         )
 
     def get_thumbnail(
@@ -598,7 +630,7 @@ class Instances:
         path: str | None = None,
         *,
         executor: ReadExecutor,
-    ) -> Image:
+    ) -> np.ndarray:
         """Read the full image, resampled to fit within ``max_size``.
 
         Parameters
@@ -630,7 +662,7 @@ class Instances:
         z: float | None = None,
         path: str | None = None,
         crop_to_image_boundary: bool = True,
-    ) -> Image:
+    ) -> np.ndarray:
         """Return tile at tile coordinate x, y as image.
 
         Parameters
