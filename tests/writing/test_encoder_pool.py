@@ -374,9 +374,7 @@ class TestEncoderPool:
         """Test encoding a batch with multiple tiles."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
-        tiles = [
-            np.full((256, 256, 3), (i * 50, 0, 0), dtype=dtype) for i in range(4)
-        ]
+        tiles = [np.full((256, 256, 3), (i * 50, 0, 0), dtype=dtype) for i in range(4)]
         expected_results = [f"encoded_{i}".encode() for i in range(4)]
         for _, (tile, expected_result) in enumerate(
             zip(tiles, expected_results, strict=True)
@@ -738,9 +736,7 @@ class TestEncoderPool:
         )
         tracker = CompletionTracker()
         # 1x2 edge block: one row of two tiles, i.e. no tile row below it.
-        tiles = [
-            [np.full((256, 256, 3), (10, 20, 30), dtype=dtype) for _ in range(2)]
-        ]
+        tiles = [[np.full((256, 256, 3), (10, 20, 30), dtype=dtype) for _ in range(2)]]
         tracker.increment()
         task = DownsampleEncodeTask(
             coordinates=PyramidTilePosition(
@@ -802,8 +798,7 @@ class TestEncoderPool:
             level=1, x_index=0, y_index=0, z_index=0, optical_path_index=0
         )
         tiles = [
-            [np.zeros((256, 256, 3), dtype=dtype) for _ in range(2)]
-            for _ in range(2)
+            [np.zeros((256, 256, 3), dtype=dtype) for _ in range(2)] for _ in range(2)
         ]
         tracker.increment()
         task = DownsampleEncodeTask(

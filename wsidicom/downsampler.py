@@ -149,9 +149,7 @@ class PillowDownsampler(Downsampler):
         ResampleFilterOption.LANCZOS: Image.Resampling.LANCZOS,
     }
 
-    def __init__(
-        self, resample: ResampleFilterOption = ResampleFilterOption.BILINEAR
-    ):
+    def __init__(self, resample: ResampleFilterOption = ResampleFilterOption.BILINEAR):
         """Create a Pillow-based downsampler.
 
         Parameters

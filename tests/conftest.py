@@ -245,9 +245,7 @@ def wsi_factory(shared_threadpool_executor: Executor):
     separately.
     """
     streams: list[BufferedReader] = []
-    wsis: dict[
-        tuple[WsiInputType, Path, bool, DownsamplerOption | None], WsiDicom
-    ] = {}
+    wsis: dict[tuple[WsiInputType, Path, bool, DownsamplerOption | None], WsiDicom] = {}
 
     def open_wsi(
         wsi_name: str,

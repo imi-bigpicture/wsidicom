@@ -227,10 +227,18 @@ class TestStitchParallel:
         # Assert - contiguous, region-sized, each quadrant from its tile
         assert result.shape == (4, 4, 3)
         assert result.flags["C_CONTIGUOUS"]
-        assert np.array_equal(result[:2, :2], np.full((2, 2, 3), COLORS[(0, 0)], np.uint8))
-        assert np.array_equal(result[:2, 2:], np.full((2, 2, 3), COLORS[(1, 0)], np.uint8))
-        assert np.array_equal(result[2:, :2], np.full((2, 2, 3), COLORS[(0, 1)], np.uint8))
-        assert np.array_equal(result[2:, 2:], np.full((2, 2, 3), COLORS[(1, 1)], np.uint8))
+        assert np.array_equal(
+            result[:2, :2], np.full((2, 2, 3), COLORS[(0, 0)], np.uint8)
+        )
+        assert np.array_equal(
+            result[:2, 2:], np.full((2, 2, 3), COLORS[(1, 0)], np.uint8)
+        )
+        assert np.array_equal(
+            result[2:, :2], np.full((2, 2, 3), COLORS[(0, 1)], np.uint8)
+        )
+        assert np.array_equal(
+            result[2:, 2:], np.full((2, 2, 3), COLORS[(1, 1)], np.uint8)
+        )
 
     def test_multiple_chunks_assembled_correctly(
         self, stitcher: Stitcher, parallel_executor: ReadExecutor
@@ -386,9 +394,7 @@ class TestReferenceAgreement:
         # Assert
         assert np.array_equal(numpy_result, pillow_result)
 
-    def test_stitch_parallel_clipped_agrees(
-        self, single_thread_executor: ReadExecutor
-    ):
+    def test_stitch_parallel_clipped_agrees(self, single_thread_executor: ReadExecutor):
         """Agreement must also hold when the region is clipped inside its tiles."""
         # Arrange - a misaligned region straddling a 3x3 tile block
         rng = np.random.default_rng(2)
