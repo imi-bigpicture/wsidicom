@@ -104,7 +104,7 @@ class LutSegmentJsonSchema(Schema):
             return self._subschema_dump(obj)
         return [self._subschema_dump(item) for item in obj]
 
-    def load(
+    def load(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         data: Mapping[str, Any] | Iterable[Mapping[str, Any]],
         **kwargs,

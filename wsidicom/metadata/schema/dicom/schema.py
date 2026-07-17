@@ -56,7 +56,9 @@ class BaseDicomSchema(LoadingSchema[LoadType], Generic[LoadType, DumpType]):
         assert isinstance(item, self.load_type)
         return item
 
-    def dump(self, obj: LoadType, **kwargs) -> DumpType:
+    def dump(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, obj: LoadType, **kwargs
+    ) -> DumpType:
         """Dump object to DumpType."""
         dumped = super().dump(obj, **kwargs)
         assert isinstance(dumped, self.dump_type)

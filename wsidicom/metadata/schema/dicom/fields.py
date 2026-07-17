@@ -30,12 +30,12 @@ from marshmallow import (
     Schema,
     ValidationError,
     fields,
+    missing,
     post_dump,
     post_load,
     pre_dump,
     pre_load,
 )
-from marshmallow.utils import missing
 from pydicom import DataElement, Dataset
 from pydicom import Sequence as DicomSequence
 from pydicom import config as pydicom_config
@@ -180,7 +180,7 @@ class BooleanDicomField(fields.Boolean):
             falsy = "NO"
         super().__init__(truthy=set([truthy]), falsy=set([falsy]), **kwargs)
 
-    def _serialize(self, value: bool, attr: str | None, obj: Any, **kwargs):
+    def _serialize(self, value: bool | None, attr: str | None, obj: Any, **kwargs):
         string_value = self.truthy if value else self.falsy
         return list(string_value)[0]
 
@@ -191,7 +191,7 @@ class BooleanDicomField(fields.Boolean):
         return deserialized
 
 
-class OffsetInSlideCoordinateSystemField(fields.Field):
+class OffsetInSlideCoordinateSystemField(fields.Field[tuple[PointMm, float | None]]):
     def _serialize(
         self,
         value: tuple[PointMm, float | None] | None,
@@ -230,7 +230,7 @@ class OffsetInSlideCoordinateSystemField(fields.Field):
         ), value[0].get("ZOffsetInSlideCoordinateSystem", None)
 
 
-class ImageOrientationSlideField(fields.Field):
+class ImageOrientationSlideField(fields.Field[float]):
     def _serialize(self, value: float | None, attr: str | None, obj: Any, **kwargs):
         rotation = value
         if rotation is None:
@@ -341,7 +341,9 @@ class FlattenOnDumpNestedDicomField(fields.Nested):
 
 
 class FloatDicomField(fields.Float):
-    def _serialize(self, value: float, attr: str | None, obj: Any, **kwargs):
+    def _serialize(self, value: float | None, attr: str | None, obj: Any, **kwargs):
+        if value is None:
+            return None
         return DSfloat(value)
 
 
@@ -426,13 +428,15 @@ class SingleCodeSequenceField(CodeDicomField):
         return super()._deserialize(value[0], attr, data, **kwargs)
 
 
-class FloatOrCodeDicomField(fields.Field, Generic[CodeType]):
+class FloatOrCodeDicomField(fields.Field[float | CodeType]):
     def __init__(self, load_type: type[CodeType], **kwargs) -> None:
         self._float_field = FloatDicomField()
         self._code_field = CodeDicomField(load_type)
         super().__init__(**kwargs)
 
-    def _serialize(self, value: float | CodeType, attr: str | None, obj: Any, **kwargs):
+    def _serialize(
+        self, value: float | CodeType | None, attr: str | None, obj: Any, **kwargs
+    ):
         assert attr is not None
         if isinstance(value, float):
             return self._float_field.serialize(attr, obj, **kwargs)
@@ -556,7 +560,7 @@ class PixelSpacingDicomField(fields.Field):
 ValueType = TypeVar("ValueType")
 
 
-class TypeDicomField(fields.Field, Generic[ValueType]):
+class TypeDicomField(fields.Field[ValueType]):
     def __init__(self, nested: fields.Field, **kwargs):
         self._nested = nested
         super().__init__(**kwargs)
