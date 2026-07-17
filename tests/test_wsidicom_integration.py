@@ -29,7 +29,7 @@ from tests.conftest import (
     skip_if_shared_pool_unsupported,
 )
 from wsidicom import WsiDicom
-from wsidicom.config import settings
+from wsidicom.config import Settings, use_settings
 from wsidicom.geometry import Point
 from wsidicom.options import DownsamplerOption
 from wsidicom.series.pyramid import Pyramid
@@ -40,10 +40,8 @@ from wsidicom.thread import ReadExecutor
 def pin_pillow_downsampler():
     """Pin the Pillow downsampler for read goldens. Pillow's resampling is stable
     across platforms, so its checksums are the golden values."""
-    original = settings.preferred_downsampler
-    settings.preferred_downsampler = DownsamplerOption.PILLOW
-    yield
-    settings.preferred_downsampler = original
+    with use_settings(Settings(preferred_downsampler=DownsamplerOption.PILLOW)):
+        yield
 
 
 @pytest.mark.integration

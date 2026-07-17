@@ -347,30 +347,33 @@ with WsiDicom.open("path_to_folder") as slide:
 
 ## Settings
 
-*wsidicom* can be configured process-wide through the `settings` variable. For example, set the parsing of files to strict:
+Settings are held in the immutable `Settings` object. To change the process-wide default, use `set_default_settings` (a whole `Settings`) or `replace_default_setting` (individual fields, like `dataclasses.replace`):
 
 ```python
-from wsidicom import settings
-settings.strict_uid_check = True
+from wsidicom import Settings, set_default_settings, replace_default_setting
+
+set_default_settings(Settings(strict_uid_check=True))
+replace_default_setting(strict_uid_check=True)  # change one field, keep the rest
 ```
 
-To configure a single opened slide instead of the whole process, construct a `Settings` and pass it as the keyword-only `settings` argument to `open` (also available on `open_dicomdir`, `open_streams` and `open_web`):
+To configure a single opened slide instead of the whole process, pass a `Settings` as the keyword-only `settings` argument to `open` (also available on `open_dicomdir`, `open_streams` and `open_web`):
 
 ```python
-from wsidicom import WsiDicom
-from wsidicom.config import Settings
+from wsidicom import WsiDicom, Settings
 
 slide = WsiDicom.open("path_to_files", settings=Settings(strict_uid_check=True))
 ```
 
-`Settings` is immutable; the given settings stay in effect for that slide's reads and saves, while the global `settings` keeps the default for everything else. To apply settings to a block of your own code, use the `use_settings` context manager:
+The given settings stay in effect for that slide's reads and saves, while the default is used for everything else. To apply settings to a block of your own code, use the `use_settings` context manager:
 
 ```python
-from wsidicom.config import Settings, use_settings
+from wsidicom import Settings, use_settings
 
 with use_settings(Settings(resampling_filter="box")):
     ...  # code here (and threads it starts) sees these settings
 ```
+
+Read the settings in effect with `get_settings()`.
 
 ## Annotation usage
 

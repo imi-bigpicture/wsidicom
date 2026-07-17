@@ -151,12 +151,6 @@ class TestDecoderSelection:
     """select_decoder honors the preferred argument, falling back to
     settings.preferred_decoder when it is None."""
 
-    @pytest.fixture(autouse=True)
-    def _restore_preferred_decoder(self):
-        original = config.settings.preferred_decoder
-        yield
-        config.settings.preferred_decoder = original
-
     def test_preferred_argument_selects_decoder(self):
         # Act — Pillow is always available and supports JPEG baseline
         selected = Decoder.select_decoder(
@@ -167,13 +161,13 @@ class TestDecoderSelection:
         assert selected is PillowDecoder
 
     def test_preferred_argument_overrides_settings(self):
-        # Arrange — a different preference in settings
-        config.settings.preferred_decoder = DecoderOption.PYDICOM
-
-        # Act — the argument wins over the setting
-        selected = Decoder.select_decoder(
-            JPEGBaseline8Bit, 3, 8, preferred=DecoderOption.PILLOW
-        )
+        # Act — the argument wins over a different preference in settings
+        with config.use_settings(
+            config.Settings(preferred_decoder=DecoderOption.PYDICOM)
+        ):
+            selected = Decoder.select_decoder(
+                JPEGBaseline8Bit, 3, 8, preferred=DecoderOption.PILLOW
+            )
 
         # Assert
         assert selected is PillowDecoder

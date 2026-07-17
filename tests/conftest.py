@@ -37,7 +37,7 @@ from upath import UPath
 from tests.data_gen import create_layer_file
 from tests.file.io.test_wsidicom_writer import WsiDicomTestImageData
 from wsidicom import WsiDicom
-from wsidicom.config import settings
+from wsidicom.config import Settings
 from wsidicom.geometry import Size
 from wsidicom.metadata.uid_generator import CallableUidGenerator
 from wsidicom.thread import ReadExecutor
@@ -262,7 +262,6 @@ def wsi_factory(shared_threadpool_executor: Executor):
         if input_type == WsiInputType.FILE:
             wsi = WsiDicom.open(folder, read_executor=read_executor)
         elif input_type == WsiInputType.WEB:
-            settings.open_web_threads = 1
             client = WsiDicomWebClient(
                 DICOMfileClient(f"file://{folder.absolute().as_posix()}")
             )
@@ -272,6 +271,7 @@ def wsi_factory(shared_threadpool_executor: Executor):
                 test_definition["series_instance_uid"],
                 [JPEGBaseline8Bit, JPEG2000, ExplicitVRLittleEndian],
                 read_executor=read_executor,
+                settings=Settings(open_web_threads=1),
             )
         elif input_type == WsiInputType.STREAM:
             new_streams = [
