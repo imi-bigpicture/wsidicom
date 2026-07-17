@@ -37,7 +37,7 @@ from wsidicom.metadata.sample import (
 )
 
 
-class IssuerOfIdentifierJsonField(fields.Field):
+class IssuerOfIdentifierJsonField(fields.Field[IssuerOfIdentifier]):
     def _serialize(
         self, value: IssuerOfIdentifier | None, attr, obj, **kwargs
     ) -> str | dict | None:
@@ -79,7 +79,7 @@ class IssuerOfIdentifierJsonField(fields.Field):
             ) from error
 
 
-class SpecimenIdentifierJsonField(fields.Field):
+class SpecimenIdentifierJsonField(fields.Field[str | SpecimenIdentifier]):
     _issuer_of_identifier_field = IssuerOfIdentifierJsonField()
 
     def _serialize(
@@ -128,7 +128,7 @@ class SpecimenIdentifierJsonField(fields.Field):
             ) from error
 
 
-class PointMmJsonField(fields.Field):
+class PointMmJsonField(fields.Field[PointMm]):
     def _serialize(self, value: PointMm | None, attr, obj, **kwargs) -> dict | None:
         if value is None:
             return None
@@ -150,7 +150,7 @@ class PointMmJsonField(fields.Field):
             raise ValidationError("Could not deserialize PointMm.") from error
 
 
-class SizeMmJsonField(fields.Field):
+class SizeMmJsonField(fields.Field[SizeMm]):
     def _serialize(self, value: SizeMm | None, attr, obj, **kwargs) -> dict | None:
         if value is None:
             return None
@@ -172,7 +172,7 @@ class SizeMmJsonField(fields.Field):
             raise ValidationError("Could not deserialize SizeMm.") from error
 
 
-class UidJsonField(fields.Field):
+class UidJsonField(fields.Field[UID]):
     def _serialize(self, value: UID | None, attr, obj, **kwargs) -> str | None:
         if value is None:
             return None
@@ -185,7 +185,7 @@ class UidJsonField(fields.Field):
             raise ValidationError("Could not deserialize UID.") from error
 
 
-class CodeJsonField(fields.Field):
+class CodeJsonField(fields.Field[Code]):
     def _serialize(self, value: Code | None, attr, obj, **kwargs) -> dict | None:
         if value is None:
             return None
@@ -198,7 +198,7 @@ class CodeJsonField(fields.Field):
             raise ValidationError("Could not deserialize Code.") from error
 
 
-class StringOrCodeJsonField(fields.Field):
+class StringOrCodeJsonField(fields.Field[str | Code]):
     def _serialize(
         self, value: str | Code | None, attr, obj, **kwargs
     ) -> str | dict | None:
@@ -346,10 +346,12 @@ class JsonFieldFactory:
             raise ValueError(f"Failed to serialize code {code}") from exception
 
 
-class NpUIntDTypeField(fields.Field):
+class NpUIntDTypeField(fields.Field[LutDataType]):
     def _serialize(
-        self, value: LutDataType, attr: str | None, obj: Any, **kwargs
-    ) -> int:
+        self, value: LutDataType | None, attr: str | None, obj: Any, **kwargs
+    ) -> int | None:
+        if value is None:
+            return None
         return 8 * value().itemsize
 
     def _deserialize(
@@ -366,8 +368,8 @@ class NpUIntDTypeField(fields.Field):
         raise NotImplementedError(f"Not-implemented bit count {value}.")
 
 
-class FileLoadingField(fields.Field):
-    def _serialize(self, value: bytes, attr: str | None, obj: Any, **kwargs):
+class FileLoadingField(fields.Field[bytes]):
+    def _serialize(self, value: bytes | None, attr: str | None, obj: Any, **kwargs):
         raise NotImplementedError("Dumping bytes to file not implemented.")
 
     def _deserialize(
@@ -384,7 +386,7 @@ class FileLoadingField(fields.Field):
             return file.read()
 
 
-class MeasurementJsonField(fields.Field):
+class MeasurementJsonField(fields.Field[Measurement]):
     def _serialize(
         self, value: Measurement | None, attr, obj, **kwargs
     ) -> dict[str, Any] | None:

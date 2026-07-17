@@ -323,7 +323,7 @@ class SubstanceItemDicomField(fields.Field):
             return None
         if isinstance(value, str):
             return [self._string_field._serialize(value, attr, obj, **kwargs)]
-        return self._code_list_field._serialize(value, attr, obj, **kwargs)
+        return self._code_list_field._serialize(list(value), attr, obj, **kwargs)
 
     def _deserialize(self, value: Sequence[Dataset], attr, data, **kwargs):
         datasets = value
@@ -419,12 +419,13 @@ class PreparationStepDicomField(fields.Field):
 
     def _serialize(
         self,
-        value: SpecimenPreparationStepDicomModel,
+        value: SpecimenPreparationStepDicomModel | None,
         attr: str | None,
         obj: Any,
         **kwargs,
     ) -> Dataset:
         """Serialize step to dataset."""
+        assert value is not None
         step = value
         assert self.data_key is not None
         sequence = self._subschema_dump(step)

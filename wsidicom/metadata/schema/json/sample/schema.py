@@ -259,11 +259,13 @@ class SubstanceJsonField(fields.Field):
     )
 
     def _serialize(
-        self, value: str | Sequence[SpecimenStainsCode], attr, obj, **kwargs
+        self, value: str | Sequence[SpecimenStainsCode] | None, attr, obj, **kwargs
     ):
+        if value is None:
+            return None
         if isinstance(value, str):
             return value
-        return self._code_list_field._serialize(value, attr, obj, **kwargs)
+        return self._code_list_field._serialize(list(value), attr, obj, **kwargs)
 
     def _deserialize(self, value: str | list[dict[str, Any]], attr, data, **kwargs):
         if isinstance(value, str):
