@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-07-17
+
 ### Added
 
 - `as_array` parameter on `WsiDicom.read_region`, `read_region_mm`, `read_region_mpp`, `read_tile`, `read_thumbnail`, `read_label` and `read_overview`, returning the pixels as a numpy array instead of a Pillow image, typically faster.
@@ -652,7 +654,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.1..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.34.0..HEAD
+[0.34.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.1..v0.34.0
 [0.33.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.0..v0.33.1
 [0.33.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.32.1..v0.33.0
 [0.32.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.32.0..v0.32.1
