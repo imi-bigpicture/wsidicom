@@ -379,9 +379,9 @@ class TestReadExecutor:
         argument = 7
         # submit wraps the call in the caller's context (matchers.Anything() is
         # that copy_context().run wrapper) for context-local settings propagation.
-        decoy.when(
-            shared.submit(matchers.Anything(), work, argument)
-        ).then_return(expected_future)
+        decoy.when(shared.submit(matchers.Anything(), work, argument)).then_return(
+            expected_future
+        )
 
         # Act
         result = read_executor.submit(work, argument)
