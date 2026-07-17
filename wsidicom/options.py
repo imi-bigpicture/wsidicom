@@ -25,11 +25,9 @@ class Option(Enum):
 
     @classmethod
     def coerce(cls: type[OptionT], value: "OptionT | str | None") -> "OptionT | None":
-        """Return ``value`` as a member, accepting a member or its string value.
-
-        Lets settings accept the plain string form (e.g. ``"pillow"``) as well as
-        the enum member. ``None`` passes through. Raises ``ValueError`` for an
-        unknown string.
+        """Coerce ``value`` to a member: a member or its string value (e.g.
+        ``"pillow"``) returns the member, ``None`` passes through, and an unknown
+        string raises ``ValueError``.
         """
         return None if value is None else cls(value)
 
@@ -39,11 +37,22 @@ class ResampleFilterOption(Option):
     native equivalent."""
 
     NEAREST = "nearest"
+    """Does not average, so it aliases when shrinking; use only where exact source
+    pixel values matter (e.g. label or mask images)."""
     BOX = "box"
+    """Equal-weighted area average. Exact and ringing-free but the crudest
+    antialiasing filter; the pyramid-generation default."""
     BILINEAR = "bilinear"
+    """Linear (triangle) kernel; the read default. Antialiases without the ringing
+    of BICUBIC and LANCZOS."""
     HAMMING = "hamming"
+    """Windowed kernel between BOX and BILINEAR; sharper than BILINEAR without
+    BOX's local dislocations."""
     BICUBIC = "bicubic"
+    """Cubic kernel; sharper than BILINEAR but can overshoot and ring at
+    high-contrast edges."""
     LANCZOS = "lanczos"
+    """Truncated-sinc kernel; the sharpest filter, with the most ringing."""
 
 
 class DownsamplerOption(Option):

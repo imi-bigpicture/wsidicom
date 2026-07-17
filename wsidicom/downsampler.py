@@ -68,6 +68,18 @@ class Downsampler(ABC):
                 return cv2_downsampler
         return PillowDownsampler(resample=resample)
 
+    @classmethod
+    def create_for_read(cls) -> "Downsampler":
+        """Create the downsampler for rescaling on read, using the configured
+        read filter (``settings.resampling_filter``)."""
+        return cls.create(resample=settings.resampling_filter)
+
+    @classmethod
+    def create_for_pyramid(cls) -> "Downsampler":
+        """Create the downsampler for generating pyramid levels, using the
+        configured pyramid filter (``settings.pyramid_resampling_filter``)."""
+        return cls.create(resample=settings.pyramid_resampling_filter)
+
     @property
     def commutes_with_stitch(self) -> bool:
         """Whether downsample-then-stitch is equivalent to stitch-then-downsample."""
@@ -162,13 +174,15 @@ class PillowDownsampler(Downsampler):
 
     @property
     def commutes_with_stitch(self) -> bool:
-        """Whether downsample-then-stitch is equivalent to stitch-then-downsample.
+        """Whether downsample-then-stitch equals stitch-then-downsample.
 
-        True for BOX and BILINEAR resampling filters. For these filters, an
-        exact 2x downscale produces equal-weighted 2x2 averaging, which
-        `Image.reduce(2)` computes identically.
+        True only for BOX, whose 2x2 footprint stays within each block, so a
+        per-tile `Image.reduce(2)` matches downsampling the whole level. BILINEAR
+        does not: Pillow scales the triangle kernel with the factor, so a 2x
+        reduce is a ~4-tap triangle that both differs from a box and reaches
+        across tile boundaries.
         """
-        return self._filter in (ResampleFilterOption.BOX, ResampleFilterOption.BILINEAR)
+        return self._filter == ResampleFilterOption.BOX
 
     def downsample(self, array: np.ndarray, output_size: Size) -> np.ndarray:
         resized = self._to_image(array).resize(
@@ -178,9 +192,13 @@ class PillowDownsampler(Downsampler):
         return self._from_image(resized, array.dtype)
 
     def reduce_by_half(self, array: np.ndarray) -> np.ndarray:
-        # Image.reduce(2) is the exact equal-weighted 2x2 average that a BOX /
-        # BILINEAR downsample of an exact 2x downscale produces; kept as the
-        # write-path fast path so pixels match the stitch-then-downsample path.
+        if self._filter != ResampleFilterOption.BOX:
+            # Only BOX's footprint equals an equal-weighted 2x2 average; other
+            # filters scale their kernel with the factor, so a real 2x resize is
+            # required rather than Image.reduce(2).
+            return super().reduce_by_half(array)
+        # Image.reduce(2) is that 2x2 average, matching a real BOX 2x downscale;
+        # kept as the write-path fast path so pixels match stitch-then-downsample.
         return self._from_image(self._to_image(array).reduce(2), array.dtype)
 
     def thumbnail(self, array: np.ndarray, max_size: Size) -> np.ndarray:
@@ -238,23 +256,20 @@ class Cv2Downsampler(Downsampler):
 
     @classmethod
     def from_filter(cls, resample: ResampleFilterOption) -> "Cv2Downsampler | None":
-        """Return a downsampler using cv2's equivalent of a resampling filter.
+        """Return a downsampler using cv2's equivalent of a resampling filter, or
+        None if opencv is unavailable or the filter has no suitable cv2 match (so
+        the caller falls back to Pillow).
 
-        Returns None if opencv is unavailable or has no equivalent for the
-        filter (e.g. HAMMING), so the caller can fall back to Pillow.
-
-        The equivalents match Pillow only approximately, except INTER_AREA,
-        which reproduces BOX and BILINEAR bit-exactly for the exact 2x downscale
-        used when generating pyramid levels.
+        Only NEAREST and BOX qualify: INTER_NEAREST_EXACT reproduces NEAREST
+        bit-exactly, and INTER_AREA matches BOX (bit-exact at the 2x pyramid
+        reduce). cv2's linear/cubic/lanczos use fixed support and alias when
+        shrinking, so they are not stand-ins for Pillow's antialiasing filters.
         """
         if cv2 is None:
             return None
         equivalents = {
-            ResampleFilterOption.NEAREST: cv2.INTER_NEAREST,
+            ResampleFilterOption.NEAREST: cv2.INTER_NEAREST_EXACT,
             ResampleFilterOption.BOX: cv2.INTER_AREA,
-            ResampleFilterOption.BILINEAR: cv2.INTER_AREA,
-            ResampleFilterOption.BICUBIC: cv2.INTER_CUBIC,
-            ResampleFilterOption.LANCZOS: cv2.INTER_LANCZOS4,
         }
         interpolation = equivalents.get(resample)
         if interpolation is None:

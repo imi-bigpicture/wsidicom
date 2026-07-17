@@ -59,7 +59,7 @@ class WsiInstance:
         self._identifier, self._uids = self._validate_instance(self.datasets)
         self._image_type = self.dataset.image_type
         self._stitcher = NumpyStitcher()
-        self._downsampler: Downsampler = Downsampler.create()
+        self._downsampler: Downsampler = Downsampler.create_for_read()
 
         if self.ext_depth_of_field:
             if self.ext_depth_of_field_planes is None:

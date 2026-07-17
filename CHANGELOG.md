@@ -10,14 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `as_array` parameter on `WsiDicom.read_region`, `read_region_mm`, `read_region_mpp`, `read_tile`, `read_thumbnail`, `read_label` and `read_overview`, returning the pixels as a numpy array instead of a Pillow image, typically faster.
-- `opencv` optional extra. When installed, pyramid generation and region/thumbnail reads can downsample with OpenCV (`Cv2Downsampler`), typically faster than the Pillow downsampler. The backend is selected by the new `settings.preferred_downsampler` (a `DownsamplerOption`, or its string value `"opencv"`/`"pillow"`, or `None` to pick the fastest available).  Because cv2 and Pillow resampling differ for non-2x resizes, `read_region_mm`/`read_region_mpp`/`read_thumbnail` output depends on this setting.
+- `opencv` optional extra. When installed, downsampling can run on OpenCV (`Cv2Downsampler`), typically faster than Pillow, producing bit-identical output for the two filters it handles: `INTER_AREA` matches Pillow's BOX at the exact-2x pyramid reduce, and `INTER_NEAREST_EXACT` matches NEAREST. Selected by the new `settings.preferred_downsampler` (a `DownsamplerOption`, or its string value `"opencv"`/`"pillow"`, or `None` to pick the best available).
+- `settings.pyramid_resampling_filter` (default BOX), the filter used to generate pyramid levels, separate from `settings.resampling_filter` (reads).
 - `read_executor` parameter on `WsiDicom.open`, `open_dicomdir`, `open_streams`, and `open_web`: an optional shared, thread-based executor reused across region reads. When supplied, reads parallelize across it by default (pass `threads=1` to a read to opt out).
 - `threads` parameter on `read_thumbnail`, controlling how many worker threads the read fans its tile fetches across (matching `read_region`).
 
 ### Changed
 
 - imagecodecs is now preferred over Pillow when both can decode a transfer syntax (`settings.preferred_decoder` still overrides).
-- `settings.pillow_resampling_filter` is renamed to `settings.resampling_filter` and is now a backend-neutral `ResampleFilterOption` enum instead of Pillow's `Image.Resampling`.
+- `settings.pillow_resampling_filter` is renamed to `settings.resampling_filter`, now applies to reads only and is a backend-neutral `ResampleFilterOption` enum instead of Pillow's `Image.Resampling`.
 - `settings.preferred_decoder` is now a `DecoderOption` enum rather than a plain string (the string name is still accepted).
 
 ### Fixed

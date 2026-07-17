@@ -416,7 +416,7 @@ class PyramidFileWriter(BaseFileWriter):
         # Resolve encoder and whether transcoding is needed
         encoder, transcode = self._resolve_transcoding(source_image_data)
 
-        downsampler = Downsampler.create()
+        downsampler = Downsampler.create_for_pyramid()
         stitcher = NumpyStitcher()
         temp_dir = UPath(tempfile.mkdtemp(prefix="wsidicom_pull_"))
 

@@ -40,7 +40,6 @@ from wsidicom import WsiDicom
 from wsidicom.config import settings
 from wsidicom.geometry import Size
 from wsidicom.metadata.uid_generator import CallableUidGenerator
-from wsidicom.options import DownsamplerOption
 from wsidicom.thread import ReadExecutor
 from wsidicom.web.wsidicom_web_client import WsiDicomWebClient
 
@@ -245,7 +244,7 @@ def wsi_factory(shared_threadpool_executor: Executor):
     separately.
     """
     streams: list[BufferedReader] = []
-    wsis: dict[tuple[WsiInputType, Path, bool, DownsamplerOption | None], WsiDicom] = {}
+    wsis: dict[tuple[WsiInputType, Path, bool], WsiDicom] = {}
 
     def open_wsi(
         wsi_name: str,
@@ -254,9 +253,7 @@ def wsi_factory(shared_threadpool_executor: Executor):
     ) -> WsiDicom:
         test_definition = WsiTestDefinitions.test_definitions[wsi_name]
         folder = UPath(SLIDE_FOLDER).joinpath(test_definition["path"])
-        # The downsampler is resolved at open time, so cache per backend too, or
-        # a wsi opened under one downsampler would be reused under another.
-        key = (input_type, folder, use_shared_executor, settings.preferred_downsampler)
+        key = (input_type, folder, use_shared_executor)
         if key in wsis:
             return wsis[key]
         read_executor = shared_threadpool_executor if use_shared_executor else None

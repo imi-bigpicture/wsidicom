@@ -30,6 +30,7 @@ class Settings:
         self._preferred_downsampler: DownsamplerOption | None = None
         self._open_web_threads: int | None = None
         self._resampling_filter = ResampleFilterOption.BILINEAR
+        self._pyramid_resampling_filter = ResampleFilterOption.BOX
         self._ignore_specimen_preparation_step_on_validation_error = True
         self._truncate_long_dicom_strings = False
         self._decoded_frame_cache_size = 100 * 1024 * 1024
@@ -119,12 +120,26 @@ class Settings:
 
     @property
     def resampling_filter(self) -> ResampleFilterOption:
-        """The resampling filter to use when rescaling images."""
+        """The resampling filter to use when rescaling images on read (region and
+        thumbnail reads). Defaults to BILINEAR."""
         return self._resampling_filter
 
     @resampling_filter.setter
     def resampling_filter(self, value: ResampleFilterOption | str) -> None:
         self._resampling_filter = ResampleFilterOption(value)
+
+    @property
+    def pyramid_resampling_filter(self) -> ResampleFilterOption:
+        """The resampling filter to use when generating pyramid levels. Defaults to
+        BOX, the standard mipmap construction (each level the exact 2x2 average of the
+        one above): it is moiré-free and adds no ringing or overshoot that would
+        accumulate from level to level. Its 2x2 footprint also stays within tile
+        boundaries, so building a level from the tiles below introduces no seams."""
+        return self._pyramid_resampling_filter
+
+    @pyramid_resampling_filter.setter
+    def pyramid_resampling_filter(self, value: ResampleFilterOption | str) -> None:
+        self._pyramid_resampling_filter = ResampleFilterOption(value)
 
     @property
     def ignore_specimen_preparation_step_on_validation_error(self) -> bool:

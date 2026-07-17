@@ -22,6 +22,7 @@ own class.
 
 import numpy as np
 import pytest
+from wsidicom_data import TestData
 
 from wsidicom.config import settings
 from wsidicom.downsampler import (
@@ -178,19 +179,34 @@ class TestPillowDownsampler:
         ["resample", "expected"],
         [
             (ResampleFilterOption.BOX, True),
-            (ResampleFilterOption.BILINEAR, True),
+            (ResampleFilterOption.BILINEAR, False),
             (ResampleFilterOption.BICUBIC, False),
             (ResampleFilterOption.NEAREST, False),
             (ResampleFilterOption.LANCZOS, False),
         ],
     )
     def test_commutes_with_stitch(self, resample: ResampleFilterOption, expected: bool):
-        """commutes_with_stitch is True only for BOX and BILINEAR."""
+        """commutes_with_stitch is True only for BOX (BILINEAR's scaled kernel
+        crosses tile boundaries and differs from the 2x2 box reduce)."""
         # Arrange
         downsampler = PillowDownsampler(resample=resample)
 
         # Act & Assert
         assert downsampler.commutes_with_stitch is expected
+
+    def test_reduce_by_half_applies_the_configured_filter(self):
+        # Arrange — real detail so box and bilinear genuinely differ
+        array = np.asarray(TestData.image(8, 3))
+        half = Size(array.shape[1] // 2, array.shape[0] // 2)
+        bilinear = PillowDownsampler(resample=ResampleFilterOption.BILINEAR)
+        box = PillowDownsampler(resample=ResampleFilterOption.BOX)
+
+        # Act
+        reduced = bilinear.reduce_by_half(array)
+
+        # Assert — matches a real bilinear resize, and is not the box average
+        assert np.array_equal(reduced, bilinear.downsample(array, half))
+        assert not np.array_equal(reduced, box.reduce_by_half(array))
 
 
 @pytest.mark.unittest
@@ -218,11 +234,8 @@ class TestCv2FromFilter:
     @pytest.mark.parametrize(
         ["resample", "cv2_attr"],
         [
-            (ResampleFilterOption.NEAREST, "INTER_NEAREST"),
+            (ResampleFilterOption.NEAREST, "INTER_NEAREST_EXACT"),
             (ResampleFilterOption.BOX, "INTER_AREA"),
-            (ResampleFilterOption.BILINEAR, "INTER_AREA"),
-            (ResampleFilterOption.BICUBIC, "INTER_CUBIC"),
-            (ResampleFilterOption.LANCZOS, "INTER_LANCZOS4"),
         ],
     )
     def test_maps_filter_to_cv2_equivalent(
@@ -238,10 +251,20 @@ class TestCv2FromFilter:
         assert downsampler is not None
         assert downsampler._interpolation == getattr(cv2, cv2_attr)
 
-    def test_filter_without_equivalent_returns_none(self):
-        # HAMMING has no cv2 equivalent, so Pillow must handle it.
+    @pytest.mark.parametrize(
+        "resample",
+        [
+            ResampleFilterOption.BILINEAR,
+            ResampleFilterOption.HAMMING,
+            ResampleFilterOption.BICUBIC,
+            ResampleFilterOption.LANCZOS,
+        ],
+    )
+    def test_filter_without_suitable_equivalent_returns_none(
+        self, resample: ResampleFilterOption
+    ):
         # Act & Assert
-        assert Cv2Downsampler.from_filter(ResampleFilterOption.HAMMING) is None
+        assert Cv2Downsampler.from_filter(resample) is None
 
 
 @pytest.mark.unittest
@@ -265,9 +288,22 @@ class TestDownsamplerCreate:
         not Cv2Downsampler.is_available(), reason="opencv not installed"
     )
     def test_opencv_argument_selects_cv2(self):
+        # Act & Assert — BOX is one of the filters cv2 handles
+        assert isinstance(
+            Downsampler.create(
+                resample=ResampleFilterOption.BOX, preferred=DownsamplerOption.OPENCV
+            ),
+            Cv2Downsampler,
+        )
+
+    def test_opencv_argument_falls_back_to_pillow_for_unsuitable_filter(self):
         # Act & Assert
         assert isinstance(
-            Downsampler.create(preferred=DownsamplerOption.OPENCV), Cv2Downsampler
+            Downsampler.create(
+                resample=ResampleFilterOption.BILINEAR,
+                preferred=DownsamplerOption.OPENCV,
+            ),
+            PillowDownsampler,
         )
 
     @pytest.mark.skipif(
@@ -279,7 +315,10 @@ class TestDownsamplerCreate:
 
         # Act & Assert — the argument wins over the setting
         assert isinstance(
-            Downsampler.create(preferred=DownsamplerOption.OPENCV), Cv2Downsampler
+            Downsampler.create(
+                resample=ResampleFilterOption.BOX, preferred=DownsamplerOption.OPENCV
+            ),
+            Cv2Downsampler,
         )
 
     def test_defaults_to_settings(self):
@@ -297,9 +336,106 @@ class TestDownsamplerCreate:
         settings.preferred_downsampler = None
 
         # Act & Assert
-        assert isinstance(Downsampler.create(), Cv2Downsampler)
+        assert isinstance(
+            Downsampler.create(resample=ResampleFilterOption.BOX), Cv2Downsampler
+        )
 
     def test_unknown_name_raises(self):
         # Act & Assert
         with pytest.raises(ValueError):
             settings.preferred_downsampler = "bogus"
+
+
+@pytest.mark.unittest
+@pytest.mark.skipif(not Cv2Downsampler.is_available(), reason="opencv not installed")
+class TestBackendEquivalence:
+    """The Pillow and OpenCV downsamplers must agree where the pipeline relies on
+    it: exact-2x reduction bit-identical, arbitrary resizes close (their algorithms
+    differ and are not byte-reproducible across platforms).
+    """
+
+    @pytest.fixture
+    def image(self) -> np.ndarray:
+        return np.asarray(TestData.image(8, 3))
+
+    @pytest.fixture
+    def backends(
+        self, resample: ResampleFilterOption
+    ) -> tuple[PillowDownsampler, Cv2Downsampler]:
+        """The Pillow and OpenCV downsamplers for a resampling filter."""
+        opencv = Cv2Downsampler.from_filter(resample)
+        assert opencv is not None
+        return PillowDownsampler(resample=resample), opencv
+
+    @pytest.mark.parametrize("resample", [ResampleFilterOption.BOX])
+    def test_reduce_by_half_is_bit_exact(
+        self,
+        image: np.ndarray,
+        backends: tuple[PillowDownsampler, Cv2Downsampler],
+    ):
+        """Exact-2x reduction is identical on all downsamplers."""
+        # Arrange
+        pillow, opencv = backends
+
+        # Act & Assert
+        assert np.array_equal(
+            pillow.reduce_by_half(image), opencv.reduce_by_half(image)
+        )
+
+    def test_reduce_by_half_bit_exact_on_rounding_ties(self):
+        """The .5 tie (2x2 sum of 2 mod 4) is the only case where cv2 INTER_AREA
+        and Pillow reduce(2) could round differently; cover every such block."""
+        # Arrange
+        values = np.arange(0, 254, dtype=np.uint8)
+        block = np.empty((2, 2 * len(values)), dtype=np.uint8)
+        block[0, 0::2] = values
+        block[0, 1::2] = values
+        block[1, 0::2] = values
+        block[1, 1::2] = values + 2
+        image = np.dstack([block, block, block])
+        pillow = PillowDownsampler(resample=ResampleFilterOption.BOX)
+        opencv = Cv2Downsampler.from_filter(ResampleFilterOption.BOX)
+        assert opencv is not None
+
+        # Act & Assert
+        assert np.array_equal(
+            pillow.reduce_by_half(image), opencv.reduce_by_half(image)
+        )
+
+    @pytest.mark.parametrize(
+        "resample", [ResampleFilterOption.NEAREST, ResampleFilterOption.BOX]
+    )
+    @pytest.mark.parametrize(
+        ("source_size", "output_size"),
+        [
+            (Size(240, 240), Size(150, 150)),  # square, 0.625x in both axes
+            (Size(240, 160), Size(150, 100)),  # non-square, still 0.625x in both
+        ],
+    )
+    def test_downsample_stays_close_at_non_2x(
+        self,
+        image: np.ndarray,
+        backends: tuple[PillowDownsampler, Cv2Downsampler],
+        source_size: Size,
+        output_size: Size,
+    ):
+        """cv2 substitutes only for the two filters it matches - NEAREST
+        (bit-identical) and BOX (bit-exact at the 2x reduce, close otherwise).
+        Assert correlation rather than a magnitude bound: it is scale-invariant, so
+        it ignores cv2's un-checksummable sub-LSB platform differences yet still
+        collapses for a transposed or garbage result. The non-square source also
+        catches a width/height swap between the wrappers."""
+        # Arrange
+        pillow, opencv = backends
+        source = image[: source_size.height, : source_size.width]
+
+        # Act
+        pillow_result = pillow.downsample(source, output_size)
+        opencv_result = opencv.downsample(source, output_size)
+
+        # Assert
+        correlation = np.corrcoef(
+            pillow_result.astype(np.float64).ravel(),
+            opencv_result.astype(np.float64).ravel(),
+        )[0, 1]
+        assert correlation > 0.97
