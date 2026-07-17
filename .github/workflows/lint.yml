@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v7
       # Installs ruff and runs `ruff check`; no project install needed.
       - name: Ruff lint
-        uses: astral-sh/ruff-action@v4
+        uses: astral-sh/ruff-action@v4.1.0
       - name: Ruff format check
         run: ruff format --check
 
