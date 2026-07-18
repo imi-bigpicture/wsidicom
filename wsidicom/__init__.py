@@ -17,7 +17,6 @@ from importlib.metadata import version
 from wsidicom.config import (
     Settings,
     get_settings,
-    replace_default_setting,
     set_default_settings,
     use_settings,
 )
@@ -45,7 +44,6 @@ __all__ = [
     "Settings",
     "get_settings",
     "set_default_settings",
-    "replace_default_setting",
     "use_settings",
     "Annotation",
     "AnnotationGroup",

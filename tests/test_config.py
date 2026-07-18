@@ -21,7 +21,6 @@ from wsidicom import config
 from wsidicom.config import (
     Settings,
     get_settings,
-    replace_default_setting,
     set_default_settings,
     use_settings,
 )
@@ -76,7 +75,7 @@ class TestSettings:
 class TestDefaultSettings:
     """The process-wide default and the `use_settings` scope: `get_settings`
     returns the scope-active `Settings` when one is active, else the default;
-    `set_default_settings`/`replace_default_setting` change the default."""
+    `set_default_settings` changes the default."""
 
     @pytest.fixture(autouse=True)
     def _restore_default_settings(self):
@@ -109,24 +108,13 @@ class TestDefaultSettings:
         # Assert
         assert get_settings().resampling_filter == ResampleFilterOption.BOX
 
-    def test_replace_default_setting_changes_only_the_given_field(self):
-        # Act
-        returned = replace_default_setting(resampling_filter=ResampleFilterOption.BOX)
-
-        # Assert — the field changed, others kept their default, and the new
-        # default is returned
-        assert get_settings().resampling_filter == ResampleFilterOption.BOX
-        assert get_settings().pyramid_resampling_filter == ResampleFilterOption.BOX
-        assert get_settings().strict_uid_check is False
-        assert returned is get_settings()
-
     def test_default_change_targets_the_default_not_the_active_scope(self):
         # Arrange
         custom = Settings(resampling_filter=ResampleFilterOption.LANCZOS)
 
         # Act — changing the default inside a scope still targets the default
         with use_settings(custom):
-            replace_default_setting(resampling_filter=ResampleFilterOption.BOX)
+            set_default_settings(Settings(resampling_filter=ResampleFilterOption.BOX))
             active = get_settings().resampling_filter
 
         # Assert — reads honoured the active `custom`; the default took the change

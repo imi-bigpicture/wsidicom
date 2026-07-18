@@ -16,8 +16,7 @@
 import contextvars
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
-from typing import Any
+from dataclasses import dataclass
 
 from wsidicom.options import DecoderOption, DownsamplerOption, ResampleFilterOption
 
@@ -28,9 +27,8 @@ class Settings:
 
     Construct with the desired values and pass to ``WsiDicom.open(settings=...)``
     for per-object settings. To change the process-wide default instead, use
-    ``set_default_settings(Settings(...))`` or ``replace_default_setting(...)``.
-    The option-enum fields accept their string value (e.g. ``"box"``) as well as
-    the enum member.
+    ``set_default_settings(Settings(...))``. The option-enum fields accept their
+    string value (e.g. ``"box"``) as well as the enum member.
     """
 
     strict_uid_check: bool = False
@@ -124,17 +122,6 @@ def set_default_settings(new_settings: Settings) -> None:
     """
     global _default_settings
     _default_settings = new_settings
-
-
-def replace_default_setting(**changes: Any) -> Settings:
-    """Replace individual fields of the process-wide default settings, like
-    ``dataclasses.replace``, and return the new default.
-
-        replace_default_setting(strict_uid_check=True)
-    """
-    global _default_settings
-    _default_settings = replace(_default_settings, **changes)
-    return _default_settings
 
 
 @contextmanager

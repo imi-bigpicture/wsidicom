@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Keyword-only `settings` parameter on `WsiDicom.open`, `open_dicomdir`, `open_streams` and `open_web`, taking a `Settings` used for that slide instead of the process-wide default.
 - `use_settings`, a context manager that applies a `Settings` to a block of code.
-- `set_default_settings` and `replace_default_setting` to change the process-wide default settings.
+- `set_default_settings` to change the process-wide default settings.
 
 ### Removed
 
-- The mutable `settings` global (`settings.<field> = ...`). Change the process-wide default with `set_default_settings`/`replace_default_setting` instead.
+- The mutable `settings` global (`settings.<field> = ...`). Change the process-wide default with `set_default_settings(Settings(...))` instead.
 
 ## [0.34.0] - 2026-07-17
 
