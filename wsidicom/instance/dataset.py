@@ -165,7 +165,7 @@ class WsiDataset(Dataset):
         if tile_type == "TILED_FULL":
             # By the standard it should be tiled full.
             return TileType.FULL
-        if "PerFrameFunctionalGroupsSequence" in self:
+        if self._has_per_frame_positions:
             # If no per frame functional sequence we can't make a sparse tile index.
             return TileType.SPARSE
         if self.image_type == ImageType.LABEL:
@@ -239,11 +239,12 @@ class WsiDataset(Dataset):
         DicomSequence
             Per frame or shared functional group sequence.
         """
-        if "PerFrameFunctionalGroupsSequence" in self and (
-            "PlanePositionSlideSequence" in self.PerFrameFunctionalGroupsSequence[0]
-        ):
+        if self._has_per_frame_positions:
             return self.PerFrameFunctionalGroupsSequence
-        elif "SharedFunctionalGroupsSequence" in self:
+        elif (
+            "SharedFunctionalGroupsSequence" in self
+            and len(self.SharedFunctionalGroupsSequence) > 0
+        ):
             return self.SharedFunctionalGroupsSequence
         return DicomSequence([])
 
@@ -883,6 +884,20 @@ class WsiDataset(Dataset):
             }
         )
         return WsiDataset(dataset)
+
+    @cached_property
+    def _has_per_frame_positions(self) -> bool:
+        """Whether the per frame functional groups carry per-frame tile positions
+        (PlanePositionSlideSequence), the marker of a sparse, explicitly-positioned
+        image. Checks the first frame as representative. This is the condition a
+        sparse tile index needs, so both :func:`tile_type` and
+        :func:`frame_sequence` gate on it to stay in agreement.
+        """
+        return (
+            "PerFrameFunctionalGroupsSequence" in self
+            and len(self.PerFrameFunctionalGroupsSequence) > 0
+            and "PlanePositionSlideSequence" in self.PerFrameFunctionalGroupsSequence[0]
+        )
 
     @cached_property
     def _ext_depth_of_field(self) -> tuple[bool, int | None, float | None]:
