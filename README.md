@@ -347,13 +347,12 @@ with WsiDicom.open("path_to_folder") as slide:
 
 ## Settings
 
-Settings are held in the immutable `Settings` object. To change the process-wide default, use `set_default_settings` (a whole `Settings`) or `replace_default_setting` (individual fields, like `dataclasses.replace`):
+Settings are held in the immutable `Settings` object. To change the process-wide default, build a `Settings` and pass it to `set_default_settings`:
 
 ```python
-from wsidicom import Settings, set_default_settings, replace_default_setting
+from wsidicom import Settings, set_default_settings
 
 set_default_settings(Settings(strict_uid_check=True))
-replace_default_setting(strict_uid_check=True)  # change one field, keep the rest
 ```
 
 To configure a single opened slide instead of the whole process, pass a `Settings` as the keyword-only `settings` argument to `open` (also available on `open_dicomdir`, `open_streams` and `open_web`):
