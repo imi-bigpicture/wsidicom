@@ -119,6 +119,11 @@ def set_default_settings(new_settings: Settings) -> None:
 
     Changes what is used when no per-call ``settings`` (see ``WsiDicom.open``)
     and no active scope (see ``use_settings``) override it.
+
+    Parameters
+    ----------
+    new_settings: Settings
+        The new process-wide default settings.
     """
     global _default_settings
     _default_settings = new_settings
@@ -126,20 +131,22 @@ def set_default_settings(new_settings: Settings) -> None:
 
 @contextmanager
 def use_settings(active: Settings | None = None) -> Iterator[Settings]:
-    """Yield the settings in effect, optionally activating ``active`` first.
+    """Activate settings for the current context and yield the settings in effect.
 
-    With no argument it is a read: it yields the currently active settings (or
-    the default) and changes nothing, so consumers can
+    Use as ``with use_settings(Settings(...)) as settings:`` to apply settings to
+    a block (and thread-pool tasks it submits that propagate the context), or
+    ``with use_settings() as settings:`` to just read the settings in effect.
 
-        with use_settings() as settings:
-            ...  # settings is whatever is in effect
+    Parameters
+    ----------
+    active: Settings | None = None
+        Settings to activate for the current context. When None, nothing is
+        activated and the settings currently in effect are yielded.
 
-    With an ``active`` ``Settings`` it activates it for the current context and
-    for thread-pool tasks submitted within it (executors that propagate the
-    context), yields it, and resets on exit:
-
-        with use_settings(Settings(resampling_filter="box")) as settings:
-            ...  # settings is active here and for nested reads
+    Yields
+    ------
+    Settings
+        The settings in effect within the context.
     """
     if active is None:
         yield get_settings()
