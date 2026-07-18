@@ -81,6 +81,24 @@ class WsiDataset(Dataset):
     format). Datasets missing any of these are rejected by
     :func:`is_supported_wsi_dicom`."""
 
+    SUPPORTED_PHOTOMETRIC_INTERPRETATIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "MONOCHROME2",
+            "RGB",
+            "YBR_FULL",
+            "YBR_FULL_422",
+            "YBR_PARTIAL_422",
+            "YBR_ICT",
+            "YBR_RCT",
+        }
+    )
+    """Photometric interpretations the library can read. Covers the values the
+    DICOM WSI IOD enumerates (MONOCHROME2, RGB, YBR_ICT, YBR_RCT, YBR_FULL_422);
+    see PS3.3 C.8.12.4
+    https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.8.12.4.html
+    Notably excludes MONOCHROME1, which the IOD does not permit. Datasets with any
+    other value are rejected by :func:`is_supported_wsi_dicom`."""
+
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"
 
@@ -412,8 +430,9 @@ class WsiDataset(Dataset):
         The dataset is rejected (``None`` returned) if it is not of the WSI SOP
         class, if it is missing any attribute the library dereferences while
         opening an instance (see ``REQUIRED_ATTRIBUTES``), if the image type is
-        not supported, or if the pixel representation or planar configuration is
-        unsupported.
+        not supported, if the pixel representation or planar configuration is
+        unsupported, if the photometric interpretation is not one the codec
+        handles (e.g. MONOCHROME1), or if it is a non-8-bit color image.
 
         Parameters
         ----------
@@ -449,6 +468,25 @@ class WsiDataset(Dataset):
         planar_configuration = int(getattr(dataset, "PlanarConfiguration", 0))
         if planar_configuration != 0:
             logging.debug(f"Unsupported planar configuration {planar_configuration}.")
+            return None
+        photometric_interpretation = str(dataset.PhotometricInterpretation)
+        if photometric_interpretation not in cls.SUPPORTED_PHOTOMETRIC_INTERPRETATIONS:
+            logging.debug(
+                "Unsupported photometric interpretation "
+                f"{photometric_interpretation}."
+            )
+            return None
+        bits_stored = int(dataset.BitsStored)
+        samples_per_pixel = int(dataset.SamplesPerPixel)
+        if bits_stored != 8 and samples_per_pixel != 1:
+            # Non-8-bit is only supported for grayscale. 16-bit color is not
+            # fundamentally hard (the stitch/downsample pipeline handles it), but
+            # no example WSI has been found to test against; would support it if
+            # one turned up.
+            logging.debug(
+                f"Unsupported combination of bits stored {bits_stored} and "
+                f"samples per pixel {samples_per_pixel}."
+            )
             return None
         return image_type
 

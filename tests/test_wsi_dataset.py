@@ -352,10 +352,15 @@ class TestWsiDataset:
 
     @pytest.mark.parametrize(
         ["attribute", "value"],
-        [("PixelRepresentation", 1), ("PlanarConfiguration", 1)],
+        [
+            ("PixelRepresentation", 1),  # signed
+            ("PlanarConfiguration", 1),  # non-interleaved color
+            ("PhotometricInterpretation", "MONOCHROME1"),  # not in the WSI IOD
+            ("BitsStored", 16),  # 16-bit color (default dataset is 3 samples)
+        ],
     )
     def test_is_supported_wsi_dicom_unsupported_pixel_format_returns_none(
-        self, attribute: str, value: int
+        self, attribute: str, value: int | str
     ):
         # Arrange
         dataset = create_main_dataset()
@@ -366,6 +371,20 @@ class TestWsiDataset:
 
         # Assert
         assert image_type is None
+
+    def test_is_supported_wsi_dicom_16bit_grayscale_returns_image_type(self):
+        # Arrange — 16-bit is supported for grayscale, just not for color
+        dataset = create_main_dataset()
+        dataset.SamplesPerPixel = 1
+        dataset.PhotometricInterpretation = "MONOCHROME2"
+        dataset.BitsAllocated = 16
+        dataset.BitsStored = 16
+
+        # Act
+        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+
+        # Assert
+        assert image_type == ImageType.VOLUME
 
     def test_as_tiled_full_preserves_xy_origin_and_sets_z(self):
         # Arrange — create_main_dataset has an origin with x=60, y=10, no z.
