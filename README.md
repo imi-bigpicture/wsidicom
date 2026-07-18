@@ -32,7 +32,23 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 - Levels are required to have (close to) 2 factor scale and same tile size.
 
-- Only 8 bits per sample is supported for color images, and 8 and 16 bits for grayscale images.
+- Color images must be 8 bits per sample; grayscale images may be 8 or 16 bits.
+  16-bit color is not fundamentally unsupported, but no example WSI has been
+  found to test and validate it against — please open an issue with a sample if
+  you have one.
+
+- Pixel data must be unsigned. The DICOM WSI IOD mandates this
+  (`PixelRepresentation` 0000H); signed pixels are non-conformant.
+
+- Color pixel data must be stored interleaved (`PlanarConfiguration` 0).
+  Non-interleaved (planar) color only occurs in native uncompressed data and is
+  likely not produced by WSI scanners, so it is rejected rather than left
+  untested.
+
+- Only the photometric interpretations enumerated by the DICOM WSI IOD
+  ([PS3.3 C.8.12.4](https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.8.12.4.html))
+  are supported: `MONOCHROME2`, `RGB`, and the `YBR_*` variants. `MONOCHROME1`
+  is not part of that IOD and is not supported.
 
 - Without optional dependencies, the following transfer syntaxes are supported:
 
