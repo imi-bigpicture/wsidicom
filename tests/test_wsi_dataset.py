@@ -185,14 +185,38 @@ class TestWsiDataset:
         assert read_tile_type == TileType.FULL
 
     def test_tile_type_tiled_sparse(self, dataset: WsiDataset):
-        # Arrange
-        dataset.PerFrameFunctionalGroupsSequence = []
+        # Arrange — a real sparse image has per-frame items carrying tile positions
+        frame = Dataset()
+        frame.PlanePositionSlideSequence = [Dataset()]
+        dataset.PerFrameFunctionalGroupsSequence = [frame]
 
         # Act
         read_tile_type = dataset.tile_type
 
         # Assert
         assert read_tile_type == TileType.SPARSE
+
+    @pytest.mark.parametrize(
+        "per_frame",
+        [
+            [],  # present but empty
+            [Dataset()],  # present, non-empty, but no PlanePositionSlideSequence
+        ],
+        ids=["empty", "no-plane-position"],
+    )
+    def test_tile_type_per_frame_without_positions_is_not_sparse(
+        self, dataset: WsiDataset, per_frame: list
+    ):
+        # Arrange — without per-frame tile positions a sparse index can't be built,
+        # so it must fall through to the tiled-full heuristics (single frame here)
+        # rather than be classed sparse and later fail reading frame positions.
+        dataset.PerFrameFunctionalGroupsSequence = per_frame
+
+        # Act
+        read_tile_type = dataset.tile_type
+
+        # Assert
+        assert read_tile_type == TileType.FULL
 
     def test_tile_type_label(self, dataset: WsiDataset):
         # Arrange
