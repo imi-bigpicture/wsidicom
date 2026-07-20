@@ -196,4 +196,3 @@ class TestConcatenation:
             # A part may only exceed the budget when it is a single frame that
             # is itself larger than the budget.
             assert part_bytes <= max_bytes or len(frames) == 1
-
