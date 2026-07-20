@@ -299,7 +299,7 @@ def read_executor():
     yield ReadExecutor(None, None)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def tiled_size():
     yield Size(2, 2)
 
@@ -309,28 +309,28 @@ def frame_count(tiled_size: Size):
     yield tiled_size.area
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def rng():
     SEED = 0
     yield random.Random(SEED)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def bits():
     yield 8
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def samples_per_pixel():
     yield 3
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def tile_size():
     yield Size(10, 10)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def transfer_syntax():
     yield JPEGBaseline8Bit
 
@@ -364,6 +364,6 @@ def image_data(frames: list[bytes], tiled_size: Size):
     yield WsiDicomTestImageData(frames, tiled_size)
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def uid_generator():
     return CallableUidGenerator()

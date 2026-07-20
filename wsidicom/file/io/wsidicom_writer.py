@@ -403,7 +403,7 @@ class WsiDicomWriter:
         file_options: dict[str, Any] | None = None,
     ) -> "WsiDicomWriter":
         """Open file and create a WsiDicomWriter with the right pixel data writer."""
-        stream = _open_stream(file, transfer_syntax, file_options)
+        stream = cls._open_stream(file, transfer_syntax, file_options)
         if transfer_syntax.is_encapsulated:
             pixel_writer: PixelDataWriter = EncapsulatedPixelDataWriter(
                 stream, offset_table, transfer_syntax, file_options
@@ -412,13 +412,35 @@ class WsiDicomWriter:
             pixel_writer = NativePixelDataWriter(stream)
         return cls(stream, transfer_syntax, pixel_writer)
 
+    @classmethod
+    def open_instance(
+        cls,
+        file: str | Path | UPath,
+        transfer_syntax: UID,
+        offset_table: OffsetTableType,
+        file_options: dict[str, Any] | None,
+        dataset: WsiDataset,
+    ) -> "WsiDicomWriter":
+        """Open a writer and write the dataset header and pixel-data preamble.
 
-def _open_stream(
-    file: str | Path | UPath,
-    transfer_syntax: UID,
-    file_options: dict[str, Any] | None = None,
-) -> WsiDicomIO:
-    """Open file for writing."""
-    return WsiDicomStreamOpener(file_options).open_for_writing(
-        file, "w+b", transfer_syntax
-    )
+        `dataset.SOPInstanceUID` and `InstanceNumber` must already be set.
+        """
+        writer = cls.open(file, transfer_syntax, offset_table, file_options)
+        try:
+            writer.write_header(dataset)
+            writer.start_pixel_data(dataset)
+        except BaseException:
+            writer.close()
+            raise
+        return writer
+
+    @staticmethod
+    def _open_stream(
+        file: str | Path | UPath,
+        transfer_syntax: UID,
+        file_options: dict[str, Any] | None = None,
+    ) -> WsiDicomIO:
+        """Open file for writing."""
+        return WsiDicomStreamOpener(file_options).open_for_writing(
+            file, "w+b", transfer_syntax
+        )

@@ -36,12 +36,12 @@ from wsidicom import WsiDicom
 from wsidicom.codec import Encoder
 from wsidicom.file import OffsetTableType
 from wsidicom.file.file_writer import PyramidFileWriter
-from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.group import Level
 from wsidicom.instance import ImageData, WsiDataset, WsiInstance
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 from wsidicom.metadata.uid_generator import UidGenerator
+from wsidicom.options import InstanceSplit
 from wsidicom.series import Pyramid
 
 FOCAL_PLANES = [0.0, 1.0]

@@ -12,9 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Option enums naming the choices that settings select between."""
+"""User-facing options for controlling how WsiDicom works."""
 
-from enum import Enum
+from dataclasses import dataclass
+from enum import Enum, Flag, auto
 from typing import TypeVar
 
 OptionT = TypeVar("OptionT", bound="Option")
@@ -72,3 +73,37 @@ class DecoderOption(Option):
     IMAGECODECS_RLE = "imagecodecs_rle"
     PYLIBJPEG_LS = "pylibjpeg_ls"
     PYDICOM = "pydicom"
+
+
+class InstanceSplit(Flag):
+    """Controls how optical paths and focal planes are split across written instances.
+
+    By default all optical paths and focal planes of a pyramid level (or group)
+    are combined into a single instance. Flags can be combined, e.g.
+    ``InstanceSplit.FOCAL_PLANE | InstanceSplit.OPTICAL_PATH`` writes one instance
+    per (focal plane, optical path) pair.
+    """
+
+    NONE = 0
+    """All optical paths and focal planes in one instance (default)."""
+    FOCAL_PLANE = auto()
+    """Write a separate instance per focal plane."""
+    OPTICAL_PATH = auto()
+    """Write a separate instance per optical path."""
+
+
+@dataclass(frozen=True)
+class ConcatenationByFrames:
+    """Split each level into concatenated instances of at most `count` frames."""
+
+    count: int
+
+
+@dataclass(frozen=True)
+class ConcatenationByBytes:
+    """Split each level into concatenated instances whose encapsulated pixel data
+    is at most `count` bytes. The dataset header is not counted, so set `count` below
+    any hard limit.
+    """
+
+    count: int

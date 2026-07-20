@@ -1,4 +1,4 @@
-#    Copyright 2023 SECTRA AB
+#    Copyright 2026 SECTRA AB
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,14 +12,16 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module for handling DICOM WSI instances read from file."""
+import pytest
 
-from wsidicom.file.io.frame_index import OffsetTableType
-from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
-from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
+from wsidicom.instance.dataset import WsiDataset
 
-__all__ = [
-    "OffsetTableType",
-    "WsiDicomFileSource",
-    "WsiDicomFileTarget",
-]
+
+@pytest.fixture
+def minimal_dataset() -> WsiDataset:
+    """Return a minimal dataset with required UIDs set."""
+    dataset = WsiDataset()
+    dataset.SOPInstanceUID = "1.2.3"
+    dataset.StudyInstanceUID = "1.2.3"
+    dataset.SeriesInstanceUID = "1.2.3"
+    return dataset

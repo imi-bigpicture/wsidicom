@@ -17,7 +17,11 @@
 `UidGenerator` is an ABC with one method per UID role. Each per-entity role
 receives the entity (or the parent `WsiMetadata` for WSI-wide UIDs), so
 implementations can derive UIDs from content. `sop_uid()` receives the
-already-built `pydicom.Dataset`. `annotation_group_uid()` is zero-arg.
+already-built `pydicom.Dataset`. The `concatenation_*()` roles receive the level
+dataset and are called once per concatenation, for grouping identities of a
+notional source instance that is never itself written (so they are separate from
+`sop_uid()`, which is per real written instance). `annotation_group_uid()` is
+zero-arg.
 
 `CallableUidGenerator` is the default implementation: every role delegates
 to a single zero-arg callable, ignoring any entity argument.
@@ -65,6 +69,12 @@ class UidGenerator(ABC):
     def sop_uid(self, dataset: Dataset) -> UID: ...
 
     @abstractmethod
+    def concatenation_uid(self, dataset: Dataset) -> UID: ...
+
+    @abstractmethod
+    def concatenation_source_uid(self, dataset: Dataset) -> UID: ...
+
+    @abstractmethod
     def annotation_group_uid(self) -> UID: ...
 
 
@@ -108,6 +118,12 @@ class CallableUidGenerator(UidGenerator):
         return self._generate()
 
     def sop_uid(self, dataset: Dataset) -> UID:
+        return self._generate()
+
+    def concatenation_uid(self, dataset: Dataset) -> UID:
+        return self._generate()
+
+    def concatenation_source_uid(self, dataset: Dataset) -> UID:
         return self._generate()
 
     def annotation_group_uid(self) -> UID:

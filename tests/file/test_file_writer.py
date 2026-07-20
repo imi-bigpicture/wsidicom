@@ -32,8 +32,8 @@ from wsidicom.file.file_writer import (
     BaseFileWriter,
     PyramidFileWriter,
 )
-from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.metadata.uid_generator import UidGenerator
+from wsidicom.options import InstanceSplit
 from wsidicom.series import Pyramid
 
 

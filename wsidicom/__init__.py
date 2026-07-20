@@ -20,7 +20,6 @@ from wsidicom.config import (
     set_default_settings,
     use_settings,
 )
-from wsidicom.file import InstanceSplit
 from wsidicom.graphical_annotations import (
     Annotation,
     AnnotationGroup,
@@ -34,6 +33,11 @@ from wsidicom.graphical_annotations import (
     PolylineAnnotationGroup,
 )
 from wsidicom.instance import ImageData, WsiDataset, WsiInstance
+from wsidicom.options import (
+    ConcatenationByBytes,
+    ConcatenationByFrames,
+    InstanceSplit,
+)
 from wsidicom.series import Labels, Overviews, Pyramid
 from wsidicom.web import WsiDicomWebClient
 from wsidicom.wsidicom import WsiDicom
@@ -55,6 +59,8 @@ __all__ = [
     "PolygonAnnotationGroup",
     "Polyline",
     "PolylineAnnotationGroup",
+    "ConcatenationByBytes",
+    "ConcatenationByFrames",
     "ImageData",
     "InstanceSplit",
     "WsiDataset",

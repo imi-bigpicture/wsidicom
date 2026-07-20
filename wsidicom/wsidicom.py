@@ -40,7 +40,6 @@ from wsidicom.errors import (
     WsiDicomOutOfBoundsError,
 )
 from wsidicom.file import (
-    InstanceSplit,
     OffsetTableType,
     WsiDicomFileSource,
     WsiDicomFileTarget,
@@ -53,6 +52,11 @@ from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.schema.dicom.label import LabelBaseDicomSchema
 from wsidicom.metadata.schema.dicom.wsi import BaseWsiMetadataDicomSchema
 from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
+from wsidicom.options import (
+    ConcatenationByBytes,
+    ConcatenationByFrames,
+    InstanceSplit,
+)
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -291,6 +295,7 @@ class WsiDicom:
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
+        concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
     ) -> list[UPath]:
         """
         Save wsi as DICOM-files in path. By default instances for the same
@@ -368,6 +373,12 @@ class WsiDicom:
             plane and/or optical path. Unequally spaced focal planes cannot
             share one instance and are always split per focal plane, regardless
             of this setting.
+        concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None
+            If set, split each pyramid level into concatenated instances (SOP
+            Instances sharing a Concatenation UID). Use `ConcatenationByFrames(n)`
+            to cut every n frames, or `ConcatenationByBytes(n)` to cut when a
+            part's encapsulated pixel data reaches n bytes. Orthogonal to
+            `instance_split`. When None (default) one instance per level is written.
 
         Returns
         -------
@@ -425,6 +436,7 @@ class WsiDicom:
                 metadata,
                 replace_metadata,
                 instance_split,
+                concatenation,
             ) as target,
         ):
             target.save(self.pyramids, labels, overviews, include_thumbnails)
