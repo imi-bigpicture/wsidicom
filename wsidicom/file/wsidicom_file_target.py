@@ -115,7 +115,6 @@ class WsiDicomFileTarget(Target):
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None
             If set, split each pyramid level into concatenated instances by frame
             count (`ConcatenationByFrames`) or byte size (`ConcatenationByBytes`).
-            Orthogonal to `instance_split`.
         """
         self._output_path = UPath(output_path)
         self._offset_table = offset_table

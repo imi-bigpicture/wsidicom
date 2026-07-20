@@ -842,8 +842,7 @@ class PyramidFileWriter(BaseFileWriter):
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None
             If set, split each pyramid level into concatenated instances by frame
             count (`ConcatenationByFrames`) or byte size (`ConcatenationByBytes`).
-            Orthogonal to `instance_split`. None (default) writes one instance
-            per level.
+            None (default) writes one instance per level.
         """
         super().__init__(
             output_path=output_path,

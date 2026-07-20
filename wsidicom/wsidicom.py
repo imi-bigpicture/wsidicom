@@ -377,8 +377,8 @@ class WsiDicom:
             If set, split each pyramid level into concatenated instances (SOP
             Instances sharing a Concatenation UID). Use `ConcatenationByFrames(n)`
             to cut every n frames, or `ConcatenationByBytes(n)` to cut when a
-            part's encapsulated pixel data reaches n bytes. Orthogonal to
-            `instance_split`. When None (default) one instance per level is written.
+            part's encapsulated pixel data reaches n bytes. When None (default)
+            one instance per level is written.
 
         Returns
         -------
