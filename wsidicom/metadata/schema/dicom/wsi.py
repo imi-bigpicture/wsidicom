@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import TypeVar
+import struct
 
 from marshmallow import fields
 from PIL import ImageCms
@@ -277,7 +278,11 @@ class WsiMetadataDicomSchema:
         profile = bytearray(
             ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
         )
-        profile[24:36] = bytes(12)
+        # Ideally we should blank the creation date to all zero's but it throws an exception in PIL
+        # Instead craft date 1900/01/01 to reproduce the date 0 on POSIX system (tm_year's offset)
+        # We shift to month=02 because of:
+        # https://github.com/python-pillow/Pillow/issues/9801
+        profile[24:36] = struct.pack(">6H", 1900, 2, 1, 0, 0, 0)
         return bytes(profile)
 
     @staticmethod
