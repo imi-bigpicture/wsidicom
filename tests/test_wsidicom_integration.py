@@ -26,7 +26,6 @@ from tests.conftest import (
     WsiInputType,
     WsiTestDefinitions,
     skip_if_hash_unstable,
-    skip_if_shared_pool_unsupported,
 )
 from wsidicom import WsiDicom
 from wsidicom.config import Settings, use_settings
@@ -77,7 +76,6 @@ class TestWsiDicomIntegration:
     ):
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
-        skip_if_shared_pool_unsupported(input_type, use_shared)
         wsi = wsi_factory(wsi_name, input_type, use_shared)
 
         # Act

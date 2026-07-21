@@ -17,6 +17,7 @@ import os
 import platform
 import random
 import sys
+from collections.abc import Iterator
 from concurrent.futures import Executor, ThreadPoolExecutor
 from enum import Enum
 from io import BufferedReader
@@ -59,21 +60,49 @@ def skip_if_hash_unstable(transfer_syntax: UID) -> None:
         pytest.skip("Lossy JPEG2000 does not produce identical output on macOS.")
 
 
-def skip_if_shared_pool_unsupported(
-    input_type: "WsiInputType", use_shared: bool
-) -> None:
-    """Skip a shared-executor read for web input, whose SQLite-backed
-    DICOMfileClient is not thread-safe across a persistent pool.
+class SingleThreadDicomFileClient(DICOMfileClient):
+    """Test-only shim that runs the DICOMfileClient calls wsidicom uses on one
+    dedicated thread, draining returned iterators there.
 
-    This is a limitation of the file-based test client only; a real DICOMweb
-    HTTP client reads safely across a shared pool.
+    DICOMfileClient creates a SQLite connection bound to the thread that
+    constructs it, so reads through a shared multi-thread pool would otherwise
+    fail with sqlite3.ProgrammingError. A real DICOMweb HTTP client needs no
+    shim. The wrapped client is therefore also constructed on the dedicated
+    thread; the base __init__ is deliberately not called, so inherited methods
+    without a thread-confined override fail loudly instead of touching SQLite
+    from the wrong thread.
     """
-    if use_shared and input_type == WsiInputType.WEB:
-        pytest.skip(
-            "The SQLite-backed DICOMfileClient used for web tests is not "
-            "thread-safe across a persistent pool; a real DICOMweb HTTP client "
-            "would be."
+
+    def __init__(self, url: str):
+        self._executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="DicomFileClient"
         )
+        self._client = self._executor.submit(DICOMfileClient, url).result()
+
+    def shutdown(self) -> None:
+        self._executor.shutdown()
+
+    def search_for_instances(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call_on_client_thread("search_for_instances", *args, **kwargs)
+
+    def retrieve_instance_metadata(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call_on_client_thread(
+            "retrieve_instance_metadata", *args, **kwargs
+        )
+
+    def iter_instance_frames(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call_on_client_thread("iter_instance_frames", *args, **kwargs)
+
+    def _call_on_client_thread(
+        self, method_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        def run() -> Any:
+            result = getattr(self._client, method_name)(*args, **kwargs)
+            if isinstance(result, Iterator):
+                return iter(list(result))
+            return result
+
+        return self._executor.submit(run).result()
 
 
 class WsiInputType(Enum):
@@ -244,6 +273,7 @@ def wsi_factory(shared_threadpool_executor: Executor):
     separately.
     """
     streams: list[BufferedReader] = []
+    clients: list[SingleThreadDicomFileClient] = []
     wsis: dict[tuple[WsiInputType, Path, bool], WsiDicom] = {}
 
     def open_wsi(
@@ -262,9 +292,11 @@ def wsi_factory(shared_threadpool_executor: Executor):
         if input_type == WsiInputType.FILE:
             wsi = WsiDicom.open(folder, read_executor=read_executor)
         elif input_type == WsiInputType.WEB:
-            client = WsiDicomWebClient(
-                DICOMfileClient(f"file://{folder.absolute().as_posix()}")
+            file_client = SingleThreadDicomFileClient(
+                f"file://{folder.absolute().as_posix()}"
             )
+            clients.append(file_client)
+            client = WsiDicomWebClient(file_client)
             wsi = WsiDicom.open_web(
                 client,
                 test_definition["study_instance_uid"],
@@ -291,6 +323,8 @@ def wsi_factory(shared_threadpool_executor: Executor):
         wsi.close()
     for stream in streams:
         stream.close()
+    for file_client in clients:
+        file_client.shutdown()
 
 
 @pytest.fixture()
@@ -309,7 +343,7 @@ def frame_count(tiled_size: Size):
     yield tiled_size.area
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def rng():
     SEED = 0
     yield random.Random(SEED)
