@@ -94,6 +94,72 @@ class TestAddColorSpaceFromIcc:
         assert updated.color_space is None
 
 
+class TestValidateIccProfile:
+    @staticmethod
+    def _profile(device_class: bytes, color_space: bytes, pcs: bytes) -> bytes:
+        profile = bytearray(
+            ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        )
+        profile[12:16] = device_class
+        profile[16:20] = color_space
+        profile[20:24] = pcs
+        return bytes(profile)
+
+    def test_no_problems_for_conformant_profile(self):
+        # Arrange
+        optical_path = OpticalPath(icc_profile=self._profile(b"scnr", b"RGB ", b"XYZ "))
+
+        # Act
+        problems = optical_path.validate_icc_profile()
+
+        # Assert
+        assert problems == []
+
+    @pytest.mark.parametrize(
+        ["device_class", "color_space", "pcs", "expected_count"],
+        [
+            (b"mntr", b"RGB ", b"XYZ ", 1),
+            (b"scnr", b"CMYK", b"Lab ", 1),
+            (b"scnr", b"RGB ", b"GRAY", 1),
+            (b"mntr", b"CMYK", b"GRAY", 3),
+        ],
+    )
+    def test_reports_one_problem_per_violated_constraint(
+        self, device_class: bytes, color_space: bytes, pcs: bytes, expected_count: int
+    ):
+        # Arrange
+        optical_path = OpticalPath(
+            icc_profile=self._profile(device_class, color_space, pcs)
+        )
+
+        # Act
+        problems = optical_path.validate_icc_profile()
+
+        # Assert
+        assert len(problems) == expected_count
+
+    @pytest.mark.parametrize("icc_profile", [None, b""])
+    def test_no_problems_for_missing_profile(self, icc_profile: bytes | None):
+        # Arrange
+        optical_path = OpticalPath(icc_profile=icc_profile)
+
+        # Act
+        problems = optical_path.validate_icc_profile()
+
+        # Assert
+        assert problems == []
+
+    def test_reports_truncated_profile(self):
+        # Arrange
+        optical_path = OpticalPath(icc_profile=b"too short")
+
+        # Act
+        problems = optical_path.validate_icc_profile()
+
+        # Assert
+        assert problems == ["ICC profile header is truncated."]
+
+
 class TestDicomLut:
     @pytest.mark.parametrize(
         ["lut", "expected_table_component"],

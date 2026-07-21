@@ -278,7 +278,9 @@ class WsiMetadataDicomSchema:
             ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
         )
         profile[24:36] = bytes(12)
-        # ICC header bytes 12:16 = device class signature
+        # DICOM requires an Input Device class profile (PS3.3 C.11.15.1.1: bytes
+        # 12:16 shall be "scnr"), but lcms emits a Display ("mntr") profile. Only
+        # the class signature differs; the colorimetry is the same sRGB.
         profile[12:16] = b"scnr"
         return bytes(profile)
 

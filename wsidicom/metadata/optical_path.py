@@ -369,3 +369,37 @@ class OpticalPath:
         if color_space is None:
             return self
         return replace(self, color_space=color_space)
+
+    def validate_icc_profile(self) -> list[str]:
+        """Return DICOM conformance problems with `icc_profile`.
+
+        Checks the constraints that DICOM requires of an embedded ICC profile,
+        see https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.11.15.html#sect_C.11.15.1.1
+        The recommendations in the same section, such as a perceptual rendering
+        intent, are not checked.
+
+        Returns
+        -------
+        list[str]
+            One message per violated constraint. Empty if the profile is
+            conformant or missing.
+        """
+        if not self.icc_profile:
+            return []
+        header = self.icc_profile[:24]
+        if len(header) < 24:
+            return ["ICC profile header is truncated."]
+        problems = []
+        if header[12:16] != b"scnr":
+            problems.append(
+                f"Device class is {header[12:16]!r}, DICOM requires b'scnr'."
+            )
+        if header[16:20] != b"RGB ":
+            problems.append(
+                f"Color space is {header[16:20]!r}, DICOM requires b'RGB '."
+            )
+        if header[20:24] not in (b"Lab ", b"XYZ "):
+            problems.append(
+                f"PCS is {header[20:24]!r}, DICOM requires b'Lab ' or b'XYZ '."
+            )
+        return problems
