@@ -14,10 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `set_default_settings` to change the process-wide default settings.
 - `concatenation` parameter on `WsiDicom.save`: `ConcatenationByFrames(n)` or `ConcatenationByBytes(size)` splits each pyramid level into concatenated SOP Instances of at most `n` frames, or `size` bytes of encapsulated pixel data (`size` also accepts a binary suffix string, e.g. `"100M"`, `"2G"`).
 - `concatenation_uid` and `concatenation_source_uid` roles on `UidGenerator`.
+- `OpticalPath.validate_icc_profile()`, returning the DICOM conformance problems (per PS3.3 C.11.15.1.1) with the embedded ICC profile, or an empty list if it is conformant or missing.
 
 ### Removed
 
 - The mutable `settings` global (`settings.<field> = ...`). Change the process-wide default with `set_default_settings(Settings(...))` instead.
+
+### Changed
+
+- Writing an optical path whose embedded ICC profile is not DICOM-conformant (per PS3.3 C.11.15.1.1) now logs a warning; the profile is still written unchanged.
+
+### Fixed
+
+- The default sRGB ICC profile inserted into generated DICOM now declares the DICOM-required Input Device class (`scnr`) instead of the Display class (`mntr`) that lcms produces, per PS3.3 C.11.15.1.1. Only the class signature changes; the colorimetry is unchanged.
 
 ## [0.34.0] - 2026-07-17
 

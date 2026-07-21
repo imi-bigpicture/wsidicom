@@ -15,6 +15,7 @@
 """DICOM schema for Optical path model."""
 
 import io
+import logging
 import struct
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
@@ -633,6 +634,12 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
         if optical_path.description is not None:
             fields["description"] = optical_path.description
         if optical_path.icc_profile is not None:
+            problems = optical_path.validate_icc_profile()
+            if problems:
+                logging.warning(
+                    "Embedded ICC profile is not DICOM-conformant: %s",
+                    "; ".join(problems),
+                )
             fields["icc_profile"] = optical_path.icc_profile
         if optical_path.color_space is not None:
             fields["color_space"] = optical_path.color_space

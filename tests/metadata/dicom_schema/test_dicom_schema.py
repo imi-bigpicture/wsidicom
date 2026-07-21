@@ -12,11 +12,13 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import logging
 from dataclasses import replace
 from datetime import datetime
 
 import pytest
 from marshmallow import ValidationError
+from PIL import ImageCms
 from pydicom import Dataset
 
 from tests.metadata.dicom_schema.helpers import (
@@ -412,6 +414,49 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert_dicom_optical_path_equals_optical_path(serialized, optical_path)
 
+    # Device-class values seen violating C.11.15.1.1 in real WSI files: mntr
+    # (Display) and spac (ColorSpace); the required class is scnr (Input).
+    @pytest.mark.parametrize("device_class", [b"mntr", b"spac"])
+    def test_serialize_warns_on_non_conformant_icc_profile(
+        self, device_class: bytes, caplog: pytest.LogCaptureFixture
+    ):
+        # Arrange
+        profile = bytearray(
+            ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        )
+        profile[12:16] = device_class
+        optical_path = OpticalPath(icc_profile=bytes(profile))
+        schema = OpticalPathDicomSchema()
+
+        # Act
+        with caplog.at_level(logging.WARNING):
+            serialized = schema.dump(optical_path)
+
+        # Assert: warned, but the profile is written through unchanged (not
+        # coerced to scnr) — the non-conformant class survives the round trip.
+        assert isinstance(serialized, Dataset)
+        assert serialized.ICCProfile == bytes(profile)
+        assert serialized.ICCProfile[12:16] == device_class
+        assert "not DICOM-conformant" in caplog.text
+
+    def test_serialize_does_not_warn_on_conformant_icc_profile(
+        self, caplog: pytest.LogCaptureFixture
+    ):
+        # Arrange
+        profile = bytearray(
+            ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        )
+        profile[12:16] = b"scnr"
+        optical_path = OpticalPath(icc_profile=bytes(profile))
+        schema = OpticalPathDicomSchema()
+
+        # Act
+        with caplog.at_level(logging.WARNING):
+            schema.dump(optical_path)
+
+        # Assert
+        assert "not DICOM-conformant" not in caplog.text
+
     def test_serialize_default_optical_path(self):
         # Arrange
         optical_path = OpticalPath()
@@ -792,6 +837,8 @@ class TestDicomSchema:
         optical_path = serialized.OpticalPathSequence[0]
         assert "ICCProfile" in optical_path
         assert optical_path.ColorSpace == "SRGB"
+        # Input Device class profile required by C.11.15.1.1
+        assert optical_path.ICCProfile[12:16] == b"scnr"
 
     def test_serialize_wsi_metadata_sets_utf8_character_set(
         self,
