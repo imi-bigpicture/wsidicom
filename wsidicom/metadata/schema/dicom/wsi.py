@@ -278,6 +278,8 @@ class WsiMetadataDicomSchema:
             ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
         )
         profile[24:36] = bytes(12)
+        # ICC header bytes 12:16 = device class signature
+        profile[12:16] = b"scnr"
         return bytes(profile)
 
     @staticmethod
