@@ -792,6 +792,8 @@ class TestDicomSchema:
         optical_path = serialized.OpticalPathSequence[0]
         assert "ICCProfile" in optical_path
         assert optical_path.ColorSpace == "SRGB"
+        # Input Device class profile required by C.11.15.1.1
+        assert optical_path.ICCProfile[12:16] == b"scnr"
 
     def test_serialize_wsi_metadata_sets_utf8_character_set(
         self,

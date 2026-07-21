@@ -473,8 +473,7 @@ class WsiDataset(Dataset):
         photometric_interpretation = str(dataset.PhotometricInterpretation)
         if photometric_interpretation not in cls.SUPPORTED_PHOTOMETRIC_INTERPRETATIONS:
             logging.debug(
-                "Unsupported photometric interpretation "
-                f"{photometric_interpretation}."
+                f"Unsupported photometric interpretation {photometric_interpretation}."
             )
             return None
         bits_stored = int(dataset.BitsStored)
