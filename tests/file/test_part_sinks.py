@@ -139,12 +139,7 @@ class TestBufferedPartSink:
                 matchers.Anything(), matchers.Anything(), concatenated=concatenated
             )
         ).then_return((part_writer, minimal_dataset))
-        sink = BufferedPartSink(
-            UPath(tmp_path),
-            part_factory,
-            0,
-            transcoder=transcoder,  # type: ignore[arg-type]
-        )
+        sink = BufferedPartSink(UPath(tmp_path), part_factory, 0, transcoder=transcoder)
         sink.write([b"x"])
         temp_file = list(tmp_path.glob("concat_*.bin"))[0]
 

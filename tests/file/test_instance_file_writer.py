@@ -100,7 +100,6 @@ class TestInstanceFileWriter:
         # Arrange
         tile = b"t"
         tiles = [tile] * level_frames
-        minimal_dataset = WsiDataset()
         part_writer = decoy.mock(cls=WsiDicomWriter)
         decoy.when(part_writer.filepath).then_return(UPath(tmp_path) / "part.dcm")
         decoy.when(part_factory.open(0, level_frames, concatenated=False)).then_return(

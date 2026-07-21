@@ -98,12 +98,30 @@ class ConcatenationByFrames:
 
     count: int
 
+    def __post_init__(self) -> None:
+        if self.count <= 0:
+            raise ValueError(f"count must be positive, got {self.count}.")
+
 
 @dataclass(frozen=True)
 class ConcatenationByBytes:
     """Split each level into concatenated instances whose encapsulated pixel data
-    is at most `count` bytes. The dataset header is not counted, so set `count` below
+    is at most `size` bytes. The dataset header is not counted, so set `size` below
     any hard limit.
+
+    `size` is a byte count, optionally given as a string with a binary suffix:
+    ``"500K"``, ``"100M"``, or ``"2G"`` (multiples of 1024), with an optional
+    trailing ``B`` (``"100MB"``).
     """
 
-    count: int
+    size: int
+
+    def __init__(self, size: int | str) -> None:
+        if isinstance(size, str):
+            suffixes = {"K": 1024, "M": 1024**2, "G": 1024**3}
+            normalized = size.upper().removesuffix("B")
+            multiplier = suffixes.get(normalized[-1:], 1)
+            size = int(normalized[:-1] if multiplier > 1 else normalized) * multiplier
+        if size <= 0:
+            raise ValueError(f"size must be positive, got {size}.")
+        object.__setattr__(self, "size", size)

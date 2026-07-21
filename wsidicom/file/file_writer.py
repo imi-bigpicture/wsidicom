@@ -1345,7 +1345,7 @@ class PyramidFileWriter(BaseFileWriter):
                 total_frames + concatenation.count - 1
             ) // concatenation.count
         elif isinstance(concatenation, ConcatenationByBytes):
-            splitter = ByteSizeSplitter(concatenation.count)
+            splitter = ByteSizeSplitter(concatenation.size)
             # Unknown while streaming; InConcatenationTotalNumber is omitted.
             part_total = None
         else:

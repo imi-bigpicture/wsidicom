@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keyword-only `settings` parameter on `WsiDicom.open`, `open_dicomdir`, `open_streams` and `open_web`, taking a `Settings` used for that slide instead of the process-wide default.
 - `use_settings`, a context manager that applies a `Settings` to a block of code.
 - `set_default_settings` to change the process-wide default settings.
-- `concatenation` parameter on `WsiDicom.save`: `ConcatenationByFrames(n)` or `ConcatenationByBytes(n)` splits each pyramid level into concatenated SOP Instances of at most `n` frames, or `n` bytes of encapsulated pixel data.
+- `concatenation` parameter on `WsiDicom.save`: `ConcatenationByFrames(n)` or `ConcatenationByBytes(size)` splits each pyramid level into concatenated SOP Instances of at most `n` frames, or `size` bytes of encapsulated pixel data (`size` also accepts a binary suffix string, e.g. `"100M"`, `"2G"`).
 - `concatenation_uid` and `concatenation_source_uid` roles on `UidGenerator`.
 
 ### Removed
