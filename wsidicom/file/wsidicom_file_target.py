@@ -29,11 +29,15 @@ from wsidicom.file.file_writer import (
     GroupFileWriter,
     PyramidFileWriter,
 )
-from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.file.io import OffsetTableType
 from wsidicom.group import Label, Level, Overview, Thumbnail
 from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.uid_generator import UidGenerator
+from wsidicom.options import (
+    ConcatenationByBytes,
+    ConcatenationByFrames,
+    InstanceSplit,
+)
 from wsidicom.series import Labels, Overviews, Pyramids
 from wsidicom.target import Target
 
@@ -58,6 +62,7 @@ class WsiDicomFileTarget(Target):
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
+        concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
     ):
         """
         Create a WsiDicomFileTarget.
@@ -107,6 +112,9 @@ class WsiDicomFileTarget(Target):
         instance_split: InstanceSplit = InstanceSplit.NONE
             Controls how optical paths and focal planes are split across output
             instances. See `InstanceSplit`.
+        concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None
+            If set, split each pyramid level into concatenated instances by frame
+            count (`ConcatenationByFrames`) or byte size (`ConcatenationByBytes`).
         """
         self._output_path = UPath(output_path)
         self._offset_table = offset_table
@@ -116,6 +124,7 @@ class WsiDicomFileTarget(Target):
         self._metadata = metadata
         self._replace_metadata = replace_metadata
         self._instance_split = instance_split
+        self._concatenation = concatenation
         super().__init__(
             uid_generator,
             workers,
@@ -193,6 +202,7 @@ class WsiDicomFileTarget(Target):
                 metadata=self._metadata,
                 replace_metadata=self._replace_metadata,
                 instance_split=self._instance_split,
+                concatenation=self._concatenation,
             )
             if include_thumbnails and pyramid.thumbnails is not None:
                 for group in pyramid.thumbnails.groups:

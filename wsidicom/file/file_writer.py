@@ -17,23 +17,24 @@
 import contextlib
 import itertools
 import logging
+import os
 import shutil
 import tempfile
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from functools import cached_property
 from pathlib import Path
 from threading import Thread
-from typing import Any
+from typing import Any, BinaryIO
 
 from pydicom.uid import UID
 from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.downsampler import Downsampler
-from wsidicom.file.instance_split import InstanceSplit
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.geometry import Size
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
@@ -41,6 +42,11 @@ from wsidicom.instance import ImageData, WsiDataset, WsiInstance
 from wsidicom.metadata import ImageType, WsiMetadata
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.uid_generator import UidGenerator
+from wsidicom.options import (
+    ConcatenationByBytes,
+    ConcatenationByFrames,
+    InstanceSplit,
+)
 from wsidicom.series import Pyramid
 from wsidicom.stitcher import NumpyStitcher
 from wsidicom.thread import CancellationToken, Cancelled, ReadExecutor
@@ -63,6 +69,460 @@ from wsidicom.writing.tile_readers import (
     TileReader,
     TranscodeTileReader,
 )
+
+
+class PartFactory:
+    """Builds and opens the instance-file parts of one level.
+
+    Each part gets a copy of the level dataset with its own per-part
+    `NumberOfFrames`, `SOPInstanceUID`, and `InstanceNumber`; concatenated parts
+    also get the concatenation attributes. Owns the shared `ConcatenationUID` and
+    notional source SOP Instance UID, minted on the first concatenated part, so a
+    caller decides only *when* to split, not how a part is built.
+    """
+
+    def __init__(
+        self,
+        base_dataset: WsiDataset,
+        uid_generator: UidGenerator,
+        output_path: UPath,
+        file_options: dict[str, Any] | None,
+        transfer_syntax: UID,
+        offset_table: OffsetTableType,
+        instance_counter: Iterator[int],
+        part_total: int | None,
+    ) -> None:
+        """Set up the part factory for one level.
+
+        Parameters
+        ----------
+        base_dataset: WsiDataset
+            The level's dataset that every part is derived from.
+        uid_generator: UidGenerator
+            Generates each part's SOP Instance UID and the shared
+            ConcatenationUID / source UID.
+        output_path: UPath
+            Directory the part files are written to.
+        file_options: dict[str, Any] | None
+            Options forwarded to file operations (e.g. fsspec credentials).
+        transfer_syntax: UID
+            Transfer syntax of the written instances.
+        offset_table: OffsetTableType
+            Offset table type to use for the pixel data.
+        instance_counter: Iterator[int]
+            Supplies each part's InstanceNumber.
+        part_total: int | None
+            Total number of parts (`InConcatenationTotalNumber`), or None when
+            it is not known in advance (byte-size splitting).
+        """
+        self._base_dataset = base_dataset
+        self._uid_generator = uid_generator
+        self._output_path = output_path
+        self._file_options = file_options
+        self._transfer_syntax = transfer_syntax
+        self._offset_table = offset_table
+        self._instance_counter = instance_counter
+        self._part_total = part_total
+        self._part_number = 0
+
+    @cached_property
+    def _concatenation_uid(self) -> UID:
+        """The ConcatenationUID shared by all parts, minted on first use."""
+        return self._uid_generator.concatenation_uid(self._base_dataset)
+
+    @cached_property
+    def _source_uid(self) -> UID:
+        """The notional source SOP Instance UID shared by all parts, minted on
+        first use."""
+        return self._uid_generator.concatenation_source_uid(self._base_dataset)
+
+    def open(
+        self, frame_offset: int, frame_count: int, *, concatenated: bool
+    ) -> tuple[WsiDicomWriter, WsiDataset]:
+        """Build and open one part of `frame_count` frames starting at `frame_offset`.
+
+        When `concatenated`, stamps the concatenation attributes and shares the
+        level's ConcatenationUID / source UID (`InConcatenationTotalNumber` is
+        omitted when the level's `part_total` is None, e.g. streaming byte splits).
+
+        A concatenated part gets its own deep copy so the shared `base_dataset`
+        stays pristine for the remaining parts. A non-concatenated part is the
+        sole part of its level, so `base_dataset` is reused in place and the
+        (possibly expensive) deepcopy of its nested sequences is skipped.
+        """
+        if concatenated:
+            dataset = WsiDataset(deepcopy(self._base_dataset))
+        else:
+            dataset = self._base_dataset
+        dataset.NumberOfFrames = frame_count
+        dataset.SOPInstanceUID = self._uid_generator.sop_uid(dataset)
+        dataset.InstanceNumber = next(self._instance_counter)
+        if concatenated:
+            self._part_number += 1
+            dataset.ConcatenationUID = self._concatenation_uid
+            dataset.SOPInstanceUIDOfConcatenationSource = self._source_uid
+            dataset.InConcatenationNumber = self._part_number
+            dataset.ConcatenationFrameOffsetNumber = frame_offset
+            if self._part_total is not None:
+                dataset.InConcatenationTotalNumber = self._part_total
+        writer = WsiDicomWriter.open_instance(
+            self._output_path.joinpath(str(dataset.SOPInstanceUID) + ".dcm"),
+            self._transfer_syntax,
+            self._offset_table,
+            self._file_options,
+            dataset,
+        )
+        return writer, dataset
+
+
+class PartSplitter(metaclass=ABCMeta):
+    """Decides where a level's raster-ordered tiles are split into concatenation
+    parts, and — when it can — how many frames the next part will hold."""
+
+    @abstractmethod
+    def should_start_new_part(self, next_tile: bytes) -> bool:
+        """Whether `next_tile` begins a new part (the current one is full).
+
+        Only called when the current part already holds at least one tile.
+        """
+
+    @abstractmethod
+    def account(self, tile: bytes) -> None:
+        """Account for `tile` now in the current part (update the running measure
+        `should_start_new_part` reads)."""
+
+    @abstractmethod
+    def reset(self) -> None:
+        """Reset accounting for a new part."""
+
+    @abstractmethod
+    def next_part_frame_count(self, remaining_frames: int) -> int | None:
+        """The next part's frame count if fixed in advance (so it can be streamed
+        straight to its file), else None (the part must be buffered until full)."""
+
+
+class NoSplitter(PartSplitter):
+    """Never splits: the level is written as a single, non-concatenated instance."""
+
+    def should_start_new_part(self, next_tile: bytes) -> bool:
+        return False
+
+    def account(self, tile: bytes) -> None:
+        pass
+
+    def reset(self) -> None:
+        pass
+
+    def next_part_frame_count(self, remaining_frames: int) -> int | None:
+        return remaining_frames
+
+
+class FrameCountSplitter(PartSplitter):
+    """Splits off a new part every `max_frames` frames."""
+
+    def __init__(self, max_frames: int) -> None:
+        """Split by frame count.
+
+        Parameters
+        ----------
+        max_frames: int
+            Maximum number of frames per part.
+        """
+        self._max_frames = max_frames
+        self._frames = 0
+
+    def should_start_new_part(self, next_tile: bytes) -> bool:
+        return self._frames >= self._max_frames
+
+    def account(self, tile: bytes) -> None:
+        self._frames += 1
+
+    def reset(self) -> None:
+        self._frames = 0
+
+    def next_part_frame_count(self, remaining_frames: int) -> int | None:
+        return min(self._max_frames, remaining_frames)
+
+
+class ByteSizeSplitter(PartSplitter):
+    """Splits off a new part when the next tile would push the current part's
+    encapsulated pixel data past `max_bytes` (each frame counted with its 8-byte
+    item header)."""
+
+    _ITEM_HEADER_BYTES = 8
+
+    def __init__(self, max_bytes: int) -> None:
+        """Split by encapsulated pixel-data size.
+
+        Parameters
+        ----------
+        max_bytes: int
+            Maximum size in bytes of a part's encapsulated pixel data (each frame
+            counted with its item header).
+        """
+        self._max_bytes = max_bytes
+        self._bytes = 0
+
+    def should_start_new_part(self, next_tile: bytes) -> bool:
+        return self._bytes + len(next_tile) + self._ITEM_HEADER_BYTES > self._max_bytes
+
+    def account(self, tile: bytes) -> None:
+        self._bytes += len(tile) + self._ITEM_HEADER_BYTES
+
+    def reset(self) -> None:
+        self._bytes = 0
+
+    def next_part_frame_count(self, remaining_frames: int) -> int | None:
+        return None
+
+
+class PartSink(metaclass=ABCMeta):
+    """Writes the frames of one concatenation part to its instance file."""
+
+    @abstractmethod
+    def write(self, tiles: Iterable[bytes]) -> None:
+        """Add a batch of raster-order tiles to the part."""
+
+    @abstractmethod
+    def finalize(self, concatenated: bool) -> UPath:
+        """Complete the part's instance and return its file path."""
+
+    @abstractmethod
+    def close(self) -> None:
+        """Best-effort cleanup on error."""
+
+
+class DirectPartSink(PartSink):
+    """Streams a part's tiles straight to an already-open instance file, used when
+    the frame count is fixed in advance (frame-count splitting)."""
+
+    def __init__(
+        self, writer: WsiDicomWriter, dataset: WsiDataset, transcoder: Encoder | None
+    ) -> None:
+        """Stream tiles to an already-open instance.
+
+        Parameters
+        ----------
+        writer: WsiDicomWriter
+            The already-opened instance file to stream the part's tiles to.
+        dataset: WsiDataset
+            The part's dataset, used to finalize the instance.
+        transcoder: Encoder | None
+            Encoder to transcode tiles with, or None to write them through.
+        """
+        self._writer = writer
+        self._dataset = dataset
+        self._transcoder = transcoder
+
+    def write(self, tiles: Iterable[bytes]) -> None:
+        self._writer.write_tiles(tiles)
+
+    def finalize(self, concatenated: bool) -> UPath:
+        filepath = self._writer.filepath
+        assert filepath is not None
+        self._writer.finalize(self._dataset, self._transcoder)
+        return filepath
+
+    def close(self) -> None:
+        with contextlib.suppress(Exception):
+            self._writer.close()
+
+
+class BufferedPartSink(PartSink):
+    """Buffers a part's raster-order tiles to one sequential scratch file and, on
+    finalize, opens the instance with the now-known frame count and writes the
+    tiles into it — used when the count is discovered only as tiles arrive
+    (byte-size splitting).
+    """
+
+    def __init__(
+        self,
+        temp_dir: UPath,
+        part_factory: PartFactory,
+        frame_offset: int,
+        transcoder: Encoder | None,
+    ) -> None:
+        """Buffer tiles until the part's frame count is known.
+
+        Parameters
+        ----------
+        temp_dir: UPath
+            Directory for the part's scratch file.
+        part_factory: PartFactory
+            Opens the instance once the buffered frame count is known.
+        frame_offset: int
+            Index of the part's first frame within the level.
+        transcoder: Encoder | None
+            Encoder to transcode tiles with, or None to write them through.
+        """
+        self._temp_dir = temp_dir
+        self._part_factory = part_factory
+        self._frame_offset = frame_offset
+        self._transcoder = transcoder
+        self._file: BinaryIO | None = None
+        self._path: Path | None = None
+        self._lengths: list[int] = []
+
+    def write(self, tiles: Iterable[bytes]) -> None:
+        if self._file is None:
+            fd, path = tempfile.mkstemp(
+                prefix="concat_", suffix=".bin", dir=str(self._temp_dir)
+            )
+            self._path = Path(path)
+            self._file = os.fdopen(fd, "w+b")
+        for tile in tiles:
+            self._file.write(tile)
+            self._lengths.append(len(tile))
+
+    def finalize(self, concatenated: bool) -> UPath:
+        writer, dataset = self._part_factory.open(
+            self._frame_offset, len(self._lengths), concatenated=concatenated
+        )
+        filepath = writer.filepath
+        assert filepath is not None
+        try:
+            writer.write_tiles(self._read())
+            writer.finalize(dataset, self._transcoder)
+        except BaseException:
+            writer.close()
+            raise
+        finally:
+            self.close()
+        return filepath
+
+    def _read(self) -> Iterator[bytes]:
+        """Yield the buffered tiles back in write order from the scratch file."""
+        if self._file is not None:
+            self._file.seek(0)
+            for length in self._lengths:
+                yield self._file.read(length)
+
+    def close(self) -> None:
+        self._lengths = []
+        if self._file is not None:
+            with contextlib.suppress(Exception):
+                self._file.close()
+            self._file = None
+        if self._path is not None:
+            with contextlib.suppress(Exception):
+                self._path.unlink()
+            self._path = None
+
+
+class InstanceFileWriter:
+    """Writes a level to files provided by `part_factory`, splitting into parts where
+    `splitter` says.
+    """
+
+    def __init__(
+        self,
+        part_factory: PartFactory,
+        splitter: PartSplitter,
+        total_frames: int,
+        transcoder: Encoder | None,
+        temp_dir: UPath,
+    ) -> None:
+        """Write a level's instance file(s).
+
+        Parameters
+        ----------
+        part_factory: PartFactory
+            Builds and opens each part's instance file.
+        splitter: PartSplitter
+            Decides where the level's tiles are split into parts.
+        total_frames: int
+            Total number of frames in the level, used to recognize a part that
+            covers the whole level (which is written non-concatenated).
+        transcoder: Encoder | None
+            Encoder to transcode tiles with, or None to write them through.
+        temp_dir: UPath
+            Scratch directory for buffered (byte-split) parts.
+        """
+        self._part_factory = part_factory
+        self._splitter = splitter
+        self._total_frames = total_frames
+        self._transcoder = transcoder
+        self._temp_dir = temp_dir
+        self._frame_offset = 0
+        self._part_frames = 0
+        self._did_split = False
+        self._filepaths: list[UPath] = []
+        self._sink: PartSink | None = None
+
+    @property
+    def filepaths(self) -> list[UPath]:
+        """The instance file(s) finalized so far, in part order."""
+        return list(self._filepaths)
+
+    def write_tiles(self, tiles: Iterable[bytes]) -> int:
+        """Batch same-part tiles to the current sink, splitting where the splitter
+        says (a batch that crosses a part boundary is split)."""
+        count = 0
+        batch: list[bytes] = []
+        for tile in tiles:
+            if self._part_frames > 0 and self._splitter.should_start_new_part(tile):
+                self._write_batch(batch)
+                batch = []
+                self._finalize_part(concatenated=True)
+                self._splitter.reset()
+            batch.append(tile)
+            self._splitter.account(tile)
+            self._part_frames += 1
+            count += 1
+        self._write_batch(batch)
+        return count
+
+    def finalize(self) -> None:
+        """Finalize the last part (a plain instance if it is the only one)."""
+        self._finalize_part(concatenated=self._did_split)
+
+    def close(self) -> None:
+        """Best-effort cleanup of the current unfinalized part on error."""
+        if self._sink is not None:
+            self._sink.close()
+            self._sink = None
+
+    def _write_batch(self, batch: list[bytes]) -> None:
+        """Write a run of same-part tiles, opening the part's sink on first use."""
+        if not batch:
+            return
+        if self._sink is None:
+            self._sink = self._open_sink()
+        self._sink.write(batch)
+
+    def _open_sink(self) -> PartSink:
+        """Open the next part's sink: a streaming `DirectPartSink` when the
+        splitter fixes the frame count in advance, else a buffering
+        `BufferedPartSink`."""
+        remaining = self._total_frames - self._frame_offset
+        expected = self._splitter.next_part_frame_count(remaining)
+        if expected is not None:
+            # Count fixed in advance: stream straight to the final file. A first
+            # part that takes the whole level is the only part, so it is written
+            # as a plain, non-concatenated instance.
+            concatenated = not (self._frame_offset == 0 and expected == remaining)
+            writer, dataset = self._part_factory.open(
+                self._frame_offset, expected, concatenated=concatenated
+            )
+            return DirectPartSink(writer, dataset, self._transcoder)
+        # Count unknown: buffer to a temp file, splice on finalize.
+        return BufferedPartSink(
+            temp_dir=self._temp_dir,
+            part_factory=self._part_factory,
+            frame_offset=self._frame_offset,
+            transcoder=self._transcoder,
+        )
+
+    def _finalize_part(self, concatenated: bool) -> None:
+        """Finalize the current part, if one is open, and advance the frame offset
+        and per-part accounting for the next one."""
+        if self._sink is None:
+            return
+        self._filepaths.append(self._sink.finalize(concatenated))
+        self._frame_offset += self._part_frames
+        self._part_frames = 0
+        self._did_split = True
+        self._sink = None
 
 
 class BaseFileWriter(metaclass=ABCMeta):
@@ -320,6 +780,7 @@ class PyramidFileWriter(BaseFileWriter):
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
+        concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
     ):
         """Create a pull-based pyramid writer.
 
@@ -378,6 +839,10 @@ class PyramidFileWriter(BaseFileWriter):
         instance_split: InstanceSplit = InstanceSplit.NONE
             How optical paths and focal planes are split across output instances.
             See `BaseFileWriter`.
+        concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None
+            If set, split each pyramid level into concatenated instances by frame
+            count (`ConcatenationByFrames`) or byte size (`ConcatenationByBytes`).
+            None (default) writes one instance per level.
         """
         super().__init__(
             output_path=output_path,
@@ -392,6 +857,7 @@ class PyramidFileWriter(BaseFileWriter):
             instance_split=instance_split,
         )
         self._pyramid = pyramid
+        self._concatenation = concatenation
         self._max_threads = max_threads
         self._include_levels = include_levels
         self._add_missing_levels = add_missing_levels
@@ -432,7 +898,7 @@ class PyramidFileWriter(BaseFileWriter):
         )
         try:
             level_writers: list[PyramidLevelWriter] = []
-            file_writers: list[WsiDicomWriter] = []
+            file_writers: list[InstanceFileWriter] = []
             try:
                 level_writers = self._build_level_writers(
                     self._pyramid.pyramid_indices,
@@ -451,11 +917,13 @@ class PyramidFileWriter(BaseFileWriter):
                         level_transfer_syntax = source_image_data.transfer_syntax
                     else:
                         level_transfer_syntax = encoder.transfer_syntax
-                    file_writer = self._prepare_writer(
+                    file_writer = self._open_writer(
                         level_writer,
-                        next(instance_counter),
+                        instance_counter,
                         level_transfer_syntax,
                         self._resolve_offset_table(level_transfer_syntax),
+                        encoder if transcode else None,
+                        temp_dir,
                     )
                     file_writers.append(file_writer)
                     level_writer.start(file_writer)
@@ -490,7 +958,6 @@ class PyramidFileWriter(BaseFileWriter):
                     level_writers,
                     file_writers,
                     encoder_pool,
-                    encoder if transcode else None,
                     token,
                 )
             except BaseException as error:
@@ -503,9 +970,7 @@ class PyramidFileWriter(BaseFileWriter):
 
             filepaths: list[UPath] = []
             for file_writer in file_writers:
-                filepath = file_writer.filepath
-                assert filepath is not None  # always set once the writer is opened
-                filepaths.append(filepath)
+                filepaths.extend(file_writer.filepaths)
             return filepaths
 
         finally:
@@ -846,39 +1311,72 @@ class PyramidFileWriter(BaseFileWriter):
             )
         return DictTileCache()
 
-    def _prepare_writer(
+    def _open_writer(
         self,
         level_writer: PyramidLevelWriter,
-        instance_number: int,
+        instance_counter: Iterator[int],
         transfer_syntax: UID,
         offset_table: OffsetTableType,
-    ) -> WsiDicomWriter:
-        """Open a DICOM file and configure it for this level's dataset.
+        transcoder: Encoder | None,
+        temp_dir: UPath,
+    ) -> InstanceFileWriter:
+        """Open the instance file(s) for a level.
 
-        Mutates `level_writer.dataset` to set `SOPInstanceUID` and
-        `InstanceNumber`, then writes the file header and pixel-data preamble.
+        With no concatenation (or when a frame/byte budget already fits the whole
+        level) the level is written as one plain, non-concatenated instance.
+        `ConcatenationByFrames` splits deterministically into parts of at most N
+        frames each (opened up front). `ConcatenationByBytes` accumulates frames
+        in raster order and splits off each part when it reaches the byte budget.
+        In the split cases `NumberOfFrames` is per part and `TotalPixelMatrix*` is
+        the whole-level value; parts share a `ConcatenationUID` and a notional
+        source SOP Instance UID. Whether the first part is marked concatenated is
+        decided when it is opened (streamed) or finalized (buffered), so a level
+        that never splits yields a plain instance regardless of the concatenation
+        mode.
         """
-        uid = self._uid_generator.sop_uid(level_writer.dataset)
-        filepath = self._output_path.joinpath(uid + ".dcm")
-        file_writer = WsiDicomWriter.open(
-            filepath, transfer_syntax, offset_table, self._file_options
+        base_dataset = level_writer.dataset
+        total_frames = int(base_dataset.NumberOfFrames)
+        concatenation = self._concatenation
+
+        if isinstance(concatenation, ConcatenationByFrames):
+            splitter: PartSplitter = FrameCountSplitter(concatenation.count)
+            # Part count is deterministic for a frame budget, so emit it.
+            part_total: int | None = (
+                total_frames + concatenation.count - 1
+            ) // concatenation.count
+        elif isinstance(concatenation, ConcatenationByBytes):
+            splitter = ByteSizeSplitter(concatenation.size)
+            # Unknown while streaming; InConcatenationTotalNumber is omitted.
+            part_total = None
+        else:
+            # No concatenation: one part, never split, not marked concatenated.
+            splitter = NoSplitter()
+            part_total = None
+
+        part_factory = PartFactory(
+            base_dataset,
+            self._uid_generator,
+            self._output_path,
+            self._file_options,
+            transfer_syntax,
+            offset_table,
+            instance_counter,
+            part_total,
         )
-        try:
-            level_writer.dataset.SOPInstanceUID = uid
-            level_writer.dataset.InstanceNumber = instance_number
-            file_writer.write_header(level_writer.dataset)
-            file_writer.start_pixel_data(level_writer.dataset)
-        except BaseException:
-            file_writer.close()
-            raise
-        return file_writer
+
+        return InstanceFileWriter(
+            part_factory=part_factory,
+            splitter=splitter,
+            total_frames=total_frames,
+            transcoder=transcoder,
+            temp_dir=temp_dir,
+        )
 
     @staticmethod
     def _finalize_writers(
         level_writers: list[PyramidLevelWriter],
-        file_writers: list[WsiDicomWriter],
+        file_writers: list[InstanceFileWriter],
         encoder_pool: EncoderPool,
-        transcoder: Encoder | None,
         token: CancellationToken,
     ) -> None:
         """Shut down pipeline in correct order and finalize all levels."""
@@ -892,14 +1390,16 @@ class PyramidFileWriter(BaseFileWriter):
         # per-level finalize reports a (misleading) tile-count mismatch.
         token.raise_if_cancelled()
 
-        for level_writer, file_writer in zip(level_writers, file_writers, strict=True):
+        for level_writer, concatenation_writer in zip(
+            level_writers, file_writers, strict=True
+        ):
             level_writer.finalize_writers()
-            file_writer.finalize(level_writer.dataset, transcoder)
+            concatenation_writer.finalize()
 
     @staticmethod
     def _cleanup_writers(
         level_writers: list[PyramidLevelWriter],
-        file_writers: list[WsiDicomWriter],
+        file_writers: list[InstanceFileWriter],
         encoder_pool: EncoderPool,
     ) -> None:
         """Clean up all resources on error."""
@@ -907,9 +1407,8 @@ class PyramidFileWriter(BaseFileWriter):
             encoder_pool.shutdown(wait=False)
         for level_writer in level_writers:
             level_writer.cleanup()
-        for file_writer in file_writers:
-            with contextlib.suppress(Exception):
-                file_writer.close()
+        for concatenation_writer in file_writers:
+            concatenation_writer.close()
 
     def _run_source_level_writers_in_threads(
         self,
@@ -1112,15 +1611,18 @@ class GroupFileWriter(BaseFileWriter):
                     focal_planes=planes,
                     optical_paths=paths,
                 )
-                uid = self._uid_generator.sop_uid(dataset)
-                filepath = self._output_path.joinpath(uid + ".dcm")
-                with WsiDicomWriter.open(
-                    filepath, transfer_syntax, offset_table, self._file_options
+                dataset.SOPInstanceUID = self._uid_generator.sop_uid(dataset)
+                dataset.InstanceNumber = self._instance_number
+                filepath = self._output_path.joinpath(
+                    str(dataset.SOPInstanceUID) + ".dcm"
+                )
+                with WsiDicomWriter.open_instance(
+                    filepath,
+                    transfer_syntax,
+                    offset_table,
+                    self._file_options,
+                    dataset,
                 ) as file_writer:
-                    dataset.SOPInstanceUID = uid
-                    dataset.InstanceNumber = self._instance_number
-                    file_writer.write_header(dataset)
-                    file_writer.start_pixel_data(dataset)
                     instance_writer.write(file_writer)
                     file_writer.finalize(dataset, transcoder)
                 self._instance_number += 1

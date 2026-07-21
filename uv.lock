@@ -272,11 +272,14 @@ wheels = [
 
 [[package]]
 name = "decoy"
-version = "2.2.0"
+version = "2.6.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/74/a0/e99a6456e390ba8342608993092c603ce0ab26c3d1db9f1491e178c8e191/decoy-2.2.0.tar.gz", hash = "sha256:515eeea7feec2f4e822341c09a0e4a45c988373c26599b26bd33bf118f6c1a7c", size = 23183, upload-time = "2025-06-09T15:12:28.849Z" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/1b/17035a255625e9dc82a3ac3e73b228016275996b85fd163b10ea448dc3b2/decoy-2.6.0.tar.gz", hash = "sha256:e65c875c8cfaed6ceff55df39d266e2967e90de3390c99d228ff94c6a2ba51d7", size = 39705, upload-time = "2026-04-30T20:25:03.051Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/d4/a9fee6a52c9df92b150139a3b2269aea94b0cbf233d8823ee8a13a5a9750/decoy-2.2.0-py3-none-any.whl", hash = "sha256:fd40c79845f15d4804746f26e337a8f651be17e80556abab286693390eb39081", size = 28329, upload-time = "2025-06-09T15:12:27.883Z" },
+    { url = "https://files.pythonhosted.org/packages/53/2a/813d13054e67c5dfc492c2cf2e51a5571a1dd026714d7b8d4a20064cb19f/decoy-2.6.0-py3-none-any.whl", hash = "sha256:c2d333a2ee3632d5bae907eca4bf7c341c287589cc37ebdfad51038e9bdcf192", size = 52136, upload-time = "2026-04-30T20:25:01.415Z" },
 ]
 
 [[package]]
