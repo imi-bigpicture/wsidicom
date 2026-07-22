@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `WsiDicom.save` now always returns absolute paths for local output, even when given a relative `output_path`.
 - The default sRGB ICC profile inserted into generated DICOM now declares the DICOM-required Input Device class (`scnr`) instead of the Display class (`mntr`) that lcms produces, per PS3.3 C.11.15.1.1. Only the class signature changes; the colorimetry is unchanged.
 
 ## [0.34.0] - 2026-07-17

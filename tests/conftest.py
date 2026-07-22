@@ -33,7 +33,6 @@ from pydicom.uid import (
     ExplicitVRLittleEndian,
     JPEGBaseline8Bit,
 )
-from upath import UPath
 
 from tests.data_gen import create_layer_file
 from tests.file.io.test_wsidicom_writer import WsiDicomTestImageData
@@ -282,7 +281,7 @@ def wsi_factory(shared_threadpool_executor: Executor):
         use_shared_executor: bool = False,
     ) -> WsiDicom:
         test_definition = WsiTestDefinitions.test_definitions[wsi_name]
-        folder = UPath(SLIDE_FOLDER).joinpath(test_definition["path"])
+        folder = Path(SLIDE_FOLDER).joinpath(test_definition["path"])
         key = (input_type, folder, use_shared_executor)
         if key in wsis:
             return wsis[key]

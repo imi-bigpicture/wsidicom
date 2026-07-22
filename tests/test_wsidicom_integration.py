@@ -30,7 +30,7 @@ from tests.conftest import (
 from wsidicom import WsiDicom
 from wsidicom.config import Settings, use_settings
 from wsidicom.geometry import Point
-from wsidicom.options import DownsamplerOption
+from wsidicom.options import ConcatenationByFrames, DownsamplerOption
 from wsidicom.series.pyramid import Pyramid
 from wsidicom.thread import ReadExecutor
 
@@ -413,3 +413,36 @@ class TestWsiDicomIntegration:
 
         # Assert
         assert isinstance(pyramid, Pyramid)
+
+
+@pytest.mark.integration
+class TestWsiDicomSave:
+    @pytest.mark.parametrize("wsi_name", ["Histech^Samantha [1229631]"])
+    @pytest.mark.parametrize("concatenation", [None, ConcatenationByFrames(1)])
+    def test_save_with_relative_output_returns_absolute_paths(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+        concatenation: ConcatenationByFrames | None,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+        monkeypatch.chdir(tmp_path)
+        highest_level_index_with_multiple_frames = next(
+            index
+            for index, level in reversed(list(enumerate(wsi.levels.levels)))
+            if level.tiled_size.area > 1
+        )
+
+        # Act
+        filepaths = wsi.save(
+            "./relative-output",
+            include_levels=[highest_level_index_with_multiple_frames],
+            concatenation=concatenation,
+        )
+
+        # Assert
+        assert len(filepaths) > 0
+        assert all(filepath.is_absolute() for filepath in filepaths), filepaths

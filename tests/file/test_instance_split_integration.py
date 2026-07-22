@@ -275,6 +275,7 @@ class TestInstanceSplitIntegration:
         assert len(filepaths) == expected_files
         total_planes = 0
         for filepath in filepaths:
+            assert isinstance(filepath, Path)
             dataset = dcmread(filepath)
             assert dataset.TotalPixelMatrixFocalPlanes == expected_planes_per_file
             total_planes += dataset.TotalPixelMatrixFocalPlanes

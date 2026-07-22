@@ -403,6 +403,7 @@ class WsiDicom:
             uid_generator = CallableUidGenerator()
         elif not isinstance(uid_generator, UidGenerator):
             uid_generator = CallableUidGenerator(uid_generator)
+        output_path = self._normalize_path(output_path)
         if include_labels:
             if label is not None:
                 label_instances = [
@@ -442,6 +443,18 @@ class WsiDicom:
         ):
             target.save(self.pyramids, labels, overviews, include_thumbnails)
             return target.filepaths
+
+    @staticmethod
+    def _normalize_path(path: str | Path | UPath) -> Path | UPath:
+        """Normalize local paths (including `file://` and `local://` URIs) to
+        absolute; preserve remote fsspec paths."""
+        if isinstance(path, str):
+            path = UPath(path)
+        if isinstance(path, Path) or (
+            isinstance(path, UPath) and path.protocol in ("", "file", "local")
+        ):
+            return path.resolve()
+        return path
 
     @classmethod
     def is_ready_for_viewing(

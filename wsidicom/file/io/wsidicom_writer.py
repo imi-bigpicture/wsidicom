@@ -13,7 +13,6 @@
 #    limitations under the License.
 
 
-import os
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Sequence
 from datetime import datetime
@@ -240,7 +239,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 
         # Replace original with temp
         self._file.close()
-        os.replace(temp_file_path, file_path)
+        temp_file_path.replace(file_path)
         self._file = next(opener.open([file_path]))
 
     @staticmethod
