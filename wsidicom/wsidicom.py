@@ -19,7 +19,6 @@ from concurrent.futures import Executor
 from pathlib import Path
 from typing import (
     Any,
-    BinaryIO,
     Literal,
     Union,
     overload,
@@ -180,40 +179,6 @@ class WsiDicom:
         with use_settings(settings):
             source = WsiDicomFileSource.open_dicomdir(path, file_options)
             return cls(source, True, read_executor, settings=settings)
-
-    @classmethod
-    def open_streams(
-        cls,
-        streams: Iterable[BinaryIO],
-        read_executor: Executor | None = None,
-        *,
-        settings: Settings | None = None,
-    ) -> "WsiDicom":
-        """Open valid WSI DICOM files in path or stream and return a WsiDicom object.
-
-        Non-valid files are ignored. Only opened files (i.e. not streams) will e closed
-        by WsiDicom.
-
-        Parameters
-        ----------
-        streams: Iterable[BinaryIO],
-            Streams to open.
-        read_executor: Executor | None = None
-            Optional shared, thread-based executor reused across reads.
-            When supplied, reads parallelize across it by default unless ``threads=1``.
-            When ``None`` each parallel read uses a per-read pool when ``threads>1``.
-
-        settings: Settings | None = None
-            Settings to use for this object instead of the process-wide default.
-
-        Returns
-        -------
-        WsiDicom
-            WsiDicom created from WSI DICOM files in path.
-        """
-        with use_settings(settings):
-            source = WsiDicomFileSource.open_streams(streams)
-            return cls(source, False, read_executor, settings=settings)
 
     @classmethod
     def open_web(

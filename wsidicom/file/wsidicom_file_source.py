@@ -18,10 +18,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import (
-    Any,
-    BinaryIO,
-)
+from typing import Any
 
 from pydicom.fileset import FileSet
 from pydicom.uid import (
@@ -151,13 +148,9 @@ class WsiDicomFileSource(Source):
         return [reader for reader_list in reader_lists for reader in reader_list]
 
     @property
-    def files(self) -> list[UPath] | None:
-        """Return the files in the source, if any."""
-        if all(reader.filepath is None for reader in self.readers):
-            return None
-        return [
-            reader.filepath for reader in self.readers if reader.filepath is not None
-        ]
+    def files(self) -> list[UPath]:
+        """Return the files in the source."""
+        return [reader.filepath for reader in self.readers]
 
     @property
     def is_ready_for_viewing(self) -> bool | None:
@@ -199,13 +192,6 @@ class WsiDicomFileSource(Source):
             ],
         )
         return cls(streams)
-
-    @classmethod
-    def open_streams(
-        cls,
-        streams: Iterable[BinaryIO],
-    ) -> "WsiDicomFileSource":
-        return cls(WsiDicomIO(stream) for stream in streams)
 
     @classmethod
     def open_dicomdir(

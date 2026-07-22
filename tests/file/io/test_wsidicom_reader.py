@@ -113,7 +113,7 @@ class TestWWsiDicomReader:
     def test_dataset_property(self, test_file: WsiDicomReader):
         # Arrange
         path = test_file.filepath
-        assert path is not None and isinstance(path, Path)
+        assert isinstance(path, Path)
 
         # Act
         dataset = WsiDataset(dcmread(path, stop_before_pixels=True))

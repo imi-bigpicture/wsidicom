@@ -137,8 +137,8 @@ class WsiDicomReader:
         return self.dataset.frame_count
 
     @property
-    def filepath(self) -> UPath | None:
-        """Return filename if stream is file."""
+    def filepath(self) -> UPath:
+        """Return the filepath the stream is backed by."""
         return self._stream.filepath
 
     def read_frame(self, frame_index: int) -> bytes:

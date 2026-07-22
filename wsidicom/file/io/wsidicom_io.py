@@ -49,8 +49,8 @@ class WsiDicomIO:
     def __init__(
         self,
         stream: BinaryIO | AbstractBufferedFile,
+        filepath: str | Path | UPath,
         transfer_syntax: UID | None = None,
-        filepath: str | Path | UPath | None = None,
         owned: bool = False,
     ):
         """
@@ -60,18 +60,17 @@ class WsiDicomIO:
         ----------
         stream: BinaryIO
             Stream to use.
-        little_endian: bool = True
-            If to set the stream to little endian.
-        implicit_vr: bool = False
-            If to set the stream to implicit VR.
-        filepath: str | Path | UPath | None = None,
-            Optional filepath of stream.
+        filepath: str | Path | UPath
+            Filepath the stream is backed by. Every stream wsidicom opens is
+            backed by a re-openable file, so this is required.
+        transfer_syntax: UID | None = None
+            Transfer syntax of the stream. If None, read from the file meta.
         owned: bool = False
             If the stream should be closed by this instance.
         """
         self._stream = cast(BinaryIO, stream)
         self._stream.seek(0)
-        self._filepath = UPath(filepath) if filepath else None
+        self._filepath = UPath(filepath)
         self._owned = owned
         self._dicom_io = DicomIO(self._stream)
         if transfer_syntax is None:
@@ -100,8 +99,8 @@ class WsiDicomIO:
         return self._stream.closed
 
     @property
-    def filepath(self) -> UPath | None:
-        """Return filepath, if opened from file."""
+    def filepath(self) -> UPath:
+        """Return the filepath the stream is backed by."""
         return self._filepath
 
     @property

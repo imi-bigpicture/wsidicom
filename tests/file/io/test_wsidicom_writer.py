@@ -350,7 +350,10 @@ class TestWsiDicomWriter:
 
         # Assert
         with WsiDicomIO(
-            open(filepath, "rb"), JPEGBaseline8Bit, filepath, True
+            open(filepath, "rb"),
+            filepath=filepath,
+            transfer_syntax=JPEGBaseline8Bit,
+            owned=True,
         ) as read_file:
             tag = read_file.read_tag()
             assert tag == SequenceDelimiterTag
@@ -376,7 +379,10 @@ class TestWsiDicomWriter:
                 writer.write_tiles([frame])
 
         with WsiDicomIO(
-            open(filepath, "rb"), JPEGBaseline8Bit, filepath, True
+            open(filepath, "rb"),
+            filepath=filepath,
+            transfer_syntax=JPEGBaseline8Bit,
+            owned=True,
         ) as read_file:
             for position in writer.frame_positions:
                 read_file.seek(position)
@@ -424,7 +430,12 @@ class TestWsiDicomWriter:
 
         # Assert
         with WsiDicomReader(
-            WsiDicomIO(open(filepath, "rb"), transfer_syntax, filepath, True)
+            WsiDicomIO(
+                open(filepath, "rb"),
+                filepath=filepath,
+                transfer_syntax=transfer_syntax,
+                owned=True,
+            )
         ) as read_file:
             for index, frame in enumerate(frames):
                 read_frame = read_file.read_frame(index)

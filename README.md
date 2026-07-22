@@ -88,20 +88,60 @@ slide = WsiDicom.open("path_to_folder")
 
 The `files` argument accepts either a path to a folder with DICOM WSI-files or a sequence of paths to DICOM WSI-files.
 
-***Load a WSI dataset from remote url using [fsspec](https://filesystem-spec.readthedocs.io).***
+***Load a WSI from anywhere with [fsspec](https://filesystem-spec.readthedocs.io).***
 
-```python
-from wsidicom import WsiDicom
-slide = WsiDicom.open("s3://bucket/key", file_options={"s3": "anon": True})
-```
-
-***Or load a WSI dataset from opened streams.***
+`WsiDicom.open` takes any fsspec URL, so the same call reads local disk, cloud
+storage, and chained/cached protocols. Backend options go through `file_options`:
 
 ```python
 from wsidicom import WsiDicom
 
-slide = WsiDicom.open_streams([file_stream_1, file_stream_2, ... ])
+slide = WsiDicom.open("s3://bucket/key", file_options={"s3": {"anon": True}})
+slide = WsiDicom.open("simplecache::s3://bucket/key")  # cache remote reads on disk
 ```
+
+Reads are lazy and seekable: wsidicom pulls the offset tables and only the frames
+it decodes, not the whole file — so opening a 5 GB slide over the network doesn't
+download 5 GB.
+
+***Read from a source fsspec doesn't know (a database blob, a vault, a custom store).***
+
+Don't buffer the slide into memory — teach fsspec your store by implementing a
+small filesystem (see fsspec's
+[Developing new filesystems](https://filesystem-spec.readthedocs.io/en/latest/developer.html)).
+The example below implements only what wsidicom needs to read a slide: `info` (to
+locate the file and get its size), `_open` (one line, wiring up the file class),
+and `_fetch_range` (the ranged read for just the bytes it needs):
+
+```python
+import fsspec
+from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
+from wsidicom import WsiDicom
+
+
+class BlobFileSystem(AbstractFileSystem):
+    protocol = "blob"
+
+    def info(self, path, **kwargs):
+        return {"name": path, "size": my_database.byte_size(path), "type": "file"}
+
+    def _open(self, path, mode="rb", **kwargs):
+        return BlobFile(self, path, mode, **kwargs)
+
+
+class BlobFile(AbstractBufferedFile):
+    def _fetch_range(self, start, end):
+        return my_database.read_bytes(self.path, offset=start, length=end - start)
+
+
+fsspec.register_implementation("blob", BlobFileSystem)
+slide = WsiDicom.open("blob://slide-123")
+```
+
+As long as your store supports ranged reads (e.g. Postgres large objects, an
+object store, any BLOB API with offset access), wsidicom reads only the bytes it
+touches. If you point `open` at a folder-like URL rather than an explicit file,
+also implement `ls` so it can enumerate the slide's parts.
 
 ***Or load a WSI dataset from a DICOMDIR.***
 
@@ -371,7 +411,7 @@ from wsidicom import Settings, set_default_settings
 set_default_settings(Settings(strict_uid_check=True))
 ```
 
-To configure a single opened slide instead of the whole process, pass a `Settings` as the keyword-only `settings` argument to `open` (also available on `open_dicomdir`, `open_streams` and `open_web`):
+To configure a single opened slide instead of the whole process, pass a `Settings` as the keyword-only `settings` argument to `open` (also available on `open_dicomdir` and `open_web`):
 
 ```python
 from wsidicom import WsiDicom, Settings

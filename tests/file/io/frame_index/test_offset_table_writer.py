@@ -41,7 +41,9 @@ def transfer_syntax():
 
 @pytest.fixture
 def buffer(transfer_syntax: UID):
-    with WsiDicomIO(BytesIO(), transfer_syntax=transfer_syntax) as buffer:
+    with WsiDicomIO(
+        BytesIO(), filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+    ) as buffer:
         yield buffer
 
 

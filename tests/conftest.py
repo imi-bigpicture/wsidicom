@@ -20,13 +20,11 @@ import sys
 from collections.abc import Iterator
 from concurrent.futures import Executor, ThreadPoolExecutor
 from enum import Enum
-from io import BufferedReader
 from pathlib import Path
 from typing import Any
 
 import pytest
 from dicomweb_client import DICOMfileClient
-from pydicom.misc import is_dicom
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -106,7 +104,6 @@ class SingleThreadDicomFileClient(DICOMfileClient):
 
 class WsiInputType(Enum):
     FILE = "file"
-    STREAM = "stream"
     WEB = "web"
 
 
@@ -271,7 +268,6 @@ def wsi_factory(shared_threadpool_executor: Executor):
     supplied-executor read path; wsis opened with and without one are cached
     separately.
     """
-    streams: list[BufferedReader] = []
     clients: list[SingleThreadDicomFileClient] = []
     wsis: dict[tuple[WsiInputType, Path, bool], WsiDicom] = {}
 
@@ -304,14 +300,6 @@ def wsi_factory(shared_threadpool_executor: Executor):
                 read_executor=read_executor,
                 settings=Settings(open_web_threads=1),
             )
-        elif input_type == WsiInputType.STREAM:
-            new_streams = [
-                open(file, "rb")
-                for file in folder.iterdir()
-                if file.is_file() and is_dicom(file)
-            ]
-            streams.extend(new_streams)
-            wsi = WsiDicom.open_streams(new_streams, read_executor=read_executor)
         else:
             raise NotImplementedError()
         wsis[key] = wsi
@@ -320,8 +308,6 @@ def wsi_factory(shared_threadpool_executor: Executor):
     yield open_wsi
     for wsi in wsis.values():
         wsi.close()
-    for stream in streams:
-        stream.close()
     for file_client in clients:
         file_client.shutdown()
 

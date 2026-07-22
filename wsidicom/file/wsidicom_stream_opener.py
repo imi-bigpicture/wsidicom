@@ -72,8 +72,14 @@ class WsiDicomStreamOpener:
             for stream in self._open_streams(file, "rb"):
                 try:
                     stream_path = getattr(stream, "path", None)
-                    path = UPath(stream_path) if stream_path is not None else None
-                    dicom_io = WsiDicomIO(stream, owned=True, filepath=path)
+                    if stream_path is None:
+                        # Every stream fsspec opens is file-backed; skip anything
+                        # that can't name a path so WsiDicomIO always has one.
+                        stream.close()
+                        continue
+                    dicom_io = WsiDicomIO(
+                        stream, filepath=UPath(stream_path), owned=True
+                    )
                     if dicom_io.is_dicom and (
                         sop_class_uids is None
                         or dicom_io.media_storage_sop_class_uid in sop_class_uids

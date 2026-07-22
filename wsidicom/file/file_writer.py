@@ -319,7 +319,6 @@ class DirectPartSink(PartSink):
 
     def finalize(self, concatenated: bool) -> UPath:
         filepath = self._writer.filepath
-        assert filepath is not None
         self._writer.finalize(self._dataset, self._transcoder)
         return filepath
 
@@ -379,7 +378,6 @@ class BufferedPartSink(PartSink):
             self._frame_offset, len(self._lengths), concatenated=concatenated
         )
         filepath = writer.filepath
-        assert filepath is not None
         try:
             writer.write_tiles(self._read())
             writer.finalize(dataset, self._transcoder)

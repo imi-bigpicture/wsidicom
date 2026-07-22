@@ -75,9 +75,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
 
     @property
     def files(self) -> list[UPath]:
-        return [
-            reader.filepath for reader in self._readers if reader.filepath is not None
-        ]
+        return [reader.filepath for reader in self._readers]
 
     @property
     def transfer_syntax(self) -> UID:

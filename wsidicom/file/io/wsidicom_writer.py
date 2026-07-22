@@ -172,9 +172,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
             try:
                 offset_writer.write(pixels_start, frame_positions, last_frame_end)
             except WsiDicomBotOverflow:
-                if self._file.filepath is not None and isinstance(
-                    offset_writer, BotWriter
-                ):
+                if isinstance(offset_writer, BotWriter):
                     self._rewrite_as_eot(
                         dataset_end,
                         last_frame_end,
@@ -191,9 +189,6 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
     ) -> None:
         """Rewrite pixel data section with EOT on BOT overflow."""
         file_path = self._file.filepath
-        if file_path is None:
-            raise ValueError("Cannot rewrite file without filepath.")
-
         temp_file_path = file_path.with_suffix(".tmp")
         opener = WsiDicomStreamOpener(self._file_options)
         temp_stream = opener.open_for_writing(
@@ -326,8 +321,8 @@ class WsiDicomWriter:
         self._offset_writer: OffsetTableWriter | None = None
 
     @property
-    def filepath(self) -> UPath | None:
-        """File path of the output file, if available."""
+    def filepath(self) -> UPath:
+        """File path of the output file."""
         return self._file.filepath
 
     @property

@@ -48,7 +48,6 @@ def pin_pillow_downsampler():
     "input_type",
     [
         WsiInputType.FILE,
-        WsiInputType.STREAM,
         WsiInputType.WEB,
     ],
 )
