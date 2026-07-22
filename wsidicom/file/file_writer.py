@@ -974,28 +974,6 @@ class PyramidFileWriter(BaseFileWriter):
         finally:
             self._cleanup_temp(temp_dir)
 
-    def _validate_uniform_levels(self, present_levels: Sequence[int]) -> None:
-        """Raise if present levels differ in optical paths / focal planes.
-
-        Instance splitting builds one cascade chain per (optical path, focal
-        plane) bucket spanning all levels, so every present level must share the
-        same membership. Thumbnails, labels, and overviews are separate groups
-        and are not affected.
-
-        Parameters
-        ----------
-        present_levels: Sequence[int]
-            Indices of the levels present in the source pyramid.
-        """
-        base_membership = self._pyramid.base_level.focal_planes_by_optical_path
-        for level_index in present_levels:
-            membership = self._pyramid.get(level_index).focal_planes_by_optical_path
-            if membership != base_membership:
-                raise NotImplementedError(
-                    "Pyramid levels have differing optical paths / focal planes; "
-                    "instance splitting across non-uniform levels is not supported."
-                )
-
     def _build_level_writers(
         self,
         present_levels: Sequence[int],
@@ -1010,9 +988,13 @@ class PyramidFileWriter(BaseFileWriter):
         Iterates levels from highest to lowest. Generated levels are created
         first (with accumulator chain wiring), then source levels get tile
         readers referencing the next generated level above them.
-        """
-        self._validate_uniform_levels(present_levels)
 
+        Each instance's focal planes and optical paths are taken from the source
+        level it is read from or downsampled from — not from the base — so levels
+        that differ (e.g. fewer focal planes on downsampled levels) are each
+        written with their own, with no uniform-membership requirement across
+        levels.
+        """
         # Determine which levels to build
         highest_in_file = present_levels[-1]
         if self._add_missing_levels:
@@ -1073,158 +1055,235 @@ class PyramidFileWriter(BaseFileWriter):
             cascade_levels.update(range(source_level + 1, level_index + 1))
         build_levels = sorted(set(included_levels) | cascade_levels)
 
-        # One reversed pass per instance-split bucket. Each bucket holds a
-        # subset of the focal planes / optical paths and gets its own
-        # independent cascade chain, producing one instance per written level.
+        # A cascade segment is a read level together with the generated levels
+        # derived from it, up to the next read level. Every level in a segment
+        # downsamples from the same source level, so its focal planes / optical
+        # paths come from that source level rather than the base — this is what
+        # lets levels differ (e.g. fewer focal planes higher up). Each (segment,
+        # instance-split bucket) is an independent cascade chain, producing one
+        # instance per written level in the segment.
         tile_cache = self._create_tile_cache(temp_dir)
         level_writers: list[PyramidLevelWriter] = []
-        base_group = self._pyramid.base_level
-        for planes, paths in self._split_planes_paths(
-            base_group.focal_planes_by_optical_path
-        ):
-            next_accumulator: PyramidTileAccumulator | None = None
-            bucket_writers: dict[int, PyramidLevelWriter] = {}
-            # Accumulators for the levels that are written, and for the levels that
-            # only bridge a gap in the cascade to reach them.
-            writing_accumulators: dict[int, WritingPyramidTileAccumulator] = {}
-            intermediate_accumulators: dict[int, PyramidTileAccumulator] = {}
-            # Written generated levels, as (level_index, dataset, tiled_size). The
-            # writers are built after the loop, once every accumulator below them
-            # exists.
-            generated: list[tuple[int, WsiDataset, Size]] = []
-            for level_index in reversed(build_levels):
-                in_source = level_index in read_levels
-                is_written = level_index in included_levels
-                if in_source:
-                    source_group = self._pyramid.get(level_index)
-                    scale = 1
-                else:
-                    source_level = self._source_level_of(
-                        level_index,
-                        base_level_index,
-                        read_levels,
-                        self._regenerate_pyramid,
-                    )
-                    source_group = self._pyramid.get(source_level)
-                    scale = int(2 ** (level_index - source_level))
-
-                if not is_written:
-                    # Bridges a gap in the cascade; no instance is written for it,
-                    # so it needs neither a dataset nor an output queue. It is
-                    # wired up below.
-                    intermediate = PyramidTileAccumulator(
-                        level_index=level_index,
-                        input_tiled_size=source_group.tiled_size.ceil_div(
-                            max(scale // 2, 1)
-                        ),
-                        encoder_pool_queue=encoder_pool.queue,
-                        next_accumulator=next_accumulator,
-                        is_chain_start=level_index - 1 in read_levels,
-                        queue_maxsize=self._queue_maxsize,
-                        token=token,
-                    )
-                    intermediate_accumulators[level_index] = intermediate
-                    next_accumulator = intermediate
-                    continue
-
-                tiled_size = source_group.tiled_size.ceil_div(scale)
-                base_instance = source_group.instance_at(paths[0], planes[0])
-                base_dataset = self._build_base_dataset(
-                    base_instance, ImageType.VOLUME, level_index
-                )
-                dataset = base_dataset.as_tiled_full(
-                    planes,
-                    paths,
-                    source_group.tiled_size,
-                    scale,
-                )
-                transcoder = encoder if transcode else None
-                if transcoder is not None:
-                    dataset.update_for_transcoding(transcoder, scale)
-
-                if in_source:
-                    # Source level: create tile reader, referencing next
-                    # accumulator for cascading if present
-                    tile_reader: TileReader
-                    if transcode and next_accumulator is not None:
-                        tile_reader = CascadingTranscodeTileReader(
-                            level_index,
-                            encoder_pool.queue,
-                            next_accumulator,
-                            token,
-                        )
-                    elif transcode:
-                        tile_reader = TranscodeTileReader(
-                            level_index,
-                            encoder_pool.queue,
-                            token,
-                        )
-                    elif next_accumulator is not None:
-                        tile_reader = CascadingPassthroughTileReader(
-                            level_index,
-                            next_accumulator,
-                            token,
-                        )
-                    else:
-                        tile_reader = PassthroughTileReader(level_index, token)
-                    bucket_writers[level_index] = SourcePyramidLevelWriter(
-                        level_index=level_index,
-                        dataset=dataset,
-                        tile_cache=tile_cache,
-                        source_group=source_group,
-                        tiled_size=tiled_size,
-                        tile_reader=tile_reader,
-                        queue_maxsize=self._queue_maxsize,
-                        chunk_size=self._chunk_size,
-                        focal_planes=planes,
-                        optical_paths=paths,
-                        token=token,
-                    )
-                    next_accumulator = None
-                else:
-                    # Generated level: create the accumulator, chaining it to the
-                    # previously-created one (the level above in the pyramid). The
-                    # input tiled size is that of the level below (scale / 2). The
-                    # writer is built after the loop, once the accumulators for any
-                    # intermediate levels below it exist.
-                    accumulator = WritingPyramidTileAccumulator(
-                        level_index=level_index,
-                        input_tiled_size=source_group.tiled_size.ceil_div(
-                            max(scale // 2, 1)
-                        ),
-                        encoder_pool_queue=encoder_pool.queue,
-                        next_accumulator=next_accumulator,
-                        is_chain_start=level_index - 1 in read_levels,
-                        queue_maxsize=self._queue_maxsize,
-                        token=token,
-                    )
-                    writing_accumulators[level_index] = accumulator
-                    generated.append((level_index, dataset, tiled_size))
-                    next_accumulator = accumulator
-
-            for generated_level, generated_dataset, generated_tiled_size in generated:
-                bucket_writers[generated_level] = GeneratedPyramidLevelWriter(
-                    level_index=generated_level,
-                    dataset=generated_dataset,
-                    tile_cache=tile_cache,
-                    focal_planes=planes,
-                    optical_paths=paths,
-                    tiled_size=generated_tiled_size,
-                    accumulator=writing_accumulators[generated_level],
-                    token=token,
-                    intermediate_accumulators=[
-                        intermediate_accumulators[level]
-                        for level in self._intermediate_levels_of(
-                            generated_level, intermediate_accumulators
-                        )
-                    ],
-                )
-
-            level_writers.extend(
-                bucket_writers[level_index] for level_index in sorted(bucket_writers)
+        read_levels_sorted = sorted(read_levels)
+        for segment_position, read_level in enumerate(read_levels_sorted):
+            next_read_level = (
+                read_levels_sorted[segment_position + 1]
+                if segment_position + 1 < len(read_levels_sorted)
+                else highest_level + 1
             )
+            segment_levels = [
+                level_index
+                for level_index in build_levels
+                if read_level <= level_index < next_read_level
+            ]
+            source_group = self._pyramid.get(read_level)
+            for planes, paths in self._split_planes_paths(
+                source_group.focal_planes_by_optical_path
+            ):
+                level_writers.extend(
+                    self._build_bucket_chain(
+                        segment_levels=segment_levels,
+                        read_level=read_level,
+                        source_group=source_group,
+                        planes=planes,
+                        paths=paths,
+                        included_levels=included_levels,
+                        read_levels=read_levels,
+                        encoder=encoder,
+                        transcode=transcode,
+                        encoder_pool=encoder_pool,
+                        tile_cache=tile_cache,
+                        token=token,
+                    )
+                )
 
         return level_writers
+
+    def _build_bucket_chain(
+        self,
+        *,
+        segment_levels: Sequence[int],
+        read_level: int,
+        source_group: Level,
+        planes: Sequence[float],
+        paths: Sequence[str],
+        included_levels: Sequence[int],
+        read_levels: set[int],
+        encoder: Encoder,
+        transcode: bool,
+        encoder_pool: EncoderPool,
+        tile_cache: TileCache,
+        token: CancellationToken,
+    ) -> list[PyramidLevelWriter]:
+        """Build the cascade chain for one instance-split bucket of one segment.
+
+        Walks the segment's levels from highest to lowest: each generated level
+        creates an accumulator chained to the one above, the source (read) level
+        at the bottom gets a tile reader feeding that chain, and gap-bridging
+        levels get an intermediate accumulator with no writer.
+
+        Parameters
+        ----------
+        segment_levels: Sequence[int]
+            Build levels of this segment (the read level and the generated levels
+            derived from it), ascending.
+        read_level: int
+            The segment's source level, read from the source and downsampled from.
+        source_group: Level
+            The group of `read_level`, supplying tiles, tiled size, and the base
+            dataset for each instance.
+        planes: Sequence[float]
+            Focal planes of this bucket.
+        paths: Sequence[str]
+            Optical paths of this bucket.
+        included_levels: Sequence[int]
+            Levels an instance is written for; others only bridge the cascade.
+        read_levels: set[int]
+            All levels read from the source, used to detect chain starts.
+        encoder: Encoder
+            Encoder for transcoding, when `transcode`.
+        transcode: bool
+            Whether tiles are transcoded.
+        encoder_pool: EncoderPool
+            Shared pool the accumulators and readers submit encode work to.
+        tile_cache: TileCache
+            Shared tile cache for the written levels.
+        token: CancellationToken
+            Shared cancellation token.
+
+        Returns
+        -------
+        list[PyramidLevelWriter]
+            Writers for this bucket's written levels, lowest level first.
+        """
+        next_accumulator: PyramidTileAccumulator | None = None
+        bucket_writers: dict[int, PyramidLevelWriter] = {}
+        # Accumulators for the levels that are written, and for the levels that
+        # only bridge a gap in the cascade to reach them.
+        writing_accumulators: dict[int, WritingPyramidTileAccumulator] = {}
+        intermediate_accumulators: dict[int, PyramidTileAccumulator] = {}
+        # Written generated levels, as (level_index, dataset, tiled_size). The
+        # writers are built after the loop, once every accumulator below them
+        # exists.
+        generated: list[tuple[int, WsiDataset, Size]] = []
+        for level_index in reversed(segment_levels):
+            in_source = level_index == read_level
+            is_written = level_index in included_levels
+            scale = 1 if in_source else int(2 ** (level_index - read_level))
+
+            if not is_written:
+                # Bridges a gap in the cascade; no instance is written for it, so
+                # it needs neither a dataset nor an output queue. It is wired up
+                # below.
+                intermediate = PyramidTileAccumulator(
+                    level_index=level_index,
+                    input_tiled_size=source_group.tiled_size.ceil_div(
+                        max(scale // 2, 1)
+                    ),
+                    encoder_pool_queue=encoder_pool.queue,
+                    next_accumulator=next_accumulator,
+                    is_chain_start=level_index - 1 in read_levels,
+                    queue_maxsize=self._queue_maxsize,
+                    token=token,
+                )
+                intermediate_accumulators[level_index] = intermediate
+                next_accumulator = intermediate
+                continue
+
+            tiled_size = source_group.tiled_size.ceil_div(scale)
+            base_instance = source_group.instance_at(paths[0], planes[0])
+            base_dataset = self._build_base_dataset(
+                base_instance, ImageType.VOLUME, level_index
+            )
+            dataset = base_dataset.as_tiled_full(
+                planes,
+                paths,
+                source_group.tiled_size,
+                scale,
+            )
+            transcoder = encoder if transcode else None
+            if transcoder is not None:
+                dataset.update_for_transcoding(transcoder, scale)
+
+            if in_source:
+                # Source level: create tile reader, referencing next accumulator
+                # for cascading if present
+                tile_reader: TileReader
+                if transcode and next_accumulator is not None:
+                    tile_reader = CascadingTranscodeTileReader(
+                        level_index,
+                        encoder_pool.queue,
+                        next_accumulator,
+                        token,
+                    )
+                elif transcode:
+                    tile_reader = TranscodeTileReader(
+                        level_index,
+                        encoder_pool.queue,
+                        token,
+                    )
+                elif next_accumulator is not None:
+                    tile_reader = CascadingPassthroughTileReader(
+                        level_index,
+                        next_accumulator,
+                        token,
+                    )
+                else:
+                    tile_reader = PassthroughTileReader(level_index, token)
+                bucket_writers[level_index] = SourcePyramidLevelWriter(
+                    level_index=level_index,
+                    dataset=dataset,
+                    tile_cache=tile_cache,
+                    source_group=source_group,
+                    tiled_size=tiled_size,
+                    tile_reader=tile_reader,
+                    queue_maxsize=self._queue_maxsize,
+                    chunk_size=self._chunk_size,
+                    focal_planes=planes,
+                    optical_paths=paths,
+                    token=token,
+                )
+                next_accumulator = None
+            else:
+                # Generated level: create the accumulator, chaining it to the
+                # previously-created one (the level above in the pyramid). The
+                # input tiled size is that of the level below (scale / 2). The
+                # writer is built after the loop, once the accumulators for any
+                # intermediate levels below it exist.
+                accumulator = WritingPyramidTileAccumulator(
+                    level_index=level_index,
+                    input_tiled_size=source_group.tiled_size.ceil_div(
+                        max(scale // 2, 1)
+                    ),
+                    encoder_pool_queue=encoder_pool.queue,
+                    next_accumulator=next_accumulator,
+                    is_chain_start=level_index - 1 in read_levels,
+                    queue_maxsize=self._queue_maxsize,
+                    token=token,
+                )
+                writing_accumulators[level_index] = accumulator
+                generated.append((level_index, dataset, tiled_size))
+                next_accumulator = accumulator
+
+        for generated_level, generated_dataset, generated_tiled_size in generated:
+            bucket_writers[generated_level] = GeneratedPyramidLevelWriter(
+                level_index=generated_level,
+                dataset=generated_dataset,
+                tile_cache=tile_cache,
+                focal_planes=planes,
+                optical_paths=paths,
+                tiled_size=generated_tiled_size,
+                accumulator=writing_accumulators[generated_level],
+                token=token,
+                intermediate_accumulators=[
+                    intermediate_accumulators[level]
+                    for level in self._intermediate_levels_of(
+                        generated_level, intermediate_accumulators
+                    )
+                ],
+            )
+
+        return [bucket_writers[level_index] for level_index in sorted(bucket_writers)]
 
     @staticmethod
     def _source_level_of(

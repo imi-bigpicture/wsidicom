@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Writing an optical path whose embedded ICC profile is not DICOM-conformant (per PS3.3 C.11.15.1.1) now logs a warning; the profile is still written unchanged.
+- `WsiDicom.save` now supports pyramids whose levels have differing focal planes or optical paths (e.g. fewer focal planes on downsampled levels), previously rejected with `NotImplementedError`. Each level's instances take the focal planes and optical paths of the source level they are read from or downsampled from, so no uniform-membership across levels is required.
 
 ### Fixed
 

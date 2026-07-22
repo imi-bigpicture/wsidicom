@@ -349,13 +349,20 @@ class TestInstanceSplitIntegration:
             }
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
-    def test_non_uniform_pyramid_levels_are_rejected(
+    def test_non_uniform_pyramid_levels_keep_their_own_planes(
         self,
         non_uniform_pyramid: Pyramid,
         write_pyramid: Callable[..., list[UPath]],
+        tmp_path: Path,
     ):
         # Arrange
 
-        # Act & Assert
-        with pytest.raises(NotImplementedError, match="non-uniform levels"):
-            write_pyramid(non_uniform_pyramid)
+        # Act — a pyramid whose levels disagree on focal planes is written with
+        # each level taking its own planes (no uniform-membership requirement).
+        write_pyramid(non_uniform_pyramid)
+
+        # Assert — reopens as one pyramid whose levels retain their own planes.
+        with WsiDicom.open(tmp_path) as saved_wsi:
+            pyramid = saved_wsi.pyramids[0]
+            assert sorted(pyramid[0].focal_planes) == [0.0, 1.0]
+            assert sorted(pyramid[1].focal_planes) == [0.0]
