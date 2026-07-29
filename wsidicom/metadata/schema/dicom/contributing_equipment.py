@@ -34,6 +34,9 @@ class ContributingEquipmentDicomSchema(DicomSchema[ContributingEquipment]):
     manufacturer = StringDicomField(
         VR.LO, data_key="Manufacturer", allow_none=True, load_default=None
     )
+    institution_name = StringDicomField(
+        VR.LO, data_key="InstitutionName", allow_none=True, load_default=None
+    )
     model_name = StringDicomField(
         VR.LO, data_key="ManufacturerModelName", allow_none=True, load_default=None
     )
