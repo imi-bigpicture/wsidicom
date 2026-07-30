@@ -37,6 +37,8 @@ class ContributingEquipment:
         `ContributingEquipmentPurposeCode("Processing Equipment")`.
     manufacturer : str | None = None
         The equipment manufacturer.
+    institution_name : str | None = None
+        The institution name of manufacturer.
     model_name : str | None = None
         The equipment model name.
     software_versions : Sequence[str] | None = None
@@ -49,6 +51,7 @@ class ContributingEquipment:
 
     purpose: ContributingEquipmentPurposeCode
     manufacturer: str | None = None
+    institution_name: str | None = None
     model_name: str | None = None
     software_versions: Sequence[str] | None = None
     description: str | None = None

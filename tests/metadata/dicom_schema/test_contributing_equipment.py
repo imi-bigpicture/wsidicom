@@ -30,6 +30,7 @@ def equipment() -> ContributingEquipment:
     return ContributingEquipment(
         purpose=ContributingEquipmentPurposeCode("Modifying Equipment"),
         manufacturer="wsidicom",
+        institution_name="Sectra AB",
         model_name="wsidicomizer",
         software_versions=["1.2.3"],
         description="Converted to DICOM WSI by wsidicomizer",
@@ -51,6 +52,7 @@ class TestContributingEquipmentDicomSchema:
         assert purpose.CodeValue == "109103"
         assert purpose.CodingSchemeDesignator == "DCM"
         assert serialized.Manufacturer == "wsidicom"
+        assert serialized.InstitutionName == "Sectra AB"
         assert serialized.ManufacturerModelName == "wsidicomizer"
         assert serialized.SoftwareVersions == "1.2.3"
         assert serialized.ContributionDescription == (

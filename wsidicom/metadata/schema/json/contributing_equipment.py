@@ -25,6 +25,7 @@ from wsidicom.metadata.schema.json.fields import JsonFieldFactory
 class ContributingEquipmentJsonSchema(LoadingSchema[ContributingEquipment]):
     purpose = JsonFieldFactory.concept_code(ContributingEquipmentPurposeCode)()
     manufacturer = fields.String(allow_none=True)
+    institution_name = fields.String(allow_none=True)
     model_name = fields.String(allow_none=True)
     software_versions = fields.List(fields.String(), allow_none=True)
     description = fields.String(allow_none=True)
