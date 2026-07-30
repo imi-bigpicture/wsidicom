@@ -14,6 +14,7 @@
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PIL.Image import Image
@@ -423,16 +424,21 @@ class WsiInstance:
 
     @classmethod
     def create_label(
-        cls, image: Image | str | Path | UPath, base_dataset: Dataset
+        cls,
+        image: Image | str | Path | UPath,
+        base_dataset: Dataset,
+        file_options: dict[str, Any] | None = None,
     ) -> "WsiInstance":
         """Create a label WsiInstance.
 
         Parameters
         ----------
         image: Image | str | Path | UPath
-            Image or path to image.
+            Image, or path to an image file.
         base_dataset: Dataset
             Base dataset to include.
+        file_options: dict[str, Any] | None = None
+            Keyword arguments for opening the filesystem the image file is on.
 
         Returns
         -------
@@ -442,7 +448,7 @@ class WsiInstance:
         if isinstance(image, Image):
             image_data = NumpyImageData.from_image(image)
         else:
-            image_data = NumpyImageData.from_file(image)
+            image_data = NumpyImageData.from_file(image, file_options)
         instance_dataset = WsiDataset.create_instance_dataset(
             base_dataset, ImageType.LABEL, image_data
         )

@@ -28,7 +28,7 @@ from copy import deepcopy
 from functools import cached_property
 from pathlib import Path
 from threading import Thread
-from typing import Any, BinaryIO
+from typing import BinaryIO
 
 from pydicom.uid import UID
 from upath import UPath
@@ -86,7 +86,6 @@ class PartFactory:
         base_dataset: WsiDataset,
         uid_generator: UidGenerator,
         output_path: UPath,
-        file_options: dict[str, Any] | None,
         transfer_syntax: UID,
         offset_table: OffsetTableType,
         instance_counter: Iterator[int],
@@ -103,8 +102,6 @@ class PartFactory:
             ConcatenationUID / source UID.
         output_path: UPath
             Directory the part files are written to.
-        file_options: dict[str, Any] | None
-            Options forwarded to file operations (e.g. fsspec credentials).
         transfer_syntax: UID
             Transfer syntax of the written instances.
         offset_table: OffsetTableType
@@ -118,7 +115,6 @@ class PartFactory:
         self._base_dataset = base_dataset
         self._uid_generator = uid_generator
         self._output_path = output_path
-        self._file_options = file_options
         self._transfer_syntax = transfer_syntax
         self._offset_table = offset_table
         self._instance_counter = instance_counter
@@ -169,7 +165,6 @@ class PartFactory:
             self._output_path.joinpath(str(dataset.SOPInstanceUID) + ".dcm"),
             self._transfer_syntax,
             self._offset_table,
-            self._file_options,
             dataset,
         )
         return writer, dataset
@@ -528,12 +523,11 @@ class BaseFileWriter(metaclass=ABCMeta):
 
     def __init__(
         self,
-        output_path: str | Path | UPath,
+        output_path: UPath,
         uid_generator: UidGenerator,
         transcoder: Encoder | None,
         force_transcoding: bool,
         offset_table: OffsetTableType | None,
-        file_options: dict[str, Any] | None,
         instance_number_start: int,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
@@ -553,8 +547,6 @@ class BaseFileWriter(metaclass=ABCMeta):
             If True, transcode even if transfer syntax matches.
         offset_table: Optional[OffsetTableType]
             Offset table type to use. If None, determined automatically.
-        file_options: Optional[Dict[str, Any]]
-            Keyword arguments for file operations.
         instance_number_start: int
             Starting instance number for output files.
         metadata: WsiMetadata | None = None
@@ -573,12 +565,11 @@ class BaseFileWriter(metaclass=ABCMeta):
             Controls how optical paths and focal planes are split across output
             instances. See `InstanceSplit`.
         """
-        self._output_path = UPath(output_path)
+        self._output_path = output_path
         self._uid_generator = uid_generator
         self._transcoder = transcoder
         self._force_transcoding = force_transcoding
         self._offset_table = offset_table
-        self._file_options = file_options
         self._instance_number = instance_number_start
         self._metadata = metadata
         self._replace_metadata = replace_metadata
@@ -760,7 +751,7 @@ class PyramidFileWriter(BaseFileWriter):
     def __init__(
         self,
         pyramid: Pyramid,
-        output_path: str | Path | UPath,
+        output_path: UPath,
         uid_generator: UidGenerator,
         max_threads: int = 16,
         offset_table: OffsetTableType | None = None,
@@ -769,7 +760,6 @@ class PyramidFileWriter(BaseFileWriter):
         include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = True,
         regenerate_pyramid: bool = False,
-        file_options: dict[str, Any] | None = None,
         instance_number_start: int = 1,
         queue_maxsize: int = 100,
         memory_budget_bytes: int | None = None,
@@ -809,8 +799,6 @@ class PyramidFileWriter(BaseFileWriter):
             of being read from the source's stored pyramid. Orthogonal to
             `add_missing_levels`, which independently controls whether the
             output extends up to the single tile level.
-        file_options: Optional[Dict[str, Any]]
-            Keyword arguments for file operations.
         instance_number_start: int
             Starting instance number for output files.
         queue_maxsize: int
@@ -848,7 +836,6 @@ class PyramidFileWriter(BaseFileWriter):
             transcoder=transcoder,
             force_transcoding=force_transcoding,
             offset_table=offset_table,
-            file_options=file_options,
             instance_number_start=instance_number_start,
             metadata=metadata,
             replace_metadata=replace_metadata,
@@ -1414,7 +1401,6 @@ class PyramidFileWriter(BaseFileWriter):
             base_dataset,
             self._uid_generator,
             self._output_path,
-            self._file_options,
             transfer_syntax,
             offset_table,
             instance_counter,
@@ -1567,12 +1553,11 @@ class GroupFileWriter(BaseFileWriter):
     def __init__(
         self,
         group: Label | Level | Overview | Thumbnail,
-        output_path: str | Path | UPath,
+        output_path: UPath,
         uid_generator: UidGenerator,
         transcoder: Encoder | None,
         force_transcoding: bool,
         offset_table: OffsetTableType | None = None,
-        file_options: dict[str, Any] | None = None,
         instance_number_start: int = 1,
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
@@ -1594,8 +1579,6 @@ class GroupFileWriter(BaseFileWriter):
             If True, transcode even if transfer syntax matches.
         offset_table: Optional[OffsetTableType]
             Offset table type to use. If None, determined automatically.
-        file_options: Optional[Dict[str, Any]]
-            Keyword arguments for file operations.
         instance_number_start: int
             Starting instance number for output files.
         metadata: WsiMetadata | None = None
@@ -1614,7 +1597,6 @@ class GroupFileWriter(BaseFileWriter):
             transcoder=transcoder,
             force_transcoding=force_transcoding,
             offset_table=offset_table,
-            file_options=file_options,
             instance_number_start=instance_number_start,
             metadata=metadata,
             replace_metadata=replace_metadata,
@@ -1677,7 +1659,6 @@ class GroupFileWriter(BaseFileWriter):
                     filepath,
                     transfer_syntax,
                     offset_table,
-                    self._file_options,
                     dataset,
                 ) as file_writer:
                     instance_writer.write(file_writer)

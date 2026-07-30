@@ -20,14 +20,15 @@ from typing import (
     Any,
     BinaryIO,
     Literal,
+    cast,
 )
 
-from fsspec.core import url_to_fs
-from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
+from fsspec.spec import AbstractFileSystem
 from pydicom.uid import UID
 from upath import UPath
 
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.paths import as_upath
 
 
 class WsiDicomStreamOpener:
@@ -40,7 +41,7 @@ class WsiDicomStreamOpener:
         Parameters
         ----------
         file_options: dict[str, Any] | None = None
-            Keyword arguments for opening filesystems and files.
+            Keyword arguments for opening filesystems.
         """
 
         self._file_options = file_options or {}
@@ -69,17 +70,9 @@ class WsiDicomStreamOpener:
         if isinstance(files, (str, Path, UPath)):
             files = [files]
         for file in files:
-            for stream in self._open_streams(file, "rb"):
+            for stream, filepath in self._open_streams(file, "rb"):
                 try:
-                    stream_path = getattr(stream, "path", None)
-                    if stream_path is None:
-                        # Every stream fsspec opens is file-backed; skip anything
-                        # that can't name a path so WsiDicomIO always has one.
-                        stream.close()
-                        continue
-                    dicom_io = WsiDicomIO(
-                        stream, filepath=UPath(stream_path), owned=True
-                    )
+                    dicom_io = WsiDicomIO(stream, filepath=filepath)
                     if dicom_io.is_dicom and (
                         sop_class_uids is None
                         or dicom_io.media_storage_sop_class_uid in sop_class_uids
@@ -112,18 +105,16 @@ class WsiDicomStreamOpener:
         WsiDicomIO
             Opened WsiDicomIO instance.
         """
-        fs, path = self._open_filesystem(str(path))
-        fs.makedirs(UPath(path).parent, exist_ok=True)
-        stream = self._open_stream(fs, path, mode)
-        return WsiDicomIO(
-            stream, transfer_syntax=transfer_syntax, filepath=UPath(path), owned=True
-        )
+        fs, fs_path, filepath = self._resolve(path)
+        fs.makedirs(filepath.parent.path, exist_ok=True)
+        stream = self._open_stream(fs, fs_path, mode)
+        return WsiDicomIO(stream, transfer_syntax=transfer_syntax, filepath=filepath)
 
     def _open_streams(
         self,
         path: str | Path | UPath,
         mode: Literal["rb"] | Literal["r+b"] | Literal["w+b"],
-    ) -> Iterator[BinaryIO | AbstractBufferedFile]:
+    ) -> Iterator[tuple[BinaryIO, UPath]]:
         """Open streams from path. If path is a directory, open all files in directory.
 
         Parameters
@@ -135,48 +126,51 @@ class WsiDicomStreamOpener:
 
         Returns
         -------
-        Iterator[BinaryIO | AbstractBufferedFile]
-            Opened streams.
+        Iterator[tuple[BinaryIO, UPath]]
+            Opened streams, each with the path it was opened from.
         """
-        if isinstance(path, UPath):
-            fs, path = path.fs, path.path
+        fs, fs_path, filepath = self._resolve(path)
+        if fs.isdir(fs_path):
+            files = filepath.iterdir()
+        elif fs.isfile(fs_path):
+            files = iter((filepath,))
         else:
-            fs, path = self._open_filesystem(str(path))
-        if fs.isdir(str(path)):
-            files = (file for file in fs.ls(str(path), detail=False) if fs.isfile(file))
-        elif fs.isfile(str(path)):
-            files = [str(path)]
-        else:
-            files = (
-                file
-                for file in fs.glob(str(path))
-                if isinstance(file, str) and fs.isfile(file)
-            )
+            # Neither a directory nor a file, so match it as a glob pattern,
+            # from the root of the filesystem it is on.
+            root = filepath.parents[-1]
+            files = root.glob(str(filepath.relative_to(root)).replace("\\", "/"))
         for file in files:
-            yield self._open_stream(fs, file, mode)
+            if file.is_file():
+                yield self._open_stream(fs, file.path, mode), file
 
-    def _open_filesystem(self, path: str) -> tuple[AbstractFileSystem, str]:
-        """Open fsspec filesystem from path.
+    def _resolve(
+        self, path: str | Path | UPath
+    ) -> tuple[AbstractFileSystem, str, UPath]:
+        """Resolve path into the filesystem to use, the path within that
+        filesystem, and the path as an `UPath`.
+
+        The path within the filesystem has the protocol stripped, as the
+        filesystem holds it instead, and is only usable together with it.
 
         Parameters
         ----------
-        path: str
-            Path to open.
+        path: str | Path | UPath
+            Path to resolve.
 
         Returns
         -------
-        tuple[AbstractFileSystem, str]
-            Opened filesystem and path.
+        tuple[AbstractFileSystem, str, UPath]
+            Filesystem, path within the filesystem, and path as an `UPath`.
         """
-        fs, path = url_to_fs(path, **self._file_options or {})
-        return fs, path  # type: ignore
+        filepath = as_upath(path, self._file_options)
+        return filepath.fs, filepath.path, filepath
 
     def _open_stream(
         self,
         fs: AbstractFileSystem,
         path: str,
         mode: Literal["rb"] | Literal["r+b"] | Literal["w+b"],
-    ) -> AbstractBufferedFile:
+    ) -> BinaryIO:
         """Open stream from path.
 
         Parameters
@@ -190,7 +184,9 @@ class WsiDicomStreamOpener:
 
         Returns
         -------
-        AbstractBufferedFile
-            Opened stream.
+        BinaryIO
+            Opened stream. The type of file object differs by filesystem, e.g.
+            `LocalFileOpener` for local files and `AbstractBufferedFile` for
+            those read in blocks over a network.
         """
-        return fs.open(path, mode, **self._file_options or {})  # type: ignore
+        return cast(BinaryIO, fs.open(path, mode))

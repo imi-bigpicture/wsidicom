@@ -229,7 +229,7 @@ def write_pyramid(
     ) -> list[UPath]:
         writer = PyramidFileWriter(
             pyramid=pyramid,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=1,
             offset_table=OffsetTableType.BASIC,

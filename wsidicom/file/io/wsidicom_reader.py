@@ -194,6 +194,6 @@ class WsiDicomReader:
                 self._stream, self._pixel_data_position, self.frame_count
             )
 
-    def close(self, force: bool | None = False) -> None:
+    def close(self) -> None:
         """Close stream."""
-        self._stream.close(force)
+        self._stream.close()

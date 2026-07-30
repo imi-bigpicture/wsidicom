@@ -13,10 +13,14 @@
 #    limitations under the License.
 
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
+from upath import UPath
 
+from wsidicom.file import WsiDicomFileTarget
 from wsidicom.file.file_writer import PyramidFileWriter
+from wsidicom.metadata.uid_generator import CallableUidGenerator
 
 
 @pytest.mark.unittest
@@ -113,3 +117,57 @@ class TestWsiDicomFileTarget:
 
         # Assert
         assert selected == expected
+
+
+@pytest.mark.unittest
+class TestWsiDicomFileTargetOutputPath:
+    def test_output_path_is_created(self, tmp_path: Path) -> None:
+        # Arrange
+        output_path = UPath(tmp_path).joinpath("wsi")
+
+        # Act
+        target = WsiDicomFileTarget(output_path, CallableUidGenerator(), 1, None, None)
+
+        # Assert
+        assert output_path.is_dir()
+        target.close()
+
+    def test_output_path_with_missing_parents_is_created(self, tmp_path: Path) -> None:
+        # Arrange
+        output_path = UPath(tmp_path).joinpath("a", "b", "wsi")
+
+        # Act
+        target = WsiDicomFileTarget(output_path, CallableUidGenerator(), 1, None, None)
+
+        # Assert
+        assert output_path.is_dir()
+        target.close()
+
+    def test_empty_output_path_is_accepted(self, tmp_path: Path) -> None:
+        # Arrange
+
+        # Act
+        target = WsiDicomFileTarget(
+            UPath(tmp_path), CallableUidGenerator(), 1, None, None
+        )
+
+        # Assert
+        assert target.filepaths == []
+        target.close()
+
+    def test_output_path_with_files_raises(self, tmp_path: Path) -> None:
+        # Arrange
+        tmp_path.joinpath("existing.dcm").touch()
+
+        # Act & Assert
+        with pytest.raises(ValueError):
+            WsiDicomFileTarget(UPath(tmp_path), CallableUidGenerator(), 1, None, None)
+
+    def test_output_path_that_is_a_file_raises(self, tmp_path: Path) -> None:
+        # Arrange
+        file = tmp_path.joinpath("file.dcm")
+        file.touch()
+
+        # Act & Assert
+        with pytest.raises(ValueError):
+            WsiDicomFileTarget(UPath(file), CallableUidGenerator(), 1, None, None)

@@ -24,11 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Writing an optical path whose embedded ICC profile is not DICOM-conformant (per PS3.3 C.11.15.1.1) now logs a warning; the profile is still written unchanged.
+- `WsiDicom.save` refuses an output path that holds files already, or that is not a folder, instead of writing the instances alongside whatever is there. An empty folder is accepted and one that does not exist is created, as before.
 - `WsiDicom.save` now supports pyramids whose levels have differing focal planes or optical paths (e.g. fewer focal planes on downsampled levels), previously rejected with `NotImplementedError`. Each level's instances take the focal planes and optical paths of the source level they are read from or downsampled from, so no uniform-membership across levels is required.
 
 ### Fixed
 
-- `WsiDicom.save` now always returns absolute paths for local output, even when given a relative `output_path`.
+- Paths on an fsspec filesystem lost their protocol: `WsiDicom.save` returned the written instances as local paths and created the output folder under the current drive instead of at the given path, and `WsiDicom.files` named local files that do not exist. Local paths are now also made absolute, when reading as well as when writing.
+- `file_options` were passed on to the opening of each file as well as to the filesystem, where fsspec forwards unknown keyword arguments to the backend. On S3 they became request parameters, so the documented `file_options={"s3": {"anon": True}}` failed on the first request. They now configure the filesystem only.
+- `file_options` were not applied to the paths returned by `WsiDicom.save`, so they could not be opened as returned, nor to a label given to it as a path. A path given as a `UPath` is now written to with its own filesystem configuration, as it was already read with.
+- Writing an instance to an fsspec output path failed when its basic offset table overflowed and it was rewritten with an extended offset table.
 - The default sRGB ICC profile inserted into generated DICOM now declares the DICOM-required Input Device class (`scnr`) instead of the Display class (`mntr`) that lcms produces, per PS3.3 C.11.15.1.1. Only the class signature changes; the colorimetry is unchanged.
 
 ## [0.34.0] - 2026-07-17

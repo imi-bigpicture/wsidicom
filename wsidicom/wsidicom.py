@@ -148,7 +148,7 @@ class WsiDicom:
     @classmethod
     def open_dicomdir(
         cls,
-        path: UPath,
+        path: str | Path | UPath,
         file_options: dict[str, Any] | None = None,
         read_executor: Executor | None = None,
         *,
@@ -158,7 +158,7 @@ class WsiDicom:
 
         Parameters
         ----------
-        path: UPath
+        path: str | Path | UPath
             Path to DICOMDIR file or directory with a DICOMDIR file. Path can be local
             or an URL supported by fsspec.
         file_options: dict[str, Any] | None = None
@@ -368,13 +368,11 @@ class WsiDicom:
             uid_generator = CallableUidGenerator()
         elif not isinstance(uid_generator, UidGenerator):
             uid_generator = CallableUidGenerator(uid_generator)
-        output_path = self._normalize_path(output_path)
         if include_labels:
             if label is not None:
                 label_instances = [
                     WsiInstance.create_label(
-                        label,
-                        self._source.base_dataset,
+                        label, self._source.base_dataset, file_options
                     )
                 ]
                 labels = Labels.open(label_instances)
@@ -408,18 +406,6 @@ class WsiDicom:
         ):
             target.save(self.pyramids, labels, overviews, include_thumbnails)
             return target.filepaths
-
-    @staticmethod
-    def _normalize_path(path: str | Path | UPath) -> Path | UPath:
-        """Normalize local paths (including `file://` and `local://` URIs) to
-        absolute; preserve remote fsspec paths."""
-        if isinstance(path, str):
-            path = UPath(path)
-        if isinstance(path, Path) or (
-            isinstance(path, UPath) and path.protocol in ("", "file", "local")
-        ):
-            return path.resolve()
-        return path
 
     @classmethod
     def is_ready_for_viewing(

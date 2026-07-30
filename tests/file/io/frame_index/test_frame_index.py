@@ -24,6 +24,7 @@ from pydicom.uid import (
     ImplicitVRLittleEndian,
     JPEGBaseline8Bit,
 )
+from upath import UPath
 
 from wsidicom.file.io.frame_index.basic import BasicOffsetTableFrameIndexParser
 from wsidicom.file.io.frame_index.extended import ExtendedOffsetFrameIndexParser
@@ -46,9 +47,9 @@ def transfer_syntax():
 
 
 @pytest.fixture
-def buffer(transfer_syntax: UID):
+def buffer(transfer_syntax: UID, placeholder_path: UPath):
     with WsiDicomIO(
-        BytesIO(), filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+        BytesIO(), filepath=placeholder_path, transfer_syntax=transfer_syntax
     ) as buffer:
         yield buffer
 

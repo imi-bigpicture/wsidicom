@@ -59,11 +59,13 @@ class WsiDicomUidDuplicateError(Exception):
 class WsiDicomNotFoundError(Exception):
     """Raised if requested item is not found"""
 
-    def __init__(self, item: str, not_found_in: str):
+    def __init__(self, item: str, not_found_in: str | None = None):
         self.item = item
         self.not_found_in = not_found_in
 
     def __str__(self):
+        if self.not_found_in is None:
+            return f"{self.item} not found"
         return f"{self.item} not found in {self.not_found_in}"
 
 

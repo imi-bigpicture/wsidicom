@@ -14,6 +14,7 @@
 
 from functools import cached_property
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PIL import Image as Pillow
@@ -29,6 +30,7 @@ from wsidicom.geometry import (
 )
 from wsidicom.instance.image_data import ImageData
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
+from wsidicom.paths import as_upath
 
 
 class NumpyImageData(ImageData):
@@ -54,9 +56,15 @@ class NumpyImageData(ImageData):
         return cls(np.asarray(image.convert("RGB")))
 
     @classmethod
-    def from_file(cls, file: str | Path | UPath) -> "NumpyImageData":
-        """Create from an image file, decoding it with Pillow."""
-        image = Pillow.open(UPath(file).open("rb"))  # type: ignore
+    def from_file(
+        cls, file: str | Path | UPath, file_options: dict[str, Any] | None = None
+    ) -> "NumpyImageData":
+        """Create from an image file, decoding it with Pillow.
+
+        `file_options` are used to open the filesystem the file is on, unless it
+        is given as an `UPath`, which carries its own configuration.
+        """
+        image = Pillow.open(as_upath(file, file_options).open("rb"))
         return cls.from_image(image)
 
     @property

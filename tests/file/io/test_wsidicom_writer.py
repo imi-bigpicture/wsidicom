@@ -32,6 +32,7 @@ from pydicom.uid import (
     VLWholeSlideMicroscopyImageStorage,
     generate_uid,
 )
+from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.file.io import (
@@ -65,7 +66,6 @@ class WsiDicomTestReader(WsiDicomReader):
         self._stream = stream
         self._frame_count = frame_count
         self._pixel_data_position = 0
-        self._owned = True
         self._transfer_syntax_uid = transfer_syntax
         dataset = Dataset()
         dataset.BitsAllocated = (bits // 8) * 8
@@ -97,8 +97,7 @@ class WsiDicomTestReader(WsiDicomReader):
         stream = WsiDicomIO(
             open(filepath, "rb"),
             transfer_syntax=transfer_syntax,
-            filepath=filepath,
-            owned=True,
+            filepath=UPath(filepath),
         )
         return cls(
             stream, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
@@ -250,7 +249,7 @@ class TestWsiDicomWriter:
 
         # Act
         with WsiDicomWriter.open(
-            filepath, transfer_syntax, written_table_type
+            UPath(filepath), transfer_syntax, written_table_type
         ) as writer:
             pixels_start, offset_writer = (
                 writer._pixel_data_writer.write_pixel_data_start(wsi_dataset)
@@ -314,7 +313,7 @@ class TestWsiDicomWriter:
 
         # Act
         with WsiDicomWriter.open(
-            filepath, transfer_syntax, OffsetTableType.NONE
+            UPath(filepath), transfer_syntax, OffsetTableType.NONE
         ) as writer:
             writer.start_pixel_data(wsi_dataset)
             for frame in frames:
@@ -341,7 +340,7 @@ class TestWsiDicomWriter:
 
         # Act
         with WsiDicomWriter.open(
-            filepath, JPEGBaseline8Bit, OffsetTableType.BASIC
+            UPath(filepath), JPEGBaseline8Bit, OffsetTableType.BASIC
         ) as writer:
             pixel_data_writer = writer._pixel_data_writer
             assert isinstance(pixel_data_writer, EncapsulatedPixelDataWriter)
@@ -351,9 +350,8 @@ class TestWsiDicomWriter:
         # Assert
         with WsiDicomIO(
             open(filepath, "rb"),
-            filepath=filepath,
+            filepath=UPath(filepath),
             transfer_syntax=JPEGBaseline8Bit,
-            owned=True,
         ) as read_file:
             tag = read_file.read_tag()
             assert tag == SequenceDelimiterTag
@@ -373,16 +371,15 @@ class TestWsiDicomWriter:
 
         # Act
         with WsiDicomWriter.open(
-            filepath, transfer_syntax, OffsetTableType.EMPTY
+            UPath(filepath), transfer_syntax, OffsetTableType.EMPTY
         ) as writer:
             for frame in frames:
                 writer.write_tiles([frame])
 
         with WsiDicomIO(
             open(filepath, "rb"),
-            filepath=filepath,
+            filepath=UPath(filepath),
             transfer_syntax=JPEGBaseline8Bit,
-            owned=True,
         ) as read_file:
             for position in writer.frame_positions:
                 read_file.seek(position)
@@ -415,7 +412,7 @@ class TestWsiDicomWriter:
         wsi_dataset = WsiDataset(dataset)
 
         # Act
-        writer = WsiDicomWriter.open(filepath, transfer_syntax, table_type)
+        writer = WsiDicomWriter.open(UPath(filepath), transfer_syntax, table_type)
         try:
             wsi_dataset.SOPInstanceUID = uid
             wsi_dataset.InstanceNumber = 0
@@ -432,9 +429,8 @@ class TestWsiDicomWriter:
         with WsiDicomReader(
             WsiDicomIO(
                 open(filepath, "rb"),
-                filepath=filepath,
+                filepath=UPath(filepath),
                 transfer_syntax=transfer_syntax,
-                owned=True,
             )
         ) as read_file:
             for index, frame in enumerate(frames):

@@ -14,14 +14,16 @@
 
 from pathlib import Path
 
+import fsspec
 import pytest
 from upath import UPath
 
 from wsidicom import WsiDicom
+from wsidicom.paths import as_local_path, as_upath
 
 
 @pytest.mark.unittest
-class TestWsiDicomNormalizeOutputPath:
+class TestAsPath:
     @pytest.mark.parametrize(
         "path, expected",
         [
@@ -39,11 +41,11 @@ class TestWsiDicomNormalizeOutputPath:
             (UPath("./relative-output"), UPath.cwd().joinpath("relative-output")),
         ],
     )
-    def test_normalize_resolves_relative_local_path(
+    def test_as_path_resolves_relative_local_path(
         self, path: str | Path | UPath, expected: Path | UPath
     ) -> None:
         # Act
-        normalized = WsiDicom._normalize_path(path)
+        normalized = as_upath(path)
 
         # Assert
         assert normalized == expected
@@ -69,35 +71,34 @@ class TestWsiDicomNormalizeOutputPath:
             UPath(Path.cwd().anchor).joinpath("out"),
         ],
     )
-    def test_normalize_returns_absolute_local_path_unchanged(
+    def test_as_path_returns_absolute_local_path_unchanged(
         self, path: str | Path | UPath
     ) -> None:
         # Arrange
         expected = UPath(path) if isinstance(path, str) else path
 
         # Act
-        normalized = WsiDicom._normalize_path(path)
+        normalized = as_upath(path)
 
         # Assert
         assert normalized == expected
         assert normalized.is_absolute()
 
     @pytest.mark.parametrize(
-        "path, expected_normalized_to_upath",
+        "path",
         [
-            ("relative-output", True),  # str normalizes to UPath
-            (UPath("relative-output"), True),  # UPath stays UPath
-            (Path("relative-output"), False),  # plain Path stays plain Path
+            "relative-output",
+            UPath("relative-output"),
+            Path("relative-output"),
+            "s3://bucket/out",
         ],
     )
-    def test_normalize_preserves_path_type(
-        self, path: str | Path | UPath, expected_normalized_to_upath: bool
-    ) -> None:
+    def test_as_path_returns_upath(self, path: str | Path | UPath) -> None:
         # Act
-        normalized = WsiDicom._normalize_path(path)
+        normalized = as_upath(path)
 
         # Assert
-        assert isinstance(normalized, UPath) == expected_normalized_to_upath
+        assert isinstance(normalized, UPath)
 
     @pytest.mark.parametrize(
         "path",
@@ -112,13 +113,54 @@ class TestWsiDicomNormalizeOutputPath:
             UPath("zip::s3://bucket/archive.zip"),
         ],
     )
-    def test_normalize_remote_path(self, path: str | Path | UPath) -> None:
+    def test_as_path_remote_path(self, path: str | Path | UPath) -> None:
         # Arrange
         expected = UPath(path) if isinstance(path, str) else path
 
         # Act
-        normalized = WsiDicom._normalize_path(path)
+        normalized = as_upath(path)
 
         # Assert
         assert isinstance(normalized, UPath)
         assert normalized == expected
+
+
+class TestWsiDicomFsspecRoundtrip:
+    def test_save_and_open_over_fsspec(self, wsi: WsiDicom) -> None:
+        # Arrange
+        output_path = "memory://test-roundtrip/wsi"
+
+        # Act
+        created_files = wsi.save(output_path)
+
+        # Assert
+        with WsiDicom.open(output_path) as opened:
+            read_size = opened.pyramids[0].base_level.size.to_tuple()
+            assert opened.read_region((0, 0), 0, read_size).size == read_size
+            opened_files = opened.files
+            assert opened_files is not None
+            assert {str(file) for file in opened_files} == {
+                str(file) for file in created_files
+            }
+        assert all(str(file).startswith(output_path) for file in created_files)
+
+
+@pytest.mark.unittest
+class TestAsLocalPath:
+    def test_path_on_other_filesystem_has_no_local_path(self) -> None:
+        # Arrange
+        filesystem = fsspec.filesystem("memory")
+        filesystem.pipe("/test-local/slide.bin", b"slide")
+
+        # Act
+        local_path = as_local_path("memory://test-local/slide.bin")
+
+        # Assert
+        assert local_path is None
+
+    def test_cached_path_has_no_local_path(self) -> None:
+        # Act
+        local_path = as_local_path("simplecache::memory://test-local/slide.bin")
+
+        # Assert
+        assert local_path is None

@@ -38,6 +38,7 @@ from wsidicom.options import (
     ConcatenationByFrames,
     InstanceSplit,
 )
+from wsidicom.paths import as_upath
 from wsidicom.series import Labels, Overviews, Pyramids
 from wsidicom.target import Target
 
@@ -116,10 +117,11 @@ class WsiDicomFileTarget(Target):
             If set, split each pyramid level into concatenated instances by frame
             count (`ConcatenationByFrames`) or byte size (`ConcatenationByBytes`).
         """
-        self._output_path = UPath(output_path)
+        self._output_path = self._prepare_output_path(
+            as_upath(output_path, file_options)
+        )
         self._offset_table = offset_table
         self._filepaths: list[UPath] = []
-        self._file_options = file_options
         self._chunk_size = chunk_size
         self._metadata = metadata
         self._replace_metadata = replace_metadata
@@ -140,6 +142,32 @@ class WsiDicomFileTarget(Target):
     def filepaths(self) -> list[UPath]:
         """Return filepaths for created files."""
         return self._filepaths
+
+    @staticmethod
+    def _prepare_output_path(output_path: UPath) -> UPath:
+        """Return output path, created if it does not exist.
+
+        The instances of a wsi belong together in a folder of their own, so a
+        folder that holds files already is refused. It is checked by listing the
+        folder rather than by `mkdir()` raising, as `mkdir()` on a key prefix
+        does nothing on filesystems without directories (object stores).
+
+        Missing parents are created, as they are for the files written into the
+        folder.
+        """
+        if output_path.exists():
+            if not output_path.is_dir():
+                raise ValueError(f"Output path {output_path} is not a folder")
+            if any(output_path.iterdir()):
+                raise ValueError(f"Output path {output_path} is not empty")
+            return output_path
+        try:
+            output_path.mkdir(parents=True)
+        except FileExistsError:
+            # Created by someone else since the check above, so what it holds is
+            # not known.
+            raise ValueError(f"Output path {output_path} already exists") from None
+        return output_path
 
     def save(
         self,
@@ -196,7 +224,6 @@ class WsiDicomFileTarget(Target):
                 include_levels=self._include_levels,
                 add_missing_levels=self._add_missing_levels,
                 regenerate_pyramid=self._regenerate_pyramid,
-                file_options=self._file_options,
                 instance_number_start=self._instance_number,
                 chunk_size=self._chunk_size,
                 metadata=self._metadata,
@@ -227,7 +254,6 @@ class WsiDicomFileTarget(Target):
             transcoder=self._transcoder,
             force_transcoding=self._force_transcoding,
             offset_table=self._offset_table,
-            file_options=self._file_options,
             instance_number_start=self._instance_number,
             metadata=self._metadata,
             replace_metadata=self._replace_metadata,

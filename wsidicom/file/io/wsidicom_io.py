@@ -18,11 +18,9 @@ import struct
 from collections.abc import Callable
 from datetime import datetime
 from functools import cached_property
-from pathlib import Path
 from struct import pack
-from typing import Any, BinaryIO, cast
+from typing import Any, BinaryIO
 
-from fsspec.spec import AbstractBufferedFile
 from pydicom.dataelem import RawDataElement, convert_raw_data_element
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.errors import InvalidDicomError
@@ -48,10 +46,9 @@ class WsiDicomIO:
 
     def __init__(
         self,
-        stream: BinaryIO | AbstractBufferedFile,
-        filepath: str | Path | UPath,
+        stream: BinaryIO,
+        filepath: UPath,
         transfer_syntax: UID | None = None,
-        owned: bool = False,
     ):
         """
         Create a WsiDicomIO.
@@ -60,18 +57,15 @@ class WsiDicomIO:
         ----------
         stream: BinaryIO
             Stream to use.
-        filepath: str | Path | UPath
+        filepath: UPath
             Filepath the stream is backed by. Every stream wsidicom opens is
             backed by a re-openable file, so this is required.
         transfer_syntax: UID | None = None
             Transfer syntax of the stream. If None, read from the file meta.
-        owned: bool = False
-            If the stream should be closed by this instance.
         """
-        self._stream = cast(BinaryIO, stream)
+        self._stream = stream
         self._stream.seek(0)
-        self._filepath = UPath(filepath)
-        self._owned = owned
+        self._filepath = filepath
         self._dicom_io = DicomIO(self._stream)
         if transfer_syntax is None:
             transfer_syntax = UID(self.file_meta_info.TransferSyntaxUID)
@@ -87,11 +81,6 @@ class WsiDicomIO:
 
     def __str__(self) -> str:
         return f"{type(self).__name__}({self._filepath})"
-
-    @property
-    def owned(self) -> bool:
-        """Return True if the stream is owned by this instance."""
-        return self._owned
 
     @property
     def closed(self) -> bool:
@@ -353,10 +342,9 @@ class WsiDicomIO:
         )
         write_dataset(self._dicom_io, dataset)
 
-    def close(self, force: bool | None = False) -> None:
-        """Close stream if owned by instance or forced."""
-        if self._owned or force:
-            self._stream.close()
+    def close(self) -> None:
+        """Close stream."""
+        self._stream.close()
 
     def update_dataset(self, dataset_start: int, update: dict[BaseTag, Any]):
         """Update dataset in place.

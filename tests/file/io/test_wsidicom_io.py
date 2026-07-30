@@ -43,6 +43,7 @@ from pydicom.uid import (
     VLWholeSlideMicroscopyImageStorage,
     generate_uid,
 )
+from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
@@ -112,40 +113,40 @@ class TestWsiDicomIO:
             ExplicitVRLittleEndian,
         ],
     )
-    @pytest.mark.parametrize("owned", [True, False])
-    def test_init(self, buffer: BinaryIO, transfer_syntax: UID, owned: bool):
+    def test_init(
+        self,
+        buffer: BinaryIO,
+        transfer_syntax: UID,
+        placeholder_path: UPath,
+    ):
         # Arrange
 
         # Act
         io = WsiDicomIO(
             buffer,
-            filepath="placeholder.dcm",
+            filepath=placeholder_path,
             transfer_syntax=transfer_syntax,
-            owned=owned,
         )
 
         # Assert
-        assert io.owned == owned
         assert str(io.filepath) == "placeholder.dcm"
         assert io.is_little_endian == transfer_syntax.is_little_endian
         assert io.is_implicit_VR == transfer_syntax.is_implicit_VR
         io.close()
 
-    @pytest.mark.parametrize("owned", [True, False])
-    def test_close(self, buffer: BinaryIO, owned: bool):
+    def test_close(self, buffer: BinaryIO, placeholder_path: UPath):
         # Arrange
         io = WsiDicomIO(
             buffer,
-            filepath="placeholder.dcm",
+            filepath=placeholder_path,
             transfer_syntax=JPEGBaseline8Bit,
-            owned=owned,
         )
 
         # Act
         io.close()
 
         # Assert
-        assert io.closed == owned
+        assert io.closed
 
     @pytest.mark.parametrize(
         "transfer_syntax",
@@ -157,10 +158,13 @@ class TestWsiDicomIO:
         ],
     )
     def test_read_media_storage_sop_class_uid(
-        self, buffer_with_file_meta: BinaryIO, file_meta_dataset: FileMetaDataset
+        self,
+        buffer_with_file_meta: BinaryIO,
+        file_meta_dataset: FileMetaDataset,
+        placeholder_path: UPath,
     ):
         # Arrange
-        io = WsiDicomIO(buffer_with_file_meta, filepath="placeholder.dcm")
+        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
 
         # Act
         uid = io.media_storage_sop_class_uid
@@ -179,10 +183,13 @@ class TestWsiDicomIO:
         ],
     )
     def test_read_file_meta_info(
-        self, buffer_with_file_meta: BinaryIO, file_meta_dataset: FileMetaDataset
+        self,
+        buffer_with_file_meta: BinaryIO,
+        file_meta_dataset: FileMetaDataset,
+        placeholder_path: UPath,
     ):
         # Arrange
-        io = WsiDicomIO(buffer_with_file_meta, filepath="placeholder.dcm")
+        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
 
         # Act
         meta_info = io.file_meta_info
@@ -204,6 +211,7 @@ class TestWsiDicomIO:
         self,
         buffer_with_file_meta: BinaryIO,
         transfer_syntax: UID,
+        placeholder_path: UPath,
     ):
         # Arrange
         dataset = Dataset()
@@ -214,7 +222,7 @@ class TestWsiDicomIO:
             little_endian=transfer_syntax.is_little_endian,
             implicit_vr=transfer_syntax.is_implicit_VR,
         )
-        io = WsiDicomIO(buffer_with_file_meta, filepath="placeholder.dcm")
+        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
 
         # Act
         read_dataset = io.read_dataset()
@@ -236,7 +244,12 @@ class TestWsiDicomIO:
         ],
     )
     def test_read_tag_length(
-        self, buffer: BinaryIO, little_endian: bool, long: bool, length: int
+        self,
+        buffer: BinaryIO,
+        little_endian: bool,
+        long: bool,
+        length: int,
+        placeholder_path: UPath,
     ):
         # Arrange
         format = "<" if little_endian else ">"
@@ -250,7 +263,7 @@ class TestWsiDicomIO:
         else:
             transfer_syntax = ExplicitVRBigEndian
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+            buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
         pre_position = io.tell()
         expected_read_length = 4 if long else 2
@@ -265,7 +278,9 @@ class TestWsiDicomIO:
         io.close()
 
     @pytest.mark.parametrize("is_implicit_VR", [True, False])
-    def test_read_tag_vr(self, buffer: BinaryIO, is_implicit_VR: bool):
+    def test_read_tag_vr(
+        self, buffer: BinaryIO, is_implicit_VR: bool, placeholder_path: UPath
+    ):
         # Arrange
         vr = bytes("OB", "iso8859")
         buffer.write(vr)
@@ -275,7 +290,7 @@ class TestWsiDicomIO:
         else:
             transfer_syntax = ExplicitVRLittleEndian
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+            buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
         pre_position = io.tell()
 
@@ -312,6 +327,7 @@ class TestWsiDicomIO:
         vr: str | None,
         length: int,
         transfer_syntax: UID,
+        placeholder_path: UPath,
     ):
         # Arrange
         format = "<" if transfer_syntax.is_little_endian else ">"
@@ -322,7 +338,7 @@ class TestWsiDicomIO:
             buffer.write(bytes([0, 0]))
         buffer.write(struct.pack(format + "L", length))
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+            buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
         # Act & Assert
@@ -359,6 +375,7 @@ class TestWsiDicomIO:
         expected_vr: str | None,
         expected_length: int,
         transfer_syntax: UID,
+        placeholder_path: UPath,
     ):
         # Arrange
         format = "<" if transfer_syntax.is_little_endian else ">"
@@ -369,7 +386,7 @@ class TestWsiDicomIO:
             buffer.write(bytes([0, 0]))
         buffer.write(struct.pack(format + "L", length))
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+            buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
         # Act & Assert
@@ -379,23 +396,25 @@ class TestWsiDicomIO:
             )
         io.close()
 
-    def test_read_sequence_delimiter(self, buffer: BinaryIO):
+    def test_read_sequence_delimiter(self, buffer: BinaryIO, placeholder_path: UPath):
         # Arrange
         buffer.write(struct.pack("<H", SequenceDelimiterTag.group))
         buffer.write(struct.pack("<H", SequenceDelimiterTag.element))
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=JPEGBaseline8Bit
+            buffer, filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit
         )
 
         # Act & Assert
         io.read_sequence_delimiter()
 
-    def test_read_sequence_delimiter_raises(self, buffer: BinaryIO):
+    def test_read_sequence_delimiter_raises(
+        self, buffer: BinaryIO, placeholder_path: UPath
+    ):
         # Arrange
         buffer.write(struct.pack("<H", ItemTag.group))
         buffer.write(struct.pack("<H", ItemTag.element))
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=JPEGBaseline8Bit
+            buffer, filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit
         )
 
         # Act & Assert
@@ -406,7 +425,11 @@ class TestWsiDicomIO:
     @pytest.mark.parametrize("little_endian", [True, False])
     @pytest.mark.parametrize("value", [0, 1, 2**64 - 1])
     def test_write_unsigned_long_long(
-        self, buffer: BinaryIO, little_endian: bool, value: int
+        self,
+        buffer: BinaryIO,
+        little_endian: bool,
+        value: int,
+        placeholder_path: UPath,
     ):
         # Arrange
         format = "<Q" if little_endian else ">Q"
@@ -416,7 +439,7 @@ class TestWsiDicomIO:
         else:
             transfer_syntax = ExplicitVRBigEndian
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+            buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
         # Act
@@ -444,12 +467,13 @@ class TestWsiDicomIO:
         vr: str,
         length: int,
         transfer_syntax: UID,
+        placeholder_path: UPath,
     ):
         # Arrange
         format = "<" if transfer_syntax.is_little_endian else ">"
 
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+            buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
         # Act
@@ -478,10 +502,12 @@ class TestWsiDicomIO:
             ImplicitVRLittleEndian,
         ],
     )
-    def test_write_preamble(self, buffer: BinaryIO, transfer_syntax: UID):
+    def test_write_preamble(
+        self, buffer: BinaryIO, transfer_syntax: UID, placeholder_path: UPath
+    ):
         # Arrange
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+            buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
         # Act
@@ -510,12 +536,14 @@ class TestWsiDicomIO:
             RLELossless,
         ],
     )
-    def test_write_meta(self, buffer: BinaryIO, transfer_syntax: UID):
+    def test_write_meta(
+        self, buffer: BinaryIO, transfer_syntax: UID, placeholder_path: UPath
+    ):
         # Arrange
         instance_uid = generate_uid()
         class_uid = VLWholeSlideMicroscopyImageStorage
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=transfer_syntax
+            buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
         # Act
@@ -543,10 +571,11 @@ class TestWsiDicomIO:
         buffer: BinaryIO,
         original_values: list[str],
         update_values: str | list[str],
+        placeholder_path: UPath,
     ):
         # Arrange
         io = WsiDicomIO(
-            buffer, filepath="placeholder.dcm", transfer_syntax=JPEGBaseline8Bit
+            buffer, filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit
         )
         dataset = Dataset()
         dataset.add(DataElement(LossyImageCompressionRatioTag, "DS", original_values))

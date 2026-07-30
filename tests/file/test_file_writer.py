@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 from decoy import Decoy, matchers
 from PIL import ImageChops, ImageFilter, ImageStat
+from upath import UPath
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
@@ -48,12 +49,11 @@ class SplitOnlyWriter(BaseFileWriter):
 
     def __init__(self, instance_split: InstanceSplit):
         super().__init__(
-            output_path=".",
+            output_path=UPath("."),
             uid_generator=None,  # type: ignore[arg-type]
             transcoder=None,
             force_transcoding=False,
             offset_table=None,
-            file_options=None,
             instance_number_start=0,
             instance_split=instance_split,
         )
@@ -230,7 +230,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -259,7 +259,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -299,7 +299,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=sparse,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -333,7 +333,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -370,7 +370,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -424,7 +424,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -453,7 +453,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -490,7 +490,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -520,7 +520,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,
@@ -594,7 +594,7 @@ class TestPyramidFileWriterFailFast:
 
         writer = PyramidFileWriter(
             pyramid=pyramid,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             transcoder=failing_encoder,
@@ -668,7 +668,7 @@ class TestPyramidFileWriterFailFast:
 
         writer = PyramidFileWriter(
             pyramid=pyramid,
-            output_path=tmp_path,
+            output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
             offset_table=OffsetTableType.BASIC,

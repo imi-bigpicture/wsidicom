@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import pytest
+from upath import UPath
 
 from wsidicom.instance.dataset import WsiDataset
 
@@ -25,3 +26,9 @@ def minimal_dataset() -> WsiDataset:
     dataset.StudyInstanceUID = "1.2.3"
     dataset.SeriesInstanceUID = "1.2.3"
     return dataset
+
+
+@pytest.fixture
+def placeholder_path() -> UPath:
+    """Return a path for a stream that is not backed by a file."""
+    return UPath("placeholder.dcm")

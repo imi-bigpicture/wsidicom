@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 from pydicom import Dataset, dcmread
 from pydicom.dataset import FileMetaDataset
+from upath import UPath
 
 from tests.data_gen import (
     TESTFRAME,
@@ -78,7 +79,7 @@ def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath(file_setting["name"])
         create_layer_file(path, dataset, meta_dataset)
-        reader = WsiDicomReader(WsiDicomIO(open(path, "rb"), filepath=path, owned=True))
+        reader = WsiDicomReader(WsiDicomIO(open(path, "rb"), filepath=UPath(path)))
         yield reader
         reader.close()
 

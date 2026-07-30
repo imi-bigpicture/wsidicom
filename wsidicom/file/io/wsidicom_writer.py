@@ -16,10 +16,6 @@
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Sequence
 from datetime import datetime
-from pathlib import Path
-from typing import (
-    Any,
-)
 
 from pydicom.encaps import itemize_frame
 from pydicom.tag import ItemTag, SequenceDelimiterTag
@@ -95,12 +91,10 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
         file: WsiDicomIO,
         offset_table: OffsetTableType,
         transfer_syntax: UID,
-        file_options: dict[str, Any] | None = None,
     ) -> None:
         self._file = file
         self._offset_table = offset_table
         self._transfer_syntax = transfer_syntax
-        self._file_options = file_options
 
     def write_pixel_data_start(
         self, dataset: WsiDataset
@@ -190,7 +184,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
         """Rewrite pixel data section with EOT on BOT overflow."""
         file_path = self._file.filepath
         temp_file_path = file_path.with_suffix(".tmp")
-        opener = WsiDicomStreamOpener(self._file_options)
+        opener = WsiDicomStreamOpener()
         temp_stream = opener.open_for_writing(
             temp_file_path, "w+b", self._transfer_syntax
         )
@@ -198,7 +192,6 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
             temp_stream,
             OffsetTableType.EXTENDED,
             self._transfer_syntax,
-            self._file_options,
         )
 
         # Copy dataset
@@ -234,7 +227,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 
         # Replace original with temp
         self._file.close()
-        temp_file_path.replace(file_path)
+        file_path.fs.mv(temp_file_path.path, file_path.path)
         self._file = next(opener.open([file_path]))
 
     @staticmethod
@@ -379,8 +372,8 @@ class WsiDicomWriter:
         )
         self.close()
 
-    def close(self, force: bool | None = False) -> None:
-        self._file.close(force)
+    def close(self) -> None:
+        self._file.close()
 
     def __enter__(self):
         return self
@@ -391,16 +384,15 @@ class WsiDicomWriter:
     @classmethod
     def open(
         cls,
-        file: str | Path | UPath,
+        file: UPath,
         transfer_syntax: UID,
         offset_table: OffsetTableType,
-        file_options: dict[str, Any] | None = None,
     ) -> "WsiDicomWriter":
         """Open file and create a WsiDicomWriter with the right pixel data writer."""
-        stream = cls._open_stream(file, transfer_syntax, file_options)
+        stream = cls._open_stream(file, transfer_syntax)
         if transfer_syntax.is_encapsulated:
             pixel_writer: PixelDataWriter = EncapsulatedPixelDataWriter(
-                stream, offset_table, transfer_syntax, file_options
+                stream, offset_table, transfer_syntax
             )
         else:
             pixel_writer = NativePixelDataWriter(stream)
@@ -409,17 +401,16 @@ class WsiDicomWriter:
     @classmethod
     def open_instance(
         cls,
-        file: str | Path | UPath,
+        file: UPath,
         transfer_syntax: UID,
         offset_table: OffsetTableType,
-        file_options: dict[str, Any] | None,
         dataset: WsiDataset,
     ) -> "WsiDicomWriter":
         """Open a writer and write the dataset header and pixel-data preamble.
 
         `dataset.SOPInstanceUID` and `InstanceNumber` must already be set.
         """
-        writer = cls.open(file, transfer_syntax, offset_table, file_options)
+        writer = cls.open(file, transfer_syntax, offset_table)
         try:
             writer.write_header(dataset)
             writer.start_pixel_data(dataset)
@@ -430,11 +421,8 @@ class WsiDicomWriter:
 
     @staticmethod
     def _open_stream(
-        file: str | Path | UPath,
+        file: UPath,
         transfer_syntax: UID,
-        file_options: dict[str, Any] | None = None,
     ) -> WsiDicomIO:
         """Open file for writing."""
-        return WsiDicomStreamOpener(file_options).open_for_writing(
-            file, "w+b", transfer_syntax
-        )
+        return WsiDicomStreamOpener().open_for_writing(file, "w+b", transfer_syntax)

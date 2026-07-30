@@ -28,12 +28,12 @@ from pydicom.uid import (
     generate_uid,
 )
 
+from wsidicom.file import WsiDicomStreamOpener
 from wsidicom.file.io import OffsetTableType, WsiDicomIO
 from wsidicom.file.io.wsidicom_writer import (
     EncapsulatedPixelDataWriter,
     NativePixelDataWriter,
 )
-from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size
 from wsidicom.instance.dataset import WsiDataset
 

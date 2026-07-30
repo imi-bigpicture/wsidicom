@@ -81,8 +81,7 @@ class WsiDicomFileSource(Source):
                             self._thumbnails.append(reader)
                     except WsiDicomNotSupportedError:
                         logging.info(f"Non-supported file {stream}.")
-                        if stream.owned:
-                            stream.close()
+                        stream.close()
                 elif (
                     stream.media_storage_sop_class_uid
                     == MicroscopyBulkSimpleAnnotationsStorage
@@ -94,7 +93,7 @@ class WsiDicomFileSource(Source):
                 )
                 stream.close()
         if len(self._levels) == 0:
-            raise WsiDicomNotFoundError("Level files", "provided files")
+            raise WsiDicomNotFoundError("Level files")
         self._base_dataset = self._get_base_dataset(self._levels)
         self._slide_uids = self._base_dataset.uids.slide
         self._base_tile_size = self._base_dataset.tile_size
@@ -191,7 +190,12 @@ class WsiDicomFileSource(Source):
                 MicroscopyBulkSimpleAnnotationsStorage,
             ],
         )
-        return cls(streams)
+        try:
+            return cls(streams)
+        except WsiDicomNotFoundError as exception:
+            if not isinstance(files, (str, Path, UPath)):
+                raise
+            raise WsiDicomNotFoundError(exception.item, str(files)) from None
 
     @classmethod
     def open_dicomdir(
@@ -219,7 +223,10 @@ class WsiDicomFileSource(Source):
             fileset = FileSet(dicomdir)
             files.extend(file.path for file in fileset)
             stream.close()
-        return cls.open(files, file_options=file_options)
+        try:
+            return cls.open(files, file_options=file_options)
+        except WsiDicomNotFoundError as exception:
+            raise WsiDicomNotFoundError(exception.item, str(path)) from None
 
     def close(self) -> None:
         """Close all opened readers in the source. Does not close provided streams."""

@@ -14,11 +14,12 @@
 
 from pathlib import Path
 
+import fsspec
 import pytest
-from pydicom.uid import VLWholeSlideMicroscopyImageStorage
+from pydicom.uid import ExplicitVRLittleEndian, VLWholeSlideMicroscopyImageStorage
 
 from tests.conftest import WsiTestDefinitions
-from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
+from wsidicom.file import WsiDicomStreamOpener
 
 
 class TestWsiDicomStreamOpener:
@@ -56,3 +57,34 @@ class TestWsiDicomStreamOpener:
 
         # Assert
         assert len(streams) == instances_count
+
+    @pytest.mark.parametrize(
+        ["pattern", "expected_count"],
+        [("memory://test-glob/*.dcm", 1), ("memory://test-glob/**/*.dcm", 2)],
+    )
+    def test_open_glob_pattern(self, pattern: str, expected_count: int, wsi_file: Path):
+        # Arrange
+        filesystem = fsspec.filesystem("memory")
+        for path in ("/test-glob/one.dcm", "/test-glob/sub/two.dcm"):
+            filesystem.pipe(path, wsi_file.read_bytes())
+
+        # Act
+        streams = list(WsiDicomStreamOpener().open(pattern))
+        for stream in streams:
+            stream.close()
+
+        # Assert
+        assert len(streams) == expected_count
+
+    def test_open_for_writing_fsspec_path_should_keep_protocol(self):
+        # Arrange
+        path = "memory://test-opener/instance.dcm"
+
+        # Act
+        with WsiDicomStreamOpener().open_for_writing(
+            path, "w+b", ExplicitVRLittleEndian
+        ) as stream:
+            filepath = stream.filepath
+
+        # Assert
+        assert str(filepath) == path
