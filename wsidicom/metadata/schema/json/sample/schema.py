@@ -31,6 +31,7 @@ from wsidicom.conceptcode import (
     SpecimenStainsCode,
 )
 from wsidicom.metadata.sample import (
+    BaseSampling,
     BaseSpecimen,
     Collection,
     Embedding,
@@ -103,7 +104,7 @@ class SamplingConstraintJsonSchema(LoadingSchema[SamplingConstraintJsonModel]):
         return SamplingConstraintJsonModel
 
     @pre_dump
-    def dump_simple(self, sampling: Sampling, **kwargs):
+    def dump_simple(self, sampling: BaseSampling, **kwargs):
         return SamplingConstraintJsonModel.to_json_model(sampling)
 
 

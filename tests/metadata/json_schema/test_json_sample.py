@@ -176,6 +176,32 @@ class TestSampleJsonSchema:
         assert dumped["identifier"] == sampling_constraint.specimen.identifier
         assert dumped["sampling_step_index"] == 0
 
+    def test_sampling_constraint_of_unknown_sampling_serialize(self):
+        # Arrange
+        specimen = Specimen("specimen")
+        sampling_constraint = specimen.sample()
+        assert isinstance(sampling_constraint, UnknownSampling)
+
+        # Act
+        dumped = SamplingConstraintJsonSchema().dump(sampling_constraint)
+
+        # Assert
+        assert isinstance(dumped, dict)
+        assert dumped["identifier"] == specimen.identifier
+        assert dumped["sampling_step_index"] == 0
+
+    def test_slide_sample_of_unknown_sampling_roundtrip(self):
+        # Arrange
+        specimen = Specimen("specimen")
+        slide_sample = SlideSample("slide sample", sampled_from=specimen.sample())
+
+        # Act
+        dumped = BaseSpecimenJsonSchema().dump(slide_sample)
+        loaded = BaseSpecimenJsonSchema().load(dumped)
+
+        # Assert
+        assert str(loaded[0]) == str(slide_sample)
+
     def test_sampling_constraint_deserialize(self):
         # Arrange
         dumped = {"identifier": "specimen", "sampling_step_index": 1}

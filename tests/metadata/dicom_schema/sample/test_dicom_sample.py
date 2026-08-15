@@ -40,6 +40,7 @@ from wsidicom.conceptcode import (
 )
 from wsidicom.config import Settings, use_settings
 from wsidicom.metadata.sample import (
+    BaseSampling,
     Collection,
     Embedding,
     Fixation,
@@ -53,6 +54,7 @@ from wsidicom.metadata.sample import (
     Specimen,
     SpecimenIdentifier,
     Staining,
+    UnknownSampling,
 )
 from wsidicom.metadata.schema.dicom.sample.formatter import SpecimenDicomFormatter
 from wsidicom.metadata.schema.dicom.sample.model import (
@@ -727,3 +729,41 @@ class TestSampleDicom:
             assert len(slide_sample.steps) == 1
             assert isinstance(slide_sample.steps[0], Processing)
             assert slide_sample.steps[0].method == processing_1_method
+
+    def test_parse_specimen_without_type_as_unknown_sampling(self):
+        # Arrange: a specimen without a type, so that the sampling of it into
+        # the block is not written and the block has no stated parent.
+        specimen = Specimen(
+            identifier="specimen",
+            extraction_step=Collection(SpecimenCollectionProcedureCode("Excision")),
+        )
+        block = Sample(
+            identifier="block",
+            sampled_from=[specimen.sample(SpecimenSamplingProcedureCode("Dissection"))],
+            type=AnatomicPathologySpecimenTypesCode("tissue specimen"),
+            steps=[Embedding(SpecimenEmbeddingMediaCode("Paraffin wax"))],
+        )
+        slide_sample = SlideSample(
+            identifier="slide sample",
+            uid=UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
+            sampled_from=block.sample(
+                SpecimenSamplingProcedureCode("Block sectioning")
+            ),
+        )
+        schema = SpecimenDescriptionDicomSchema()
+        description = schema.dump(SpecimenDicomFormatter.to_dicom(slide_sample))
+
+        # Act
+        parsed, _ = SpecimenDicomParser().parse_descriptions([schema.load(description)])
+
+        # Assert: the block is taken to be sampled from the specimen described
+        # before it, as an UnknownSampling since the file does not say so.
+        assert len(parsed) == 1
+        sampled_from = parsed[0].sampled_from
+        assert isinstance(sampled_from, BaseSampling)
+        parsed_block = sampled_from.specimen
+        assert isinstance(parsed_block, Sample)
+        assert parsed_block.identifier == "block"
+        parsed_sampling = parsed_block.sampled_from[0]
+        assert isinstance(parsed_sampling, UnknownSampling)
+        assert parsed_sampling.specimen.identifier == "specimen"

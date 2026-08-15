@@ -64,7 +64,7 @@ class SamplingConstraintJsonModel:
     sampling_step_index: int
 
     @classmethod
-    def to_json_model(cls, sampling: Sampling) -> "SamplingConstraintJsonModel":
+    def to_json_model(cls, sampling: BaseSampling) -> "SamplingConstraintJsonModel":
         """Create json model for sampling."""
         return cls(
             identifier=sampling.specimen.identifier,
@@ -74,7 +74,7 @@ class SamplingConstraintJsonModel:
     def from_json_model(
         self,
         specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen],
-    ) -> Sampling:
+    ) -> BaseSampling:
         """Create sampling from json model.
 
         Parameters
@@ -86,7 +86,7 @@ class SamplingConstraintJsonModel:
 
         Returns
         -------
-        Sampling
+        BaseSampling
             Created sampling.
         """
         specimen = specimens[self.identifier]
@@ -143,7 +143,7 @@ class SamplingJsonModel:
     def _get_sampling_constraints(
         self,
         specimens: UserDict[str | SpecimenIdentifier, BaseSpecimen],
-    ) -> list[Sampling] | None:
+    ) -> list[BaseSampling] | None:
         """
         Get list of constraint sampling this sampling.
 
@@ -156,7 +156,7 @@ class SamplingJsonModel:
 
         Returns
         -------
-        list[Sampling] | None
+        list[BaseSampling] | None
             List of constraint samplings, or None if no constraints.
         """
         if self.sampling_constraints is None:

@@ -474,9 +474,9 @@ class BaseSpecimen(metaclass=ABCMeta):
     container: ContainerTypeCode | None
 
     @property
-    def samplings(self) -> list[Sampling]:
+    def samplings(self) -> list[BaseSampling]:
         """Return list of samplings done on the specimen."""
-        return [step for step in self.steps if isinstance(step, Sampling)]
+        return [step for step in self.steps if isinstance(step, BaseSampling)]
 
     def add(self, step: PreparationStep) -> None:
         """Add a preparation step to the sequence of steps for the specimen."""
@@ -693,10 +693,6 @@ class Sample(SampledSpecimen):
         """Create a sampling from the specimen that can be used to create a new
         sample."""
         self._check_sampling_constraints_in_sampling_tree(sampling_constraints)
-        if sampling_constraints is not None:
-            for sampling_constraint in sampling_constraints:
-                assert isinstance(sampling_constraint, Sampling)
-
         if method is None or self.type is None:
             sampling = UnknownSampling(
                 specimen=self,
