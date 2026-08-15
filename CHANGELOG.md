@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-08-15
+
 ### Added
 
 - Keyword-only `settings` parameter on `WsiDicom.open`, `open_dicomdir` and `open_web`, taking a `Settings` used for that slide instead of the process-wide default.
@@ -35,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `file_options` were not applied to the paths returned by `WsiDicom.save`, so they could not be opened as returned, nor to a label given to it as a path. A path given as a `UPath` is now written to with its own filesystem configuration, as it was already read with.
 - Writing an instance to an fsspec output path failed when its basic offset table overflowed and it was rewritten with an extended offset table.
 - The default sRGB ICC profile inserted into generated DICOM now declares the DICOM-required Input Device class (`scnr`) instead of the Display class (`mntr`) that lcms produces, per PS3.3 C.11.15.1.1. Only the class signature changes; the colorimetry is unchanged.
+- A Specimen Description that does not state where a sample came from was dropped when read, leaving the slide with no samples, and could not be serialized to json. Both come of the sampling such a description parses into, which has no method and was not counted among the samplings done on the specimen.
 
 ## [0.34.0] - 2026-07-17
 
@@ -683,7 +686,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of wsidicom
 
-[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.34.0..HEAD
+[Unreleased]: https://github.com/imi-bigpicture/wsidicom/compare/v0.35.0..HEAD
+[0.35.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.34.0..v0.35.0
 [0.34.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.1..v0.34.0
 [0.33.1]: https://github.com/imi-bigpicture/wsidicom/compare/v0.33.0..v0.33.1
 [0.33.0]: https://github.com/imi-bigpicture/wsidicom/compare/v0.32.1..v0.33.0
