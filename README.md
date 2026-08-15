@@ -83,6 +83,7 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 ```python
 from wsidicom import WsiDicom
+
 slide = WsiDicom.open("path_to_folder")
 ```
 
@@ -184,6 +185,7 @@ Then proceed to call `WsiDicom.open_web()` with this as in the first example.
 
 ```python
 from wsidicom import WsiDicom
+
 with WsiDicom.open("path_to_folder") as slide:
     ...
 ```
@@ -263,9 +265,8 @@ Conversion between OpenSlide `location` and `level` parameters to WsiDicom can b
 ```python
 with WsiDicom.open("path_to_folder") as wsi:
     level = wsi.levels[openslide_level_index]
-    x = openslide_x // 2**(level.level)
-    y = openslide_y // 2**(level.level)
-
+    x = openslide_x // 2 ** (level.level)
+    y = openslide_y // 2 ** (level.level)
 ```
 
 ## Metadata
@@ -449,6 +450,7 @@ Codes that are defined in the 222-draft can be created using the create(source, 
 
 ```python
 from wsidicom import WsiDicom
+
 slide = WsiDicom.open("path_to_folder")
 ```
 
@@ -456,6 +458,7 @@ slide = WsiDicom.open("path_to_folder")
 
 ```python
 from wsidicom import Annotation, Point
+
 point_annotation = Annotation(Point(10.0, 20.0))
 ```
 
@@ -463,6 +466,7 @@ point_annotation = Annotation(Point(10.0, 20.0))
 
 ```python
 from wsidicom import conceptcode, Measurement
+
 # A measurement is defined by a type code ('Area'), a value (25.0) and a unit code ('Pixels).
 area = ConceptCode.MeasurementCode("Area")
 pixels = ConceptCode.UnitCode("Pixels")
@@ -474,13 +478,14 @@ point_annotation_with_measurement = Annotation(Point(10.0, 20.0), [measurement])
 
 ```python
 from wsidicom import PointAnnotationGroup
+
 # The 222 supplement requires groups to have a label, a category and a type
 group = PointAnnotationGroup(
     annotations=[point_annotation, point_annotation_with_measurement],
-    label='group label',
-    category_code=ConceptCode.AnnotationCategoryCode('Tissue'),
-    type_code=ConceptCode.AnnotationTypeCode('Nucleus'),
-    description='description'
+    label="group label",
+    category_code=ConceptCode.AnnotationCategoryCode("Tissue"),
+    type_code=ConceptCode.AnnotationTypeCode("Nucleus"),
+    description="description",
 )
 ```
 
@@ -488,13 +493,14 @@ group = PointAnnotationGroup(
 
 ```python
 from wsidicom import AnnotationInstance
-annotations = AnnotationInstance([group], 'volume', slide.uids)
+
+annotations = AnnotationInstance([group], "volume", slide.uids)
 ```
 
 ***Save the collection to file.***
 
 ```python
-annotations.save('path_to_dicom_dir/annotation.dcm')
+annotations.save("path_to_dicom_dir/annotation.dcm")
 ```
 
 ***Reopen the slide and access the annotation instance.***
@@ -594,7 +600,7 @@ Support for other formats (or methods to access DICOM data) can be implemented b
 The implemented Source can then create a instance from the implemented ImageData (and a method returning a WsiDataset):
 
 ```python
-image_data = MyImageData('path_to_image_file')
+image_data = MyImageData("path_to_image_file")
 dataset = create_dataset_from_image_data(image_data)
 instance = WsiInstance(dataset, image_data)
 ```
