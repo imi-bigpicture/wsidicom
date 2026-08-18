@@ -416,7 +416,7 @@ class TestWsiDicomIntegration:
 
 @pytest.mark.integration
 class TestWsiDicomSave:
-    @pytest.mark.parametrize("wsi_name", ["Histech^Samantha [1229631]"])
+    @pytest.mark.parametrize("wsi_name", ["Hamamatsu-Case-A"])
     @pytest.mark.parametrize("concatenation", [None, ConcatenationByFrames(1)])
     def test_save_with_relative_output_returns_absolute_paths(
         self,

@@ -1,453 +1,4 @@
 {
-    "Histech^Samantha [1229631]": {
-        "path": "WG26Demo2020_PV/Histech^Samantha [1229631]/20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
-        "study_instance_uid": "2.25.292315917905782003007355414279734624434",
-        "series_instance_uid": "2.25.240842844665571684955379851385752717044",
-        "instances": 13,
-        "levels": 10,
-        "label": "991552d66ac9b3a82ce61d4af47824e6",
-        "overview": "06147bec99dc9d6852f281f317fbb96c",
-        "tiled": "full",
-        "level_transfer_syntax": "1.2.840.10008.1.2.4.50",
-        "label_transfer_syntax": "1.2.840.10008.1.2.4.50",
-        "overview_transfer_syntax": "1.2.840.10008.1.2.4.50",
-        "read_region": [
-            {
-                "location": {
-                    "x": 20000,
-                    "y": 15000
-                },
-                "level": 0,
-                "size": {
-                    "width": 200,
-                    "height": 200
-                },
-                "md5": "b075476112b07f2bc4593f2fb27d964b"
-            },
-            {
-                "location": {
-                    "x": 10000,
-                    "y": 7500
-                },
-                "level": 1,
-                "size": {
-                    "width": 200,
-                    "height": 200
-                },
-                "md5": "0c69d7e0484da6cc0a7710614e89dcf8"
-            },
-            {
-                "location": {
-                    "x": 5000,
-                    "y": 3750
-                },
-                "level": 2,
-                "size": {
-                    "width": 200,
-                    "height": 200
-                },
-                "md5": "cb449dcc6cb4d6db6d87ffee5067e461"
-            }
-        ],
-        "read_region_mm": [
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "level": 0,
-                "size": {
-                    "width": 0.05,
-                    "height": 0.05
-                },
-                "md5": "12073aa25f2b25af0efdd358134f9512"
-            },
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "level": 1,
-                "size": {
-                    "width": 0.1,
-                    "height": 0.1
-                },
-                "md5": "ec8d85fd02b04e9390b1a9027ea19235"
-            },
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "level": 2,
-                "size": {
-                    "width": 0.2,
-                    "height": 0.2
-                },
-                "md5": "2abba722f24c556af2ddc2d75c3c283c"
-            },
-            {
-                "location": {
-                    "x": 53.95311,
-                    "y": 30.14541
-                },
-                "level": 0,
-                "size": {
-                    "width": 0.1,
-                    "height": 0.05
-                },
-                "slide_origin": true,
-                "md5": "4bfdb7f5279eed564a21a08592a7e925"
-            },
-            {
-                "location": {
-                    "x": 53.95311,
-                    "y": 30.14541
-                },
-                "level": 2,
-                "size": {
-                    "width": 0.1,
-                    "height": 0.05
-                },
-                "slide_origin": true,
-                "md5": "a6b531e3caa6a06915cbe195396a3013"
-            }
-        ],
-        "read_region_mpp": [
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "mpp": 0.5,
-                "size": {
-                    "width": 0.05,
-                    "height": 0.05
-                },
-                "md5": "93e3262ef920de005a7f6538456d1a62"
-            },
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "mpp": 5,
-                "size": {
-                    "width": 0.5,
-                    "height": 0.5
-                },
-                "md5": "40f703eb10d34feb4add36f8d542e32e"
-            },
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "mpp": 25,
-                "size": {
-                    "width": 2.5,
-                    "height": 2.5
-                },
-                "md5": "9ebfdbe2815c704fde0167f65023ef8a"
-            },
-            {
-                "location": {
-                    "x": 53.95311,
-                    "y": 30.14541
-                },
-                "mpp": 5,
-                "size": {
-                    "width": 0.1,
-                    "height": 0.05
-                },
-                "slide_origin": true,
-                "md5": "4bddd3274c1aa9edc903749745a2f6e0"
-            }
-        ],
-        "read_tile": [
-            {
-                "location": {
-                    "x": 24,
-                    "y": 20
-                },
-                "level": 0,
-                "md5": "69adabc58c45d7e55add875b57282cb3"
-            },
-            {
-                "location": {
-                    "x": 12,
-                    "y": 10
-                },
-                "level": 1,
-                "md5": "a7a7acbafd02a01f7537e47b10e80ca8"
-            },
-            {
-                "location": {
-                    "x": 6,
-                    "y": 5
-                },
-                "level": 2,
-                "md5": "42630d76a37ad600ee960ab0f27ee962"
-            }
-        ],
-        "read_encoded_tile": [
-            {
-                "location": {
-                    "x": 24,
-                    "y": 20
-                },
-                "level": 0,
-                "md5": "c7db48ebb4fc1b0960aa010cc1db08b2"
-            },
-            {
-                "location": {
-                    "x": 12,
-                    "y": 10
-                },
-                "level": 1,
-                "md5": "cb54e189e1a33917afa29a5bce0cbf2a"
-            },
-            {
-                "location": {
-                    "x": 6,
-                    "y": 5
-                },
-                "level": 2,
-                "md5": "15ea2069985506bd2b0bddbbae749df2"
-            }
-        ],
-        "read_thumbnail": [
-            {
-                "size": {
-                    "width": 512,
-                    "height": 512
-                },
-                "md5": "e0727aca5ad2a3dc39d1f525f72df084"
-            }
-        ]
-    },
-    "MoticWangjie^Professer [100001]": {
-        "path": "WG26Demo2019_PV/MoticWangjie^Professer [100001]/20190903 102029 [200001]/Series 000 [SM]",
-        "study_instance_uid": "1.2.276.0.7230010.3.1.2.1145362585.2096.1567753444.779",
-        "series_instance_uid": "1.2.276.0.7230010.3.1.3.1145362585.2096.1567753444.780",
-        "instances": 8,
-        "levels": 8,
-        "label": null,
-        "overview": null,
-        "tiled": "sparse",
-        "level_transfer_syntax": "1.2.840.10008.1.2.4.50",
-        "label_transfer_syntax": "1.2.840.10008.1.2.4.50",
-        "overview_transfer_syntax": "1.2.840.10008.1.2.4.50",
-        "read_region": [
-            {
-                "location": {
-                    "x": 20000,
-                    "y": 15000
-                },
-                "level": 0,
-                "size": {
-                    "width": 200,
-                    "height": 200
-                },
-                "md5": "8caf1eadec44d80b7431af0491b97a55"
-            },
-            {
-                "location": {
-                    "x": 10000,
-                    "y": 7500
-                },
-                "level": 1,
-                "size": {
-                    "width": 200,
-                    "height": 200
-                },
-                "md5": "d3260384a16c2686800198dc6f079f3a"
-            },
-            {
-                "location": {
-                    "x": 5000,
-                    "y": 3750
-                },
-                "level": 2,
-                "size": {
-                    "width": 200,
-                    "height": 200
-                },
-                "md5": "5ca3da6bc91548df419226c7a56db2c9"
-            }
-        ],
-        "read_region_mm": [
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "level": 0,
-                "size": {
-                    "width": 0.05,
-                    "height": 0.05
-                },
-                "md5": "b3d264d3fbd79b771c47d56769cae729"
-            },
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "level": 1,
-                "size": {
-                    "width": 0.1,
-                    "height": 0.1
-                },
-                "md5": "e0a2a1be5414b969a5f30fcee742a5a4"
-            },
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "level": 2,
-                "size": {
-                    "width": 0.2,
-                    "height": 0.2
-                },
-                "md5": "697edbaf32b50b696322fd8bbe040919"
-            }
-        ],
-        "read_region_mpp": [
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "mpp": 0.5,
-                "size": {
-                    "width": 0.1,
-                    "height": 0.1
-                },
-                "md5": "a1eac63bdaeda88c008ece88878b3f81"
-            },
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "mpp": 5,
-                "size": {
-                    "width": 1,
-                    "height": 1
-                },
-                "md5": "29e63bc222d561f4f6e4ae248085bce1"
-            },
-            {
-                "location": {
-                    "x": 4,
-                    "y": 3
-                },
-                "mpp": 25,
-                "size": {
-                    "width": 5,
-                    "height": 5
-                },
-                "md5": "1b335c34c9dcf91955c7413b5cc2a716"
-            }
-        ],
-        "read_tile": [
-            {
-                "location": {
-                    "x": 24,
-                    "y": 20
-                },
-                "level": 0,
-                "md5": "5cc45ec8259561956f34a7a784fcaf2c"
-            },
-            {
-                "location": {
-                    "x": 12,
-                    "y": 10
-                },
-                "level": 1,
-                "md5": "3d243c8b2459cc249f7cb9252695c2e4"
-            },
-            {
-                "location": {
-                    "x": 6,
-                    "y": 5
-                },
-                "level": 2,
-                "md5": "63c9750b5dd05c224ea2b1ddc6273ee9"
-            },
-            {
-                "location": {
-                    "x": 112,
-                    "y": 108
-                },
-                "level": 0,
-                "md5": "ffc08224a94678fdab77ecdcb948becc"
-            },
-            {
-                "location": {
-                    "x": 112,
-                    "y": 108
-                },
-                "level": 0,
-                "md5": "680c5eb5a5acc420ba43d7dbf3e144ce",
-                "crop_to_image_boundary": false
-            }
-        ],
-        "read_encoded_tile": [
-            {
-                "location": {
-                    "x": 24,
-                    "y": 20
-                },
-                "level": 0,
-                "md5": "064d5c4da42f7a6c9f3229c0230ba202"
-            },
-            {
-                "location": {
-                    "x": 12,
-                    "y": 10
-                },
-                "level": 1,
-                "md5": "437ab868ddb69ba40d3c262530cb07df"
-            },
-            {
-                "location": {
-                    "x": 6,
-                    "y": 5
-                },
-                "level": 2,
-                "md5": "665e94c4f47180aacedeeaf5cc7e21bf"
-            },
-            {
-                "location": {
-                    "x": 112,
-                    "y": 108
-                },
-                "level": 0,
-                "md5": "ac3e277d47511436ba8d8dc043f482bc"
-            },
-            {
-                "location": {
-                    "x": 112,
-                    "y": 108
-                },
-                "level": 0,
-                "md5": "7417f856050c820250651e53270d1e92",
-                "crop_to_image_boundary": false
-            }
-        ],
-        "read_thumbnail": [
-            {
-                "size": {
-                    "width": 512,
-                    "height": 512
-                },
-                "md5": "8ff6df7578e4851706498ca8d58edee6"
-            }
-        ]
-    },
     "3DHisthech-1": {
         "path": "3DHISTECH-1",
         "study_instance_uid": "2.25.229657274315044610913259338298080404914",
@@ -781,6 +332,302 @@
                     "height": 512
                 },
                 "md5": "3a4d79e664225e1ea9b80c4e647f6b2c"
+            }
+        ]
+    },
+    "Hamamatsu-2": {
+        "path": "Hamamatsu-2",
+        "study_instance_uid": "1.2.392.200140.2.1.1.1.2.1272481390.15544.1780047767.322",
+        "series_instance_uid": "1.2.392.200140.2.1.1.1.3.1272481390.15544.1780047767.323",
+        "instances": 10,
+        "levels": 8,
+        "label": "151de832643bcdfa708076f4ea26161e",
+        "overview": "e8bea453ca03b0838143d08b8af5292b",
+        "tiled": "full",
+        "level_transfer_syntax": "1.2.840.10008.1.2.4.50",
+        "label_transfer_syntax": "1.2.840.10008.1.2.4.50",
+        "overview_transfer_syntax": "1.2.840.10008.1.2.4.50",
+        "read_region": [
+            {
+                "location": {
+                    "x": 18872,
+                    "y": 20781
+                },
+                "level": 0,
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "3b9d561fb1834a2f93d1cf66484c2585"
+            },
+            {
+                "location": {
+                    "x": 5630,
+                    "y": 5003
+                },
+                "level": 2,
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "3399cc77bfb3c1ba36d9dc48165a8e44"
+            },
+            {
+                "location": {
+                    "x": 1067,
+                    "y": 1186
+                },
+                "level": 4,
+                "size": {
+                    "width": 256,
+                    "height": 256
+                },
+                "md5": "a91883afe8785945989dcd5682dfc026"
+            }
+        ],
+        "read_region_mm": [
+            {
+                "location": {
+                    "x": 4.27362,
+                    "y": 4.71011
+                },
+                "level": 0,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.2
+                },
+                "md5": "95702d0b237302bac7e06c59adea0f81"
+            },
+            {
+                "location": {
+                    "x": 5.28379,
+                    "y": 4.71011
+                },
+                "level": 2,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.2
+                },
+                "md5": "224218f27d5fd5f3fcf3fe257db72273"
+            }
+        ],
+        "read_region_mpp": [
+            {
+                "location": {
+                    "x": 4.27362,
+                    "y": 4.71011
+                },
+                "mpp": 0.5,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.2
+                },
+                "md5": "4b06fd8aa0d8ac4fc99b01e58a4ffd88"
+            },
+            {
+                "location": {
+                    "x": 4.12362,
+                    "y": 4.56011
+                },
+                "mpp": 5,
+                "size": {
+                    "width": 0.5,
+                    "height": 0.5
+                },
+                "md5": "3788fd261ca3dda762fa1c7666a94a6c"
+            }
+        ],
+        "read_tile": [
+            {
+                "location": {
+                    "x": 37,
+                    "y": 41
+                },
+                "level": 0,
+                "md5": "1d2d4c4f2c702280b47c18fe73a35e56"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 5
+                },
+                "level": 3,
+                "md5": "46806d8307a4dc6f70ee2e512b74a17d"
+            }
+        ],
+        "read_encoded_tile": [
+            {
+                "location": {
+                    "x": 37,
+                    "y": 41
+                },
+                "level": 0,
+                "md5": "82cc65767bf7bb88c3c9067ef808a78f"
+            },
+            {
+                "location": {
+                    "x": 4,
+                    "y": 5
+                },
+                "level": 3,
+                "md5": "6828af731fab63d3697eb76b08d2abf4"
+            }
+        ],
+        "read_thumbnail": [
+            {
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "4cd8fa15c0b86ce5cbcf9c510796345f"
+            }
+        ]
+    },
+    "Hamamatsu-Case-A": {
+        "path": "Hamamatsu-Case-A",
+        "study_instance_uid": "2.25.337718186214244581533687743900184835919",
+        "series_instance_uid": "1.2.392.200140.2.1.1.1.3.984002627.21512.1682516380.719",
+        "instances": 7,
+        "levels": 5,
+        "label": "1e8153f1984f5b7ef1c3ec7d355d018b",
+        "overview": "297e76cdbff7363229a345bfd561dec8",
+        "tiled": "full",
+        "level_transfer_syntax": "1.2.840.10008.1.2.4.50",
+        "label_transfer_syntax": "1.2.840.10008.1.2.4.50",
+        "overview_transfer_syntax": "1.2.840.10008.1.2.4.50",
+        "read_region": [
+            {
+                "location": {
+                    "x": 32069,
+                    "y": 65145
+                },
+                "level": 0,
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "c89d4df3c288c9b1a7c9c4042353d831"
+            },
+            {
+                "location": {
+                    "x": 9508,
+                    "y": 16094
+                },
+                "level": 2,
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "285fa264396fe10cea8f716073ab1391"
+            },
+            {
+                "location": {
+                    "x": 1892,
+                    "y": 3959
+                },
+                "level": 4,
+                "size": {
+                    "width": 256,
+                    "height": 256
+                },
+                "md5": "bbd20aa0fb3b6fe3fc6e70c79f973783"
+            }
+        ],
+        "read_region_mm": [
+            {
+                "location": {
+                    "x": 7.33992,
+                    "y": 14.95309
+                },
+                "level": 0,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.2
+                },
+                "md5": "79274a68fa2cb07180a43f9fbca78f5e"
+            },
+            {
+                "location": {
+                    "x": 8.88936,
+                    "y": 14.95309
+                },
+                "level": 2,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.2
+                },
+                "md5": "23b8760f550916dbc9ee23c39667e187"
+            }
+        ],
+        "read_region_mpp": [
+            {
+                "location": {
+                    "x": 7.33992,
+                    "y": 14.95309
+                },
+                "mpp": 0.5,
+                "size": {
+                    "width": 0.2,
+                    "height": 0.2
+                },
+                "md5": "37b99e675a8ceb32ae983d74072dad00"
+            },
+            {
+                "location": {
+                    "x": 7.18992,
+                    "y": 14.80309
+                },
+                "mpp": 5,
+                "size": {
+                    "width": 0.5,
+                    "height": 0.5
+                },
+                "md5": "ff1c66bb22a9a963f67d8776209cf86b"
+            }
+        ],
+        "read_tile": [
+            {
+                "location": {
+                    "x": 31,
+                    "y": 63
+                },
+                "level": 0,
+                "md5": "03f4bc825b31f020ef412707fc963379"
+            },
+            {
+                "location": {
+                    "x": 3,
+                    "y": 7
+                },
+                "level": 3,
+                "md5": "256535765495886df371b087baa4cc65"
+            }
+        ],
+        "read_encoded_tile": [
+            {
+                "location": {
+                    "x": 31,
+                    "y": 63
+                },
+                "level": 0,
+                "md5": "db7a1f461de6e57bc7589f2c35fea443"
+            },
+            {
+                "location": {
+                    "x": 3,
+                    "y": 7
+                },
+                "level": 3,
+                "md5": "fbe11728f848cef9df30ea60926a4f05"
+            }
+        ],
+        "read_thumbnail": [
+            {
+                "size": {
+                    "width": 512,
+                    "height": 512
+                },
+                "md5": "dd4ae76ba70fe70d4db5a1b1cfab0dea"
             }
         ]
     }

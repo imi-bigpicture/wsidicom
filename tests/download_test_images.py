@@ -13,16 +13,15 @@
 #    limitations under the License.
 
 import os
-import re
-from collections.abc import Sequence
 from dataclasses import dataclass
-from ftplib import Error, error_perm
 from hashlib import sha256
 from pathlib import Path
+from urllib.parse import quote
 
-from fsspec import register_implementation
-from fsspec.core import url_to_fs
-from fsspec.implementations.ftp import FTPFileSystem
+import requests
+
+HF_DATASET = "erikgabr/wsi-testdata"
+HF_BASE = f"https://huggingface.co/datasets/{HF_DATASET}/resolve/main"
 
 
 @dataclass
@@ -33,41 +32,8 @@ class TestSlideDefinition:
 
 
 SLIDES: dict[str, TestSlideDefinition] = {
-    "FULL_WITH_BOT": TestSlideDefinition(
-        remote_path="ftp://medical.nema.org/MEDICAL/Dicom/DataSets/WG26/WG26Demo2020_PV/Histech^Samantha [1229631]/20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
-        local_path="WG26Demo2020_PV/Histech^Samantha [1229631]/20190104 140000 [Case S - Colon polyps]/Series 000 [SM]",
-        files={
-            "2.25.173648596820938096199028939965251554503.dcm": "46a8e4d9200dbe6d9033c436021717cd8ecfc98c6adaa9c0af5cf154ae5a7258",
-            "2.25.181487944453580109633363498147571426374.dcm": "6db30229f5457a8b7c5fc894e94f24300c823ca2c2825d7d97bf5384b63608ef",
-            "2.25.191907898033754830752233761154920949936.dcm": "7efcc19596eb280d52ff933caa25503ea60fb6e4bb36d367337e439d092b37e9",
-            "2.25.209236321826383427842899333369775338594.dcm": "4441f3dd8cdcd847870c6a589a1564843a257247ded3c14326751656592efaeb",
-            "2.25.222943316513786317622687980099326639180.dcm": "1db99f47bbee8b6ea444581b529b40148e1d4b03c07cee220e99c82bef1c7055",
-            "2.25.251277550657103455222613143487830679046.dcm": "1e525bd14212490029d4d511ac421fc7cc5788a8c4b76694eca6a889a89ba07f",
-            "2.25.253973508129488054885063915385651983009.dcm": "9e4edefcb74325dee2f0f712eadfb8a66279d408285efbf95e2121fe2505b55e",
-            "2.25.259312801889857550164526960213815274816.dcm": "228779f94e5d9f173334064b6389b54e530f9332b96873415f3a79ece1270aef",
-            "2.25.264278491200307498225194538752823371217.dcm": "125413fbadaac9f171975c09d9f63d07868fd227dba31f5ec5e92e0e6a674b8a",
-            "2.25.290884199110265475119989552423006928136.dcm": "f7df6a4b58e9b5842ce4ab52339f5ba7fddf1ad1536a2fa91ae49f21e10e86fa",
-            "2.25.315427219625170954090644500893748466389.dcm": "4e5be925331d2cce7171a311d84417fad0674d1dc44680524bd35049c8904662",
-            "2.25.339652625381363485545547336547695948130.dcm": "7ba9872adbd32f27839ffa68aac3155451acd6586a6149da119547aa7a797cc3",
-            "2.25.98447601926716844575918590187306802549.dcm": "c8f1d0243e570aac30af3c97066bc488b82bd5e334ebdae3577ea5f8db172498",
-        },
-    ),
-    "SPARSE_NO_BOT": TestSlideDefinition(
-        remote_path="ftp://medical.nema.org/MEDICAL/Dicom/DataSets/WG26/WG26Demo2019_PV/MoticWangjie^Professer [100001]/20190903 102029 [200001]/Series 000 [SM]",
-        local_path="WG26Demo2019_PV/MoticWangjie^Professer [100001]/20190903 102029 [200001]/Series 000 [SM]",
-        files={
-            "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753444.778.dcm": "c702db8afea7a18628f21735f7335a6cf3c4e355f7e4fa28db81b0d205ad2799",
-            "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753447.783.dcm": "ad08c959f1e2a6c84676e832274330d6c3a49ce3a1224765469d1de72496b91c",
-            "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753450.788.dcm": "343df2b55a460debeafc02498df70f206b4f13f1b5eacf3f7f76357cd9a3deeb",
-            "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753451.793.dcm": "27880e6d6cf5e0dc4f3d9d913a5881c4c9f65fa8eadab50c3c81a1575c2d60f6",
-            "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753451.798.dcm": "a1d6e4db64dbfbc1805cd9c1c2660312e3c498d2835a87648c276a67488c83de",
-            "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753451.803.dcm": "944c35ac4ac78ebb6119196ed76a5648e6787df3a613257bebbca318f90dba5a",
-            "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753451.808.dcm": "746e14855490cc5f867e07e83a1b32ed8af61346e853d242f1c015f80e7f7371",
-            "1.2.276.0.7230010.3.1.4.1145362585.2096.1567753451.813.dcm": "1da91803ab1fca3de83a12cc6ccd3d29263d2d1ddbb81c3953b26077e1ab09fc",
-        },
-    ),
     "3DHisthech-1": TestSlideDefinition(
-        remote_path="zip::https://openslide.cs.cmu.edu/download/openslide-testdata/DICOM/3DHISTECH-1.zip",
+        remote_path=f"{HF_BASE}/dicom/3DHISTECH-1",
         local_path="3DHISTECH-1",
         files={
             "000001.dcm": "fc89d375687ae95dd387864d88b139c7364e8589ce972b2f2b39e5c424f39be5",
@@ -87,7 +53,7 @@ SLIDES: dict[str, TestSlideDefinition] = {
         },
     ),
     "CMU-1-JP2K-33005": TestSlideDefinition(
-        remote_path="zip::https://openslide.cs.cmu.edu/download/openslide-testdata/DICOM/CMU-1-JP2K-33005.zip",
+        remote_path=f"{HF_BASE}/dicom/CMU-1-JP2K-33005",
         local_path="CMU-1-JP2K-33005",
         files={
             "DCM_0.dcm": "db096bd0ddbd1d61962c03a8c0de9a1f305dc2f8523a7f48b94f22ff4b641d0a",
@@ -99,7 +65,7 @@ SLIDES: dict[str, TestSlideDefinition] = {
         },
     ),
     "JP2K-33003-1": TestSlideDefinition(
-        remote_path="zip::https://openslide.cs.cmu.edu/download/openslide-testdata/DICOM/JP2K-33003-1.zip",
+        remote_path=f"{HF_BASE}/dicom/JP2K-33003-1",
         local_path="JP2K-33003-1",
         files={
             "DCM_0.dcm": "d33960d767bb6258be0d1d885acceb511818a355ebe4b538098dba79aff722e0",
@@ -111,7 +77,7 @@ SLIDES: dict[str, TestSlideDefinition] = {
         },
     ),
     "Leica-4": TestSlideDefinition(
-        remote_path="zip::https://openslide.cs.cmu.edu/download/openslide-testdata/DICOM/Leica-4.zip",
+        remote_path=f"{HF_BASE}/dicom/Leica-4",
         local_path="Leica-4",
         files={
             "1.3.6.1.4.1.36533.116129230228107214763613716719238114924751.dcm": "8686256901b3403cb185a5c6253e1561b17cf1d13342a6bf8345c412d8c31c30",
@@ -122,106 +88,36 @@ SLIDES: dict[str, TestSlideDefinition] = {
             "1.3.6.1.4.1.36533.2642199142199497125516614013324167247234250.dcm": "25c901e3556d2f78a88127b536ed9e7c8909e8eb6358db0e0891b7fc3ee112d0",
         },
     ),
+    "Hamamatsu-2": TestSlideDefinition(
+        remote_path=f"{HF_BASE}/dicom/Hamamatsu-2",
+        local_path="Hamamatsu-2",
+        files={
+            "A1 - 2026-05-29 10.08.06.1.dcm": "5a883359b4d684f1532ae0ca08357a2b9fcb3fa662b01ea39214a02284520e8b",
+            "A1 - 2026-05-29 10.08.06.2.dcm": "81691b651af3ebc959c3ced10ca6fe197fa08357ceebfbdba4f235b7d63e6f2b",
+            "A1 - 2026-05-29 10.08.06.3.dcm": "b6f28bdfc479511c2f385563c70aeb8252ffd26cded51a7564328d9b7bbaf0d4",
+            "A1 - 2026-05-29 10.08.06.4.dcm": "426c6d34b146db00a06a361ec70c6d75ccfa53457341ba6098f2aa3e61c07f32",
+            "A1 - 2026-05-29 10.08.06.5.dcm": "a4041247948d0ce392ab7092bc18ec6a443888fd68d09ebc1ff7faaab93403fb",
+            "A1 - 2026-05-29 10.08.06.6.dcm": "c8ea3ccb3f089584065a8f8d249bb4ded38ecabaca3fb10c85bdf7ff9dbd6fa6",
+            "A1 - 2026-05-29 10.08.06.7.dcm": "ddfbc65094ca5b73fe6cc6729b47a3dccf7990c6477fcbd442478c971814cc0d",
+            "A1 - 2026-05-29 10.08.06.8.dcm": "b208c94c06beb0b95aa85969260a7d1b5493a949d1f5a5278f930e36bdba1ebc",
+            "A1 - 2026-05-29 10.08.06_label.dcm": "ee484bc5752f64e80912b63c283c8e695f9ec00949c43485cb849a86286504da",
+            "A1 - 2026-05-29 10.08.06_slide.dcm": "9bf5c2d18643c636c9f23e52d2caa5ce04f22bf7e2313b17640fd2f0e83b47de",
+        },
+    ),
+    "Hamamatsu-Case-A": TestSlideDefinition(
+        remote_path=f"{HF_BASE}/dicom/Hamamatsu-Case-A",
+        local_path="Hamamatsu-Case-A",
+        files={
+            "Breast(Cancer)_HE_T-4um_(normal)_40x.1.dcm": "9bc15b0e5c06fd92e249c72b96f6a261dfd05debc78f112f5e99cf87a83b0833",
+            "Breast(Cancer)_HE_T-4um_(normal)_40x.2.dcm": "3059b473d248739369e2c6273ba46215c561d94be9f8db29a720b050a0cd73bd",
+            "Breast(Cancer)_HE_T-4um_(normal)_40x.3.dcm": "ed3bf09845b5929be693e1c01e09c28fe8fce3cb11b3c425c69a0fc4933b0bb0",
+            "Breast(Cancer)_HE_T-4um_(normal)_40x.4.dcm": "4c92adb86e2817d0afe396efe149a4b3839db7e21f1b0201f325f5b532e8433f",
+            "Breast(Cancer)_HE_T-4um_(normal)_40x.5.dcm": "ef8e23b6c245fe740fa0c749ea1e912b9db5077c992055758b7e359f0176e3c1",
+            "Breast(Cancer)_HE_T-4um_(normal)_40x_label.dcm": "1141e9c1694bf604b3dfa6ae99fd2c3fa74f0825e78a2fb8a950fe24d23eb18f",
+            "Breast(Cancer)_HE_T-4um_(normal)_40x_slide.dcm": "99e8dd49d8fd0f27d8c2e5e0005393d4db304bff083628ba8f13e6d491b48f3b",
+        },
+    ),
 }
-
-
-class PatchedFTPFileSystem(FTPFileSystem):
-    """Patched to handle case where `dir` does not return a "ls -l" style response."""
-
-    def ls(self, path, detail=True, **kwargs):
-        path = self._strip_protocol(path)
-        out = []
-        if path not in self.dircache:
-            try:
-                try:
-                    out = [
-                        (fn, details)
-                        for (fn, details) in self.ftp.mlsd(path)
-                        if fn not in [".", ".."]
-                        and details["type"] not in ["pdir", "cdir"]
-                    ]
-                except error_perm:
-                    out = self._mlsd2(path)  # Not platform independent
-                for fn, details in out:
-                    details["name"] = "/".join(
-                        ["" if path == "/" else path, fn.lstrip("/")]
-                    )
-                    if details["type"] == "file":
-                        details["size"] = int(details["size"])  # type: ignore
-                    else:
-                        details["size"] = 0  # type: ignore
-                    if details["type"] == "dir":
-                        details["type"] = "directory"
-                self.dircache[path] = out
-            except Error:
-                try:
-                    info = self.info(path)
-                    if info["type"] == "file":  # type: ignore
-                        out = [(path, info)]
-                except (Error, IndexError) as exc:
-                    raise FileNotFoundError(path) from exc
-        files = self.dircache.get(path, out)
-        if not detail:
-            return sorted([fn for fn, details in files])
-        return [details for fn, details in files]
-
-    def _mlsd2(self, path="."):
-        """
-        Patch of the original _mlsd2 function to be platform to handle case where
-        `dir` does not return a "ls -l" style response.
-        """
-        re_linux = re.compile(r"^[0-9]{2}-[0-9]{2}}-[0-9]{2}$")
-        re_patched = re.compile(
-            r"^([0-9]{2}-[0-9]{2}-[0-9]{2})  ([0-9]{2}:[0-9]{2}[A|P]M) +([0-9]+) (.*)"
-        )
-
-        def parse_linux(split_line: Sequence[str]):
-            this = (
-                split_line[-1],
-                {
-                    "modify": " ".join(split_line[5:8]),
-                    "unix.owner": split_line[2],
-                    "unix.group": split_line[3],
-                    "unix.mode": split_line[0],
-                    "size": split_line[4],
-                },
-            )
-            if this[1]["unix.mode"][0] == "d":
-                this[1]["type"] = "dir"
-            else:
-                this[1]["type"] = "file"
-            return this
-
-        def parse_patched(split_line: Sequence[str]):
-            this = (
-                " ".join(split_line[3:]),
-                {
-                    "modify": " ".join(split_line[0:1]),
-                },
-            )
-            if split_line[2] == "<DIR>":
-                this[1]["type"] = "dir"
-            else:
-                this[1]["type"] = "file"
-                this[1]["size"] = split_line[2]
-            return this
-
-        lines = []
-        minfo = []
-        self.ftp.dir(path, lines.append)
-        for line in lines:
-            split_line = line.split()
-            if re_linux.match(split_line[0]) and len(split_line) > 8:
-                this = parse_linux(split_line)
-            elif re_patched.match(line):
-                this = parse_patched(split_line)
-            else:
-                continue
-            minfo.append(this)
-        return minfo
-
-
-register_implementation("ftp", PatchedFTPFileSystem, clobber=True)
 
 
 def get_slide_dir() -> Path:
@@ -253,6 +149,14 @@ def check_checksum(file_path: Path, checksum: str):
             print(f"{file_path} checksum OK")
 
 
+def download_file(url: str, filename: Path):
+    with requests.get(url, stream=True, timeout=30) as request:
+        request.raise_for_status()
+        with open(filename, "wb") as file:
+            for chunk in request.iter_content(chunk_size=1024 * 1024):
+                file.write(chunk)
+
+
 def main():
     print("Downloading and/or checking testdata.")
     slide_dir = get_slide_dir()
@@ -262,13 +166,9 @@ def main():
         for file, checksum in slide.files.items():
             full_local_file_path = full_local_path.joinpath(file)
             if not full_local_file_path.exists():
-                fs, path = url_to_fs(slide.remote_path)  #
-                full_remote_file_path = path + "/" + file
-                with (
-                    fs.open(full_remote_file_path, mode="rb") as remote_file,
-                    open(full_local_file_path, "wb") as local_file,
-                ):
-                    local_file.write(remote_file.read())
+                download_file(
+                    f"{slide.remote_path}/{quote(file)}", full_local_file_path
+                )
             check_checksum(full_local_file_path, checksum)
 
 
