@@ -225,7 +225,7 @@ class TestPyramidFileWriterIntegration:
         # Arrange
         wsi = wsi_factory(wsi_name)
         pyramid = wsi.pyramids[0]
-        expected_levels_count = len(pyramid)
+        expected_sizes = {level.size.to_tuple() for level in pyramid}
 
         # Act
         generator = PyramidFileWriter(
@@ -239,7 +239,9 @@ class TestPyramidFileWriterIntegration:
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
-            assert len(saved_wsi.pyramids[0]) == expected_levels_count
+            # The writer fills dyadic gaps, so assert existing levels are preserved.
+            saved_sizes = {level.size.to_tuple() for level in saved_wsi.pyramids[0]}
+            assert expected_sizes <= saved_sizes
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_generate_from_base_level_only(
@@ -380,7 +382,12 @@ class TestPyramidFileWriterIntegration:
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
             target_size = target_level.size.to_tuple()
-            created_level = saved_wsi.pyramids[0][1]
+            # Match by size, not index: a non-dyadic source shifts level positions.
+            created_level = next(
+                level
+                for level in saved_wsi.pyramids[0]
+                if level.size.to_tuple() == target_size
+            )
             created_size = created_level.size.to_tuple()
             assert created_size == target_size
 
@@ -419,7 +426,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         # Arrange
         wsi = wsi_factory(wsi_name)
         pyramid = wsi.pyramids[0]
-        expected_levels_count = len(pyramid)
+        expected_sizes = {level.size.to_tuple() for level in pyramid}
 
         # Act
         generator = PyramidFileWriter(
@@ -433,7 +440,9 @@ class TestPyramidFileWriterBottomUpIntegration:
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
-            assert len(saved_wsi.pyramids[0]) == expected_levels_count
+            # The writer fills dyadic gaps, so assert existing levels are preserved.
+            saved_sizes = {level.size.to_tuple() for level in saved_wsi.pyramids[0]}
+            assert expected_sizes <= saved_sizes
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_generate_from_base_level_only_bottom_up(
@@ -485,7 +494,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         # Arrange
         wsi = wsi_factory(wsi_name)
         pyramid = wsi.pyramids[0]
-        expected_levels_count = len(pyramid)
+        expected_sizes = {level.size.to_tuple() for level in pyramid}
 
         # Act
         generator = PyramidFileWriter(
@@ -500,7 +509,9 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
 
         # Assert
         with WsiDicom.open(tmp_path) as saved_wsi:
-            assert len(saved_wsi.pyramids[0]) == expected_levels_count
+            # The writer fills dyadic gaps, so assert existing levels are preserved.
+            saved_sizes = {level.size.to_tuple() for level in saved_wsi.pyramids[0]}
+            assert expected_sizes <= saved_sizes
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_generate_from_base_level_only_bottom_up_sequential(
