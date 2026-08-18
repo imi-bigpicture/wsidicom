@@ -28,13 +28,12 @@ jobs:
             test-images-cache-
           path: tests/testdata/slides
           enableCrossOsArchive: true
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install fsspec requests aiohttp
       - name: Download test images
         if: ${{ steps.cache-test-images.outputs.cache-hit != 'true' }}
-        run: python tests/download_test_images.py
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests
+          python tests/download_test_images.py
 
   tests:
     needs: [cache_test_images]
