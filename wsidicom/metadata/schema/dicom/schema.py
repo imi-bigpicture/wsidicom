@@ -37,6 +37,8 @@ from wsidicom.metadata.schema.dicom.fields import (
     FlattenOnDumpNestedDicomField,
 )
 
+logger = logging.getLogger(__name__)
+
 DumpType = TypeVar("DumpType", Dataset, Iterable[Dataset])
 
 
@@ -123,7 +125,7 @@ class ModuleDicomSchema(DicomSchema[LoadType]):
         try:
             return super().load(data, **kwargs)  # type: ignore
         except ValidationError:
-            logging.warning(
+            logger.warning(
                 f"Failed to load module {self.module_name} with schema {self}.",
                 exc_info=True,
             )

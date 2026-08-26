@@ -45,6 +45,8 @@ from wsidicom.metadata import ImageType
 from wsidicom.source import Source
 from wsidicom.uid import SlideUids
 
+logger = logging.getLogger(__name__)
+
 
 class WsiDicomFileSource(Source):
     """Source reading WSI DICOM file instances."""
@@ -80,7 +82,7 @@ class WsiDicomFileSource(Source):
                         elif reader.image_type == ImageType.THUMBNAIL:
                             self._thumbnails.append(reader)
                     except WsiDicomNotSupportedError:
-                        logging.info(f"Non-supported file {stream}.")
+                        logger.info(f"Non-supported file {stream}.")
                         stream.close()
                 elif (
                     stream.media_storage_sop_class_uid
@@ -88,7 +90,7 @@ class WsiDicomFileSource(Source):
                 ):
                     self._annotations.append(stream)
             except Exception:
-                logging.error(
+                logger.error(
                     f"Failed to open file {stream} due to exception.", exc_info=True
                 )
                 stream.close()
@@ -327,7 +329,7 @@ class WsiDicomFileSource(Source):
             if file.dataset.matches_series(series_uids, series_tile_size):
                 yield file
             else:
-                logging.warning(
+                logger.warning(
                     f"{file.filepath} with uids {file.uids.slide} "
                     f"did not match series with {series_uids} "
                     f"and tile size {series_tile_size}"

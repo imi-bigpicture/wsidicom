@@ -14,7 +14,7 @@
 
 """Frame index for EOT, parsing the positions from the EOT."""
 
-from venv import logger
+import logging
 
 from pydicom.tag import Tag
 
@@ -22,6 +22,8 @@ from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.frame_index.offset_table import OffsetTableFrameIndexParser
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
+
+logger = logging.getLogger(__name__)
 
 
 class ExtendedOffsetFrameIndexParser(OffsetTableFrameIndexParser):

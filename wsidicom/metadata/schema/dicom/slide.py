@@ -38,6 +38,8 @@ from wsidicom.metadata.schema.dicom.sample.parser import SpecimenDicomParser
 from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 from wsidicom.metadata.slide import Slide
 
+logger = logging.getLogger(__name__)
+
 
 class SlideDicomSchema(ModuleDicomSchema[Slide]):
     identifier = DefaultingDicomField(
@@ -97,7 +99,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
                 )
 
             except (AttributeError, ValueError):
-                logging.warning(
+                logger.warning(
                     "Failed to parse SpecimenDescriptionSequence", exc_info=True
                 )
                 samples = None

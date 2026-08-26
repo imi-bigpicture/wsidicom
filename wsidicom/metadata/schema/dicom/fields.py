@@ -65,6 +65,8 @@ from wsidicom.metadata.sample import (
     UniversalIssuerType,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class StringLikeDicomField(fields.Field):
     def _deserialize(self, value, attr, data, **kwargs) -> Any:
@@ -96,7 +98,7 @@ class StringDicomField(StringLikeDicomField):
             and get_settings().truncate_long_dicom_strings_on_validation_error
         ):
             maximum_allowed_length = MAX_VALUE_LEN[self._value_representation]
-            logging.warning(
+            logger.warning(
                 f"Truncating long DICOM string {value} of value representation "
                 f"{self._value_representation} with maximum allowed length "
                 f"{maximum_allowed_length} to {value[:maximum_allowed_length]}."

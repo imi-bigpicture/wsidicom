@@ -50,6 +50,8 @@ from wsidicom.metadata.schema.dicom.sample.model import (
     StorageDicomModel,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ParsedSpecimen:
@@ -338,7 +340,7 @@ class SpecimenDicomParser:
             identifier, steps_directory
         )
         if not steps_directory.is_empty:
-            logging.warning(
+            logger.warning(
                 "Specimen description contained steps for specimens that were not "
                 "parsed. If this is due to steps missing issuer of identifiers, try "
                 "setting `settings.strict_specimen_identifier_check` to `False`."
@@ -769,7 +771,7 @@ class SpecimenDicomParser:
             Created Specimen, if the specimen has no parents, or Specimen.
 
         """
-        logging.debug(f"Creating specimen with identifier {identifier}")
+        logger.debug(f"Creating specimen with identifier {identifier}")
         parsed_specimen = self._parse_preparation_steps_for_specimen(
             identifier, steps_directory
         )

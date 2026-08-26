@@ -65,6 +65,8 @@ from wsidicom.metadata.schema.dicom.schema import (
     ModuleDicomSchema,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class LutSegmentType(Enum):
     DISCRETE = 0
@@ -636,7 +638,7 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
         if optical_path.icc_profile is not None:
             problems = optical_path.validate_icc_profile()
             if problems:
-                logging.warning(
+                logger.warning(
                     "Embedded ICC profile is not DICOM-conformant: %s",
                     "; ".join(problems),
                 )

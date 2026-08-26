@@ -70,6 +70,8 @@ from wsidicom.writing.tile_readers import (
     TranscodeTileReader,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class PartFactory:
     """Builds and opens the instance-file parts of one level.
@@ -1477,7 +1479,7 @@ class PyramidFileWriter(BaseFileWriter):
                     # Token already cancelled by another worker; exit quietly.
                     pass
                 except Exception as error:
-                    logging.error(
+                    logger.error(
                         f"Producer thread Producer-L{level_writer.level_index} "
                         f"failed: {error}"
                     )

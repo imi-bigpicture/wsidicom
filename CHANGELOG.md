@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- wsidicom now logs through a logger per module (`logging.getLogger(__name__)`) instead of the root logger, so its output can be configured and filtered independently of the rest of the application. `logging.getLogger("wsidicom")` controls the whole package, and a single noisy module can be silenced on its own.
+
 ### Fixed
 
 - Reading a DICOM-TIFF dual file set Pillow's `Image.MAX_IMAGE_PIXELS` to `None` while parsing the tiff tags, disabling decompression bomb protection for every Pillow decode in the process rather than only for wsidicom's, and two such parses running concurrently could leave it `None` permanently. The tags are now read from the image file directory alone, without opening the file as an image, so the limit is never changed.

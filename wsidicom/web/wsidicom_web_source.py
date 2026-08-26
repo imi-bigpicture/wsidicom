@@ -43,6 +43,8 @@ from wsidicom.web.wsidicom_web_image_data import WsiDicomWebImageData
 
 """A source for reading WSI DICOM files from DICOMWeb."""
 
+logger = logging.getLogger(__name__)
+
 # Transfer syntaxes to try in order of preference.
 PREFERRED_WEB_TRANSFER_SYNTAXES = [
     JPEGBaseline8Bit,
@@ -98,7 +100,7 @@ class WsiDicomWebSource(Source):
             study_uid, series_uid, instance_uid, available_transfer_syntaxes = uids
             dataset = client.get_instance(study_uid, series_uid, instance_uid)
             if not WsiDataset.is_supported_wsi_dicom(dataset):
-                logging.info(f"Non-supported instance {instance_uid}.")
+                logger.info(f"Non-supported instance {instance_uid}.")
                 return None
             dataset = WsiDataset(dataset)
 
@@ -110,7 +112,7 @@ class WsiDicomWebSource(Source):
                 requested_transfer_syntaxes,
             )
             if transfer_syntax is None:
-                logging.info(
+                logger.info(
                     f"No supported transfer syntax found for instance {uids[2]}."
                 )
                 return None

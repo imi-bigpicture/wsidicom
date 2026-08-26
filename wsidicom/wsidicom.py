@@ -63,6 +63,8 @@ from wsidicom.thread import ReadExecutor
 from wsidicom.uid import SlideUids
 from wsidicom.web import WsiDicomWebClient, WsiDicomWebSource
 
+logger = logging.getLogger(__name__)
+
 
 class WsiDicom:
     """A WSI containing pyramidal levels and optionally labels and/or overviews."""
@@ -1234,7 +1236,7 @@ class WsiDicom:
         if self.annotations != []:
             for annotation in self.annotations:
                 if not annotation.slide_uids.matches(slide_uids):
-                    logging.warning("Annotations uids does not match.")
+                    logger.warning("Annotations uids does not match.")
         return slide_uids
 
     def __enter__(self):

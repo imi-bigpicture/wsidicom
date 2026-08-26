@@ -21,6 +21,8 @@ from typing import Any, Generic, TypeVar
 
 from marshmallow import Schema, ValidationError, fields, post_load
 
+logger = logging.getLogger(__name__)
+
 LoadType = TypeVar("LoadType")
 
 
@@ -67,7 +69,7 @@ class DefaultOnValidationExceptionField(fields.Field):
         try:
             return self.inner._deserialize(value, attr, data, **kwargs)
         except ValidationError as exception:
-            logging.warning(
+            logger.warning(
                 f"Could not deserialize {attr} using {self.inner} "
                 f"due to exception {exception}"
                 f"returning default value {self.load_default}"

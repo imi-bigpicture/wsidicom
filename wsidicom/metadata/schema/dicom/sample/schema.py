@@ -71,6 +71,8 @@ from wsidicom.metadata.schema.dicom.schema import (
     LoadType,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class SampleCodes:
     identifier: Code = codes.DCM.SpecimenIdentifier  # type: ignore
@@ -469,7 +471,7 @@ class PreparationStepDicomField(fields.Field):
         except ValidationError as exception:
             error = "Failed to load processing step due to validation error."
             if get_settings().ignore_specimen_preparation_step_on_validation_error:
-                logging.warning(error, exc_info=True)
+                logger.warning(error, exc_info=True)
                 return None
             raise ValidationError(
                 error + " Check the processing step for errors or set "

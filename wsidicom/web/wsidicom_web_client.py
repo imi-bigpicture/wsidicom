@@ -30,6 +30,8 @@ from requests.auth import AuthBase
 
 from wsidicom.codec import determine_media_type
 
+logger = logging.getLogger(__name__)
+
 SOP_CLASS_UID = "00080016"
 SOP_INSTANCE_UID = "00080018"
 SERIES_INSTANCE_UID = "0020000E"
@@ -228,15 +230,13 @@ class WsiDicomWebClient:
                 exception.response is not None
                 and exception.response.status_code == HTTPStatus.NOT_ACCEPTABLE
             ):
-                logging.debug(
+                logger.debug(
                     f"Transfer syntax {transfer_syntax} not supported "
                     f"for {instance_uid}."
                 )
                 return False
             raise exception
-        logging.debug(
-            f"Transfer syntax {transfer_syntax} supported for {instance_uid}."
-        )
+        logger.debug(f"Transfer syntax {transfer_syntax} supported for {instance_uid}.")
         return True
 
     def _get_instances(
@@ -336,7 +336,7 @@ class WsiDicomWebClient:
         except HTTPError as exception:
             status_code = HTTPStatus(exception.response.status_code)
             error_message = exception.response.text
-            logging.debug(
+            logger.debug(
                 f"Got error code: {status_code} message: {error_message} "
                 "when searching for instances."
             )
@@ -350,7 +350,7 @@ class WsiDicomWebClient:
                     if status_code in known_search_filter_errors
                     if error_key in error_message
                 )
-                logging.debug(f"Removing filter {filter_key} from search filters.")
+                logger.debug(f"Removing filter {filter_key} from search filters.")
                 filter_value = search_filters.pop(filter_key)
                 instances = self._search_for_instances(
                     study_uid,
@@ -374,7 +374,7 @@ class WsiDicomWebClient:
                     if status_code in known_search_filter_errors
                     if error_key in error_message
                 )
-                logging.debug(f"Removing field {field_key} from fields.")
+                logger.debug(f"Removing field {field_key} from fields.")
                 fields.remove(field_key)
                 return self._search_for_instances(
                     study_uid,

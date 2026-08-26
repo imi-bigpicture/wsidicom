@@ -50,6 +50,8 @@ from wsidicom.tags import (
 )
 from wsidicom.uid import FileUids, SlideUids
 
+logger = logging.getLogger(__name__)
+
 
 class TileType(Enum):
     FULL = "TILED_FULL"
@@ -217,7 +219,7 @@ class WsiDataset(Dataset):
         pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
         if pixel_spacing_values is not None:
             if any([spacing <= 0 for spacing in pixel_spacing_values]):
-                logging.warning(f"Pixel spacing not positive, {pixel_spacing_values}")
+                logger.warning(f"Pixel spacing not positive, {pixel_spacing_values}")
                 return None
             return SizeMm(pixel_spacing_values[1], pixel_spacing_values[0])
         return None
@@ -309,7 +311,7 @@ class WsiDataset(Dataset):
                     raise WsiDicomError(error)
                 # Labels and overviews are likely to have only one tile.
                 error += " Overriding image size to tile size."
-                logging.warning(error)
+                logger.warning(error)
                 image_size = self.tile_size
         return image_size
 
@@ -448,31 +450,31 @@ class WsiDataset(Dataset):
 
         sop_class_uid: UID | None = getattr(dataset, "SOPClassUID", None)
         if sop_class_uid != VLWholeSlideMicroscopyImageStorage:
-            logging.debug(f"Non-wsi image, SOP class {sop_class_uid}.")
+            logger.debug(f"Non-wsi image, SOP class {sop_class_uid}.")
             return None
 
         for name in cls.REQUIRED_ATTRIBUTES:
             if name not in dataset:
-                logging.debug(f"Missing required attribute {name}.")
+                logger.debug(f"Missing required attribute {name}.")
                 return None
 
         try:
             image_type = cls._get_image_type(dataset.ImageType)
         except ValueError:
-            logging.debug(f"Non-supported image type {dataset.ImageType}.")
+            logger.debug(f"Non-supported image type {dataset.ImageType}.")
             return None
 
         pixel_representation = int(getattr(dataset, "PixelRepresentation", 0))
         if pixel_representation != 0:
-            logging.debug(f"Unsupported pixel representation {pixel_representation}.")
+            logger.debug(f"Unsupported pixel representation {pixel_representation}.")
             return None
         planar_configuration = int(getattr(dataset, "PlanarConfiguration", 0))
         if planar_configuration != 0:
-            logging.debug(f"Unsupported planar configuration {planar_configuration}.")
+            logger.debug(f"Unsupported planar configuration {planar_configuration}.")
             return None
         photometric_interpretation = str(dataset.PhotometricInterpretation)
         if photometric_interpretation not in cls.SUPPORTED_PHOTOMETRIC_INTERPRETATIONS:
-            logging.debug(
+            logger.debug(
                 f"Unsupported photometric interpretation {photometric_interpretation}."
             )
             return None
@@ -483,7 +485,7 @@ class WsiDataset(Dataset):
             # fundamentally hard (the stitch/downsample pipeline handles it), but
             # no example WSI has been found to test against; would support it if
             # one turned up.
-            logging.debug(
+            logger.debug(
                 f"Unsupported combination of bits stored {bits_stored} and "
                 f"samples per pixel {samples_per_pixel}."
             )

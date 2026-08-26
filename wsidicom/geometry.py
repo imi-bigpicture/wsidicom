@@ -18,6 +18,8 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from typing import Union
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class SizeMm:
@@ -500,7 +502,7 @@ class RegionMm:
 class Orientation:
     def __init__(self, orientation: tuple[float, float, float, float, float, float]):
         if orientation[0] != -orientation[4] or orientation[1] != orientation[3]:
-            logging.warning(
+            logger.warning(
                 f"Orientation {orientation} is not "
                 "orthogonal with equal lengths with column rotated 90 deg from row"
             )
