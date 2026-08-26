@@ -96,6 +96,9 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
 
     def put(self, key: CacheKeyType, item: CacheItem[CacheItemType]) -> None:
         with self._lock:
+            replaced = self._cache.pop(key, None)
+            if replaced is not None:
+                self._size -= replaced.size
             self._cache[key] = item
             self._size += item.size
             while self._size > self._maxsize:
@@ -104,6 +107,7 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
     def clear(self) -> None:
         with self._lock:
             self._cache.clear()
+            self._size = 0
 
     def resize(self, maxsize: int) -> None:
         with self._lock:
