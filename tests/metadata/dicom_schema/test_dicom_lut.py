@@ -32,6 +32,7 @@ from wsidicom.metadata.schema.dicom.optical_path import (
 )
 
 
+@pytest.mark.unittest
 class TestDicomLut:
     @pytest.mark.parametrize(
         [

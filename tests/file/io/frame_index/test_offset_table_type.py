@@ -17,6 +17,7 @@ import pytest
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 
 
+@pytest.mark.unittest
 @pytest.mark.parametrize(
     ["string", "expected_result"],
     [

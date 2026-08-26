@@ -53,6 +53,7 @@ from wsidicom.metadata.schema.json.pyramid import PyramidJsonSchema
 from wsidicom.metadata.wsi import WsiMetadata
 
 
+@pytest.mark.unittest
 class TestJsonSchema:
     @pytest.mark.parametrize(
         ["manufacturer", "model_name", "serial_number", "versions"],

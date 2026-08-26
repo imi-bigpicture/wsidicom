@@ -90,6 +90,7 @@ def shared_functional_group(pixel_measure: Dataset):
     yield shared_functional_group
 
 
+@pytest.mark.unittest
 class TestWsiDataset:
     @pytest.mark.parametrize(
         ["values", "expected_values"],

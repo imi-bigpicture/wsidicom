@@ -64,6 +64,7 @@ def tiles(bits: int):
     ]
 
 
+@pytest.mark.unittest
 class TestFrameIndexParser:
     @pytest.mark.parametrize(
         "transfer_syntax",

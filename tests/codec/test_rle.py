@@ -20,6 +20,7 @@ import pytest
 from wsidicom.codec.rle import RleCodec
 
 
+@pytest.mark.unittest
 @pytest.mark.skipif(not RleCodec.is_available(), reason="Image codecs not available")
 class TestRle:
     @pytest.mark.parametrize(

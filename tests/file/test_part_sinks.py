@@ -44,6 +44,7 @@ def part_factory(decoy: Decoy, part_writer: WsiDicomWriter) -> PartFactory:
     return part_factory
 
 
+@pytest.mark.unittest
 class TestDirectPartSink:
     @pytest.mark.parametrize("transcoder", [None, JpegEncoder(JpegSettings())])
     @pytest.mark.parametrize("concatenated", [True, False])
@@ -84,6 +85,7 @@ class TestDirectPartSink:
         decoy.verify(part_writer.close(), times=1)
 
 
+@pytest.mark.unittest
 @pytest.mark.parametrize("transcoder", [None, JpegEncoder(JpegSettings())])
 @pytest.mark.parametrize("concatenated", [True, False])
 class TestBufferedPartSink:

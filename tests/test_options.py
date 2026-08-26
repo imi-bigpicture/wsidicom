@@ -19,6 +19,7 @@ import pytest
 from wsidicom import ConcatenationByBytes, ConcatenationByFrames
 
 
+@pytest.mark.unittest
 class TestConcatenationByFrames:
     @pytest.mark.parametrize("count", [-10, -1, 0])
     def test_rejects_non_positive_count(self, count: int) -> None:
@@ -39,6 +40,7 @@ class TestConcatenationByFrames:
         assert concatenation.count == count
 
 
+@pytest.mark.unittest
 class TestConcatenationByBytes:
     @pytest.mark.parametrize(
         ("size", "expected"),

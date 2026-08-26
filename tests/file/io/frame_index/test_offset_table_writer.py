@@ -53,6 +53,7 @@ def positions():
     yield [0, 100, 200, 300, 400]
 
 
+@pytest.mark.unittest
 class TestOffsetTableWriter:
     @pytest.mark.parametrize("frame_count", [1, 8])
     def test_reserve_bot(self, buffer: WsiDicomIO, frame_count: int):

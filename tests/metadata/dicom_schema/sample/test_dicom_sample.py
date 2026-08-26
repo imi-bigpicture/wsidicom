@@ -68,6 +68,7 @@ from wsidicom.metadata.schema.dicom.sample.schema import (
 )
 
 
+@pytest.mark.unittest
 class TestSampleDicom:
     @pytest.mark.parametrize(
         ["slide_sample_ids", "slide_sample_uids", "specimen_ids"],

@@ -114,6 +114,7 @@ def frame_of_reference_uid():
     return generate_uid()
 
 
+@pytest.mark.unittest
 class TestPyramids:
     @pytest.mark.parametrize(
         [

@@ -40,6 +40,7 @@ def base_dataset() -> WsiDataset:
     return dataset
 
 
+@pytest.mark.unittest
 class TestPartFactory:
     def test_concatenated_parts_share_identity_and_partition_contiguously(
         self, base_dataset: WsiDataset, tmp_path: Path

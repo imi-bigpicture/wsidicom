@@ -87,6 +87,7 @@ def two_part_splitter(
     return part_splitter
 
 
+@pytest.mark.unittest
 class TestInstanceFileWriter:
     def test_single_part_covering_the_level_is_not_concatenated(
         self,

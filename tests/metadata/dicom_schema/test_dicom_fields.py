@@ -63,6 +63,7 @@ class ParentFlattenOnDumpSchema(DicomSchema):
         return dict
 
 
+@pytest.mark.unittest
 class TestDicomFields:
     def test_code_content_item_dicom_field_serialize(self):
         # Arrange

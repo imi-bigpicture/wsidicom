@@ -38,6 +38,7 @@ def equipment() -> ContributingEquipment:
     )
 
 
+@pytest.mark.unittest
 class TestContributingEquipmentDicomSchema:
     def test_serialize(self, equipment: ContributingEquipment):
         # Arrange

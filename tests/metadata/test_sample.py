@@ -24,6 +24,7 @@ from wsidicom.metadata.sample import (
 )
 
 
+@pytest.mark.unittest
 class TestIssuerOfIdentifier:
     @pytest.mark.parametrize(
         ["value", "expected"],
@@ -76,6 +77,7 @@ class TestIssuerOfIdentifier:
         assert actual == expected
 
 
+@pytest.mark.unittest
 class TestSpecimenIdentifier:
     @pytest.mark.parametrize(
         ["first", "second", "expected"],

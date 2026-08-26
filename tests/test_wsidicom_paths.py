@@ -125,6 +125,7 @@ class TestAsPath:
         assert normalized == expected
 
 
+@pytest.mark.unittest
 class TestWsiDicomFsspecRoundtrip:
     def test_save_and_open_over_fsspec(self, wsi: WsiDicom) -> None:
         # Arrange

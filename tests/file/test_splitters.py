@@ -30,6 +30,7 @@ _ITEM_HEADER_BYTES = 8
 _MAX_FRAMES = 100
 
 
+@pytest.mark.unittest
 class TestNoSplitter:
     def test_never_starts_new_part(self) -> None:
         # Arrange
@@ -54,6 +55,7 @@ class TestNoSplitter:
         assert count == remaining
 
 
+@pytest.mark.unittest
 class TestFrameCountSplitter:
     def test_starts_new_part_only_once_max_frames_reached(self) -> None:
         # Arrange
@@ -105,6 +107,7 @@ class TestFrameCountSplitter:
         assert count == expected
 
 
+@pytest.mark.unittest
 class TestByteSizeSplitter:
     def test_accumulates_tiles_with_header_until_budget_exceeded(self) -> None:
         # Arrange — budget holds exactly two tiles, each counted with its header.

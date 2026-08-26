@@ -39,6 +39,7 @@ from wsidicom.metadata.schema.json.fields import (
 )
 
 
+@pytest.mark.unittest
 class TestFields:
     @pytest.mark.parametrize(
         ["measurement", "expected"],

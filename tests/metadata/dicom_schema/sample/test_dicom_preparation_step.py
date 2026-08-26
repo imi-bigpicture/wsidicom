@@ -71,6 +71,7 @@ from wsidicom.metadata.schema.dicom.sample.schema import (
 )
 
 
+@pytest.mark.unittest
 @pytest.mark.parametrize(
     "identifier",
     [
@@ -507,6 +508,7 @@ class TestPreparationStepDicomSchema:
         assert deserialized.specimen_type == storage_dicom.specimen_type
 
 
+@pytest.mark.unittest
 @pytest.mark.parametrize(
     "invalid_preparation_step_type",
     ["missing_processing_type", "unknown_processing_type", "validation_error"],
@@ -625,6 +627,7 @@ class TestPreparationStepDicomErrorHandling:
         assert len(model.steps) == 0
 
 
+@pytest.mark.unittest
 class TestSampleLocalizationDicomSchema:
     @pytest.mark.parametrize("reference", ["reference", None])
     @pytest.mark.parametrize("description", ["description", None])

@@ -22,6 +22,7 @@ from tests.conftest import WsiTestDefinitions
 from wsidicom.file import WsiDicomStreamOpener
 
 
+@pytest.mark.unittest
 class TestWsiDicomStreamOpener:
     @pytest.mark.parametrize(
         "wsi_folder_and_counts", WsiTestDefinitions.folders_and_instance_counts()

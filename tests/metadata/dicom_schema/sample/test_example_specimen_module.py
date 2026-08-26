@@ -224,6 +224,7 @@ def staining_substances():
     ]
 
 
+@pytest.mark.unittest
 class TestExampleSpecimenModule:
     def test_load_example_specimen_module(
         self,

@@ -103,6 +103,7 @@ def file_meta_dataset(uid: UID, transfer_syntax: UID, sop_class_uid: UID):
     yield dataset
 
 
+@pytest.mark.unittest
 class TestWsiDicomIO:
     @pytest.mark.parametrize(
         "transfer_syntax",

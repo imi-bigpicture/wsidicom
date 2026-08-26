@@ -25,6 +25,7 @@ from wsidicom.metadata.optical_path import (
 )
 
 
+@pytest.mark.unittest
 class TestAddColorSpaceFromIcc:
     def test_sets_color_space_from_stripped_profile_description(self):
         # Arrange
@@ -94,6 +95,7 @@ class TestAddColorSpaceFromIcc:
         assert updated.color_space is None
 
 
+@pytest.mark.unittest
 class TestValidateIccProfile:
     @staticmethod
     def _profile(device_class: bytes, color_space: bytes, pcs: bytes) -> bytes:
@@ -160,6 +162,7 @@ class TestValidateIccProfile:
         assert problems == ["ICC profile header is truncated."]
 
 
+@pytest.mark.unittest
 class TestDicomLut:
     @pytest.mark.parametrize(
         ["lut", "expected_table_component"],

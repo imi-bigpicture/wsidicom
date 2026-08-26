@@ -61,6 +61,7 @@ from wsidicom.metadata.schema.json.sample.schema import (
 )
 
 
+@pytest.mark.unittest
 class TestSampleJsonSchema:
     @pytest.mark.parametrize(
         ["localization", "expected"],

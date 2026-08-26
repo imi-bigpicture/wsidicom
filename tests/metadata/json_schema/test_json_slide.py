@@ -28,6 +28,7 @@ from wsidicom.metadata.schema.json.slide import SlideJsonSchema
 from wsidicom.metadata.slide import Slide
 
 
+@pytest.mark.unittest
 class TestSlideJsonSchema:
     @pytest.mark.parametrize(
         "slide_identifier",

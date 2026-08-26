@@ -152,6 +152,7 @@ def instance_metadata(
 #     yield client
 
 
+@pytest.mark.unittest
 class TestWsiDicomWebClient:
     @pytest.mark.parametrize("available_sop_transfer_syntax_uid", [None])
     def test_get_wsi_instances_available_transfer_syntax_uid_field_not_supported_fallback(

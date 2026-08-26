@@ -90,6 +90,7 @@ from wsidicom.metadata.schema.dicom.study import StudyDicomSchema
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 
 
+@pytest.mark.unittest
 class TestDicomSchema:
     @pytest.mark.parametrize(
         ["manufacturer", "model_name", "serial_number", "versions"],
