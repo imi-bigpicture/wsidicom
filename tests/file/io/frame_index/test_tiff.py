@@ -174,6 +174,18 @@ class TestTiffFrameIndexParser:
         with pytest.raises(EmptyTiffFrameTagsException):
             TiffFrameIndexParser(buffer, pixel_data_start, len(offsets))
 
+    def test_raises_empty_tiff_frame_tags_when_tag_lengths_differ(
+        self, buffer: WsiDicomIO, write_dual_file: Callable[..., int]
+    ):
+        # Arrange
+        offsets = [1000, 2000, 3000]
+        lengths = [110, 220]
+        pixel_data_start = write_dual_file(offsets, lengths)
+
+        # Act & Assert
+        with pytest.raises(EmptyTiffFrameTagsException):
+            TiffFrameIndexParser(buffer, pixel_data_start, len(offsets))
+
     # A truncated directory makes Pillow warn and return the tags it did parse,
     # which then fails on the missing tag rather than on the short read.
     @pytest.mark.filterwarnings("ignore:Corrupt EXIF data:UserWarning")

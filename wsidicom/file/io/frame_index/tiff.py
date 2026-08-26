@@ -32,7 +32,7 @@ class TiffFrameIndexParser(PixelDataFrameIndexParser):
         return OffsetTableType.TIFF
 
     def _get_index(self):
-        return list(zip(self._offsets, self._lengths, strict=False))
+        return list(zip(self._offsets, self._lengths, strict=True))
 
     def _get_tags(self):
         """Return the tags used for the TIFF table."""
@@ -44,6 +44,11 @@ class TiffFrameIndexParser(PixelDataFrameIndexParser):
             raise EmptyTiffFrameTagsException(
                 f"Tiff file is missing required tag {TiffTags(exception.args[0])}."
             ) from exception
+        if len(offsets) != len(lengths):
+            raise EmptyTiffFrameTagsException(
+                f"Tiff file has {len(offsets)} {TiffTags.TILEOFFSETS.name} but "
+                f"{len(lengths)} {TiffTags.TILEBYTECOUNTS.name}."
+            )
         return offsets, lengths
 
     def _read_image_file_directory(self) -> ImageFileDirectory_v2:
