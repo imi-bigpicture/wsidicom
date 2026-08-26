@@ -15,6 +15,7 @@
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
+from uuid import uuid4
 
 import numpy as np
 
@@ -44,6 +45,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         self._decoder = codec.decoder
         self._decoded_frame_cache = decoded_frame_cache
         self._encoded_frame_cache = encoded_frame_cache
+        self._cache_id = uuid4().int
         super().__init__(codec.encoder)
 
     @abstractmethod
@@ -195,7 +197,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             return self.blank_encoded_tile
 
         return self._encoded_frame_cache.get_tile_frame(
-            id(self), frame_index, self._get_tile_frame
+            self._cache_id, frame_index, self._get_tile_frame
         )
 
     def get_decoded_tile(
@@ -230,7 +232,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         if not cache:
             return self._get_decoded_tile_frame(frame_index)
         return self._decoded_frame_cache.get_tile_frame(
-            id(self),
+            self._cache_id,
             frame_index,
             self._get_decoded_tile_frame,
         )
@@ -247,7 +249,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         wanted = [frame_index for frame_index in frame_indices if frame_index != -1]
         if cache:
             frames = self._decoded_frame_cache.get_tile_frames(
-                id(self),
+                self._cache_id,
                 wanted,
                 self._get_decoded_tile_frames,
             )
@@ -265,7 +267,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         """Return bytes for multiple tiles, fetching frames in a batch."""
         frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
         frames = self._encoded_frame_cache.get_tile_frames(
-            id(self),
+            self._cache_id,
             [frame_index for frame_index in frame_indices if frame_index != -1],
             self._get_tile_frames,
         )
@@ -296,7 +298,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         if frame_index == -1:
             return self.blank_encoded_tile, self.blank_tile
         encoded = self._encoded_frame_cache.get_tile_frame(
-            id(self), frame_index, self._get_tile_frame
+            self._cache_id, frame_index, self._get_tile_frame
         )
         decoded = self.decoder.decode(encoded)
         return encoded, decoded

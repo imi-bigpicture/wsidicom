@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Image data were identified in the shared frame caches by `id()`, which is reused once an object is collected, so an image data created after another had been collected could be served that other one's frames. This is not reachable through `WsiDicom.open`, which keeps every image data alive for as long as the caches, but is reachable from a `Source` that creates image data on demand. Each image data is now given an id of its own that is never reused.
 - Reading a DICOM-TIFF dual file set Pillow's `Image.MAX_IMAGE_PIXELS` to `None` while parsing the tiff tags, disabling decompression bomb protection for every Pillow decode in the process rather than only for wsidicom's, and two such parses running concurrently could leave it `None` permanently. The tags are now read from the image file directory alone, without opening the file as an image, so the limit is never changed.
 
 ## [0.35.0] - 2026-08-15
