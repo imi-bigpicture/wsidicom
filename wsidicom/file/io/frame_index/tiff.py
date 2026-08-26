@@ -1,8 +1,7 @@
 from enum import Enum
-from typing import Any
+from struct import error as StructError
 
-from PIL import Image as Pillow
-from PIL import UnidentifiedImageError
+from PIL.TiffImagePlugin import ImageFileDirectory_v2
 
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.frame_index.pixel_data import PixelDataFrameIndexParser
@@ -37,26 +36,48 @@ class TiffFrameIndexParser(PixelDataFrameIndexParser):
 
     def _get_tags(self):
         """Return the tags used for the TIFF table."""
-        # Large images will cause `DecompressionBombError` when opened if this is not
-        # set to None. Restore it when we are done.
-        max_image_pixels_restore = Pillow.MAX_IMAGE_PIXELS
-        Pillow.MAX_IMAGE_PIXELS = None
+        directory = self._read_image_file_directory()
         try:
-            image = Pillow.open(self._file.stream)
-            tags: dict[int, Any] | None = getattr(image, "tag_v2", None)
-            if tags is None:
-                raise EmptyTiffFrameTagsException("File does not contain tiff tags.")
-            try:
-                offsets: list[int] = tags[TiffTags.TILEOFFSETS.value]
-                lengths: list[int] = tags[TiffTags.TILEBYTECOUNTS.value]
-            except KeyError as exception:
+            offsets: list[int] = directory[TiffTags.TILEOFFSETS.value]
+            lengths: list[int] = directory[TiffTags.TILEBYTECOUNTS.value]
+        except KeyError as exception:
+            raise EmptyTiffFrameTagsException(
+                f"Tiff file is missing required tag {TiffTags(exception.args[0])}."
+            ) from exception
+        return offsets, lengths
+
+    def _read_image_file_directory(self) -> ImageFileDirectory_v2:
+        """Read the first image file directory (IFD) of the tiff file.
+
+        The directory is parsed straight from the stream rather than by opening the
+        file as an image. Only the tags are needed, and opening an image is refused
+        for one larger than `PIL.Image.MAX_IMAGE_PIXELS` -- a limit that guards
+        against decompression bombs and that whole slide images routinely exceed.
+
+        Returns
+        -------
+        ImageFileDirectory_v2
+            The first image file directory of the tiff file.
+        """
+        HEADER_LENGTH = 8
+        BIG_TIFF_VERSION = 43
+        stream = self._file.stream
+        stream.seek(0)
+        header = stream.read(HEADER_LENGTH)
+        try:
+            # A big tiff has a header of twice the length. Detected as PIL does, so
+            # that the same files are accepted.
+            if header[2] == BIG_TIFF_VERSION:
+                header += stream.read(HEADER_LENGTH)
+            directory = ImageFileDirectory_v2(header)
+            if directory.next == 0:
                 raise EmptyTiffFrameTagsException(
-                    f"Tiff file is missing required tag {TiffTags(exception.args[0])}."
-                ) from exception
-            return offsets, lengths
-        except UnidentifiedImageError:
+                    "Tiff file does not contain an image file directory."
+                )
+            stream.seek(directory.next)
+            directory.load(stream)
+        except (IndexError, SyntaxError, StructError, OSError) as exception:
             raise EmptyTiffFrameTagsException(
                 "File is not a valid tiff file."
-            ) from None
-        finally:
-            Pillow.MAX_IMAGE_PIXELS = max_image_pixels_restore
+            ) from exception
+        return directory
