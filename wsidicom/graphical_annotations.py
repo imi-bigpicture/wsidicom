@@ -172,10 +172,18 @@ class Measurement:
         list[int]
             Measurement indices of the measurement group.
         """
+        FIRST_INDEX = 1
         measurement_ds = ds.MeasurementValuesSequence[0]
         if "AnnotationIndexList" in measurement_ds:
             indices = dcm_to_list(measurement_ds.AnnotationIndexList, "l")
-            return [index - 1 for index in indices]
+            out_of_range = next(
+                (index for index in indices if index < FIRST_INDEX), None
+            )
+            if out_of_range is not None:
+                raise ValueError(
+                    f"Annotation index list is one-based, but contains {out_of_range}."
+                )
+            return [index - FIRST_INDEX for index in indices]
         return list(range(annotation_count))
 
     @classmethod
@@ -1415,10 +1423,15 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
         list[int]
             List of indices in dataset.
         """
-        return [
-            (value - 1) // 2
-            for value in dcm_to_list(ds.LongPrimitivePointIndexList, "l")
-        ]
+        FIRST_VALUE = 1
+        VALUES_PER_POINT = 2
+        values = dcm_to_list(ds.LongPrimitivePointIndexList, "l")
+        out_of_range = next((value for value in values if value < FIRST_VALUE), None)
+        if out_of_range is not None:
+            raise ValueError(
+                f"Point index list is one-based, but contains {out_of_range}."
+            )
+        return [(value - FIRST_VALUE) // VALUES_PER_POINT for value in values]
 
     @classmethod
     def _get_geometries_from_ds(cls, ds: Dataset) -> Sequence[GeometryType]:

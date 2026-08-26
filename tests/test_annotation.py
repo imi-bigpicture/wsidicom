@@ -379,6 +379,48 @@ class TestWsiDicomAnnotation:
         ):
             assert annotation == input_annotation
 
+    @pytest.mark.parametrize("out_of_range_value", [0, -1])
+    def test_polyline_group_with_out_of_range_point_index_raises(
+        self, out_of_range_value: int
+    ):
+        # Arrange
+        annotations = [
+            Annotation(Polyline([(0.0, 0.1), (1.0, 1.1)])),
+            Annotation(Polyline([(2.0, 2.1), (3.0, 3.1)])),
+        ]
+        group = PolylineAnnotationGroup(annotations, "test", category_code, type_code)
+        ds = group.to_ds(0)
+        # The point index list is one-based.
+        ds.LongPrimitivePointIndexList = np.array(
+            [out_of_range_value, 5], dtype=np.int32
+        ).tobytes()
+
+        # Act & Assert
+        with pytest.raises(ValueError):
+            PolylineAnnotationGroup.from_ds(ds, generate_uid())
+
+    @pytest.mark.parametrize("out_of_range_index", [0, -1])
+    def test_polyline_group_with_out_of_range_annotation_index_raises(
+        self, out_of_range_index: int
+    ):
+        # Arrange
+        measurements = [Measurement(MeasurementCode("Area"), 1.0, UnitCode("um2"))]
+        annotations = [
+            Annotation(Polyline([(0.0, 0.1), (1.0, 1.1)]), measurements),
+            Annotation(Polyline([(2.0, 2.1), (3.0, 3.1)]), measurements),
+        ]
+        group = PolylineAnnotationGroup(annotations, "test", category_code, type_code)
+        ds = group.to_ds(0)
+        # The annotation index list is one-based.
+        values_ds = ds.MeasurementsSequence[0].MeasurementValuesSequence[0]
+        values_ds.AnnotationIndexList = np.array(
+            [out_of_range_index, 2], dtype=np.int32
+        ).tobytes()
+
+        # Act & Assert
+        with pytest.raises(ValueError):
+            PolylineAnnotationGroup.from_ds(ds, generate_uid())
+
     def test_float_32_to_32(self):
         # Arrange
         np_input = np.array([0.0254, 0.12405], dtype=np.float32)
