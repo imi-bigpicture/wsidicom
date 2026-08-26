@@ -307,6 +307,49 @@ class TestWsiDicomWebClient:
         with pytest.raises(HTTPError):
             list(client.get_wsi_instances(study_instance_uid, [series_instance_uid]))
 
+    @pytest.mark.parametrize(
+        "status_code",
+        [
+            HTTPStatus.UNAUTHORIZED,  # A standard code with no known workaround.
+            520,  # Not a code the standard library knows.
+            None,  # An error carrying no response at all.
+        ],
+    )
+    def test_get_wsi_instances_error_without_workaround_throw(
+        self,
+        decoy: Decoy,
+        study_instance_uid: UID,
+        series_instance_uid: UID,
+        status_code: int | None,
+    ):
+        # Arrange
+        if status_code is None:
+            error = HTTPError()
+        else:
+            response = Response()
+            response.status_code = status_code
+            response._content = b"Some other error message"
+            error = HTTPError(response=response)
+
+        dicom_web_client = decoy.mock(cls=DICOMwebClient)
+        decoy.when(
+            dicom_web_client.search_for_instances(
+                study_instance_uid=study_instance_uid,
+                fields=["AvailableTransferSyntaxUID"],
+                search_filters={
+                    SOP_CLASS_UID: VLWholeSlideMicroscopyImageStorage,
+                    SERIES_INSTANCE_UID: [series_instance_uid],
+                    MODALITY: "SM",
+                },
+            )
+        ).then_raise(error)
+
+        client = WsiDicomWebClient(dicom_web_client)
+
+        # Act and Assert
+        with pytest.raises(HTTPError):
+            list(client.get_wsi_instances(study_instance_uid, [series_instance_uid]))
+
     def test_get_instance(
         self,
         decoy: Decoy,

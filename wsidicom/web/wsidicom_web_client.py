@@ -312,14 +312,14 @@ class WsiDicomWebClient:
         """
         # Errors that can be fixed by removing the offending filter and filtering
         # the results.
-        known_search_filter_errors = {
+        known_search_filter_errors: dict[int, dict[str, str]] = {
             HTTPStatus.BAD_REQUEST: {
                 "SOPClassUID is not a supported instance": SOP_CLASS_UID
             }
         }
         # Errors that can be fixed by removing the offending field. Should only
         # be used if the offending field is not required.
-        known_field_errors = {
+        known_field_errors: dict[int, dict[str, str]] = {
             HTTPStatus.BAD_REQUEST: {
                 "unknown/unsupported QIDO attribute: "
                 "AvailableTransferSyntaxUID": "AvailableTransferSyntaxUID"
@@ -334,22 +334,20 @@ class WsiDicomWebClient:
                 )
             )
         except HTTPError as exception:
-            status_code = HTTPStatus(exception.response.status_code)
+            if exception.response is None:
+                # Nothing to match the error against.
+                raise
+            status_code = exception.response.status_code
             error_message = exception.response.text
             logger.debug(
                 f"Got error code: {status_code} message: {error_message} "
                 "when searching for instances."
             )
             # If search filter error remove offending filter and filter the results.
-            try:
-                filter_key = next(
-                    filter_key
-                    for error_key, filter_key in known_search_filter_errors[
-                        status_code
-                    ].items()
-                    if status_code in known_search_filter_errors
-                    if error_key in error_message
-                )
+            filter_key = self._find_key_to_remove(
+                known_search_filter_errors, status_code, error_message
+            )
+            if filter_key is not None:
                 logger.debug(f"Removing filter {filter_key} from search filters.")
                 filter_value = search_filters.pop(filter_key)
                 instances = self._search_for_instances(
@@ -363,17 +361,12 @@ class WsiDicomWebClient:
                     for instance in instances
                     if instance[filter_key]["Value"][0] == filter_value
                 )
-            except StopIteration:
-                pass
 
             # If a field error remove offending field.
-            try:
-                field_key = next(
-                    field_key
-                    for error_key, field_key in known_field_errors[status_code].items()
-                    if status_code in known_search_filter_errors
-                    if error_key in error_message
-                )
+            field_key = self._find_key_to_remove(
+                known_field_errors, status_code, error_message
+            )
+            if field_key is not None:
                 logger.debug(f"Removing field {field_key} from fields.")
                 fields.remove(field_key)
                 return self._search_for_instances(
@@ -381,10 +374,39 @@ class WsiDicomWebClient:
                     fields=fields,
                     search_filters=search_filters,
                 )
-            except StopIteration:
-                pass
             # Not a known error. Propagate the exception.
             raise
+
+    @staticmethod
+    def _find_key_to_remove(
+        known_errors: dict[int, dict[str, str]],
+        status_code: int,
+        error_message: str,
+    ) -> str | None:
+        """Return the key to remove to work around a known error, if it is one.
+
+        Parameters
+        ----------
+        known_errors: dict[int, dict[str, str]]
+            Key to remove by the error message it is known by, by status code.
+        status_code: int
+            Status code of the error.
+        error_message: str
+            Message of the error.
+
+        Returns
+        -------
+        str | None
+            Key to remove, or None if the error is not a known one.
+        """
+        return next(
+            (
+                key
+                for error_key, key in known_errors.get(status_code, {}).items()
+                if error_key in error_message
+            ),
+            None,
+        )
 
     @staticmethod
     def _get_uids_from_response(
