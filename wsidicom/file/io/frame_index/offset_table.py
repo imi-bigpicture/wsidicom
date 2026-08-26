@@ -62,6 +62,12 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         bytes_per_item = self.bytes_per_item
         mode = self.mode
         table_length = len(table)
+        if table_length == 0 or table_length % bytes_per_item:
+            raise WsiDicomFileError(
+                str(self._file),
+                f"Expected offset table of a non-zero multiple of {bytes_per_item} "
+                f"bytes, got {table_length}.",
+            )
         TAG_BYTES = 4
         LENGTH_BYTES = 4
         positions: list[tuple[int, int]] = []
@@ -70,7 +76,9 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         # frame in pixel data.
         this_offset: int = unpack(mode, table[0:bytes_per_item])[0]
         if this_offset != 0:
-            raise ValueError("First item in table should be at offset 0")
+            raise WsiDicomFileError(
+                str(self._file), "First item in offset table should be at offset 0"
+            )
         for index in range(bytes_per_item, table_length, bytes_per_item):
             next_offset = unpack(mode, table[index : index + bytes_per_item])[0]
             offset = this_offset + TAG_BYTES + LENGTH_BYTES

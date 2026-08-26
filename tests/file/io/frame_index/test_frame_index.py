@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from io import BytesIO
+from struct import pack
 
 import pytest
 from pydicom.encaps import encapsulate, encapsulate_extended
@@ -26,6 +27,7 @@ from pydicom.uid import (
 )
 from upath import UPath
 
+from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.frame_index.basic import BasicOffsetTableFrameIndexParser
 from wsidicom.file.io.frame_index.extended import ExtendedOffsetFrameIndexParser
 from wsidicom.file.io.frame_index.native_pixel_data import (
@@ -142,6 +144,26 @@ class TestFrameIndexParser:
 
         # Assert
         assert frame_index == expected_frame_index
+
+    @pytest.mark.parametrize("bits", [8])
+    def test_basic_offset_table_with_non_zero_first_offset(
+        self, buffer: WsiDicomIO, tiles: list[bytes]
+    ):
+        # Arrange
+        ITEM_TAG_AND_LENGTH = 8
+        FIRST_OFFSET = slice(ITEM_TAG_AND_LENGTH, ITEM_TAG_AND_LENGTH + 4)
+        buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
+        encapsulated = bytearray(encapsulate(tiles, has_bot=True))
+        # The first item in the table is required to be at offset 0.
+        encapsulated[FIRST_OFFSET] = pack("<L", ITEM_TAG_AND_LENGTH)
+        buffer.write(bytes(encapsulated))
+        buffer.write_tag(SequenceDelimiterTag)
+        buffer.write_UL(0)
+        parser = BasicOffsetTableFrameIndexParser(buffer, 0, len(tiles))
+
+        # Act & Assert
+        with pytest.raises(WsiDicomFileError):
+            parser.parse_frame_index()
 
     @pytest.mark.parametrize("bits", [8, 16])
     def test_extended_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
