@@ -21,7 +21,7 @@ from pydicom.uid import UID
 from upath import UPath
 
 from wsidicom.codec import Codec
-from wsidicom.errors import WsiDicomNotSupportedError
+from wsidicom.errors import WsiDicomNotSupportedError, WsiDicomOutOfBoundsError
 from wsidicom.file.io.frame_index import (
     BasicOffsetTableFrameIndexParser,
     EmptyBasicTableOffsetException,
@@ -144,6 +144,8 @@ class WsiDicomReader:
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
 
+        Raises WsiDicomOutOfBoundsError if the frame is not in this file.
+
         Parameters
         ----------
         frame_index: int
@@ -154,8 +156,14 @@ class WsiDicomReader:
         bytes
             The frame as bytes
         """
-        frame_index -= self.frame_offset
-        frame_position, frame_length = self.frame_index[frame_index]
+        index_in_file = frame_index - self.frame_offset
+        if not 0 <= index_in_file < len(self.frame_index):
+            raise WsiDicomOutOfBoundsError(
+                f"Frame index {frame_index}",
+                f"frames {self.frame_offset} to "
+                f"{self.frame_offset + len(self.frame_index) - 1} in file",
+            )
+        frame_position, frame_length = self.frame_index[index_in_file]
         with self._lock:
             self._stream.seek(frame_position, 0)
             return self._stream.read(frame_length)

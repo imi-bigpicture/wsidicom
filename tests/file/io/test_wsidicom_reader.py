@@ -27,6 +27,7 @@ from tests.data_gen import (
     create_main_dataset,
     create_meta_dataset,
 )
+from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.file.io import OffsetTableType, WsiDicomReader
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import TileType, WsiDataset
@@ -182,6 +183,24 @@ class TestWWsiDicomReader:
 
         # Assert
         assert frame_count == 1
+
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_read_frame_before_first_frame_in_file(self, test_file: WsiDicomReader):
+        # Arrange
+        before_first_frame = test_file.frame_offset - 1
+
+        # Act & Assert
+        with pytest.raises(WsiDicomOutOfBoundsError):
+            test_file.read_frame(before_first_frame)
+
+    @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
+    def test_read_frame_after_last_frame_in_file(self, test_file: WsiDicomReader):
+        # Arrange
+        after_last_frame = test_file.frame_offset + len(test_file.frame_index)
+
+        # Act & Assert
+        with pytest.raises(WsiDicomOutOfBoundsError):
+            test_file.read_frame(after_last_frame)
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
     def test_read_frame(self, test_file: WsiDicomReader, padded_test_frame: bytes):
