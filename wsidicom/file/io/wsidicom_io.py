@@ -31,6 +31,7 @@ from pydicom.filereader import (
     read_partial,
     read_preamble,
 )
+from pydicom.filereader import read_dataset as read_elements
 from pydicom.filewriter import write_dataset, write_file_meta_info, writers
 from pydicom.tag import BaseTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
@@ -38,7 +39,6 @@ from pydicom.valuerep import VR
 from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.tags import ExtendedOffsetTableTag
 
 
 class WsiDicomIO:
@@ -150,19 +150,100 @@ class WsiDicomIO:
         return file_meta_info
 
     def read_dataset(self, force: bool = False) -> Dataset:
-        """Read dataset, excluding EOT and PixelData from stream."""
-        extended_offset_table_tag = ExtendedOffsetTableTag
+        """Read the entire dataset from the stream.
 
-        def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
-            return tag >= extended_offset_table_tag
+        Parameters
+        ----------
+        force: bool = False
+            Read the dataset even if the stream is not a valid DICOM stream.
 
+        Returns
+        -------
+        Dataset
+            The entire dataset read from the stream.
+        """
         self.seek(0)
         return read_partial(
+            self._stream,
+            defer_size=None,
+            force=force,
+        )
+
+    def read_dataset_until(
+        self, stop_tag: BaseTag, force: bool = False
+    ) -> tuple[Dataset, BaseTag | None]:
+        """Read dataset from stream, stopping at `stop_tag`.
+
+        The stream is left positioned at the tag that stopped the read, so a caller that
+        stops early can carry on from there. That tag is returned with the dataset, as
+        the read has already had to look at it to decide to stop, and it is what a
+        caller carrying on needs to know.
+
+        Parameters
+        ----------
+        stop_tag: BaseTag
+            First tag not to read. Stopping at the extended offset table leaves out the
+            pixel data; stopping at the Per Frame Functional Groups Sequence leaves that
+            sequence unparsed as well.
+        force: bool = False
+            Read the dataset even if the stream is not a valid DICOM stream.
+
+        Returns
+        -------
+        tuple[Dataset, BaseTag | None]
+            Dataset of the elements before `stop_tag`, and the tag the read stopped at,
+            or None if the stream ended before a tag ordered at or after `stop_tag`.
+        """
+        stopped_at: BaseTag | None = None
+
+        def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
+            nonlocal stopped_at
+            if tag < stop_tag:
+                return False
+            stopped_at = tag
+            return True
+
+        self.seek(0)
+        dataset = read_partial(
             self._stream,
             _stop_at,
             defer_size=None,
             force=force,
             specific_tags=None,
+        )
+        return dataset, stopped_at
+
+    def read_dataset_from(self, position: int, stop_tag: BaseTag) -> Dataset:
+        """Read elements from `position` onwards, stopping at `stop_tag`.
+
+        For continuing a read that stopped early. Unlike :func:`read_dataset` and
+        :func:`read_dataset_until` this reads elements and nothing else: the preamble
+        and file meta information are not read again, so the result is a plain dataset
+        rather than one carrying a file name and its file meta information. There is no
+        header to read past, so there is nothing for a force flag to force.
+
+        Parameters
+        ----------
+        position: int
+            Offset of the first element to read.
+        stop_tag: BaseTag
+            First tag not to read.
+
+        Returns
+        -------
+        Dataset
+            Dataset of the elements between `position` and `stop_tag`.
+        """
+
+        def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
+            return tag >= stop_tag
+
+        self.seek(position)
+        return read_elements(
+            self._stream,
+            self._dicom_io.is_implicit_VR,
+            self._dicom_io.is_little_endian,
+            stop_when=_stop_at,
         )
 
     def read_tag(self) -> BaseTag:

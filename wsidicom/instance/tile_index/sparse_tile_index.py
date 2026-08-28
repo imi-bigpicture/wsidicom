@@ -17,10 +17,12 @@ from collections.abc import Sequence
 from functools import cached_property
 
 import numpy as np
+from numpy.typing import NDArray
 
-from wsidicom.errors import WsiDicomNotFoundError
+from wsidicom.errors import WsiDicomError, WsiDicomNotFoundError
 from wsidicom.geometry import Point, Size
 from wsidicom.instance.dataset import WsiDataset
+from wsidicom.instance.per_frame_group_positions import PerFrameGroupPositions
 from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
@@ -46,11 +48,11 @@ class SparseTilePlane:
         return self.pretty_str()
 
     def __getitem__(self, position: Point) -> int:
-        """Get frame index from tile index at plane_position.
+        """Get frame index from tile index at position.
 
         Parameters
         ----------
-        plane_position: Point
+        position: Point
             Position in plane to get the frame index from
 
         Returns
@@ -61,17 +63,24 @@ class SparseTilePlane:
         frame_index = int(self.plane[position.x, position.y])
         return frame_index
 
-    def __setitem__(self, position: Point, frame_index: int):
-        """Add frame index to tile index.
+    def add_frames(
+        self,
+        columns: NDArray[np.int64],
+        rows: NDArray[np.int64],
+        frame_indices: NDArray[np.int64],
+    ):
+        """Add the frame index of many tiles at once.
 
         Parameters
         ----------
-        plane_position: Point
-            Position in plane to add the frame index
-        frame_index: int
-            Frame index to add to the index
+        columns: NDArray[np.int64]
+            Column in the plane of each frame.
+        rows: NDArray[np.int64]
+            Row in the plane of each frame.
+        frame_indices: NDArray[np.int64]
+            Frame index to add at each of those positions.
         """
-        self.plane[position.x, position.y] = frame_index
+        self.plane[columns, rows] = frame_indices
 
     def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         return "Sparse tile plane"
@@ -162,11 +171,6 @@ class SparseTileIndex(TileIndex):
     def _read_planes_from_datasets(self) -> dict[tuple[float, str], SparseTilePlane]:
         """Return SparseTilePlane from planes in datasets.
 
-        Parameters
-        ----------
-        datasets: Sequence[WsiDataset]
-           List of datasets to read planes from.
-
         Returns
         -------
         dict[tuple[float, str], SparseTilePlane]
@@ -175,10 +179,131 @@ class SparseTileIndex(TileIndex):
         planes: dict[tuple[float, str], SparseTilePlane] = defaultdict(
             lambda: SparseTilePlane(self.tiled_size)
         )
+        tile_size = self.tile_size
         for dataset in self._datasets:
-            frame_sequence = dataset.frame_sequence
-            for i, frame in enumerate(frame_sequence):
-                tile, z = self._read_frame_coordinates(frame)
-                identifier = dataset.read_optical_path_identifier(frame)
-                planes[(z, identifier)][tile] = i + dataset.frame_offset
+            positions = dataset.frame_positions
+            frame_count = len(positions.columns)
+            frame_indices = np.arange(frame_count) + dataset.frame_offset
+            tile_columns = (positions.columns - 1) // tile_size.width
+            tile_rows = (positions.rows - 1) // tile_size.height
+            self._check_within_tiling(tile_columns, tile_rows, positions)
+            z_offsets = self._plane_z_offsets(
+                positions.z_offsets, frame_count, dataset.read_z_offset()
+            )
+            optical_identifiers = self._plane_identifiers(
+                positions.optical_path_identifiers,
+                frame_count,
+                dataset.read_optical_path_identifier(),
+            )
+            unique_optical_identifiers = np.unique(optical_identifiers)
+            for z in np.unique(z_offsets):
+                for optical_identifier in unique_optical_identifiers:
+                    # Comparing an array to a value compares every element of it, and
+                    # & is likewise elementwise, so this is one bool per frame. Numpy
+                    # types both as Any, hence the annotation.
+                    frames_in_plane: NDArray[np.bool_] = (z_offsets == z) & (
+                        optical_identifiers == optical_identifier
+                    )
+                    if not frames_in_plane.any():
+                        continue
+                    # Every array is one value per frame, so the same frames are taken
+                    # out of each.
+                    planes[(float(z), str(optical_identifier))].add_frames(
+                        tile_columns[frames_in_plane],
+                        tile_rows[frames_in_plane],
+                        frame_indices[frames_in_plane],
+                    )
         return planes
+
+    def _check_within_tiling(
+        self,
+        tile_columns: NDArray[np.int64],
+        tile_rows: NDArray[np.int64],
+        positions: PerFrameGroupPositions,
+    ) -> None:
+        """Raise if a frame states a position that is not a tile of this image.
+
+        Placing a frame above the tiling raises an IndexError that says nothing about
+        the file it came from. Placing one below it raises nothing at all, as a
+        negative index counts from the far end, and the frame is quietly put somewhere
+        it does not belong. Both are the file stating a position the image has no room
+        for, so both are refused here rather than left to numpy.
+
+        Parameters
+        ----------
+        tile_columns: NDArray[np.int64]
+            Column in the tiling of each frame.
+        tile_rows: NDArray[np.int64]
+            Row in the tiling of each frame.
+        positions: PerFrameGroupPositions
+            Positions the frames state, to say in the message what one of them said.
+
+        Raises
+        ------
+        WsiDicomError
+            If any frame is outside the tiling.
+        """
+        outside = (
+            (tile_columns < 0)
+            | (tile_columns >= self.tiled_size.width)
+            | (tile_rows < 0)
+            | (tile_rows >= self.tiled_size.height)
+        )
+        if not outside.any():
+            return
+        frame = int(outside.argmax())
+        raise WsiDicomError(
+            f"{int(outside.sum())} of {len(outside)} frames state a position the image "
+            f"has no tile for. Frame {frame} states "
+            f"({positions.columns[frame]}, {positions.rows[frame]}), which is tile "
+            f"({tile_columns[frame]}, {tile_rows[frame]}) of a tiling that is "
+            f"{self.tiled_size.width} by {self.tiled_size.height} tiles."
+        )
+
+    def _plane_z_offsets(
+        self, z_offsets: NDArray[np.float64] | None, frame_count: int, default: float
+    ) -> NDArray[np.float64]:
+        """Return the z offset that puts each frame in a plane.
+
+        Parameters
+        ----------
+        z_offsets: NDArray[np.float64] | None
+            Z offset of each frame, or None if the frames do not state one.
+        frame_count: int
+            Number of frames.
+        default: float
+            Z offset of the frames of a dataset that does not state one per frame.
+
+        Returns
+        -------
+        NDArray[np.float64]
+            Z offset of each frame, rounded to the precision planes are keyed by.
+        """
+        if z_offsets is None:
+            return np.full(frame_count, default)
+        return np.round(z_offsets, self.Z_DECIMALS)
+
+    @staticmethod
+    def _plane_identifiers(
+        identifiers: NDArray[np.str_] | None, frame_count: int, default: str
+    ) -> NDArray[np.str_]:
+        """Return the optical path identifier that puts each frame in a plane.
+
+        Parameters
+        ----------
+        identifiers: NDArray[np.str_] | None
+            Optical path identifier of each frame, or None if the frames do not state
+            one.
+        frame_count: int
+            Number of frames.
+        default: str
+            Identifier of the frames of a dataset that does not state one per frame.
+
+        Returns
+        -------
+        NDArray[np.str_]
+            Optical path identifier of each frame.
+        """
+        if identifiers is None:
+            return np.full(frame_count, default)
+        return identifiers

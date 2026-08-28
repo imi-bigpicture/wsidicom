@@ -24,7 +24,8 @@ from pydicom.dataset import FileMetaDataset
 from pydicom.filebase import DicomFileLike
 from pydicom.filereader import _read_file_meta_info, read_preamble
 from pydicom.filewriter import write_file_meta_info
-from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag
+from pydicom.sequence import Sequence
+from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -48,7 +49,9 @@ from upath import UPath
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.tags import (
+    ExtendedOffsetTableTag,
     LossyImageCompressionRatioTag,
+    PerFrameFunctionalGroupsSequenceTag,
     PixelDataTag,
 )
 
@@ -230,6 +233,61 @@ class TestWsiDicomIO:
 
         # Assert
         assert read_dataset == dataset
+        io.close()
+
+    def test_read_dataset_stops_at_stop_tag(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        # Arrange
+        dataset = Dataset()
+        dataset.PatientID = "Test123"
+        dataset.PerFrameFunctionalGroupsSequence = Sequence([Dataset()])
+        dataset.ContainerIdentifier = "Test456"
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
+
+        # Act
+        read_dataset, stopped_at = io.read_dataset_until(
+            stop_tag=PerFrameFunctionalGroupsSequenceTag
+        )
+
+        # Assert
+        assert stopped_at == PerFrameFunctionalGroupsSequenceTag
+        assert PerFrameFunctionalGroupsSequenceTag not in read_dataset
+        assert read_dataset.PatientID == "Test123"
+        io.close()
+
+    def test_read_dataset_from_reads_elements_after_position(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        """Elements the read stopped short of can be picked up from where they start."""
+        # Arrange
+        container_identifier_tag = Tag("ContainerIdentifier")
+        dataset = Dataset()
+        dataset.PatientID = "Test123"
+        dataset.ContainerIdentifier = "Test456"
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
+        before, _ = io.read_dataset_until(stop_tag=container_identifier_tag)
+
+        # Act
+        after = io.read_dataset_from(io.tell(), ExtendedOffsetTableTag)
+
+        # Assert
+        assert container_identifier_tag not in before
+        assert after.ContainerIdentifier == "Test456"
+        before.update(after)
+        assert before == dataset
         io.close()
 
     @pytest.mark.parametrize("little_endian", [True, False])

@@ -102,7 +102,6 @@ class FullTileIndex(TileIndex):
 
         """
         MM_TO_MICRON = 1000.0
-        DECIMALS = 3
         focal_planes: set[float] = set()
         for dataset in self._datasets:
             slice_spacing = dataset.spacing_between_slices
@@ -121,7 +120,8 @@ class FullTileIndex(TileIndex):
 
             for plane in range(number_of_focal_planes):
                 z = round(
-                    dataset.z_offset + plane * slice_spacing * MM_TO_MICRON, DECIMALS
+                    dataset.z_offset + plane * slice_spacing * MM_TO_MICRON,
+                    self.Z_DECIMALS,
                 )
                 focal_planes.add(z)
         return sorted(focal_planes)

@@ -14,6 +14,7 @@
 
 """Module for reading DICOM WSI files."""
 
+import logging
 import threading
 
 from pydicom.tag import Tag
@@ -35,11 +36,17 @@ from wsidicom.file.io.frame_index.tiff import (
     EmptyTiffFrameTagsException,
     TiffFrameIndexParser,
 )
+from wsidicom.file.io.per_frame_functional_groups_reader import (
+    PerFrameFunctionalGroupsReader,
+    UnscannablePerFrameGroupsException,
+)
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import WsiDataset
 from wsidicom.metadata import ImageType
-from wsidicom.tags import ExtendedOffsetTableTag
+from wsidicom.tags import ExtendedOffsetTableTag, PerFrameFunctionalGroupsSequenceTag
 from wsidicom.uid import FileUids
+
+logger = logging.getLogger(__name__)
 
 
 class WsiDicomReader:
@@ -57,13 +64,11 @@ class WsiDicomReader:
         self._lock = threading.Lock()
         self._stream = stream
         self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
-        dataset = self._stream.read_dataset()
+        self._dataset = self._read_dataset()
         self._pixel_data_position = self._stream.tell()
 
-        self._image_type = WsiDataset.is_supported_wsi_dicom(dataset)
-        if self._image_type is not None:
-            self._dataset = WsiDataset(dataset)
-        else:
+        self._image_type = WsiDataset.is_supported_wsi_dicom(self._dataset)
+        if self._image_type is None:
             raise WsiDicomNotSupportedError(
                 f"Non-supported file or stream {self._stream}."
             )
@@ -79,6 +84,55 @@ class WsiDicomReader:
             )
         self._frame_index_parser: FrameIndexParser | None = None
         self._frame_index: list[tuple[int, int]] | None = None
+
+    def _read_dataset(self) -> WsiDataset:
+        """Read the dataset, leaving the per frame functional groups as bytes.
+
+        The read stops at the sequence, :class:`PerFrameFunctionalGroupsReader` searches
+        its bytes for the tile positions, and the read picks up again after it. If the
+        search cannot be trusted the sequence is read into datasets instead, so the
+        outcome is the same either way. The stream is left where the pixel data starts,
+        which is only known once the sequence has been passed, one way or the other.
+
+        Returns
+        -------
+        WsiDataset
+            Dataset, carrying the tile positions if they were found.
+        """
+        dataset, stopped_at = self._stream.read_dataset_until(
+            stop_tag=PerFrameFunctionalGroupsSequenceTag
+        )
+        # The read stops at the first tag ordered at or after the sequence, which need
+        # not be the sequence itself, and the rest of the dataset starts there.
+        continue_from = self._stream.tell()
+        frame_positions = None
+        if stopped_at == PerFrameFunctionalGroupsSequenceTag:
+            reader = PerFrameFunctionalGroupsReader(
+                self._stream,
+                continue_from,
+                int(dataset.get("NumberOfFrames", 0) or 0),
+                self._transfer_syntax_uid,
+                specific_character_set=dataset.get("SpecificCharacterSet", None),
+            )
+            try:
+                frame_positions = reader.read_positions()
+            except UnscannablePerFrameGroupsException as exception:
+                # Carry on from the sequence rather than past it, so that it is read.
+                logger.debug(
+                    "Could not find the tile positions of %s in the bytes of the per "
+                    "frame functional groups sequence (%s). Reading the sequence into "
+                    "datasets instead, which is slower and holds more memory.",
+                    self._stream,
+                    exception,
+                )
+            else:
+                continue_from = reader.end_of_sequence
+
+        # The rest of the dataset: the sequence when its bytes were not enough, and
+        # whatever is between it and the pixel data.
+        rest = self._stream.read_dataset_from(continue_from, ExtendedOffsetTableTag)
+        dataset.update(rest)
+        return WsiDataset(dataset, frame_positions=frame_positions)
 
     def __enter__(self):
         return self

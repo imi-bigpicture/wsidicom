@@ -3,9 +3,11 @@ from collections.abc import Sequence
 import pytest
 from pydicom import Dataset
 from pydicom.dataelem import DataElement
+from pydicom.sequence import Sequence as DicomSequence
 from pydicom.uid import UID, generate_uid
 
 from tests.data_gen import create_main_dataset
+from wsidicom.errors import WsiDicomError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance import ImageData, TileType
 from wsidicom.instance.dataset import WsiDataset
@@ -88,6 +90,46 @@ def shared_functional_group(pixel_measure: Dataset):
     shared_functional_group = Dataset()
     shared_functional_group.PixelMeasuresSequence = [pixel_measure]
     yield shared_functional_group
+
+
+def _optical_path_identification(identifier: str) -> DicomSequence:
+    """Return an Optical Path Identification Sequence naming `identifier`."""
+    item = Dataset()
+    item.OpticalPathIdentifier = identifier
+    return DicomSequence([item])
+
+
+def _plane_position(z_offset: float) -> DicomSequence:
+    """Return a Plane Position (Slide) Sequence at `z_offset`."""
+    item = Dataset()
+    item.ZOffsetInSlideCoordinateSystem = z_offset
+    return DicomSequence([item])
+
+
+def _per_frame_groups(
+    z_offsets: Sequence[float | None] = (None, None),
+    identifiers: Sequence[str | None] = (None, None),
+) -> DicomSequence:
+    """Return per frame functional groups for frames at the given z and optical path.
+
+    Every frame states a tile position, as a sparse tiled image is required to. A
+    frame states a z offset or an optical path identifier only where one is given.
+    """
+    frames = DicomSequence()
+    for z_offset, identifier in zip(z_offsets, identifiers, strict=True):
+        position = Dataset()
+        position.ColumnPositionInTotalImagePixelMatrix = 1
+        position.RowPositionInTotalImagePixelMatrix = 1
+        if z_offset is not None:
+            position.ZOffsetInSlideCoordinateSystem = z_offset
+        frame = Dataset()
+        frame.PlanePositionSlideSequence = DicomSequence([position])
+        if identifier is not None:
+            optical_path = Dataset()
+            optical_path.OpticalPathIdentifier = identifier
+            frame.OpticalPathIdentificationSequence = DicomSequence([optical_path])
+        frames.append(frame)
+    return frames
 
 
 @pytest.mark.unittest
@@ -485,3 +527,170 @@ class TestWsiDataset:
             0
         ]
         assert "SpacingBetweenSlices" not in pixel_measure
+
+    def test_optical_path_identifier_from_the_frame_wins_over_the_shared_groups(self):
+        # Arrange - the standard place for it in a sparse image is the frame.
+        source = create_main_dataset()
+        source.SharedFunctionalGroupsSequence[
+            0
+        ].OpticalPathIdentificationSequence = _optical_path_identification("shared")
+        frame = Dataset()
+        frame.OpticalPathIdentificationSequence = _optical_path_identification("frame")
+        dataset = WsiDataset(source)
+
+        # Act
+        identifier = dataset.read_optical_path_identifier(frame)
+
+        # Assert
+        assert identifier == "frame"
+
+    def test_optical_path_identifier_falls_back_to_the_shared_groups(self):
+        # Arrange - stating it once for all frames is not where the standard puts it,
+        # but it is unambiguous, so a frame that states none is answered from there.
+        source = create_main_dataset()
+        source.SharedFunctionalGroupsSequence[
+            0
+        ].OpticalPathIdentificationSequence = _optical_path_identification("shared")
+        dataset = WsiDataset(source)
+
+        # Act
+        identifier = dataset.read_optical_path_identifier()
+
+        # Assert - and not "0", the first optical path of the instance.
+        assert identifier == "shared"
+
+    def test_optical_path_identifier_falls_back_to_the_optical_paths(self):
+        # Arrange - nothing states it per frame or once for all frames.
+        dataset = WsiDataset(create_main_dataset())
+
+        # Act
+        identifier = dataset.read_optical_path_identifier()
+
+        # Assert
+        assert identifier == "0"
+
+    def test_z_offset_from_the_frame_wins_over_the_shared_groups(self):
+        # Arrange - the standard place for it in a sparse image is the frame.
+        source = create_main_dataset()
+        source.SharedFunctionalGroupsSequence[
+            0
+        ].PlanePositionSlideSequence = _plane_position(2.0)
+        frame = Dataset()
+        frame.PlanePositionSlideSequence = _plane_position(1.0)
+        dataset = WsiDataset(source)
+
+        # Act
+        z_offset = dataset.read_z_offset(frame)
+
+        # Assert
+        assert z_offset == 1.0
+
+    def test_z_offset_falls_back_to_the_shared_groups(self):
+        # Arrange - one focal plane stated once for all frames rather than per frame.
+        source = create_main_dataset()
+        source.SharedFunctionalGroupsSequence[
+            0
+        ].PlanePositionSlideSequence = _plane_position(2.0)
+        dataset = WsiDataset(source)
+
+        # Act
+        z_offset = dataset.read_z_offset()
+
+        # Assert - and not the default of zero.
+        assert z_offset == 2.0
+
+    def test_z_offset_falls_back_to_zero(self):
+        # Arrange - nothing states it per frame or once for all frames.
+        dataset = WsiDataset(create_main_dataset())
+
+        # Act
+        z_offset = dataset.read_z_offset()
+
+        # Assert
+        assert z_offset == 0.0
+
+    @pytest.mark.parametrize(
+        ["z_offsets", "identifiers"],
+        [
+            ([1.0, None], [None, None]),
+            ([None, None], ["1", None]),
+        ],
+    )
+    def test_frame_positions_refuse_an_element_only_some_frames_state(
+        self,
+        z_offsets: Sequence[float | None],
+        identifiers: Sequence[str | None],
+    ):
+        # Arrange - a macro in the per frame groups is in every frame or in none, so
+        # there is no reading of this file that is better than a guess.
+        source = create_main_dataset()
+        source.PerFrameFunctionalGroupsSequence = _per_frame_groups(
+            z_offsets, identifiers
+        )
+        dataset = WsiDataset(source)
+
+        # Act & Assert
+        with pytest.raises(WsiDicomError):
+            _ = dataset.frame_positions
+
+    @pytest.mark.parametrize(
+        ["z_offsets", "identifiers", "expected_z", "expected_identifiers"],
+        [
+            ([None, None], [None, None], None, None),
+            ([1.0, 2.0], [None, None], [1.0, 2.0], None),
+            ([None, None], ["0", "1"], None, ["0", "1"]),
+        ],
+    )
+    def test_frame_positions_of_an_element_every_frame_states_or_none_do(
+        self,
+        z_offsets: Sequence[float | None],
+        identifiers: Sequence[str | None],
+        expected_z: list[float] | None,
+        expected_identifiers: list[str] | None,
+    ):
+        # Arrange
+        source = create_main_dataset()
+        source.PerFrameFunctionalGroupsSequence = _per_frame_groups(
+            z_offsets, identifiers
+        )
+        dataset = WsiDataset(source)
+
+        # Act
+        positions = dataset.frame_positions
+
+        # Assert - None where no frame states it, so what the instance says applies.
+        if expected_z is None:
+            assert positions.z_offsets is None
+        else:
+            assert positions.z_offsets is not None
+            assert list(positions.z_offsets) == expected_z
+        if expected_identifiers is None:
+            assert positions.optical_path_identifiers is None
+        else:
+            assert positions.optical_path_identifiers is not None
+            assert list(positions.optical_path_identifiers) == expected_identifiers
+
+    def test_frame_positions_refuse_more_than_one_optical_path_identifier(self):
+        # Arrange - Optical Path Identification Sequence holds a single item, so which
+        # path a frame stating several is on cannot be told.
+        source = create_main_dataset()
+        frames = DicomSequence()
+        for identifiers in (["0", "1"], ["2", "3"]):
+            position = Dataset()
+            position.ColumnPositionInTotalImagePixelMatrix = 1
+            position.RowPositionInTotalImagePixelMatrix = 1
+            frame = Dataset()
+            frame.PlanePositionSlideSequence = DicomSequence([position])
+            frame.OpticalPathIdentificationSequence = DicomSequence(
+                [
+                    _optical_path_identification(identifier)[0]
+                    for identifier in identifiers
+                ]
+            )
+            frames.append(frame)
+        source.PerFrameFunctionalGroupsSequence = frames
+        dataset = WsiDataset(source)
+
+        # Act & Assert
+        with pytest.raises(WsiDicomError):
+            _ = dataset.frame_positions

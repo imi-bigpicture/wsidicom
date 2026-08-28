@@ -20,6 +20,7 @@ from enum import Enum
 from functools import cached_property
 from typing import Any, ClassVar
 
+import numpy as np
 from pydicom.dataset import Dataset
 from pydicom.multival import MultiValue
 from pydicom.sequence import Sequence as DicomSequence
@@ -40,13 +41,17 @@ from wsidicom.errors import (
 )
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.image_data import ImageData
+from wsidicom.instance.per_frame_group_positions import PerFrameGroupPositions
 from wsidicom.metadata.image import ImageType
 from wsidicom.tags import (
+    ColumnPositionInTotalImagePixelMatrixTag,
     LossyImageCompressionMethodTag,
     LossyImageCompressionRatioTag,
-    OpticalPathIdentificationSequenceTag,
     OpticalPathIdentifierTag,
     PerFrameFunctionalGroupsSequenceTag,
+    PlanePositionSlideSequenceTag,
+    RowPositionInTotalImagePixelMatrixTag,
+    ZOffsetInSlideCoordinateSystemTag,
 )
 from wsidicom.uid import FileUids, SlideUids
 
@@ -100,6 +105,124 @@ class WsiDataset(Dataset):
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.8.12.4.html
     Notably excludes MONOCHROME1, which the IOD does not permit. Datasets with any
     other value are rejected by :func:`is_supported_wsi_dicom`."""
+
+    DEFAULT_Z_OFFSET: ClassVar[float] = 0.0
+    """Z offset of a frame that does not state one, which is the focal plane at zero."""
+
+    def __init__(
+        self,
+        *args: Any,
+        frame_positions: PerFrameGroupPositions | None = None,
+        **kwargs: Any,
+    ):
+        """Create a WSI dataset.
+
+        Parameters
+        ----------
+        *args: Any
+            Positional arguments for `Dataset`, e.g. the dataset to wrap.
+        frame_positions: PerFrameGroupPositions | None = None
+            Tile positions the reader took out of the bytes of the Per Frame Functional
+            Groups Sequence, given when it did not have to build a dataset for every
+            item. The sequence is then not in the dataset, and these stand in for it.
+        **kwargs: Any
+            Keyword arguments for `Dataset`.
+        """
+        super().__init__(*args, **kwargs)
+        self._frame_positions = frame_positions
+
+    @property
+    def frame_positions(self) -> PerFrameGroupPositions:
+        """Tile position of every frame, in frame order.
+
+        The same either way: the positions the reader took out of the bytes of the per
+        frame functional groups sequence, or the sequence when it is in the dataset.
+        Only what a frame states is reported, so frames that carry no z offset or
+        optical path identifier have none here either.
+
+        Returns
+        -------
+        PerFrameGroupPositions
+            Position of every frame.
+        """
+        if self._frame_positions is not None:
+            return self._frame_positions
+        return self._parse_frame_positions()
+
+    def _parse_frame_positions(self) -> PerFrameGroupPositions:
+        """Return the position of every frame, parsed from the per frame groups.
+
+        A frame need not carry a z offset or an optical path identifier. If no frame
+        carries one, there is no sequence of them and what the instance states applies
+        to every frame; if only some do, the file is refused.
+
+        Returns
+        -------
+        PerFrameGroupPositions
+            Position of every frame.
+
+        Raises
+        ------
+        WsiDicomError
+            If the per frame functional groups do not state the tile positions, or if
+            only some frames state a z offset or an optical path identifier.
+        """
+        if not self._has_parsed_per_frame_positions:
+            raise WsiDicomError(
+                "The per frame functional groups of this instance do not state where "
+                "its frames sit, or there are none. A sparse tiled image is required "
+                "to give every frame a Plane Position (Slide)."
+            )
+        columns: list[int] = []
+        rows: list[int] = []
+        z_offsets: list[float] = []
+        identifiers: list[str] = []
+        for frame in self.PerFrameFunctionalGroupsSequence:
+            position: Dataset = frame[PlanePositionSlideSequenceTag][0]
+            columns.append(
+                int(position[ColumnPositionInTotalImagePixelMatrixTag].value)
+            )
+            rows.append(int(position[RowPositionInTotalImagePixelMatrixTag].value))
+            z_offset = position.get(ZOffsetInSlideCoordinateSystemTag, None)
+            if z_offset is not None:
+                z_offsets.append(float(z_offset.value))
+            optical_paths: DicomSequence | None = getattr(
+                frame, "OpticalPathIdentificationSequence", None
+            )
+            if optical_paths is not None and len(optical_paths) > 1:
+                raise WsiDicomError(
+                    f"A frame states {len(optical_paths)} optical path identifiers, "
+                    "where Optical Path Identification Sequence holds a single item."
+                )
+            identifier = (
+                None
+                if optical_paths is None or len(optical_paths) == 0
+                else getattr(optical_paths[0], "OpticalPathIdentifier", None)
+            )
+            if identifier is not None:
+                identifiers.append(str(identifier))
+
+        frame_count = len(columns)
+        for element, values in (
+            ("z offset", z_offsets),
+            ("optical path identifier", identifiers),
+        ):
+            if len(values) not in (0, frame_count):
+                raise WsiDicomError(
+                    f"{len(values)} of {frame_count} frames state a {element}. A per "
+                    "frame functional group macro is in every frame or in none of "
+                    "them, so there is no reading of this that is not a guess."
+                )
+        return PerFrameGroupPositions(
+            columns=np.asarray(columns, dtype=np.int64),
+            rows=np.asarray(rows, dtype=np.int64),
+            z_offsets=(
+                np.asarray(z_offsets, dtype=np.float64) if len(z_offsets) > 0 else None
+            ),
+            optical_path_identifiers=(
+                np.asarray(identifiers, dtype=np.str_) if len(identifiers) > 0 else None
+            ),
+        )
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self})"
@@ -231,25 +354,6 @@ class WsiDataset(Dataset):
             return None
         return getattr(self.pixel_measure, "SpacingBetweenSlices", None)
 
-    @cached_property
-    def frame_sequence(self) -> DicomSequence:
-        """Return per frame functional group sequence if present, otherwise
-        shared functional group sequence.
-
-        Returns
-        -------
-        DicomSequence
-            Per frame or shared functional group sequence.
-        """
-        if self._has_per_frame_positions:
-            return self.PerFrameFunctionalGroupsSequence
-        elif (
-            "SharedFunctionalGroupsSequence" in self
-            and len(self.SharedFunctionalGroupsSequence) > 0
-        ):
-            return self.SharedFunctionalGroupsSequence
-        return DicomSequence([])
-
     @property
     def ext_depth_of_field(self) -> bool:
         """Return true if instance has extended depth of field
@@ -372,6 +476,23 @@ class WsiDataset(Dataset):
     def optical_path_sequence(self) -> DicomSequence | None:
         """Return optical path sequence from dataset."""
         return getattr(self, "OpticalPathSequence", None)
+
+    @cached_property
+    def _shared_functional_group(self) -> Dataset | None:
+        """The item of the Shared Functional Groups Sequence, if the instance has one.
+
+        By the standard a functional group macro is stated in either the shared groups
+        or the per frame groups and not both, so for a sparse tiled image the tile
+        positions and the optical path are per frame. A file that instead states a
+        value that is the same for every frame once in the shared groups is not
+        following that, but what it means is unambiguous, so it is read. Only frames
+        that state no value of their own are answered from here, which leaves a file
+        that does follow the standard reading exactly as before.
+        """
+        shared = getattr(self, "SharedFunctionalGroupsSequence", None)
+        if shared is None or len(shared) == 0:
+            return None
+        return shared[0]
 
     @cached_property
     def z_offset(self) -> float:
@@ -551,25 +672,77 @@ class WsiDataset(Dataset):
 
         return self.uids.slide.matches(uids)
 
-    def read_optical_path_identifier(self, frame: Dataset) -> str:
-        """Return optical path identifier from frame, or from self if not
-        found."""
-        optical_path_sequence = frame.get(
-            OpticalPathIdentificationSequenceTag, self.optical_path_sequence
-        )
-        if optical_path_sequence is None:
-            return "0"
-        optical_sequence = getattr(
-            frame, "OpticalPathIdentificationSequence", self.optical_path_sequence
-        )
-        if optical_sequence is None:
-            return "0"
-        optical_path_identifier = optical_sequence[0].get(
-            OpticalPathIdentifierTag, None
-        )
-        if optical_path_identifier is None:
-            return "0"
-        return optical_path_identifier.value
+    def read_optical_path_identifier(self, frame: Dataset | None = None) -> str:
+        """Return the optical path identifier that applies to `frame`.
+
+        Parameters
+        ----------
+        frame: Dataset | None = None
+            Per frame functional group item, or None to ask what applies to a frame
+            that states no identifier of its own.
+
+        Returns
+        -------
+        str
+            Optical path identifier, "0" if neither the frame, the shared groups nor
+            the optical paths of the instance name one.
+        """
+        for source in (frame, self._shared_functional_group):
+            if source is None:
+                continue
+            identifier = self._optical_path_identifier_of(
+                getattr(source, "OpticalPathIdentificationSequence", None)
+            )
+            if identifier is not None:
+                return identifier
+        identifier = self._optical_path_identifier_of(self.optical_path_sequence)
+        return "0" if identifier is None else identifier
+
+    def read_z_offset(self, frame: Dataset | None = None) -> float:
+        """Return the z offset in the slide coordinate system that applies to `frame`.
+
+        Parameters
+        ----------
+        frame: Dataset | None = None
+            Per frame functional group item, or None to ask what applies to a frame
+            that states no offset of its own.
+
+        Returns
+        -------
+        float
+            Z offset, `DEFAULT_Z_OFFSET` if neither the frame nor the shared groups
+            state one.
+        """
+        for source in (frame, self._shared_functional_group):
+            if source is None:
+                continue
+            position = getattr(source, "PlanePositionSlideSequence", None)
+            if position is None or len(position) == 0:
+                continue
+            z_offset = position[0].get(ZOffsetInSlideCoordinateSystemTag, None)
+            if z_offset is not None:
+                return float(z_offset.value)
+        return self.DEFAULT_Z_OFFSET
+
+    @staticmethod
+    def _optical_path_identifier_of(sequence: DicomSequence | None) -> str | None:
+        """Return the optical path identifier the first item of `sequence` names.
+
+        Parameters
+        ----------
+        sequence: DicomSequence | None
+            Optical Path Identification Sequence or Optical Path Sequence, or None.
+
+        Returns
+        -------
+        str | None
+            The identifier, or None if the sequence is missing, empty, or does not
+            name one.
+        """
+        if sequence is None or len(sequence) == 0:
+            return None
+        identifier = sequence[0].get(OpticalPathIdentifierTag, None)
+        return None if identifier is None else str(identifier.value)
 
     def get_multi_value(self, tag: BaseTag) -> list[Any]:
         """Return values for tag as list of values. If tag is not found, return empty
@@ -886,14 +1059,23 @@ class WsiDataset(Dataset):
         )
         return WsiDataset(dataset)
 
-    @cached_property
+    @property
     def _has_per_frame_positions(self) -> bool:
-        """Whether the per frame functional groups carry per-frame tile positions
-        (PlanePositionSlideSequence), the marker of a sparse, explicitly-positioned
-        image. Checks the first frame as representative. This is the condition a
-        sparse tile index needs, so both :func:`tile_type` and
-        :func:`frame_sequence` gate on it to stay in agreement.
+        """Whether the frames carry per-frame tile positions, the marker of a sparse,
+        explicitly-positioned image. This is the condition a sparse tile index needs,
+        so :func:`tile_type` gates on it.
+
+        Positions from the reader answer the same question: they only exist when it
+        found a tile position for every frame, and then the sequence itself is not in
+        the dataset.
         """
+        return self._frame_positions is not None or self._has_parsed_per_frame_positions
+
+    @property
+    def _has_parsed_per_frame_positions(self) -> bool:
+        """Whether the per frame functional groups sequence is in the dataset and its
+        items carry tile positions (PlanePositionSlideSequence). Checks the first frame
+        as representative."""
         return (
             "PerFrameFunctionalGroupsSequence" in self
             and len(self.PerFrameFunctionalGroupsSequence) > 0

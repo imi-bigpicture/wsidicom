@@ -14,24 +14,23 @@
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Sequence
+from typing import ClassVar
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 
 from wsidicom.geometry import Point, Size
 from wsidicom.instance.dataset import WsiDataset
-from wsidicom.tags import (
-    ColumnPositionInTotalImagePixelMatrixTag,
-    OpticalPathIdentifierTag,
-    PlanePositionSlideSequenceTag,
-    RowPositionInTotalImagePixelMatrixTag,
-    ZOffsetInSlideCoordinateSystemTag,
-)
+from wsidicom.tags import OpticalPathIdentifierTag
 
 
 class TileIndex(metaclass=ABCMeta):
     """Index for mapping tile position to frame number. Is subclassed into
     FullTileIndex and SparseTileIndex."""
+
+    Z_DECIMALS: ClassVar[int] = 3
+    """Decimals kept when rounding a z offset into a focal plane key. Focal planes are
+    keys in a dict, so every path that produces one has to round the same way."""
 
     def __init__(self, datasets: Sequence[WsiDataset]):
         """Create tile index for frames in datasets. Requires equal tile
@@ -159,27 +158,3 @@ class TileIndex(metaclass=ABCMeta):
             str(optical_ds[OpticalPathIdentifierTag].value)
             for optical_ds in optical_path_sequence
         )
-
-    def _read_frame_coordinates(self, frame: Dataset) -> tuple[Point, float]:
-        """Return frame coordinate (Point(x, y) and float z) of the frame.
-        In the Plane Position Slide Sequence x and y are defined in mm and z in
-        um.
-
-        Parameters
-        ----------
-        frame: Dataset
-            Pydicom frame sequence.
-
-        Returns
-        -------
-        Point, float
-            The frame xy coordinate and z coordinate
-        """
-        DECIMALS = 3
-        position: Dataset = frame[PlanePositionSlideSequenceTag][0]
-        y = int(position[RowPositionInTotalImagePixelMatrixTag].value) - 1
-        x = int(position[ColumnPositionInTotalImagePixelMatrixTag].value) - 1
-        z_offset = position.get(ZOffsetInSlideCoordinateSystemTag, None)
-        z = 0 if z_offset is None else round(float(z_offset.value), DECIMALS)
-        tile = Point(x=x, y=y) // self.tile_size
-        return tile, z
