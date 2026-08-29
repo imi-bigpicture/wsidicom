@@ -15,12 +15,14 @@
 """Module with base IO class for handling DICOM WSI files."""
 
 import struct
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from datetime import datetime
 from functools import cached_property
 from struct import pack
 from typing import Any, BinaryIO
 
+from fsspec.implementations.local import LocalFileSystem
 from pydicom.dataelem import RawDataElement, convert_raw_data_element
 from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.errors import InvalidDicomError
@@ -91,6 +93,35 @@ class WsiDicomIO:
     def filepath(self) -> UPath:
         """Return the filepath the stream is backed by."""
         return self._filepath
+
+    @contextmanager
+    def buffered(self, buffer_bytes: int) -> Generator[BinaryIO, None, None]:
+        """Yield a stream over the same file that reads it a block at a time.
+
+        The stream this instance holds is yielded as it is when the file is not a
+        local one, since nothing else can be opened for it, and a stream that fetches
+        over a network has its own idea of how much to ask for at a time.
+
+        Parameters
+        ----------
+        buffer_bytes: int
+            Bytes to read at a time.
+
+        Yields
+        ------
+        BinaryIO
+            Stream over the same file, to read and seek within.
+        """
+        if (
+            not isinstance(self._filepath.fs, LocalFileSystem)
+            or not self._filepath.is_file()
+        ):
+            yield self._stream
+            return
+        size = self._filepath.stat().st_size
+        buffer_bytes = max(min(buffer_bytes, size), 1)
+        with open(str(self._filepath), "rb", buffering=buffer_bytes) as buffered:
+            yield buffered
 
     @property
     def write(self) -> Callable[[bytes], int]:

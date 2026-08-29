@@ -27,6 +27,7 @@ from wsidicom.file.io.frame_index import (
     BasicOffsetTableFrameIndexParser,
     EmptyBasicTableOffsetException,
     ExtendedOffsetFrameIndexParser,
+    FrameIndex,
     FrameIndexParser,
     NativePixelDataFrameIndexParser,
     OffsetTableType,
@@ -83,15 +84,16 @@ class WsiDicomReader:
                 f"Non-supported transfer syntax {self.transfer_syntax}"
             )
         self._frame_index_parser: FrameIndexParser | None = None
-        self._frame_index: list[tuple[int, int]] | None = None
+        self._frame_index: FrameIndex | None = None
 
     def _read_dataset(self) -> WsiDataset:
         """Read the dataset, leaving the per frame functional groups as bytes.
 
         The read stops at the sequence, :class:`PerFrameFunctionalGroupsReader` searches
         its bytes for the tile positions, and the read picks up again after it. If the
-        search cannot be trusted the sequence is read into datasets instead, so the
-        outcome is the same either way. The stream is left where the pixel data starts,
+        search cannot be trusted, or there is nothing to find because the image is
+        tiled full, the sequence is read into pydicom datasets instead, so the outcome
+        is the same either way. The stream is left where the pixel data starts,
         which is only known once the sequence has been passed, one way or the other.
 
         Returns
@@ -106,7 +108,11 @@ class WsiDicomReader:
         # not be the sequence itself, and the rest of the dataset starts there.
         continue_from = self._stream.tell()
         frame_positions = None
-        if stopped_at == PerFrameFunctionalGroupsSequenceTag:
+        # A tiled full image states where its frames are by the order they are in, so
+        # its per frame groups hold no tile positions to find, and a full tile index
+        # would not ask for them if they did.
+        tiled_full = dataset.get("DimensionOrganizationType", None) == "TILED_FULL"
+        if stopped_at == PerFrameFunctionalGroupsSequenceTag and not tiled_full:
             reader = PerFrameFunctionalGroupsReader(
                 self._stream,
                 continue_from,
@@ -175,7 +181,7 @@ class WsiDicomReader:
         return self.dataset.frame_offset
 
     @property
-    def frame_index(self) -> list[tuple[int, int]]:
+    def frame_index(self) -> FrameIndex:
         """Return frame positions and lengths."""
         if self._frame_index is None:
             with self._lock:

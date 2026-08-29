@@ -41,6 +41,7 @@ from wsidicom.file.io import (
     WsiDicomReader,
     WsiDicomWriter,
 )
+from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
 from wsidicom.file.io.wsidicom_writer import EncapsulatedPixelDataWriter
 from wsidicom.geometry import Point, Size, SizeMm
@@ -77,7 +78,7 @@ class WsiDicomTestReader(WsiDicomReader):
         dataset.ImageType = ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]
         self._dataset = WsiDataset(dataset)
         self._frame_index_parser: FrameIndexParser | None = None
-        self._frame_index: list[tuple[int, int]] | None = None
+        self._frame_index: FrameIndex | None = None
         self._lock = threading.Lock()
 
     @property
@@ -284,7 +285,7 @@ class TestWsiDicomWriter:
             (offset, length)
             for offset, length in zip(frame_offsets, frame_lengths, strict=True)
         ]
-        assert expected_frame_positions == read_frame_positions
+        assert expected_frame_positions == list(read_frame_positions)
         assert written_table_type == read_table_type
 
     @pytest.mark.parametrize(

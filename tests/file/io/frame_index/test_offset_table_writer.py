@@ -135,6 +135,48 @@ class TestOffsetTableWriter:
         buffer.seek(0)
         ExtendedOffsetFrameIndexParser(buffer, 0, len(positions))
 
+    def test_write_eot_lengths_are_of_the_frames(
+        self, buffer: WsiDicomIO, positions: Sequence[int]
+    ):
+        """The lengths state the frames, not the distance from one to the next.
+
+        A frame position is where the item tag and length introducing the frame are,
+        so the distance to the next frame is those eight bytes more than the frame
+        itself. Nothing else reads these lengths back if the reader derives them
+        instead, so they are checked here.
+        """
+        # Arrange
+        HEADER_BYTES = 8
+        EOT_ITEM_BYTES = 8
+        last_frame_end = 600
+        expected = [
+            next_position - position - HEADER_BYTES
+            for position, next_position in zip(positions, positions[1:], strict=False)
+        ]
+        expected.append(last_frame_end - positions[-1] - HEADER_BYTES)
+        writer = EotWriter(buffer)
+        writer.reserve(len(positions))
+        buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
+        buffer.write_tag(ItemTag)
+        buffer.write_UL(0)
+
+        # Act
+        writer.write(0, positions, last_frame_end)
+
+        # Assert
+        buffer.seek(0)
+        assert buffer.read_tag() == ExtendedOffsetTableTag
+        buffer.read_tag_vr()
+        buffer.seek(buffer.read_tag_length(True), 1)
+        assert buffer.read_tag() == ExtendedOffsetTableLengthsTag
+        buffer.read_tag_vr()
+        buffer.read_tag_length(True)
+        written = [
+            struct.unpack("<Q", buffer.read(EOT_ITEM_BYTES))[0]
+            for _ in range(len(positions))
+        ]
+        assert written == expected
+
     @staticmethod
     def assertEndOfFile(file: WsiDicomIO):
         with pytest.raises(EOFError):

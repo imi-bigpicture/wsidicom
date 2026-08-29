@@ -1,8 +1,10 @@
 from enum import Enum
 from struct import error as StructError
 
+import numpy as np
 from PIL.TiffImagePlugin import ImageFileDirectory_v2
 
+from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.frame_index.pixel_data import PixelDataFrameIndexParser
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
@@ -31,8 +33,11 @@ class TiffFrameIndexParser(PixelDataFrameIndexParser):
     def offset_table_type(self):
         return OffsetTableType.TIFF
 
-    def _get_index(self):
-        return list(zip(self._offsets, self._lengths, strict=True))
+    def _get_index(self) -> FrameIndex:
+        return FrameIndex(
+            np.asarray(self._offsets, dtype=np.int64),
+            np.asarray(self._lengths, dtype=np.int64),
+        )
 
     def _get_tags(self):
         """Return the tags used for the TIFF table."""
@@ -64,16 +69,16 @@ class TiffFrameIndexParser(PixelDataFrameIndexParser):
         ImageFileDirectory_v2
             The first image file directory of the tiff file.
         """
-        HEADER_LENGTH = 8
+        HEADER_BYTES = 8
         BIG_TIFF_VERSION = 43
         stream = self._file.stream
         stream.seek(0)
-        header = stream.read(HEADER_LENGTH)
+        header = stream.read(HEADER_BYTES)
         try:
             # A big tiff has a header of twice the length. Detected as PIL does, so
             # that the same files are accepted.
             if header[2] == BIG_TIFF_VERSION:
-                header += stream.read(HEADER_LENGTH)
+                header += stream.read(HEADER_BYTES)
             directory = ImageFileDirectory_v2(header)
             if directory.next == 0:
                 raise EmptyTiffFrameTagsException(

@@ -16,6 +16,9 @@
 
 import math
 
+import numpy as np
+
+from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
@@ -58,21 +61,20 @@ class NativePixelDataFrameIndexParser(FrameIndexParser):
         self._validate_pixel_data_start(self.expected_length)
         return self._file.tell()
 
-    def _get_index(self) -> list[tuple[int, int]]:
+    def _get_index(self) -> FrameIndex:
         """Create frame positions for uncapsulated data.
 
-        Parameters
-        ----------
-        pixel_data_start: int
-            Offset to first frame in pixel data.
+        Every frame is the same size, so the positions are a series and the lengths are
+        all the same.
 
         Returns
         -------
-        list[tuple[int, int]]
-            A list with frame positions and frame lengths.
+        FrameIndex
+            Position and length of every frame.
         """
         frame_size = self._tile_size.area * self._samples_per_pixel * (self._bits // 8)
-        return [
-            (self._pixels_start + index * frame_size, frame_size)
-            for index in range(self._frame_count)
-        ]
+        frames = np.arange(self._frame_count, dtype=np.int64)
+        return FrameIndex(
+            self._pixels_start + frames * frame_size,
+            np.full(self._frame_count, frame_size, dtype=np.int64),
+        )

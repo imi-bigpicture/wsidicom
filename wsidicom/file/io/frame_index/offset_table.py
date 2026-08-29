@@ -15,52 +15,51 @@
 """Abstract class for FrameIndex that has an offset table (basic or extended)."""
 
 from abc import abstractmethod
-from struct import unpack
 
-from pydicom.tag import ItemTag
+import numpy as np
+from numpy.typing import NDArray
 
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.frame_index.encapsulated_pixel_data import (
     EncapsulatedPixelDataFrameIndexParser,
 )
+from wsidicom.file.io.frame_index.frame_index import FrameIndex
 
 
 class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
+    """Frame index parser for pixel data introduced by an offset table."""
+
     @property
     @abstractmethod
+    def dtype(self) -> str:
+        """Return the data type of an item in the table."""
+        raise NotImplementedError()
+
+    @property
     def bytes_per_item(self) -> int:
         """Return the number of bytes per item in the table."""
-        raise NotImplementedError()
+        return np.dtype(self.dtype).itemsize
 
-    @property
-    @abstractmethod
-    def mode(self) -> str:
-        """Return the mode used for unpacking the table."""
-        raise NotImplementedError()
+    def _parse_offsets(self, table: bytes) -> NDArray[np.int64]:
+        """Parse the offset of every frame out of a table (BOT or EOT).
 
-    def _parse_table(self, table: bytes, pixels_start: int) -> list[tuple[int, int]]:
-        """Parse table with offsets (BOT or EOT).
+        The whole table is turned into offsets at once rather than a frame at a time.
 
         Parameters
         ----------
         table: bytes
             BOT or EOT as bytes
-        table_type: OffsetTableType
-            Type of table, 'bot' or 'eot'.
-        pixels_start: int
-            Position of first frame item in pixel data.
 
         Returns
         -------
-        list[tuple[int, int]]
-            A list with frame positions and frame lengths.
+        NDArray[np.int64]
+            Offset of every frame, relative to the first frame in the pixel data.
         """
         if not self._file.is_little_endian:
             raise WsiDicomFileError(
                 str(self._file), "Big endian not supported for BOT or EOT"
             )
         bytes_per_item = self.bytes_per_item
-        mode = self.mode
         table_length = len(table)
         if table_length == 0 or table_length % bytes_per_item:
             raise WsiDicomFileError(
@@ -68,40 +67,40 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
                 f"Expected offset table of a non-zero multiple of {bytes_per_item} "
                 f"bytes, got {table_length}.",
             )
-        TAG_BYTES = 4
-        LENGTH_BYTES = 4
-        positions: list[tuple[int, int]] = []
-        # Read through table to get offset and length for all but last item
-        # All read offsets are for item tag of frame and relative to first
-        # frame in pixel data.
-        this_offset: int = unpack(mode, table[0:bytes_per_item])[0]
-        if this_offset != 0:
+        offsets = np.frombuffer(table, dtype=self.dtype).astype(np.int64)
+        if offsets[0] != 0:
             raise WsiDicomFileError(
                 str(self._file), "First item in offset table should be at offset 0"
             )
-        for index in range(bytes_per_item, table_length, bytes_per_item):
-            next_offset = unpack(mode, table[index : index + bytes_per_item])[0]
-            offset = this_offset + TAG_BYTES + LENGTH_BYTES
-            length = next_offset - offset
-            if length <= 0 or length % 2:
-                raise WsiDicomFileError(
-                    str(self._file),
-                    (
-                        f"Invalid frame length {length} "
-                        f"for frame {index // bytes_per_item}"
-                    ),
-                )
-            positions.append((pixels_start + offset, length))
-            this_offset = next_offset
+        return offsets
 
-        # Go to last frame in pixel data and read the length of the frame
-        self._file.seek(pixels_start + this_offset)
-        if self._file.read_tag() != ItemTag:
-            raise WsiDicomFileError(str(self._file), "Expected ItemTag in PixelData")
-        length: int = self._file.read_UL()
-        if length <= 0 or length % 2:
-            raise WsiDicomFileError(str(self._file), "Invalid frame length")
-        offset = this_offset + TAG_BYTES + LENGTH_BYTES
-        positions.append((pixels_start + offset, length))
+    def _build_index(
+        self,
+        offsets: NDArray[np.int64],
+        lengths: NDArray[np.int64],
+        pixels_start: int,
+    ) -> FrameIndex:
+        """Return where every frame is in the file, from its offset and its length.
 
-        return positions
+        Parameters
+        ----------
+        offsets: NDArray[np.int64]
+            Offset of every frame, relative to the first frame in the pixel data.
+        lengths: NDArray[np.int64]
+            Length of every frame.
+        pixels_start: int
+            Position of first frame item in pixel data.
+
+        Returns
+        -------
+        FrameIndex
+            Position and length of every frame.
+        """
+        invalid: NDArray[np.bool_] = (lengths <= 0) | (lengths % 2 != 0)
+        if invalid.any():
+            frame = int(invalid.argmax())
+            raise WsiDicomFileError(
+                str(self._file),
+                f"Invalid frame length {lengths[frame]} for frame {frame}",
+            )
+        return FrameIndex(pixels_start + offsets + self.HEADER_BYTES, lengths)

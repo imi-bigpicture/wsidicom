@@ -17,6 +17,7 @@
 from abc import abstractmethod
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.tags import PixelDataTag
@@ -30,7 +31,7 @@ class FrameIndexParser:
         self._file.seek(self._pixel_data_start)
         self._pixels_start = self._get_pixels_start()
 
-    def parse_frame_index(self) -> list[tuple[int, int]]:
+    def parse_frame_index(self) -> FrameIndex:
         self._file.seek(self._pixel_data_start)
         index = self._get_index()
         self._validate_frame_index(index)
@@ -42,8 +43,8 @@ class FrameIndexParser:
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_index(self) -> list[tuple[int, int]]:
-        """Return a list of frame positions and lengths."""
+    def _get_index(self) -> FrameIndex:
+        """Return the position and length of every frame."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -51,12 +52,12 @@ class FrameIndexParser:
         """Parse pixel data start and return position of first frame."""
         raise NotImplementedError()
 
-    def _validate_frame_index(self, frame_index: list[tuple[int, int]]):
+    def _validate_frame_index(self, frame_index: FrameIndex):
         """Validate frame index.
 
         Parameters
         ----------
-        frame_index: list[tuple[int, int]]
+        frame_index: FrameIndex
             Frame index.
         """
         if len(frame_index) < self._frame_count:
@@ -77,7 +78,7 @@ class FrameIndexParser:
                 ),
             )
 
-    def _validate_pixel_data_start(self, expected_length: int | None):
+    def _validate_pixel_data_start(self, expected_length: int | None = None):
         """Check that pixel data tag is present and that the tag length is equal to
         expected count. Raises WsiDicomFileError otherwise.
 

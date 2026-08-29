@@ -18,6 +18,7 @@ from wsidicom.file.io.frame_index.basic import (
     EmptyBasicTableOffsetException,
 )
 from wsidicom.file.io.frame_index.extended import ExtendedOffsetFrameIndexParser
+from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.native_pixel_data import (
     NativePixelDataFrameIndexParser,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "BasicOffsetTableFrameIndexParser",
     "PixelDataFrameIndexParser",
     "ExtendedOffsetFrameIndexParser",
+    "FrameIndex",
     "FrameIndexParser",
     "NativePixelDataFrameIndexParser",
     "OffsetTableType",

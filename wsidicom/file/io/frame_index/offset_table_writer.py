@@ -148,15 +148,18 @@ class EotWriter(OffsetTableWriter):
             True,
             True,
         )
+        # A length is of the frame itself, so the item tag and length that a frame
+        # position points at are not part of it.
+        TAG_BYTES = 4
+        LENGTH_BYTES = 4
+        HEADER_BYTES = TAG_BYTES + LENGTH_BYTES
         frame_start = frame_positions[0]
         for frame_end in frame_positions[1:]:  # Write EOT lengths
-            frame_length = frame_end - frame_start
+            frame_length = frame_end - frame_start - HEADER_BYTES
             self._file.write_unsigned_long_long(frame_length)
             frame_start = frame_end
 
         # Last frame length, end does not include tag and length
-        TAG_BYTES = 4
-        LENGTH_BYTES = 4
-        last_frame_start = frame_start + TAG_BYTES + LENGTH_BYTES
+        last_frame_start = frame_start + HEADER_BYTES
         last_frame_length = last_frame_end - last_frame_start
         self._file.write_unsigned_long_long(last_frame_length)

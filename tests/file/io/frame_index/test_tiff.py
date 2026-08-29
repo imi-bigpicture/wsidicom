@@ -109,7 +109,7 @@ class TestTiffFrameIndexParser:
         frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index == list(zip(offsets, lengths, strict=True))
+        assert list(frame_index) == list(zip(offsets, lengths, strict=True))
         assert parser.offset_table_type == OffsetTableType.TIFF
 
     def test_parse_frame_index_does_not_open_file_as_image(
@@ -138,7 +138,7 @@ class TestTiffFrameIndexParser:
         frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index == list(zip(offsets, lengths, strict=True))
+        assert list(frame_index) == list(zip(offsets, lengths, strict=True))
 
     def test_parse_frame_index_leaves_decompression_bomb_limit_unchanged(
         self, buffer: WsiDicomIO, write_dual_file: Callable[..., int]

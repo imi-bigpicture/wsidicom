@@ -92,7 +92,7 @@ class TestFrameIndexParser:
         frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index == expected_frame_index
+        assert list(frame_index) == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
     def test_pixel_data_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
@@ -118,7 +118,59 @@ class TestFrameIndexParser:
         frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index == expected_frame_index
+        assert list(frame_index) == expected_frame_index
+
+    @pytest.mark.parametrize("bits", [8])
+    def test_pixel_data_without_a_sequence_delimiter(
+        self, buffer: WsiDicomIO, tiles: list[bytes]
+    ):
+        # Arrange - the frames end where the pixel data does, with nothing after them.
+        buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
+        buffer.write(encapsulate(tiles, has_bot=False))
+        parser = PixelDataFrameIndexParser(buffer, 0, len(tiles))
+
+        # Act & Assert
+        with pytest.raises(WsiDicomFileError):
+            parser.parse_frame_index()
+
+    @pytest.mark.parametrize("bits", [8])
+    def test_pixel_data_with_an_odd_frame_length(
+        self, buffer: WsiDicomIO, tiles: list[bytes]
+    ):
+        # Arrange - a frame is required to be padded to an even length.
+        ITEM_TAG_AND_LENGTH = 8
+        FIRST_LENGTH = slice(ITEM_TAG_AND_LENGTH + 4, ITEM_TAG_AND_LENGTH + 8)
+        buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
+        encapsulated = bytearray(encapsulate(tiles, has_bot=False))
+        encapsulated[FIRST_LENGTH] = pack("<L", 1)
+        buffer.write(bytes(encapsulated))
+        buffer.write_tag(SequenceDelimiterTag)
+        buffer.write_UL(0)
+        parser = PixelDataFrameIndexParser(buffer, 0, len(tiles))
+
+        # Act & Assert - the length itself has to be rejected, not the misread that
+        # following it would lead to.
+        with pytest.raises(WsiDicomFileError, match="Invalid frame length"):
+            parser.parse_frame_index()
+
+    @pytest.mark.parametrize("bits", [8])
+    def test_basic_offset_table_with_an_offset_that_runs_backwards(
+        self, buffer: WsiDicomIO, tiles: list[bytes]
+    ):
+        # Arrange - offsets that do not grow give a frame a length of zero or less.
+        ITEM_TAG_AND_LENGTH = 8
+        SECOND_OFFSET = slice(ITEM_TAG_AND_LENGTH + 4, ITEM_TAG_AND_LENGTH + 8)
+        buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
+        encapsulated = bytearray(encapsulate(tiles, has_bot=True))
+        encapsulated[SECOND_OFFSET] = pack("<L", 0)
+        buffer.write(bytes(encapsulated))
+        buffer.write_tag(SequenceDelimiterTag)
+        buffer.write_UL(0)
+        parser = BasicOffsetTableFrameIndexParser(buffer, 0, len(tiles))
+
+        # Act & Assert
+        with pytest.raises(WsiDicomFileError):
+            parser.parse_frame_index()
 
     @pytest.mark.parametrize("bits", [8, 16])
     def test_basic_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
@@ -143,7 +195,7 @@ class TestFrameIndexParser:
         frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index == expected_frame_index
+        assert list(frame_index) == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8])
     def test_basic_offset_table_with_non_zero_first_offset(
@@ -205,4 +257,4 @@ class TestFrameIndexParser:
         frame_index = parser.parse_frame_index()
 
         # Assert
-        assert frame_index == expected_frame_index
+        assert list(frame_index) == expected_frame_index
