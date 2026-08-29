@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Jpeg2kSettings` and `HTJpeg2000Settings` raised `TypeError` on a bare float compression level, which is both the documented type and what the encoders take. `levels` is now typed `float | Sequence[float]`.
 - `Extended Offset Table Lengths` was written as the distance from one frame to the next, eight bytes more than the frame itself, for every frame but the last. A reader that trusts the stated lengths read past the end of every frame.
 - A DICOM-TIFF dual file whose `TileOffsets` and `TileByteCounts` hold a different number of entries had the longer silently truncated to the shorter, which surfaced as a frame count mismatch. Such a file is now read from the pixel data instead.
 - A basic or extended offset table whose first item was not at offset 0 raised `ValueError`, and one shorter than a single entry raised `struct.error`. Both are now `WsiDicomFileError`.

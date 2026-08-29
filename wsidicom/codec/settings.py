@@ -403,7 +403,7 @@ class JpegLsSettings(Settings):
 class Jpeg2kSettings(Settings):
     def __init__(
         self,
-        levels: int | Sequence[int] = 80,
+        levels: float | Sequence[float] = 80,
         bits: int = 8,
         channels: Channels = Channels.YBR,
     ):
@@ -412,14 +412,14 @@ class Jpeg2kSettings(Settings):
 
         Parameters:
         ----------
-            levels: float | Sequence[float] = 80.0
+            levels: float | Sequence[float] = 80
                 JPEG 2000 compression levels in dB. Set to 0 for lossless.
             bits: int = 8
                 Number of bits per pixel.
             channels: Channels = Channels.YBR
                 Color channels in encoded image.
         """
-        if isinstance(levels, int):
+        if isinstance(levels, (int, float)):
             levels = [levels]
         self._levels = levels
         super().__init__(bits, channels)
@@ -431,7 +431,7 @@ class Jpeg2kSettings(Settings):
         )
 
     @property
-    def levels(self) -> Sequence[int]:
+    def levels(self) -> Sequence[float]:
         """Return level."""
         return self._levels
 

@@ -481,7 +481,7 @@ class Jpeg2kEncoder(Encoder[Jpeg2kSettings | HTJpeg2000Settings]):
         return bytes(
             jpeg2k_encode(
                 np.array(pixels),
-                level=self._level,
+                level=self._level,  # pyright: ignore[reportArgumentType]
                 reversible=self._reversible,
                 bitspersample=self._bits,
                 codecformat="J2K",
