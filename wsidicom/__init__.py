@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import logging
 from importlib.metadata import version
 
 from wsidicom.config import (
@@ -43,6 +44,11 @@ from wsidicom.web import WsiDicomWebClient
 from wsidicom.wsidicom import WsiDicom
 
 __version__ = version("wsidicom")
+
+# Logging is for the application using wsidicom to configure. Without a handler
+# of its own, records from wsidicom reach the handler of last resort and are
+# written to stderr even by an application that never set logging up.
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 __all__ = [
     "Settings",
