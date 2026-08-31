@@ -34,7 +34,7 @@ class SeriesDicomSchema(ModuleDicomSchema[Series]):
         fields.Integer(), dump_default=1, data_key="SeriesNumber", allow_none=True
     )
     description = StringDicomField(
-        value_representation=VR.LT, data_key="SeriesDescription", allow_none=True
+        value_representation=VR.LO, data_key="SeriesDescription", allow_none=True
     )
     body_part_examined = StringDicomField(
         value_representation=VR.CS, data_key="BodyPartExamined", allow_none=True

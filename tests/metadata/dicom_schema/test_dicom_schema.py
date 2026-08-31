@@ -369,6 +369,65 @@ class TestDicomSchema:
         assert isinstance(deserialized, Label)
         assert deserialized == label
 
+    def test_fields_state_the_value_representation_of_the_attribute_they_write(
+        self,
+    ):
+        """A field decides what is truncated, the tag decides what is written.
+
+        They have to agree: a field stating a longer value representation than
+        the attribute has writes a value too long for it, and one stating a
+        shorter cuts a value that would have fitted.
+        """
+        # Arrange
+        schemas = _dicom_schema_classes()
+
+        # Act
+        stated = [
+            (schema.__name__, field.data_key, str(vr), dictionary_VR(tag))
+            for schema in schemas
+            for field in _instantiate(schema).fields.values()
+            if isinstance(field.data_key, str)
+            and (tag := tag_for_keyword(field.data_key)) is not None
+            and (vr := getattr(field, "_value_representation", None)) is not None
+        ]
+
+        # Assert
+        assert stated, "no field states a value representation"
+        assert [entry for entry in stated if entry[2] != entry[3]] == []
+
+    def test_serialize_series_description_truncates_at_the_length_of_its_vr(self):
+        """Series Description is LO, so a value over 64 characters is truncated."""
+        # Arrange
+        series = Series(uid=generate_uid(), description="S" * 100)
+        schema = SeriesDicomSchema()
+
+        # Act
+        with use_settings(
+            Settings(truncate_long_dicom_strings_on_validation_error=True)
+        ):
+            serialized = schema.dump(series)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert len(str(serialized.SeriesDescription)) == MAX_VALUE_LEN["LO"]
+
+    def test_serialize_image_comments_keeps_what_its_vr_allows(self):
+        """Image Comments is LT, so a value over 64 characters is kept whole."""
+        # Arrange
+        comments = "C" * 200
+        label = Label(comments=comments)
+        schema = LabelDicomSchema()
+
+        # Act
+        with use_settings(
+            Settings(truncate_long_dicom_strings_on_validation_error=True)
+        ):
+            serialized = schema.dump(label)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert str(serialized.ImageComments) == comments
+
     def test_serialize_overview(self, overview: Overview):
         # Arrange
         schema = OverviewDicomSchema()

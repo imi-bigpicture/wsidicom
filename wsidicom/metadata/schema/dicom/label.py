@@ -91,7 +91,7 @@ class LabelDicomSchema(LabelBaseDicomSchema):
     )
     contains_phi = BooleanDicomField(data_key="BurnedInAnnotation", allow_none=True)
     comments = StringDicomField(
-        value_representation=VR.LO, data_key="ImageComments", allow_none=True
+        value_representation=VR.LT, data_key="ImageComments", allow_none=True
     )
     specimen_label_in_image = StringDicomField(
         VR.CS, data_key="SpecimenLabelInImage", dump_only=True, dump_default="YES"

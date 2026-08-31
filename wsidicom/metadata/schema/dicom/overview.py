@@ -41,7 +41,7 @@ class OverviewDicomSchema(DicomSchema[Overview]):
         data_key="SpecimenLabelInImage", load_default=True
     )
     comments = StringDicomField(
-        value_representation=VR.LO, data_key="ImageComments", allow_none=True
+        value_representation=VR.LT, data_key="ImageComments", allow_none=True
     )
 
     @property
