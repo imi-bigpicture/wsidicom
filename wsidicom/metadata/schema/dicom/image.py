@@ -14,13 +14,15 @@
 
 """DICOM schema for Image model."""
 
+import datetime
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from marshmallow import fields, post_dump, post_load, pre_dump
+from marshmallow import fields, post_load, pre_dump
 from pydicom.dataset import Dataset
-from pydicom.valuerep import DA, TM, VR
+from pydicom.valuerep import VR
 
 from wsidicom.codec import LossyCompressionIsoStandard
 from wsidicom.geometry import SizeMm
@@ -34,6 +36,7 @@ from wsidicom.metadata.image import (
 from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
+    DateDicomField,
     DateTimeDicomField,
     DefaultingDicomField,
     EnumDicomField,
@@ -45,11 +48,14 @@ from wsidicom.metadata.schema.dicom.fields import (
     OffsetInSlideCoordinateSystemField,
     PixelSpacingDicomField,
     StringDicomField,
+    TimeDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import (
     DicomSchema,
     ModuleDicomSchema,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ExtendedDepthOfFieldDicomSchema(DicomSchema[ExtendedDepthOfField]):
@@ -182,6 +188,14 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         dump_default=defaults.date_time,
         load_default=None,
     )
+    content_date = DateDicomField(
+        data_key="ContentDate",
+        load_default=None,
+    )
+    content_time = TimeDicomField(
+        data_key="ContentTime",
+        load_default=None,
+    )
     focus_method = DefaultingDicomField(
         fields.Enum(FocusMethod),
         data_key="FocusMethod",
@@ -218,8 +232,16 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
 
     @pre_dump
     def pre_dump(self, image: Image, **kwargs):
+        content_datetime = image.content_datetime
+        if content_datetime is None:
+            content_datetime = image.acquisition_datetime
+        if content_datetime is None:
+            content_datetime = defaults.date_time
+        content_date, content_time = self._split_datetime(content_datetime)
         return {
             "acquisition_datetime": image.acquisition_datetime,
+            "content_date": content_date,
+            "content_time": content_time,
             "focus_method": image.focus_method,
             "extended_depth_of_field_bool": image.extended_depth_of_field is not None,
             "extended_depth_of_field": image.extended_depth_of_field,
@@ -234,16 +256,52 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
             ),
         }
 
-    @post_dump
-    def post_dump(self, data: dict[str, Any], **kwargs):
-        acquisition = data.get("AcquisitionDateTime")
-        if acquisition is not None:
-            data["ContentDate"] = DA(acquisition.date())
-            data["ContentTime"] = TM(acquisition.time())
-        return super().post_dump(data, **kwargs)
+    @staticmethod
+    def _split_datetime(
+        datetime_value: datetime.datetime | datetime.date | None,
+    ) -> tuple[datetime.date | None, datetime.time | None]:
+        """Split a datetime into the date and the time it holds.
+
+        The time is None when the value is a date alone, and both are None when
+        there is no value, so that a time that was never given is not made up.
+        """
+        # A datetime is a date, so it has to be the one checked for first.
+        if isinstance(datetime_value, datetime.datetime):
+            return datetime_value.date(), datetime_value.time()
+        if isinstance(datetime_value, datetime.date):
+            return datetime_value, None
+        return None, None
+
+    @staticmethod
+    def _join_datetime(
+        date_value: datetime.date | None, time_value: datetime.time | None
+    ) -> datetime.datetime | datetime.date | None:
+        """Join a date and a time into the value the two of them hold.
+
+        Either may be missing on its own. A date with no time is kept as a date
+        rather than made into a datetime at a time that was never given, and a
+        time with no date is dropped, as there is no date to place it on.
+
+        What is returned is remade as a plain `datetime.date` or
+        `datetime.datetime`, so that a value read as a subclass of one of them
+        is not passed on as that subclass.
+        """
+        if date_value is None:
+            if time_value is not None:
+                logger.warning(
+                    "Dataset holds a time but no date. The time is dropped, as "
+                    "there is no date to place it on."
+                )
+            return None
+        if time_value is None:
+            return datetime.date(date_value.year, date_value.month, date_value.day)
+        return datetime.datetime.combine(date_value, time_value)
 
     @post_load
     def post_load(self, data: dict[str, Any], **kwargs):
+        data["content_datetime"] = self._join_datetime(
+            data.pop("content_date", None), data.pop("content_time", None)
+        )
         extended_depth_of_field_bool = data.pop("extended_depth_of_field_bool")
         extended_depth_of_field = data.get("extended_depth_of_field")
         if (extended_depth_of_field_bool) != (extended_depth_of_field is not None):

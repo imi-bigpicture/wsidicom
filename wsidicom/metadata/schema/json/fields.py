@@ -15,6 +15,7 @@
 """Json fields for serializing values."""
 
 import dataclasses
+import datetime
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -222,6 +223,42 @@ class StringOrCodeJsonField(fields.Field[str | Code]):
             return Code(**value)
         except ValueError as error:
             raise ValidationError("Could not deserialize Code.") from error
+
+
+class DateTimeOrDateJsonField(fields.Field[datetime.datetime | datetime.date]):
+    """Field for a value that is a datetime, or the date alone.
+
+    Written as the ISO format of what it is, which says which of the two it is:
+    a datetime holds a date and a time separated by `T`, a date holds no time.
+    """
+
+    def _serialize(
+        self,
+        value: datetime.datetime | datetime.date | None,
+        attr,
+        obj,
+        **kwargs,
+    ) -> str | None:
+        if value is None:
+            return None
+        return value.isoformat()
+
+    def _deserialize(
+        self, value: str, attr, data, **kwargs
+    ) -> datetime.datetime | datetime.date:
+        # A date parses as a datetime at midnight, so what the value holds is
+        # what decides which of them takes it.
+        parse = (
+            datetime.datetime.fromisoformat
+            if "T" in value
+            else datetime.date.fromisoformat
+        )
+        try:
+            return parse(value)
+        except ValueError as error:
+            raise ValidationError(
+                f"Could not deserialize {value} as a datetime or date."
+            ) from error
 
 
 class JsonFieldFactory:

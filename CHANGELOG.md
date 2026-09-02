@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Opening an image with without offset table is now faster, as pixel data is now read in blocks rather than one frame at a time.
 - Building a sparse tile index is faster, as the frames of a plane are placed in it in one operation rather than one at a time. `WsiDataset.frame_positions` returns `PerFrameGroupPositions`, one sequence per element, replacing the iterator of `FramePosition`, which is gone.
 - wsidicom logs through a logger per module rather than the root logger, so `logging.getLogger("wsidicom")` controls the package and a single module can be silenced on its own.
+- `Image.content_datetime`, when the pixel data of an image was created, which DICOM holds in `Content Date` and `Content Time`. They were written from `acquisition_datetime` and never read back, so an image derived from another could not keep the content datetime of the original. It is a `date` when the dataset holds no content time, and is the acquisition datetime when the image has none of its own.
 
 ### Fixed
 

@@ -14,7 +14,7 @@
 
 import logging
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime, time
 
 import pytest
 from marshmallow import ValidationError
@@ -265,6 +265,126 @@ class TestDicomSchema:
         deserialized = schema.load(dicom_image)
         assert isinstance(deserialized, Image)
         assert deserialized == image
+
+    @pytest.mark.parametrize(
+        ["content_date", "content_time", "expected"],
+        [
+            ["20200102", "030405.000060", datetime(2020, 1, 2, 3, 4, 5, 60)],
+            # A date with no time stays a date, a time with no date is dropped.
+            ["20200102", None, date(2020, 1, 2)],
+            [None, "030405.000060", None],
+            [None, None, None],
+        ],
+    )
+    def test_deserialize_image_content_datetime(
+        self,
+        content_date: str | None,
+        content_time: str | None,
+        expected: datetime | date | None,
+    ):
+        # Arrange
+        dataset = Dataset()
+        dataset.AcquisitionDateTime = "20230805121314.000150"
+        if content_date is not None:
+            dataset.ContentDate = content_date
+        if content_time is not None:
+            dataset.ContentTime = content_time
+        schema = ImageDicomSchema()
+
+        # Act
+        deserialized = schema.load(dataset)
+
+        # Assert
+        assert deserialized.content_datetime == expected
+        assert type(deserialized.content_datetime) is type(expected)
+        assert deserialized.acquisition_datetime == datetime(
+            2023, 8, 5, 12, 13, 14, 150
+        )
+
+    def test_deserialize_image_content_time_without_content_date_warns(
+        self, caplog: pytest.LogCaptureFixture
+    ):
+        # Arrange
+        dataset = Dataset()
+        dataset.ContentTime = "030405.000060"
+        schema = ImageDicomSchema()
+
+        # Act
+        with caplog.at_level(logging.WARNING):
+            deserialized = schema.load(dataset)
+
+        # Assert
+        assert deserialized.content_datetime is None
+        assert "holds a time but no date" in caplog.text
+
+    def test_serialize_image_content_datetime(self):
+        # Arrange
+        image = Image(
+            acquisition_datetime=datetime(2023, 8, 5, 12, 13, 14, 150),
+            content_datetime=datetime(2020, 1, 2, 3, 4, 5, 60),
+        )
+        schema = ImageDicomSchema()
+
+        # Act
+        serialized = schema.dump(image)
+
+        # Assert
+        assert serialized.AcquisitionDateTime == datetime(2023, 8, 5, 12, 13, 14, 150)
+        assert serialized.ContentDate == date(2020, 1, 2)
+        assert serialized.ContentTime == time(3, 4, 5, 60)
+
+    @pytest.mark.parametrize(
+        "content_datetime", [datetime(2020, 1, 2, 3, 4, 5, 60), date(2020, 1, 2)]
+    )
+    def test_image_content_datetime_round_trip(self, content_datetime: datetime | date):
+        # Arrange
+        image = Image(content_datetime=content_datetime)
+        schema = ImageDicomSchema()
+
+        # Act
+        round_tripped = schema.load(schema.dump(image))
+
+        # Assert
+        assert round_tripped.content_datetime == content_datetime
+        assert type(round_tripped.content_datetime) is type(content_datetime)
+
+    def test_serialize_image_content_date_writes_no_content_time(self):
+        # Arrange
+        image = Image(content_datetime=date(2020, 1, 2))
+        schema = ImageDicomSchema()
+
+        # Act
+        serialized = schema.dump(image)
+
+        # Assert
+        assert serialized.ContentDate == date(2020, 1, 2)
+        assert "ContentTime" not in serialized
+
+    def test_serialize_image_content_datetime_defaults_to_acquisition_datetime(self):
+        # Arrange
+        image = Image(acquisition_datetime=datetime(2023, 8, 5, 12, 13, 14, 150))
+        schema = ImageDicomSchema()
+
+        # Act
+        serialized = schema.dump(image)
+
+        # Assert
+        assert serialized.ContentDate == date(2023, 8, 5)
+        assert serialized.ContentTime == time(12, 13, 14, 150)
+
+    def test_remove_confidential_removes_content_datetime(self):
+        # Arrange
+        image = Image(
+            acquisition_datetime=datetime(2023, 8, 5, 12, 13, 14, 150),
+            content_datetime=datetime(2023, 8, 5, 12, 13, 14, 150),
+        )
+
+        # Act
+        without_confidential = image.remove_confidential()
+
+        # Assert
+        assert without_confidential.acquisition_datetime is None
+        assert without_confidential.content_datetime is None
 
     def test_serialize_label_base(self, label: Label):
         # Arrange
