@@ -24,10 +24,9 @@ from wsidicom.conceptcode import ContainerTypeCode
 from wsidicom.metadata.sample import SpecimenIdentifier
 from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
-    DefaultingDicomField,
     IssuerOfIdentifierDicomField,
     ListDicomField,
-    SingleCodeSequenceField,
+    SingleCodeSequenceDicomField,
     StringDicomField,
 )
 from wsidicom.metadata.schema.dicom.sample import (
@@ -42,9 +41,9 @@ logger = logging.getLogger(__name__)
 
 
 class SlideDicomSchema(ModuleDicomSchema[Slide]):
-    identifier = DefaultingDicomField(
-        StringDicomField(value_representation=VR.LO),
-        dump_default=defaults.string,
+    identifier = StringDicomField(
+        value_representation=VR.LO,
+        default_if_none=defaults.string,
         data_key="ContainerIdentifier",
         allow_none=True,
     )
@@ -59,7 +58,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         allow_none=True,
         dump_required=True,
     )
-    container_type = SingleCodeSequenceField(
+    container_type = SingleCodeSequenceDicomField(
         ContainerTypeCode,
         data_key="ContainerTypeCodeSequence",
         dump_only=True,

@@ -43,6 +43,7 @@ def create_dataset(
     is what a dataset read without parsing the per frame functional groups carries.
     """
     dataset = WsiDataset(
+        Dataset(),
         frame_positions=PerFrameGroupPositions(
             columns=np.asarray(columns, dtype=np.int64),
             rows=np.asarray(rows, dtype=np.int64),
@@ -54,20 +55,28 @@ def create_dataset(
                 if optical_path_identifiers is None
                 else np.asarray(optical_path_identifiers, dtype=np.str_)
             ),
-        )
+        ),
     )
-    dataset.TotalPixelMatrixColumns = IMAGE_SIZE
-    dataset.TotalPixelMatrixRows = IMAGE_SIZE
-    dataset.Columns = TILE_SIZE
-    dataset.Rows = TILE_SIZE
-    dataset.NumberOfFrames = len(columns)
-    dataset.SOPInstanceUID = "1.2.3.4"
-    dataset.StudyInstanceUID = "1.2.3"
-    dataset.SeriesInstanceUID = "1.2.3.5"
+    dataset = dataset.replace(
+        {
+            "TotalPixelMatrixColumns": IMAGE_SIZE,
+            "TotalPixelMatrixRows": IMAGE_SIZE,
+            "Columns": TILE_SIZE,
+            "Rows": TILE_SIZE,
+            "NumberOfFrames": len(columns),
+            "SOPInstanceUID": "1.2.3.4",
+            "StudyInstanceUID": "1.2.3",
+            "SeriesInstanceUID": "1.2.3.5",
+        }
+    )
     if frame_offset:
         # Only a concatenated instance has its frames offset from the first.
-        dataset.SOPInstanceUIDOfConcatenationSource = "1.2.3.6"
-        dataset.ConcatenationFrameOffsetNumber = frame_offset
+        dataset = dataset.replace(
+            {
+                "SOPInstanceUIDOfConcatenationSource": "1.2.3.6",
+                "ConcatenationFrameOffsetNumber": frame_offset,
+            }
+        )
     return dataset
 
 
@@ -98,7 +107,7 @@ def create_parsed_dataset(
             optical_path.OpticalPathIdentifier = optical_path_identifiers[index]
             frame.OpticalPathIdentificationSequence = DicomSequence([optical_path])
         frames.append(frame)
-    dataset.PerFrameFunctionalGroupsSequence = frames
+    dataset = dataset.replace({"PerFrameFunctionalGroupsSequence": frames})
     return dataset
 
 

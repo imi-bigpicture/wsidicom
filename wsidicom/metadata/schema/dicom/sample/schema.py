@@ -17,9 +17,7 @@
 import datetime
 import logging
 from collections.abc import Iterable, Sequence
-from typing import (
-    Any,
-)
+from typing import Any
 
 from marshmallow import ValidationError, fields, post_load
 from pydicom import Dataset
@@ -45,11 +43,13 @@ from wsidicom.metadata.schema.common import DefaultOnValidationExceptionField
 from wsidicom.metadata.schema.dicom.fields import (
     CodeDicomField,
     CodeItemDicomField,
+    ContentItemDicomField,
+    DatasetDicomField,
     DateTimeItemDicomField,
     IssuerOfIdentifierDicomField,
     ListDicomField,
-    MeasurementtemDicomField,
-    SingleCodeSequenceField,
+    MeasurementItemDicomField,
+    SingleCodeSequenceDicomField,
     StringDicomField,
     StringItemDicomField,
     UidDicomField,
@@ -70,6 +70,7 @@ from wsidicom.metadata.schema.dicom.schema import (
     ItemSequenceDicomSchema,
     LoadType,
 )
+from wsidicom.tags import TextValueTag
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +113,9 @@ class SampleCodes:
 class SampleLocalizationDicomSchema(ItemSequenceDicomSchema[SampleLocalization]):
     reference = StringItemDicomField(allow_none=True)
     description = StringItemDicomField(allow_none=True)
-    x = MeasurementtemDicomField(allow_none=True)
-    y = MeasurementtemDicomField(allow_none=True)
-    z = MeasurementtemDicomField(allow_none=True)
+    x = MeasurementItemDicomField(allow_none=True)
+    y = MeasurementItemDicomField(allow_none=True)
+    z = MeasurementItemDicomField(allow_none=True)
     visual_marking = StringItemDicomField(allow_none=True)
 
     @property
@@ -201,9 +202,9 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
     parent_specimen_type = CodeItemDicomField(AnatomicPathologySpecimenTypesCode)
     location_reference = StringItemDicomField(allow_none=True)
     location_description = StringItemDicomField(allow_none=True)
-    location_x = MeasurementtemDicomField(allow_none=True)
-    location_y = MeasurementtemDicomField(allow_none=True)
-    location_z = MeasurementtemDicomField(allow_none=True)
+    location_x = MeasurementItemDicomField(allow_none=True)
+    location_y = MeasurementItemDicomField(allow_none=True)
+    location_z = MeasurementItemDicomField(allow_none=True)
 
     @property
     def load_type(self):
@@ -310,30 +311,45 @@ class ProcessingDicomSchema(BasePreparationStepDicomSchema[ProcessingDicomModel]
         return ProcessingDicomModel
 
 
-class SubstanceItemDicomField(fields.Field):
-    _code_list_field = fields.List(CodeItemDicomField(SpecimenStainsCode))
-    _string_field = StringItemDicomField()
+class SubstanceItemDicomField(
+    ContentItemDicomField[str | Sequence[SpecimenStainsCode] | None]
+):
+    _code_item = CodeItemDicomField(SpecimenStainsCode)
+    _string_item = StringItemDicomField()
 
+    # Makes the several items a substance is written as, rather than one. An
+    # item field makes one item, so the items are made one at a time: a list
+    # field cannot say this, as it is typed by one type where an item field
+    # dumps the dataset of an item and loads what the item states.
     def _serialize(
         self,
         value: str | Sequence[SpecimenStainsCode] | None,
         attr,
         obj,
         **kwargs,
-    ):
+    ) -> Sequence[Dataset] | None:
         if value is None:
             return None
         if isinstance(value, str):
-            return [self._string_field._serialize(value, attr, obj, **kwargs)]
-        return self._code_list_field._serialize(list(value), attr, obj, **kwargs)
+            item = self._string_item._serialize(value, attr, obj, **kwargs)
+            return None if item is None else [item]
+        items = (
+            self._code_item._serialize(code, attr, obj, **kwargs) for code in value
+        )
+        return [item for item in items if item is not None]
 
-    def _deserialize(self, value: Sequence[Dataset], attr, data, **kwargs):
-        datasets = value
+    def _deserialize(
+        self, value: Dataset | Sequence[Dataset], attr, data, **kwargs
+    ) -> str | Sequence[SpecimenStainsCode] | None:
+        datasets = [value] if isinstance(value, Dataset) else value
         first_value = datasets[0]
 
-        if first_value.ValueType == "TEXT" or hasattr(first_value, "TextValue"):
-            return self._string_field.deserialize(first_value, attr, data, **kwargs)
-        return self._code_list_field.deserialize(datasets, attr, data, **kwargs)
+        if first_value.ValueType == "TEXT" or TextValueTag in first_value:
+            return self._string_item.deserialize(first_value, attr, data, **kwargs)
+        return [
+            self._code_item.deserialize(dataset, attr, data, **kwargs)
+            for dataset in datasets
+        ]
 
 
 class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
@@ -395,29 +411,41 @@ class StorageDicomSchema(BasePreparationStepDicomSchema[StorageDicomModel]):
         return StorageDicomModel
 
 
-class PreparationStepDicomField(fields.Field):
-    """Mapping step type to schema."""
+class PreparationStepDicomField(
+    DatasetDicomField[SpecimenPreparationStepDicomModel | None]
+):
+    """Field for a preparation step, whichever kind of step it is.
 
-    _type_to_schema_mapping: dict[
+    A step is written as the content items of the sequence named by the data
+    key, by the schema for the kind of step it is. The data key is the
+    attribute of the item this makes, not one of the dataset the item is in.
+    """
+
+    PREPARATION_STEP_SCHEMAS: tuple[type[ItemSequenceDicomSchema], ...] = (
+        SamplingDicomSchema,
+        CollectionDicomSchema,
+        ProcessingDicomSchema,
+        StainingDicomSchema,
+        ReceivingDicomSchema,
+        StorageDicomSchema,
+    )
+    """The schemas a preparation step is written and read by, one for each kind of
+    step. What kind a schema is for is the schema's to say, so the way to a schema
+    from a step, and from the processing type a step states, is worked out from the
+    schemas rather than stated again here."""
+
+    _schema_by_step: dict[
         type[SpecimenPreparationStepDicomModel], type[ItemSequenceDicomSchema]
-    ] = {
-        SamplingDicomModel: SamplingDicomSchema,
-        CollectionDicomModel: CollectionDicomSchema,
-        ProcessingDicomModel: ProcessingDicomSchema,
-        StainingDicomModel: StainingDicomSchema,
-        ReceivingDicomModel: ReceivingDicomSchema,
-        StorageDicomModel: StorageDicomSchema,
+    ] = {schema().load_type: schema for schema in PREPARATION_STEP_SCHEMAS}
+
+    _schema_by_processing_type: dict[Code, type[ItemSequenceDicomSchema]] = {
+        schema().fields["processing_type"].dump_default: schema
+        for schema in PREPARATION_STEP_SCHEMAS
     }
 
-    """Mapping key in serialized step to schema. Keys are CID 8111 codes."""
-    _processing_type_to_schema_mapping: dict[Code, type[ItemSequenceDicomSchema]] = {
-        SampleCodes.sampling_of_tissue_specimen: SamplingDicomSchema,
-        SampleCodes.specimen_collection: CollectionDicomSchema,
-        SampleCodes.sample_processing: ProcessingDicomSchema,
-        SampleCodes.staining: StainingDicomSchema,
-        SampleCodes.receiving: ReceivingDicomSchema,
-        SampleCodes.storage: StorageDicomSchema,
-    }
+    def __init__(self, data_key: str, **kwargs):
+        self._data_key = data_key
+        super().__init__(data_key=data_key, **kwargs)
 
     def _serialize(
         self,
@@ -425,24 +453,19 @@ class PreparationStepDicomField(fields.Field):
         attr: str | None,
         obj: Any,
         **kwargs,
-    ) -> Dataset:
-        """Serialize step to dataset."""
-        assert value is not None
-        step = value
-        assert self.data_key is not None
-        sequence = self._subschema_dump(step)
+    ) -> Dataset | None:
+        """The item holding the content items the step is written as."""
+        if value is None:
+            return None
         dataset = Dataset()
-        setattr(dataset, self.data_key, sequence)
+        self._set_attribute(dataset, self._data_key, self._subschema_dump(value))
         return dataset
 
     def _deserialize(
         self, value: Dataset, attr: str | None, data: Any, **kwargs
     ) -> SpecimenPreparationStepDicomModel | None:
-        """Deserialize step from dataset."""
-        dataset = value
-        assert self.data_key is not None
-        sequence = getattr(dataset, self.data_key)
-        return self._subschema_load(sequence)
+        """The step the content items of the item hold."""
+        return self._subschema_load(getattr(value, self._data_key))
 
     def _subschema_load(
         self, sequence: Iterable[Dataset]
@@ -461,7 +484,7 @@ class PreparationStepDicomField(fields.Field):
                     "Failed to load processing step due to missing processing type."
                 ) from None
             try:
-                schema = self._processing_type_to_schema_mapping[processing_type]
+                schema = self._schema_by_processing_type[processing_type]
             except KeyError:
                 raise ValidationError(
                     "Failed to load processing step due to unknown "
@@ -483,7 +506,7 @@ class PreparationStepDicomField(fields.Field):
 
     def _subschema_dump(self, step: SpecimenPreparationStepDicomModel) -> list[Dataset]:
         """Select a schema and dump the step using the schema."""
-        schema = self._type_to_schema_mapping[type(step)]
+        schema = self._schema_by_step[type(step)]
         dumped = schema().dump(step, many=False)
         assert isinstance(dumped, list)
         return dumped
@@ -516,7 +539,7 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
         data_key="PrimaryAnatomicStructureSequence",
         load_default=[],
     )
-    specimen_type = SingleCodeSequenceField(
+    specimen_type = SingleCodeSequenceDicomField(
         load_type=AnatomicPathologySpecimenTypesCode,
         data_key="SpecimenTypeCodeSequence",
         dump_default=AnatomicPathologySpecimenTypesCode("Slide"),

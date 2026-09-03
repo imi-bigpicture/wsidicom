@@ -13,12 +13,51 @@
 #    limitations under the License.
 
 from dataclasses import dataclass
-from typing import ClassVar, Optional, TypeVar
+from typing import ClassVar, Optional, Protocol, TypeVar
 
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.sr.codedict import codes
 from pydicom.sr.coding import Code
+
+
+class CodeLike(Protocol):
+    """What a code holds, whichever kind of code it is.
+
+    pydicom's `Code` and wsidicom's `ConceptCode` share no base, so what takes
+    either of them says so by shape rather than by ancestry. Used as the bound
+    of `CodeType` rather than naming the two types themselves, so that what is
+    made with a kind of code is typed by that kind and not by the two it could
+    have been.
+
+    The members are read only, as a `Code` is a named tuple, and the parameters
+    are keyword only, as the kinds of code do not take them in the same order.
+    """
+
+    def __init__(
+        self,
+        *,
+        value: str,
+        scheme_designator: str,
+        meaning: str,
+        scheme_version: str | None = None,
+    ) -> None: ...
+
+    @property
+    def value(self) -> str: ...
+
+    @property
+    def scheme_designator(self) -> str: ...
+
+    @property
+    def meaning(self) -> str: ...
+
+    @property
+    def scheme_version(self) -> str | None: ...
+
+
+CodeType = TypeVar("CodeType", bound=CodeLike)
+
 
 ConceptCodeType = TypeVar("ConceptCodeType", bound="ConceptCode")
 CidConceptCodeType = TypeVar("CidConceptCodeType", bound="CidConceptCode")
@@ -80,7 +119,7 @@ class ConceptCode:
         ds.CodingSchemeDesignator = self.scheme_designator
         ds.CodeMeaning = self.meaning
         if self.scheme_version is not None:
-            ds.CodeSchemeVersion = self.scheme_version
+            ds.CodingSchemeVersion = self.scheme_version
         return ds
 
     def insert_into_ds(self, ds: Dataset) -> Dataset:
@@ -130,7 +169,7 @@ class ConceptCode:
                 value=code_ds.CodeValue,
                 scheme_designator=code_ds.CodingSchemeDesignator,
                 meaning=code_ds.CodeMeaning,
-                scheme_version=getattr(code_ds, "CodeSchemeVersion", None),
+                scheme_version=code_ds.get("CodingSchemeVersion", None),
             )
             for code_ds in getattr(ds, cls.sequence_name)
         ]

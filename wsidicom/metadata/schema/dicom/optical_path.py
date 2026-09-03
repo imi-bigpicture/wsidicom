@@ -53,16 +53,25 @@ from wsidicom.metadata.optical_path import (
 from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
     CodeDicomField,
-    DefaultingDicomField,
+    DatasetDicomField,
     FlattenOnDumpNestedDicomField,
     FloatDicomField,
-    SingleCodeSequenceField,
+    ListDicomField,
+    SingleCodeSequenceDicomField,
     StringDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import (
     DicomSchema,
     LoadType,
     ModuleDicomSchema,
+)
+from wsidicom.tags import (
+    BluePaletteColorLookupTableDataTag,
+    GreenPaletteColorLookupTableDataTag,
+    RedPaletteColorLookupTableDataTag,
+    SegmentedBluePaletteColorLookupTableDataTag,
+    SegmentedGreenPaletteColorLookupTableDataTag,
+    SegmentedRedPaletteColorLookupTableDataTag,
 )
 
 logger = logging.getLogger(__name__)
@@ -99,14 +108,14 @@ class LutDicomParser:
         data_type = np.uint8 if bits == 8 else np.uint16
 
         segmented_keys = (
-            "SegmentedRedPaletteColorLookupTableData",
-            "SegmentedGreenPaletteColorLookupTableData",
-            "SegmentedBluePaletteColorLookupTableData",
+            SegmentedRedPaletteColorLookupTableDataTag,
+            SegmentedGreenPaletteColorLookupTableDataTag,
+            SegmentedBluePaletteColorLookupTableDataTag,
         )
         non_segmented_keys = (
-            "RedPaletteColorLookupTableData",
-            "GreenPaletteColorLookupTableData",
-            "BluePaletteColorLookupTableData",
+            RedPaletteColorLookupTableDataTag,
+            GreenPaletteColorLookupTableDataTag,
+            BluePaletteColorLookupTableDataTag,
         )
         if all(key in dataset for key in segmented_keys):
             red = list(
@@ -354,20 +363,18 @@ class LutDicomParser:
 
 class LutDicomFormatter:
     @classmethod
-    def to_dataset(cls, lut: Lut) -> list[Dataset]:
-        """Convert lut into dataset."""
-        dataset = Dataset()
+    def packed(cls, lut: Lut) -> tuple[int, dict[str, int], dict[str, bytes]]:
+        """The length, the segment starts and the packed data of a lut."""
         length = 0 if lut.length == 2**16 else lut.length
-        red_start, red_data = cls._pack_segments(lut.red, lut.data_type)
-        green_start, green_data = cls._pack_segments(lut.green, lut.data_type)
-        blue_start, blue_data = cls._pack_segments(lut.blue, lut.data_type)
-        dataset.RedPaletteColorLookupTableDescriptor = (length, red_start, lut.bits)
-        dataset.GreenPaletteColorLookupTableDescriptor = (length, green_start, lut.bits)
-        dataset.BluePaletteColorLookupTableDescriptor = (length, blue_start, lut.bits)
-        dataset.SegmentedRedPaletteColorLookupTableData = red_data
-        dataset.SegmentedGreenPaletteColorLookupTableData = green_data
-        dataset.SegmentedBluePaletteColorLookupTableData = blue_data
-        return [dataset]
+        starts: dict[str, int] = {}
+        data: dict[str, bytes] = {}
+        for colour, segments in (
+            ("Red", lut.red),
+            ("Green", lut.green),
+            ("Blue", lut.blue),
+        ):
+            starts[colour], data[colour] = cls._pack_segments(segments, lut.data_type)
+        return length, starts, data
 
     @classmethod
     def _pack_segments(
@@ -495,11 +502,29 @@ class LutDicomFormatter:
         )
 
 
-class LutDicomField(fields.Field):
+class LutDicomField(DatasetDicomField):
+    # Makes the sequence holding the one item it builds.
     def _serialize(self, value: Lut | None, attr: str | None, obj: Any, **kwargs):
         if value is None:
             return None
-        return LutDicomFormatter.to_dataset(value)
+        length, starts, data = LutDicomFormatter.packed(value)
+        dataset = Dataset()
+        for colour in ("Red", "Green", "Blue"):
+            # The descriptor is written as US: its second value is a pixel
+            # value, which is unsigned for the palettes of an optical path.
+            # Given as a list, a tuple not being a value an element holds.
+            self._set_attribute(
+                dataset,
+                f"{colour}PaletteColorLookupTableDescriptor",
+                [length, starts[colour], value.bits],
+                "US",
+            )
+            self._set_attribute(
+                dataset,
+                f"Segmented{colour}PaletteColorLookupTableData",
+                data[colour],
+            )
+        return [dataset]
 
     def _deserialize(
         self,
@@ -583,24 +608,24 @@ class ObjectivesSchema(DicomSchema[Objectives]):
 
 
 class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
-    identifier = DefaultingDicomField(
-        StringDicomField(value_representation=VR.SH),
+    identifier = StringDicomField(
+        value_representation=VR.SH,
         data_key="OpticalPathIdentifier",
         load_default=None,
-        dump_default=defaults.optical_path_identifier,
+        default_if_none=defaults.optical_path_identifier,
     )
     description = StringDicomField(
         value_representation=VR.ST, data_key="OpticalPathDescription", load_default=None
     )
-    illumination_types = DefaultingDicomField(
-        fields.List(CodeDicomField(IlluminationCode)),
+    illumination_types = ListDicomField(
+        CodeDicomField(IlluminationCode),
         data_key="IlluminationTypeCodeSequence",
-        dump_default=[defaults.illumination_type],
+        default_if_none=[defaults.illumination_type],
     )
-    illumination_wavelength = fields.Integer(
+    illumination_wavelength = FloatDicomField(
         data_key="IlluminationWaveLength", load_default=None
     )
-    illumination_color_code = SingleCodeSequenceField(
+    illumination_color_code = SingleCodeSequenceDicomField(
         IlluminationColorCode,
         data_key="IlluminationColorCodeSequence",
         load_default=None,

@@ -15,7 +15,6 @@
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
-from functools import cached_property
 from typing import (
     Generic,
     TypeVar,
@@ -28,7 +27,6 @@ from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.metadata import ImageType
 from wsidicom.metadata import Label as LabelMetadata
 from wsidicom.metadata import Overview as OverviewMetadata
-from wsidicom.metadata.schema.dicom import LabelDicomSchema, OverviewDicomSchema
 from wsidicom.uid import SlideUids
 
 SeriesType = TypeVar("SeriesType", bound="Series")
@@ -237,10 +235,10 @@ class Overviews(Series[Overview]):
     def image_type(self) -> ImageType:
         return ImageType.OVERVIEW
 
-    @cached_property
+    @property
     def metadata(self) -> OverviewMetadata:
         """Metadata of the overview series."""
-        return OverviewDicomSchema().load(self.datasets[0])
+        return self.datasets[0].overview_metadata
 
 
 class Labels(Series[Label]):
@@ -252,10 +250,10 @@ class Labels(Series[Label]):
     def image_type(self) -> ImageType:
         return ImageType.LABEL
 
-    @cached_property
+    @property
     def metadata(self) -> LabelMetadata:
         """Metadata of the label series."""
-        return LabelDicomSchema().load(self.datasets[0])
+        return self.datasets[0].label_metadata
 
 
 class Thumbnails(Series[Thumbnail]):

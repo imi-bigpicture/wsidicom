@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import pytest
+from pydicom import Dataset
 from upath import UPath
 
 from wsidicom.instance.dataset import WsiDataset
@@ -21,11 +22,11 @@ from wsidicom.instance.dataset import WsiDataset
 @pytest.fixture
 def minimal_dataset() -> WsiDataset:
     """Return a minimal dataset with required UIDs set."""
-    dataset = WsiDataset()
+    dataset = Dataset()
     dataset.SOPInstanceUID = "1.2.3"
     dataset.StudyInstanceUID = "1.2.3"
     dataset.SeriesInstanceUID = "1.2.3"
-    return dataset
+    return WsiDataset(dataset)
 
 
 @pytest.fixture

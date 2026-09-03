@@ -27,7 +27,7 @@ from wsidicom.metadata.optical_path import (
     LutSegment,
 )
 from wsidicom.metadata.schema.dicom.optical_path import (
-    LutDicomFormatter,
+    LutDicomField,
     LutDicomParser,
 )
 
@@ -144,7 +144,7 @@ class TestDicomLut:
                     [LinearLutSegment(0, 255, 256)],
                     np.uint8,
                 ),
-                (256, 0, 8),
+                [256, 0, 8],
                 b"\x00\x01\x00\x01\xff\x00",
                 b"\x00\x01\x00\x01\xff\x00",
                 b"\x00\x01\x00\x01\xff\xff",
@@ -156,7 +156,7 @@ class TestDicomLut:
                     [ConstantLutSegment(0, 256)],
                     np.uint16,
                 ),
-                (256, 0, 16),
+                [256, 0, 16],
                 b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\xff\xff",
                 b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00",
                 b"\x00\x00\x01\x00\x00\x00\x01\x00\xff\x00\x00\x00",
@@ -166,7 +166,7 @@ class TestDicomLut:
     def test_to_dataset(
         self,
         lut: Lut,
-        expected_descriptor: tuple[int, int, int],
+        expected_descriptor: list[int],
         expected_red_lut: bytes,
         expected_green_lut: bytes,
         expected_blue_lut: bytes,
@@ -174,9 +174,10 @@ class TestDicomLut:
         # Arrange
 
         # Act
-        dataset_sequence = LutDicomFormatter.to_dataset(lut)
+        dataset_sequence = LutDicomField()._serialize(lut, "lut", None)
 
         # Assert
+        assert dataset_sequence is not None
         assert len(dataset_sequence) == 1
         dataset = dataset_sequence[0]
         assert isinstance(dataset, Dataset)

@@ -37,7 +37,7 @@ from wsidicom.metadata import (
     Study,
     WsiMetadata,
 )
-from wsidicom.metadata.schema.dicom.optical_path import LutDicomFormatter
+from wsidicom.metadata.schema.dicom.optical_path import LutDicomField
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 
 
@@ -266,8 +266,8 @@ def create_dicom_optical_path(optical_path: OpticalPath):
             optical_path.objective.objective_numerical_aperture
         )
     if optical_path.lut is not None:
-        dataset.PaletteColorLookupTableSequence = LutDicomFormatter.to_dataset(
-            optical_path.lut
+        dataset.PaletteColorLookupTableSequence = LutDicomField()._serialize(
+            optical_path.lut, "lut", optical_path
         )
     if optical_path.icc_profile is not None:
         dataset.ICCProfile = optical_path.icc_profile

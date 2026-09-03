@@ -20,7 +20,7 @@ from uuid import uuid4
 import numpy as np
 
 from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
-from wsidicom.codec import Codec, Decoder, Encoder, LossyCompressionIsoStandard
+from wsidicom.codec import Codec, Decoder, Encoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
@@ -29,8 +29,6 @@ from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
 from wsidicom.instance.tile_index.sparse_tile_index import SparseTileIndex
 from wsidicom.instance.tile_index.tile_index import TileIndex
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
-from wsidicom.metadata.schema.dicom.image import ImageCoordinateSystemDicomSchema
-from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
 
 
 class WsiDicomImageData(ImageData, metaclass=ABCMeta):
@@ -131,15 +129,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     @property
     def image_coordinate_system(self) -> ImageCoordinateSystem | None:
         """Return the image origin of the image data."""
-        return self._image_coordinate_system
-
-    @cached_property
-    def _image_coordinate_system(self) -> ImageCoordinateSystem | None:
-        try:
-            schema = ImageCoordinateSystemDicomSchema()
-            return schema.load(self._datasets[0])
-        except TypeError:
-            return None
+        return self._datasets[0].image_coordinate_system
 
     @property
     def thread_safe(self) -> bool:
@@ -147,24 +137,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
 
     @property
     def lossy_compression(self) -> list[LossyCompression] | None:
-        if not self._datasets[0].lossy_compressed:
-            return None
-        methods = [
-            LossyCompressionIsoStandard(value)
-            for value in self._datasets[0].get_multi_value(
-                LossyImageCompressionMethodTag
-            )
-        ]
-        ratios = [
-            float(value)
-            for value in self._datasets[0].get_multi_value(
-                LossyImageCompressionRatioTag
-            )
-        ]
-        return list(
-            LossyCompression(method, ratio)
-            for method, ratio in zip(methods, ratios, strict=False)
-        )
+        return self._datasets[0].lossy_compressions
 
     @property
     def transcoder(self) -> Encoder | None:

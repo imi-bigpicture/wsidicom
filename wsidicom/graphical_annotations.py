@@ -806,7 +806,7 @@ class AnnotationGroup(Generic[GeometryType]):
         is_double = cls._is_ds_double(ds)
         annotations = cls._get_annotations_from_ds(ds)
         label = cls._get_label_from_ds(ds)
-        description = getattr(ds, "AnnotationGroupDescription", None)
+        description = ds.get("AnnotationGroupDescription", None)
         type_code = AnnotationTypeCode.from_ds(ds)
         if type_code is None:
             raise ValueError(f"Dataset is missing {AnnotationTypeCode.sequence_name}.")
@@ -815,7 +815,7 @@ class AnnotationGroup(Generic[GeometryType]):
             raise ValueError(
                 f"Dataset is missing {AnnotationCategoryCode.sequence_name}."
             )
-        color = getattr(ds, "RecommendedDisplayCIELabValue", None)
+        color = ds.get("RecommendedDisplayCIELabValue", None)
         return cls(
             annotations,
             label,
@@ -1654,7 +1654,7 @@ class AnnotationInstance:
         groups: list[AnnotationGroup] = []
         slide_uids: SlideUids | None = None
 
-        frame_of_reference_uid = getattr(dataset, "FrameOfReferenceUID", None)
+        frame_of_reference_uid = dataset.get("FrameOfReferenceUID", None)
         if dataset.AnnotationCoordinateType == "2D":
             coordinate_type = "image"
         elif dataset.AnnotationCoordinateType == "3D":

@@ -27,13 +27,18 @@ from typing import (
 
 from marshmallow import ValidationError, post_dump, pre_load
 from pydicom import Dataset
+from pydicom.datadict import dictionary_VR
+from pydicom.dataelem import DataElement
 from pydicom.sr.coding import Code
+from pydicom.tag import Tag
 
 from wsidicom.conceptcode import dataset_to_code
+from wsidicom.config import dicom_validation_mode
 from wsidicom.metadata.sample import Measurement
 from wsidicom.metadata.schema.common import LoadingSchema, LoadType
 from wsidicom.metadata.schema.dicom.fields import (
-    DefaultingDicomField,
+    AttributeDicomField,
+    ContentItemDicomField,
     FlattenOnDumpNestedDicomField,
 )
 
@@ -84,16 +89,49 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
             if (
                 field.data_key in data
                 and data[field.data_key] is None
-                and not isinstance(field, DefaultingDicomField)
+                and not (
+                    isinstance(field, AttributeDicomField) and field.writes_when_empty
+                )
             ):
                 # Remove empty non-defaulting fields
                 data.pop(field.data_key)
         dataset = Dataset()
-        try:
-            dataset.update(data)  # type: ignore
-        except Exception as e:
-            raise Exception(f"Failed to update dataset with {data.keys()}.") from e
+        for key, value in data.items():
+            try:
+                if isinstance(value, DataElement):
+                    # Flattened in from a nested schema, which made the element
+                    # and checked the value with the value representation its
+                    # own field states.
+                    dataset[value.tag] = value
+                else:
+                    dataset[Tag(key)] = self._data_element(key, value)
+            except ValueError as exception:
+                # A value that does not conform to its value representation,
+                # raised as what it is so it can be caught as such.
+                raise ValueError(
+                    f"Failed to set {key} of dataset to {value}."
+                ) from exception
+            except Exception as exception:
+                raise Exception(
+                    f"Failed to set {key} of dataset to {value}."
+                ) from exception
         return dataset
+
+    def _data_element(self, keyword: str, value: Any) -> DataElement:
+        """Make the element holding a value, checking the value as it is made.
+
+        For a value from a field that writes no element of its own: a field
+        that does states how what it writes is written, and gives the element.
+        The mode is passed for the value, so pydicom's global validation mode
+        is never set and a process using wsidicom keeps the mode it chose.
+        """
+        tag = Tag(keyword)
+        return DataElement(
+            tag,
+            dictionary_VR(tag),
+            value,
+            validation_mode=dicom_validation_mode(),
+        )
 
     @pre_load
     def pre_load(self, dataset: Dataset, many: bool, **kwargs) -> dict[str, Any]:
@@ -170,14 +208,27 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
     ) -> list[Dataset]:
         """Format content items into sequence in a dataset."""
         return [
-            self._name_item(flatten_item, name)
-            for item, name in [
-                (data[key], description.name)
-                for key, description in self.item_fields.items()
-            ]
-            if item is not None
+            self._item_field(key).name_item(flatten_item, description.name)
+            for key, description in self.item_fields.items()
+            if (item := data[key]) is not None
             for flatten_item in ([item] if isinstance(item, Dataset) else item)
         ]
+
+    def _item_field(self, key: str) -> ContentItemDicomField:
+        """The field making the items of `key`.
+
+        Every item of the sequence is made by a field that can also name it: a
+        field that cannot is one this schema cannot write, rather than one
+        whose items are left out.
+        """
+        field = self.fields.get(key)
+        if not isinstance(field, ContentItemDicomField):
+            raise TypeError(
+                f"{type(self).__name__} writes {key} as items of a sequence, so "
+                f"the field for it has to make items, and "
+                f"{type(field).__name__} does not."
+            )
+        return field
 
     @pre_load
     def pre_load(
@@ -191,18 +242,6 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
         for field in self._dump_only_fields:
             data.pop(field)
         return data
-
-    @staticmethod
-    def _name_item(item: Dataset, name: Code):
-        """Add concept name code sequence to dataset."""
-        name_dataset = Dataset()
-        name_dataset.CodeValue = name.value
-        name_dataset.CodingSchemeDesignator = name.scheme_designator
-        name_dataset.CodeMeaning = name.meaning
-        if name.scheme_version is not None and name.scheme_version != "":
-            name_dataset.CodingSchemeVersion = name.scheme_version
-        item.ConceptNameCodeSequence = [name_dataset]
-        return item
 
     def _get_item(
         self, sequence: Iterable[Dataset], field: ItemField

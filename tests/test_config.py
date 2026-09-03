@@ -12,10 +12,13 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from contextlib import suppress
 from dataclasses import FrozenInstanceError
 from typing import cast
 
 import pytest
+from pydicom import config as pydicom_config
+from pydicom.uid import generate_uid
 
 from wsidicom import config
 from wsidicom.config import (
@@ -24,7 +27,9 @@ from wsidicom.config import (
     set_default_settings,
     use_settings,
 )
-from wsidicom.options import ResampleFilterOption
+from wsidicom.metadata import Series
+from wsidicom.metadata.schema.dicom import SeriesDicomSchema
+from wsidicom.options import DicomValueValidationOption, ResampleFilterOption
 
 
 @pytest.mark.unittest
@@ -120,3 +125,33 @@ class TestDefaultSettings:
         # Assert — reads honoured the active `custom`; the default took the change
         assert active == ResampleFilterOption.LANCZOS
         assert get_settings().resampling_filter == ResampleFilterOption.BOX
+
+
+@pytest.mark.unittest
+class TestPydicomGlobalValidationMode:
+    """The mode is passed per value, so pydicom's global mode is never set."""
+
+    @pytest.mark.parametrize("option", list(DicomValueValidationOption))
+    def test_pydicom_global_validation_mode_is_never_touched(
+        self, option: DicomValueValidationOption
+    ):
+        """Whichever mode wsidicom is set to, it reaches pydicom per value.
+
+        Checking through pydicom's global mode would be the other way to do it,
+        and would leave a process using wsidicom with a mode it did not choose.
+        """
+        # Arrange
+        before = pydicom_config.settings.reading_validation_mode
+        settings = Settings(dicom_value_validation=option)
+        # Series Description is LO, which allows 64
+        series = Series(uid=generate_uid(), description="X" * 100)
+
+        # Act
+        with use_settings(settings):
+            with suppress(ValueError):
+                SeriesDicomSchema().dump(series)
+            during = pydicom_config.settings.reading_validation_mode
+
+        # Assert
+        assert during == before
+        assert pydicom_config.settings.reading_validation_mode == before

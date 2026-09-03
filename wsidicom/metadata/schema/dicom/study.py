@@ -17,8 +17,8 @@
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.schema.dicom.fields import (
+    EMPTY,
     DateDicomField,
-    DefaultingNoneDicomField,
     PersonNameDicomField,
     StringDicomField,
     TimeDicomField,
@@ -32,24 +32,22 @@ class StudyDicomSchema(ModuleDicomSchema[Study]):
     uid = UidDicomField(
         data_key="StudyInstanceUID", allow_none=True, dump_required=True
     )
-    identifier = DefaultingNoneDicomField(
-        StringDicomField(value_representation=VR.ST),
+    identifier = StringDicomField(
+        value_representation=VR.SH,
         data_key="StudyID",
         allow_none=True,
+        default_if_none=EMPTY,
     )
-    date = DefaultingNoneDicomField(
-        DateDicomField(), data_key="StudyDate", allow_none=True
-    )
-    time = DefaultingNoneDicomField(
-        TimeDicomField(), data_key="StudyTime", allow_none=True
-    )
-    accession_number = DefaultingNoneDicomField(
-        StringDicomField(value_representation=VR.ST),
+    date = DateDicomField(data_key="StudyDate", allow_none=True, default_if_none=EMPTY)
+    time = TimeDicomField(data_key="StudyTime", allow_none=True, default_if_none=EMPTY)
+    accession_number = StringDicomField(
+        value_representation=VR.SH,
         data_key="AccessionNumber",
         allow_none=True,
+        default_if_none=EMPTY,
     )
-    referring_physician_name = DefaultingNoneDicomField(
-        PersonNameDicomField(), data_key="ReferringPhysicianName", allow_none=True
+    referring_physician_name = PersonNameDicomField(
+        data_key="ReferringPhysicianName", allow_none=True, default_if_none=EMPTY
     )
     description = StringDicomField(
         value_representation=VR.LO, data_key="StudyDescription", allow_none=True

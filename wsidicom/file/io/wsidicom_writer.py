@@ -248,7 +248,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
             * (dataset.bits // 8)
         )
         ratio = DSfloat(round(uncompressed_size / compressed_size, 2))
-        ratios = dataset.get_multi_value(LossyImageCompressionRatioTag)
+        ratios = dataset.lossy_compression_ratios
         ratios[-1] = ratio
         self._file.update_dataset(
             dataset_start,
@@ -325,15 +325,15 @@ class WsiDicomWriter:
 
     def write_header(self, dataset: WsiDataset) -> None:
         """Write DICOM preamble, file meta info, and dataset."""
-        uid = UID(dataset.SOPInstanceUID)
+        instance_uid = dataset.instance_uid
         self._file.write_preamble()
         self._file.write_file_meta_info(
-            uid,
+            instance_uid,
             VLWholeSlideMicroscopyImageStorage,
             self._transfer_syntax,
         )
         self._dataset_start = self._file.tell()
-        self._file.write_dataset(dataset, datetime.now())
+        self._file.write_dataset(dataset.as_dataset(), datetime.now())
         self._dataset_end = self._file.tell()
 
     def start_pixel_data(self, dataset: WsiDataset) -> None:

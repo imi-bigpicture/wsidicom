@@ -21,14 +21,14 @@ from wsidicom.metadata.contributing_equipment import ContributingEquipment
 from wsidicom.metadata.schema.dicom.fields import (
     DateTimeDicomField,
     ListDicomField,
-    SingleCodeSequenceField,
+    SingleCodeSequenceDicomField,
     StringDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import DicomSchema
 
 
 class ContributingEquipmentDicomSchema(DicomSchema[ContributingEquipment]):
-    purpose = SingleCodeSequenceField(
+    purpose = SingleCodeSequenceDicomField(
         ContributingEquipmentPurposeCode, data_key="PurposeOfReferenceCodeSequence"
     )
     manufacturer = StringDicomField(

@@ -52,7 +52,7 @@ class TestSaveWithMetadata:
         for pyramid in wsi.pyramids:
             for level in pyramid:
                 for instance in level.instances.values():
-                    block = instance.dataset.private_block(
+                    block = instance.dataset.as_dataset().private_block(
                         0x0009, "WSIDICOM TEST", create=True
                     )
                     block.add_new(0x01, "LO", value)
@@ -78,7 +78,7 @@ class TestSaveWithMetadata:
 
         # Assert
         with WsiDicom.open(output) as saved:
-            dataset = saved.pyramids[0].base_level.default_instance.dataset
+            dataset = saved.pyramids[0].base_level.default_instance.dataset.as_dataset()
             assert str(dataset.PatientName) == ANONYMIZED_NAME
             assert private_tag not in dataset
 
@@ -104,7 +104,7 @@ class TestSaveWithMetadata:
 
         # Assert
         with WsiDicom.open(output) as saved:
-            dataset = saved.pyramids[0].base_level.default_instance.dataset
+            dataset = saved.pyramids[0].base_level.default_instance.dataset.as_dataset()
             assert str(dataset.PatientName) == ANONYMIZED_NAME
             assert private_tag in dataset
 
@@ -126,7 +126,7 @@ class TestSaveWithMetadata:
 
         # Assert
         with WsiDicom.open(output) as saved:
-            dataset = saved.pyramids[0].base_level.default_instance.dataset
+            dataset = saved.pyramids[0].base_level.default_instance.dataset.as_dataset()
             optical_path = dataset.OpticalPathSequence[0]
             assert "ICCProfile" in optical_path
             assert len(optical_path.ICCProfile) > 0
@@ -157,7 +157,7 @@ class TestSaveWithMetadata:
 
         # Assert
         with WsiDicom.open(output) as saved:
-            dataset = saved.pyramids[0].base_level.default_instance.dataset
+            dataset = saved.pyramids[0].base_level.default_instance.dataset.as_dataset()
             optical_path = dataset.OpticalPathSequence[0]
             assert optical_path.ICCProfile == icc_profile
 
@@ -178,6 +178,6 @@ class TestSaveWithMetadata:
 
         # Assert
         with WsiDicom.open(output) as saved:
-            dataset = saved.pyramids[0].base_level.default_instance.dataset
+            dataset = saved.pyramids[0].base_level.default_instance.dataset.as_dataset()
             assert str(dataset.PatientName) == original_name
             assert private_tag in dataset

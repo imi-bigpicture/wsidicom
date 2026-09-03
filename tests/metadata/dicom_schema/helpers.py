@@ -154,6 +154,7 @@ def assert_dicom_image_equals_image(dicom_image: Dataset, image: Image):
     # ContentDate/Time hold the content datetime, which defaults to the
     # acquisition datetime when the image has none of its own (#206).
     content_datetime = image.content_datetime or dicom_image.AcquisitionDateTime
+    assert isinstance(content_datetime, datetime.datetime)
     assert dicom_image.ContentDate == content_datetime.date()
     assert dicom_image.ContentTime == content_datetime.time()
     if image.focus_method is None:

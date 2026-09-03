@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 from decoy import Decoy, matchers
+from pydicom import Dataset
 from upath import UPath
 
 from wsidicom.codec.encoder import Encoder, JpegEncoder, JpegSettings
@@ -40,7 +41,7 @@ def part_factory(decoy: Decoy, part_writer: WsiDicomWriter) -> PartFactory:
         part_factory.open(
             matchers.Anything(), matchers.Anything(), concatenated=matchers.Anything()
         )
-    ).then_return((part_writer, WsiDataset()))
+    ).then_return((part_writer, WsiDataset(Dataset())))
     return part_factory
 
 
@@ -76,7 +77,7 @@ class TestDirectPartSink:
         self, part_writer: WsiDicomWriter, decoy: Decoy
     ) -> None:
         # Arrange
-        sink = DirectPartSink(part_writer, WsiDataset(), transcoder=None)
+        sink = DirectPartSink(part_writer, WsiDataset(Dataset()), transcoder=None)
 
         # Act
         sink.close()

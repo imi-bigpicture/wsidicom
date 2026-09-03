@@ -48,8 +48,6 @@ from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level, Thumbnail
 from wsidicom.instance import WsiDataset, WsiInstance
 from wsidicom.metadata import WsiMetadata
-from wsidicom.metadata.schema.dicom.label import LabelBaseDicomSchema
-from wsidicom.metadata.schema.dicom.wsi import BaseWsiMetadataDicomSchema
 from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.options import (
     ConcatenationByBytes,
@@ -374,7 +372,7 @@ class WsiDicom:
             if label is not None:
                 label_instances = [
                     WsiInstance.create_label(
-                        label, self._source.base_dataset, file_options
+                        label, self._source.base_dataset.as_dataset(), file_options
                     )
                 ]
                 labels = Labels.open(label_instances)
@@ -1261,12 +1259,12 @@ class WsiDicom:
         if self.labels is not None:
             label_metadata = self.labels.metadata
         else:
-            label_metadata = LabelBaseDicomSchema().load(pyramid.datasets[0])
+            label_metadata = pyramid.datasets[0].label_metadata
         if self.overviews is not None:
             overview_metadata = self.overviews.metadata
         else:
             overview_metadata = None
-        base = BaseWsiMetadataDicomSchema().load(pyramid.datasets[0])
+        base = pyramid.datasets[0].base_metadata
         return WsiMetadata(
             study=base.study,
             series=base.series,

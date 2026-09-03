@@ -33,6 +33,23 @@ class Option(Enum):
         return None if value is None else cls(value)
 
 
+class DicomValueValidationOption(Option):
+    """How far to check that values conform to their DICOM value representation.
+
+    pydicom checks a value as an element is made or assigned, and not at all when
+    writing, so a value that got in while checking was off is written without
+    complaint. wsidicom therefore checks the datasets itself, at the point it has
+    built them.
+    """
+
+    NONE = "none"
+    """Do not check. Values are written as they are."""
+    WRITTEN = "written"
+    """Check what wsidicom builds from the metadata. A value it cannot write
+    conformantly is an error; values carried over from a source file are left
+    alone, so a file that reads today still saves."""
+
+
 class ResampleFilterOption(Option):
     """Backend-neutral resampling filter, mapped by each downsampler to its
     native equivalent."""

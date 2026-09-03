@@ -58,6 +58,7 @@ from wsidicom.metadata.series import Series
 from wsidicom.metadata.slide import Slide
 from wsidicom.metadata.study import Study
 from wsidicom.metadata.wsi import WsiMetadata
+from wsidicom.tags import SpecificCharacterSetTag
 
 
 @dataclass(frozen=True)
@@ -148,7 +149,7 @@ class WsiMetadataDicomSchema:
         # Default text to UTF-8 so non-ASCII metadata (e.g. ideographic/phonetic
         # PatientName groups) is encoded correctly; merged into every image type
         # below. setdefault so a caller-supplied SpecificCharacterSet is respected.
-        base_dataset.setdefault("SpecificCharacterSet", "ISO_IR 192")
+        base_dataset.setdefault(SpecificCharacterSetTag, "ISO_IR 192")
         if image_type == ImageType.VOLUME or image_type == ImageType.THUMBNAIL:
             pyramid = metadata.pyramid
             if metadata.pyramid.image.image_coordinate_system is None:
@@ -162,8 +163,8 @@ class WsiMetadataDicomSchema:
                 pyramid = self._insert_default_icc_profile(pyramid)
             pyramid_dataset = PyramidDicomSchema().dump(pyramid)
             label_dataset = LabelOnlyDicomSchema().dump(metadata.label)
-            pyramid_dataset.update(base_dataset)
-            pyramid_dataset.update(label_dataset)
+            for element in (*base_dataset, *label_dataset):
+                pyramid_dataset.add(element)
             return pyramid_dataset
         if image_type == ImageType.LABEL:
             label = metadata.label
@@ -182,7 +183,8 @@ class WsiMetadataDicomSchema:
             if require_icc_profile:
                 label = self._insert_default_icc_profile(label)
             label_dataset = LabelDicomSchema().dump(label)
-            label_dataset.update(base_dataset)
+            for element in base_dataset:
+                label_dataset.add(element)
             return label_dataset
         if image_type == ImageType.OVERVIEW:
             if metadata.overview is not None:
@@ -200,8 +202,8 @@ class WsiMetadataDicomSchema:
                 overview = self._insert_default_icc_profile(overview)
             overview_dataset = OverviewDicomSchema().dump(overview)
             label_dataset = LabelOnlyDicomSchema().dump(metadata.label)
-            overview_dataset.update(base_dataset)
-            overview_dataset.update(label_dataset)
+            for element in (*base_dataset, *label_dataset):
+                overview_dataset.add(element)
             return overview_dataset
         raise ValueError(f"Unsupported image type {image_type}")
 

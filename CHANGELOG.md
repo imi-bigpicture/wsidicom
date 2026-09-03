@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Settings.dicom_value_validation`, whether to check that the values wsidicom writes conform to their DICOM value representation. `written`, the default, checks what wsidicom builds from the metadata; `none` checks nothing. Values carried over from a source file are left alone, and pydicom's global validation mode is never used or modified.
+
 ### Changed
 
 - Opening a sparse image is now faster and holds less memory. It no longer creates a dataset object for every item of `PerFrameFunctionalGroupsSequence`, which for a slide with many frames was most of the time and memory that opening it took. The tile positions are read out of the sequence directly, and the sequence is parsed as before where they cannot be. `WsiDicomReader.dataset` no longer holds the sequence; `WsiDataset.frame_positions` gives the tile positions.
@@ -18,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Reading the z offset of an image whose `Total Pixel Matrix Origin Sequence` is present but holds no item raised `IndexError` instead of falling back to the shared functional groups. The fallback caught only `AttributeError`, which an empty sequence does not raise.
+- Saving metadata onto an instance rebuilt every attribute from the tag, which gave an attribute written as one of two value representations, such as `Smallest Image Pixel Value`, the literal `US or SS` rather than the one it was read as. The elements are now carried over as they are.
+- `truncate_long_dicom_strings_on_validation_error` was gated on `pydicom.settings.writing_validation_mode`, which does not govern value validation, so the truncation only ever ran when something else had set that mode. It no longer depends on pydicom's global state.
 - `Jpeg2kSettings` and `HTJpeg2000Settings` raised `TypeError` on a bare float compression level, which is both the documented type and what the encoders take. `levels` is now typed `float | Sequence[float]`.
 - `Extended Offset Table Lengths` was written as the distance from one frame to the next, eight bytes more than the frame itself, for every frame but the last. A reader that trusts the stated lengths read past the end of every frame.
 - A DICOM-TIFF dual file whose `TileOffsets` and `TileByteCounts` hold a different number of entries had the longer silently truncated to the shorter, which surfaced as a frame count mismatch. Such a file is now read from the pixel data instead.
@@ -30,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Image data were identified in the shared frame caches by `id()`, which is reused once an object is collected, so an image data created after another had been collected could be served that other one's frames. This is not reachable through `WsiDicom.open`, which keeps every image data alive for as long as the caches, but is reachable from a `Source` that creates image data on demand. Each image data is now given an id of its own that is never reused.
 - Reading a DICOM-TIFF dual file set Pillow's `Image.MAX_IMAGE_PIXELS` to `None` while parsing the tiff tags, disabling decompression bomb protection for every Pillow decode in the process rather than only for wsidicom's, and two such parses running concurrently could leave it `None` permanently. The tags are now read from the image file directory alone, without opening the file as an image, so the limit is never changed.
 - `Series Description` was written as `LT` and `Image Comments` as `LO`, the opposite of the value representations those attributes have. A series description over the 64 characters `LO` allows was written over-length rather than truncated, and image comments were cut to 64 characters where `LT` allows 10240.
+- The scheme version of a code was both written and read as `CodeSchemeVersion`, which is not the keyword of a DICOM attribute. Writing it set an attribute of the object rather than of the dataset, so `Coding Scheme Version` was never written; reading asked a dataset for a name no attribute has, which answers with nothing. A code given a scheme version lost it on the way to DICOM, and a code read from a dataset that states one came back without it.
 
 ## [0.35.0] - 2026-08-15
 

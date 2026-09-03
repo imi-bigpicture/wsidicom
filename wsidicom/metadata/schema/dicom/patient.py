@@ -23,15 +23,15 @@ from pydicom.valuerep import VR
 
 from wsidicom.metadata.patient import Patient, PatientDeIdentification, PatientSex
 from wsidicom.metadata.schema.dicom.fields import (
+    EMPTY,
     BooleanDicomField,
     CodeDicomField,
     DateDicomField,
-    DefaultingNoneDicomField,
     EnumDicomField,
     FlattenOnDumpNestedDicomField,
     ListDicomField,
     PersonNameDicomField,
-    SingleCodeSequenceField,
+    SingleCodeSequenceDicomField,
     StringDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import (
@@ -77,26 +77,27 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
 
 
 class PatientDicomSchema(ModuleDicomSchema[Patient]):
-    name = DefaultingNoneDicomField(
-        PersonNameDicomField(), data_key="PatientName", load_default=None
+    name = PersonNameDicomField(
+        data_key="PatientName", load_default=None, default_if_none=EMPTY
     )
-    identifier = DefaultingNoneDicomField(
-        StringDicomField(value_representation=VR.LO),
+    identifier = StringDicomField(
+        value_representation=VR.LO,
         data_key="PatientID",
         load_default=None,
+        default_if_none=EMPTY,
     )
-    birth_date = DefaultingNoneDicomField(
-        DateDicomField(), data_key="PatientBirthDate", load_default=None
+    birth_date = DateDicomField(
+        data_key="PatientBirthDate", load_default=None, default_if_none=EMPTY
     )
-    sex = DefaultingNoneDicomField(
-        EnumDicomField(PatientSex), data_key="PatientSex", load_default=None
+    sex = EnumDicomField(
+        PatientSex, data_key="PatientSex", load_default=None, default_if_none=EMPTY
     )
     species_description_string = StringDicomField(
         value_representation=VR.LO,
         data_key="PatientSpeciesDescription",
         allow_none=True,
     )
-    species_description_code = SingleCodeSequenceField(
+    species_description_code = SingleCodeSequenceDicomField(
         Code, data_key="PatientSpeciesCodeSequence", allow_none=True
     )
     de_identification = FlattenOnDumpNestedDicomField(

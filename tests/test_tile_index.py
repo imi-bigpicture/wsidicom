@@ -47,11 +47,11 @@ class TestTileIndex:
         self, optical_path_sequence: DicomSequence, expected: list[str]
     ):
         # Arrange
-        dataset = WsiDataset()
+        dataset = Dataset()
         dataset.OpticalPathSequence = optical_path_sequence
 
         # Act
-        paths = TileIndex._read_optical_paths_from_datasets([dataset])
+        paths = TileIndex._read_optical_paths_from_datasets([WsiDataset(dataset)])
 
         # Assert
         assert paths == expected
@@ -61,20 +61,22 @@ class TestTileIndex:
         self, optical_path_sequence: DicomSequence
     ):
         # Arrange — the same paths appear in two datasets.
-        first = WsiDataset()
+        first = Dataset()
         first.OpticalPathSequence = optical_path_sequence
-        second = WsiDataset()
+        second = Dataset()
         second.OpticalPathSequence = optical_path_sequence
 
         # Act
-        paths = TileIndex._read_optical_paths_from_datasets([first, second])
+        paths = TileIndex._read_optical_paths_from_datasets(
+            [WsiDataset(first), WsiDataset(second)]
+        )
 
         # Assert — deduped, first-seen order preserved.
         assert paths == ["1", "0"]
 
     def test_read_optical_paths_defaults_to_zero_when_absent(self):
         # Arrange
-        dataset = WsiDataset()
+        dataset = WsiDataset(Dataset())
 
         # Act
         paths = TileIndex._read_optical_paths_from_datasets([dataset])

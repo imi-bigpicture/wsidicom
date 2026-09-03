@@ -1,18 +1,26 @@
+import logging
 from collections.abc import Sequence
 
 import pytest
 from pydicom import Dataset
 from pydicom.dataelem import DataElement
 from pydicom.sequence import Sequence as DicomSequence
+from pydicom.tag import BaseTag, Tag
 from pydicom.uid import UID, generate_uid
 
 from tests.data_gen import create_main_dataset
+from wsidicom.config import Settings, use_settings
 from wsidicom.errors import WsiDicomError
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance import ImageData, TileType
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.metadata import ImageType
-from wsidicom.tags import LossyImageCompressionRatioTag
+from wsidicom.options import DicomValueValidationOption
+from wsidicom.tags import (
+    LossyImageCompressionRatioTag,
+    SharedFunctionalGroupsSequenceTag,
+    TotalPixelMatrixOriginSequenceTag,
+)
 
 
 @pytest.fixture
@@ -54,7 +62,7 @@ def dataset(
     series_instance_uid: UID,
     concatenation: bool,
 ):
-    dataset = WsiDataset()
+    dataset = Dataset()
     dataset.SOPInstanceUID = instance_uid
     if concatenation:
         dataset.SOPInstanceUIDOfConcatenationSource = concatenation_uid
@@ -62,7 +70,7 @@ def dataset(
     dataset.StudyInstanceUID = study_instance_uid
     dataset.SeriesInstanceUID = series_instance_uid
     dataset.ImageType = ["DERIVED", "PRIMARY", "VOLUME", "RESAMPLED"]
-    yield dataset
+    yield WsiDataset(dataset)
 
 
 @pytest.fixture
@@ -146,10 +154,12 @@ class TestWsiDataset:
     ):
         # Arrange
         if values is not None:
-            dataset.add(DataElement(LossyImageCompressionRatioTag, "CS", values))
+            dataset.as_dataset().add(
+                DataElement(LossyImageCompressionRatioTag, "CS", values)
+            )
 
         # Act
-        read_values = dataset.get_multi_value(LossyImageCompressionRatioTag)
+        read_values = dataset.lossy_compression_ratios
 
         # Assert
         assert read_values == expected_values
@@ -193,7 +203,7 @@ class TestWsiDataset:
     ):
         # Arrange
         if concatenation is not None:
-            dataset.ConcatenationFrameOffsetNumber = concatenation
+            dataset = dataset.replace({"ConcatenationFrameOffsetNumber": concatenation})
 
         # Act
         frame_offset = dataset.frame_offset
@@ -209,7 +219,7 @@ class TestWsiDataset:
     ):
         # Arrange
         if frame_count is not None:
-            dataset.NumberOfFrames = frame_count
+            dataset = dataset.replace({"NumberOfFrames": frame_count})
 
         # Act
         read_frame_count = dataset.frame_count
@@ -219,7 +229,7 @@ class TestWsiDataset:
 
     def test_tile_type_tiled_full(self, dataset: WsiDataset):
         # Arrange
-        dataset.DimensionOrganizationType = "TILED_FULL"
+        dataset = dataset.replace({"DimensionOrganizationType": "TILED_FULL"})
 
         # Act
         read_tile_type = dataset.tile_type
@@ -231,7 +241,7 @@ class TestWsiDataset:
         # Arrange — a real sparse image has per-frame items carrying tile positions
         frame = Dataset()
         frame.PlanePositionSlideSequence = [Dataset()]
-        dataset.PerFrameFunctionalGroupsSequence = [frame]
+        dataset = dataset.replace({"PerFrameFunctionalGroupsSequence": [frame]})
 
         # Act
         read_tile_type = dataset.tile_type
@@ -253,7 +263,7 @@ class TestWsiDataset:
         # Arrange — without per-frame tile positions a sparse index can't be built,
         # so it must fall through to the tiled-full heuristics (single frame here)
         # rather than be classed sparse and later fail reading frame positions.
-        dataset.PerFrameFunctionalGroupsSequence = per_frame
+        dataset = dataset.replace({"PerFrameFunctionalGroupsSequence": per_frame})
 
         # Act
         read_tile_type = dataset.tile_type
@@ -263,7 +273,9 @@ class TestWsiDataset:
 
     def test_tile_type_label(self, dataset: WsiDataset):
         # Arrange
-        dataset.ImageType = ["DERIVED", "LABEL", "VOLUME", "RESAMPLED"]
+        dataset = dataset.replace(
+            {"ImageType": ["DERIVED", "LABEL", "VOLUME", "RESAMPLED"]}
+        )
 
         # Act
         read_tile_type = dataset.tile_type
@@ -273,9 +285,13 @@ class TestWsiDataset:
 
     def test_tile_type_single_frame(self, dataset: WsiDataset):
         # Arrange
-        dataset.TotalPixelMatrixFocalPlanes = 1
-        dataset.NumberOfOpticalPaths = 1
-        dataset.NumberOfFrames = 1
+        dataset = dataset.replace(
+            {
+                "TotalPixelMatrixFocalPlanes": 1,
+                "NumberOfOpticalPaths": 1,
+                "NumberOfFrames": 1,
+            }
+        )
 
         # Act
         read_tile_type = dataset.tile_type
@@ -290,13 +306,110 @@ class TestWsiDataset:
         pixel_measure: Dataset,
     ):
         # Arrange
-        dataset.SharedFunctionalGroupsSequence = [shared_functional_group]
+        dataset = dataset.replace(
+            {"SharedFunctionalGroupsSequence": [shared_functional_group]}
+        )
 
         # Act
         read_pixel_measure = dataset.pixel_measure
 
         # Assert
         assert read_pixel_measure == pixel_measure
+
+    @pytest.mark.parametrize("option", list(DicomValueValidationOption))
+    def test_replace_checks_the_value_whatever_the_setting_says(
+        self, dataset: WsiDataset, option: DicomValueValidationOption
+    ):
+        """What is written here is what wsidicom worked out, not what it was given.
+
+        `Settings.dicom_value_validation` is there for the metadata a caller
+        supplies. Turning it off must not stop wsidicom checking its own.
+        """
+        # Arrange
+        # Series Description is LO, which allows 64
+        settings = Settings(dicom_value_validation=option)
+
+        # Act & Assert
+        with use_settings(settings), pytest.raises(ValueError):
+            dataset.replace({"SeriesDescription": "X" * 100})
+
+    def test_overlay_keeps_the_value_representation_the_element_was_made_with(
+        self, dataset: WsiDataset
+    ):
+        """The dictionary cannot settle a value representation written as one of two."""
+        # Arrange
+        # Smallest Image Pixel Value is written as US or SS, and this one as US
+        source = Dataset()
+        source.add(DataElement(Tag("SmallestImagePixelValue"), "US", 7))
+
+        # Act
+        overlaid = dataset.overlay(source).as_dataset()
+
+        # Assert
+        assert overlaid[Tag("SmallestImagePixelValue")].VR == "US"
+
+    def test_replace_refuses_an_element_under_another_tag(self, dataset: WsiDataset):
+        """An element is set under its own tag, so the two have to agree."""
+        # Arrange
+        element = DataElement(Tag("PatientName"), "PN", "Smith")
+
+        # Act & Assert
+        with pytest.raises(ValueError):
+            dataset.replace({Tag("SeriesDescription"): element})
+
+    def test_replace_refuses_a_value_for_an_unsettled_value_representation(
+        self, dataset: WsiDataset
+    ):
+        """A raw value says nothing about which of the two to write it as."""
+        # Arrange
+
+        # Act & Assert
+        with pytest.raises(ValueError):
+            dataset.replace({"SmallestImagePixelValue": 7})
+
+    def test_pixel_measure_reads_the_first_of_several_shared_groups(
+        self,
+        dataset: WsiDataset,
+        shared_functional_group: Dataset,
+        pixel_measure: Dataset,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # Arrange
+        # The shared functional groups sequence is defined to hold one item. A
+        # dataset that states two is read for the first rather than rejected.
+        second_group = Dataset()
+        second_group.PixelMeasuresSequence = DicomSequence([Dataset()])
+        dataset = dataset.replace(
+            {
+                SharedFunctionalGroupsSequenceTag: [
+                    shared_functional_group,
+                    second_group,
+                ]
+            }
+        )
+
+        # Act
+        with caplog.at_level(logging.WARNING):
+            read_pixel_measure = dataset.pixel_measure
+
+        # Assert
+        assert read_pixel_measure == pixel_measure
+        assert "SharedFunctionalGroupsSequence holds 2 items" in caplog.text
+
+    def test_z_offset_with_empty_origin_sequence_falls_back(
+        self,
+        dataset: WsiDataset,
+    ):
+        # Arrange
+        # An origin sequence that is there but holds no item states no z
+        # offset, and is read as though it were not there at all.
+        dataset = dataset.replace({TotalPixelMatrixOriginSequenceTag: []})
+
+        # Act
+        z_offset = dataset.z_offset
+
+        # Assert
+        assert z_offset == WsiDataset.DEFAULT_Z_OFFSET
 
     @pytest.mark.parametrize(
         ["pixel_spacing", "expected_pixel_spacing"],
@@ -309,7 +422,9 @@ class TestWsiDataset:
         expected_pixel_spacing: SizeMm | None,
     ):
         # Arrange
-        dataset.SharedFunctionalGroupsSequence = [shared_functional_group]
+        dataset = dataset.replace(
+            {"SharedFunctionalGroupsSequence": [shared_functional_group]}
+        )
 
         # Act
         read_pixel_spacing = dataset.pixel_spacing
@@ -325,7 +440,9 @@ class TestWsiDataset:
         spacing_between_slices: float | None,
     ):
         # Arrange
-        dataset.SharedFunctionalGroupsSequence = [shared_functional_group]
+        dataset = dataset.replace(
+            {"SharedFunctionalGroupsSequence": [shared_functional_group]}
+        )
 
         # Act
         read_spacing_between_slices = dataset.spacing_between_slices
@@ -358,28 +475,28 @@ class TestWsiDataset:
         )
 
         # Assert
-        assert instance_dataset.ImageType == expected_image_type
+        assert instance_dataset.as_dataset().ImageType == expected_image_type
 
     def test_is_supported_wsi_dicom_supported_volume_returns_image_type(self):
         # Arrange
         dataset = create_main_dataset()
 
         # Act
-        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+        image_type = WsiDataset(dataset).supported_image_type
 
         # Assert
         assert image_type == ImageType.VOLUME
 
     @pytest.mark.parametrize("attribute", WsiDataset.REQUIRED_ATTRIBUTES)
     def test_is_supported_wsi_dicom_missing_required_attribute_returns_none(
-        self, attribute: str
+        self, attribute: BaseTag
     ):
         # Arrange
         dataset = create_main_dataset()
-        delattr(dataset, attribute)
+        del dataset[attribute]
 
         # Act
-        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+        image_type = WsiDataset(dataset).supported_image_type
 
         # Assert
         assert image_type is None
@@ -390,7 +507,7 @@ class TestWsiDataset:
         del dataset.SOPClassUID
 
         # Act
-        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+        image_type = WsiDataset(dataset).supported_image_type
 
         # Assert
         assert image_type is None
@@ -401,7 +518,7 @@ class TestWsiDataset:
         dataset.SOPClassUID = "1.2.840.10008.5.1.4.1.1.2"  # CT Image Storage
 
         # Act
-        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+        image_type = WsiDataset(dataset).supported_image_type
 
         # Assert
         assert image_type is None
@@ -412,7 +529,7 @@ class TestWsiDataset:
         dataset.ImageType = ["DERIVED", "PRIMARY", "BADFLAVOR", "NONE"]
 
         # Act
-        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+        image_type = WsiDataset(dataset).supported_image_type
 
         # Assert
         assert image_type is None
@@ -434,7 +551,7 @@ class TestWsiDataset:
         setattr(dataset, attribute, value)
 
         # Act
-        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+        image_type = WsiDataset(dataset).supported_image_type
 
         # Assert
         assert image_type is None
@@ -448,7 +565,7 @@ class TestWsiDataset:
         dataset.BitsStored = 16
 
         # Act
-        image_type = WsiDataset.is_supported_wsi_dicom(dataset)
+        image_type = WsiDataset(dataset).supported_image_type
 
         # Assert
         assert image_type == ImageType.VOLUME
@@ -461,7 +578,7 @@ class TestWsiDataset:
         result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
 
         # Assert
-        origin = result.TotalPixelMatrixOriginSequence[0]
+        origin = result.as_dataset().TotalPixelMatrixOriginSequence[0]
         assert float(origin.XOffsetInSlideCoordinateSystem) == 60.0
         assert float(origin.YOffsetInSlideCoordinateSystem) == 10.0
         assert float(origin.ZOffsetInSlideCoordinateSystem) == 5.0
@@ -476,7 +593,7 @@ class TestWsiDataset:
         result = dataset.as_tiled_full([0.0], ["0"], Size(2, 2), 1)
 
         # Assert — no invalid (x/y-less) origin item is created.
-        assert "TotalPixelMatrixOriginSequence" not in result
+        assert "TotalPixelMatrixOriginSequence" not in result.as_dataset()
 
     def test_as_tiled_full_creates_valid_origin_when_absent_and_z_nonzero(self):
         # Arrange — a non-zero focal plane with no origin sequence.
@@ -488,7 +605,7 @@ class TestWsiDataset:
         result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
 
         # Assert — required x/y are present (defaulted) alongside z.
-        origin = result.TotalPixelMatrixOriginSequence[0]
+        origin = result.as_dataset().TotalPixelMatrixOriginSequence[0]
         assert float(origin.XOffsetInSlideCoordinateSystem) == 0.0
         assert float(origin.YOffsetInSlideCoordinateSystem) == 0.0
         assert float(origin.ZOffsetInSlideCoordinateSystem) == 5.0
@@ -506,10 +623,11 @@ class TestWsiDataset:
 
         # Assert
         identifiers = [
-            str(item.OpticalPathIdentifier) for item in result.OpticalPathSequence
+            str(item.OpticalPathIdentifier)
+            for item in result.as_dataset().OpticalPathSequence
         ]
         assert identifiers == ["1"]
-        assert result.NumberOfOpticalPaths == 1
+        assert result.as_dataset().NumberOfOpticalPaths == 1
 
     def test_as_tiled_full_drops_slice_spacing_for_single_focal_plane(self):
         # Arrange — a source with multi-plane slice spacing set.
@@ -523,9 +641,11 @@ class TestWsiDataset:
         result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
 
         # Assert — stale spacing is removed.
-        pixel_measure = result.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[
-            0
-        ]
+        pixel_measure = (
+            result.as_dataset()
+            .SharedFunctionalGroupsSequence[0]
+            .PixelMeasuresSequence[0]
+        )
         assert "SpacingBetweenSlices" not in pixel_measure
 
     def test_optical_path_identifier_from_the_frame_wins_over_the_shared_groups(self):

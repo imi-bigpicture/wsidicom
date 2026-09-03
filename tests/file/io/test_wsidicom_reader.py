@@ -171,13 +171,14 @@ class TestWWsiDicomReader:
         assert isinstance(path, Path)
 
         # Act
-        dataset = WsiDataset(dcmread(path, stop_before_pixels=True))
-        if PerFrameFunctionalGroupsSequenceTag not in test_file.dataset:
+        expected = dcmread(path, stop_before_pixels=True)
+        read = test_file.dataset.as_dataset()
+        if PerFrameFunctionalGroupsSequenceTag not in read:
             # The sequence was read rather than parsed, so it is not in the dataset.
-            del dataset[PerFrameFunctionalGroupsSequenceTag]
+            del expected[PerFrameFunctionalGroupsSequenceTag]
 
         # Assert
-        assert test_file.dataset == dataset
+        assert read == expected
 
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_frame_positions_match_parsed_sequence(
@@ -190,9 +191,9 @@ class TestWWsiDicomReader:
         if settings["tile_type"] is TileType.FULL:
             # The per frame groups of a tiled full image hold no tile positions, so
             # there is nothing to read and the sequence is parsed.
-            assert PerFrameFunctionalGroupsSequenceTag in test_file.dataset
+            assert PerFrameFunctionalGroupsSequenceTag in test_file.dataset.as_dataset()
             return
-        assert PerFrameFunctionalGroupsSequenceTag not in test_file.dataset
+        assert PerFrameFunctionalGroupsSequenceTag not in test_file.dataset.as_dataset()
 
         # Act
         positions = test_file.dataset.frame_positions
@@ -225,7 +226,7 @@ class TestWWsiDicomReader:
         reader = file_with_element_after_sequence
 
         # Act
-        dataset = reader.dataset
+        dataset = reader.dataset.as_dataset()
 
         # Assert
         assert dataset[TAG_AFTER_SEQUENCE].value == "After the sequence"
@@ -268,7 +269,7 @@ class TestWWsiDicomReader:
         reader = file_with_unreadable_sequence
 
         # Act
-        dataset = reader.dataset
+        dataset = reader.dataset.as_dataset()
 
         # Assert
         assert len(dataset.PerFrameFunctionalGroupsSequence) == 2
@@ -294,7 +295,7 @@ class TestWWsiDicomReader:
         reader = file_without_sequence_with_element_after_it
 
         # Act
-        dataset = reader.dataset
+        dataset = reader.dataset.as_dataset()
 
         # Assert
         assert dataset[TAG_AFTER_SEQUENCE].value == "After the sequence"

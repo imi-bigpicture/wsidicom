@@ -14,11 +14,10 @@
 
 """DICOM schema for Series model."""
 
-from marshmallow import fields
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.schema.dicom.fields import (
-    DefaultingDicomField,
+    IntegerDicomField,
     StringDicomField,
     UidDicomField,
 )
@@ -30,8 +29,8 @@ class SeriesDicomSchema(ModuleDicomSchema[Series]):
     uid = UidDicomField(
         data_key="SeriesInstanceUID", allow_none=True, dump_required=True
     )
-    number = DefaultingDicomField(
-        fields.Integer(), dump_default=1, data_key="SeriesNumber", allow_none=True
+    number = IntegerDicomField(
+        default_if_none=1, data_key="SeriesNumber", allow_none=True
     )
     description = StringDicomField(
         value_representation=VR.LO, data_key="SeriesDescription", allow_none=True

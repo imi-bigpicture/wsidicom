@@ -23,8 +23,9 @@ from struct import pack
 from typing import Any, BinaryIO
 
 from fsspec.implementations.local import LocalFileSystem
+from pydicom import DataElement, Dataset, FileMetaDataset
+from pydicom.config import RAISE
 from pydicom.dataelem import RawDataElement, convert_raw_data_element
-from pydicom.dataset import Dataset, FileMetaDataset, validate_file_meta
 from pydicom.errors import InvalidDicomError
 from pydicom.filebase import DicomIO
 from pydicom.filereader import (
@@ -41,6 +42,13 @@ from pydicom.valuerep import VR
 from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.tags import (
+    InstanceCreationDateTag,
+    InstanceCreationTimeTag,
+    MediaStorageSOPClassUIDTag,
+    MediaStorageSOPInstanceUIDTag,
+    TransferSyntaxUIDTag,
+)
 
 
 class WsiDicomIO:
@@ -427,11 +435,25 @@ class WsiDicomIO:
             SOP Class UID.
 
         """
-        meta = FileMetaDataset()
-        meta.TransferSyntaxUID = transfer_syntax
-        meta.MediaStorageSOPInstanceUID = instance_uid
-        meta.MediaStorageSOPClassUID = sop_class_uid
-        validate_file_meta(meta)
+        meta = FileMetaDataset(
+            {
+                MediaStorageSOPClassUIDTag: DataElement(
+                    MediaStorageSOPClassUIDTag,
+                    "UI",
+                    sop_class_uid,
+                    validation_mode=RAISE,
+                ),
+                MediaStorageSOPInstanceUIDTag: DataElement(
+                    MediaStorageSOPInstanceUIDTag,
+                    "UI",
+                    instance_uid,
+                    validation_mode=RAISE,
+                ),
+                TransferSyntaxUIDTag: DataElement(
+                    TransferSyntaxUIDTag, "UI", transfer_syntax, validation_mode=RAISE
+                ),
+            }
+        )
         write_file_meta_info(self._dicom_io, meta)
 
     def write_dataset(self, dataset: Dataset, creation_datetime: datetime):
@@ -446,12 +468,14 @@ class WsiDicomIO:
             ContentDate/Time describe the image content and are left untouched.
 
         """
-        dataset.InstanceCreationDate = datetime.date(creation_datetime).strftime(
-            "%Y%m%d"
+        creation_date = DataElement(
+            InstanceCreationDateTag, "DA", creation_datetime.date()
         )
-        dataset.InstanceCreationTime = datetime.time(creation_datetime).strftime(
-            "%H%M%S.%f"
+        creation_time = DataElement(
+            InstanceCreationTimeTag, "TM", creation_datetime.time()
         )
+        dataset.add(creation_date)
+        dataset.add(creation_time)
         write_dataset(self._dicom_io, dataset)
 
     def close(self) -> None:
@@ -491,7 +515,7 @@ class WsiDicomIO:
             length = element.length
             if isinstance(element, RawDataElement):
                 element = convert_raw_data_element(element)
-            element.value = update[BaseTag(element.tag)]
+            element.value = update[element.tag]
             self.seek(element_value_position)
             writer, param = writers[VR(element.VR)]
             if param is None:

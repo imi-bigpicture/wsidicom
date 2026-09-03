@@ -44,7 +44,13 @@ from wsidicom.file.io.per_frame_functional_groups_reader import (
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import WsiDataset
 from wsidicom.metadata import ImageType
-from wsidicom.tags import ExtendedOffsetTableTag, PerFrameFunctionalGroupsSequenceTag
+from wsidicom.tags import (
+    DimensionOrganizationTypeTag,
+    ExtendedOffsetTableTag,
+    NumberOfFramesTag,
+    PerFrameFunctionalGroupsSequenceTag,
+    SpecificCharacterSetTag,
+)
 from wsidicom.uid import FileUids
 
 logger = logging.getLogger(__name__)
@@ -68,7 +74,7 @@ class WsiDicomReader:
         self._dataset = self._read_dataset()
         self._pixel_data_position = self._stream.tell()
 
-        self._image_type = WsiDataset.is_supported_wsi_dicom(self._dataset)
+        self._image_type = self._dataset.supported_image_type
         if self._image_type is None:
             raise WsiDicomNotSupportedError(
                 f"Non-supported file or stream {self._stream}."
@@ -111,14 +117,18 @@ class WsiDicomReader:
         # A tiled full image states where its frames are by the order they are in, so
         # its per frame groups hold no tile positions to find, and a full tile index
         # would not ask for them if they did.
-        tiled_full = dataset.get("DimensionOrganizationType", None) == "TILED_FULL"
+        tiled_full = (
+            WsiDataset.get_value(dataset, DimensionOrganizationTypeTag) == "TILED_FULL"
+        )
         if stopped_at == PerFrameFunctionalGroupsSequenceTag and not tiled_full:
             reader = PerFrameFunctionalGroupsReader(
                 self._stream,
                 continue_from,
-                int(dataset.get("NumberOfFrames", 0) or 0),
+                int(WsiDataset.get_value(dataset, NumberOfFramesTag, 0) or 0),
                 self._transfer_syntax_uid,
-                specific_character_set=dataset.get("SpecificCharacterSet", None),
+                specific_character_set=WsiDataset.get_value(
+                    dataset, SpecificCharacterSetTag
+                ),
             )
             try:
                 frame_positions = reader.read_positions()
@@ -137,8 +147,9 @@ class WsiDicomReader:
         # The rest of the dataset: the sequence when its bytes were not enough, and
         # whatever is between it and the pixel data.
         rest = self._stream.read_dataset_from(continue_from, ExtendedOffsetTableTag)
-        dataset.update(rest)
-        return WsiDataset(dataset, frame_positions=frame_positions)
+        for element in rest:
+            dataset.add(element)
+        return WsiDataset(dataset, frame_positions)
 
     def __enter__(self):
         return self

@@ -18,7 +18,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from wsidicom.options import DecoderOption, DownsamplerOption, ResampleFilterOption
+from pydicom.config import RAISE, WARN
+
+from wsidicom.options import (
+    DecoderOption,
+    DicomValueValidationOption,
+    DownsamplerOption,
+    ResampleFilterOption,
+)
 
 
 @dataclass(frozen=True)
@@ -66,10 +73,17 @@ class Settings:
     ignore_specimen_preparation_step_on_validation_error: bool = True
     """If ignore specimen preparation steps that fails to validate. If false all
     steps will be ignored if one fails to validate."""
+    dicom_value_validation: DicomValueValidationOption = (
+        DicomValueValidationOption.WRITTEN
+    )
+    """How far to check that values conform to their DICOM value representation.
+    Defaults to checking what wsidicom itself builds. Checking is done on the
+    built datasets with the mode passed per value, so pydicom's own validation
+    mode is never set and a process using wsidicom keeps the mode it chose."""
     truncate_long_dicom_strings_on_validation_error: bool = False
     """If long DICOM strings should be truncated. This is only used if
-    `pydicom.settings.writing_validation_mode` is set to `pydicom.config.RAISE`.
-    If set to `True` long strings will be truncated if needed to pass validation."""
+    `strict_dicom_value_validation` is set. If set to `True` long strings will be
+    truncated if needed to pass validation."""
     decoded_frame_cache_size: int = 100 * 1024 * 1024
     """Size of the decoded frame cache. Default is 100 MB."""
     encoded_frame_cache_size: int = 100 * 1024 * 1024
@@ -87,6 +101,11 @@ class Settings:
             self,
             "pyramid_resampling_filter",
             ResampleFilterOption(self.pyramid_resampling_filter),
+        )
+        object.__setattr__(
+            self,
+            "dicom_value_validation",
+            DicomValueValidationOption(self.dicom_value_validation),
         )
         object.__setattr__(
             self, "preferred_decoder", DecoderOption.coerce(self.preferred_decoder)
@@ -156,3 +175,14 @@ def use_settings(active: Settings | None = None) -> Iterator[Settings]:
         yield active
     finally:
         _active_settings.reset(token)
+
+
+def dicom_validation_mode() -> int:
+    """The pydicom validation mode to make an element with.
+
+    Given to `DataElement` rather than set on pydicom, so a value wsidicom sets
+    is checked while the mode the rest of the process uses is left alone.
+    """
+    if get_settings().dicom_value_validation is DicomValueValidationOption.NONE:
+        return WARN
+    return RAISE

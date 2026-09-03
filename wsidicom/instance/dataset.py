@@ -14,17 +14,21 @@
 
 import logging
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from typing import Any, ClassVar
 
 import numpy as np
+from pydicom.config import RAISE
+from pydicom.datadict import dictionary_VR, keyword_for_tag
+from pydicom.dataelem import DataElement
 from pydicom.dataset import Dataset
 from pydicom.multival import MultiValue
 from pydicom.sequence import Sequence as DicomSequence
-from pydicom.tag import BaseTag
+from pydicom.tag import BaseTag, Tag
 from pydicom.uid import (
     UID,
     VLWholeSlideMicroscopyImageStorage,
@@ -33,6 +37,7 @@ from pydicom.uid import (
 from pydicom.valuerep import MAX_VALUE_LEN, DSfloat
 
 from wsidicom.codec import Encoder
+from wsidicom.codec.encoder import LossyCompressionIsoStandard
 from wsidicom.config import get_settings
 from wsidicom.errors import (
     WsiDicomError,
@@ -42,15 +47,79 @@ from wsidicom.errors import (
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.per_frame_group_positions import PerFrameGroupPositions
-from wsidicom.metadata.image import ImageType
+from wsidicom.metadata import (
+    ImageCoordinateSystem,
+    ImageType,
+    Label,
+    LossyCompression,
+    Overview,
+    Pyramid,
+)
+from wsidicom.metadata.schema.dicom import (
+    BaseWsiMetadata,
+    BaseWsiMetadataDicomSchema,
+    ImageCoordinateSystemDicomSchema,
+    LabelBaseDicomSchema,
+    LabelDicomSchema,
+    OverviewDicomSchema,
+    PyramidDicomSchema,
+)
 from wsidicom.tags import (
+    BitsAllocatedTag,
+    BitsStoredTag,
     ColumnPositionInTotalImagePixelMatrixTag,
+    ColumnsTag,
+    ConcatenationFrameOffsetNumberTag,
+    ConcatenationUIDTag,
+    DimensionOrganizationTypeTag,
+    DistanceBetweenFocalPlanesTag,
+    ExtendedDepthOfFieldTag,
+    FocusMethodTag,
+    FrameOfReferenceUIDTag,
+    FrameTypeTag,
+    HighBitTag,
+    ImagedVolumeDepthTag,
+    ImagedVolumeHeightTag,
+    ImagedVolumeWidthTag,
+    ImageOrientationSlideTag,
+    ImageTypeTag,
+    InConcatenationNumberTag,
+    InConcatenationTotalNumberTag,
+    InstanceNumberTag,
     LossyImageCompressionMethodTag,
     LossyImageCompressionRatioTag,
+    LossyImageCompressionTag,
+    NumberOfFocalPlanesTag,
+    NumberOfFramesTag,
+    NumberOfOpticalPathsTag,
+    OpticalPathIdentificationSequenceTag,
     OpticalPathIdentifierTag,
+    OpticalPathSequenceTag,
     PerFrameFunctionalGroupsSequenceTag,
+    PhotometricInterpretationTag,
+    PixelMeasuresSequenceTag,
+    PixelRepresentationTag,
+    PixelSpacingTag,
+    PlanarConfigurationTag,
     PlanePositionSlideSequenceTag,
     RowPositionInTotalImagePixelMatrixTag,
+    RowsTag,
+    SamplesPerPixelTag,
+    SeriesInstanceUIDTag,
+    SharedFunctionalGroupsSequenceTag,
+    SliceThicknessTag,
+    SOPClassUIDTag,
+    SOPInstanceUIDOfConcatenationSourceTag,
+    SOPInstanceUIDTag,
+    SpacingBetweenSlicesTag,
+    StudyInstanceUIDTag,
+    TotalPixelMatrixColumnsTag,
+    TotalPixelMatrixFocalPlanesTag,
+    TotalPixelMatrixOriginSequenceTag,
+    TotalPixelMatrixRowsTag,
+    WholeSlideMicroscopyImageFrameTypeSequenceTag,
+    XOffsetInSlideCoordinateSystemTag,
+    YOffsetInSlideCoordinateSystemTag,
     ZOffsetInSlideCoordinateSystemTag,
 )
 from wsidicom.uid import FileUids, SlideUids
@@ -63,30 +132,57 @@ class TileType(Enum):
     SPARSE = "TILED_SPARSE"
 
 
-class WsiDataset(Dataset):
+@dataclass(frozen=True)
+class ConcatenationPart:
+    """Where one instance sits in the concatenation its level is written as.
+
+    Parameters
+    ----------
+    uid: UID
+        Concatenation UID shared by every part of the level.
+    source_instance_uid: UID
+        SOP Instance UID the parts would have had as a single instance.
+    number: int
+        Position of this part in the concatenation, counting from one.
+    frame_offset: int
+        Number of frames the parts before this one hold together.
+    total: int | None = None
+        Number of parts the concatenation holds, when that is known. Left out
+        of the dataset when it is not, as when parts are split by byte size
+        while writing.
+    """
+
+    uid: UID
+    source_instance_uid: UID
+    number: int
+    frame_offset: int
+    total: int | None = None
+
+
+class WsiDataset:
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
     parsers for attributes specific for WSI. Use snake case to avoid name
     collision with dicom fields (that are handled by pydicom.dataset.Dataset).
     """
 
-    REQUIRED_ATTRIBUTES: ClassVar[tuple[str, ...]] = (
-        "SOPInstanceUID",
-        "StudyInstanceUID",
-        "SeriesInstanceUID",
-        "ImageType",
-        "Rows",
-        "Columns",
-        "TotalPixelMatrixColumns",
-        "TotalPixelMatrixRows",
-        "SamplesPerPixel",
-        "PhotometricInterpretation",
-        "BitsStored",
+    REQUIRED_ATTRIBUTES: ClassVar[tuple[BaseTag, ...]] = (
+        SOPInstanceUIDTag,
+        StudyInstanceUIDTag,
+        SeriesInstanceUIDTag,
+        ImageTypeTag,
+        RowsTag,
+        ColumnsTag,
+        TotalPixelMatrixColumnsTag,
+        TotalPixelMatrixRowsTag,
+        SamplesPerPixelTag,
+        PhotometricInterpretationTag,
+        BitsStoredTag,
     )
     """DICOM attributes that must be present for the library to be able to read
     an instance. These are the attributes that are dereferenced unconditionally
     while opening a dataset (identity, image and tile geometry, and pixel
     format). Datasets missing any of these are rejected by
-    :func:`is_supported_wsi_dicom`."""
+    `supported_image_type`."""
 
     SUPPORTED_PHOTOMETRIC_INTERPRETATIONS: ClassVar[frozenset[str]] = frozenset(
         {
@@ -104,32 +200,298 @@ class WsiDataset(Dataset):
     see PS3.3 C.8.12.4
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.8.12.4.html
     Notably excludes MONOCHROME1, which the IOD does not permit. Datasets with any
-    other value are rejected by :func:`is_supported_wsi_dicom`."""
+    other value are rejected by `supported_image_type`."""
 
     DEFAULT_Z_OFFSET: ClassVar[float] = 0.0
     """Z offset of a frame that does not state one, which is the focal plane at zero."""
 
     def __init__(
         self,
-        *args: Any,
+        dataset: Dataset,
         frame_positions: PerFrameGroupPositions | None = None,
-        **kwargs: Any,
     ):
-        """Create a WSI dataset.
+        """Create a WSI dataset around a pydicom dataset.
+
+        The dataset is wrapped rather than subclassed: what this adds is reading
+        of WSI attributes, and `set` for writing one, which checks the value as
+        it is set. The dataset itself is `dataset`.
 
         Parameters
         ----------
-        *args: Any
-            Positional arguments for `Dataset`, e.g. the dataset to wrap.
+        dataset: Dataset
+            Dataset to wrap.
         frame_positions: PerFrameGroupPositions | None = None
             Tile positions the reader took out of the bytes of the Per Frame Functional
             Groups Sequence, given when it did not have to build a dataset for every
             item. The sequence is then not in the dataset, and these stand in for it.
-        **kwargs: Any
-            Keyword arguments for `Dataset`.
         """
-        super().__init__(*args, **kwargs)
+        self._dataset = dataset
         self._frame_positions = frame_positions
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> "WsiDataset":
+        """A copy of this holding a copy of the dataset.
+
+        Defined so that the readers cached on this are not carried over to the
+        copy by the default copying of the attributes of an object: what was
+        worked out from the attributes of this one is worked out again for the
+        copy rather than described from the dataset it came from.
+        """
+        return WsiDataset(deepcopy(self._dataset, memo), self._frame_positions)
+
+    def as_dataset(self) -> Dataset:
+        """The wrapped dataset, for giving to something that takes a dataset.
+
+        A method rather than a property so that stepping out of this class is a
+        deliberate act and plain to find; what is read from a WSI dataset should
+        come from the readers here.
+        """
+        return self._dataset
+
+    @staticmethod
+    def _create_data_element(
+        tag: str | BaseTag,
+        value: Any,
+        value_representation: str | None = None,
+    ) -> DataElement:
+        """Make an element holding a value, checking the value as it is made.
+
+        Parameters
+        ----------
+        tag: str | BaseTag
+            Tag of the attribute, or the keyword of one that has a keyword.
+        value: Any
+            Value to set it to, as it would be given to pydicom.
+        value_representation: str | None = None
+            VR to write the value as, for a tag that does not have one of its
+            own, such as a private tag. Taken from the tag when not given.
+
+        The value is always checked, whatever `Settings.dicom_value_validation`
+        says. That setting is there for the metadata a caller supplies, which
+        wsidicom writes as given; what is written through here is what wsidicom
+        worked out for itself, and a value it cannot write conformantly is a
+        fault of its own rather than of the metadata it was handed.
+
+        Raises
+        ------
+        ValueError
+            If the tag is not a tag or the keyword of one, if it has no value
+            representation of its own and none was given, or if the value does
+            not conform to its value representation.
+        """
+        element_tag = Tag(tag)
+        if value_representation is None:
+            try:
+                value_representation = dictionary_VR(element_tag)
+            except KeyError:
+                raise ValueError(
+                    f"{element_tag} has no value representation of its own, so "
+                    "one has to be given to set it."
+                ) from None
+            if " or " in value_representation:
+                raise ValueError(
+                    f"{element_tag} is written as {value_representation}, so "
+                    "which of them has to be given to set it."
+                )
+        return DataElement(
+            element_tag,
+            value_representation,
+            value,
+            validation_mode=RAISE,
+        )
+
+    def replace(self, changes: Mapping[str | BaseTag, Any]) -> "WsiDataset":
+        """A copy of this with the given attributes changed.
+
+        A WSI dataset offers no way to change it in place: what wsidicom writes
+        is written by making a changed copy, so that the values it writes are
+        the ones checked here, while the values read from a file are left as
+        they were read.
+
+        The copy holds the elements of this one rather than copies of them, so
+        that making one costs the number of attributes rather than the size of
+        what they hold: changing an attribute puts a new element in the copy
+        and leaves this one as it was. What is reached through `as_dataset` is
+        shared, so changing that changes it for both.
+
+        Parameters
+        ----------
+        changes: Mapping[str | BaseTag, Any]
+            Attributes to change, by keyword or by tag.
+
+        Returns
+        -------
+        WsiDataset
+            Copy of this with the attributes changed.
+
+        Raises
+        ------
+        ValueError
+            If a tag is not a tag or the keyword of one, or if a value does not
+            conform to its value representation.
+        """
+        dataset = Dataset()
+        for element in self._dataset:
+            dataset.add(element)
+        file_meta = self._dataset.get("file_meta", None)
+        if file_meta is not None:
+            dataset.file_meta = file_meta
+        self._update_dataset(dataset, changes)
+        return WsiDataset(dataset, self._frame_positions)
+
+    @staticmethod
+    def get_value(dataset: Dataset, tag: BaseTag, default: Any = None) -> Any:
+        """The value of an attribute of a dataset, or `default` if it is not there.
+
+        Asking a dataset for a tag gives the element holding the value, where
+        asking it for a keyword gives the value itself. This gives the value,
+        so that a tag reads like the keyword it stands for.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to read the attribute from.
+        tag: BaseTag
+            Tag of the attribute.
+        default: Any = None
+            What to answer with when the dataset does not hold the attribute.
+        """
+        element = dataset.get(tag, None)
+        return default if element is None else element.value
+
+    @staticmethod
+    def get_optional_sequence(dataset: Dataset, tag: BaseTag) -> DicomSequence | None:
+        """The items of a sequence attribute of a dataset, or None if the dataset
+        does not hold the attribute.
+
+        Tells an attribute that is not there from one that is there and holds no
+        items. Use `get_sequence` where that difference does not matter.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to read the sequence from.
+        tag: BaseTag
+            Tag of the sequence attribute.
+        """
+        element = dataset.get(tag, None)
+        if element is None:
+            return None
+        items: DicomSequence = element.value
+        return items
+
+    @classmethod
+    def get_sequence(cls, dataset: Dataset, tag: BaseTag) -> DicomSequence:
+        """The items of a sequence attribute of a dataset.
+
+        Empty when the attribute holds no items and when it is not there at
+        all: a sequence that is not there holds nothing, which is what most
+        readers of one here make of it.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to read the sequence from.
+        tag: BaseTag
+            Tag of the sequence attribute.
+        """
+        items = cls.get_optional_sequence(dataset, tag)
+        return DicomSequence() if items is None else items
+
+    @classmethod
+    def get_sequence_item(cls, dataset: Dataset, tag: BaseTag) -> Dataset | None:
+        """The first item of a sequence attribute of a dataset, or None if the
+        dataset does not hold the attribute or holds it with no items.
+
+        For the sequences that are defined to hold exactly one item, which is
+        every one read through here. How many items a sequence may hold is said
+        by the module that defines it and not by the data dictionary, which
+        gives every sequence attribute a value multiplicity of one, so this is
+        not something that can be derived from the tag.
+
+        A dataset that states more than one item is read for its first, which is
+        what it means if it means anything, and logged rather than rejected.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to read the sequence from.
+        tag: BaseTag
+            Tag of the sequence attribute.
+        """
+        items = cls.get_sequence(dataset, tag)
+        if len(items) == 0:
+            return None
+        if len(items) > 1:
+            logger.warning(
+                f"{keyword_for_tag(tag)} holds {len(items)} items, where it is "
+                "defined to hold one. Reading the first."
+            )
+        return items[0]
+
+    @classmethod
+    def _update_dataset(
+        cls, dataset: Dataset, update: Mapping[str | BaseTag, Any]
+    ) -> None:
+        """Set attributes of a dataset, checking each value as it is set.
+
+        For a dataset being built rather than one being changed, and for the
+        datasets held in a sequence: making the element of a sequence checks
+        that the value is a sequence and nothing of what the items of it hold,
+        so what is put in an item is checked as it is put there.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to set the attributes of.
+        update: Mapping[str | BaseTag, Any]
+            Attributes to set, by keyword or by tag.
+
+        Raises
+        ------
+        ValueError
+            If a tag is not a tag or the keyword of one, or if a value does not
+            conform to its value representation.
+        """
+        for tag, value in update.items():
+            if isinstance(value, DataElement):
+                if value.tag != Tag(tag):
+                    raise ValueError(
+                        f"{value.tag} was given for {Tag(tag)}, and an element "
+                        "cannot be set under a tag other than its own."
+                    )
+            else:
+                value = cls._create_data_element(tag, value)
+            dataset.add(value)
+
+    def overlay(self, dataset: Dataset) -> "WsiDataset":
+        """A copy of this with the attributes of `dataset` set on it.
+
+        The elements are carried over as they are, keeping the value
+        representation each was made with, which the dictionary cannot always
+        give back: an attribute written as one of two is settled by whoever
+        made the element and not by the tag.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset whose attributes to set on the copy.
+
+        Returns
+        -------
+        WsiDataset
+            Copy of this with the attributes of `dataset` set on it.
+
+        Raises
+        ------
+        ValueError
+            If a value does not conform to its value representation.
+        """
+        return self.replace({element.tag: element for element in dataset})
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, WsiDataset):
+            return self._dataset == other.as_dataset()
+        return self._dataset == other
 
     @property
     def frame_positions(self) -> PerFrameGroupPositions:
@@ -177,7 +539,8 @@ class WsiDataset(Dataset):
         rows: list[int] = []
         z_offsets: list[float] = []
         identifiers: list[str] = []
-        for frame in self.PerFrameFunctionalGroupsSequence:
+        sequence = self.get_sequence(self._dataset, PerFrameFunctionalGroupsSequenceTag)
+        for frame in sequence:
             position: Dataset = frame[PlanePositionSlideSequenceTag][0]
             columns.append(
                 int(position[ColumnPositionInTotalImagePixelMatrixTag].value)
@@ -186,21 +549,21 @@ class WsiDataset(Dataset):
             z_offset = position.get(ZOffsetInSlideCoordinateSystemTag, None)
             if z_offset is not None:
                 z_offsets.append(float(z_offset.value))
-            optical_paths: DicomSequence | None = getattr(
-                frame, "OpticalPathIdentificationSequence", None
+            optical_paths = self.get_sequence(
+                frame, OpticalPathIdentificationSequenceTag
             )
-            if optical_paths is not None and len(optical_paths) > 1:
+            if len(optical_paths) > 1:
                 raise WsiDicomError(
                     f"A frame states {len(optical_paths)} optical path identifiers, "
                     "where Optical Path Identification Sequence holds a single item."
                 )
             identifier = (
                 None
-                if optical_paths is None or len(optical_paths) == 0
-                else getattr(optical_paths[0], "OpticalPathIdentifier", None)
+                if len(optical_paths) == 0
+                else optical_paths[0].get(OpticalPathIdentifierTag, None)
             )
             if identifier is not None:
-                identifiers.append(str(identifier))
+                identifiers.append(str(identifier.value))
 
         frame_count = len(columns)
         for element, values in (
@@ -230,6 +593,16 @@ class WsiDataset(Dataset):
     def __str__(self) -> str:
         return f"{type(self).__name__} of dataset {self.uids.instance}"
 
+    @property
+    def instance_uid(self) -> UID:
+        """The SOP instance uid of this instance.
+
+        On its own rather than through `uids`, which needs the study and series
+        uids as well and so asks more of the dataset than a caller that wants
+        only this one.
+        """
+        return UID(self._dataset.SOPInstanceUID)
+
     @cached_property
     def uids(self) -> FileUids:
         """Return UIDs from dataset.
@@ -239,13 +612,15 @@ class WsiDataset(Dataset):
         FileUids
             Found UIDs from dataset.
         """
-        instance_uid = UID(self.SOPInstanceUID)
-        concatenation_uid = getattr(self, "SOPInstanceUIDOfConcatenationSource", None)
-        frame_of_reference_uid = getattr(self, "FrameOfReferenceUID", None)
+        instance_uid = UID(self._dataset.SOPInstanceUID)
+        concatenation_uid = self.get_value(
+            self._dataset, SOPInstanceUIDOfConcatenationSourceTag
+        )
+        frame_of_reference_uid = self.get_value(self._dataset, FrameOfReferenceUIDTag)
 
         slide_uids = SlideUids(
-            self.StudyInstanceUID,
-            self.SeriesInstanceUID,
+            self._dataset.StudyInstanceUID,
+            self._dataset.SeriesInstanceUID,
             frame_of_reference_uid,
         )
         file_uids = FileUids(instance_uid, concatenation_uid, slide_uids)
@@ -265,7 +640,7 @@ class WsiDataset(Dataset):
         if self.uids.concatenation is None:
             return 0
         try:
-            return int(self.ConcatenationFrameOffsetNumber)
+            return int(self._dataset.ConcatenationFrameOffsetNumber)
         except AttributeError:
             raise WsiDicomError(
                 "Concatenated file missing concatenation frame offsetnumber"
@@ -274,7 +649,7 @@ class WsiDataset(Dataset):
     @property
     def frame_count(self) -> int:
         """Return number of frames in instance."""
-        return int(getattr(self, "NumberOfFrames", 1))
+        return int(self.get_value(self._dataset, NumberOfFramesTag, 1))
 
     @cached_property
     def tile_type(self) -> TileType:
@@ -286,7 +661,9 @@ class WsiDataset(Dataset):
         TileType
             Tiling type
         """
-        tile_type = getattr(self, "DimensionOrganizationType", "TILED_SPARSE")
+        tile_type = self.get_value(
+            self._dataset, DimensionOrganizationTypeTag, "TILED_SPARSE"
+        )
         if tile_type == "TILED_FULL":
             # By the standard it should be tiled full.
             return TileType.FULL
@@ -297,8 +674,12 @@ class WsiDataset(Dataset):
             # Labels are expected to only have one frame and can be treated as tiled
             # full.
             return TileType.FULL
-        number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
-        number_of_optical_paths = getattr(self, "NumberOfOpticalPaths", 1)
+        number_of_focal_planes = self.get_value(
+            self._dataset, TotalPixelMatrixFocalPlanesTag, 1
+        )
+        number_of_optical_paths = self.get_value(
+            self._dataset, NumberOfOpticalPathsTag, 1
+        )
         if self.frame_count == number_of_focal_planes * number_of_optical_paths:
             # One frame per focal plane and optical path, treat as tiled full.
             return TileType.FULL
@@ -313,15 +694,12 @@ class WsiDataset(Dataset):
         Dataset | None
             Found Pixel measure dataset.
         """
-        shared_functional_group = getattr(self, "SharedFunctionalGroupsSequence", None)
-        if shared_functional_group is None:
-            return None
-        pixel_measure_sequence = getattr(
-            shared_functional_group[0], "PixelMeasuresSequence", None
+        shared = self.get_sequence_item(
+            self._dataset, SharedFunctionalGroupsSequenceTag
         )
-        if pixel_measure_sequence is None:
+        if shared is None:
             return None
-        return pixel_measure_sequence[0]
+        return self.get_sequence_item(shared, PixelMeasuresSequenceTag)
 
     @cached_property
     def pixel_spacing(self) -> SizeMm | None:
@@ -339,7 +717,7 @@ class WsiDataset(Dataset):
         """
         if self.pixel_measure is None:
             return None
-        pixel_spacing_values = getattr(self.pixel_measure, "PixelSpacing", None)
+        pixel_spacing_values = self.get_value(self.pixel_measure, PixelSpacingTag)
         if pixel_spacing_values is not None:
             if any([spacing <= 0 for spacing in pixel_spacing_values]):
                 logger.warning(f"Pixel spacing not positive, {pixel_spacing_values}")
@@ -352,7 +730,7 @@ class WsiDataset(Dataset):
         """Return spacing between slices."""
         if self.pixel_measure is None:
             return None
-        return getattr(self.pixel_measure, "SpacingBetweenSlices", None)
+        return self.get_value(self.pixel_measure, SpacingBetweenSlicesTag)
 
     @property
     def ext_depth_of_field(self) -> bool:
@@ -374,7 +752,7 @@ class WsiDataset(Dataset):
     @cached_property
     def focus_method(self) -> str:
         """Return focus method."""
-        return str(getattr(self, "FocusMethod", "AUTO"))
+        return str(self.get_value(self._dataset, FocusMethodTag, "AUTO"))
 
     @cached_property
     def image_size(self) -> Size:
@@ -385,15 +763,21 @@ class WsiDataset(Dataset):
         Size
             The image size
         """
-        image_size = Size(self.TotalPixelMatrixColumns, self.TotalPixelMatrixRows)
+        image_size = Size(
+            self._dataset.TotalPixelMatrixColumns, self._dataset.TotalPixelMatrixRows
+        )
         if image_size.width <= 0 or image_size.height <= 0:
             raise WsiDicomError("Image size is zero")
         if self.tile_type == TileType.FULL and self.uids.concatenation is None:
             # Check that the number of frames match the image size and tile size.
             # Dont check concatenated instances as the frame count is ambiguous.
             expected_tiled_size = image_size.ceil_div(self.tile_size)
-            number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
-            number_of_optical_paths = getattr(self, "NumberOfOpticalPaths", 1)
+            number_of_focal_planes = self.get_value(
+                self._dataset, TotalPixelMatrixFocalPlanesTag, 1
+            )
+            number_of_optical_paths = self.get_value(
+                self._dataset, NumberOfOpticalPathsTag, 1
+            )
             expected_frame_count = (
                 expected_tiled_size.area
                 * number_of_focal_planes
@@ -428,8 +812,8 @@ class WsiDataset(Dataset):
         SizeMm
             The size of the image in mm
         """
-        mm_width = getattr(self, "ImagedVolumeWidth", None)
-        mm_height = getattr(self, "ImagedVolumeHeight", None)
+        mm_width = self.get_value(self._dataset, ImagedVolumeWidthTag)
+        mm_height = self.get_value(self._dataset, ImagedVolumeHeightTag)
         if mm_width is None or mm_height is None:
             mm_size = None
         else:
@@ -439,7 +823,7 @@ class WsiDataset(Dataset):
     @cached_property
     def mm_depth(self) -> float | None:
         """Return depth of image in mm."""
-        return getattr(self, "ImagedVolumeDepth", None)
+        return self.get_value(self._dataset, ImagedVolumeDepthTag)
 
     @cached_property
     def tile_size(self) -> Size:
@@ -450,32 +834,110 @@ class WsiDataset(Dataset):
         Size
             The tile size
         """
-        return Size(self.Columns, self.Rows)
+        return Size(self._dataset.Columns, self._dataset.Rows)
 
     @property
     def samples_per_pixel(self) -> int:
         """Return samples per pixel (3 for RGB)."""
-        return self.SamplesPerPixel
+        return self._dataset.SamplesPerPixel
 
     @property
     def bits(self) -> int:
         """Return the number of bits stored for each sample."""
-        return self.BitsStored
+        return self._dataset.BitsStored
 
     @property
     def lossy_compressed(self) -> bool:
         """Return true if image has been lossy compressed."""
-        return getattr(self, "LossyImageCompression", None) == "01"
+        lossy = self._dataset.get(LossyImageCompressionTag, None)
+        return lossy is not None and lossy.value == "01"
+
+    @cached_property
+    def pyramid_metadata(self) -> Pyramid:
+        """The pyramid metadata this dataset states.
+
+        Held once worked out, as the other readers here are: deserialising the
+        dataset through the metadata schema is more than an attribute lookup,
+        and a dataset does not change once made.
+        """
+        return PyramidDicomSchema().load(self._dataset)
+
+    @cached_property
+    def overview_metadata(self) -> Overview:
+        """The overview metadata this dataset states."""
+        return OverviewDicomSchema().load(self._dataset)
+
+    @cached_property
+    def image_coordinate_system(self) -> ImageCoordinateSystem | None:
+        """Where on the slide this image sits, or None if it does not say."""
+        try:
+            return ImageCoordinateSystemDicomSchema().load(self._dataset)
+        except TypeError:
+            return None
+
+    @cached_property
+    def label_metadata(self) -> Label:
+        """The label metadata this dataset states."""
+        if self.image_type == ImageType.LABEL:
+            return LabelDicomSchema().load(self._dataset)
+        return LabelBaseDicomSchema().load(self._dataset)
+
+    @cached_property
+    def base_metadata(self) -> BaseWsiMetadata:
+        """The study, series, patient, equipment and slide metadata this states."""
+        return BaseWsiMetadataDicomSchema().load(self._dataset)
+
+    @property
+    def lossy_compressions(self) -> list[LossyCompression] | None:
+        """The lossy compressions the image has been through, in order.
+
+        None if it has not been lossy compressed. Each step pairs the method it
+        was compressed with and the ratio it reached.
+        """
+        if not self.lossy_compressed:
+            return None
+        methods = [
+            LossyCompressionIsoStandard(value)
+            for value in self._get_multi_value(LossyImageCompressionMethodTag)
+        ]
+        ratios = [
+            float(value)
+            for value in self._get_multi_value(LossyImageCompressionRatioTag)
+        ]
+        return [
+            LossyCompression(method, ratio)
+            for method, ratio in zip(methods, ratios, strict=False)
+        ]
+
+    @property
+    def lossy_compression_ratios(self) -> list[Any]:
+        """The compression ratios as they stand in the dataset, one per step.
+
+        Given as they are written rather than as numbers: the writer reserves a
+        blank of the full width for the ratio of the step it is about to write
+        and patches the value in once the size is known, so the width of what is
+        here matters.
+        """
+        return self._get_multi_value(LossyImageCompressionRatioTag)
+
+    @property
+    def lossy_compression_methods(self) -> list[Any]:
+        """The compression methods as they stand in the dataset, one per step.
+
+        One method for each ratio in `lossy_compression_ratios`, in the same
+        order: the step that compressed the image data by that ratio.
+        """
+        return self._get_multi_value(LossyImageCompressionMethodTag)
 
     @property
     def photometric_interpretation(self) -> str:
         """Return photometric interpretation."""
-        return self.PhotometricInterpretation
+        return self._dataset.PhotometricInterpretation
 
     @cached_property
     def optical_path_sequence(self) -> DicomSequence | None:
         """Return optical path sequence from dataset."""
-        return getattr(self, "OpticalPathSequence", None)
+        return self.get_optional_sequence(self._dataset, OpticalPathSequenceTag)
 
     @cached_property
     def _shared_functional_group(self) -> Dataset | None:
@@ -489,34 +951,29 @@ class WsiDataset(Dataset):
         that state no value of their own are answered from here, which leaves a file
         that does follow the standard reading exactly as before.
         """
-        shared = getattr(self, "SharedFunctionalGroupsSequence", None)
-        if shared is None or len(shared) == 0:
-            return None
-        return shared[0]
+        return self.get_sequence_item(self._dataset, SharedFunctionalGroupsSequenceTag)
 
     @cached_property
     def z_offset(self) -> float:
-        z_offset_getters = (
-            lambda: (
-                self.TotalPixelMatrixOriginSequence[0].ZOffsetInSlideCoordinateSystem
-            ),
-            lambda: (
-                self.SharedFunctionalGroupsSequence[0]
-                .PlanePositionSlideSequence[0]
-                .ZOffsetInSlideCoordinateSystem
-            ),
+        """The z offset in the slide coordinate system that applies to the image.
+
+        Stated by the Total pixel matrix origin sequence, and when that states
+        none, by the plane position of the shared functional groups.
+        `DEFAULT_Z_OFFSET` when neither states one.
+        """
+        origin = self.get_sequence_item(
+            self._dataset, TotalPixelMatrixOriginSequenceTag
         )
-        for z_offset_getter in z_offset_getters:
-            try:
-                return z_offset_getter()
-            except AttributeError:
-                pass
-        return 0.0
+        if origin is not None:
+            z_offset = origin.get(ZOffsetInSlideCoordinateSystemTag, None)
+            if z_offset is not None:
+                return float(z_offset.value)
+        return self.read_z_offset()
 
     @property
     def number_of_focal_planes(self) -> int:
         """Return number of focal planes in image."""
-        return self.get("TotalPixelMatrixFocalPlanes", 1)
+        return self.get_value(self._dataset, TotalPixelMatrixFocalPlanesTag, 1)
 
     @property
     def slice_thickness(self) -> float | None:
@@ -528,11 +985,15 @@ class WsiDataset(Dataset):
             Slice thickness or None if unknown.
         """
         if self.pixel_measure is not None:
-            slice_thickness = getattr(self.pixel_measure, "SliceThickness", None)
+            slice_thickness: float | None = self.get_value(
+                self.pixel_measure, SliceThicknessTag
+            )
             if slice_thickness is not None:
                 return slice_thickness
         if self.mm_depth is not None:
-            number_of_focal_planes = getattr(self, "TotalPixelMatrixFocalPlanes", 1)
+            number_of_focal_planes = int(
+                self.get_value(self._dataset, TotalPixelMatrixFocalPlanesTag, 1)
+            )
             return self.mm_depth / number_of_focal_planes
         return None
 
@@ -545,62 +1006,55 @@ class WsiDataset(Dataset):
         ImageType
             Wsi flavour.
         """
-        return self._get_image_type(self.ImageType)
+        return self._get_image_type(self._dataset.ImageType)
 
-    @classmethod
-    def is_supported_wsi_dicom(cls, dataset: Dataset) -> ImageType | None:
-        """Check if dataset is a DICOM WSI type that the library can read.
+    @property
+    def supported_image_type(self) -> ImageType | None:
+        """The WSI flavour of this dataset, or None if it is not one to read.
 
-        The dataset is rejected (``None`` returned) if it is not of the WSI SOP
-        class, if it is missing any attribute the library dereferences while
-        opening an instance (see ``REQUIRED_ATTRIBUTES``), if the image type is
-        not supported, if the pixel representation or planar configuration is
-        unsupported, if the photometric interpretation is not one the codec
-        handles (e.g. MONOCHROME1), or if it is a non-8-bit color image.
-
-        Parameters
-        ----------
-        dataset: Dataset
-            Pydicom dataset to check if is a WSI dataset.
-
-        Returns
-        -------
-        ImageType | None
-            WSI image flavor, or None if the dataset is not a supported WSI.
+        None if it is not of the WSI SOP class, if it is missing any attribute
+        dereferenced while opening an instance (see ``REQUIRED_ATTRIBUTES``), if
+        the image type is not supported, if the pixel representation or planar
+        configuration is unsupported, if the photometric interpretation is not
+        one the codec handles (e.g. MONOCHROME1), or if it is a non-8-bit colour
+        image.
         """
-
-        sop_class_uid: UID | None = getattr(dataset, "SOPClassUID", None)
+        sop_class_uid: UID | None = self.get_value(self._dataset, SOPClassUIDTag)
         if sop_class_uid != VLWholeSlideMicroscopyImageStorage:
             logger.debug(f"Non-wsi image, SOP class {sop_class_uid}.")
             return None
 
-        for name in cls.REQUIRED_ATTRIBUTES:
-            if name not in dataset:
-                logger.debug(f"Missing required attribute {name}.")
+        for name in self.REQUIRED_ATTRIBUTES:
+            if name not in self._dataset:
+                logger.debug(f"Missing required attribute {keyword_for_tag(name)}.")
                 return None
 
         try:
-            image_type = cls._get_image_type(dataset.ImageType)
+            image_type = self._get_image_type(self._dataset.ImageType)
         except ValueError:
-            logger.debug(f"Non-supported image type {dataset.ImageType}.")
+            logger.debug(f"Non-supported image type {self._dataset.ImageType}.")
             return None
 
-        pixel_representation = int(getattr(dataset, "PixelRepresentation", 0))
+        pixel_representation = int(
+            self.get_value(self._dataset, PixelRepresentationTag, 0)
+        )
         if pixel_representation != 0:
             logger.debug(f"Unsupported pixel representation {pixel_representation}.")
             return None
-        planar_configuration = int(getattr(dataset, "PlanarConfiguration", 0))
+        planar_configuration = int(
+            self.get_value(self._dataset, PlanarConfigurationTag, 0)
+        )
         if planar_configuration != 0:
             logger.debug(f"Unsupported planar configuration {planar_configuration}.")
             return None
-        photometric_interpretation = str(dataset.PhotometricInterpretation)
-        if photometric_interpretation not in cls.SUPPORTED_PHOTOMETRIC_INTERPRETATIONS:
+        photometric_interpretation = str(self._dataset.PhotometricInterpretation)
+        if photometric_interpretation not in self.SUPPORTED_PHOTOMETRIC_INTERPRETATIONS:
             logger.debug(
                 f"Unsupported photometric interpretation {photometric_interpretation}."
             )
             return None
-        bits_stored = int(dataset.BitsStored)
-        samples_per_pixel = int(dataset.SamplesPerPixel)
+        bits_stored = int(self._dataset.BitsStored)
+        samples_per_pixel = int(self._dataset.SamplesPerPixel)
         if bits_stored != 8 and samples_per_pixel != 1:
             # Non-8-bit is only supported for grayscale. 16-bit color is not
             # fundamentally hard (the stitch/downsample pipeline handles it), but
@@ -631,7 +1085,7 @@ class WsiDataset(Dataset):
         instance_uids: list[UID] = []
 
         for dataset in datasets:
-            instance_uid = UID(dataset.SOPInstanceUID)
+            instance_uid = dataset.instance_uid
             if instance_uid not in instance_uids:
                 instance_uids.append(instance_uid)
             else:
@@ -657,8 +1111,10 @@ class WsiDataset(Dataset):
             and self.tile_size == other_dataset.tile_size
             and self.tile_type == other_dataset.tile_type
             and (
-                getattr(self, "TotalPixelMatrixOriginSequence", None)
-                == getattr(other_dataset, "TotalPixelMatrixOriginSequence", None)
+                self.get_sequence(self._dataset, TotalPixelMatrixOriginSequenceTag)
+                == self.get_sequence(
+                    other_dataset.as_dataset(), TotalPixelMatrixOriginSequenceTag
+                )
             )
         )
 
@@ -691,7 +1147,7 @@ class WsiDataset(Dataset):
             if source is None:
                 continue
             identifier = self._optical_path_identifier_of(
-                getattr(source, "OpticalPathIdentificationSequence", None)
+                self.get_sequence(source, OpticalPathIdentificationSequenceTag)
             )
             if identifier is not None:
                 return identifier
@@ -716,8 +1172,8 @@ class WsiDataset(Dataset):
         for source in (frame, self._shared_functional_group):
             if source is None:
                 continue
-            position = getattr(source, "PlanePositionSlideSequence", None)
-            if position is None or len(position) == 0:
+            position = self.get_sequence(source, PlanePositionSlideSequenceTag)
+            if len(position) == 0:
                 continue
             z_offset = position[0].get(ZOffsetInSlideCoordinateSystemTag, None)
             if z_offset is not None:
@@ -744,7 +1200,7 @@ class WsiDataset(Dataset):
         identifier = sequence[0].get(OpticalPathIdentifierTag, None)
         return None if identifier is None else str(identifier.value)
 
-    def get_multi_value(self, tag: BaseTag) -> list[Any]:
+    def _get_multi_value(self, tag: BaseTag) -> list[Any]:
         """Return values for tag as list of values. If tag is not found, return empty
         list. If tag is not multi value, return list with one value.
 
@@ -758,13 +1214,57 @@ class WsiDataset(Dataset):
         list[Any]
             List of values.
         """
-        element = self.get(tag)
+        element = self._dataset.get(tag)
         if element is None:
             return []
         vm = getattr(element, "VM", 1)
         if vm > 1 or isinstance(element, MultiValue):
             return [value for value in element]
         return [element.value]
+
+    def as_instance(
+        self,
+        instance_uid: UID,
+        instance_number: int,
+        frame_count: int | None = None,
+        concatenation: ConcatenationPart | None = None,
+    ) -> "WsiDataset":
+        """A copy of this identified as one instance being written.
+
+        Parameters
+        ----------
+        instance_uid: UID
+            SOP Instance UID to write the instance as.
+        instance_number: int
+            Instance Number to write the instance as.
+        frame_count: int | None = None
+            Number of frames the instance holds, when that differs from the
+            number this states.
+        concatenation: ConcatenationPart | None = None
+            Where the instance sits in the concatenation its level is written
+            as, when the level is written as one.
+
+        Returns
+        -------
+        WsiDataset
+            Copy of this identified as the instance described.
+        """
+        changes: dict[str | BaseTag, Any] = {
+            SOPInstanceUIDTag: instance_uid,
+            InstanceNumberTag: instance_number,
+        }
+        if frame_count is not None:
+            changes[NumberOfFramesTag] = frame_count
+        if concatenation is not None:
+            changes[ConcatenationUIDTag] = concatenation.uid
+            changes[SOPInstanceUIDOfConcatenationSourceTag] = (
+                concatenation.source_instance_uid
+            )
+            changes[InConcatenationNumberTag] = concatenation.number
+            changes[ConcatenationFrameOffsetNumberTag] = concatenation.frame_offset
+            if concatenation.total is not None:
+                changes[InConcatenationTotalNumberTag] = concatenation.total
+        return self.replace(changes)
 
     def as_tiled_full(
         self,
@@ -795,49 +1295,59 @@ class WsiDataset(Dataset):
 
         """
         dataset = self._copy_without_per_frame()
-        dataset.DimensionOrganizationType = "TILED_FULL"
+        # The changes are collected and made in one go at the end, so that
+        # what is read below is the dataset as it came rather than a dataset
+        # part way through being changed.
+        changes: dict[str | BaseTag, Any] = {DimensionOrganizationTypeTag: "TILED_FULL"}
         # Make a new Shared functional group sequence and Pixel measure
         # sequence if not in dataset, otherwise update the Pixel measure
         # sequence
-        shared_functional_group = getattr(
-            dataset, "SharedFunctionalGroupsSequence", DicomSequence([Dataset()])
-        )
-
-        pixel_measure = getattr(
-            shared_functional_group[0],
-            "PixelMeasuresSequence",
-            DicomSequence([Dataset()]),
-        )
-        if dataset.pixel_spacing is not None:
-            pixel_measure[0].PixelSpacing = [
-                DSfloat(dataset.pixel_spacing.height * scale, True),
-                DSfloat(dataset.pixel_spacing.width * scale, True),
+        shared_functional_group = self.get_sequence(
+            dataset, SharedFunctionalGroupsSequenceTag
+        ) or DicomSequence([Dataset()])
+        pixel_measure = self.get_sequence(
+            shared_functional_group[0], PixelMeasuresSequenceTag
+        ) or DicomSequence([Dataset()])
+        # What goes in the item of a sequence is checked as it is put there:
+        # making the element of the sequence checks that the value is one, and
+        # nothing of what the items of it hold.
+        measures: dict[str | BaseTag, Any] = {}
+        if self.pixel_spacing is not None:
+            measures[PixelSpacingTag] = [
+                DSfloat(self.pixel_spacing.height * scale, True),
+                DSfloat(self.pixel_spacing.width * scale, True),
             ]
         focal_plane_spacing = self._get_spacing_between_slices_for_focal_planes(
             focal_planes
         )
         if focal_plane_spacing is not None:
-            pixel_measure[0].SpacingBetweenSlices = DSfloat(focal_plane_spacing, True)
-        elif "SpacingBetweenSlices" in pixel_measure[0]:
+            measures[SpacingBetweenSlicesTag] = DSfloat(focal_plane_spacing, True)
+        elif SpacingBetweenSlicesTag in pixel_measure[0]:
             # A single focal plane has no spacing; drop any spacing carried over
             # from a multi-plane source that has been split per focal plane.
             del pixel_measure[0].SpacingBetweenSlices
 
         if self.slice_thickness is not None:
-            pixel_measure[0].SliceThickness = DSfloat(dataset.slice_thickness, True)
+            measures[SliceThicknessTag] = DSfloat(self.slice_thickness, True)
+        self._update_dataset(pixel_measure[0], measures)
 
-        shared_functional_group[0].PixelMeasuresSequence = pixel_measure
-        dataset.SharedFunctionalGroupsSequence = shared_functional_group
+        self._update_dataset(
+            shared_functional_group[0], {PixelMeasuresSequenceTag: pixel_measure}
+        )
+        changes[SharedFunctionalGroupsSequenceTag] = shared_functional_group
 
-        dataset.TotalPixelMatrixColumns = max(
+        # The raw attributes rather than `image_size`, which checks the frame
+        # count against the tile size: the frame count written below is for the
+        # tiled full arrangement and does not add up against the size read here.
+        changes[TotalPixelMatrixColumnsTag] = max(
             math.ceil(dataset.TotalPixelMatrixColumns / scale), 1
         )
-        dataset.TotalPixelMatrixRows = max(
+        changes[TotalPixelMatrixRowsTag] = max(
             math.ceil(dataset.TotalPixelMatrixRows / scale), 1
         )
-        dataset.TotalPixelMatrixFocalPlanes = len(focal_planes)
-        dataset.NumberOfOpticalPaths = len(optical_paths)
-        dataset.NumberOfFrames = (
+        changes[TotalPixelMatrixFocalPlanesTag] = len(focal_planes)
+        changes[NumberOfOpticalPathsTag] = len(optical_paths)
+        changes[NumberOfFramesTag] = (
             max(tiled_size.ceil_div(scale).area, 1)
             * len(focal_planes)
             * len(optical_paths)
@@ -846,15 +1356,13 @@ class WsiDataset(Dataset):
         # Keep only the optical paths written to this instance, so the optical
         # path identity is preserved when the paths have been split across
         # instances (e.g. one instance per optical path).
-        optical_path_sequence = getattr(dataset, "OpticalPathSequence", None)
-        if optical_path_sequence is not None:
-            kept_optical_paths = DicomSequence(
-                item
-                for item in optical_path_sequence
-                if str(item[OpticalPathIdentifierTag].value) in optical_paths
-            )
-            if len(kept_optical_paths) != 0:
-                dataset.OpticalPathSequence = kept_optical_paths
+        kept_optical_paths = DicomSequence(
+            item
+            for item in self.get_sequence(self._dataset, OpticalPathSequenceTag)
+            if str(item[OpticalPathIdentifierTag].value) in optical_paths
+        )
+        if len(kept_optical_paths) != 0:
+            changes[OpticalPathSequenceTag] = kept_optical_paths
 
         # Encode the focal plane origin (z) so the planes can be reconstructed
         # on read as ``z_offset + index * spacing``. This is the source z offset
@@ -863,22 +1371,30 @@ class WsiDataset(Dataset):
         # the in-plane (x, y) origin when present. Only create a new origin
         # sequence when there is a non-zero z to encode, since x and y are
         # required in the sequence item; a zero z is the default on read.
-        focal_plane_origin = getattr(dataset, "TotalPixelMatrixOriginSequence", None)
+        focal_plane_origin = self.get_sequence_item(
+            dataset, TotalPixelMatrixOriginSequenceTag
+        )
         if focal_plane_origin is not None:
-            focal_plane_origin[0].ZOffsetInSlideCoordinateSystem = DSfloat(
-                focal_planes[0], True
+            self._update_dataset(
+                focal_plane_origin,
+                {ZOffsetInSlideCoordinateSystemTag: DSfloat(focal_planes[0], True)},
             )
         elif focal_planes[0] != 0.0:
             origin_item = Dataset()
-            origin_item.XOffsetInSlideCoordinateSystem = DSfloat(0.0, True)
-            origin_item.YOffsetInSlideCoordinateSystem = DSfloat(0.0, True)
-            origin_item.ZOffsetInSlideCoordinateSystem = DSfloat(focal_planes[0], True)
-            dataset.TotalPixelMatrixOriginSequence = DicomSequence([origin_item])
+            self._update_dataset(
+                origin_item,
+                {
+                    XOffsetInSlideCoordinateSystemTag: DSfloat(0.0, True),
+                    YOffsetInSlideCoordinateSystemTag: DSfloat(0.0, True),
+                    ZOffsetInSlideCoordinateSystemTag: DSfloat(focal_planes[0], True),
+                },
+            )
+            changes[TotalPixelMatrixOriginSequenceTag] = DicomSequence([origin_item])
 
-        return dataset
+        return WsiDataset(dataset).replace(changes)
 
-    def update_for_transcoding(self, transcoder: Encoder, scale: int) -> None:
-        """Update dataset metadata for transcoding.
+    def update_for_transcoding(self, transcoder: Encoder, scale: int) -> "WsiDataset":
+        """A copy of this with the metadata of the transcoded image data.
 
         Parameters
         ----------
@@ -886,19 +1402,27 @@ class WsiDataset(Dataset):
             Encoder being used for transcoding.
         scale: int
             Scale factor applied to the image data.
+
+        Returns
+        -------
+        WsiDataset
+            Copy of this describing the transcoded image data.
         """
-        self.PhotometricInterpretation = transcoder.photometric_interpretation
+        changes: dict[str | BaseTag, Any] = {
+            PhotometricInterpretationTag: transcoder.photometric_interpretation
+        }
         if transcoder.lossy_method:
-            self.LossyImageCompression = "01"
-            ratios = self.get_multi_value(LossyImageCompressionRatioTag)
-            methods = self.get_multi_value(LossyImageCompressionMethodTag)
+            changes[LossyImageCompressionTag] = "01"
+            ratios = self._get_multi_value(LossyImageCompressionRatioTag)
+            methods = self._get_multi_value(LossyImageCompressionMethodTag)
             if scale != 1:
                 ratios.clear()
                 methods.clear()
             ratios.append(" " * MAX_VALUE_LEN["DS"])
             methods.append(transcoder.lossy_method.value)
-            self.LossyImageCompressionRatio = ratios
-            self.LossyImageCompressionMethod = methods
+            changes[LossyImageCompressionRatioTag] = ratios
+            changes[LossyImageCompressionMethodTag] = methods
+        return self.replace(changes)
 
     @classmethod
     def create_instance_dataset(
@@ -934,13 +1458,19 @@ class WsiDataset(Dataset):
                 resampled = "RESAMPLED"
 
         original_or_derived = "ORIGINAL" if resampled == "NONE" else "DERIVED"
-        dataset.ImageType = [
+        image_type_value = [
             original_or_derived,
             "PRIMARY",
             image_type.value,
             resampled,
         ]
-        dataset.SOPInstanceUID = generate_uid(prefix=None)
+        cls._update_dataset(
+            dataset,
+            {
+                ImageTypeTag: image_type_value,
+                SOPInstanceUIDTag: generate_uid(prefix=None),
+            },
+        )
         shared_functional_group_sequence = Dataset()
         if image_data.pixel_spacing is None:
             if image_type == ImageType.VOLUME:
@@ -948,116 +1478,154 @@ class WsiDataset(Dataset):
                     "Image flavor 'VOLUME' requires pixel spacing to be set"
                 )
         else:
-            pixel_measure_sequence = Dataset()
-            pixel_measure_sequence.PixelSpacing = [
-                DSfloat(image_data.pixel_spacing.height, True),
-                DSfloat(image_data.pixel_spacing.width, True),
-            ]
+            # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
+            # Height, Depth. Depth must not be 0. Default to 0.5 microns
+            slice_thickness = 0.0005
+            measures: dict[str | BaseTag, Any] = {
+                PixelSpacingTag: [
+                    DSfloat(image_data.pixel_spacing.height, True),
+                    DSfloat(image_data.pixel_spacing.width, True),
+                ],
+                SliceThicknessTag: DSfloat(slice_thickness, True),
+            }
             focal_plane_spacing = cls._get_spacing_between_slices_for_focal_planes(
                 image_data.focal_planes
             )
             if focal_plane_spacing is not None:
-                pixel_measure_sequence.SpacingBetweenSlices = DSfloat(
-                    focal_plane_spacing, True
-                )
-            # DICOM 2022a part 3 IODs - C.8.12.4.1.2 Imaged Volume Width,
-            # Height, Depth. Depth must not be 0. Default to 0.5 microns
-            slice_thickness = 0.0005
-            pixel_measure_sequence.SliceThickness = DSfloat(slice_thickness, True)
-            shared_functional_group_sequence.PixelMeasuresSequence = DicomSequence(
-                [pixel_measure_sequence]
-            )
-            dataset.SharedFunctionalGroupsSequence = DicomSequence(
-                [shared_functional_group_sequence]
+                measures[SpacingBetweenSlicesTag] = DSfloat(focal_plane_spacing, True)
+            pixel_measure_sequence = Dataset()
+            cls._update_dataset(pixel_measure_sequence, measures)
+            cls._update_dataset(
+                shared_functional_group_sequence,
+                {PixelMeasuresSequenceTag: DicomSequence([pixel_measure_sequence])},
             )
             if image_data.imaged_size is None:
-                dataset.ImagedVolumeWidth = (
+                imaged_width = (
                     image_data.image_size.width * image_data.pixel_spacing.width
                 )
-                dataset.ImagedVolumeHeight = (
+                imaged_height = (
                     image_data.image_size.height * image_data.pixel_spacing.height
                 )
             else:
-                dataset.ImagedVolumeWidth = image_data.imaged_size.width
-                dataset.ImagedVolumeHeight = image_data.imaged_size.height
-            # SliceThickness is in mm, ImagedVolumeDepth in um
-            dataset.ImagedVolumeDepth = DSfloat(slice_thickness * 1000, True)
+                imaged_width = image_data.imaged_size.width
+                imaged_height = image_data.imaged_size.height
+            cls._update_dataset(
+                dataset,
+                {
+                    SharedFunctionalGroupsSequenceTag: DicomSequence(
+                        [shared_functional_group_sequence]
+                    ),
+                    ImagedVolumeWidthTag: imaged_width,
+                    ImagedVolumeHeightTag: imaged_height,
+                    # SliceThickness is in mm, ImagedVolumeDepth in um
+                    ImagedVolumeDepthTag: DSfloat(slice_thickness * 1000, True),
+                },
+            )
 
         # DICOM 2022a part 3 IODs - C.8.12.9 Whole Slide Microscopy Image Frame Type
         # Macro. Analogous to ImageType and shared by all frames so clone
         wsi_frame_type_item = Dataset()
-        wsi_frame_type_item.FrameType = dataset.ImageType
-        (
-            shared_functional_group_sequence.WholeSlideMicroscopyImageFrameTypeSequence
-        ) = DicomSequence([wsi_frame_type_item])
-        dataset.SharedFunctionalGroupsSequence = DicomSequence(
-            [shared_functional_group_sequence]
+        cls._update_dataset(wsi_frame_type_item, {FrameTypeTag: image_type_value})
+        cls._update_dataset(
+            shared_functional_group_sequence,
+            {
+                WholeSlideMicroscopyImageFrameTypeSequenceTag: DicomSequence(
+                    [wsi_frame_type_item]
+                )
+            },
+        )
+        cls._update_dataset(
+            dataset,
+            {
+                SharedFunctionalGroupsSequenceTag: DicomSequence(
+                    [shared_functional_group_sequence]
+                )
+            },
         )
 
         if image_data.image_coordinate_system is not None:
-            dataset.ImageOrientationSlide = [
-                DSfloat(value, True)
-                for value in image_data.image_coordinate_system.orientation.values
-            ]
-            offset_item = Dataset()
-            offset_item.XOffsetInSlideCoordinateSystem = DSfloat(
-                image_data.image_coordinate_system.origin.x, True
-            )
-            offset_item.YOffsetInSlideCoordinateSystem = DSfloat(
-                image_data.image_coordinate_system.origin.y, True
-            )
+            offset: dict[str | BaseTag, Any] = {
+                XOffsetInSlideCoordinateSystemTag: DSfloat(
+                    image_data.image_coordinate_system.origin.x, True
+                ),
+                YOffsetInSlideCoordinateSystemTag: DSfloat(
+                    image_data.image_coordinate_system.origin.y, True
+                ),
+            }
             if image_data.image_coordinate_system.z_offset is not None:
-                offset_item.ZOffsetInSlideCoordinateSystem = DSfloat(
+                offset[ZOffsetInSlideCoordinateSystemTag] = DSfloat(
                     image_data.image_coordinate_system.z_offset, True
                 )
-            dataset.TotalPixelMatrixOriginSequence = DicomSequence([offset_item])
+            offset_item = Dataset()
+            cls._update_dataset(offset_item, offset)
+            cls._update_dataset(
+                dataset,
+                {
+                    ImageOrientationSlideTag: [
+                        DSfloat(value, True)
+                        for value in (
+                            image_data.image_coordinate_system.orientation.values
+                        )
+                    ],
+                    TotalPixelMatrixOriginSequenceTag: DicomSequence([offset_item]),
+                },
+            )
 
-        dataset.DimensionOrganizationType = "TILED_FULL"
-        dataset.TotalPixelMatrixColumns = image_data.image_size.width
-        dataset.TotalPixelMatrixRows = image_data.image_size.height
-        dataset.Columns = image_data.tile_size.width
-        dataset.Rows = image_data.tile_size.height
-        dataset.NumberOfFrames = (
-            image_data.tiled_size.area
-            * len(image_data.focal_planes)
-            * len(image_data.optical_paths)
-        )
-        dataset.BitsAllocated = image_data.bits // 8 * 8
-        dataset.BitsStored = image_data.bits
-        dataset.HighBit = image_data.bits - 1
-        dataset.PixelRepresentation = 0
+        written: dict[str | BaseTag, Any] = {
+            DimensionOrganizationTypeTag: "TILED_FULL",
+            TotalPixelMatrixColumnsTag: image_data.image_size.width,
+            TotalPixelMatrixRowsTag: image_data.image_size.height,
+            ColumnsTag: image_data.tile_size.width,
+            RowsTag: image_data.tile_size.height,
+            NumberOfFramesTag: (
+                image_data.tiled_size.area
+                * len(image_data.focal_planes)
+                * len(image_data.optical_paths)
+            ),
+            BitsAllocatedTag: image_data.bits // 8 * 8,
+            BitsStoredTag: image_data.bits,
+            HighBitTag: image_data.bits - 1,
+            PixelRepresentationTag: 0,
+            PhotometricInterpretationTag: image_data.photometric_interpretation,
+            SamplesPerPixelTag: image_data.samples_per_pixel,
+            FocusMethodTag: "AUTO",
+            ExtendedDepthOfFieldTag: "NO",
+        }
         if image_data.lossy_compression:
-            dataset.LossyImageCompression = "01"
-            dataset.LossyImageCompressionRatio = [
+            written[LossyImageCompressionTag] = "01"
+            written[LossyImageCompressionRatioTag] = [
                 DSfloat(item.ratio, auto_format=True)
                 for item in image_data.lossy_compression
             ]
-            dataset.LossyImageCompressionMethod = [
+            written[LossyImageCompressionMethodTag] = [
                 item.method.value for item in image_data.lossy_compression
             ]
         else:
-            dataset.LossyImageCompression = "00"
-
-        dataset.PhotometricInterpretation = image_data.photometric_interpretation
-        dataset.SamplesPerPixel = image_data.samples_per_pixel
-
+            written[LossyImageCompressionTag] = "00"
         if image_data.samples_per_pixel == 3:
-            dataset.PlanarConfiguration = 0
-
-        dataset.FocusMethod = "AUTO"
-        dataset.ExtendedDepthOfField = "NO"
+            written[PlanarConfigurationTag] = 0
+        cls._update_dataset(dataset, written)
         return WsiDataset(dataset)
 
-    def _copy_without_per_frame(self) -> "WsiDataset":
-        """Copy dataset excluding PerFrameFunctionalGroupsSequence."""
-        dataset = deepcopy(
-            {
-                tag: elem
-                for tag, elem in self.items()
-                if tag != PerFrameFunctionalGroupsSequenceTag
-            }
+    def _copy_without_per_frame(self) -> Dataset:
+        """Copy dataset excluding PerFrameFunctionalGroupsSequence.
+
+        A plain dataset rather than a WSI dataset: the copy is made in order to
+        change it, and what is read from it while it is being changed is read
+        as DICOM attributes rather than through the readers here, which cache
+        what they work out and would go stale as it is changed.
+        """
+        dataset = Dataset()
+        dataset.update(
+            deepcopy(
+                {
+                    tag: elem
+                    for tag, elem in self._dataset.items()
+                    if tag != PerFrameFunctionalGroupsSequenceTag
+                }
+            )
         )
-        return WsiDataset(dataset)
+        return dataset
 
     @property
     def _has_per_frame_positions(self) -> bool:
@@ -1076,11 +1644,8 @@ class WsiDataset(Dataset):
         """Whether the per frame functional groups sequence is in the dataset and its
         items carry tile positions (PlanePositionSlideSequence). Checks the first frame
         as representative."""
-        return (
-            "PerFrameFunctionalGroupsSequence" in self
-            and len(self.PerFrameFunctionalGroupsSequence) > 0
-            and "PlanePositionSlideSequence" in self.PerFrameFunctionalGroupsSequence[0]
-        )
+        frames = self.get_sequence(self._dataset, PerFrameFunctionalGroupsSequenceTag)
+        return len(frames) > 0 and PlanePositionSlideSequenceTag in frames[0]
 
     @cached_property
     def _ext_depth_of_field(self) -> tuple[bool, int | None, float | None]:
@@ -1093,20 +1658,20 @@ class WsiDataset(Dataset):
             If extended depth of field is used, and if used number of focal
             planes and distance between focal planes.
         """
-        if getattr(self, "ExtendedDepthOfField", "NO") != "YES":
+        if self.get_value(self._dataset, ExtendedDepthOfFieldTag, "NO") != "YES":
             return False, None, None
 
-        planes = getattr(self, "NumberOfFocalPlanes", 1)
-        distance = getattr(self, "DistanceBetweenFocalPlanes", 0.0)
+        planes = self.get_value(self._dataset, NumberOfFocalPlanesTag, 1)
+        distance = self.get_value(self._dataset, DistanceBetweenFocalPlanesTag, 0.0)
         if planes is None or distance is None:
             raise WsiDicomFileError(
-                self.filepath,
+                str(self.uids.instance),
                 "Missing NumberOfFocalPlanes or DistanceBetweenFocalPlanes",
             )
         return True, planes, distance
 
-    @staticmethod
-    def focal_planes_equally_spaced(focal_planes: Sequence[float]) -> bool:
+    @classmethod
+    def focal_planes_equally_spaced(cls, focal_planes: Sequence[float]) -> bool:
         """Return whether the focal planes can share one TILED_FULL instance.
 
         Focal planes can only be encoded in a single TILED_FULL instance if they
@@ -1123,7 +1688,7 @@ class WsiDataset(Dataset):
             True if the focal planes are a single plane or equally spaced.
         """
         try:
-            WsiDataset._get_spacing_between_slices_for_focal_planes(focal_planes)
+            cls._get_spacing_between_slices_for_focal_planes(focal_planes)
             return True
         except NotImplementedError:
             return False

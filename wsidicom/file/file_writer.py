@@ -24,7 +24,6 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from copy import deepcopy
 from functools import cached_property
 from pathlib import Path
 from threading import Thread
@@ -38,7 +37,12 @@ from wsidicom.downsampler import Downsampler
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.geometry import Size
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
-from wsidicom.instance import ImageData, WsiDataset, WsiInstance
+from wsidicom.instance import (
+    ConcatenationPart,
+    ImageData,
+    WsiDataset,
+    WsiInstance,
+)
 from wsidicom.metadata import ImageType, WsiMetadata
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.uid_generator import UidGenerator
@@ -126,13 +130,15 @@ class PartFactory:
     @cached_property
     def _concatenation_uid(self) -> UID:
         """The ConcatenationUID shared by all parts, minted on first use."""
-        return self._uid_generator.concatenation_uid(self._base_dataset)
+        return self._uid_generator.concatenation_uid(self._base_dataset.as_dataset())
 
     @cached_property
     def _source_uid(self) -> UID:
         """The notional source SOP Instance UID shared by all parts, minted on
         first use."""
-        return self._uid_generator.concatenation_source_uid(self._base_dataset)
+        return self._uid_generator.concatenation_source_uid(
+            self._base_dataset.as_dataset()
+        )
 
     def open(
         self, frame_offset: int, frame_count: int, *, concatenated: bool
@@ -143,28 +149,32 @@ class PartFactory:
         level's ConcatenationUID / source UID (`InConcatenationTotalNumber` is
         omitted when the level's `part_total` is None, e.g. streaming byte splits).
 
-        A concatenated part gets its own deep copy so the shared `base_dataset`
-        stays pristine for the remaining parts. A non-concatenated part is the
-        sole part of its level, so `base_dataset` is reused in place and the
-        (possibly expensive) deepcopy of its nested sequences is skipped.
+        Every part is given its own dataset, which holds the elements of
+        `base_dataset` rather than copies of them: the shared dataset stays
+        pristine for the remaining parts without the cost of copying what its
+        attributes hold.
         """
-        if concatenated:
-            dataset = WsiDataset(deepcopy(self._base_dataset))
-        else:
-            dataset = self._base_dataset
-        dataset.NumberOfFrames = frame_count
-        dataset.SOPInstanceUID = self._uid_generator.sop_uid(dataset)
-        dataset.InstanceNumber = next(self._instance_counter)
+        dataset = self._base_dataset
         if concatenated:
             self._part_number += 1
-            dataset.ConcatenationUID = self._concatenation_uid
-            dataset.SOPInstanceUIDOfConcatenationSource = self._source_uid
-            dataset.InConcatenationNumber = self._part_number
-            dataset.ConcatenationFrameOffsetNumber = frame_offset
-            if self._part_total is not None:
-                dataset.InConcatenationTotalNumber = self._part_total
+            concatenation = ConcatenationPart(
+                uid=self._concatenation_uid,
+                source_instance_uid=self._source_uid,
+                number=self._part_number,
+                frame_offset=frame_offset,
+                total=self._part_total,
+            )
+        else:
+            concatenation = None
+        instance_uid = self._uid_generator.sop_uid(dataset.as_dataset())
+        dataset = dataset.as_instance(
+            instance_uid=instance_uid,
+            instance_number=next(self._instance_counter),
+            frame_count=frame_count,
+            concatenation=concatenation,
+        )
         writer = WsiDicomWriter.open_instance(
-            self._output_path.joinpath(str(dataset.SOPInstanceUID) + ".dcm"),
+            self._output_path.joinpath(str(dataset.instance_uid) + ".dcm"),
             self._transfer_syntax,
             self._offset_table,
             dataset,
@@ -632,12 +642,10 @@ class BaseFileWriter(metaclass=ABCMeta):
             return WsiDataset.create_instance_dataset(
                 dumped, image_type, image_data, pyramid_index
             )
-        # Overlay the supplied metadata on a copy of the source dataset. Wrapping
-        # the copy in a new WsiDataset resets cached properties so they reflect
-        # the updated attributes.
-        dataset = WsiDataset(deepcopy(source_instance.dataset))
-        dataset.update(dumped)
-        return dataset
+        # Overlay the supplied metadata on a copy of the source dataset. The
+        # copy holds the elements of the source rather than copies of them, and
+        # the overlaid values are checked as they are set.
+        return source_instance.dataset.overlay(dumped)
 
     def _resolve_transcoding(
         self, source_image_data: ImageData
@@ -1192,7 +1200,7 @@ class PyramidFileWriter(BaseFileWriter):
             )
             transcoder = encoder if transcode else None
             if transcoder is not None:
-                dataset.update_for_transcoding(transcoder, scale)
+                dataset = dataset.update_for_transcoding(transcoder, scale)
 
             if in_source:
                 # Source level: create tile reader, referencing next accumulator
@@ -1381,7 +1389,7 @@ class PyramidFileWriter(BaseFileWriter):
         mode.
         """
         base_dataset = level_writer.dataset
-        total_frames = int(base_dataset.NumberOfFrames)
+        total_frames = base_dataset.frame_count
         concatenation = self._concatenation
 
         if isinstance(concatenation, ConcatenationByFrames):
@@ -1642,7 +1650,13 @@ class GroupFileWriter(BaseFileWriter):
                     1,
                 )
                 if transcoder is not None:
-                    dataset.update_for_transcoding(transcoder, 1)
+                    dataset = dataset.update_for_transcoding(transcoder, 1)
+                # The identity is set before the writer is made, so that the
+                # writer is given the dataset that is written.
+                dataset = dataset.as_instance(
+                    instance_uid=self._uid_generator.sop_uid(dataset.as_dataset()),
+                    instance_number=self._instance_number,
+                )
 
                 instance_writer = GroupInstanceWriter(
                     dataset=dataset,
@@ -1652,10 +1666,8 @@ class GroupFileWriter(BaseFileWriter):
                     focal_planes=planes,
                     optical_paths=paths,
                 )
-                dataset.SOPInstanceUID = self._uid_generator.sop_uid(dataset)
-                dataset.InstanceNumber = self._instance_number
                 filepath = self._output_path.joinpath(
-                    str(dataset.SOPInstanceUID) + ".dcm"
+                    str(dataset.instance_uid) + ".dcm"
                 )
                 with WsiDicomWriter.open_instance(
                     filepath,

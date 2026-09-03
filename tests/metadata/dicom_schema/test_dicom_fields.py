@@ -19,7 +19,7 @@ from marshmallow import fields
 from pydicom import Dataset
 from pydicom import config as pydicom_config
 from pydicom.sr.coding import Code
-from pydicom.valuerep import MAX_VALUE_LEN, STR_VR, VR, DSfloat
+from pydicom.valuerep import MAX_VALUE_LEN, VR, DSfloat
 
 from tests.metadata.dicom_schema.helpers import (
     assert_dicom_issuer_of_identifier_equals_issuer_of_identifier,
@@ -35,16 +35,21 @@ from wsidicom.metadata.sample import (
     UniversalIssuerType,
 )
 from wsidicom.metadata.schema.dicom.fields import (
+    EMPTY,
     CodeDicomField,
     CodeItemDicomField,
     DateTimeItemDicomField,
     FlattenOnDumpNestedDicomField,
     IssuerOfIdentifierDicomField,
-    MeasurementtemDicomField,
+    ListDicomField,
+    MeasurementItemDicomField,
     StringDicomField,
     StringItemDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import DicomSchema
+
+FREE_TEXT_VR = [VR.LO, VR.SH, VR.ST, VR.LT, VR.UT, VR.CS]
+BOUNDED_FREE_TEXT_VR = [vr for vr in FREE_TEXT_VR if vr.name in MAX_VALUE_LEN]
 
 
 class ChildFlattenOnDumpSchema(DicomSchema):
@@ -57,6 +62,27 @@ class ChildFlattenOnDumpSchema(DicomSchema):
 
 class ParentFlattenOnDumpSchema(DicomSchema):
     nested = FlattenOnDumpNestedDicomField(ChildFlattenOnDumpSchema())
+
+    @property
+    def load_type(self) -> type[dict]:
+        return dict
+
+
+class DefaultingSchema(DicomSchema):
+    """Schema for the ways a field can be told what to write without a value."""
+
+    without_default = StringDicomField(VR.LO, data_key="PatientID")
+    with_default = StringDicomField(
+        VR.LT, data_key="PatientComments", default_if_none="a default"
+    )
+    written_empty = StringDicomField(
+        VR.LO, data_key="PatientSpeciesDescription", default_if_none=EMPTY
+    )
+    list_with_default = ListDicomField(
+        StringDicomField(VR.LO),
+        data_key="SoftwareVersions",
+        default_if_none=["a default"],
+    )
 
     @property
     def load_type(self) -> type[dict]:
@@ -168,7 +194,7 @@ class TestDicomFields:
         value = 1.0
         unit = UnitCode("mm", "UCUM", "mm")
         measurement = Measurement(value, unit)
-        field = MeasurementtemDicomField()
+        field = MeasurementItemDicomField()
 
         # Act
         serialized = field.serialize("attribute", {"attribute": measurement})
@@ -200,7 +226,7 @@ class TestDicomFields:
         unit_dataset = create_code_dataset(unit)
         dataset.MeasurementUnitsCodeSequence = [unit_dataset]
 
-        field = MeasurementtemDicomField()
+        field = MeasurementItemDicomField()
 
         # Act
         deserialized = field.deserialize(dataset, "attribute")
@@ -239,7 +265,7 @@ class TestDicomFields:
             assert isinstance(item, Dataset)
             assert_dicom_issuer_of_identifier_equals_issuer_of_identifier(item, issuer)
 
-    @pytest.mark.parametrize("value_representation", STR_VR)
+    @pytest.mark.parametrize("value_representation", FREE_TEXT_VR)
     def test_string_field_serialize(self, value_representation: VR):
         # Arrange
         length = MAX_VALUE_LEN.get(value_representation.name, 10)
@@ -253,7 +279,7 @@ class TestDicomFields:
         # Assert
         assert serialized == value
 
-    @pytest.mark.parametrize("value_representation", [VR(vr) for vr in MAX_VALUE_LEN])
+    @pytest.mark.parametrize("value_representation", BOUNDED_FREE_TEXT_VR)
     def test_string_field_serialize_truncate_long_strings(
         self, value_representation: VR
     ):
@@ -357,3 +383,91 @@ class TestDicomFields:
 
         # Assert
         assert serialized["PatientID"].value == "patient id"
+
+    def test_field_without_default_is_left_out_when_there_is_no_value(self):
+        # Arrange
+        schema = DefaultingSchema()
+        data = {"without_default": None}
+
+        # Act
+        serialized = schema.dump(data)
+
+        # Assert
+        assert "PatientID" not in serialized
+
+    def test_field_with_default_writes_the_default_when_there_is_no_value(self):
+        # Arrange
+        schema = DefaultingSchema()
+        data = {"with_default": None}
+
+        # Act
+        serialized = schema.dump(data)
+
+        # Assert
+        assert serialized.PatientComments == "a default"
+
+    def test_field_with_default_writes_the_value_when_there_is_one(self):
+        # Arrange
+        schema = DefaultingSchema()
+        data = {"with_default": "a value"}
+
+        # Act
+        serialized = schema.dump(data)
+
+        # Assert
+        assert serialized.PatientComments == "a value"
+
+    def test_field_defaulting_to_empty_writes_the_attribute_empty(self):
+        # Arrange
+        schema = DefaultingSchema()
+        data = {"written_empty": None}
+
+        # Act
+        serialized = schema.dump(data)
+
+        # Assert
+        assert "PatientSpeciesDescription" in serialized
+        assert serialized.PatientSpeciesDescription is None
+
+    def test_list_field_with_default_writes_the_default_when_there_are_no_items(self):
+        # Arrange
+        schema = DefaultingSchema()
+        data = {"list_with_default": []}
+
+        # Act
+        serialized = schema.dump(data)
+
+        # Assert
+        assert serialized.SoftwareVersions == "a default"
+
+    def test_defaulting_field_writes_the_value_representation_it_states(self):
+        """The field that writes the attribute is the one that states how.
+
+        A default gives a field a value to write, and says nothing about how
+        the attribute is written, so the element holds what the field states.
+        """
+        # Arrange
+        schema = DefaultingSchema()
+        data = {"with_default": None}
+
+        # Act
+        serialized = schema.dump(data)
+
+        # Assert
+        assert serialized["PatientComments"].VR == VR.LT
+
+    def test_string_field_stating_another_value_representation_is_refused(self):
+        """A field states how its attribute is written, so it cannot state another."""
+        # Arrange
+        # Accession Number is SH.
+        # Act & Assert
+        with pytest.raises(ValueError):
+            StringDicomField(VR.ST, data_key="AccessionNumber")
+
+    def test_string_field_without_an_attribute_states_what_it_likes(self):
+        """A field that writes no attribute of its own has none to agree with."""
+        # Arrange & Act
+        field = StringDicomField(VR.ST)
+
+        # Assert
+        assert field.value_representation == VR.ST

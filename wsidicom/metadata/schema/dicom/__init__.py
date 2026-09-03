@@ -15,8 +15,11 @@
 """Schemas for serializing metadata models to and from DICOM."""
 
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
-from wsidicom.metadata.schema.dicom.image import ImageDicomSchema
-from wsidicom.metadata.schema.dicom.label import LabelDicomSchema, LabelOnlyDicomSchema
+from wsidicom.metadata.schema.dicom.image import (
+    ImageCoordinateSystemDicomSchema,
+    ImageDicomSchema,
+)
+from wsidicom.metadata.schema.dicom.label import LabelBaseDicomSchema, LabelDicomSchema
 from wsidicom.metadata.schema.dicom.optical_path import OpticalPathDicomSchema
 from wsidicom.metadata.schema.dicom.overview import OverviewDicomSchema
 from wsidicom.metadata.schema.dicom.patient import PatientDicomSchema
@@ -24,19 +27,26 @@ from wsidicom.metadata.schema.dicom.pyramid import PyramidDicomSchema
 from wsidicom.metadata.schema.dicom.series import SeriesDicomSchema
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 from wsidicom.metadata.schema.dicom.study import StudyDicomSchema
-from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
+from wsidicom.metadata.schema.dicom.wsi import (
+    BaseWsiMetadata,
+    BaseWsiMetadataDicomSchema,
+    WsiMetadataDicomSchema,
+)
 
 __all__ = [
+    "BaseWsiMetadata",
+    "BaseWsiMetadataDicomSchema",
     "EquipmentDicomSchema",
+    "ImageCoordinateSystemDicomSchema",
     "ImageDicomSchema",
-    "LabelOnlyDicomSchema",
+    "LabelBaseDicomSchema",
+    "LabelDicomSchema",
     "OpticalPathDicomSchema",
+    "OverviewDicomSchema",
     "PatientDicomSchema",
+    "PyramidDicomSchema",
     "SeriesDicomSchema",
     "SlideDicomSchema",
     "StudyDicomSchema",
     "WsiMetadataDicomSchema",
-    "LabelDicomSchema",
-    "PyramidDicomSchema",
-    "OverviewDicomSchema",
 ]

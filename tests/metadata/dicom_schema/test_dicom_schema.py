@@ -12,7 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import importlib
+import inspect
 import logging
+import pkgutil
 from dataclasses import replace
 from datetime import date, datetime, time
 
@@ -20,7 +23,11 @@ import pytest
 from marshmallow import ValidationError
 from PIL import ImageCms
 from pydicom import Dataset
+from pydicom.datadict import dictionary_VR, tag_for_keyword
+from pydicom.uid import generate_uid
+from pydicom.valuerep import MAX_VALUE_LEN
 
+import wsidicom.metadata.schema.dicom as dicom_schemas
 from tests.metadata.dicom_schema.helpers import (
     assert_dicom_code_dataset_equals_code,
     assert_dicom_code_sequence_equals_codes,
@@ -42,6 +49,7 @@ from wsidicom.conceptcode import (
     LenseCode,
     LightPathFilterCode,
 )
+from wsidicom.config import Settings, use_settings
 from wsidicom.geometry import Orientation, PointMm, SizeMm
 from wsidicom.metadata import (
     Equipment,
@@ -84,10 +92,26 @@ from wsidicom.metadata.schema.dicom.optical_path import (
 )
 from wsidicom.metadata.schema.dicom.overview import OverviewDicomSchema
 from wsidicom.metadata.schema.dicom.patient import PatientDicomSchema
+from wsidicom.metadata.schema.dicom.schema import DicomSchema
 from wsidicom.metadata.schema.dicom.series import SeriesDicomSchema
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 from wsidicom.metadata.schema.dicom.study import StudyDicomSchema
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
+
+
+def _dicom_schema_classes() -> list[type[DicomSchema]]:
+    """Every DICOM schema in the package, so a new one is covered as it is added."""
+    classes: set[type[DicomSchema]] = set()
+    for module_info in pkgutil.iter_modules(dicom_schemas.__path__):
+        module = importlib.import_module(f"{dicom_schemas.__name__}.{module_info.name}")
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if (
+                issubclass(cls, DicomSchema)
+                and cls is not DicomSchema
+                and not inspect.isabstract(cls)
+            ):
+                classes.add(cls)
+    return sorted(classes, key=lambda cls: cls.__name__)
 
 
 @pytest.mark.unittest
@@ -489,8 +513,11 @@ class TestDicomSchema:
         assert isinstance(deserialized, Label)
         assert deserialized == label
 
+    @pytest.mark.parametrize(
+        "schema", _dicom_schema_classes(), ids=lambda schema: schema.__name__
+    )
     def test_fields_state_the_value_representation_of_the_attribute_they_write(
-        self,
+        self, schema: type[DicomSchema]
     ):
         """A field decides what is truncated, the tag decides what is written.
 
@@ -499,21 +526,18 @@ class TestDicomSchema:
         shorter cuts a value that would have fitted.
         """
         # Arrange
-        schemas = _dicom_schema_classes()
 
         # Act
         stated = [
-            (schema.__name__, field.data_key, str(vr), dictionary_VR(tag))
-            for schema in schemas
-            for field in _instantiate(schema).fields.values()
+            (field.data_key, str(vr), dictionary_VR(tag))
+            for field in schema().fields.values()
             if isinstance(field.data_key, str)
             and (tag := tag_for_keyword(field.data_key)) is not None
             and (vr := getattr(field, "_value_representation", None)) is not None
         ]
 
         # Assert
-        assert stated, "no field states a value representation"
-        assert [entry for entry in stated if entry[2] != entry[3]] == []
+        assert [entry for entry in stated if entry[1] != entry[2]] == []
 
     def test_serialize_series_description_truncates_at_the_length_of_its_vr(self):
         """Series Description is LO, so a value over 64 characters is truncated."""

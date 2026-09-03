@@ -38,7 +38,7 @@ from wsidicom.file import OffsetTableType
 from wsidicom.file.file_writer import PyramidFileWriter
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.group import Level
-from wsidicom.instance import ImageData, WsiDataset, WsiInstance
+from wsidicom.instance import ImageData, WsiInstance
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.options import InstanceSplit
@@ -148,10 +148,14 @@ def multi_focal_plane_pyramid(wsi: WsiDicom, focal_planes: list[float]) -> Pyram
     image_data = MultiFocalPlaneImageData(source_instance.image_data, focal_planes)
 
     dataset = deepcopy(source_instance.dataset)
-    dataset.TotalPixelMatrixFocalPlanes = len(focal_planes)
-    dataset.NumberOfFrames = image_data.tiled_size.area * len(focal_planes)
+    dataset = dataset.replace(
+        {
+            "TotalPixelMatrixFocalPlanes": len(focal_planes),
+            "NumberOfFrames": image_data.tiled_size.area * len(focal_planes),
+        }
+    )
 
-    instance = WsiInstance(WsiDataset(dataset), image_data)
+    instance = WsiInstance(dataset, image_data)
     return Pyramid([Level([instance], level.pixel_spacing)], [])
 
 
@@ -171,12 +175,16 @@ def sparse_instance(
         source_instance.image_data, focal_planes, [optical_path]
     )
     dataset = deepcopy(source_instance.dataset)
-    dataset.SOPInstanceUID = generate_uid()
-    dataset.TotalPixelMatrixFocalPlanes = len(focal_planes)
-    dataset.NumberOfOpticalPaths = 1
-    dataset.NumberOfFrames = image_data.tiled_size.area * len(focal_planes)
-    dataset.OpticalPathSequence = optical_path_sequence(optical_path)
-    return WsiInstance(WsiDataset(dataset), image_data)
+    dataset = dataset.replace(
+        {
+            "SOPInstanceUID": generate_uid(),
+            "TotalPixelMatrixFocalPlanes": len(focal_planes),
+            "NumberOfOpticalPaths": 1,
+            "NumberOfFrames": image_data.tiled_size.area * len(focal_planes),
+            "OpticalPathSequence": optical_path_sequence(optical_path),
+        }
+    )
+    return WsiInstance(dataset, image_data)
 
 
 @pytest.fixture

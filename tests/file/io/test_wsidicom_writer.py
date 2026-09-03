@@ -415,8 +415,9 @@ class TestWsiDicomWriter:
         # Act
         writer = WsiDicomWriter.open(UPath(filepath), transfer_syntax, table_type)
         try:
-            wsi_dataset.SOPInstanceUID = uid
-            wsi_dataset.InstanceNumber = 0
+            wsi_dataset = wsi_dataset.replace(
+                {"SOPInstanceUID": uid, "InstanceNumber": 0}
+            )
             writer.write_header(wsi_dataset)
             writer.start_pixel_data(wsi_dataset)
             for frame in frames:

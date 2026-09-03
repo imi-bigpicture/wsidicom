@@ -25,7 +25,6 @@ from wsidicom.codec.encoder import Encoder
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
 from wsidicom.metadata.uid_generator import CallableUidGenerator
 from wsidicom.series import Pyramid, Pyramids
-from wsidicom.tags import LossyImageCompressionMethodTag, LossyImageCompressionRatioTag
 
 
 @pytest.mark.integration
@@ -135,19 +134,15 @@ class TestWsiDicomFileTargetIntegration:
                 level.default_instance.image_data.transfer_syntax
                 == transcoder.transfer_syntax
             )
-            assert level.default_instance.dataset.LossyImageCompression == "01"
-            original_methods = original_level.default_instance.dataset.get_multi_value(
-                LossyImageCompressionMethodTag
+            assert level.default_instance.dataset.lossy_compressed
+            original_methods = (
+                original_level.default_instance.dataset.lossy_compression_methods
             )
-            original_ratios = original_level.default_instance.dataset.get_multi_value(
-                LossyImageCompressionRatioTag
+            original_ratios = (
+                original_level.default_instance.dataset.lossy_compression_ratios
             )
-            methods = level.default_instance.dataset.get_multi_value(
-                LossyImageCompressionMethodTag
-            )
-            ratios = level.default_instance.dataset.get_multi_value(
-                LossyImageCompressionRatioTag
-            )
+            methods = level.default_instance.dataset.lossy_compression_methods
+            ratios = level.default_instance.dataset.lossy_compression_ratios
 
             if expect_transcoding and transcoder.lossy_method is not None:
                 assert transcoder.lossy_method.value == methods[-1]

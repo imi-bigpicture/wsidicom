@@ -14,7 +14,6 @@
 
 from collections import OrderedDict
 from collections.abc import Iterable
-from functools import cached_property
 
 from wsidicom.errors import (
     WsiDicomNotFoundError,
@@ -26,7 +25,6 @@ from wsidicom.group.level import BaseLevel
 from wsidicom.instance import WsiInstance
 from wsidicom.metadata import ImageCoordinateSystem, ImageType
 from wsidicom.metadata import Pyramid as PyramidMetadata
-from wsidicom.metadata.schema.dicom.pyramid import PyramidDicomSchema
 from wsidicom.series.series import Series, Thumbnails
 from wsidicom.stringprinting import list_pretty_str
 
@@ -127,10 +125,10 @@ class Pyramid(Series[Level]):
     def thumbnails(self) -> Thumbnails | None:
         return self._thumbnails
 
-    @cached_property
+    @property
     def metadata(self) -> PyramidMetadata:
         """Metadata of the pyramid series."""
-        return PyramidDicomSchema().load(self.base_level.default_instance.dataset)
+        return self.base_level.default_instance.dataset.pyramid_metadata
 
     @classmethod
     def open(

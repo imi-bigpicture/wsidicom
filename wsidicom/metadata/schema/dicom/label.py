@@ -23,10 +23,10 @@ from wsidicom.metadata.image import Image
 from wsidicom.metadata.label import Label
 from wsidicom.metadata.optical_path import OpticalPath
 from wsidicom.metadata.schema.dicom.fields import (
+    EMPTY,
     BooleanDicomField,
-    DefaultingDicomField,
-    DefaultingListDicomField,
     FlattenOnDumpNestedDicomField,
+    ListDicomField,
     StringDicomField,
 )
 from wsidicom.metadata.schema.dicom.image import (
@@ -37,17 +37,17 @@ from wsidicom.metadata.schema.dicom.schema import ModuleDicomSchema
 
 
 class LabelBaseDicomSchema(ModuleDicomSchema[Label]):
-    text = DefaultingDicomField(
-        StringDicomField(VR.UT),
+    text = StringDicomField(
+        VR.UT,
         data_key="LabelText",
         allow_none=True,
-        dump_default=None,
+        default_if_none=EMPTY,
     )
-    barcode = DefaultingDicomField(
-        StringDicomField(VR.LO),
+    barcode = StringDicomField(
+        VR.LT,
         data_key="BarcodeValue",
         allow_none=True,
-        dump_default=None,
+        default_if_none=EMPTY,
     )
 
     @property
@@ -83,10 +83,10 @@ class LabelDicomSchema(LabelBaseDicomSchema):
     image = FlattenOnDumpNestedDicomField(
         ImageDicomSchema(), dump_default=Image(), load_default=Image()
     )
-    optical_paths = DefaultingListDicomField(
+    optical_paths = ListDicomField(
         FlattenOnDumpNestedDicomField(OpticalPathDicomSchema()),
         data_key="OpticalPathSequence",
-        dump_default=[OpticalPath()],
+        default_if_none=[OpticalPath()],
         load_default=[],
     )
     contains_phi = BooleanDicomField(data_key="BurnedInAnnotation", allow_none=True)

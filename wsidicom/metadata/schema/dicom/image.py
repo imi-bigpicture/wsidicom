@@ -38,14 +38,13 @@ from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
     DateDicomField,
     DateTimeDicomField,
-    DefaultingDicomField,
     EnumDicomField,
     FlattenOnDumpNestedDicomField,
     FloatDicomField,
-    ImageOrientationSlideField,
+    ImageOrientationSlideDicomField,
     ListDicomField,
     NestedDatasetDicomField,
-    OffsetInSlideCoordinateSystemField,
+    OffsetInSlideCoordinateSystemDicomField,
     PixelSpacingDicomField,
     StringDicomField,
     TimeDicomField,
@@ -72,10 +71,10 @@ class ExtendedDepthOfFieldDicomSchema(DicomSchema[ExtendedDepthOfField]):
 
 
 class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem | None]):
-    origin = OffsetInSlideCoordinateSystemField(
+    origin = OffsetInSlideCoordinateSystemDicomField(
         data_key="TotalPixelMatrixOriginSequence", allow_none=False
     )
-    rotation = ImageOrientationSlideField(
+    rotation = ImageOrientationSlideDicomField(
         data_key="ImageOrientationSlide", allow_none=False
     )
 
@@ -134,17 +133,19 @@ class PixelMeasureDicomSchema(DicomSchema[PixelMeasureDicomModel]):
 
 class LossyCompressionDicomSchema:
     method = StringDicomField(VR.CS)
-    ratio = FloatDicomField()
+    ratio = FloatDicomField(value_representation=VR.DS)
 
 
 class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):
     methods = ListDicomField(
-        EnumDicomField(LossyCompressionIsoStandard, by_value=True),
+        EnumDicomField(
+            LossyCompressionIsoStandard, by_value=True, value_representation=VR.CS
+        ),
         data_key="LossyImageCompressionMethod",
         dump_none_if_empty=True,
     )
     ratios = ListDicomField(
-        FloatDicomField(),
+        FloatDicomField(value_representation=VR.DS),
         data_key="LossyImageCompressionRatio",
         dump_none_if_empty=True,
     )
@@ -182,10 +183,9 @@ class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):
 
 
 class ImageDicomSchema(ModuleDicomSchema[Image]):
-    acquisition_datetime = DefaultingDicomField(
-        DateTimeDicomField(),
+    acquisition_datetime = DateTimeDicomField(
         data_key="AcquisitionDateTime",
-        dump_default=defaults.date_time,
+        default_if_none=defaults.date_time,
         load_default=None,
     )
     content_date = DateDicomField(
@@ -196,10 +196,10 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         data_key="ContentTime",
         load_default=None,
     )
-    focus_method = DefaultingDicomField(
-        fields.Enum(FocusMethod),
+    focus_method = EnumDicomField(
+        FocusMethod,
         data_key="FocusMethod",
-        dump_default=defaults.focus_method,
+        default_if_none=defaults.focus_method,
         load_default=None,
     )
     extended_depth_of_field_bool = BooleanDicomField(

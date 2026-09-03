@@ -19,6 +19,7 @@ import itertools
 from pathlib import Path
 
 import pytest
+from pydicom import Dataset
 from pydicom.uid import JPEGBaseline8Bit
 from upath import UPath
 
@@ -31,13 +32,13 @@ from wsidicom.metadata.uid_generator import CallableUidGenerator
 @pytest.fixture
 def base_dataset() -> WsiDataset:
     """A minimal WSI dataset complete enough for the writer to open an instance."""
-    dataset = WsiDataset()
+    dataset = Dataset()
     dataset.NumberOfFrames = 1
     dataset.Rows = 16
     dataset.Columns = 16
     dataset.SamplesPerPixel = 3
     dataset.BitsAllocated = 8
-    return dataset
+    return WsiDataset(dataset)
 
 
 @pytest.mark.unittest
@@ -59,12 +60,13 @@ class TestPartFactory:
         )
 
         # Act
-        _, first_part_dataset = factory.open(0, first_count, concatenated=True)
-        _, second_part_dataset = factory.open(
-            first_count, second_count, concatenated=True
-        )
+        _, first_part = factory.open(0, first_count, concatenated=True)
+        _, second_part = factory.open(first_count, second_count, concatenated=True)
 
         # Assert — one concatenation identity shared by every part
+        first_part_dataset = first_part.as_dataset()
+        second_part_dataset = second_part.as_dataset()
+
         assert (
             first_part_dataset.ConcatenationUID == second_part_dataset.ConcatenationUID
         )
@@ -99,10 +101,11 @@ class TestPartFactory:
         )
 
         # Act
-        _, part_dataset = factory.open(0, 100, concatenated=True)
+        _, part = factory.open(0, 100, concatenated=True)
 
         # Assert
-        assert part_dataset.InConcatenationTotalNumber == part_total
+        dataset = part.as_dataset()
+        assert dataset.InConcatenationTotalNumber == part_total
 
     def test_total_number_omitted_when_unknown(
         self, base_dataset: WsiDataset, tmp_path: Path
@@ -119,12 +122,13 @@ class TestPartFactory:
         )
 
         # Act
-        _, part_dataset = factory.open(0, 100, concatenated=True)
+        _, part = factory.open(0, 100, concatenated=True)
 
         # Assert
-        assert "InConcatenationTotalNumber" not in part_dataset
+        dataset = part.as_dataset()
+        assert "InConcatenationTotalNumber" not in dataset
 
-    def test_non_concatenated_part_reuses_base_without_concat_attrs(
+    def test_non_concatenated_part_copies_base_without_concat_attrs(
         self, base_dataset: WsiDataset, tmp_path: Path
     ) -> None:
         # Arrange
@@ -139,9 +143,12 @@ class TestPartFactory:
         )
 
         # Act — sole part of the level
-        _, part_dataset = factory.open(0, 500, concatenated=False)
+        _, part = factory.open(0, 500, concatenated=False)
 
-        # Assert — base reused in place (no copy), no concatenation attributes
-        assert part_dataset is base_dataset
-        assert "ConcatenationUID" not in part_dataset
-        assert part_dataset.NumberOfFrames == 500
+        # Assert — a copy, with the base left as it was, no concatenation attributes
+        dataset = part.as_dataset()
+        base = base_dataset.as_dataset()
+        assert part is not base_dataset
+        assert base.NumberOfFrames == 1
+        assert "ConcatenationUID" not in dataset
+        assert dataset.NumberOfFrames == 500

@@ -98,11 +98,12 @@ class WsiDicomWebSource(Source):
             uids: tuple[UID, UID, UID, set[UID] | None],
         ) -> WsiInstance | None:
             study_uid, series_uid, instance_uid, available_transfer_syntaxes = uids
-            dataset = client.get_instance(study_uid, series_uid, instance_uid)
-            if not WsiDataset.is_supported_wsi_dicom(dataset):
+            dataset = WsiDataset(
+                client.get_instance(study_uid, series_uid, instance_uid)
+            )
+            if dataset.supported_image_type is None:
                 logger.info(f"Non-supported instance {instance_uid}.")
                 return None
-            dataset = WsiDataset(dataset)
 
             transfer_syntax = self._determine_transfer_syntax(
                 client,
