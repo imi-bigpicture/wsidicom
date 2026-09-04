@@ -19,7 +19,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Protocol
 
 import numpy as np
 from pydicom.config import RAISE
@@ -159,6 +159,19 @@ class ConcatenationPart:
     total: int | None = None
 
 
+class DeferredElementReader(Protocol):
+    """Reads the elements whose values were deferred while reading a dataset."""
+
+    def read_deferred_elements(self) -> None:
+        """Read every deferred element into the dataset it belongs in.
+
+        Does nothing when there is nothing left to read, so it can be called
+        whenever a whole dataset is wanted without first asking whether it is
+        already whole.
+        """
+        ...
+
+
 class WsiDataset:
     """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
     parsers for attributes specific for WSI. Use snake case to avoid name
@@ -209,6 +222,7 @@ class WsiDataset:
         self,
         dataset: Dataset,
         frame_positions: PerFrameGroupPositions | None = None,
+        deferred_element_reader: DeferredElementReader | None = None,
     ):
         """Create a WSI dataset around a pydicom dataset.
 
@@ -224,9 +238,12 @@ class WsiDataset:
             Tile positions the reader took out of the bytes of the Per Frame Functional
             Groups Sequence, given when it did not have to build a dataset for every
             item. The sequence is then not in the dataset, and these stand in for it.
+        deferred_element_reader: DeferredElementReader | None = None
+            Reader for the elements deferred when the dataset was read.
         """
         self._dataset = dataset
         self._frame_positions = frame_positions
+        self._deferred_element_reader = deferred_element_reader
 
     def __deepcopy__(self, memo: dict[int, Any]) -> "WsiDataset":
         """A copy of this holding a copy of the dataset.
@@ -236,7 +253,7 @@ class WsiDataset:
         worked out from the attributes of this one is worked out again for the
         copy rather than described from the dataset it came from.
         """
-        return WsiDataset(deepcopy(self._dataset, memo), self._frame_positions)
+        return WsiDataset(deepcopy(self._complete_dataset, memo), self._frame_positions)
 
     def as_dataset(self) -> Dataset:
         """The wrapped dataset, for giving to something that takes a dataset.
@@ -244,7 +261,20 @@ class WsiDataset:
         A method rather than a property so that stepping out of this class is a
         deliberate act and plain to find; what is read from a WSI dataset should
         come from the readers here.
+
+        Whole, so that what leaves this class is what the file states. A value that
+        element was deferred when the dataset was read is read now, which is why
+        the
+        attributes read here go to the dataset directly instead.
         """
+        return self._complete_dataset
+
+    @property
+    def _complete_dataset(self) -> Dataset:
+        """The dataset, with every deferred element read into it."""
+        if self._deferred_element_reader is not None:
+            # Reads deferred elements into the dataset.
+            self._deferred_element_reader.read_deferred_elements()
         return self._dataset
 
     @classmethod
@@ -427,10 +457,11 @@ class WsiDataset:
             If a tag is not a tag or the keyword of one, or if a value does not
             conform to its value representation.
         """
+        source = self._complete_dataset
         dataset = Dataset()
-        for element in self._dataset:
+        for element in source:
             dataset.add(element)
-        file_meta = self._dataset.get("file_meta", None)
+        file_meta = source.get("file_meta", None)
         if file_meta is not None:
             dataset.file_meta = file_meta
         self._update_dataset(dataset, changes)
@@ -958,12 +989,12 @@ class WsiDataset:
         dataset through the metadata schema is more than an attribute lookup,
         and a dataset does not change once made.
         """
-        return PyramidDicomSchema().load(self._dataset)
+        return PyramidDicomSchema().load(self._complete_dataset)
 
     @cached_property
     def overview_metadata(self) -> Overview:
         """The overview metadata this dataset states."""
-        return OverviewDicomSchema().load(self._dataset)
+        return OverviewDicomSchema().load(self._complete_dataset)
 
     @cached_property
     def image_coordinate_system(self) -> ImageCoordinateSystem | None:
@@ -977,13 +1008,13 @@ class WsiDataset:
     def label_metadata(self) -> Label:
         """The label metadata this dataset states."""
         if self.image_type == ImageType.LABEL:
-            return LabelDicomSchema().load(self._dataset)
-        return LabelBaseDicomSchema().load(self._dataset)
+            return LabelDicomSchema().load(self._complete_dataset)
+        return LabelBaseDicomSchema().load(self._complete_dataset)
 
     @cached_property
     def base_metadata(self) -> BaseWsiMetadata:
         """The study, series, patient, equipment and slide metadata this states."""
-        return BaseWsiMetadataDicomSchema().load(self._dataset)
+        return BaseWsiMetadataDicomSchema().load(self._complete_dataset)
 
     @property
     def lossy_compressions(self) -> list[LossyCompression] | None:
@@ -1033,8 +1064,27 @@ class WsiDataset:
         return self._dataset.PhotometricInterpretation
 
     @cached_property
-    def optical_path_sequence(self) -> DicomSequence | None:
-        """Return optical path sequence from dataset."""
+    def optical_path_identifiers(self) -> list[str]:
+        """The optical path identifiers this states, in the order it states them.
+
+        `["0"]` where the dataset names no optical path, that being the identifier
+        a frame is taken to be of when it names none.
+        """
+        if self._optical_path_sequence is None:
+            return ["0"]
+        return [
+            str(item[OpticalPathIdentifierTag].value)
+            for item in self._optical_path_sequence
+        ]
+
+    @cached_property
+    def _optical_path_sequence(self) -> DicomSequence | None:
+        """The optical path sequence, read from the dataset directly.
+
+        Private because its items are read here rather than given out: a value of
+        an item may have been deferred when the dataset was read, so an item is
+        whole only in what `as_dataset` gives.
+        """
         return self.get_optional_sequence(self._dataset, OpticalPathSequenceTag)
 
     @cached_property
@@ -1190,7 +1240,7 @@ class WsiDataset:
             )
             if identifier is not None:
                 return identifier
-        identifier = self._optical_path_identifier_of(self.optical_path_sequence)
+        identifier = self._optical_path_identifier_of(self._optical_path_sequence)
         return "0" if identifier is None else identifier
 
     def read_z_offset(self, frame: Dataset | None = None) -> float:
@@ -1659,7 +1709,7 @@ class WsiDataset:
             deepcopy(
                 {
                     tag: elem
-                    for tag, elem in self._dataset.items()
+                    for tag, elem in self._complete_dataset.items()
                     if tag != PerFrameFunctionalGroupsSequenceTag
                 }
             )

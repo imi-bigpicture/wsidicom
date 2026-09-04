@@ -15,12 +15,12 @@
 """Module with base IO class for handling DICOM WSI files."""
 
 import struct
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from datetime import datetime
 from functools import cached_property
 from struct import pack
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, ClassVar
 
 from fsspec.implementations.local import LocalFileSystem
 from pydicom import DataElement, Dataset, FileMetaDataset
@@ -36,12 +36,14 @@ from pydicom.filereader import (
 )
 from pydicom.filereader import read_dataset as read_elements
 from pydicom.filewriter import write_dataset, write_file_meta_info, writers
-from pydicom.tag import BaseTag, SequenceDelimiterTag, Tag
+from pydicom.sequence import Sequence as DicomSequence
+from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
 from pydicom.uid import UID
 from pydicom.valuerep import VR
 from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.deferred_element import DeferredElement
 from wsidicom.tags import (
     InstanceCreationDateTag,
     InstanceCreationTimeTag,
@@ -53,6 +55,9 @@ from wsidicom.tags import (
 
 class WsiDicomIO:
     """Class for reading or writing DICOM WSI to stream."""
+
+    UNDEFINED_LENGTH: ClassVar[int] = 0xFFFFFFFF
+    """Length stated by an item or a sequence that is delimited instead."""
 
     def __init__(
         self,
@@ -208,15 +213,11 @@ class WsiDicomIO:
             force=force,
         )
 
-    def read_dataset_until(
-        self, stop_tag: BaseTag, force: bool = False
-    ) -> tuple[Dataset, BaseTag | None]:
-        """Read dataset from stream, stopping at `stop_tag`.
+    def read_dataset_until(self, stop_tag: BaseTag, force: bool = False) -> Dataset:
+        """Read dataset from start of stream, stopping at `stop_tag`.
 
         The stream is left positioned at the tag that stopped the read, so a caller that
-        stops early can carry on from there. That tag is returned with the dataset, as
-        the read has already had to look at it to decide to stop, and it is what a
-        caller carrying on needs to know.
+        stops early can carry on from there.
 
         Parameters
         ----------
@@ -229,18 +230,12 @@ class WsiDicomIO:
 
         Returns
         -------
-        tuple[Dataset, BaseTag | None]
-            Dataset of the elements before `stop_tag`, and the tag the read stopped at,
-            or None if the stream ended before a tag ordered at or after `stop_tag`.
+        Dataset
+            Dataset of the elements before `stop_tag`.
         """
-        stopped_at: BaseTag | None = None
 
         def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
-            nonlocal stopped_at
-            if tag < stop_tag:
-                return False
-            stopped_at = tag
-            return True
+            return tag >= stop_tag
 
         self.seek(0)
         dataset = read_partial(
@@ -250,18 +245,24 @@ class WsiDicomIO:
             force=force,
             specific_tags=None,
         )
-        return dataset, stopped_at
+        return dataset
 
-    def read_dataset_from(
-        self, position: int, stop_tag: BaseTag
-    ) -> tuple[Dataset, BaseTag | None]:
-        """Read elements from `position` onwards, stopping at `stop_tag`.
+    def read_dataset_into(
+        self, position: int, stop_tag: BaseTag, into: Dataset
+    ) -> BaseTag | None:
+        """Read elements from `position` onwards into `into`, stopping at `stop_tag`.
 
         For continuing a read that stopped early. Unlike :func:`read_dataset` and
         :func:`read_dataset_until` this reads elements and nothing else: the preamble
-        and file meta information are not read again, so the result is a plain dataset
-        rather than one carrying a file name and its file meta information. There is no
-        header to read past, so there is nothing for a force flag to force.
+        and file meta information are not read again, so there is nothing to carry a
+        file name and its file meta information. There is no header to read past, so
+        there is nothing for a force flag to force.
+
+        The elements go into a dataset already read rather than into one of their
+        own, a dataset read in parts being one dataset and not several. They are put
+        in as they were read, so what they hold is made of them against the
+        character set of `into` rather than against a character set of their own,
+        which a part read after the one stating it would not have.
 
         Parameters
         ----------
@@ -269,13 +270,14 @@ class WsiDicomIO:
             Offset of the first element to read.
         stop_tag: BaseTag
             First tag not to read.
+        into: Dataset
+            Dataset to read the elements into.
 
         Returns
         -------
-        tuple[Dataset, BaseTag | None]
-            Dataset of the elements between `position` and `stop_tag`, and the tag the
-            read stopped at, or None if the stream ended before a tag ordered at or
-            after `stop_tag`.
+        BaseTag | None
+            The tag the read stopped at, or None if the stream ended before a tag
+            ordered at or after `stop_tag`.
         """
         stopped_at: BaseTag | None = None
 
@@ -287,13 +289,114 @@ class WsiDicomIO:
             return True
 
         self.seek(position)
-        dataset = read_elements(
+        read = read_elements(
             self._stream,
             self._dicom_io.is_implicit_VR,
             self._dicom_io.is_little_endian,
             stop_when=_stop_at,
         )
-        return dataset, stopped_at
+        for element in read:
+            into.add(element)
+        return stopped_at
+
+    def read_sequence(
+        self, position: int, defer_size: int
+    ) -> tuple[DicomSequence, list[DeferredElement], int]:
+        """Read the sequence at `position`, deferring values above `defer_size`.
+
+        Parameters
+        ----------
+        position: int
+            Offset of the tag of the sequence.
+        defer_size: int
+            Values longer than this many bytes are deferred.
+
+        Returns
+        -------
+        tuple[DicomSequence, list[DeferredElement], int]
+            The sequence, the deferred elements, and the offset just past the
+            sequence.
+        """
+        self.seek(position)
+        tag = self.read_tag()
+        value_representation = self.read_tag_vr()
+        if value_representation not in (None, b"SQ"):
+            raise WsiDicomFileError(
+                str(self),
+                f"Expected a sequence at {position}, found {tag} with value "
+                f"representation {value_representation!r}",
+            )
+        length = self.read_UL()
+        if length == self.UNDEFINED_LENGTH:
+            length = None
+        items: list[Dataset] = []
+        deferred: list[DeferredElement] = []
+        end_of_sequence = None if length is None else self.tell() + length
+        # End at stated length or when at the sequence delimiter
+        while end_of_sequence is None or self.tell() < end_of_sequence:
+            item_tag = self.read_tag()
+            if item_tag == SequenceDelimiterTag:
+                # The delimiter states a length of its own, always zero. Reading
+                # past it is what puts the end where the sequence really ends.
+                self.read_UL()
+                end_of_sequence = self.tell()
+                break
+            if item_tag != ItemTag:
+                raise WsiDicomFileError(
+                    str(self),
+                    f"Expected an item at {self.tell() - 4}, found {item_tag}",
+                )
+            item_length = self.read_UL()
+            if item_length == self.UNDEFINED_LENGTH:
+                item_length = None
+            item = read_elements(
+                self._stream,
+                self._dicom_io.is_implicit_VR,
+                self._dicom_io.is_little_endian,
+                bytelength=item_length,
+                defer_size=defer_size,
+                at_top_level=False,
+            )
+            deferred.extend(self._take_deferred_elements(item))
+            items.append(item)
+        sequence = DicomSequence(items)
+        sequence.is_undefined_length = length is None
+        return sequence, deferred, self.tell()
+
+    def _take_deferred_elements(self, dataset: Dataset) -> Iterable[DeferredElement]:
+        """Take out the elements `dataset` holds whose values were deferred.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to take the elements out of.
+
+        Returns
+        -------
+        Iterable[DeferredElement]
+            One per value taken out.
+        """
+        elements = (
+            dataset.get_item(tag, keep_deferred=True) for tag in list(dataset.keys())
+        )
+        deferred_elements = (
+            element
+            for element in elements
+            if isinstance(element, RawDataElement)
+            and element.value is None
+            and element.length
+        )
+        for element in deferred_elements:
+            del dataset[element.tag]
+            yield DeferredElement(
+                dataset,
+                element.tag,
+                element.VR,
+                element.value_tell,
+                element.length,
+                self._dicom_io.is_implicit_VR,
+                self._dicom_io.is_little_endian,
+            )
 
     def read_tag(self) -> BaseTag:
         """Read tag from stream."""

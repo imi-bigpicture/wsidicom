@@ -13,15 +13,13 @@
 #    limitations under the License.
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import ClassVar
 
 from pydicom.dataset import Dataset
-from pydicom.sequence import Sequence as DicomSequence
 
 from wsidicom.geometry import Point, Size
 from wsidicom.instance.dataset import WsiDataset
-from wsidicom.tags import OpticalPathIdentifierTag
 
 
 class TileIndex(metaclass=ABCMeta):
@@ -129,32 +127,6 @@ class TileIndex(metaclass=ABCMeta):
 
         """
         paths = dict.fromkeys(
-            path
-            for dataset in datasets
-            for path in cls._get_path_identifiers(dataset.optical_path_sequence)
+            path for dataset in datasets for path in dataset.optical_path_identifiers
         )
         return list(paths) if paths else ["0"]
-
-    @staticmethod
-    def _get_path_identifiers(
-        optical_path_sequence: DicomSequence | None,
-    ) -> Iterable[str]:
-        """Parse optical path sequence and return list of optical path
-        identifiers, in Optical Path Sequence order.
-
-        Parameters
-        ----------
-        optical_path_sequence: DicomSequence
-            Optical path sequence.
-
-        Returns
-        -------
-        Iterable[str]
-            List of optical path identifiers, in Optical Path Sequence order.
-        """
-        if optical_path_sequence is None:
-            return ["0"]
-        return dict.fromkeys(
-            str(optical_ds[OpticalPathIdentifierTag].value)
-            for optical_ds in optical_path_sequence
-        )

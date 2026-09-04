@@ -252,17 +252,16 @@ class TestWsiDicomIO:
         io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
 
         # Act
-        read_dataset, stopped_at = io.read_dataset_until(
+        read_dataset = io.read_dataset_until(
             stop_tag=PerFrameFunctionalGroupsSequenceTag
         )
 
         # Assert
-        assert stopped_at == PerFrameFunctionalGroupsSequenceTag
         assert PerFrameFunctionalGroupsSequenceTag not in read_dataset
         assert read_dataset.PatientID == "Test123"
         io.close()
 
-    def test_read_dataset_from_reads_elements_after_position(
+    def test_read_dataset_into_reads_elements_after_position_into_a_dataset(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
     ):
         """Elements the read stopped short of can be picked up from where they start."""
@@ -278,16 +277,15 @@ class TestWsiDicomIO:
             implicit_vr=False,
         )
         io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
-        before, _ = io.read_dataset_until(stop_tag=container_identifier_tag)
+        read = io.read_dataset_until(stop_tag=container_identifier_tag)
+        assert container_identifier_tag not in read
 
         # Act
-        after, _ = io.read_dataset_from(io.tell(), ExtendedOffsetTableTag)
+        io.read_dataset_into(io.tell(), ExtendedOffsetTableTag, read)
 
         # Assert
-        assert container_identifier_tag not in before
-        assert after.ContainerIdentifier == "Test456"
-        before.update(after)
-        assert before == dataset
+        assert read.ContainerIdentifier == "Test456"
+        assert read == dataset
         io.close()
 
     @pytest.mark.parametrize("little_endian", [True, False])

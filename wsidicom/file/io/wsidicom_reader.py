@@ -16,7 +16,9 @@
 
 import logging
 import threading
+from typing import ClassVar
 
+from pydicom.dataelem import DataElement
 from pydicom.dataset import Dataset
 from pydicom.tag import BaseTag, Tag
 from pydicom.uid import UID
@@ -24,6 +26,7 @@ from upath import UPath
 
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotSupportedError, WsiDicomOutOfBoundsError
+from wsidicom.file.io.deferred_element import DeferredElement
 from wsidicom.file.io.frame_index import (
     BasicOffsetTableFrameIndexParser,
     EmptyBasicTableOffsetException,
@@ -50,6 +53,7 @@ from wsidicom.tags import (
     DimensionOrganizationTypeTag,
     ExtendedOffsetTableTag,
     NumberOfFramesTag,
+    OpticalPathSequenceTag,
     PerFrameFunctionalGroupsSequenceTag,
     SOPInstanceUIDTag,
     SpecificCharacterSetTag,
@@ -62,6 +66,10 @@ logger = logging.getLogger(__name__)
 class WsiDicomReader:
     """Reader for DICOM WSI data in stream"""
 
+    DEFERRED_VALUE_SIZE: ClassVar[int] = 64 * 1024
+    """Values longer than this many bytes are read when they are used rather
+    than when the dataset is read."""
+
     def __init__(self, stream: WsiDicomIO):
         """
         Parse DICOM stream. If valid WSI type read required parameters.
@@ -73,6 +81,7 @@ class WsiDicomReader:
         """
         self._lock = threading.Lock()
         self._stream = stream
+        self._deferred_elements: list[DeferredElement] = []
         self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
         dataset = self._read_dataset()
         if dataset is None:
@@ -110,25 +119,62 @@ class WsiDicomReader:
             Dataset, carrying the tile positions if they were found, or None if this
             is not an instance to read.
         """
-        dataset, _ = self._stream.read_dataset_until(stop_tag=SOPInstanceUIDTag)
+        dataset = self._stream.read_dataset_until(stop_tag=SOPInstanceUIDTag)
         if not WsiDataset.is_supported_image_type(dataset):
             return None
 
-        instance_attributes, stopped_at = self._stream.read_dataset_from(
-            self._stream.tell(), PerFrameFunctionalGroupsSequenceTag
+        self._stream.read_dataset_into(
+            self._stream.tell(), OpticalPathSequenceTag, dataset
         )
-        for element in instance_attributes:
-            dataset.add(element)
+        continue_from = self._read_optical_paths(dataset)
+
+        stopped_at = self._stream.read_dataset_into(
+            continue_from, PerFrameFunctionalGroupsSequenceTag, dataset
+        )
         if not WsiDataset.is_supported(dataset):
             return None
 
         frame_positions, continue_from = self._read_frame_positions(dataset, stopped_at)
-        trailing_attributes, _ = self._stream.read_dataset_from(
-            continue_from, ExtendedOffsetTableTag
+        self._stream.read_dataset_into(continue_from, ExtendedOffsetTableTag, dataset)
+        return WsiDataset(dataset, frame_positions, self)
+
+    def _read_optical_paths(self, dataset: Dataset) -> int:
+        """Read the optical path sequence, deferring the values (e.g. ICC profile) that
+        are large.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset read so far, which the sequence is added to.
+
+        Returns
+        -------
+        int
+            Offset the rest of the dataset is to be read from.
+        """
+        position = self._stream.tell()
+        if self._stream.read_tag() != OpticalPathSequenceTag:
+            return position
+        sequence, deferred, end_of_sequence = self._stream.read_sequence(
+            position, self.DEFERRED_VALUE_SIZE
         )
-        for element in trailing_attributes:
-            dataset.add(element)
-        return WsiDataset(dataset, frame_positions)
+        dataset[OpticalPathSequenceTag] = DataElement(
+            OpticalPathSequenceTag, "SQ", sequence
+        )
+        self._deferred_elements.extend(deferred)
+        return end_of_sequence
+
+    def read_deferred_elements(self) -> None:
+        """Read every deferred element into the dataset it belongs in.
+
+        Does nothing once there is nothing left to read, so a caller wanting a whole
+        dataset can ask without first asking whether it is already whole.
+        """
+        with self._lock:
+            while self._deferred_elements:
+                element = self._deferred_elements.pop()
+                self._stream.seek(element.offset)
+                element.set(self._stream.read(element.length, need_exact_length=True))
 
     def _read_frame_positions(
         self, dataset: Dataset, stopped_at: BaseTag | None
