@@ -19,7 +19,7 @@ import logging
 from abc import abstractmethod
 from typing import Any, Generic, TypeVar
 
-from marshmallow import Schema, ValidationError, fields, post_load
+from marshmallow import Schema, post_load
 
 logger = logging.getLogger(__name__)
 
@@ -55,26 +55,3 @@ class DataclassLoadingSchema(LoadingSchema[LoadType]):
                 if field.name in data
             }
         )
-
-
-class DefaultOnValidationExceptionField(fields.Field):
-    """Field that returns a default value if validation fails."""
-
-    def __init__(self, inner: fields.Field, load_default, **kwargs):
-        super().__init__(**kwargs)
-        self.inner = inner
-        self.load_default = load_default
-
-    def _deserialize(self, value, attr, data, **kwargs):
-        try:
-            return self.inner._deserialize(value, attr, data, **kwargs)
-        except ValidationError as exception:
-            logger.warning(
-                f"Could not deserialize {attr} using {self.inner} "
-                f"due to exception {exception}"
-                f"returning default value {self.load_default}"
-            )
-            return self.load_default
-
-    def _serialize(self, value: Any, attr, obj, **kwargs):
-        return self.inner._serialize(value, attr, obj, **kwargs)

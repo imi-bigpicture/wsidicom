@@ -38,6 +38,7 @@ from wsidicom.metadata.schema.dicom.contributing_equipment import (
 from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.equipment import EquipmentDicomSchema
 from wsidicom.metadata.schema.dicom.fields import (
+    ConstantDicomField,
     FlattenOnDumpNestedDicomField,
     ListDicomField,
     UidDatasetDicomField,
@@ -102,17 +103,17 @@ class BaseWsiMetadataDicomSchema(DicomSchema[BaseWsiMetadata]):
         dump_none_if_empty=True,
         load_default=(),
     )
-    sop_class_uid = fields.Constant(
+    sop_class_uid = ConstantDicomField(
         VLWholeSlideMicroscopyImageStorage, dump_only=True, data_key="SOPClassUID"
     )
-    modality = fields.Constant("SM", dump_only=True, data_key="Modality")
-    position_reference_indicator = fields.Constant(
+    modality = ConstantDicomField("SM", dump_only=True, data_key="Modality")
+    position_reference_indicator = ConstantDicomField(
         "SLIDE_CORNER", dump_only=True, data_key="PositionReferenceIndicator"
     )
-    volumetric_properties = fields.Constant(
+    volumetric_properties = ConstantDicomField(
         "VOLUME", dump_only=True, data_key="VolumetricProperties"
     )
-    acquisition_context = fields.Constant(
+    acquisition_context = ConstantDicomField(
         [], data_key="AcquisitionContextSequence", dump_only=True
     )
 

@@ -17,7 +17,7 @@
 from collections import defaultdict
 from typing import Any
 
-from marshmallow import fields, post_load, pre_dump
+from marshmallow import post_load, pre_dump
 from pydicom.sr.coding import Code
 from pydicom.valuerep import VR
 
@@ -45,7 +45,7 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
     method_strings = ListDicomField(
         StringDicomField(VR.LO), data_key="DeidentificationMethod"
     )
-    method_codes = fields.List(
+    method_codes = ListDicomField(
         CodeDicomField(Code), data_key="DeidentificationMethodCodeSequence"
     )
 

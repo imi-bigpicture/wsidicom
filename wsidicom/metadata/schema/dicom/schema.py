@@ -27,13 +27,13 @@ from typing import (
 
 from marshmallow import ValidationError, post_dump, pre_load
 from pydicom import Dataset
+from pydicom.config import IGNORE
 from pydicom.datadict import dictionary_VR
 from pydicom.dataelem import DataElement
 from pydicom.sr.coding import Code
-from pydicom.tag import Tag
+from pydicom.tag import BaseTag, Tag
 
 from wsidicom.conceptcode import dataset_to_code
-from wsidicom.config import dicom_validation_mode
 from wsidicom.metadata.sample import Measurement
 from wsidicom.metadata.schema.common import LoadingSchema, LoadType
 from wsidicom.metadata.schema.dicom.fields import (
@@ -80,34 +80,45 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
         return Dataset
 
     @post_dump
-    def post_dump(self, data: dict[str, Any], many: bool, **kwargs) -> Dataset:
-        """Create pydicom Dataset from attributes in dictionary."""
+    def post_dump(
+        self, data: dict[str | BaseTag, Any], many: bool, **kwargs
+    ) -> Dataset:
+        """Create pydicom Dataset from attributes in dictionary.
+
+        Keyed by the keyword of the attribute for what a field made of a
+        value, and by the tag for an element flattened in from a nested
+        schema, which is already made.
+        """
         for field in self.fields.values():
             if isinstance(field, FlattenOnDumpNestedDicomField):
-                # Flatten nested fields into data
-                field.flatten(data)
+                self._flatten(data, field)
+            data_key = field.data_key
             if (
-                field.data_key in data
-                and data[field.data_key] is None
+                data_key is not None
+                and data_key in data
+                and data[data_key] is None
                 and not (
                     isinstance(field, AttributeDicomField) and field.writes_when_empty
                 )
             ):
                 # Remove empty non-defaulting fields
-                data.pop(field.data_key)
+                data.pop(data_key)
         dataset = Dataset()
         for key, value in data.items():
             try:
-                if isinstance(value, DataElement):
-                    # Flattened in from a nested schema, which made the element
-                    # and checked the value with the value representation its
-                    # own field states.
-                    dataset[value.tag] = value
-                else:
-                    dataset[Tag(key)] = self._data_element(key, value)
+                if not isinstance(value, DataElement):
+                    tag = Tag(key)
+                    value = DataElement(
+                        tag,
+                        dictionary_VR(tag),
+                        value,
+                        validation_mode=IGNORE,
+                    )
+                dataset[value.tag] = value
             except ValueError as exception:
-                # A value that does not conform to its value representation,
-                # raised as what it is so it can be caught as such.
+                # A value the attribute cannot hold at all, such as one of a
+                # type it is never written as. What does not conform to the
+                # value representation was refused by the field.
                 raise ValueError(
                     f"Failed to set {key} of dataset to {value}."
                 ) from exception
@@ -117,21 +128,56 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
                 ) from exception
         return dataset
 
-    def _data_element(self, keyword: str, value: Any) -> DataElement:
-        """Make the element holding a value, checking the value as it is made.
+    @classmethod
+    def _flatten(
+        cls,
+        data: dict[str | BaseTag, Any], field: FlattenOnDumpNestedDicomField
+    ) -> None:
+        """Put what a nested schema made in with what this schema made.
 
-        For a value from a field that writes no element of its own: a field
-        that does states how what it writes is written, and gives the element.
-        The mode is passed for the value, so pydicom's global validation mode
-        is never set and a process using wsidicom keeps the mode it chose.
+        The nested schema made elements, which go in under their own tags: they
+        are made already, and the schema that made them settled how each is
+        written. What the field made is taken out, as the dataset holding them
+        is not itself an attribute.
         """
-        tag = Tag(keyword)
-        return DataElement(
-            tag,
-            dictionary_VR(tag),
-            value,
-            validation_mode=dicom_validation_mode(),
-        )
+        key = field.data_key if field.data_key is not None else field.name
+        if key is None:
+            return
+        nested = data.pop(key, None)
+        if not isinstance(nested, Dataset):
+            return
+        for element in nested:
+            data[element.tag] = element
+
+    @classmethod
+    def _de_flatten(
+        cls,
+        dataset: Dataset, field: FlattenOnDumpNestedDicomField
+    ) -> Dataset | None:
+        """Take back out of a dataset what a nested schema is to be loaded from.
+
+        Undoes `_flatten`, gathering the attributes the nested schema names into
+        a dataset of their own. None when the dataset holds none of them, which
+        is a nested schema with nothing to load.
+        """
+        nested = Dataset()
+        for nested_field in field.nested_schema.fields.values():
+            if nested_field.dump_only:
+                continue
+            if isinstance(nested_field, FlattenOnDumpNestedDicomField):
+                de_flattened = cls._de_flatten(dataset, nested_field)
+                if de_flattened is not None:
+                    for element in de_flattened:
+                        nested.add(element)
+            elif nested_field.data_key is not None and nested_field.data_key in dataset:
+                # The element as it was read, not the value set again: what was
+                # read is not wsidicom's to write, so it is neither remade nor
+                # checked against how the attribute is written.
+                tag = Tag(nested_field.data_key)
+                nested[tag] = dataset[tag]
+        if len(nested) == 0:
+            return None
+        return nested
 
     @pre_load
     def pre_load(self, dataset: Dataset, many: bool, **kwargs) -> dict[str, Any]:
@@ -144,7 +190,7 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
                 attributes[field.data_key] = dataset.get(field.data_key)
             elif isinstance(field, FlattenOnDumpNestedDicomField):
                 # De-flatten nested fields from dataset
-                de_flattened = field.de_flatten(dataset)
+                de_flattened = self._de_flatten(dataset, field)
                 if de_flattened is not None:
                     attributes[key] = de_flattened
         return attributes

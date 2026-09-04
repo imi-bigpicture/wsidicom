@@ -52,10 +52,12 @@ from wsidicom.metadata.optical_path import (
 )
 from wsidicom.metadata.schema.dicom.defaults import defaults
 from wsidicom.metadata.schema.dicom.fields import (
+    BytesDicomField,
     CodeDicomField,
     DatasetDicomField,
     FlattenOnDumpNestedDicomField,
     FloatDicomField,
+    IntegerDicomField,
     ListDicomField,
     SingleCodeSequenceDicomField,
     StringDicomField,
@@ -557,17 +559,17 @@ class FilterDicomSchema(DicomSchema[LoadType]):
 
 
 class LightPathFilterDicomSchema(FilterDicomSchema[LightPathFilter]):
-    filters = fields.List(
+    filters = ListDicomField(
         CodeDicomField(LightPathFilterCode),
         data_key="LightPathFilterTypeStackCodeSequence",
         allow_none=True,
     )
-    nominal = fields.Integer(
+    nominal = IntegerDicomField(
         data_key="LightPathFilterPassThroughWavelength", allow_none=True
     )
     low_pass = fields.Integer(load_only=True, allow_none=True)
     high_pass = fields.Integer(load_only=True, allow_none=True)
-    filter_band = fields.List(fields.Integer(), data_key="LightPathFilterPassBand")
+    filter_band = ListDicomField(fields.Integer(), data_key="LightPathFilterPassBand")
 
     @property
     def load_type(self) -> type[LightPathFilter]:
@@ -575,17 +577,17 @@ class LightPathFilterDicomSchema(FilterDicomSchema[LightPathFilter]):
 
 
 class ImagePathFilterDicomSchema(FilterDicomSchema[ImagePathFilter]):
-    filters = fields.List(
+    filters = ListDicomField(
         CodeDicomField(ImagePathFilterCode),
         data_key="ImagePathFilterTypeStackCodeSequence",
         allow_none=True,
     )
-    nominal = fields.Integer(
+    nominal = IntegerDicomField(
         data_key="ImagePathFilterPassThroughWavelength", allow_none=True
     )
     low_pass = fields.Integer(load_only=True, allow_none=True)
     high_pass = fields.Integer(load_only=True, allow_none=True)
-    filter_band = fields.List(fields.Integer(), data_key="ImagePathFilterPassBand")
+    filter_band = ListDicomField(fields.Integer(), data_key="ImagePathFilterPassBand")
 
     @property
     def load_type(self) -> type[ImagePathFilter]:
@@ -593,7 +595,7 @@ class ImagePathFilterDicomSchema(FilterDicomSchema[ImagePathFilter]):
 
 
 class ObjectivesSchema(DicomSchema[Objectives]):
-    lenses = fields.List(
+    lenses = ListDicomField(
         CodeDicomField(LenseCode), data_key="LensesCodeSequence", allow_none=True
     )
     condenser_power = FloatDicomField(data_key="CondenserLensPower", allow_none=True)
@@ -631,7 +633,7 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
         load_default=None,
     )
 
-    icc_profile = fields.Raw(data_key="ICCProfile", load_default=None)
+    icc_profile = BytesDicomField(data_key="ICCProfile", load_default=None)
     color_space = StringDicomField(
         value_representation=VR.CS, data_key="ColorSpace", load_default=None
     )

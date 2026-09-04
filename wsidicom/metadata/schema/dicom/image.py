@@ -20,7 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from marshmallow import fields, post_load, pre_dump
+from marshmallow import post_load, pre_dump
 from pydicom.dataset import Dataset
 from pydicom.valuerep import VR
 
@@ -42,6 +42,7 @@ from wsidicom.metadata.schema.dicom.fields import (
     FlattenOnDumpNestedDicomField,
     FloatDicomField,
     ImageOrientationSlideDicomField,
+    IntegerDicomField,
     ListDicomField,
     NestedDatasetDicomField,
     OffsetInSlideCoordinateSystemDicomField,
@@ -58,10 +59,10 @@ logger = logging.getLogger(__name__)
 
 
 class ExtendedDepthOfFieldDicomSchema(DicomSchema[ExtendedDepthOfField]):
-    number_of_focal_planes = fields.Integer(
+    number_of_focal_planes = IntegerDicomField(
         data_key="NumberOfFocalPlanes", allow_none=False
     )
-    distance_between_focal_planes = fields.Float(
+    distance_between_focal_planes = FloatDicomField(
         data_key="DistanceBetweenFocalPlanes", allow_none=False
     )
 

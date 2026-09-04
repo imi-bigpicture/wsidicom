@@ -19,7 +19,7 @@ import logging
 import math
 import re
 from abc import abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum, auto
 from typing import (
     Any,
@@ -243,6 +243,26 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
         """How what this writes is written."""
         return self._value_representation
 
+    def serialize(
+        self,
+        attr: str,
+        obj: Any,
+        accessor: Callable[[Any, str, Any], Any] | None = None,
+        **kwargs,
+    ) -> Any:
+        """What the field writes, checked against how the attribute is written.
+
+        Wraps whatever the field made of the value, so that every field writing
+        an attribute is checked the one way and none has to remember to do it.
+
+        What comes back is what the attribute is written from, which is not the
+        type the field loads: a field taking a code writes the dataset of one,
+        and a field taking a size writes the two numbers of it.
+        """
+        value = super().serialize(attr, obj, accessor, **kwargs)
+        self._validate_written_value(value)
+        return value
+
     def _check_how_many(self, given: int) -> None:
         """Check how many values were given against how many the attribute holds.
 
@@ -276,7 +296,14 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
             return
         if value is None or value is missing:
             return
-        values = value if isinstance(value, (list, tuple, MultiValue)) else [value]
+        if self.value_representation == VR.SQ:
+            # A sequence is the one value of the attribute holding it, however
+            # many items it holds: how many items it may hold is said by the
+            # module that defines it and not by the value multiplicity, which
+            # is one for every sequence attribute there is.
+            values = [value]
+        else:
+            values = value if isinstance(value, (list, tuple, MultiValue)) else [value]
         self._check_how_many(len(values))
         # A validator takes one value at a time, so the values of an attribute
         # holding several are checked one by one: handing it all of them is
@@ -367,7 +394,9 @@ class StringDicomField(AttributeDicomField[str]):
             )
         super().__init__(value_representation=value_representation, **kwargs)
 
-    def _serialize(self, value: str | None, attr: str | None, obj: Any, **kwargs):
+    def _serialize(
+        self, value: str | None, attr: str | None, obj: Any, **kwargs
+    ) -> str | None:
         if value is None:
             return None
         value_representation = self.value_representation
@@ -382,7 +411,6 @@ class StringDicomField(AttributeDicomField[str]):
                 f"{maximum_allowed_length} to {value[:maximum_allowed_length]}."
             )
             value = value[:maximum_allowed_length]
-        self._validate_written_value(value)
         return super()._serialize(value, attr, obj, **kwargs)
 
     def _deserialize(self, value, attr, data, **kwargs) -> Any:
@@ -404,6 +432,46 @@ class IntegerDicomField(AttributeDicomField[int], fields.Integer):
     """Field for an attribute holding an integer."""
 
 
+class DefaultOnValidationExceptionField(AttributeDicomField[Any]):
+    """Field that returns a default value if validation fails.
+
+    An attribute field rather than a plain one, so what the inner field makes
+    of the value is checked against how the attribute is written like anything
+    else wsidicom writes.
+    """
+
+    def __init__(self, inner: fields.Field, load_default, **kwargs):
+        self.inner = inner
+        super().__init__(**kwargs)
+        self.load_default = load_default
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        try:
+            return self.inner._deserialize(value, attr, data, **kwargs)
+        except ValidationError as exception:
+            logger.warning(
+                f"Could not deserialize {attr} using {self.inner} "
+                f"due to exception {exception}"
+                f"returning default value {self.load_default}"
+            )
+            return self.load_default
+
+    def _serialize(self, value: Any, attr, obj, **kwargs) -> Any:
+        return self.inner._serialize(value, attr, obj, **kwargs)
+
+
+class ConstantDicomField(AttributeDicomField[Any], fields.Constant):
+    """Field for an attribute always written with the same value.
+
+    The value is checked like any other, so a constant that the attribute
+    cannot hold is refused where it is stated rather than where it is written.
+    """
+
+
+class BytesDicomField(AttributeDicomField[bytes], fields.Raw):
+    """Field for an attribute holding bytes, such as a profile or a table."""
+
+
 class DateTimeDicomField(AttributeDicomField[datetime.datetime]):
     def _serialize(
         self,
@@ -411,7 +479,7 @@ class DateTimeDicomField(AttributeDicomField[datetime.datetime]):
         attr: str | None,
         obj: Any,
         **kwargs,
-    ):
+    ) -> DT | None:
         if value is None:
             return None
         return DT(value)
@@ -428,7 +496,7 @@ class DateTimeDicomField(AttributeDicomField[datetime.datetime]):
 class DateDicomField(AttributeDicomField[datetime.date]):
     def _serialize(
         self, value: datetime.date | None, attr: str | None, obj: Any, **kwargs
-    ):
+    ) -> DA | None:
         if value is None:
             return None
         return DA(value)
@@ -445,7 +513,7 @@ class DateDicomField(AttributeDicomField[datetime.date]):
 class TimeDicomField(AttributeDicomField[datetime.time]):
     def _serialize(
         self, value: datetime.time | None, attr: str | None, obj: Any, **kwargs
-    ):
+    ) -> TM | None:
         if value is None:
             return None
         return TM(value)
@@ -472,7 +540,9 @@ class BooleanDicomField(AttributeDicomField[bool], fields.Boolean):
             falsy = "NO"
         super().__init__(truthy=set([truthy]), falsy=set([falsy]), **kwargs)
 
-    def _serialize(self, value: bool | None, attr: str | None, obj: Any, **kwargs):
+    def _serialize(
+        self, value: bool | None, attr: str | None, obj: Any, **kwargs
+    ) -> str:
         string_value = self.truthy if value else self.falsy
         return list(string_value)[0]
 
@@ -490,7 +560,7 @@ class OffsetInSlideCoordinateSystemDicomField(DatasetDicomField):
         attr: str | None,
         obj: Any,
         **kwargs,
-    ):
+    ) -> list[Dataset] | None:
         origin = value
         if origin is None:
             if self.dump_default is None:
@@ -536,7 +606,9 @@ class OffsetInSlideCoordinateSystemDicomField(DatasetDicomField):
 
 
 class ImageOrientationSlideDicomField(AttributeDicomField[float]):
-    def _serialize(self, value: float | None, attr: str | None, obj: Any, **kwargs):
+    def _serialize(
+        self, value: float | None, attr: str | None, obj: Any, **kwargs
+    ) -> list[float] | None:
         rotation = value
         if rotation is None:
             if self.dump_default is None:
@@ -546,7 +618,6 @@ class ImageOrientationSlideDicomField(AttributeDicomField[float]):
         x = round(math.sin(rotation * math.pi / 180), 8)
         y = round(math.cos(rotation * math.pi / 180), 8)
         orientation = [-x, y, 0, y, x, 0]
-        self._validate_written_value(orientation)
         return orientation
 
     def _deserialize(
@@ -617,39 +688,7 @@ class FlattenOnDumpNestedDicomField(fields.Nested):
     def nested_schema(self) -> Schema:
         return self._nested
 
-    def de_flatten(self, dataset: Dataset) -> Dataset | None:
-        """Create new dataset containing the attributes defined in nested schema."""
-        nested = Dataset()
-        for nested_field in self.nested_schema.fields.values():
-            if nested_field.dump_only:
-                continue
-            if isinstance(nested_field, FlattenOnDumpNestedDicomField):
-                de_flatten_nested_field = nested_field.de_flatten(dataset)
-                if de_flatten_nested_field is not None:
-                    for element in de_flatten_nested_field:
-                        nested.add(element)
-            elif nested_field.data_key is not None and nested_field.data_key in dataset:
-                # The element as it was read, not the value set again: what was
-                # read is not wsidicom's to write, so it is neither remade nor
-                # checked against how the attribute is written.
-                tag = Tag(nested_field.data_key)
-                nested[tag] = dataset[tag]
-        if len(nested) == 0:
-            return None
-        return nested
-
-    def flatten(self, data: dict[str, Any]):
-        """Insert attributes from nested dataset into data."""
-        key = self.name
-        if self.data_key is not None:
-            key = self.data_key
-        assert key is not None
-        nested = data.pop(key, None)
-        if isinstance(nested, Dataset):
-            for nested_key, nested_value in nested.items():
-                data[nested_key] = nested_value  # type: ignore
-
-    def _serialize(self, nested_obj, attr: str | None, obj: Any, **kwargs):
+    def _serialize(self, nested_obj, attr: str | None, obj: Any, **kwargs) -> Any:
         if nested_obj is None and self.dump_default != missing:
             nested_obj = self.dump_default
         return super()._serialize(nested_obj, attr, obj, **kwargs)
@@ -659,16 +698,15 @@ class FloatDicomField(AttributeDicomField[float]):
     def _deserialize(self, value: Any, attr, data, **kwargs) -> float:
         return float(value)
 
-    def _serialize(self, value: float | None, attr: str | None, obj: Any, **kwargs):
+    def _serialize(
+        self, value: float | None, attr: str | None, obj: Any, **kwargs
+    ) -> DSfloat | None:
         if value is None:
             return None
-        # A float of enough digits makes a decimal string too long to be one,
-        # which `DSfloat` gives without complaint, so it is checked here.
         serialized = DSfloat(value)
-        # A float of enough digits makes a decimal string too long to be one,
-        # which raises OverflowError when the element is made, and not the
-        # ValueError everything else raises.
-        self._validate_written_value(serialized)
+        # `DSfloat` hands back what it was given when it cannot make a decimal
+        # string of it, which is never so for a float.
+        assert isinstance(serialized, DSfloat)
         return serialized
 
 
@@ -753,7 +791,6 @@ class SingleCodeSequenceDicomField(AttributeDicomField[CodeType], Generic[CodeTy
         if item is None:
             return None
         items = [item]
-        self._validate_written_value(items)
         return items
 
     def _deserialize(
@@ -779,7 +816,9 @@ class UidDicomField(StringDicomField):
         super().__init__(value_representation=VR.UI, **kwargs)
         self._dump_required = dump_required
 
-    def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs):
+    def _serialize(
+        self, value: Any, attr: str | None, obj: Any, **kwargs
+    ) -> str | None:
         if value is None and self._dump_required:
             raise ValidationError(
                 f"{self.data_key or attr} is a Type 1 DICOM attribute and "
@@ -836,7 +875,6 @@ class PersonNameDicomField(AttributeDicomField[str]):
         # A component longer than a person name allows is governed by pydicom's
         # writing validation mode, which making the element does not consult,
         # so making the element would let it through.
-        self._validate_written_value(serialized)
         return serialized
 
 

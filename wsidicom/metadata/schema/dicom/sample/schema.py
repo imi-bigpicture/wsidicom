@@ -39,13 +39,13 @@ from wsidicom.conceptcode import (
 )
 from wsidicom.config import get_settings
 from wsidicom.metadata.sample import Measurement, SampleLocalization
-from wsidicom.metadata.schema.common import DefaultOnValidationExceptionField
 from wsidicom.metadata.schema.dicom.fields import (
     CodeDicomField,
     CodeItemDicomField,
     ContentItemDicomField,
     DatasetDicomField,
     DateTimeItemDicomField,
+    DefaultOnValidationExceptionField,
     IssuerOfIdentifierDicomField,
     ListDicomField,
     MeasurementItemDicomField,
