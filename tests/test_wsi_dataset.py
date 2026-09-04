@@ -6,7 +6,7 @@ from pydicom import Dataset
 from pydicom.dataelem import DataElement
 from pydicom.sequence import Sequence as DicomSequence
 from pydicom.tag import BaseTag, Tag
-from pydicom.uid import UID, generate_uid
+from pydicom.uid import UID, CTImageStorage, generate_uid
 
 from tests.data_gen import create_main_dataset
 from wsidicom.config import Settings, use_settings
@@ -19,6 +19,7 @@ from wsidicom.options import DicomValueValidationOption
 from wsidicom.tags import (
     LossyImageCompressionRatioTag,
     SharedFunctionalGroupsSequenceTag,
+    SOPInstanceUIDTag,
     TotalPixelMatrixOriginSequenceTag,
 )
 
@@ -477,18 +478,102 @@ class TestWsiDataset:
         # Assert
         assert instance_dataset.as_dataset().ImageType == expected_image_type
 
-    def test_is_supported_wsi_dicom_supported_volume_returns_image_type(self):
+    def test_is_supported_image_type_supported_volume_returns_true(self):
         # Arrange
         dataset = create_main_dataset()
 
         # Act
-        image_type = WsiDataset(dataset).supported_image_type
+        is_supported_image_type = WsiDataset.is_supported_image_type(dataset)
 
         # Assert
-        assert image_type == ImageType.VOLUME
+        assert is_supported_image_type
+
+    def test_is_supported_image_type_answers_from_the_attributes_read_first(self):
+        """The check a reader makes before parsing the rest of a stream.
+
+        It is asked of a dataset holding only what is ordered before SOP Instance
+        UID, so it must not read an attribute ordered after it.
+        """
+        # Arrange
+        source = create_main_dataset()
+        dataset = Dataset()
+        for element in source:
+            if element.tag < SOPInstanceUIDTag:
+                dataset.add(element)
+
+        # Act
+        is_supported_image_type = WsiDataset.is_supported_image_type(dataset)
+
+        # Assert
+        assert is_supported_image_type
+
+    def test_is_supported_image_type_missing_sop_class_uid_returns_false(self):
+        # Arrange
+        dataset = create_main_dataset()
+        del dataset.SOPClassUID
+
+        # Act
+        is_supported_image_type = WsiDataset.is_supported_image_type(dataset)
+
+        # Assert
+        assert not is_supported_image_type
+
+    def test_is_supported_image_type_non_wsi_sop_class_returns_false(self):
+        # Arrange
+        dataset = create_main_dataset()
+        dataset.SOPClassUID = CTImageStorage
+
+        # Act
+        is_supported_image_type = WsiDataset.is_supported_image_type(dataset)
+
+        # Assert
+        assert not is_supported_image_type
+
+    @pytest.mark.parametrize(
+        "image_type",
+        [
+            ["DERIVED", "PRIMARY", "BADFLAVOR", "NONE"],
+            ["DERIVED", "PRIMARY", "LOCALIZER", "RESAMPLED"],
+            ["DERIVED", "PRIMARY"],  # too few values to state a flavour
+        ],
+        ids=["unknown", "localizer", "too-few-values"],
+    )
+    def test_is_supported_image_type_unsupported_image_type_returns_false(
+        self, image_type: Sequence[str]
+    ):
+        # Arrange
+        dataset = create_main_dataset()
+        dataset.ImageType = image_type
+
+        # Act
+        is_supported_image_type = WsiDataset.is_supported_image_type(dataset)
+
+        # Assert
+        assert not is_supported_image_type
+
+    def test_is_supported_image_type_missing_image_type_returns_false(self):
+        # Arrange — answered rather than raised, as a file is turned away by this
+        dataset = create_main_dataset()
+        del dataset.ImageType
+
+        # Act
+        is_supported_image_type = WsiDataset.is_supported_image_type(dataset)
+
+        # Assert
+        assert not is_supported_image_type
+
+    def test_is_supported_supported_volume_returns_true(self):
+        # Arrange
+        dataset = create_main_dataset()
+
+        # Act
+        is_supported = WsiDataset.is_supported(dataset)
+
+        # Assert
+        assert is_supported
 
     @pytest.mark.parametrize("attribute", WsiDataset.REQUIRED_ATTRIBUTES)
-    def test_is_supported_wsi_dicom_missing_required_attribute_returns_none(
+    def test_is_supported_missing_required_attribute_returns_false(
         self, attribute: BaseTag
     ):
         # Arrange
@@ -496,43 +581,43 @@ class TestWsiDataset:
         del dataset[attribute]
 
         # Act
-        image_type = WsiDataset(dataset).supported_image_type
+        is_supported = WsiDataset.is_supported(dataset)
 
         # Assert
-        assert image_type is None
+        assert not is_supported
 
-    def test_is_supported_wsi_dicom_missing_sop_class_uid_returns_none(self):
+    def test_is_supported_missing_sop_class_uid_returns_false(self):
         # Arrange
         dataset = create_main_dataset()
         del dataset.SOPClassUID
 
         # Act
-        image_type = WsiDataset(dataset).supported_image_type
+        is_supported = WsiDataset.is_supported(dataset)
 
         # Assert
-        assert image_type is None
+        assert not is_supported
 
-    def test_is_supported_wsi_dicom_non_wsi_sop_class_returns_none(self):
-        # Arrange
+    def test_is_supported_non_wsi_sop_class_returns_false(self):
+        # Arrange — the only SOP class check a source reading over the web makes
         dataset = create_main_dataset()
-        dataset.SOPClassUID = "1.2.840.10008.5.1.4.1.1.2"  # CT Image Storage
+        dataset.SOPClassUID = CTImageStorage
 
         # Act
-        image_type = WsiDataset(dataset).supported_image_type
+        is_supported = WsiDataset.is_supported(dataset)
 
         # Assert
-        assert image_type is None
+        assert not is_supported
 
-    def test_is_supported_wsi_dicom_unsupported_image_type_returns_none(self):
-        # Arrange
+    def test_is_supported_unsupported_image_type_returns_false(self):
+        # Arrange — answered rather than raised, as an instance is turned away by this
         dataset = create_main_dataset()
         dataset.ImageType = ["DERIVED", "PRIMARY", "BADFLAVOR", "NONE"]
 
         # Act
-        image_type = WsiDataset(dataset).supported_image_type
+        is_supported = WsiDataset.is_supported(dataset)
 
         # Assert
-        assert image_type is None
+        assert not is_supported
 
     @pytest.mark.parametrize(
         ["attribute", "value"],
@@ -543,7 +628,7 @@ class TestWsiDataset:
             ("BitsStored", 16),  # 16-bit color (default dataset is 3 samples)
         ],
     )
-    def test_is_supported_wsi_dicom_unsupported_pixel_format_returns_none(
+    def test_is_supported_unsupported_pixel_format_returns_false(
         self, attribute: str, value: int | str
     ):
         # Arrange
@@ -551,12 +636,12 @@ class TestWsiDataset:
         setattr(dataset, attribute, value)
 
         # Act
-        image_type = WsiDataset(dataset).supported_image_type
+        is_supported = WsiDataset.is_supported(dataset)
 
         # Assert
-        assert image_type is None
+        assert not is_supported
 
-    def test_is_supported_wsi_dicom_16bit_grayscale_returns_image_type(self):
+    def test_is_supported_16bit_grayscale_returns_true(self):
         # Arrange — 16-bit is supported for grayscale, just not for color
         dataset = create_main_dataset()
         dataset.SamplesPerPixel = 1
@@ -565,10 +650,34 @@ class TestWsiDataset:
         dataset.BitsStored = 16
 
         # Act
-        image_type = WsiDataset(dataset).supported_image_type
+        is_supported = WsiDataset.is_supported(dataset)
 
         # Assert
-        assert image_type == ImageType.VOLUME
+        assert is_supported
+
+    @pytest.mark.parametrize(
+        ["attribute", "value"],
+        [
+            ("SOPClassUID", CTImageStorage),
+            ("ImageType", ["DERIVED", "PRIMARY", "LOCALIZER", "RESAMPLED"]),
+        ],
+        ids=["sop-class", "image-type"],
+    )
+    def test_is_supported_image_type_never_accepts_what_is_supported_rejects(
+        self, attribute: str, value: object
+    ):
+        """The early check is a part of the whole one, so it can stand in for it."""
+        # Arrange
+        dataset = create_main_dataset()
+        setattr(dataset, attribute, value)
+
+        # Act
+        is_supported_image_type = WsiDataset.is_supported_image_type(dataset)
+        is_supported = WsiDataset.is_supported(dataset)
+
+        # Assert
+        assert not is_supported
+        assert not is_supported_image_type
 
     def test_as_tiled_full_preserves_xy_origin_and_sets_z(self):
         # Arrange — create_main_dataset has an origin with x=60, y=10, no z.

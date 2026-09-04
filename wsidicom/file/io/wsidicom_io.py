@@ -252,7 +252,9 @@ class WsiDicomIO:
         )
         return dataset, stopped_at
 
-    def read_dataset_from(self, position: int, stop_tag: BaseTag) -> Dataset:
+    def read_dataset_from(
+        self, position: int, stop_tag: BaseTag
+    ) -> tuple[Dataset, BaseTag | None]:
         """Read elements from `position` onwards, stopping at `stop_tag`.
 
         For continuing a read that stopped early. Unlike :func:`read_dataset` and
@@ -270,20 +272,28 @@ class WsiDicomIO:
 
         Returns
         -------
-        Dataset
-            Dataset of the elements between `position` and `stop_tag`.
+        tuple[Dataset, BaseTag | None]
+            Dataset of the elements between `position` and `stop_tag`, and the tag the
+            read stopped at, or None if the stream ended before a tag ordered at or
+            after `stop_tag`.
         """
+        stopped_at: BaseTag | None = None
 
         def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
-            return tag >= stop_tag
+            nonlocal stopped_at
+            if tag < stop_tag:
+                return False
+            stopped_at = tag
+            return True
 
         self.seek(position)
-        return read_elements(
+        dataset = read_elements(
             self._stream,
             self._dicom_io.is_implicit_VR,
             self._dicom_io.is_little_endian,
             stop_when=_stop_at,
         )
+        return dataset, stopped_at
 
     def read_tag(self) -> BaseTag:
         """Read tag from stream."""

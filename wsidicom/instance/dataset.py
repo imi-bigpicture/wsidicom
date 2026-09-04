@@ -182,7 +182,7 @@ class WsiDataset:
     an instance. These are the attributes that are dereferenced unconditionally
     while opening a dataset (identity, image and tile geometry, and pixel
     format). Datasets missing any of these are rejected by
-    `supported_image_type`."""
+    `is_supported`."""
 
     SUPPORTED_PHOTOMETRIC_INTERPRETATIONS: ClassVar[frozenset[str]] = frozenset(
         {
@@ -200,7 +200,7 @@ class WsiDataset:
     see PS3.3 C.8.12.4
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_c.8.12.4.html
     Notably excludes MONOCHROME1, which the IOD does not permit. Datasets with any
-    other value are rejected by `supported_image_type`."""
+    other value are rejected by `is_supported`."""
 
     DEFAULT_Z_OFFSET: ClassVar[float] = 0.0
     """Z offset of a frame that does not state one, which is the focal plane at zero."""
@@ -246,6 +246,104 @@ class WsiDataset:
         come from the readers here.
         """
         return self._dataset
+
+    @classmethod
+    def is_supported_image_type(cls, dataset: Dataset) -> bool:
+        """Whether a dataset is of the WSI SOP class and states a flavour that is read.
+
+        The part of :func:`is_supported` that can be answered from the attributes
+        ordered before ``SOPInstanceUID``, so that a reader working through a stream
+        can turn an instance away without parsing the rest of it. Answers for a
+        dataset holding no more than those attributes, and never accepts what
+        :func:`is_supported` rejects.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to check, holding at least the attributes ordered before
+            ``SOPInstanceUID``.
+
+        Returns
+        -------
+        bool
+            True if the dataset is of the WSI SOP class and states an image type
+            this library reads.
+        """
+        sop_class_uid: UID | None = cls.get_value(dataset, SOPClassUIDTag)
+        if sop_class_uid != VLWholeSlideMicroscopyImageStorage:
+            logger.debug(f"Non-wsi image, SOP class {sop_class_uid}.")
+            return False
+        image_type = cls.get_value(dataset, ImageTypeTag)
+        if image_type is None:
+            logger.debug(f"Missing required attribute {keyword_for_tag(ImageTypeTag)}.")
+            return False
+        try:
+            cls._get_image_type(image_type)
+        except (ValueError, IndexError):
+            logger.debug(f"Non-supported image type {image_type}.")
+            return False
+        return True
+
+    @classmethod
+    def is_supported(cls, dataset: Dataset) -> bool:
+        """Whether a dataset is a WSI instance this library can read.
+
+        False if it is not of the WSI SOP class, if the image type is not one that
+        is read, if it is missing any attribute dereferenced while opening an
+        instance (see ``REQUIRED_ATTRIBUTES``), if the pixel representation or
+        planar configuration is unsupported, if the photometric interpretation is
+        not one the codec handles (e.g. MONOCHROME1), or if it is a non-8-bit
+        colour image.
+
+        This settles whether an instance is read, wherever it was read from. Every
+        attribute it looks at is ordered before the Per Frame Functional Groups
+        Sequence, so a reader that has come that far through a stream can ask.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset to check, holding at least the attributes ordered before the
+            Per Frame Functional Groups Sequence.
+
+        Returns
+        -------
+        bool
+            True if the instance can be read.
+        """
+        if not cls.is_supported_image_type(dataset):
+            return False
+        for tag in cls.REQUIRED_ATTRIBUTES:
+            if tag not in dataset:
+                logger.debug(f"Missing required attribute {keyword_for_tag(tag)}.")
+                return False
+
+        pixel_representation = int(cls.get_value(dataset, PixelRepresentationTag, 0))
+        if pixel_representation != 0:
+            logger.debug(f"Unsupported pixel representation {pixel_representation}.")
+            return False
+        planar_configuration = int(cls.get_value(dataset, PlanarConfigurationTag, 0))
+        if planar_configuration != 0:
+            logger.debug(f"Unsupported planar configuration {planar_configuration}.")
+            return False
+        photometric_interpretation = str(dataset.PhotometricInterpretation)
+        if photometric_interpretation not in cls.SUPPORTED_PHOTOMETRIC_INTERPRETATIONS:
+            logger.debug(
+                f"Unsupported photometric interpretation {photometric_interpretation}."
+            )
+            return False
+        bits_stored = int(dataset.BitsStored)
+        samples_per_pixel = int(dataset.SamplesPerPixel)
+        if bits_stored != 8 and samples_per_pixel != 1:
+            # Non-8-bit is only supported for grayscale. 16-bit color is not
+            # fundamentally hard (the stitch/downsample pipeline handles it), but
+            # no example WSI has been found to test against; would support it if
+            # one turned up.
+            logger.debug(
+                f"Unsupported combination of bits stored {bits_stored} and "
+                f"samples per pixel {samples_per_pixel}."
+            )
+            return False
+        return True
 
     @staticmethod
     def _create_data_element(
@@ -1007,65 +1105,6 @@ class WsiDataset:
             Wsi flavour.
         """
         return self._get_image_type(self._dataset.ImageType)
-
-    @property
-    def supported_image_type(self) -> ImageType | None:
-        """The WSI flavour of this dataset, or None if it is not one to read.
-
-        None if it is not of the WSI SOP class, if it is missing any attribute
-        dereferenced while opening an instance (see ``REQUIRED_ATTRIBUTES``), if
-        the image type is not supported, if the pixel representation or planar
-        configuration is unsupported, if the photometric interpretation is not
-        one the codec handles (e.g. MONOCHROME1), or if it is a non-8-bit colour
-        image.
-        """
-        sop_class_uid: UID | None = self.get_value(self._dataset, SOPClassUIDTag)
-        if sop_class_uid != VLWholeSlideMicroscopyImageStorage:
-            logger.debug(f"Non-wsi image, SOP class {sop_class_uid}.")
-            return None
-
-        for name in self.REQUIRED_ATTRIBUTES:
-            if name not in self._dataset:
-                logger.debug(f"Missing required attribute {keyword_for_tag(name)}.")
-                return None
-
-        try:
-            image_type = self._get_image_type(self._dataset.ImageType)
-        except ValueError:
-            logger.debug(f"Non-supported image type {self._dataset.ImageType}.")
-            return None
-
-        pixel_representation = int(
-            self.get_value(self._dataset, PixelRepresentationTag, 0)
-        )
-        if pixel_representation != 0:
-            logger.debug(f"Unsupported pixel representation {pixel_representation}.")
-            return None
-        planar_configuration = int(
-            self.get_value(self._dataset, PlanarConfigurationTag, 0)
-        )
-        if planar_configuration != 0:
-            logger.debug(f"Unsupported planar configuration {planar_configuration}.")
-            return None
-        photometric_interpretation = str(self._dataset.PhotometricInterpretation)
-        if photometric_interpretation not in self.SUPPORTED_PHOTOMETRIC_INTERPRETATIONS:
-            logger.debug(
-                f"Unsupported photometric interpretation {photometric_interpretation}."
-            )
-            return None
-        bits_stored = int(self._dataset.BitsStored)
-        samples_per_pixel = int(self._dataset.SamplesPerPixel)
-        if bits_stored != 8 and samples_per_pixel != 1:
-            # Non-8-bit is only supported for grayscale. 16-bit color is not
-            # fundamentally hard (the stitch/downsample pipeline handles it), but
-            # no example WSI has been found to test against; would support it if
-            # one turned up.
-            logger.debug(
-                f"Unsupported combination of bits stored {bits_stored} and "
-                f"samples per pixel {samples_per_pixel}."
-            )
-            return None
-        return image_type
 
     @staticmethod
     def check_duplicate_dataset(

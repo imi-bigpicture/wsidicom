@@ -164,8 +164,6 @@ class WsiDicomFileSource(Source):
             return None
         files = sorted(self.readers, key=lambda file: file.frame_count)
         for file in files:
-            if file.image_type is None:
-                continue
             if (
                 file.dataset.tile_type != TileType.SPARSE
                 or file.offset_table_type is None

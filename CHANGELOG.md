@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Parsing of a non-WSI file, or a file with an unsupported image type, is now aborted earlier.
 - Opening a sparse image is now faster and holds less memory. It no longer creates a dataset object for every item of `PerFrameFunctionalGroupsSequence`, which for a slide with many frames was most of the time and memory that opening it took. The tile positions are read out of the sequence directly, and the sequence is parsed as before where they cannot be. `WsiDicomReader.dataset` no longer holds the sequence; `WsiDataset.frame_positions` gives the tile positions.
 - Building the frame index of an image with an offset table is faster. The table is parsed in one pass rather than one frame at a time, and an extended offset table takes its frame lengths from `Extended Offset Table Lengths` rather than deriving them from the distance between offsets. `WsiDicomReader.frame_index` is now a `FrameIndex` rather than a `list`; indexing, length and iteration are unchanged.
 - Opening an image with without offset table is now faster, as pixel data is now read in blocks rather than one frame at a time.

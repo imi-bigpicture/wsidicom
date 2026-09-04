@@ -98,10 +98,8 @@ class WsiDicomWebSource(Source):
             uids: tuple[UID, UID, UID, set[UID] | None],
         ) -> WsiInstance | None:
             study_uid, series_uid, instance_uid, available_transfer_syntaxes = uids
-            dataset = WsiDataset(
-                client.get_instance(study_uid, series_uid, instance_uid)
-            )
-            if dataset.supported_image_type is None:
+            dataset = self._get_dataset(client, study_uid, series_uid, instance_uid)
+            if dataset is None:
                 logger.info(f"Non-supported instance {instance_uid}.")
                 return None
 
@@ -293,3 +291,15 @@ class WsiDicomWebSource(Source):
             ),
             None,
         )
+
+    @staticmethod
+    def _get_dataset(
+        client: WsiDicomWebClient,
+        study_uid: UID,
+        series_uid: UID,
+        instance_uid: UID,
+    ) -> WsiDataset | None:
+        dataset = client.get_instance(study_uid, series_uid, instance_uid)
+        if not WsiDataset.is_supported(dataset):
+            return None
+        return WsiDataset(dataset)

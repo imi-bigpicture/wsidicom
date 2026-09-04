@@ -281,7 +281,7 @@ class TestWsiDicomIO:
         before, _ = io.read_dataset_until(stop_tag=container_identifier_tag)
 
         # Act
-        after = io.read_dataset_from(io.tell(), ExtendedOffsetTableTag)
+        after, _ = io.read_dataset_from(io.tell(), ExtendedOffsetTableTag)
 
         # Assert
         assert container_identifier_tag not in before

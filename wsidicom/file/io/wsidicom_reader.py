@@ -17,7 +17,8 @@
 import logging
 import threading
 
-from pydicom.tag import Tag
+from pydicom.dataset import Dataset
+from pydicom.tag import BaseTag, Tag
 from pydicom.uid import UID
 from upath import UPath
 
@@ -43,12 +44,14 @@ from wsidicom.file.io.per_frame_functional_groups_reader import (
 )
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance import WsiDataset
+from wsidicom.instance.per_frame_group_positions import PerFrameGroupPositions
 from wsidicom.metadata import ImageType
 from wsidicom.tags import (
     DimensionOrganizationTypeTag,
     ExtendedOffsetTableTag,
     NumberOfFramesTag,
     PerFrameFunctionalGroupsSequenceTag,
+    SOPInstanceUIDTag,
     SpecificCharacterSetTag,
 )
 from wsidicom.uid import FileUids
@@ -71,14 +74,13 @@ class WsiDicomReader:
         self._lock = threading.Lock()
         self._stream = stream
         self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
-        self._dataset = self._read_dataset()
-        self._pixel_data_position = self._stream.tell()
-
-        self._image_type = self._dataset.supported_image_type
-        if self._image_type is None:
+        dataset = self._read_dataset()
+        if dataset is None:
             raise WsiDicomNotSupportedError(
                 f"Non-supported file or stream {self._stream}."
             )
+        self._dataset = dataset
+        self._pixel_data_position = self._stream.tell()
         syntax_supported = Codec.is_supported(
             self.transfer_syntax,
             self._dataset.samples_per_pixel,
@@ -92,64 +94,98 @@ class WsiDicomReader:
         self._frame_index_parser: FrameIndexParser | None = None
         self._frame_index: FrameIndex | None = None
 
-    def _read_dataset(self) -> WsiDataset:
+    def _read_dataset(self) -> WsiDataset | None:
         """Read the dataset, leaving the per frame functional groups as bytes.
 
-        The read stops at the sequence, :class:`PerFrameFunctionalGroupsReader` searches
-        its bytes for the tile positions, and the read picks up again after it. If the
-        search cannot be trusted, or there is nothing to find because the image is
-        tiled full, the sequence is read into pydicom datasets instead, so the outcome
-        is the same either way. The stream is left where the pixel data starts,
-        which is only known once the sequence has been passed, one way or the other.
+        Read in parts, so that an instance that is not read is turned away before the
+        rest of it is parsed, and so that the per frame functional groups sequence is
+        searched for the tile positions rather than parsed.
+
+        The stream is left where the pixel data starts, which is only known once the
+        sequence has been passed, one way or the other.
 
         Returns
         -------
-        WsiDataset
-            Dataset, carrying the tile positions if they were found.
+        WsiDataset | None
+            Dataset, carrying the tile positions if they were found, or None if this
+            is not an instance to read.
         """
-        dataset, stopped_at = self._stream.read_dataset_until(
-            stop_tag=PerFrameFunctionalGroupsSequenceTag
+        dataset, _ = self._stream.read_dataset_until(stop_tag=SOPInstanceUIDTag)
+        if not WsiDataset.is_supported_image_type(dataset):
+            return None
+
+        instance_attributes, stopped_at = self._stream.read_dataset_from(
+            self._stream.tell(), PerFrameFunctionalGroupsSequenceTag
         )
-        # The read stops at the first tag ordered at or after the sequence, which need
-        # not be the sequence itself, and the rest of the dataset starts there.
+        for element in instance_attributes:
+            dataset.add(element)
+        if not WsiDataset.is_supported(dataset):
+            return None
+
+        frame_positions, continue_from = self._read_frame_positions(dataset, stopped_at)
+        trailing_attributes, _ = self._stream.read_dataset_from(
+            continue_from, ExtendedOffsetTableTag
+        )
+        for element in trailing_attributes:
+            dataset.add(element)
+        return WsiDataset(dataset, frame_positions)
+
+    def _read_frame_positions(
+        self, dataset: Dataset, stopped_at: BaseTag | None
+    ) -> tuple[PerFrameGroupPositions | None, int]:
+        """Search the bytes of the per frame functional groups for the tile positions.
+
+        Called with the stream at the tag the read of the dataset stopped at, which is
+        the first tag ordered at or after the sequence and need not be the sequence
+        itself. A tiled full image states where its frames are by the order they are
+        in, so its per frame groups hold no tile positions to find, and a full tile
+        index would not ask for them if they did.
+
+        Where there is nothing to find, or the search cannot be trusted, the read is
+        to carry on from the sequence rather than past it, so that it is read into
+        datasets instead. That is slower and holds more memory, but the outcome is
+        the same either way.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset read so far, for what the search needs to know about the frames.
+        stopped_at: BaseTag | None
+            Tag the read of the dataset stopped at, or None if the stream ended.
+
+        Returns
+        -------
+        tuple[PerFrameGroupPositions | None, int]
+            Tile positions if they were found, and the offset the rest of the dataset
+            is to be read from.
+        """
         continue_from = self._stream.tell()
-        frame_positions = None
-        # A tiled full image states where its frames are by the order they are in, so
-        # its per frame groups hold no tile positions to find, and a full tile index
-        # would not ask for them if they did.
         tiled_full = (
             WsiDataset.get_value(dataset, DimensionOrganizationTypeTag) == "TILED_FULL"
         )
-        if stopped_at == PerFrameFunctionalGroupsSequenceTag and not tiled_full:
-            reader = PerFrameFunctionalGroupsReader(
+        if stopped_at != PerFrameFunctionalGroupsSequenceTag or tiled_full:
+            return None, continue_from
+        reader = PerFrameFunctionalGroupsReader(
+            self._stream,
+            continue_from,
+            int(WsiDataset.get_value(dataset, NumberOfFramesTag, 0) or 0),
+            self._transfer_syntax_uid,
+            specific_character_set=WsiDataset.get_value(
+                dataset, SpecificCharacterSetTag
+            ),
+        )
+        try:
+            frame_positions = reader.read_positions()
+        except UnscannablePerFrameGroupsException as exception:
+            logger.debug(
+                "Could not find the tile positions of %s in the bytes of the per "
+                "frame functional groups sequence (%s). Reading the sequence into "
+                "datasets instead, which is slower and holds more memory.",
                 self._stream,
-                continue_from,
-                int(WsiDataset.get_value(dataset, NumberOfFramesTag, 0) or 0),
-                self._transfer_syntax_uid,
-                specific_character_set=WsiDataset.get_value(
-                    dataset, SpecificCharacterSetTag
-                ),
+                exception,
             )
-            try:
-                frame_positions = reader.read_positions()
-            except UnscannablePerFrameGroupsException as exception:
-                # Carry on from the sequence rather than past it, so that it is read.
-                logger.debug(
-                    "Could not find the tile positions of %s in the bytes of the per "
-                    "frame functional groups sequence (%s). Reading the sequence into "
-                    "datasets instead, which is slower and holds more memory.",
-                    self._stream,
-                    exception,
-                )
-            else:
-                continue_from = reader.end_of_sequence
-
-        # The rest of the dataset: the sequence when its bytes were not enough, and
-        # whatever is between it and the pixel data.
-        rest = self._stream.read_dataset_from(continue_from, ExtendedOffsetTableTag)
-        for element in rest:
-            dataset.add(element)
-        return WsiDataset(dataset, frame_positions)
+            return None, continue_from
+        return frame_positions, reader.end_of_sequence
 
     def __enter__(self):
         return self
@@ -173,8 +209,8 @@ class WsiDicomReader:
         return self._dataset
 
     @property
-    def image_type(self) -> ImageType | None:
-        return self._image_type
+    def image_type(self) -> ImageType:
+        return self._dataset.image_type
 
     @property
     def uids(self) -> FileUids:
