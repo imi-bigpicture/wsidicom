@@ -921,19 +921,27 @@ class IssuerOfIdentifierDicomField(DatasetDicomField):
 
 
 class PixelSpacingDicomField(AttributeDicomField[SizeMm | None]):
-    def _serialize(self, value: SizeMm | None, attr: str | None, obj: Any, **kwargs):
+    def _serialize(
+        self, value: SizeMm | None, attr: str | None, obj: Any, **kwargs
+    ) -> list[DSfloat] | None:
         if value is None:
             return None
-        spacing = [DSfloat(value.width, True), DSfloat(value.height, True)]
-        self._validate_written_value(spacing)
-        return spacing
+        # The row spacing first and the column spacing second, which is the
+        # spacing down the image and then the spacing across it.
+        height = DSfloat(value.height, True)
+        width = DSfloat(value.width, True)
+        # `DSfloat` hands back what it was given when it cannot make a decimal
+        # string of it, which is never so for a float.
+        assert isinstance(height, DSfloat) and isinstance(width, DSfloat)
+        return [height, width]
 
     def _deserialize(
         self, value: Sequence[DSfloat] | None, attr, data, **kwargs
     ) -> SizeMm | None:
         if value is None or len(value) == 0:
             return None
-        return SizeMm(value[0], value[1])
+        # Row spacing before column spacing, so the height before the width.
+        return SizeMm(value[1], value[0])
 
 
 class NestedDatasetDicomField(DatasetDicomField[ValueType], fields.Nested):

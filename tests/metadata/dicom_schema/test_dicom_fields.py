@@ -27,6 +27,7 @@ from tests.metadata.dicom_schema.helpers import (
 )
 from wsidicom.conceptcode import UnitCode
 from wsidicom.config import Settings, use_settings
+from wsidicom.geometry import SizeMm
 from wsidicom.metadata.sample import (
     IssuerOfIdentifier,
     LocalIssuerOfIdentifier,
@@ -43,6 +44,8 @@ from wsidicom.metadata.schema.dicom.fields import (
     IssuerOfIdentifierDicomField,
     ListDicomField,
     MeasurementItemDicomField,
+    PixelSpacingDicomField,
+    SingleCodeSequenceDicomField,
     StringDicomField,
     StringItemDicomField,
 )
@@ -463,6 +466,71 @@ class TestDicomFields:
         # Act & Assert
         with pytest.raises(ValueError):
             StringDicomField(VR.ST, data_key="AccessionNumber")
+
+    def test_pixel_spacing_writes_the_row_spacing_first(self):
+        """DICOM states the row spacing before the column spacing.
+
+        The row spacing is the spacing between the centres of adjacent rows,
+        which is down the image, and so the height of a pixel.
+        """
+        # Arrange
+        field = PixelSpacingDicomField(data_key="PixelSpacing")
+        spacing = SizeMm(width=0.1, height=0.9)
+
+        # Act
+        serialized = field._serialize(spacing, "pixel_spacing", None)
+
+        # Assert
+        assert serialized == [0.9, 0.1]
+
+    def test_pixel_spacing_reads_the_row_spacing_first(self):
+        # Arrange
+        field = PixelSpacingDicomField(data_key="PixelSpacing")
+
+        # Act
+        deserialized = field._deserialize([0.9, 0.1], "pixel_spacing", None)
+
+        # Assert
+        assert deserialized == SizeMm(width=0.1, height=0.9)
+
+    @pytest.mark.parametrize("given", [1, 3])
+    def test_field_refuses_the_wrong_number_of_values(self, given: int):
+        """Pixel Spacing holds two values, so one or three is not a spacing."""
+        # Arrange
+        field = PixelSpacingDicomField(data_key="PixelSpacing")
+
+        # Act & Assert
+        with pytest.raises(ValueError):
+            field._validate_written_value([DSfloat(0.1, True)] * given)
+
+    def test_field_accepts_the_number_of_values_the_attribute_holds(self):
+        # Arrange
+        field = PixelSpacingDicomField(data_key="PixelSpacing")
+
+        # Act
+        field._validate_written_value([DSfloat(0.1, True), DSfloat(0.2, True)])
+
+        # Assert
+        # No error is the assertion: two values are what the attribute holds.
+
+    @pytest.mark.parametrize("items", [1, 2, 5])
+    def test_a_sequence_is_one_value_however_many_items_it_holds(self, items: int):
+        """How many items a sequence may hold is not its value multiplicity.
+
+        The data dictionary gives every sequence attribute a multiplicity of
+        one, meaning the one sequence, so counting items against it would refuse
+        every sequence holding more than a single item.
+        """
+        # Arrange
+        field = SingleCodeSequenceDicomField(
+            UnitCode, data_key="MeasurementUnitsCodeSequence"
+        )
+
+        # Act
+        field._validate_written_value([Dataset()] * items)
+
+        # Assert
+        # No error is the assertion.
 
     def test_string_field_without_an_attribute_states_what_it_likes(self):
         """A field that writes no attribute of its own has none to agree with."""
