@@ -16,6 +16,7 @@ from collections.abc import Sequence as TypingSequence
 from io import BytesIO
 
 import pytest
+from decoy import Decoy, matchers
 from pydicom.charset import convert_encodings
 from pydicom.dataset import Dataset
 from pydicom.filebase import DicomBytesIO
@@ -117,6 +118,69 @@ def create_reader(
         transfer_syntax,
         chunk_size=chunk_size,
     )
+
+
+def create_reading_stream(decoy: Decoy, data: bytes) -> tuple[BytesIO, list[int]]:
+    """A mocked stream over `data`, and the sizes of the reads that search it.
+
+    Mocked so that the reads come through something the test holds, and reading
+    real bytes because the reader has to get through the sequence for there to be
+    reads worth looking at. The sizes are collected as they are asked for rather
+    than verified as calls, decoy warning that a rehearsal both stubbed and
+    verified is a misuse of a mock.
+
+    The reads that pick out a tag or a length are a handful of bytes each, while
+    the reads that search the sequence are orders of magnitude larger, so only
+    those above a threshold well over the former are collected.
+    """
+    reading = BytesIO(data)
+    searching_reads: list[int] = []
+
+    def read(size: int = -1) -> bytes:
+        if size > 1024:
+            searching_reads.append(size)
+        return reading.read(size)
+
+    stream = decoy.mock(cls=BytesIO)
+    decoy.when(stream.read(matchers.Anything())).then_do(read)
+    decoy.when(stream.seek(matchers.Anything())).then_do(reading.seek)
+    decoy.when(stream.tell()).then_do(reading.tell)
+    decoy.when(stream.close()).then_do(reading.close)
+    return stream, searching_reads
+
+
+def create_reader_over_mocked_stream(
+    decoy: Decoy,
+    frames: TypingSequence[Dataset],
+    undefined_length: bool = True,
+) -> tuple[PerFrameFunctionalGroupsReader, list[int]]:
+    """Create a reader over a mocked stream holding `frames`.
+
+    Returns
+    -------
+    tuple[PerFrameFunctionalGroupsReader, list[int]]
+        The reader, and the sizes of the reads that search the sequence, which
+        fill as the reader reads.
+    """
+    dataset = Dataset()
+    dataset.PerFrameFunctionalGroupsSequence = Sequence(frames)
+    dataset[PerFrameFunctionalGroupsSequenceTag].is_undefined_length = undefined_length
+    buffer = DicomBytesIO()
+    buffer.is_little_endian = True
+    buffer.is_implicit_VR = False
+    write_dataset(buffer, dataset)
+    stream, searching_reads = create_reading_stream(
+        decoy, buffer.getvalue() + PIXEL_DATA_HEADER
+    )
+    reader = PerFrameFunctionalGroupsReader(
+        WsiDicomIO(
+            stream, filepath=UPath("per_frame.dcm"), transfer_syntax=JPEGBaseline8Bit
+        ),
+        0,
+        len(frames),
+        JPEGBaseline8Bit,
+    )
+    return reader, searching_reads
 
 
 def create_file_without_sequence() -> WsiDicomIO:
@@ -338,6 +402,67 @@ class TestPerFrameFunctionalGroupsReader:
         assert list(positions.rows) == [index + 2 for index in range(frame_count)]
         assert positions.optical_path_identifiers is not None
         assert list(positions.optical_path_identifiers) == ["1"] * frame_count
+
+    def test_first_read_is_sized_from_the_frame_count(self, decoy: Decoy):
+        """A sequence that states no length is read from what the frame count says it
+        should take, rather than by pulling a whole chunk of the file."""
+        # Arrange
+        frame_count = 300
+        frames = [create_frame(column=index + 1, row=1) for index in range(frame_count)]
+        reader, searching_reads = create_reader_over_mocked_stream(decoy, frames)
+        expected = frame_count * PerFrameFunctionalGroupsReader.ESTIMATED_BYTES_PER_ITEM
+        assert expected > PerFrameFunctionalGroupsReader.MINIMUM_CHUNK_SIZE
+
+        # Act
+        positions = reader.read_positions()
+
+        # Assert
+        assert searching_reads == [expected]
+        assert list(positions.columns) == [index + 1 for index in range(frame_count)]
+
+    def test_reads_grow_when_items_are_larger_than_assumed(self, decoy: Decoy):
+        """Assuming too little only costs another read, which asks for twice what the
+        one before it did so that a sequence of large items is not crawled through."""
+        # Arrange
+        frame_count = 300
+        frames = []
+        for index in range(frame_count):
+            frame = create_frame(column=index + 1, row=1)
+            # Padding, so that an item takes well over what is assumed of it.
+            frame.ImageComments = "x" * 800
+            frames.append(frame)
+        reader, searching_reads = create_reader_over_mocked_stream(decoy, frames)
+        expected = frame_count * PerFrameFunctionalGroupsReader.ESTIMATED_BYTES_PER_ITEM
+
+        # Act
+        positions = reader.read_positions()
+
+        # Assert
+        assert searching_reads[:2] == [expected, expected * 2]
+        assert all(
+            size <= PerFrameFunctionalGroupsReader.CHUNK_SIZE
+            for size in searching_reads
+        )
+        assert list(positions.columns) == [index + 1 for index in range(frame_count)]
+
+    def test_sequence_stating_a_length_is_read_to_that_length(self, decoy: Decoy):
+        """A sequence that states a length says exactly how much to read, so the frame
+        count is not guessed from."""
+        # Arrange
+        frame_count = 300
+        frames = [create_frame(column=index + 1, row=1) for index in range(frame_count)]
+        reader, searching_reads = create_reader_over_mocked_stream(
+            decoy, frames, undefined_length=False
+        )
+        estimate = frame_count * PerFrameFunctionalGroupsReader.ESTIMATED_BYTES_PER_ITEM
+
+        # Act
+        positions = reader.read_positions()
+
+        # Assert
+        assert len(searching_reads) == 1
+        assert searching_reads[0] < estimate
+        assert list(positions.columns) == [index + 1 for index in range(frame_count)]
 
 
 @pytest.mark.unittest

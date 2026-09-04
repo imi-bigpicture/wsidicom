@@ -517,7 +517,22 @@ class PerFrameFunctionalGroupsReader:
     """
 
     CHUNK_SIZE: ClassVar[int] = 8 * 1024 * 1024
-    """Bytes read at a time while searching."""
+    """Most bytes read at a time while searching."""
+
+    ESTIMATED_BYTES_PER_ITEM: ClassVar[int] = 320
+    """Bytes a per frame item is assumed to take, sizing the first read of a
+    sequence that states no length.
+
+    The items of a sequence hold the same elements as each other, so their size barely
+    varies within an instance and the frame count bounds the sequence well. The value
+    is deliberately above the largest seen rather than close to the average: reading
+    less than the sequence only costs another turn of the loop, while reading more
+    costs bytes that are never searched.
+    """
+
+    MINIMUM_CHUNK_SIZE: ClassVar[int] = 64 * 1024
+    """Fewest bytes read at a time, so that an instance of very few frames does not
+    read a byte at a time."""
 
     SEQUENCE_DELIMITER: ClassVar[bytes] = struct.pack(
         "<HHI", SequenceDelimiterTag.group, SequenceDelimiterTag.element, 0
@@ -790,14 +805,29 @@ class PerFrameFunctionalGroupsReader:
             None if sequence_length is None else buffer_file_position + sequence_length
         )
 
+        # A sequence that states no length says nothing about how much to read, but
+        # its items are alike, so the frame count bounds it. Starting from that bound
+        # rather than from a whole chunk keeps a short sequence from pulling megabytes
+        # that are never searched, and doubling from it keeps an instance whose items
+        # are larger than assumed from crawling through the sequence.
+        delimited_bytes_to_read = min(
+            self._chunk_size,
+            max(
+                self.MINIMUM_CHUNK_SIZE,
+                self._frame_count * self.ESTIMATED_BYTES_PER_ITEM,
+            ),
+        )
+
         self._file.seek(buffer_file_position)
         buffer = b""
         while True:
-            bytes_to_read = (
-                self._chunk_size
-                if unread_bytes is None
-                else min(self._chunk_size, unread_bytes)
-            )
+            if unread_bytes is not None:
+                bytes_to_read = min(self._chunk_size, unread_bytes)
+            else:
+                bytes_to_read = delimited_bytes_to_read
+                delimited_bytes_to_read = min(
+                    self._chunk_size, delimited_bytes_to_read * 2
+                )
             chunk = self._file.read(bytes_to_read) if bytes_to_read > 0 else b""
             if unread_bytes is not None:
                 unread_bytes -= len(chunk)
