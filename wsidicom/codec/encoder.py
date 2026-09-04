@@ -310,7 +310,7 @@ class PillowEncoder(Encoder[JpegSettings | Jpeg2kSettings]):
             image.save(
                 buffer,
                 format=self._format,
-                **self._pillow_settings,  # type: ignore
+                **self._pillow_settings,
             )
             return buffer.getvalue()
 

@@ -4,5 +4,6 @@
   "venv": ".venv",
   "pythonVersion": "3.10",
   "reportMissingImports": "error",
-  "reportUnusedImport": "warning"
+  "reportUnusedImport": "warning",
+  "reportUnnecessaryTypeIgnoreComment": "error"
 }

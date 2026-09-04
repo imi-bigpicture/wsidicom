@@ -76,38 +76,38 @@ logger = logging.getLogger(__name__)
 
 
 class SampleCodes:
-    identifier: Code = codes.DCM.SpecimenIdentifier  # type: ignore
-    issuer_of_identifier: Code = codes.DCM.IssuerOfSpecimenIdentifier  # type: ignore
-    processing_type: Code = codes.DCM.ProcessingType  # type: ignore
-    sampling_method: Code = codes.DCM.SamplingMethod  # type: ignore
-    datetime_of_processing: Code = codes.DCM.DatetimeOfProcessing  # type: ignore
-    processing_description: Code = codes.DCM.ProcessingStepDescription  # type: ignore
-    parent_specimen_identifier: Code = codes.DCM.ParentSpecimenIdentifier  # type: ignore
+    identifier: Code = codes.DCM.SpecimenIdentifier
+    issuer_of_identifier: Code = codes.DCM.IssuerOfSpecimenIdentifier
+    processing_type: Code = codes.DCM.ProcessingType
+    sampling_method: Code = codes.DCM.SamplingMethod
+    datetime_of_processing: Code = codes.DCM.DatetimeOfProcessing
+    processing_description: Code = codes.DCM.ProcessingStepDescription
+    parent_specimen_identifier: Code = codes.DCM.ParentSpecimenIdentifier
     issuer_of_parent_specimen_identifier: Code = (
         codes.DCM.IssuerOfParentSpecimenIdentifier
-    )  # type: ignore
-    parent_specimen_type: Code = codes.DCM.ParentSpecimenType  # type: ignore
-    specimen_type: Code = codes.SCT.SpecimenType  # type: ignore
-    specimen_collection: Code = codes.SCT.SpecimenCollection  # type: ignore
-    sampling_of_tissue_specimen: Code = codes.SCT.SamplingOfTissueSpecimen  # type: ignore
-    sample_processing: Code = codes.SCT.SpecimenProcessing  # type: ignore
-    staining: Code = codes.SCT.Staining  # type: ignore
-    using_substance: Code = codes.SCT.UsingSubstance  # type: ignore
-    fixative: Code = codes.SCT.TissueFixative  # type: ignore
-    embedding: Code = codes.SCT.TissueEmbeddingMedium  # type: ignore
-    location_frame_of_reference: Code = codes.DCM.PositionFrameOfReference  # type: ignore
-    location_of_sampling_site: Code = codes.DCM.LocationOfSamplingSite  # type: ignore
-    location_of_sampling_site_x: Code = codes.DCM.LocationOfSamplingSiteXOffset  # type: ignore
-    location_of_sampling_site_y: Code = codes.DCM.LocationOfSamplingSiteYOffset  # type: ignore
-    location_of_sampling_site_z: Code = codes.DCM.LocationOfSamplingSiteZOffset  # type: ignore
-    location_of_specimen: Code = codes.DCM.LocationOfSpecimen  # type: ignore
-    location_of_specimen_x: Code = codes.DCM.LocationOfSpecimenXOffset  # type: ignore
-    location_of_specimen_y: Code = codes.DCM.LocationOfSpecimenYOffset  # type: ignore
-    location_of_specimen_z: Code = codes.DCM.LocationOfSpecimenZOffset  # type: ignore
-    visual_marking_of_specimen: Code = codes.DCM.VisualMarkingOfSpecimen  # type: ignore
-    container: Code = codes.SCT.SpecimenContainer  # type: ignore
-    receiving: Code = codes.SCT.SpecimenReceiving  # type: ignore
-    storage: Code = codes.DCM.SpecimenStorage  # type: ignore
+    )
+    parent_specimen_type: Code = codes.DCM.ParentSpecimenType
+    specimen_type: Code = codes.SCT.SpecimenType
+    specimen_collection: Code = codes.SCT.SpecimenCollection
+    sampling_of_tissue_specimen: Code = codes.SCT.SamplingOfTissueSpecimen
+    sample_processing: Code = codes.SCT.SpecimenProcessing
+    staining: Code = codes.SCT.Staining
+    using_substance: Code = codes.SCT.UsingSubstance
+    fixative: Code = codes.SCT.TissueFixative
+    embedding: Code = codes.SCT.TissueEmbeddingMedium
+    location_frame_of_reference: Code = codes.DCM.PositionFrameOfReference
+    location_of_sampling_site: Code = codes.DCM.LocationOfSamplingSite
+    location_of_sampling_site_x: Code = codes.DCM.LocationOfSamplingSiteXOffset
+    location_of_sampling_site_y: Code = codes.DCM.LocationOfSamplingSiteYOffset
+    location_of_sampling_site_z: Code = codes.DCM.LocationOfSamplingSiteZOffset
+    location_of_specimen: Code = codes.DCM.LocationOfSpecimen
+    location_of_specimen_x: Code = codes.DCM.LocationOfSpecimenXOffset
+    location_of_specimen_y: Code = codes.DCM.LocationOfSpecimenYOffset
+    location_of_specimen_z: Code = codes.DCM.LocationOfSpecimenZOffset
+    visual_marking_of_specimen: Code = codes.DCM.VisualMarkingOfSpecimen
+    container: Code = codes.SCT.SpecimenContainer
+    receiving: Code = codes.SCT.SpecimenReceiving
+    storage: Code = codes.DCM.SpecimenStorage
 
 
 class SampleLocalizationDicomSchema(ItemSequenceDicomSchema[SampleLocalization]):

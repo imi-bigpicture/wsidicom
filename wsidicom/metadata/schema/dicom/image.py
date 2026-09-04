@@ -47,7 +47,6 @@ from wsidicom.metadata.schema.dicom.fields import (
     NestedDatasetDicomField,
     OffsetInSlideCoordinateSystemDicomField,
     PixelSpacingDicomField,
-    StringDicomField,
     TimeDicomField,
 )
 from wsidicom.metadata.schema.dicom.schema import (
@@ -130,11 +129,6 @@ class PixelMeasureDicomSchema(DicomSchema[PixelMeasureDicomModel]):
     @property
     def load_type(self) -> type[PixelMeasureDicomModel]:
         return PixelMeasureDicomModel
-
-
-class LossyCompressionDicomSchema:
-    method = StringDicomField(VR.CS)
-    ratio = FloatDicomField(value_representation=VR.DS)
 
 
 class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):

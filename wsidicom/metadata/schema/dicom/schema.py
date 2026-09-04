@@ -37,7 +37,6 @@ from wsidicom.conceptcode import dataset_to_code
 from wsidicom.metadata.sample import Measurement
 from wsidicom.metadata.schema.common import LoadingSchema, LoadType
 from wsidicom.metadata.schema.dicom.fields import (
-    AttributeDicomField,
     ContentItemDicomField,
     FlattenOnDumpNestedDicomField,
 )
@@ -93,20 +92,19 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
             if isinstance(field, FlattenOnDumpNestedDicomField):
                 self._flatten(data, field)
             data_key = field.data_key
-            if (
-                data_key is not None
-                and data_key in data
-                and data[data_key] is None
-                and not (
-                    isinstance(field, AttributeDicomField) and field.writes_when_empty
-                )
-            ):
-                # Remove empty non-defaulting fields
-                data.pop(data_key)
+            if data_key is not None and data.get(data_key) is None:
+                # A field gives nothing for an attribute it does not write,
+                # having already settled whether one with no value is written.
+                # Taken out whether it is there or not, as a schema of its own
+                # may have taken it out first.
+                data.pop(data_key, None)
         dataset = Dataset()
         for key, value in data.items():
             try:
                 if not isinstance(value, DataElement):
+                    # A field building the dataset of a sequence item gives the
+                    # items rather than the element holding them, and a
+                    # sequence is written as a sequence and nothing else.
                     tag = Tag(key)
                     value = DataElement(
                         tag,
@@ -130,8 +128,7 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
 
     @classmethod
     def _flatten(
-        cls,
-        data: dict[str | BaseTag, Any], field: FlattenOnDumpNestedDicomField
+        cls, data: dict[str | BaseTag, Any], field: FlattenOnDumpNestedDicomField
     ) -> None:
         """Put what a nested schema made in with what this schema made.
 
@@ -151,8 +148,7 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
 
     @classmethod
     def _de_flatten(
-        cls,
-        dataset: Dataset, field: FlattenOnDumpNestedDicomField
+        cls, dataset: Dataset, field: FlattenOnDumpNestedDicomField
     ) -> Dataset | None:
         """Take back out of a dataset what a nested schema is to be loaded from.
 
@@ -207,7 +203,7 @@ class ModuleDicomSchema(DicomSchema[LoadType]):
     def load(self, data: Dataset, **kwargs) -> LoadType:
         """Load dataset to LoadType. Return default LoadType if validation error."""
         try:
-            return super().load(data, **kwargs)  # type: ignore
+            return super().load(data, **kwargs)
         except ValidationError:
             logger.warning(
                 f"Failed to load module {self.module_name} with schema {self}.",

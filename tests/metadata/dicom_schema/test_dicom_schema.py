@@ -533,7 +533,7 @@ class TestDicomSchema:
             for field in schema().fields.values()
             if isinstance(field.data_key, str)
             and (tag := tag_for_keyword(field.data_key)) is not None
-            and (vr := getattr(field, "_value_representation", None)) is not None
+            and (vr := getattr(field, "value_representation", None)) is not None
         ]
 
         # Assert

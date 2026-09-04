@@ -71,7 +71,10 @@ class LabelOnlyDicomSchema(LabelBaseDicomSchema):
 
     @post_dump
     def post_dump(self, data: dict[str, Any], **kwargs):
-        if data["LabelText"] is None and data["BarcodeValue"] is None:
+        if all(
+            data[key] is None or data[key].value is None
+            for key in ("LabelText", "BarcodeValue")
+        ):
             data.pop("LabelText")
             data.pop("BarcodeValue")
         return super().post_dump(data, **kwargs)

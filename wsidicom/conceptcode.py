@@ -176,7 +176,7 @@ class ConceptCode:
 
 
 class SingleConceptCode(ConceptCode):
-    """Code for concepts  # type: ignore that only allow a single item"""
+    """Code for concepts that only allow a single item."""
 
     @classmethod
     def from_ds(cls: type[ConceptCodeType], ds: Dataset) -> Optional["ConceptCodeType"]:
@@ -201,7 +201,7 @@ class SingleConceptCode(ConceptCode):
 
 
 class MultipleConceptCode(ConceptCode):
-    """Code for concepts  # type: ignore that allow multiple items"""
+    """Code for concepts that allow multiple items."""
 
     @classmethod
     def from_ds(cls: type[ConceptCodeType], ds: Dataset) -> list[ConceptCodeType]:
@@ -226,7 +226,7 @@ class MultipleConceptCode(ConceptCode):
 
 
 class CidConceptCode(ConceptCode):
-    """Code for concepts  # type: ignore defined in Context groups"""
+    """Code for concepts defined in Context groups."""
 
     cid: ClassVar[dict[str, Code]]
 
@@ -396,7 +396,7 @@ class AnnotationCategoryCode(CidConceptCode, SingleConceptCode):
     """
 
     sequence_name = "AnnotationPropertyCategoryCodeSequence"
-    cid = codes.cid7150.concepts  # type: ignore
+    cid = codes.cid7150.concepts
 
 
 class IlluminationCode(CidConceptCode, MultipleConceptCode):
@@ -406,7 +406,7 @@ class IlluminationCode(CidConceptCode, MultipleConceptCode):
     """
 
     sequence_name = "IlluminationTypeCodeSequence"
-    cid = codes.cid8123.concepts  # type: ignore
+    cid = codes.cid8123.concepts
 
 
 class LenseCode(CidConceptCode, MultipleConceptCode):
@@ -416,7 +416,7 @@ class LenseCode(CidConceptCode, MultipleConceptCode):
     """
 
     sequence_name = "LensesCodeSequence"
-    cid = codes.cid8121.concepts  # type: ignore
+    cid = codes.cid8121.concepts
 
 
 class LightPathFilterCode(CidConceptCode, MultipleConceptCode):
@@ -426,7 +426,7 @@ class LightPathFilterCode(CidConceptCode, MultipleConceptCode):
     """
 
     sequence_name = "LightPathFilterTypeStackCodeSequence"
-    cid = codes.cid8124.concepts  # type: ignore
+    cid = codes.cid8124.concepts
 
 
 class ImagePathFilterCode(CidConceptCode, MultipleConceptCode):
@@ -436,7 +436,7 @@ class ImagePathFilterCode(CidConceptCode, MultipleConceptCode):
     """
 
     sequence_name = "ImagePathFilterTypeStackCodeSequence"
-    cid = codes.cid8124.concepts  # type: ignore
+    cid = codes.cid8124.concepts
 
 
 class IlluminationColorCode(CidConceptCode, SingleConceptCode):
@@ -446,7 +446,7 @@ class IlluminationColorCode(CidConceptCode, SingleConceptCode):
     """
 
     sequence_name = "IlluminationColorCodeSequence"
-    cid = codes.cid8122.concepts  # type: ignore
+    cid = codes.cid8122.concepts
 
 
 class IlluminatorCode(CidConceptCode, SingleConceptCode):
@@ -456,7 +456,7 @@ class IlluminatorCode(CidConceptCode, SingleConceptCode):
     """
 
     sequence_name = "IlluminatorTypeCodeSequence"
-    cid = codes.cid8125.concepts  # type: ignore
+    cid = codes.cid8125.concepts
 
 
 class ChannelDescriptionCode(CidConceptCode, MultipleConceptCode):
@@ -466,62 +466,62 @@ class ChannelDescriptionCode(CidConceptCode, MultipleConceptCode):
     """
 
     sequence_name = "ChannelDescriptionCodeSequence"
-    cid = codes.cid8122.concepts  # type: ignore
+    cid = codes.cid8122.concepts
 
 
 class SpecimenCollectionProcedureCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8109.concepts  # type: ignore
+    cid = codes.cid8109.concepts
 
 
 class SpecimenSamplingProcedureCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8110.concepts  # type: ignore
+    cid = codes.cid8110.concepts
 
 
 class SpecimenPreparationProcedureCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8111.concepts  # type: ignore
+    cid = codes.cid8111.concepts
 
 
 class SpecimenStainsCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8112.concepts  # type: ignore
+    cid = codes.cid8112.concepts
 
 
 class SpecimenPreparationStepsCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8113.concepts  # type: ignore
+    cid = codes.cid8113.concepts
 
 
 class SpecimenFixativesCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8114.concepts  # type: ignore
+    cid = codes.cid8114.concepts
 
 
 class SpecimenEmbeddingMediaCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8115.concepts  # type: ignore
+    cid = codes.cid8115.concepts
 
 
 class AnatomicPathologySpecimenTypesCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8103.concepts  # type: ignore
+    cid = codes.cid8103.concepts
 
 
 class ContainerComponentTypeCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8102.concepts  # type: ignore
+    cid = codes.cid8102.concepts
 
 
 class ContainerTypeCode(CidConceptCode, SingleConceptCode):
     sequence_name = "ConceptCodeSequence"
-    cid = codes.cid8101.concepts  # type: ignore
+    cid = codes.cid8101.concepts
 
 
 class ContributingEquipmentPurposeCode(CidConceptCode, SingleConceptCode):
     sequence_name = "PurposeOfReferenceCodeSequence"
-    cid = codes.cid7005.concepts  # type: ignore
+    cid = codes.cid7005.concepts
 
 
 class ConceptNameCode(SingleConceptCode):

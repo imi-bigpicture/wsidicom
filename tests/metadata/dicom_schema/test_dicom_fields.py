@@ -277,7 +277,7 @@ class TestDicomFields:
 
         # Act
 
-        serialized = field.serialize("attribute", {"attribute": value})
+        serialized = field._serialize(value, "attribute", None)
 
         # Assert
         assert serialized == value
@@ -297,7 +297,7 @@ class TestDicomFields:
         with use_settings(
             Settings(truncate_long_dicom_strings_on_validation_error=True)
         ):
-            serialized = field.serialize("attribute", {"attribute": value})
+            serialized = field._serialize(value, "attribute", None)
 
         # Assert
         assert serialized == value[:maximum_allowed_length]
@@ -319,7 +319,7 @@ class TestDicomFields:
         field = StringDicomField(VR.CS)
 
         # Act
-        serialized = field.serialize("attribute", {"attribute": value})
+        serialized = field._serialize(value, "attribute", None)
 
         # Assert
         assert serialized == expected

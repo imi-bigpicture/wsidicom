@@ -37,7 +37,7 @@ from marshmallow import (
 from marshmallow.types import StrSequenceOrSet
 from pydicom import DataElement, Dataset
 from pydicom import Sequence as DicomSequence
-from pydicom.config import RAISE
+from pydicom.config import IGNORE, RAISE
 from pydicom.datadict import (
     dictionary_VR,
     get_entry,
@@ -154,6 +154,7 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
             value_representation
         )
         self._value_multiplicity = self._resolve_value_multiplicity()
+        self._tag = Tag(self.data_key) if isinstance(self.data_key, str) else None
 
     def _resolve_value_multiplicity(self) -> tuple[str, int, int | None] | None:
         """How many values the attribute this writes holds.
@@ -219,7 +220,7 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
         return of_the_attribute
 
     @property
-    def writes_when_empty(self) -> bool:
+    def _writes_when_empty(self) -> bool:
         """Whether the attribute is written even when there is no value."""
         return self._default_if_none is not None
 
@@ -232,7 +233,7 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
     ) -> Any:
         """The value to write, which is the default when the object has none."""
         value = super().get_value(obj, attr, accessor=accessor, default=default)
-        if not self.writes_when_empty or not self._is_empty(value):
+        if not self._writes_when_empty or not self._is_empty(value):
             return value
         # An attribute written empty is written with no value at all, which is
         # what None is once the value is being written rather than given.
@@ -255,13 +256,31 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
         Wraps whatever the field made of the value, so that every field writing
         an attribute is checked the one way and none has to remember to do it.
 
-        What comes back is what the attribute is written from, which is not the
-        type the field loads: a field taking a code writes the dataset of one,
-        and a field taking a size writes the two numbers of it.
+        What comes back is the element, made with the value representation the
+        field settled when it was made rather than one looked up again: an
+        attribute written as one of two is settled here and nowhere else.
+        None when there is nothing to write.
         """
         value = super().serialize(attr, obj, accessor, **kwargs)
         self._validate_written_value(value)
-        return value
+        if self._tag is None:
+            # A field that writes no attribute of its own makes part of what
+            # the field holding it writes, and that field asks it for what it
+            # made rather than for an element. Being asked for one here means
+            # it was put where a field writing an attribute belongs.
+            raise ValueError(
+                f"{type(self).__name__} names no attribute, so it has no "
+                "element to make. A field that writes one is given a data_key."
+            )
+        if self._is_empty(value) and not self._writes_when_empty:
+            # Nothing to write, and not an attribute written with no value.
+            return None
+        return DataElement(
+            self._tag,
+            self.value_representation,
+            None if self._is_empty(value) else value,
+            validation_mode=IGNORE,
+        )
 
     def _check_how_many(self, given: int) -> None:
         """Check how many values were given against how many the attribute holds.
@@ -936,7 +955,7 @@ class PixelSpacingDicomField(AttributeDicomField[SizeMm | None]):
         return [height, width]
 
     def _deserialize(
-        self, value: Sequence[DSfloat] | None, attr, data, **kwargs
+        self, value: Sequence[float] | None, attr, data, **kwargs
     ) -> SizeMm | None:
         if value is None or len(value) == 0:
             return None
