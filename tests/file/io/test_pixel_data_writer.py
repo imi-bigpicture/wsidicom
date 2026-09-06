@@ -22,6 +22,7 @@ from pydicom import Sequence as DicomSequence
 from pydicom.dataset import Dataset
 from pydicom.tag import ItemTag, SequenceDelimiterTag
 from pydicom.uid import (
+    UID,
     ExplicitVRLittleEndian,
     JPEGBaseline8Bit,
     VLWholeSlideMicroscopyImageStorage,
@@ -29,7 +30,7 @@ from pydicom.uid import (
 )
 
 from wsidicom.file import WsiDicomStreamOpener
-from wsidicom.file.io import OffsetTableType, WsiDicomIO
+from wsidicom.file.io import OffsetTableType, WsiDicomWriteIO
 from wsidicom.file.io.wsidicom_writer import (
     EncapsulatedPixelDataWriter,
     NativePixelDataWriter,
@@ -40,7 +41,7 @@ from wsidicom.instance.dataset import WsiDataset
 ITEM_HEADER_SIZE = 8  # 4-byte tag + 4-byte length
 
 
-def _open_stream(filepath: Path, transfer_syntax) -> WsiDicomIO:
+def _open_stream(filepath: Path, transfer_syntax: UID) -> WsiDicomWriteIO:
     return WsiDicomStreamOpener().open_for_writing(filepath, "w+b", transfer_syntax)
 
 
