@@ -16,11 +16,12 @@ import math
 import os
 from collections.abc import Sequence
 from pathlib import Path
+from typing import BinaryIO
 
 import numpy as np
 import pytest
 from pydicom import Sequence as DicomSequence
-from pydicom.dataset import Dataset
+from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.tag import ItemTag, SequenceDelimiterTag
 from pydicom.uid import (
     UID,
@@ -43,7 +44,11 @@ from wsidicom.file.io import (
 from wsidicom.file.io.deferred_dataset_reader import FileDeferredDatasetReader
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
-from wsidicom.file.io.wsidicom_io import WsiDicomIO, WsiDicomWriteIO
+from wsidicom.file.io.wsidicom_io import (
+    StreamStart,
+    WsiDicomIO,
+    WsiDicomWriteIO,
+)
 from wsidicom.file.io.wsidicom_writer import EncapsulatedPixelDataWriter
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.instance import ImageData
@@ -51,6 +56,20 @@ from wsidicom.instance.dataset import WsiDataset
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 
 SLIDE_FOLDER = Path(os.environ.get("WSIDICOM_TESTDIR", "tests/testdata/slides"))
+
+
+class WsiDicomTestReadIO(WsiDicomReadIO):
+    """Read stream over a written stream holding pixel data alone.
+
+    The written stream has no preamble or file meta information, so there is
+    nothing at its start to read the transfer syntax from and it is given instead.
+    """
+
+    def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID):
+        file_meta_info = FileMetaDataset()
+        file_meta_info.TransferSyntaxUID = transfer_syntax
+        self._stream_start = StreamStart(file_meta_info, 0)
+        WsiDicomIO.__init__(self, stream, filepath, transfer_syntax)
 
 
 class WsiDicomTestReader(WsiDicomReader):
@@ -99,7 +118,9 @@ class WsiDicomTestReader(WsiDicomReader):
         tile_size: Size,
         samples_per_pixel: int,
     ) -> "WsiDicomTestReader":
-        stream = WsiDicomIO(open(filepath, "rb"), UPath(filepath), transfer_syntax)
+        stream = WsiDicomTestReadIO(
+            open(filepath, "rb"), UPath(filepath), transfer_syntax
+        )
         return cls(
             stream, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
         )
