@@ -15,12 +15,12 @@
 """Module with base IO class for handling DICOM WSI files."""
 
 import struct
+import threading
 from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from datetime import datetime
-from functools import cached_property
 from struct import pack
-from typing import Any, BinaryIO, ClassVar
+from typing import Any, BinaryIO, ClassVar, NamedTuple
 
 from fsspec.implementations.local import LocalFileSystem
 from pydicom import DataElement, Dataset, FileMetaDataset
@@ -29,6 +29,7 @@ from pydicom.dataelem import RawDataElement, convert_raw_data_element
 from pydicom.errors import InvalidDicomError
 from pydicom.filebase import DicomIO
 from pydicom.filereader import (
+    _is_implicit_vr,
     _read_file_meta_info,
     data_element_generator,
     read_partial,
@@ -53,37 +54,45 @@ from wsidicom.tags import (
 )
 
 
+class StreamStart(NamedTuple):
+    """What reading the start of a stream gives.
+
+    Reading the file meta information is what finds where the dataset after it
+    starts, so the two are found together and kept together.
+    """
+
+    file_meta_info: FileMetaDataset
+    """File meta information of the stream."""
+
+    dataset_position: int
+    """Offset the dataset starts at, past the preamble and the file meta information."""
+
+
 class WsiDicomIO:
     """Class for reading or writing DICOM WSI to stream."""
 
     UNDEFINED_LENGTH: ClassVar[int] = 0xFFFFFFFF
     """Length stated by an item or a sequence that is delimited instead."""
 
-    def __init__(
-        self,
-        stream: BinaryIO,
-        filepath: UPath,
-        transfer_syntax: UID | None = None,
-    ):
-        """
-        Create a WsiDicomIO.
+    def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID):
+        """Create a stream over a DICOM file or buffer.
 
         Parameters
         ----------
         stream: BinaryIO
             Stream to use.
         filepath: UPath
-            Filepath the stream is backed by. Every stream wsidicom opens is
-            backed by a re-openable file, so this is required.
-        transfer_syntax: UID | None = None
-            Transfer syntax of the stream. If None, read from the file meta.
+            Path the stream is over. Used for error messages and for opening a
+            second stream over the same file, so this is required.
+        transfer_syntax: UID
+            Transfer syntax the stream is read and written with.
         """
         self._stream = stream
         self._stream.seek(0)
         self._filepath = filepath
         self._dicom_io = DicomIO(self._stream)
-        if transfer_syntax is None:
-            transfer_syntax = UID(self.file_meta_info.TransferSyntaxUID)
+        self._lock = threading.RLock()
+        self._transfer_syntax = transfer_syntax
         self._dicom_io.is_little_endian = transfer_syntax.is_little_endian
         self._dicom_io.is_implicit_VR = transfer_syntax.is_implicit_VR
         self.__enter__()
@@ -97,6 +106,17 @@ class WsiDicomIO:
     def __str__(self) -> str:
         return f"{type(self).__name__}({self._filepath})"
 
+    @contextmanager
+    def exclusive(self) -> Generator[None, None, None]:
+        """Hold the stream, for a read or a write that seeks before it.
+
+        The position is the stream's own, so two of those at once would each move
+        the other's. Re-entrant, so that one can be made of others without every
+        one of them having to know which of them holds it.
+        """
+        with self._lock:
+            yield
+
     @property
     def closed(self) -> bool:
         """Return True if the stream is closed."""
@@ -106,6 +126,11 @@ class WsiDicomIO:
     def filepath(self) -> UPath:
         """Return the filepath the stream is backed by."""
         return self._filepath
+
+    @property
+    def transfer_syntax(self) -> UID:
+        """Return the transfer syntax the stream is read and written with."""
+        return self._transfer_syntax
 
     @contextmanager
     def buffered(self, buffer_bytes: int) -> Generator[BinaryIO, None, None]:
@@ -137,10 +162,6 @@ class WsiDicomIO:
             yield buffered
 
     @property
-    def write(self) -> Callable[[bytes], int]:
-        return self._stream.write
-
-    @property
     def seek(self):
         return self._stream.seek
 
@@ -164,6 +185,134 @@ class WsiDicomIO:
     def stream(self):
         return self._stream
 
+    def read(self, size: int, need_exact_length: bool = False) -> bytes:
+        """Read bytes from stream."""
+        data = self._stream.read(size)
+        if need_exact_length and len(data) != size:
+            raise EOFError()
+        return data
+
+    def read_tag(self) -> BaseTag:
+        """Read tag from stream."""
+        return Tag(self._dicom_io.read_tag())
+
+    def read_tag_length(self, long: bool) -> int:
+        """Read tag length."""
+        if not long and not self._dicom_io.is_implicit_VR:
+            return self._dicom_io.read_US()
+        return self._dicom_io.read_UL()
+
+    def read_tag_vr(self) -> bytes | None:
+        """Read tag VR if implicit VR."""
+        if not self._dicom_io.is_implicit_VR:
+            vr = self.stream.read(4)
+            return vr[0:2]
+        return None
+
+    def read_UL(self) -> int:
+        """Read unsigned long integer (32 bits)."""
+        return self._dicom_io.read_UL()
+
+    def check_tag_and_length(
+        self, tag: BaseTag, length: int, with_vr: bool, long: bool
+    ) -> None:
+        """Check if tag at position is expected tag with expected length.
+
+        Parameters
+        ----------
+        tag: BaseTag
+            Expected tag.
+        length: int
+            Expected length.
+        with_vr: bool
+            If tag is expected to have VR.
+        long: bool
+            If length is expected to be long.
+
+        """
+        try:
+            read_tag = self._dicom_io.read_tag()
+            if tag != read_tag:
+                raise WsiDicomFileError(
+                    str(self), f"Found tag {read_tag} expected {tag}."
+                )
+            if with_vr:
+                if self._dicom_io.is_implicit_VR:
+                    raise WsiDicomFileError(str(self), "Expected VR, but implicit VR.")
+                self.read_tag_vr()
+            read_length = self.read_tag_length(long)
+            if length != read_length:
+                raise WsiDicomFileError(
+                    str(self), f"Found length {read_length} expected {length}."
+                )
+        except struct.error:
+            raise WsiDicomFileError(str(self), "Failed to unpack data.") from None
+
+    def close(self) -> None:
+        """Close stream."""
+        self._stream.close()
+
+
+class WsiDicomReadIO(WsiDicomIO):
+    """Stream a DICOM file is read from.
+
+    The file meta information states what the transfer syntax is, so it is read when
+    the stream is opened, which is also what finds where the dataset after it starts.
+    """
+
+    def __init__(self, stream: BinaryIO, filepath: UPath):
+        """Create a stream to read a DICOM file over.
+
+        Parameters
+        ----------
+        stream: BinaryIO
+            Stream to use.
+        filepath: UPath
+            Path the stream is over. Used for error messages and for opening a
+            second stream over the same file, so this is required.
+        """
+        self._stream_start = self._read_stream_start(stream, filepath)
+        super().__init__(
+            stream,
+            filepath,
+            UID(self._stream_start.file_meta_info.TransferSyntaxUID),
+        )
+
+    @property
+    def stream_start(self) -> StreamStart:
+        """What reading the start of the stream gave when it was opened."""
+        return self._stream_start
+
+    @staticmethod
+    def _read_stream_start(stream: BinaryIO, filepath: UPath) -> StreamStart:
+        """Read the preamble and the file meta information from the start of a stream.
+
+        The stream is left where it was. Read before the stream is one of these, what
+        it holds being what states how the rest of the stream is to be read.
+
+        Parameters
+        ----------
+        stream: BinaryIO
+            Stream to read.
+        filepath: UPath
+            Path the stream is over, for the error message.
+
+        Returns
+        -------
+        StreamStart
+            File meta information of the stream, and where the dataset starts.
+        """
+        stream.seek(0)
+        try:
+            read_preamble(stream, False)
+            return StreamStart(_read_file_meta_info(stream), stream.tell())
+        except InvalidDicomError:
+            raise WsiDicomFileError(
+                str(filepath), "is not a DICOM file or stream."
+            ) from None
+        finally:
+            stream.seek(0)
+
     @property
     def is_dicom(self):
         rewind = self.tell()
@@ -178,20 +327,10 @@ class WsiDicomIO:
         """Read Media Storage SOP Class UID from file meta info."""
         return self.file_meta_info.MediaStorageSOPClassUID
 
-    @cached_property
+    @property
     def file_meta_info(self) -> FileMetaDataset:
         """Read file meta info from stream."""
-        self.seek(0)
-        try:
-            read_preamble(self._stream, False)
-            file_meta_info = _read_file_meta_info(self._stream)
-        except InvalidDicomError:
-            raise WsiDicomFileError(
-                str(self), "is not a DICOM file or stream."
-            ) from None
-        finally:
-            self.seek(0)
-        return file_meta_info
+        return self.stream_start.file_meta_info
 
     def read_dataset(self, force: bool = False) -> Dataset:
         """Read the entire dataset from the stream.
@@ -213,56 +352,43 @@ class WsiDicomIO:
             force=force,
         )
 
-    def read_dataset_until(self, stop_tag: BaseTag, force: bool = False) -> Dataset:
-        """Read dataset from start of stream, stopping at `stop_tag`.
+    def read_elements_until(
+        self, stop_tag: BaseTag, into: dict[BaseTag, DataElement | RawDataElement]
+    ) -> BaseTag | None:
+        """Read from the start of the stream into `into`, stopping at `stop_tag`.
 
-        The stream is left positioned at the tag that stopped the read, so a caller that
-        stops early can carry on from there.
+        For a dataset read in parts, where the parts are made into one dataset by
+        :func:`make_dataset` once the last of them has been read. The elements are
+        kept as they were read, so that their values are made against the character
+        set of the whole rather than against the one the part holding them had.
 
         Parameters
         ----------
         stop_tag: BaseTag
-            First tag not to read. Stopping at the extended offset table leaves out the
-            pixel data; stopping at the Per Frame Functional Groups Sequence leaves that
-            sequence unparsed as well.
-        force: bool = False
-            Read the dataset even if the stream is not a valid DICOM stream.
+            First tag not to read.
+        into: dict[BaseTag, DataElement | RawDataElement]
+            Elements read so far, which the elements read here are added to.
 
         Returns
         -------
-        Dataset
-            Dataset of the elements before `stop_tag`.
+        BaseTag | None
+            The tag the read stopped at, or None if the stream ended before a tag
+            ordered at or after `stop_tag`.
         """
-
-        def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
-            return tag >= stop_tag
-
-        self.seek(0)
-        dataset = read_partial(
-            self._stream,
-            _stop_at,
-            defer_size=None,
-            force=force,
-            specific_tags=None,
+        return self.read_elements_from(
+            self.stream_start.dataset_position, stop_tag, into
         )
-        return dataset
 
-    def read_dataset_into(
-        self, position: int, stop_tag: BaseTag, into: Dataset
+    def read_elements_from(
+        self,
+        position: int,
+        stop_tag: BaseTag,
+        into: dict[BaseTag, DataElement | RawDataElement],
     ) -> BaseTag | None:
-        """Read elements from `position` onwards into `into`, stopping at `stop_tag`.
+        """Read elements from `position` into `into`, stopping at `stop_tag`.
 
-        For continuing a read that stopped early. Unlike :func:`read_dataset` and
-        :func:`read_dataset_until` this reads elements and nothing else: the preamble
-        and file meta information are not read again, so there is nothing to carry a
-        file name and its file meta information. There is no header to read past, so
-        there is nothing for a force flag to force.
-
-        The elements go into a dataset already read rather than into one of their
-        own, a dataset read in parts being one dataset and not several. They are put
-        in as they were read, so what they hold is made of them against the
-        character set of `into` rather than against a character set of their own,
-        which a part read after the one stating it would not have.
+        For carrying on a read of a dataset read in parts. There is no header to read
+        past, the elements being read straight from `position`.
 
         Parameters
         ----------
@@ -270,8 +396,8 @@ class WsiDicomIO:
             Offset of the first element to read.
         stop_tag: BaseTag
             First tag not to read.
-        into: Dataset
-            Dataset to read the elements into.
+        into: dict[BaseTag, DataElement | RawDataElement]
+            Elements read so far, which the elements read here are added to.
 
         Returns
         -------
@@ -289,15 +415,72 @@ class WsiDicomIO:
             return True
 
         self.seek(position)
-        read = read_elements(
+        # What the stream states it is need not be what it is, so the first bytes
+        # are looked at the way pydicom looks at them when it reads a dataset.
+        is_implicit_value_representation = _is_implicit_vr(
+            self._stream,
+            self._dicom_io.is_implicit_VR,
+            self._dicom_io.is_little_endian,
+            _stop_at,
+            is_sequence=False,
+        )
+        self.seek(position)
+        for element in data_element_generator(
+            self._stream,
+            is_implicit_value_representation,
+            self._dicom_io.is_little_endian,
+            stop_when=_stop_at,
+        ):
+            into[element.tag] = element
+        return stopped_at
+
+    def read_dataset_from(
+        self, position: int, stop_tag: BaseTag, into: Dataset | None = None
+    ) -> Dataset:
+        """Read elements from `position` onwards into `into`, stopping at `stop_tag`.
+
+        For continuing a read that stopped early. Unlike :func:`read_dataset` and
+        :func:`read_dataset_until` this reads elements and nothing else: the preamble
+        and file meta information are not read again, so there is nothing to carry a
+        file name and its file meta information. There is no header to read past, so
+        there is nothing for a force flag to force.
+
+        The elements go into the dataset given, so that a dataset read in parts is
+        one dataset and not several, or into one of their own when none is given.
+        They are put in as they were read, so what they hold is made of them against
+        the character set of the dataset they end up in rather than against one of
+        their own, which a part read after the one stating it would not have.
+
+        Parameters
+        ----------
+        position: int
+            Offset of the first element to read.
+        stop_tag: BaseTag
+            First tag not to read.
+        into: Dataset | None = None
+            Dataset to read the elements into, or None for a dataset of their own.
+
+        Returns
+        -------
+        Dataset
+            The dataset the elements were read into.
+        """
+
+        def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
+            return tag >= stop_tag
+
+        self.seek(position)
+        dataset = read_elements(
             self._stream,
             self._dicom_io.is_implicit_VR,
             self._dicom_io.is_little_endian,
             stop_when=_stop_at,
         )
-        for element in read:
-            into.add(element)
-        return stopped_at
+        if into is None:
+            return dataset
+        for element in dataset.elements():
+            into[element.tag] = element
+        return into
 
     def read_sequence(
         self, position: int, defer_size: int
@@ -398,77 +581,17 @@ class WsiDicomIO:
                 self._dicom_io.is_little_endian,
             )
 
-    def read_tag(self) -> BaseTag:
-        """Read tag from stream."""
-        return Tag(self._dicom_io.read_tag())
 
-    def read_tag_length(self, long: bool) -> int:
-        """Read tag length."""
-        if not long and not self._dicom_io.is_implicit_VR:
-            return self._dicom_io.read_US()
-        return self._dicom_io.read_UL()
+class WsiDicomWriteIO(WsiDicomIO):
+    """Stream a DICOM file is written to.
 
-    def read_tag_vr(self) -> bytes | None:
-        """Read tag VR if implicit VR."""
-        if not self._dicom_io.is_implicit_VR:
-            vr = self.stream.read(4)
-            return vr[0:2]
-        return None
+    Opened with the transfer syntax stated, there being nothing to read it from in a
+    file that has not been written yet.
+    """
 
-    def read_UL(self) -> int:
-        """Read unsigned long integer (32 bits)."""
-        return self._dicom_io.read_UL()
-
-    def read(self, size: int, need_exact_length: bool = False) -> bytes:
-        """Read bytes from stream."""
-        data = self._stream.read(size)
-        if need_exact_length and len(data) != size:
-            raise EOFError()
-        return data
-
-    def check_tag_and_length(
-        self, tag: BaseTag, length: int, with_vr: bool, long: bool
-    ) -> None:
-        """Check if tag at position is expected tag with expected length.
-
-        Parameters
-        ----------
-        tag: BaseTag
-            Expected tag.
-        length: int
-            Expected length.
-        with_vr: bool
-            If tag is expected to have VR.
-        long: bool
-            If length is expected to be long.
-
-        """
-        try:
-            read_tag = self._dicom_io.read_tag()
-            if tag != read_tag:
-                raise WsiDicomFileError(
-                    str(self), f"Found tag {read_tag} expected {tag}."
-                )
-            if with_vr:
-                if self._dicom_io.is_implicit_VR:
-                    raise WsiDicomFileError(str(self), "Expected VR, but implicit VR.")
-                self.read_tag_vr()
-            read_length = self.read_tag_length(long)
-            if length != read_length:
-                raise WsiDicomFileError(
-                    str(self), f"Found length {read_length} expected {length}."
-                )
-        except struct.error:
-            raise WsiDicomFileError(str(self), "Failed to unpack data.") from None
-
-    def read_sequence_delimiter(self):
-        """Check if last read tag was a sequence delimiter.
-        Raises WsiDicomFileError otherwise.
-        """
-        TAG_BYTES = 4
-        self.seek(-TAG_BYTES, 1)
-        if self._dicom_io.read_tag() != SequenceDelimiterTag:
-            raise WsiDicomFileError(str(self), "No sequence delimiter tag")
+    @property
+    def write(self) -> Callable[[bytes], int]:
+        return self._stream.write
 
     def write_unsigned_long_long(self, value: int):
         """Write unsigned long long integer (64 bits).
@@ -590,10 +713,6 @@ class WsiDicomIO:
         dataset.add(creation_date)
         dataset.add(creation_time)
         write_dataset(self._dicom_io, dataset)
-
-    def close(self) -> None:
-        """Close stream."""
-        self._stream.close()
 
     def update_dataset(self, dataset_start: int, update: dict[BaseTag, Any]):
         """Update dataset in place.

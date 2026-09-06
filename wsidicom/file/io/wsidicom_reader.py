@@ -15,10 +15,9 @@
 """Module for reading DICOM WSI files."""
 
 import logging
-import threading
 from typing import ClassVar
 
-from pydicom.dataelem import DataElement
+from pydicom.dataelem import DataElement, RawDataElement
 from pydicom.dataset import Dataset
 from pydicom.tag import BaseTag, Tag
 from pydicom.uid import UID
@@ -26,6 +25,7 @@ from upath import UPath
 
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotSupportedError, WsiDicomOutOfBoundsError
+from wsidicom.file.io.deferred_dataset_reader import FileDeferredDatasetReader
 from wsidicom.file.io.deferred_element import DeferredElement
 from wsidicom.file.io.frame_index import (
     BasicOffsetTableFrameIndexParser,
@@ -41,22 +41,14 @@ from wsidicom.file.io.frame_index.tiff import (
     EmptyTiffFrameTagsException,
     TiffFrameIndexParser,
 )
-from wsidicom.file.io.per_frame_functional_groups_reader import (
-    PerFrameFunctionalGroupsReader,
-    UnscannablePerFrameGroupsException,
-)
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomReadIO
 from wsidicom.instance import WsiDataset
-from wsidicom.instance.per_frame_group_positions import PerFrameGroupPositions
 from wsidicom.metadata import ImageType
 from wsidicom.tags import (
-    DimensionOrganizationTypeTag,
     ExtendedOffsetTableTag,
-    NumberOfFramesTag,
     OpticalPathSequenceTag,
     PerFrameFunctionalGroupsSequenceTag,
     SOPInstanceUIDTag,
-    SpecificCharacterSetTag,
 )
 from wsidicom.uid import FileUids
 
@@ -70,26 +62,19 @@ class WsiDicomReader:
     """Values longer than this many bytes are read when they are used rather
     than when the dataset is read."""
 
-    def __init__(self, stream: WsiDicomIO):
+    def __init__(self, stream: WsiDicomReadIO):
         """
         Parse DICOM stream. If valid WSI type read required parameters.
 
         Parameters
         ----------
-        stream: WsiDicomIO
+        stream: WsiDicomReadIO
             File to open.
         """
-        self._lock = threading.Lock()
         self._stream = stream
-        self._deferred_elements: list[DeferredElement] = []
         self._transfer_syntax_uid = UID(self._stream.file_meta_info.TransferSyntaxUID)
-        dataset = self._read_dataset()
-        if dataset is None:
-            raise WsiDicomNotSupportedError(
-                f"Non-supported file or stream {self._stream}."
-            )
-        self._dataset = dataset
-        self._pixel_data_position = self._stream.tell()
+        dataset, self._deferred_reader = self._read_dataset()
+        self._dataset = WsiDataset(dataset, deferred_reader=self._deferred_reader)
         syntax_supported = Codec.is_supported(
             self.transfer_syntax,
             self._dataset.samples_per_pixel,
@@ -103,135 +88,94 @@ class WsiDicomReader:
         self._frame_index_parser: FrameIndexParser | None = None
         self._frame_index: FrameIndex | None = None
 
-    def _read_dataset(self) -> WsiDataset | None:
+    def _read_dataset(self) -> tuple[Dataset, FileDeferredDatasetReader]:
         """Read the dataset, leaving the per frame functional groups as bytes.
 
         Read in parts, so that an instance that is not read is turned away before the
         rest of it is parsed, and so that the per frame functional groups sequence is
         searched for the tile positions rather than parsed.
 
-        The stream is left where the pixel data starts, which is only known once the
-        sequence has been passed, one way or the other.
+        The read stops at the per frame functional groups sequence, and the stream is
+        left there. What follows it, and where the pixel data starts, is read when a
+        frame is.
+
+        The elements are gathered as they are read and made into the dataset once,
+        rather than a part at a time into a dataset that is added to, which costs an
+        insert per element and a dataset per part that is thrown away again.
 
         Returns
         -------
-        WsiDataset | None
-            Dataset, carrying the tile positions if they were found, or None if this
-            is not an instance to read.
+        tuple[Dataset, FileDeferredDatasetReader]
+            The dataset as far as it was read, and a reader for the rest of it.
         """
-        dataset = self._stream.read_dataset_until(stop_tag=SOPInstanceUIDTag)
-        if not WsiDataset.is_supported_image_type(dataset):
-            return None
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+        self._stream.read_elements_until(SOPInstanceUIDTag, elements)
+        if not WsiDataset.is_supported_image_type(elements):
+            raise WsiDicomNotSupportedError(
+                f"{self._stream} is not a whole slide image, or is of an image type "
+                f"that is not read."
+            )
 
-        self._stream.read_dataset_into(
-            self._stream.tell(), OpticalPathSequenceTag, dataset
+        self._stream.read_elements_from(
+            self._stream.tell(), OpticalPathSequenceTag, elements
         )
-        continue_from = self._read_optical_paths(dataset)
+        continue_from, deferred_elements = self._read_optical_paths(elements)
 
-        stopped_at = self._stream.read_dataset_into(
-            continue_from, PerFrameFunctionalGroupsSequenceTag, dataset
+        stopped_at = self._stream.read_elements_from(
+            continue_from, PerFrameFunctionalGroupsSequenceTag, elements
         )
-        if not WsiDataset.is_supported(dataset):
-            return None
+        if not WsiDataset.is_supported(elements):
+            raise WsiDicomNotSupportedError(
+                f"{self._stream} is a whole slide image that cannot be read: an "
+                f"attribute it needs is missing, or its pixel format is not "
+                f"supported."
+            )
 
-        frame_positions, continue_from = self._read_frame_positions(dataset, stopped_at)
-        self._stream.read_dataset_into(continue_from, ExtendedOffsetTableTag, dataset)
-        return WsiDataset(dataset, frame_positions, self)
+        if stopped_at == PerFrameFunctionalGroupsSequenceTag:
+            per_frame_position = self._stream.tell()
+            pixel_data_position = None
+        else:
+            self._stream.read_elements_from(
+                self._stream.tell(), ExtendedOffsetTableTag, elements
+            )
+            per_frame_position = None
+            pixel_data_position = self._stream.tell()
+        dataset = WsiDataset.make_dataset(elements, self._stream.transfer_syntax)
+        return dataset, FileDeferredDatasetReader(
+            self._stream,
+            dataset,
+            deferred_elements,
+            per_frame_position,
+            pixel_data_position,
+        )
 
-    def _read_optical_paths(self, dataset: Dataset) -> int:
+    def _read_optical_paths(
+        self, elements: dict[BaseTag, DataElement | RawDataElement]
+    ) -> tuple[int, list[DeferredElement]]:
         """Read the optical path sequence, deferring the values (e.g. ICC profile) that
         are large.
 
         Parameters
         ----------
-        dataset: Dataset
-            Dataset read so far, which the sequence is added to.
+        elements: dict[BaseTag, DataElement | RawDataElement]
+            Elements read so far, which the sequence is added to.
 
         Returns
         -------
-        int
-            Offset the rest of the dataset is to be read from.
+        tuple[int, list[DeferredElement]]
+            Offset the rest of the dataset is to be read from, and the elements
+            whose values were deferred.
         """
         position = self._stream.tell()
         if self._stream.read_tag() != OpticalPathSequenceTag:
-            return position
+            return position, []
         sequence, deferred, end_of_sequence = self._stream.read_sequence(
             position, self.DEFERRED_VALUE_SIZE
         )
-        dataset[OpticalPathSequenceTag] = DataElement(
+        elements[OpticalPathSequenceTag] = DataElement(
             OpticalPathSequenceTag, "SQ", sequence
         )
-        self._deferred_elements.extend(deferred)
-        return end_of_sequence
-
-    def read_deferred_elements(self) -> None:
-        """Read every deferred element into the dataset it belongs in.
-
-        Does nothing once there is nothing left to read, so a caller wanting a whole
-        dataset can ask without first asking whether it is already whole.
-        """
-        with self._lock:
-            while self._deferred_elements:
-                element = self._deferred_elements.pop()
-                self._stream.seek(element.offset)
-                element.set(self._stream.read(element.length, need_exact_length=True))
-
-    def _read_frame_positions(
-        self, dataset: Dataset, stopped_at: BaseTag | None
-    ) -> tuple[PerFrameGroupPositions | None, int]:
-        """Search the bytes of the per frame functional groups for the tile positions.
-
-        Called with the stream at the tag the read of the dataset stopped at, which is
-        the first tag ordered at or after the sequence and need not be the sequence
-        itself. A tiled full image states where its frames are by the order they are
-        in, so its per frame groups hold no tile positions to find, and a full tile
-        index would not ask for them if they did.
-
-        Where there is nothing to find, or the search cannot be trusted, the read is
-        to carry on from the sequence rather than past it, so that it is read into
-        datasets instead. That is slower and holds more memory, but the outcome is
-        the same either way.
-
-        Parameters
-        ----------
-        dataset: Dataset
-            Dataset read so far, for what the search needs to know about the frames.
-        stopped_at: BaseTag | None
-            Tag the read of the dataset stopped at, or None if the stream ended.
-
-        Returns
-        -------
-        tuple[PerFrameGroupPositions | None, int]
-            Tile positions if they were found, and the offset the rest of the dataset
-            is to be read from.
-        """
-        continue_from = self._stream.tell()
-        tiled_full = (
-            WsiDataset.get_value(dataset, DimensionOrganizationTypeTag) == "TILED_FULL"
-        )
-        if stopped_at != PerFrameFunctionalGroupsSequenceTag or tiled_full:
-            return None, continue_from
-        reader = PerFrameFunctionalGroupsReader(
-            self._stream,
-            continue_from,
-            int(WsiDataset.get_value(dataset, NumberOfFramesTag, 0) or 0),
-            self._transfer_syntax_uid,
-            specific_character_set=WsiDataset.get_value(
-                dataset, SpecificCharacterSetTag
-            ),
-        )
-        try:
-            frame_positions = reader.read_positions()
-        except UnscannablePerFrameGroupsException as exception:
-            logger.debug(
-                "Could not find the tile positions of %s in the bytes of the per "
-                "frame functional groups sequence (%s). Reading the sequence into "
-                "datasets instead, which is slower and holds more memory.",
-                self._stream,
-                exception,
-            )
-            return None, continue_from
-        return frame_positions, reader.end_of_sequence
+        return end_of_sequence, deferred
 
     def __enter__(self):
         return self
@@ -242,12 +186,7 @@ class WsiDicomReader:
     @property
     def offset_table_type(self) -> OffsetTableType:
         """Return type of the offset table, or None if not present."""
-        if self._frame_index_parser is None:
-            with self._lock:
-                if self._frame_index_parser is None:
-                    self._frame_index_parser = self._get_frame_index_parser()
-
-        return self._frame_index_parser.offset_table_type
+        return self._frame_index_parser_for_stream.offset_table_type
 
     @property
     def dataset(self) -> WsiDataset:
@@ -276,13 +215,40 @@ class WsiDicomReader:
     @property
     def frame_index(self) -> FrameIndex:
         """Return frame positions and lengths."""
-        if self._frame_index is None:
-            with self._lock:
-                if self._frame_index_parser is None:
-                    self._frame_index_parser = self._get_frame_index_parser()
-                if self._frame_index is None:
-                    self._frame_index = self._frame_index_parser.parse_frame_index()
-        return self._frame_index
+        frame_index = self._frame_index
+        if frame_index is not None:
+            return frame_index
+        with self._stream.exclusive():
+            # Asked again with the stream held, so that two callers at once parse
+            # the index once between them rather than once each.
+            frame_index = self._frame_index
+            if frame_index is None:
+                frame_index = self._frame_index_parser_for_stream.parse_frame_index()
+                self._frame_index = frame_index
+            return frame_index
+
+    @property
+    def _frame_index_parser_for_stream(self) -> FrameIndexParser:
+        """Parser for the frame index of the stream, made when first asked for.
+
+        Making it is what finds where the pixel data starts, which for an instance
+        whose read stopped at the per frame functional groups sequence means reading
+        past that, so it is made once and kept.
+
+        Returns
+        -------
+        FrameIndexParser
+            Parser for the frame index.
+        """
+        parser = self._frame_index_parser
+        if parser is not None:
+            return parser
+        with self._stream.exclusive():
+            parser = self._frame_index_parser
+            if parser is None:
+                parser = self._get_frame_index_parser()
+                self._frame_index_parser = parser
+            return parser
 
     @property
     def frame_count(self) -> int:
@@ -317,17 +283,18 @@ class WsiDicomReader:
                 f"{self.frame_offset + len(self.frame_index) - 1} in file",
             )
         frame_position, frame_length = self.frame_index[index_in_file]
-        with self._lock:
+        with self._stream.exclusive():
             self._stream.seek(frame_position, 0)
             return self._stream.read(frame_length)
 
     def _get_frame_index_parser(self) -> FrameIndexParser:
         """Create frame index for stream."""
-        self._stream.seek(self._pixel_data_position)
+        pixel_data_position = self._deferred_reader.seek_to_pixel_data()
+        self._stream.seek(pixel_data_position)
         if not self.transfer_syntax.is_encapsulated:
             return NativePixelDataFrameIndexParser(
                 self._stream,
-                self._pixel_data_position,
+                pixel_data_position,
                 self._dataset.frame_count,
                 self._dataset.tile_size,
                 self._dataset.samples_per_pixel,
@@ -336,23 +303,23 @@ class WsiDicomReader:
         pixel_data_or_eot_tag = Tag(self._stream.read_tag())
         if pixel_data_or_eot_tag == ExtendedOffsetTableTag:
             return ExtendedOffsetFrameIndexParser(
-                self._stream, self._pixel_data_position, self.frame_count
+                self._stream, pixel_data_position, self.frame_count
             )
         try:
             return BasicOffsetTableFrameIndexParser(
-                self._stream, self._pixel_data_position, self.frame_count
+                self._stream, pixel_data_position, self.frame_count
             )
         except EmptyBasicTableOffsetException:
             pass
 
         try:
             return TiffFrameIndexParser(
-                self._stream, self._pixel_data_position, self.frame_count
+                self._stream, pixel_data_position, self.frame_count
             )
         except EmptyTiffFrameTagsException:
-            self._stream.seek(self._pixel_data_position)
+            self._stream.seek(pixel_data_position)
             return PixelDataFrameIndexParser(
-                self._stream, self._pixel_data_position, self.frame_count
+                self._stream, pixel_data_position, self.frame_count
             )
 
     def close(self) -> None:

@@ -35,7 +35,7 @@ from wsidicom.errors import (
     WsiDicomNotSupportedError,
 )
 from wsidicom.file.io import WsiDicomReader
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomReadIO
 from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.geometry import Size
@@ -51,12 +51,12 @@ logger = logging.getLogger(__name__)
 class WsiDicomFileSource(Source):
     """Source reading WSI DICOM file instances."""
 
-    def __init__(self, streams: Iterable[WsiDicomIO]) -> None:
+    def __init__(self, streams: Iterable[WsiDicomReadIO]) -> None:
         """Create a WsiDicomFileSource.
 
         Parameters
         ----------
-        streams: Iterable[WsiDicomIO]
+        streams: Iterable[WsiDicomReadIO]
             Opened streams to read from.
         """
         super().__init__()
@@ -64,7 +64,7 @@ class WsiDicomFileSource(Source):
         self._labels: list[WsiDicomReader] = []
         self._overviews: list[WsiDicomReader] = []
         self._thumbnails: list[WsiDicomReader] = []
-        self._annotations: list[WsiDicomIO] = []
+        self._annotations: list[WsiDicomReadIO] = []
         for stream in streams:
             try:
                 if (

@@ -14,7 +14,6 @@
 
 import math
 import os
-import threading
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -37,12 +36,14 @@ from upath import UPath
 from wsidicom.codec import Encoder
 from wsidicom.file.io import (
     OffsetTableType,
-    WsiDicomIO,
     WsiDicomReader,
+    WsiDicomReadIO,
     WsiDicomWriter,
 )
+from wsidicom.file.io.deferred_dataset_reader import FileDeferredDatasetReader
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
+from wsidicom.file.io.wsidicom_io import WsiDicomIO, WsiDicomWriteIO
 from wsidicom.file.io.wsidicom_writer import EncapsulatedPixelDataWriter
 from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.instance import ImageData
@@ -57,7 +58,7 @@ class WsiDicomTestReader(WsiDicomReader):
 
     def __init__(
         self,
-        stream: WsiDicomIO,
+        stream: WsiDicomReadIO,
         transfer_syntax: UID,
         frame_count: int,
         bits: int,
@@ -66,7 +67,7 @@ class WsiDicomTestReader(WsiDicomReader):
     ):
         self._stream = stream
         self._frame_count = frame_count
-        self._pixel_data_position = 0
+        self._deferred_elements = []
         self._transfer_syntax_uid = transfer_syntax
         dataset = Dataset()
         dataset.BitsAllocated = (bits // 8) * 8
@@ -77,9 +78,12 @@ class WsiDicomTestReader(WsiDicomReader):
         dataset.NumberOfFrames = frame_count
         dataset.ImageType = ["ORIGINAL", "PRIMARY", "VOLUME", "NONE"]
         self._dataset = WsiDataset(dataset)
+        # No sequence to pass, and the pixel data at the start of the stream.
+        self._deferred_reader = FileDeferredDatasetReader(
+            stream, dataset, [], per_frame_position=None, pixel_data_position=0
+        )
         self._frame_index_parser: FrameIndexParser | None = None
         self._frame_index: FrameIndex | None = None
-        self._lock = threading.Lock()
 
     @property
     def frame_count(self) -> int:
@@ -95,11 +99,7 @@ class WsiDicomTestReader(WsiDicomReader):
         tile_size: Size,
         samples_per_pixel: int,
     ) -> "WsiDicomTestReader":
-        stream = WsiDicomIO(
-            open(filepath, "rb"),
-            transfer_syntax=transfer_syntax,
-            filepath=UPath(filepath),
-        )
+        stream = WsiDicomIO(open(filepath, "rb"), UPath(filepath), transfer_syntax)
         return cls(
             stream, transfer_syntax, frame_count, bits, tile_size, samples_per_pixel
         )
@@ -349,7 +349,7 @@ class TestWsiDicomWriter:
             pixel_data_writer._file.write_UL(0)
 
         # Assert
-        with WsiDicomIO(
+        with WsiDicomWriteIO(
             open(filepath, "rb"),
             filepath=UPath(filepath),
             transfer_syntax=JPEGBaseline8Bit,
@@ -378,9 +378,7 @@ class TestWsiDicomWriter:
                 writer.write_tiles([frame])
 
         with WsiDicomIO(
-            open(filepath, "rb"),
-            filepath=UPath(filepath),
-            transfer_syntax=JPEGBaseline8Bit,
+            open(filepath, "rb"), UPath(filepath), JPEGBaseline8Bit
         ) as read_file:
             for position in writer.frame_positions:
                 read_file.seek(position)
@@ -429,10 +427,9 @@ class TestWsiDicomWriter:
 
         # Assert
         with WsiDicomReader(
-            WsiDicomIO(
+            WsiDicomReadIO(
                 open(filepath, "rb"),
                 filepath=UPath(filepath),
-                transfer_syntax=transfer_syntax,
             )
         ) as read_file:
             for index, frame in enumerate(frames):

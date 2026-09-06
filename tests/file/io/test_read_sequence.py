@@ -18,15 +18,21 @@ from io import BytesIO
 
 import pytest
 from pydicom.dataelem import DataElement
-from pydicom.dataset import Dataset
+from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.filebase import DicomBytesIO
-from pydicom.filewriter import write_dataset
+from pydicom.filewriter import write_dataset, write_file_meta_info
 from pydicom.sequence import Sequence
 from pydicom.tag import Tag
-from pydicom.uid import UID, ExplicitVRLittleEndian, ImplicitVRLittleEndian
+from pydicom.uid import (
+    UID,
+    ExplicitVRLittleEndian,
+    ImplicitVRLittleEndian,
+    VLWholeSlideMicroscopyImageStorage,
+    generate_uid,
+)
 from upath import UPath
 
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomReadIO
 
 OPTICAL_PATH_SEQUENCE_TAG = Tag(0x0048, 0x0105)
 LARGE_VALUE = b"a profile" * 20000
@@ -37,7 +43,7 @@ def create_stream(
     sequence: Sequence,
     undefined_length: bool = True,
     transfer_syntax: UID = ExplicitVRLittleEndian,
-) -> WsiDicomIO:
+) -> WsiDicomReadIO:
     """Write `sequence` as an optical path sequence at the start of a stream."""
     dataset = Dataset()
     dataset[OPTICAL_PATH_SEQUENCE_TAG] = DataElement(
@@ -48,11 +54,25 @@ def create_stream(
     buffer.is_little_endian = transfer_syntax.is_little_endian
     buffer.is_implicit_VR = transfer_syntax.is_implicit_VR
     write_dataset(buffer, dataset)
-    return WsiDicomIO(
-        BytesIO(buffer.getvalue()),
+    return WsiDicomReadIO(
+        BytesIO(file_meta(transfer_syntax) + buffer.getvalue()),
         filepath=UPath("optical_path.dcm"),
-        transfer_syntax=transfer_syntax,
     )
+
+
+def file_meta(transfer_syntax: UID) -> bytes:
+    """The preamble and file meta information a stream that is read starts with."""
+    dataset = FileMetaDataset()
+    dataset.TransferSyntaxUID = transfer_syntax
+    dataset.MediaStorageSOPClassUID = VLWholeSlideMicroscopyImageStorage
+    dataset.MediaStorageSOPInstanceUID = generate_uid()
+    header = DicomBytesIO()
+    header.is_little_endian = True
+    header.is_implicit_VR = False
+    header.write(b"\x00" * 128)
+    header.write(b"DICM")
+    write_file_meta_info(header, dataset)
+    return header.getvalue()
 
 
 def create_item(with_nested_sequence: bool = False) -> Dataset:
@@ -75,7 +95,9 @@ class TestReadSequenceDeferringValues:
         stream = create_stream(Sequence([create_item()]), undefined_length)
 
         # Act
-        sequence, deferred, _ = stream.read_sequence(0, DEFER_SIZE)
+        sequence, deferred, _ = stream.read_sequence(
+            stream.stream_start.dataset_position, DEFER_SIZE
+        )
 
         # Assert
         assert [element.keyword for element in sequence[0]] == ["OpticalPathIdentifier"]
@@ -90,7 +112,9 @@ class TestReadSequenceDeferringValues:
         length = len(stream.stream.getvalue())  # type: ignore[attr-defined]
 
         # Act
-        _, _, end_of_sequence = stream.read_sequence(0, DEFER_SIZE)
+        _, _, end_of_sequence = stream.read_sequence(
+            stream.stream_start.dataset_position, DEFER_SIZE
+        )
 
         # Assert
         assert end_of_sequence == length
@@ -110,7 +134,9 @@ class TestReadSequenceDeferringValues:
         )
 
         # Act
-        sequence, deferred, _ = stream.read_sequence(0, DEFER_SIZE)
+        sequence, deferred, _ = stream.read_sequence(
+            stream.stream_start.dataset_position, DEFER_SIZE
+        )
         for value in deferred:
             stream.seek(value.offset)
             value.set(stream.read(value.length, need_exact_length=True))
@@ -126,7 +152,9 @@ class TestReadSequenceDeferringValues:
         stream = create_stream(Sequence([item]))
 
         # Act
-        sequence, deferred, _ = stream.read_sequence(0, DEFER_SIZE)
+        sequence, deferred, _ = stream.read_sequence(
+            stream.stream_start.dataset_position, DEFER_SIZE
+        )
 
         # Assert
         assert sequence[0].ICCProfile == b"small!"
@@ -135,7 +163,9 @@ class TestReadSequenceDeferringValues:
     def test_a_value_passed_over_is_put_back_as_it_was(self):
         # Arrange
         stream = create_stream(Sequence([create_item()]))
-        sequence, deferred, _ = stream.read_sequence(0, DEFER_SIZE)
+        sequence, deferred, _ = stream.read_sequence(
+            stream.stream_start.dataset_position, DEFER_SIZE
+        )
 
         # Act
         for value in deferred:
@@ -151,7 +181,9 @@ class TestReadSequenceDeferringValues:
         than the bytes it was deferred as."""
         # Arrange
         stream = create_stream(Sequence([create_item(with_nested_sequence=True)]))
-        sequence, deferred, _ = stream.read_sequence(0, DEFER_SIZE)
+        sequence, deferred, _ = stream.read_sequence(
+            stream.stream_start.dataset_position, DEFER_SIZE
+        )
         assert {value.value_representation for value in deferred} == {"SQ", "OB"}
 
         # Act

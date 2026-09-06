@@ -29,7 +29,7 @@ from wsidicom.file.io.frame_index.tiff import (
     EmptyTiffFrameTagsException,
     TiffFrameIndexParser,
 )
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomWriteIO
 from wsidicom.tags import PixelDataTag
 
 TILE_OFFSETS_TAG = 324
@@ -42,14 +42,14 @@ SLIDE_SIZE = (200000, 100000)
 
 @pytest.fixture
 def buffer(placeholder_path: UPath):
-    with WsiDicomIO(
+    with WsiDicomWriteIO(
         BytesIO(), filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit
     ) as buffer:
         yield buffer
 
 
 @pytest.fixture
-def write_dual_file(buffer: WsiDicomIO) -> Callable[..., int]:
+def write_dual_file(buffer: WsiDicomWriteIO) -> Callable[..., int]:
     """Return a callable writing a tiff-and-dicom dual file into the buffer.
 
     The callable writes a tiff header and image file directory at the start of the
@@ -97,7 +97,10 @@ def write_dual_file(buffer: WsiDicomIO) -> Callable[..., int]:
 class TestTiffFrameIndexParser:
     @pytest.mark.parametrize("big_tiff", [False, True])
     def test_parse_frame_index_from_tiff_tags(
-        self, buffer: WsiDicomIO, write_dual_file: Callable[..., int], big_tiff: bool
+        self,
+        buffer: WsiDicomWriteIO,
+        write_dual_file: Callable[..., int],
+        big_tiff: bool,
     ):
         # Arrange
         offsets = [1000, 2000, 3000, 4000]
@@ -114,7 +117,7 @@ class TestTiffFrameIndexParser:
 
     def test_parse_frame_index_does_not_open_file_as_image(
         self,
-        buffer: WsiDicomIO,
+        buffer: WsiDicomWriteIO,
         write_dual_file: Callable[..., int],
         monkeypatch: pytest.MonkeyPatch,
     ):
@@ -141,7 +144,7 @@ class TestTiffFrameIndexParser:
         assert list(frame_index) == list(zip(offsets, lengths, strict=True))
 
     def test_parse_frame_index_leaves_decompression_bomb_limit_unchanged(
-        self, buffer: WsiDicomIO, write_dual_file: Callable[..., int]
+        self, buffer: WsiDicomWriteIO, write_dual_file: Callable[..., int]
     ):
         # Arrange
         offsets = [1000, 2000]
@@ -158,7 +161,7 @@ class TestTiffFrameIndexParser:
     @pytest.mark.parametrize("missing_tag", [TILE_OFFSETS_TAG, TILE_BYTE_COUNTS_TAG])
     def test_raises_empty_tiff_frame_tags_when_tag_is_missing(
         self,
-        buffer: WsiDicomIO,
+        buffer: WsiDicomWriteIO,
         write_dual_file: Callable[..., int],
         missing_tag: int,
     ):
@@ -175,7 +178,7 @@ class TestTiffFrameIndexParser:
             TiffFrameIndexParser(buffer, pixel_data_start, len(offsets))
 
     def test_raises_empty_tiff_frame_tags_when_tag_lengths_differ(
-        self, buffer: WsiDicomIO, write_dual_file: Callable[..., int]
+        self, buffer: WsiDicomWriteIO, write_dual_file: Callable[..., int]
     ):
         # Arrange
         offsets = [1000, 2000, 3000]
@@ -200,7 +203,7 @@ class TestTiffFrameIndexParser:
         ],
     )
     def test_raises_empty_tiff_frame_tags_when_not_a_valid_tiff(
-        self, buffer: WsiDicomIO, content: bytes
+        self, buffer: WsiDicomWriteIO, content: bytes
     ):
         # Arrange
         buffer.write(content)

@@ -31,7 +31,7 @@ from tests.data_gen import (
 )
 from wsidicom.errors import WsiDicomError, WsiDicomOutOfBoundsError
 from wsidicom.file.io import OffsetTableType, WsiDicomReader
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomReadIO
 from wsidicom.instance import TileType, WsiDataset
 from wsidicom.metadata import ImageType
 from wsidicom.tags import PerFrameFunctionalGroupsSequenceTag
@@ -87,7 +87,7 @@ def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath(file_setting["name"])
         create_layer_file(path, dataset, meta_dataset)
-        reader = WsiDicomReader(WsiDicomIO(open(path, "rb"), filepath=UPath(path)))
+        reader = WsiDicomReader(WsiDicomReadIO(open(path, "rb"), filepath=UPath(path)))
         yield reader
         reader.close()
 
@@ -102,7 +102,7 @@ def file_with_element_after_sequence(
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath(FILE_SETTINGS[name]["name"])
         create_layer_file(path, dataset, meta_dataset)
-        reader = WsiDicomReader(WsiDicomIO(open(path, "rb"), filepath=UPath(path)))
+        reader = WsiDicomReader(WsiDicomReadIO(open(path, "rb"), filepath=UPath(path)))
         yield reader
         reader.close()
 
@@ -118,7 +118,7 @@ def file_with_unreadable_sequence(meta_dataset: FileMetaDataset):
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath("unreadable_sequence.dcm")
         create_layer_file(path, dataset, meta_dataset)
-        reader = WsiDicomReader(WsiDicomIO(open(path, "rb"), filepath=UPath(path)))
+        reader = WsiDicomReader(WsiDicomReadIO(open(path, "rb"), filepath=UPath(path)))
         yield reader
         reader.close()
 
@@ -133,7 +133,7 @@ def file_without_sequence_with_element_after_it(meta_dataset: FileMetaDataset):
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath("no_sequence.dcm")
         create_layer_file(path, dataset, meta_dataset)
-        reader = WsiDicomReader(WsiDicomIO(open(path, "rb"), filepath=UPath(path)))
+        reader = WsiDicomReader(WsiDicomReadIO(open(path, "rb"), filepath=UPath(path)))
         yield reader
         reader.close()
 
@@ -188,12 +188,12 @@ class TestWWsiDicomReader:
         # Arrange
         path = test_file.filepath
         assert isinstance(path, Path)
-        if settings["tile_type"] is TileType.FULL:
-            # The per frame groups of a tiled full image hold no tile positions, so
-            # there is nothing to read and the sequence is parsed.
-            assert PerFrameFunctionalGroupsSequenceTag in test_file.dataset.as_dataset()
-            return
+        # The sequence holds the tile positions and nothing else that is wanted, so
+        # it is never kept in the dataset, whatever the instance is tiled as.
         assert PerFrameFunctionalGroupsSequenceTag not in test_file.dataset.as_dataset()
+        if settings["tile_type"] is TileType.FULL:
+            # The per frame groups of a tiled full image hold no tile positions.
+            return
 
         # Act
         positions = test_file.dataset.frame_positions
@@ -264,7 +264,24 @@ class TestWWsiDicomReader:
     def test_unreadable_sequence_is_parsed_instead(
         self, file_with_unreadable_sequence: WsiDicomReader
     ):
-        """When the positions cannot be read, the sequence is parsed as it always was."""
+        """Where the bytes cannot be searched, parsing the sequence gives the same."""
+        # Arrange
+        reader = file_with_unreadable_sequence
+        path = reader.filepath
+        assert isinstance(path, Path)
+        parsed = WsiDataset(dcmread(path, stop_before_pixels=True))
+
+        # Act
+        positions = reader.dataset.frame_positions
+
+        # Assert
+        assert list(positions.columns) == list(parsed.frame_positions.columns)
+        assert list(positions.rows) == list(parsed.frame_positions.rows)
+
+    def test_unreadable_sequence_is_not_kept_in_the_dataset(
+        self, file_with_unreadable_sequence: WsiDicomReader
+    ):
+        """Parsed for the positions and let go of, as a searched one is."""
         # Arrange
         reader = file_with_unreadable_sequence
 
@@ -272,7 +289,7 @@ class TestWWsiDicomReader:
         dataset = reader.dataset.as_dataset()
 
         # Assert
-        assert len(dataset.PerFrameFunctionalGroupsSequence) == 2
+        assert PerFrameFunctionalGroupsSequenceTag not in dataset
 
     def test_unreadable_sequence_leaves_pixel_data_findable(
         self, file_with_unreadable_sequence: WsiDicomReader, padded_test_frame: bytes

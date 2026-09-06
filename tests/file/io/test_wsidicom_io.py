@@ -19,13 +19,14 @@ from pathlib import Path
 from typing import BinaryIO
 
 import pytest
-from pydicom import DataElement, Dataset
+from pydicom import DataElement, Dataset, dcmread
+from pydicom.dataelem import RawDataElement
 from pydicom.dataset import FileMetaDataset
 from pydicom.filebase import DicomFileLike
 from pydicom.filereader import _read_file_meta_info, read_preamble
 from pydicom.filewriter import write_file_meta_info
 from pydicom.sequence import Sequence
-from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag, Tag
+from pydicom.tag import BaseTag, ItemTag, Tag
 from pydicom.uid import (
     JPEG2000,
     UID,
@@ -47,7 +48,12 @@ from pydicom.uid import (
 from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import (
+    WsiDicomIO,
+    WsiDicomReadIO,
+    WsiDicomWriteIO,
+)
+from wsidicom.instance.dataset import WsiDataset
 from wsidicom.tags import (
     ExtendedOffsetTableTag,
     LossyImageCompressionRatioTag,
@@ -126,11 +132,7 @@ class TestWsiDicomIO:
         # Arrange
 
         # Act
-        io = WsiDicomIO(
-            buffer,
-            filepath=placeholder_path,
-            transfer_syntax=transfer_syntax,
-        )
+        io = WsiDicomIO(buffer, placeholder_path, transfer_syntax)
 
         # Assert
         assert str(io.filepath) == "placeholder.dcm"
@@ -138,13 +140,11 @@ class TestWsiDicomIO:
         assert io.is_implicit_VR == transfer_syntax.is_implicit_VR
         io.close()
 
-    def test_close(self, buffer: BinaryIO, placeholder_path: UPath):
+    def test_close(
+        self, buffer: BinaryIO, transfer_syntax: UID, placeholder_path: UPath
+    ):
         # Arrange
-        io = WsiDicomIO(
-            buffer,
-            filepath=placeholder_path,
-            transfer_syntax=JPEGBaseline8Bit,
-        )
+        io = WsiDicomIO(buffer, placeholder_path, transfer_syntax)
 
         # Act
         io.close()
@@ -168,7 +168,7 @@ class TestWsiDicomIO:
         placeholder_path: UPath,
     ):
         # Arrange
-        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
 
         # Act
         uid = io.media_storage_sop_class_uid
@@ -193,7 +193,7 @@ class TestWsiDicomIO:
         placeholder_path: UPath,
     ):
         # Arrange
-        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
 
         # Act
         meta_info = io.file_meta_info
@@ -226,7 +226,7 @@ class TestWsiDicomIO:
             little_endian=transfer_syntax.is_little_endian,
             implicit_vr=transfer_syntax.is_implicit_VR,
         )
-        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
 
         # Act
         read_dataset = io.read_dataset()
@@ -235,7 +235,7 @@ class TestWsiDicomIO:
         assert read_dataset == dataset
         io.close()
 
-    def test_read_dataset_stops_at_stop_tag(
+    def test_read_elements_until_stops_at_stop_tag(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
     ):
         # Arrange
@@ -249,16 +249,107 @@ class TestWsiDicomIO:
             little_endian=True,
             implicit_vr=False,
         )
-        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
 
         # Act
-        read_dataset = io.read_dataset_until(
-            stop_tag=PerFrameFunctionalGroupsSequenceTag
+        stopped_at = io.read_elements_until(
+            PerFrameFunctionalGroupsSequenceTag, elements
         )
 
         # Assert
-        assert PerFrameFunctionalGroupsSequenceTag not in read_dataset
-        assert read_dataset.PatientID == "Test123"
+        assert stopped_at == PerFrameFunctionalGroupsSequenceTag
+        assert PerFrameFunctionalGroupsSequenceTag not in elements
+        assert (
+            WsiDataset.make_dataset(elements, io.transfer_syntax).PatientID == "Test123"
+        )
+        io.close()
+
+    def test_read_elements_from_carries_on_from_where_the_read_stopped(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        """Elements the read stopped short of can be picked up from where they start."""
+        # Arrange
+        container_identifier_tag = Tag("ContainerIdentifier")
+        dataset = Dataset()
+        dataset.PatientID = "Test123"
+        dataset.ContainerIdentifier = "Test456"
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+        io.read_elements_until(container_identifier_tag, elements)
+        assert container_identifier_tag not in elements
+
+        # Act
+        io.read_elements_from(io.tell(), ExtendedOffsetTableTag, elements)
+
+        # Assert
+        read = WsiDataset.make_dataset(elements, io.transfer_syntax)
+        assert read.ContainerIdentifier == "Test456"
+        assert read == dataset
+        io.close()
+
+    def test_read_elements_from_makes_values_against_the_character_set_read_before(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        """A part read after the one stating the character set is made against it."""
+        # Arrange
+        series_description = "Gr\u00f6nr\u00f6d v\u00e4vnad"
+        dataset = Dataset()
+        dataset.SpecificCharacterSet = "ISO_IR 192"
+        dataset.PatientID = "Test123"
+        dataset.SeriesDescription = series_description
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        series_description_tag = Tag("SeriesDescription")
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+        io.read_elements_until(series_description_tag, elements)
+        assert series_description_tag not in elements
+
+        # Act
+        io.read_elements_from(io.tell(), ExtendedOffsetTableTag, elements)
+
+        # Assert
+        assert (
+            WsiDataset.make_dataset(elements, io.transfer_syntax).SeriesDescription
+            == series_description
+        )
+        io.close()
+
+    def test_make_dataset_states_how_the_dataset_was_encoded(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        """What a dataset is written back as is what it was read as."""
+        # Arrange
+        dataset = Dataset()
+        dataset.SpecificCharacterSet = "ISO_IR 192"
+        dataset.PatientID = "Test123"
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+        io.read_elements_until(ExtendedOffsetTableTag, elements)
+
+        # Act
+        read = WsiDataset.make_dataset(elements, io.transfer_syntax)
+
+        # Assert
+        assert read.original_encoding == (False, True)
+        assert read.original_character_set == ["UTF8"]
         io.close()
 
     def test_read_dataset_into_reads_elements_after_position_into_a_dataset(
@@ -276,16 +367,49 @@ class TestWsiDicomIO:
             little_endian=True,
             implicit_vr=False,
         )
-        io = WsiDicomIO(buffer_with_file_meta, filepath=placeholder_path)
-        read = io.read_dataset_until(stop_tag=container_identifier_tag)
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+        io.read_elements_until(container_identifier_tag, elements)
+        read = WsiDataset.make_dataset(elements, io.transfer_syntax)
         assert container_identifier_tag not in read
 
         # Act
-        io.read_dataset_into(io.tell(), ExtendedOffsetTableTag, read)
+        io.read_dataset_from(io.tell(), ExtendedOffsetTableTag, read)
 
         # Assert
         assert read.ContainerIdentifier == "Test456"
         assert read == dataset
+        io.close()
+
+    def test_read_dataset_into_makes_values_against_the_character_set_read_before(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        """A part read after the one stating the character set is made against it."""
+        # Arrange
+        series_description = "Gr\u00f6nr\u00f6d v\u00e4vnad"
+        dataset = Dataset()
+        dataset.SpecificCharacterSet = "ISO_IR 192"
+        dataset.PatientID = "Test123"
+        dataset.SeriesDescription = series_description
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        series_description_tag = Tag("SeriesDescription")
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+        io.read_elements_until(series_description_tag, elements)
+        read = WsiDataset.make_dataset(elements, io.transfer_syntax)
+        assert series_description_tag not in read
+        assert read.SpecificCharacterSet == "ISO_IR 192"
+
+        # Act
+        io.read_dataset_from(io.tell(), ExtendedOffsetTableTag, read)
+
+        # Assert
+        assert read.SeriesDescription == series_description
         io.close()
 
     @pytest.mark.parametrize("little_endian", [True, False])
@@ -319,7 +443,7 @@ class TestWsiDicomIO:
             transfer_syntax = ExplicitVRLittleEndian
         else:
             transfer_syntax = ExplicitVRBigEndian
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
         pre_position = io.tell()
@@ -346,7 +470,7 @@ class TestWsiDicomIO:
             transfer_syntax = ImplicitVRLittleEndian
         else:
             transfer_syntax = ExplicitVRLittleEndian
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
         pre_position = io.tell()
@@ -394,7 +518,7 @@ class TestWsiDicomIO:
             buffer.write(bytes("OB", "iso8859"))
             buffer.write(bytes([0, 0]))
         buffer.write(struct.pack(format + "L", length))
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
@@ -442,7 +566,7 @@ class TestWsiDicomIO:
             buffer.write(bytes("OB", "iso8859"))
             buffer.write(bytes([0, 0]))
         buffer.write(struct.pack(format + "L", length))
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
@@ -451,32 +575,6 @@ class TestWsiDicomIO:
             io.check_tag_and_length(
                 expected_tag, expected_length, expected_vr is not None, True
             )
-        io.close()
-
-    def test_read_sequence_delimiter(self, buffer: BinaryIO, placeholder_path: UPath):
-        # Arrange
-        buffer.write(struct.pack("<H", SequenceDelimiterTag.group))
-        buffer.write(struct.pack("<H", SequenceDelimiterTag.element))
-        io = WsiDicomIO(
-            buffer, filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit
-        )
-
-        # Act & Assert
-        io.read_sequence_delimiter()
-
-    def test_read_sequence_delimiter_raises(
-        self, buffer: BinaryIO, placeholder_path: UPath
-    ):
-        # Arrange
-        buffer.write(struct.pack("<H", ItemTag.group))
-        buffer.write(struct.pack("<H", ItemTag.element))
-        io = WsiDicomIO(
-            buffer, filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit
-        )
-
-        # Act & Assert
-        with pytest.raises(WsiDicomFileError):
-            io.read_sequence_delimiter()
         io.close()
 
     @pytest.mark.parametrize("little_endian", [True, False])
@@ -495,7 +593,7 @@ class TestWsiDicomIO:
             transfer_syntax = ExplicitVRLittleEndian
         else:
             transfer_syntax = ExplicitVRBigEndian
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
@@ -529,7 +627,7 @@ class TestWsiDicomIO:
         # Arrange
         format = "<" if transfer_syntax.is_little_endian else ">"
 
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
@@ -563,7 +661,7 @@ class TestWsiDicomIO:
         self, buffer: BinaryIO, transfer_syntax: UID, placeholder_path: UPath
     ):
         # Arrange
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
@@ -599,7 +697,7 @@ class TestWsiDicomIO:
         # Arrange
         instance_uid = generate_uid()
         class_uid = VLWholeSlideMicroscopyImageStorage
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
         )
 
@@ -631,7 +729,7 @@ class TestWsiDicomIO:
         placeholder_path: UPath,
     ):
         # Arrange
-        io = WsiDicomIO(
+        io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit
         )
         dataset = Dataset()
@@ -642,7 +740,7 @@ class TestWsiDicomIO:
         io.update_dataset(0, {LossyImageCompressionRatioTag: update_values})
 
         # Assert
-        io.seek(0)
-        read_dataset = io.read_dataset(True)
+        buffer.seek(0)
+        read_dataset = dcmread(buffer, force=True)
         updated_values = read_dataset.LossyImageCompressionRatio
         assert updated_values == update_values

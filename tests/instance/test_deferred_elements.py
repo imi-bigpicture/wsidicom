@@ -20,28 +20,31 @@ from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence
 from pydicom.tag import Tag
 
-from wsidicom.instance.dataset import WsiDataset
+from wsidicom.instance.dataset import DeferredDatasetReader, WsiDataset
 
 ICC_PROFILE_TAG = Tag(0x0028, 0x2000)
 OPTICAL_PATH_SEQUENCE_TAG = Tag(0x0048, 0x0105)
 PROFILE = b"a profile" * 1000
 
 
-class FakeDeferredElementReader:
+class FakeDeferredDatasetReader(DeferredDatasetReader):
     """Puts a value into the item it belongs in, counting the times it is asked."""
 
     def __init__(self, item: Dataset):
         self._item = item
         self.reads = 0
 
-    def read_deferred_elements(self) -> None:
+    def complete_dataset(self) -> None:
         if ICC_PROFILE_TAG in self._item:
             return
         self.reads += 1
         self._item[ICC_PROFILE_TAG] = DataElement(ICC_PROFILE_TAG, "OB", PROFILE)
 
+    def read_frame_positions(self) -> None:
+        return None
 
-def create_dataset() -> tuple[WsiDataset, FakeDeferredElementReader]:
+
+def create_dataset() -> tuple[WsiDataset, FakeDeferredDatasetReader]:
     """A dataset holding an optical path whose profile was deferred."""
     item = Dataset()
     item.OpticalPathIdentifier = "1"
@@ -49,8 +52,8 @@ def create_dataset() -> tuple[WsiDataset, FakeDeferredElementReader]:
     dataset[OPTICAL_PATH_SEQUENCE_TAG] = DataElement(
         OPTICAL_PATH_SEQUENCE_TAG, "SQ", Sequence([item])
     )
-    reader = FakeDeferredElementReader(item)
-    return WsiDataset(dataset, None, reader), reader
+    reader = FakeDeferredDatasetReader(item)
+    return WsiDataset(dataset, deferred_reader=reader), reader
 
 
 @pytest.mark.unittest

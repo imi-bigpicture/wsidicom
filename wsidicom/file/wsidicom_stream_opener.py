@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module for opening WsiDicomIO instances from streams or files."""
+"""Module for opening WsiDicomReadIO instances from streams or files."""
 
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
@@ -27,7 +27,7 @@ from fsspec.spec import AbstractFileSystem
 from pydicom.uid import UID
 from upath import UPath
 
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomReadIO, WsiDicomWriteIO
 from wsidicom.paths import as_upath
 
 
@@ -50,8 +50,8 @@ class WsiDicomStreamOpener:
         self,
         files: str | Path | UPath | Iterable[str | Path | UPath],
         sop_class_uids: UID | Sequence[UID] | None = None,
-    ) -> Iterator[WsiDicomIO]:
-        """Open DICOM streams in paths and return WsiDicomIO instances.
+    ) -> Iterator[WsiDicomReadIO]:
+        """Open DICOM streams in paths and return WsiDicomReadIO instances.
 
         Parameters
         ----------
@@ -62,8 +62,8 @@ class WsiDicomStreamOpener:
 
         Returns
         -------
-        Iterator[WsiDicomIO]
-            Opened WsiDicomIO instances.
+        Iterator[WsiDicomReadIO]
+            Opened WsiDicomReadIO instances.
         """
         if isinstance(sop_class_uids, UID):
             sop_class_uids = [sop_class_uids]
@@ -72,7 +72,7 @@ class WsiDicomStreamOpener:
         for file in files:
             for stream, filepath in self._open_streams(file, "rb"):
                 try:
-                    dicom_io = WsiDicomIO(stream, filepath=filepath)
+                    dicom_io = WsiDicomReadIO(stream, filepath=filepath)
                     if dicom_io.is_dicom and (
                         sop_class_uids is None
                         or dicom_io.media_storage_sop_class_uid in sop_class_uids
@@ -88,7 +88,7 @@ class WsiDicomStreamOpener:
         path: str | Path | UPath,
         mode: Literal["r+b"] | Literal["w+b"],
         transfer_syntax: UID,
-    ) -> WsiDicomIO:
+    ) -> WsiDicomWriteIO:
         """Open a stream for writing.
 
         Parameters
@@ -102,13 +102,13 @@ class WsiDicomStreamOpener:
 
         Returns
         -------
-        WsiDicomIO
-            Opened WsiDicomIO instance.
+        WsiDicomWriteIO
+            Opened WsiDicomWriteIO instance.
         """
         fs, fs_path, filepath = self._resolve(path)
         fs.makedirs(filepath.parent.path, exist_ok=True)
         stream = self._open_stream(fs, fs_path, mode)
-        return WsiDicomIO(stream, transfer_syntax=transfer_syntax, filepath=filepath)
+        return WsiDicomWriteIO(stream, filepath, transfer_syntax)
 
     def _open_streams(
         self,

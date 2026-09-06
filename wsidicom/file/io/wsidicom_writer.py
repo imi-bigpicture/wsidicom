@@ -31,7 +31,7 @@ from wsidicom.file.io.frame_index import (
     OffsetTableType,
     OffsetTableWriter,
 )
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomWriteIO
 from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.tags import LossyImageCompressionRatioTag, PixelDataTag
@@ -88,7 +88,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 
     def __init__(
         self,
-        file: WsiDicomIO,
+        file: WsiDicomWriteIO,
         offset_table: OffsetTableType,
         transfer_syntax: UID,
     ) -> None:
@@ -228,7 +228,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
         # Replace original with temp
         self._file.close()
         file_path.fs.mv(temp_file_path.path, file_path.path)
-        self._file = next(opener.open([file_path]))
+        self._file = opener.open_for_writing(file_path, "r+b", self._transfer_syntax)
 
     @staticmethod
     def _calculate_size(
@@ -259,7 +259,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 class NativePixelDataWriter(PixelDataWriter):
     """Writes native (uncompressed) pixel data."""
 
-    def __init__(self, file: WsiDicomIO) -> None:
+    def __init__(self, file: WsiDicomWriteIO) -> None:
         self._file = file
 
     def write_pixel_data_start(
@@ -300,7 +300,7 @@ class WsiDicomWriter:
 
     def __init__(
         self,
-        file: WsiDicomIO,
+        file: WsiDicomWriteIO,
         transfer_syntax: UID,
         pixel_data_writer: PixelDataWriter,
     ) -> None:
@@ -423,6 +423,6 @@ class WsiDicomWriter:
     def _open_stream(
         file: UPath,
         transfer_syntax: UID,
-    ) -> WsiDicomIO:
+    ) -> WsiDicomWriteIO:
         """Open file for writing."""
         return WsiDicomStreamOpener().open_for_writing(file, "w+b", transfer_syntax)

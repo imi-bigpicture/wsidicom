@@ -14,17 +14,19 @@
 
 import logging
 import math
+from abc import ABCMeta, abstractmethod
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
-from typing import Any, ClassVar, Protocol
+from typing import Any, ClassVar
 
 import numpy as np
+from pydicom.charset import convert_encodings, default_encoding
 from pydicom.config import RAISE
 from pydicom.datadict import dictionary_VR, keyword_for_tag
-from pydicom.dataelem import DataElement
+from pydicom.dataelem import DataElement, RawDataElement, convert_raw_data_element
 from pydicom.dataset import Dataset
 from pydicom.multival import MultiValue
 from pydicom.sequence import Sequence as DicomSequence
@@ -159,17 +161,25 @@ class ConcatenationPart:
     total: int | None = None
 
 
-class DeferredElementReader(Protocol):
-    """Reads the elements whose values were deferred while reading a dataset."""
+class DeferredDatasetReader(metaclass=ABCMeta):
+    """Reads what was left unread when a dataset was first read."""
 
-    def read_deferred_elements(self) -> None:
-        """Read every deferred element into the dataset it belongs in.
+    @abstractmethod
+    def complete_dataset(self) -> None:
+        """Read everything left unread into the dataset."""
+        raise NotImplementedError()
 
-        Does nothing when there is nothing left to read, so it can be called
-        whenever a whole dataset is wanted without first asking whether it is
-        already whole.
+    @abstractmethod
+    def read_frame_positions(self) -> PerFrameGroupPositions | None:
+        """Read the tile position of every frame.
+
+        Returns
+        -------
+        PerFrameGroupPositions | None
+            Position of every frame, or None where the instance has none, its frames
+            being placed by the order they are in.
         """
-        ...
+        raise NotImplementedError()
 
 
 class WsiDataset:
@@ -222,7 +232,7 @@ class WsiDataset:
         self,
         dataset: Dataset,
         frame_positions: PerFrameGroupPositions | None = None,
-        deferred_element_reader: DeferredElementReader | None = None,
+        deferred_reader: DeferredDatasetReader | None = None,
     ):
         """Create a WSI dataset around a pydicom dataset.
 
@@ -238,12 +248,12 @@ class WsiDataset:
             Tile positions the reader took out of the bytes of the Per Frame Functional
             Groups Sequence, given when it did not have to build a dataset for every
             item. The sequence is then not in the dataset, and these stand in for it.
-        deferred_element_reader: DeferredElementReader | None = None
-            Reader for the elements deferred when the dataset was read.
+        deferred_reader: DeferredDatasetReader | None = None
+            Reader for what was left unread when the dataset was read.
         """
         self._dataset = dataset
         self._frame_positions = frame_positions
-        self._deferred_element_reader = deferred_element_reader
+        self._deferred_reader = deferred_reader
 
     def __deepcopy__(self, memo: dict[int, Any]) -> "WsiDataset":
         """A copy of this holding a copy of the dataset.
@@ -271,14 +281,15 @@ class WsiDataset:
 
     @property
     def _complete_dataset(self) -> Dataset:
-        """The dataset, with every deferred element read into it."""
-        if self._deferred_element_reader is not None:
-            # Reads deferred elements into the dataset.
-            self._deferred_element_reader.read_deferred_elements()
+        """The dataset, with everything left unread read into it."""
+        if self._deferred_reader is not None:
+            self._deferred_reader.complete_dataset()
         return self._dataset
 
     @classmethod
-    def is_supported_image_type(cls, dataset: Dataset) -> bool:
+    def is_supported_image_type(
+        cls, dataset: Dataset | dict[BaseTag, DataElement | RawDataElement]
+    ) -> bool:
         """Whether a dataset is of the WSI SOP class and states a flavour that is read.
 
         The part of :func:`is_supported` that can be answered from the attributes
@@ -315,7 +326,9 @@ class WsiDataset:
         return True
 
     @classmethod
-    def is_supported(cls, dataset: Dataset) -> bool:
+    def is_supported(
+        cls, dataset: Dataset | dict[BaseTag, DataElement | RawDataElement]
+    ) -> bool:
         """Whether a dataset is a WSI instance this library can read.
 
         False if it is not of the WSI SOP class, if the image type is not one that
@@ -331,7 +344,7 @@ class WsiDataset:
 
         Parameters
         ----------
-        dataset: Dataset
+        dataset: Dataset | dict[BaseTag, DataElement | RawDataElement]
             Dataset to check, holding at least the attributes ordered before the
             Per Frame Functional Groups Sequence.
 
@@ -355,14 +368,16 @@ class WsiDataset:
         if planar_configuration != 0:
             logger.debug(f"Unsupported planar configuration {planar_configuration}.")
             return False
-        photometric_interpretation = str(dataset.PhotometricInterpretation)
+        photometric_interpretation = str(
+            cls.get_value(dataset, PhotometricInterpretationTag)
+        )
         if photometric_interpretation not in cls.SUPPORTED_PHOTOMETRIC_INTERPRETATIONS:
             logger.debug(
                 f"Unsupported photometric interpretation {photometric_interpretation}."
             )
             return False
-        bits_stored = int(dataset.BitsStored)
-        samples_per_pixel = int(dataset.SamplesPerPixel)
+        bits_stored = int(cls.get_value(dataset, BitsStoredTag))
+        samples_per_pixel = int(cls.get_value(dataset, SamplesPerPixelTag))
         if bits_stored != 8 and samples_per_pixel != 1:
             # Non-8-bit is only supported for grayscale. 16-bit color is not
             # fundamentally hard (the stitch/downsample pipeline handles it), but
@@ -374,6 +389,39 @@ class WsiDataset:
             )
             return False
         return True
+
+    @classmethod
+    def make_dataset(
+        cls, elements: dict[BaseTag, DataElement | RawDataElement], transfer_syntax: UID
+    ) -> Dataset:
+        """Make the elements of a dataset read in parts into one dataset.
+
+        The character set the dataset states is what its values are made against, so
+        it is set here, once, rather than by each part against what that part held.
+
+        Parameters
+        ----------
+        elements: dict[BaseTag, DataElement | RawDataElement]
+            Elements the dataset is made of.
+
+        Returns
+        -------
+        Dataset
+            Dataset of `elements`.
+        """
+        dataset = Dataset(elements)
+        character_set = dataset.get("SpecificCharacterSet", None)
+        encoding = (
+            convert_encodings(character_set)
+            if character_set is not None
+            else default_encoding
+        )
+        dataset.set_original_encoding(
+            transfer_syntax.is_implicit_VR,
+            transfer_syntax.is_little_endian,
+            encoding,
+        )
+        return dataset
 
     @staticmethod
     def _create_data_element(
@@ -468,7 +516,11 @@ class WsiDataset:
         return WsiDataset(dataset, self._frame_positions)
 
     @staticmethod
-    def get_value(dataset: Dataset, tag: BaseTag, default: Any = None) -> Any:
+    def get_value(
+        dataset: Dataset | dict[BaseTag, DataElement | RawDataElement],
+        tag: BaseTag,
+        default: Any = None,
+    ) -> Any:
         """The value of an attribute of a dataset, or `default` if it is not there.
 
         Asking a dataset for a tag gives the element holding the value, where
@@ -477,7 +529,7 @@ class WsiDataset:
 
         Parameters
         ----------
-        dataset: Dataset
+        dataset: Dataset | dict[BaseTag, DataElement | RawDataElement]
             Dataset to read the attribute from.
         tag: BaseTag
             Tag of the attribute.
@@ -485,10 +537,14 @@ class WsiDataset:
             What to answer with when the dataset does not hold the attribute.
         """
         element = dataset.get(tag, None)
+        if isinstance(element, RawDataElement):
+            element = convert_raw_data_element(element)
         return default if element is None else element.value
 
     @staticmethod
-    def get_optional_sequence(dataset: Dataset, tag: BaseTag) -> DicomSequence | None:
+    def get_optional_sequence(
+        dataset: Dataset | dict[BaseTag, DataElement], tag: BaseTag
+    ) -> DicomSequence | None:
         """The items of a sequence attribute of a dataset, or None if the dataset
         does not hold the attribute.
 
@@ -497,7 +553,7 @@ class WsiDataset:
 
         Parameters
         ----------
-        dataset: Dataset
+        dataset: Dataset | dict[BaseTag, DataElement | RawDataElement]
             Dataset to read the sequence from.
         tag: BaseTag
             Tag of the sequence attribute.
@@ -509,7 +565,9 @@ class WsiDataset:
         return items
 
     @classmethod
-    def get_sequence(cls, dataset: Dataset, tag: BaseTag) -> DicomSequence:
+    def get_sequence(
+        cls, dataset: Dataset | dict[BaseTag, DataElement], tag: BaseTag
+    ) -> DicomSequence:
         """The items of a sequence attribute of a dataset.
 
         Empty when the attribute holds no items and when it is not there at
@@ -518,7 +576,7 @@ class WsiDataset:
 
         Parameters
         ----------
-        dataset: Dataset
+        dataset: Dataset | dict[BaseTag, DataElement]
             Dataset to read the sequence from.
         tag: BaseTag
             Tag of the sequence attribute.
@@ -527,7 +585,9 @@ class WsiDataset:
         return DicomSequence() if items is None else items
 
     @classmethod
-    def get_sequence_item(cls, dataset: Dataset, tag: BaseTag) -> Dataset | None:
+    def get_sequence_item(
+        cls, dataset: Dataset | dict[BaseTag, DataElement], tag: BaseTag
+    ) -> Dataset | None:
         """The first item of a sequence attribute of a dataset, or None if the
         dataset does not hold the attribute or holds it with no items.
 
@@ -542,7 +602,7 @@ class WsiDataset:
 
         Parameters
         ----------
-        dataset: Dataset
+        dataset: Dataset | dict[BaseTag, DataElement]
             Dataset to read the sequence from.
         tag: BaseTag
             Tag of the sequence attribute.
@@ -636,6 +696,8 @@ class WsiDataset:
         PerFrameGroupPositions
             Position of every frame.
         """
+        if self._frame_positions is None and self._deferred_reader is not None:
+            self._frame_positions = self._deferred_reader.read_frame_positions()
         if self._frame_positions is not None:
             return self._frame_positions
         return self._parse_frame_positions()
@@ -664,11 +726,36 @@ class WsiDataset:
                 "its frames sit, or there are none. A sparse tiled image is required "
                 "to give every frame a Plane Position (Slide)."
             )
+        return self.parse_frame_positions(
+            self.get_sequence(self._dataset, PerFrameFunctionalGroupsSequenceTag)
+        )
+
+    @classmethod
+    def parse_frame_positions(cls, sequence: DicomSequence) -> PerFrameGroupPositions:
+        """Return the position of every frame, parsed from per frame groups.
+
+        For a sequence read into datasets, whether because it was in the dataset from
+        the start or because its bytes could not be searched.
+
+        Parameters
+        ----------
+        sequence: DicomSequence
+            Per frame functional groups, one item per frame.
+
+        Returns
+        -------
+        PerFrameGroupPositions
+            Position of every frame.
+
+        Raises
+        ------
+        WsiDicomError
+            If only some frames state a z offset or an optical path identifier.
+        """
         columns: list[int] = []
         rows: list[int] = []
         z_offsets: list[float] = []
         identifiers: list[str] = []
-        sequence = self.get_sequence(self._dataset, PerFrameFunctionalGroupsSequenceTag)
         for frame in sequence:
             position: Dataset = frame[PlanePositionSlideSequenceTag][0]
             columns.append(
@@ -678,7 +765,7 @@ class WsiDataset:
             z_offset = position.get(ZOffsetInSlideCoordinateSystemTag, None)
             if z_offset is not None:
                 z_offsets.append(float(z_offset.value))
-            optical_paths = self.get_sequence(
+            optical_paths = cls.get_sequence(
                 frame, OpticalPathIdentificationSequenceTag
             )
             if len(optical_paths) > 1:
@@ -781,6 +868,20 @@ class WsiDataset:
         return int(self.get_value(self._dataset, NumberOfFramesTag, 1))
 
     @cached_property
+    def states_tiled_full(self) -> bool:
+        """Whether the dataset states that its frames are tiled full.
+
+        What it states, which is not all there is to `tile_type`: an image that
+        states nothing is worked out from what its frames carry. Reading this
+        instead asks only of the dataset, which is what a caller wanting to know
+        before the frames have been read needs.
+        """
+        tiling = self.get_value(
+            self._dataset, DimensionOrganizationTypeTag, "TILED_SPARSE"
+        )
+        return tiling == "TILED_FULL"
+
+    @cached_property
     def tile_type(self) -> TileType:
         """Return tiling type of dataset. Raises WsiDicomError if type
         is undetermined.
@@ -790,10 +891,7 @@ class WsiDataset:
         TileType
             Tiling type
         """
-        tile_type = self.get_value(
-            self._dataset, DimensionOrganizationTypeTag, "TILED_SPARSE"
-        )
-        if tile_type == "TILED_FULL":
+        if self.states_tiled_full:
             # By the standard it should be tiled full.
             return TileType.FULL
         if self._has_per_frame_positions:
@@ -897,9 +995,13 @@ class WsiDataset:
         )
         if image_size.width <= 0 or image_size.height <= 0:
             raise WsiDicomError("Image size is zero")
-        if self.tile_type == TileType.FULL and self.uids.concatenation is None:
+        if self.states_tiled_full and self.uids.concatenation is None:
             # Check that the number of frames match the image size and tile size.
             # Dont check concatenated instances as the frame count is ambiguous.
+            # What the dataset states rather than `tile_type`, which works out what
+            # an image that states nothing is from what its frames carry, and so
+            # would have the tile positions read to answer a question asked of every
+            # instance while opening a slide.
             expected_tiled_size = image_size.ceil_div(self.tile_size)
             number_of_focal_planes = self.get_value(
                 self._dataset, TotalPixelMatrixFocalPlanesTag, 1
@@ -1726,6 +1828,8 @@ class WsiDataset:
         found a tile position for every frame, and then the sequence itself is not in
         the dataset.
         """
+        if self._frame_positions is None and self._deferred_reader is not None:
+            self._frame_positions = self._deferred_reader.read_frame_positions()
         return self._frame_positions is not None or self._has_parsed_per_frame_positions
 
     @property

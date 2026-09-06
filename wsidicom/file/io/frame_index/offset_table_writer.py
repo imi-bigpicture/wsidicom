@@ -20,19 +20,19 @@ from collections.abc import Sequence
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomBotOverflow
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomWriteIO
 from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
 
 
 class OffsetTableWriter(metaclass=ABCMeta):
     """Abstract class for writing offset tables to file."""
 
-    def __init__(self, file: WsiDicomIO) -> None:
+    def __init__(self, file: WsiDicomWriteIO) -> None:
         """Initiate offset table writer.
 
         Parameters
         ----------
-        file: WsiDicomIO
+        file: WsiDicomWriteIO
             File to write to.
 
         """

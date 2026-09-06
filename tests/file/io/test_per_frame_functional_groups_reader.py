@@ -69,7 +69,9 @@ def create_frame(
 
 
 def create_file(
-    frames: TypingSequence[Dataset], undefined_length: bool = True
+    frames: TypingSequence[Dataset],
+    undefined_length: bool = True,
+    transfer_syntax: UID = JPEGBaseline8Bit,
 ) -> WsiDicomIO:
     """Write frames as a per frame functional groups sequence in a minimal file.
 
@@ -93,13 +95,13 @@ def create_file(
     dataset.PerFrameFunctionalGroupsSequence = Sequence(frames)
     dataset[PerFrameFunctionalGroupsSequenceTag].is_undefined_length = undefined_length
     buffer = DicomBytesIO()
-    buffer.is_little_endian = True
-    buffer.is_implicit_VR = False
+    buffer.is_little_endian = transfer_syntax.is_little_endian
+    buffer.is_implicit_VR = transfer_syntax.is_implicit_VR
     write_dataset(buffer, dataset)
     return WsiDicomIO(
         BytesIO(buffer.getvalue() + PIXEL_DATA_HEADER),
-        filepath=UPath("per_frame.dcm"),
-        transfer_syntax=JPEGBaseline8Bit,
+        UPath("per_frame.dcm"),
+        transfer_syntax,
     )
 
 
@@ -112,10 +114,9 @@ def create_reader(
 ) -> PerFrameFunctionalGroupsReader:
     """Create a reader for a file holding `frames`."""
     return PerFrameFunctionalGroupsReader(
-        create_file(frames, undefined_length),
+        create_file(frames, undefined_length, transfer_syntax),
         0,
         len(frames) if frame_count is None else frame_count,
-        transfer_syntax,
         chunk_size=chunk_size,
     )
 
@@ -173,12 +174,9 @@ def create_reader_over_mocked_stream(
         decoy, buffer.getvalue() + PIXEL_DATA_HEADER
     )
     reader = PerFrameFunctionalGroupsReader(
-        WsiDicomIO(
-            stream, filepath=UPath("per_frame.dcm"), transfer_syntax=JPEGBaseline8Bit
-        ),
+        WsiDicomIO(stream, UPath("per_frame.dcm"), JPEGBaseline8Bit),
         0,
         len(frames),
-        JPEGBaseline8Bit,
     )
     return reader, searching_reads
 
@@ -186,9 +184,7 @@ def create_reader_over_mocked_stream(
 def create_file_without_sequence() -> WsiDicomIO:
     """Create a file holding a pixel data header and nothing else."""
     return WsiDicomIO(
-        BytesIO(PIXEL_DATA_HEADER),
-        filepath=UPath("per_frame.dcm"),
-        transfer_syntax=JPEGBaseline8Bit,
+        BytesIO(PIXEL_DATA_HEADER), UPath("per_frame.dcm"), JPEGBaseline8Bit
     )
 
 
@@ -208,6 +204,7 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert list(positions.columns) == [index + 1 for index in range(frame_count)]
         assert list(positions.rows) == [index + 2 for index in range(frame_count)]
 
@@ -228,6 +225,7 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert list(positions.columns) == [1, 3, 5]
         assert positions.z_offsets is not None
         assert list(positions.z_offsets) == [0.5, 0.125, 0.5]
@@ -245,6 +243,7 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert list(positions.columns) == [1, 3]
         assert list(positions.rows) == [2, 4]
         assert positions.z_offsets is not None
@@ -255,7 +254,7 @@ class TestPerFrameFunctionalGroupsReader:
     def test_read_positions_ends_at_next_element(self):
         # Arrange
         file = create_file([create_frame(1, 1), create_frame(2, 1)])
-        reader = PerFrameFunctionalGroupsReader(file, 0, 2, JPEGBaseline8Bit)
+        reader = PerFrameFunctionalGroupsReader(file, 0, 2)
 
         # Act
         reader.read_positions()
@@ -282,6 +281,7 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert positions.z_offsets is None
 
     def test_read_positions_without_optical_path_identifiers(self):
@@ -292,9 +292,10 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert positions.optical_path_identifiers is None
 
-    def test_raises_when_element_is_in_some_frames_only(self):
+    def test_searching_refused_when_element_is_in_some_frames_only(self):
         """A value present in some frames cannot be matched to frames by position."""
         # Arrange
         reader = create_reader(
@@ -303,44 +304,52 @@ class TestPerFrameFunctionalGroupsReader:
 
         # Act & Assert
         with pytest.raises(UnscannablePerFrameGroupsException):
-            reader.read_positions()
+            reader._search_positions()
 
-    def test_raises_when_frame_count_does_not_match(self):
+    def test_searching_refused_when_frame_count_does_not_match(self):
         # Arrange
         reader = create_reader([create_frame(1, 1), create_frame(2, 1)], frame_count=3)
 
         # Act & Assert
         with pytest.raises(UnscannablePerFrameGroupsException):
-            reader.read_positions()
+            reader._search_positions()
 
     def test_raises_when_not_positioned_at_sequence(self):
         # Arrange
-        reader = PerFrameFunctionalGroupsReader(
-            create_file_without_sequence(), 0, 1, JPEGBaseline8Bit
-        )
+        reader = PerFrameFunctionalGroupsReader(create_file_without_sequence(), 0, 1)
 
         # Act & Assert
         with pytest.raises(UnscannablePerFrameGroupsException):
             reader.read_positions()
 
-    def test_raises_for_implicit_vr(self):
+    def test_items_are_parsed_for_implicit_vr(self):
+        """The bytes of an implicit value representation data set are not searched."""
         # Arrange
         reader = create_reader(
-            [create_frame(1, 1)], transfer_syntax=ImplicitVRLittleEndian
+            [create_frame(1, 1), create_frame(2, 3)],
+            transfer_syntax=ImplicitVRLittleEndian,
         )
 
-        # Act & Assert
-        with pytest.raises(UnscannablePerFrameGroupsException):
-            reader.read_positions()
+        # Act
+        positions = reader.read_positions()
+
+        # Assert
+        assert positions is not None
+        assert list(positions.columns) == [1, 2]
+        assert list(positions.rows) == [1, 3]
 
     @pytest.mark.parametrize("frame_count", [0, -1])
-    def test_raises_without_frames(self, frame_count: int):
+    def test_items_are_parsed_without_frames(self, frame_count: int):
+        """Nothing to match the values against, so the items are read instead."""
         # Arrange
         reader = create_reader([create_frame(1, 1)], frame_count=frame_count)
 
-        # Act & Assert
-        with pytest.raises(UnscannablePerFrameGroupsException):
-            reader.read_positions()
+        # Act
+        positions = reader.read_positions()
+
+        # Assert
+        assert positions is not None
+        assert list(positions.columns) == [1]
 
     @pytest.mark.parametrize(
         ["transfer_syntax", "expected"],
@@ -375,6 +384,7 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert list(positions.columns) == [index + 1 for index in range(20)]
 
     @pytest.mark.parametrize("undefined_length", [True, False])
@@ -398,10 +408,52 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert list(positions.columns) == [index + 1 for index in range(frame_count)]
         assert list(positions.rows) == [index + 2 for index in range(frame_count)]
         assert positions.optical_path_identifiers is not None
         assert list(positions.optical_path_identifiers) == ["1"] * frame_count
+
+    @pytest.mark.parametrize("undefined_length", [True, False])
+    @pytest.mark.parametrize("frame_count", [1, 17])
+    def test_read_end_of_sequence_agrees_with_reading_the_positions(
+        self, frame_count: int, undefined_length: bool
+    ):
+        """Where the sequence ends is what the rest of the dataset is read from, so
+        finding only the end has to land where finding the positions lands."""
+        # Arrange
+        frames = [
+            create_frame(column=index + 1, row=index + 2)
+            for index in range(frame_count)
+        ]
+        scanning = create_reader(frames, undefined_length=undefined_length)
+        scanning.read_positions()
+        expected = scanning.end_of_sequence
+        reader = create_reader(frames, undefined_length=undefined_length)
+
+        # Act
+        end_of_sequence = reader.read_end_of_sequence()
+
+        # Assert
+        assert end_of_sequence == expected
+        assert reader.end_of_sequence == expected
+
+    def test_read_end_of_sequence_of_a_sequence_stating_a_length_reads_nothing(
+        self, decoy: Decoy
+    ):
+        """A stated length says where the sequence ends, so there is nothing to
+        search and nothing to read."""
+        # Arrange
+        frames = [create_frame(column=index + 1, row=1) for index in range(300)]
+        reader, searching_reads = create_reader_over_mocked_stream(
+            decoy, frames, undefined_length=False
+        )
+
+        # Act
+        reader.read_end_of_sequence()
+
+        # Assert
+        assert searching_reads == []
 
     def test_first_read_is_sized_from_the_frame_count(self, decoy: Decoy):
         """A sequence that states no length is read from what the frame count says it
@@ -417,6 +469,7 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert searching_reads == [expected]
         assert list(positions.columns) == [index + 1 for index in range(frame_count)]
 
@@ -438,6 +491,7 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert searching_reads[:2] == [expected, expected * 2]
         assert all(
             size <= PerFrameFunctionalGroupsReader.CHUNK_SIZE
@@ -460,6 +514,7 @@ class TestPerFrameFunctionalGroupsReader:
         positions = reader.read_positions()
 
         # Assert
+        assert positions is not None
         assert len(searching_reads) == 1
         assert searching_reads[0] < estimate
         assert list(positions.columns) == [index + 1 for index in range(frame_count)]

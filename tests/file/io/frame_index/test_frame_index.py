@@ -34,7 +34,7 @@ from wsidicom.file.io.frame_index.native_pixel_data import (
     NativePixelDataFrameIndexParser,
 )
 from wsidicom.file.io.frame_index.pixel_data import PixelDataFrameIndexParser
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import WsiDicomWriteIO
 from wsidicom.geometry import Size
 from wsidicom.tags import (
     ExtendedOffsetTableLengthsTag,
@@ -50,7 +50,7 @@ def transfer_syntax():
 
 @pytest.fixture
 def buffer(transfer_syntax: UID, placeholder_path: UPath):
-    with WsiDicomIO(
+    with WsiDicomWriteIO(
         BytesIO(), filepath=placeholder_path, transfer_syntax=transfer_syntax
     ) as buffer:
         yield buffer
@@ -74,7 +74,10 @@ class TestFrameIndexParser:
     )
     @pytest.mark.parametrize("bits", [8, 16])
     def test_read_native_pixel_data_offset_table_frame_positions(
-        self, buffer: WsiDicomIO, tiles: list[bytes], transfer_syntax: UID, bits: int
+        self,
+        buffer: WsiDicomWriteIO,
+        tiles: list[bytes],
+        bits: int,
     ):
         # Arrange
         buffer.write_tag_of_vr_and_length(PixelDataTag, "OB", len(tiles) * bits // 8)
@@ -95,7 +98,7 @@ class TestFrameIndexParser:
         assert list(frame_index) == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_pixel_data_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
+    def test_pixel_data_offset_table(self, buffer: WsiDicomWriteIO, tiles: list[bytes]):
         # Arrange
         EMPTY_BOT = 16
         ITEM_TAG_AND_LENGTH = 8
@@ -122,7 +125,7 @@ class TestFrameIndexParser:
 
     @pytest.mark.parametrize("bits", [8])
     def test_pixel_data_without_a_sequence_delimiter(
-        self, buffer: WsiDicomIO, tiles: list[bytes]
+        self, buffer: WsiDicomWriteIO, tiles: list[bytes]
     ):
         # Arrange - the frames end where the pixel data does, with nothing after them.
         buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
@@ -135,7 +138,7 @@ class TestFrameIndexParser:
 
     @pytest.mark.parametrize("bits", [8])
     def test_pixel_data_with_an_odd_frame_length(
-        self, buffer: WsiDicomIO, tiles: list[bytes]
+        self, buffer: WsiDicomWriteIO, tiles: list[bytes]
     ):
         # Arrange - a frame is required to be padded to an even length.
         ITEM_TAG_AND_LENGTH = 8
@@ -155,7 +158,7 @@ class TestFrameIndexParser:
 
     @pytest.mark.parametrize("bits", [8])
     def test_basic_offset_table_with_an_offset_that_runs_backwards(
-        self, buffer: WsiDicomIO, tiles: list[bytes]
+        self, buffer: WsiDicomWriteIO, tiles: list[bytes]
     ):
         # Arrange - offsets that do not grow give a frame a length of zero or less.
         ITEM_TAG_AND_LENGTH = 8
@@ -173,7 +176,7 @@ class TestFrameIndexParser:
             parser.parse_frame_index()
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_basic_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
+    def test_basic_offset_table(self, buffer: WsiDicomWriteIO, tiles: list[bytes]):
         # Arrange
         BOT = 16 + len(tiles) * 4
         ITEM_TAG_AND_LENGTH = 8
@@ -199,7 +202,7 @@ class TestFrameIndexParser:
 
     @pytest.mark.parametrize("bits", [8])
     def test_basic_offset_table_with_non_zero_first_offset(
-        self, buffer: WsiDicomIO, tiles: list[bytes]
+        self, buffer: WsiDicomWriteIO, tiles: list[bytes]
     ):
         # Arrange
         ITEM_TAG_AND_LENGTH = 8
@@ -218,7 +221,7 @@ class TestFrameIndexParser:
             parser.parse_frame_index()
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_extended_offset_table(self, buffer: WsiDicomIO, tiles: list[bytes]):
+    def test_extended_offset_table(self, buffer: WsiDicomWriteIO, tiles: list[bytes]):
         # Arrange
         EMPTY_BOT = 16
         ITEM_TAG_AND_LENGTH = 8

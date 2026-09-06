@@ -85,12 +85,12 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     @property
     def image_size(self) -> Size:
         """The pixel size of the image."""
-        return self.tiles.image_size
+        return self._datasets[0].image_size
 
     @property
     def tile_size(self) -> Size:
         """The pixel tile size of the image."""
-        return self.tiles.tile_size
+        return self._datasets[0].tile_size
 
     @property
     def focal_planes(self) -> list[float]:

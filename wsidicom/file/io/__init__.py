@@ -15,8 +15,19 @@
 """Module for reading and writing DICOM WSI files."""
 
 from wsidicom.file.io.frame_index import OffsetTableType
-from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.file.io.wsidicom_io import (
+    WsiDicomIO,
+    WsiDicomReadIO,
+    WsiDicomWriteIO,
+)
 from wsidicom.file.io.wsidicom_reader import WsiDicomReader
 from wsidicom.file.io.wsidicom_writer import WsiDicomWriter
 
-__all__ = ["WsiDicomIO", "WsiDicomReader", "WsiDicomWriter", "OffsetTableType"]
+__all__ = [
+    "WsiDicomIO",
+    "WsiDicomReadIO",
+    "WsiDicomWriteIO",
+    "WsiDicomReader",
+    "WsiDicomWriter",
+    "OffsetTableType",
+]

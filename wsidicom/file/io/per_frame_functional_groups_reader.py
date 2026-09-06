@@ -14,6 +14,7 @@
 
 """Reader for tile positions in the Per Frame Functional Groups Sequence."""
 
+import logging
 import re
 import struct
 from abc import ABCMeta, abstractmethod
@@ -23,19 +24,24 @@ from typing import ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
-from pydicom.charset import convert_encodings
+from pydicom.charset import convert_encodings, default_encoding
+from pydicom.filereader import read_dataset as read_elements
 from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag
 from pydicom.uid import UID
 
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
+from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.per_frame_group_positions import PerFrameGroupPositions
 from wsidicom.tags import (
     ColumnPositionInTotalImagePixelMatrixTag,
     OpticalPathIdentifierTag,
     PerFrameFunctionalGroupsSequenceTag,
+    PlanePositionSlideSequenceTag,
     RowPositionInTotalImagePixelMatrixTag,
     ZOffsetInSlideCoordinateSystemTag,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class UnscannablePerFrameGroupsException(Exception):
@@ -567,7 +573,6 @@ class PerFrameFunctionalGroupsReader:
         file: WsiDicomIO,
         sequence_file_position: int,
         frame_count: int,
-        transfer_syntax: UID,
         specific_character_set: str | MutableSequence[str] | None = None,
         chunk_size: int | None = None,
     ):
@@ -581,8 +586,6 @@ class PerFrameFunctionalGroupsReader:
             Offset of the Per Frame Functional Groups Sequence tag.
         frame_count: int
             Number of frames the instance declares, used to check the result.
-        transfer_syntax: UID
-            Transfer syntax of the instance.
         specific_character_set: str | MutableSequence[str] | None = None
             Specific Character Set (0008,0005) of the instance, which text values are
             decoded with. The default repertoire if not given.
@@ -592,18 +595,21 @@ class PerFrameFunctionalGroupsReader:
         self._file = file
         self._sequence_file_position = sequence_file_position
         self._frame_count = frame_count
-        self._transfer_syntax = transfer_syntax
         self._chunk_size = chunk_size if chunk_size is not None else self.CHUNK_SIZE
         self._end_of_sequence: int | None = None
-        encodings = convert_encodings(specific_character_set)
-        self._search_elements: tuple[SearchElement, ...] = (
+        encodings = (
+            convert_encodings(specific_character_set)
+            if specific_character_set is not None
+            else [default_encoding]
+        )
+        self._position_elements: tuple[SearchElement, ...] = (
             SignedLongElement(ColumnPositionInTotalImagePixelMatrixTag),
             SignedLongElement(RowPositionInTotalImagePixelMatrixTag),
             DecimalStringElement(ZOffsetInSlideCoordinateSystemTag),
             ShortStringElement(OpticalPathIdentifierTag, encodings),
         )
-        self._search_elements_by_tag = {
-            element.tag: element for element in self._search_elements
+        self._position_elements_by_tag = {
+            element.tag: element for element in self._position_elements
         }
 
     @staticmethod
@@ -647,7 +653,31 @@ class PerFrameFunctionalGroupsReader:
             raise ValueError("Positions have not been read yet.")
         return self._end_of_sequence
 
-    def read_positions(self) -> PerFrameGroupPositions:
+    def read_positions(self) -> PerFrameGroupPositions | None:
+        """Find the tile position of every frame.
+
+        Searches the bytes of the sequence, and parses its items where that cannot
+        be trusted, which is slower and holds more memory while it is done.
+
+        Returns
+        -------
+        PerFrameGroupPositions | None
+            Position of every frame, or None where the frames do not state where
+            they sit.
+        """
+        try:
+            return self._search_positions()
+        except UnscannablePerFrameGroupsException as exception:
+            logger.debug(
+                "Could not search the bytes of the per frame functional groups "
+                "sequence of %s (%s). Reading its items into datasets instead, "
+                "which is slower and holds more memory.",
+                self._file,
+                exception,
+            )
+            return self._parse_positions()
+
+    def _search_positions(self) -> PerFrameGroupPositions:
         """Find the tile positions of all frames in the bytes of the sequence.
 
         Returns
@@ -658,16 +688,18 @@ class PerFrameFunctionalGroupsReader:
         Raises
         ------
         UnscannablePerFrameGroupsException
-            If the values could not be found with confidence, in which case the caller
-            has to build a dataset for every item instead.
+            If the values could not be found with confidence.
         """
-        if self._frame_count < 1 or not self.is_scannable(self._transfer_syntax):
+        if self._frame_count < 1 or not self.is_scannable(self._file.transfer_syntax):
             raise UnscannablePerFrameGroupsException(
-                f"Cannot search a data set of transfer syntax {self._transfer_syntax} "
+                "Cannot search a data set of transfer syntax "
+                f"{self._file.transfer_syntax} "
                 f"for {self._frame_count} frames."
             )
         sequence_length = self._read_sequence_length()
-        found_values, end_of_sequence = self._search(sequence_length)
+        found_values, end_of_sequence = self._search(
+            sequence_length, self._position_elements
+        )
         if end_of_sequence is None:
             raise UnscannablePerFrameGroupsException(
                 "Sequence did not end in a delimiter followed by an element."
@@ -689,6 +721,88 @@ class PerFrameFunctionalGroupsReader:
         )
         self._end_of_sequence = end_of_sequence
         return positions
+
+    def read_end_of_sequence(self) -> int:
+        """Find where the sequence ends, without looking for the values in it.
+
+        Parses the items where the end cannot be found in the bytes.
+
+        Returns
+        -------
+        int
+            Offset just past the sequence.
+        """
+        try:
+            return self._search_end_of_sequence()
+        except UnscannablePerFrameGroupsException as exception:
+            logger.debug(
+                "Could not find the end of the per frame functional groups sequence "
+                "of %s in its bytes (%s). Reading its items into datasets instead.",
+                self._file,
+                exception,
+            )
+            self._parse_positions()
+            return self.end_of_sequence
+
+    def _search_end_of_sequence(self) -> int:
+        """Find where the sequence ends in its bytes.
+
+        Returns
+        -------
+        int
+            Offset just past the sequence.
+
+        Raises
+        ------
+        UnscannablePerFrameGroupsException
+            If the element at the position is not the sequence, or if a delimited
+            one does not end in a delimiter followed by an element.
+        """
+        sequence_length = self._read_sequence_length()
+        if sequence_length is not None:
+            end_of_sequence = (
+                self._sequence_file_position
+                + self.SEQUENCE_HEADER_BYTES
+                + sequence_length
+            )
+        else:
+            _, end_of_sequence = self._search(sequence_length, ())
+            if end_of_sequence is None:
+                raise UnscannablePerFrameGroupsException(
+                    "Sequence did not end in a delimiter followed by an element."
+                )
+        self._end_of_sequence = end_of_sequence
+        return end_of_sequence
+
+    def _parse_positions(self) -> PerFrameGroupPositions | None:
+        """Read the items of the sequence into datasets and take the positions.
+
+        The way of last resort, for a sequence whose bytes could not be searched.
+        Where the sequence ends is what reading it also gives.
+
+        Returns
+        -------
+        PerFrameGroupPositions | None
+            Position of every frame, or None where the frames do not state where
+            they sit.
+        """
+        self._file.seek(self._sequence_file_position)
+        read = read_elements(
+            self._file.stream,
+            self._file.is_implicit_VR,
+            self._file.is_little_endian,
+            stop_when=lambda tag, vr, length: tag > PerFrameFunctionalGroupsSequenceTag,
+        )
+        self._end_of_sequence = self._file.tell()
+        items = WsiDataset.get_sequence(read, PerFrameFunctionalGroupsSequenceTag)
+        if len(items) == 0:
+            raise UnscannablePerFrameGroupsException(
+                f"Expected the Per Frame Functional Groups Sequence at "
+                f"{self._sequence_file_position}, found no items to read."
+            )
+        if PlanePositionSlideSequenceTag not in items[0]:
+            return None
+        return WsiDataset.parse_frame_positions(items)
 
     def _decode_required_values(
         self, tag: BaseTag, found_values: dict[BaseTag, list[bytes]]
@@ -725,7 +839,7 @@ class PerFrameFunctionalGroupsReader:
                     else "the element is not stated by every frame."
                 )
             )
-        element = self._search_elements_by_tag[tag]
+        element = self._position_elements_by_tag[tag]
         try:
             return element.decode_values(raw)
         except ValueError as exception:
@@ -761,9 +875,11 @@ class PerFrameFunctionalGroupsReader:
         return self._decode_required_values(tag, found_values)
 
     def _search(
-        self, sequence_length: int | None
+        self,
+        sequence_length: int | None,
+        search_elements: tuple[SearchElement, ...],
     ) -> tuple[dict[BaseTag, list[bytes]], int | None]:
-        """Search the sequence for every element, a chunk at a time.
+        """Search the sequence for `search_elements`, a chunk at a time.
 
         A sequence that states a length is read to that length, a delimited one until
         its delimiter is found. Nothing beyond the delimiter is searched, so reading
@@ -773,6 +889,9 @@ class PerFrameFunctionalGroupsReader:
         ----------
         sequence_length: int | None
             Length of the sequence, or None if it is delimited instead of stating one.
+        search_elements: tuple[SearchElement, ...]
+            Elements to look for. None of them, to read no further than where the
+            sequence ends.
 
         Returns
         -------
@@ -781,18 +900,18 @@ class PerFrameFunctionalGroupsReader:
             sequence, or None if the sequence did not end where it should have.
         """
         found_values: dict[BaseTag, list[bytes]] = {
-            element.tag: [] for element in self._search_elements
+            element.tag: [] for element in search_elements
         }
         # How far into the file each element's values have been found, so that the
         # bytes carried from one chunk to the next are not searched again.
         found_to_file_positions: dict[BaseTag, int] = {
-            element.tag: 0 for element in self._search_elements
+            element.tag: 0 for element in search_elements
         }
         # Bytes carried from one chunk to the next, so that an element lying across the
         # boundary is whole in the next buffer. Long enough for the longest element,
         # and for a delimiter with the start of the element after it.
         max_carried_bytes = max(
-            max(element.max_bytes for element in self._search_elements),
+            max(element.max_bytes for element in self._position_elements),
             len(self.SEQUENCE_DELIMITER) + self.TAG_AND_VR_BYTES,
         )
         # None while the sequence states no length, as there is then no telling how
@@ -846,7 +965,7 @@ class PerFrameFunctionalGroupsReader:
             search_buffer = SearchBuffer(
                 buffer, buffer_file_position, search_to_buffer_position
             )
-            for element in self._search_elements:
+            for element in search_elements:
                 # Each element carries on from where its own values were last found,
                 # so that the bytes carried from the previous chunk are not searched
                 # again.
