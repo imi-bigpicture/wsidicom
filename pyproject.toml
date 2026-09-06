@@ -74,6 +74,7 @@ ignore = ["S101"]
 [tool.typos.default.extend-words]
 Professer = "Professer"
 SEH = "SEH"
+PN = "PN"
 
 [build-system]
 requires = ["hatchling"]
