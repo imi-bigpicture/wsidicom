@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-28T16:35:32.2944782Z"
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P14D"
 
 [[package]]
@@ -353,7 +353,7 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3b/8d/dc18623e5e926ad53c626e128c8baaf4ec42e41029cf0a07381cfef79289/imagecodecs-2026.3.6.tar.gz", hash = "sha256:471b8a4d1b3843cbf7179b45f7d7261f0c0b28809efc1ca6c47822477b143b85", size = 9565259, upload-time = "2026-03-07T01:26:41.183Z" }
 wheels = [
@@ -374,7 +374,7 @@ resolution-markers = [
     "python_full_version >= '3.12'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/87/da/c2488dd650a72f65e6f7c808fecea4650e1fe9d34783583870056399e378/imagecodecs-2026.8.16.tar.gz", hash = "sha256:03a6add9ad9ba61dce1520489fd090b1b5cf2a2701a9666d1ab8e7653278175f", size = 9703497, upload-time = "2026-08-15T16:07:19.803Z" }
 wheels = [
@@ -1152,7 +1152,7 @@ dev = [
     { name = "shapely", specifier = ">=2.0.2,<3.0.0" },
     { name = "typos", specifier = ">=1.48.0" },
     { name = "wsidicom-data", specifier = ">=0.3.0,<0.4.0" },
-    { name = "xmltodict", specifier = ">=0.12.0,<0.13.0" },
+    { name = "xmltodict", specifier = ">=0.12.0,<1.1.0" },
 ]
 
 [[package]]
@@ -1169,9 +1169,9 @@ wheels = [
 
 [[package]]
 name = "xmltodict"
-version = "0.12.0"
+version = "1.0.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/58/40/0d783e14112e064127063fbf5d1fe1351723e5dfe9d6daad346a305f6c49/xmltodict-0.12.0.tar.gz", hash = "sha256:50d8c638ed7ecb88d90561beedbf720c9b4e851a9fa6c47ebd64e99d166d8a21", size = 18481, upload-time = "2019-02-11T07:00:24.529Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/70/80f3b7c10d2630aa66414bf23d210386700aa390547278c789afa994fd7e/xmltodict-1.0.4.tar.gz", hash = "sha256:6d94c9f834dd9e44514162799d344d815a3a4faec913717a9ecbfa5be1bb8e61", size = 26124, upload-time = "2026-02-22T02:21:22.074Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/fd/30d5c1d3ac29ce229f6bdc40bbc20b28f716e8b363140c26eff19122d8a5/xmltodict-0.12.0-py2.py3-none-any.whl", hash = "sha256:8bbcb45cc982f48b2ca8fe7e7827c5d792f217ecf1792626f808bf41c3b86051", size = 9170, upload-time = "2019-02-11T07:00:26.288Z" },
+    { url = "https://files.pythonhosted.org/packages/38/34/98a2f52245f4d47be93b580dae5f9861ef58977d73a79eb47c58f1ad1f3a/xmltodict-1.0.4-py3-none-any.whl", hash = "sha256:a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a", size = 13580, upload-time = "2026-02-22T02:21:21.039Z" },
 ]
