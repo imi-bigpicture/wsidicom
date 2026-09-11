@@ -27,7 +27,7 @@ from wsidicom.metadata.image import FocusMethod, ImageCoordinateSystem
 
 class Defaults:
     string = "Unknown"
-    date_time = datetime.datetime.fromtimestamp(0, datetime.timezone.utc)
+    date_time = datetime.datetime.fromtimestamp(0, datetime.UTC)
     optical_path_identifier = "1"
     illumination_type = IlluminationCode("Brightfield illumination")
     illumination = IlluminationColorCode("Full Spectrum")
