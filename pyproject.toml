@@ -7,7 +7,7 @@ authors = [
 ]
 license = {text = "Apache-2.0"}
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = ["whole slide image", "digital pathology", "annotations", "dicom"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -56,7 +56,7 @@ Repository = "https://github.com/imi-bigpicture/wsidicom"
 exclude-newer = "14 days"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
