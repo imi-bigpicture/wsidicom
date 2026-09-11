@@ -38,7 +38,7 @@ opencv = ["opencv-python-headless>=4.5.0"]
 [dependency-groups]
 dev = [
     "pytest>=7.2.0,<10.0.0",
-    "xmltodict>=0.12.0,<0.13.0",
+    "xmltodict>=0.12.0,<1.1.0",
     "shapely>=2.0.2,<3.0.0",
     "ruff>=0.16.3",
     "pyright>=1.1.409",
