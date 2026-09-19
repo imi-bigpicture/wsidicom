@@ -1008,6 +1008,39 @@ class TestDicomSchema:
         assert_dicom_label_equals_label(serialized, label)
         assert_dicom_patient_equals_patient(serialized, patient)
 
+    @pytest.mark.parametrize(
+        "image_type", [ImageType.VOLUME, ImageType.OVERVIEW, ImageType.LABEL]
+    )
+    def test_optical_path_sequence_defaults_when_there_are_no_optical_paths(
+        self,
+        wsi_metadata: WsiMetadata,
+        image_type: ImageType,
+    ):
+        # Arrange
+        metadata = replace(
+            wsi_metadata,
+            pyramid=replace(wsi_metadata.pyramid, optical_paths=[]),
+            overview=replace(wsi_metadata.overview, optical_paths=[]),
+            label=replace(wsi_metadata.label, optical_paths=[]),
+        )
+        schema = WsiMetadataDicomSchema()
+
+        # Act
+        serialized = schema.dump(
+            metadata, image_type=image_type, require_icc_profile=False
+        )
+
+        # Assert: Optical Path Sequence is Type 1 and holds at least one item
+        assert isinstance(serialized, Dataset)
+        assert len(serialized.OpticalPathSequence) == 1
+        assert_dicom_optical_path_equals_optical_path(
+            serialized.OpticalPathSequence[0],
+            OpticalPath(
+                identifier=defaults.optical_path_identifier,
+                illumination_types=[defaults.illumination_type],
+            ),
+        )
+
     def test_require_icc_profile_sets_srgb_color_space(
         self,
         wsi_metadata: WsiMetadata,

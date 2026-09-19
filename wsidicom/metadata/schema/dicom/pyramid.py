@@ -17,6 +17,7 @@
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.image import Image
+from wsidicom.metadata.optical_path import OpticalPath
 from wsidicom.metadata.pyramid import Pyramid
 from wsidicom.metadata.schema.dicom.fields import (
     BooleanDicomField,
@@ -35,6 +36,7 @@ class PyramidDicomSchema(DicomSchema[Pyramid]):
     optical_paths = ListDicomField(
         FlattenOnDumpNestedDicomField(OpticalPathDicomSchema()),
         data_key="OpticalPathSequence",
+        default_if_none=[OpticalPath()],
         load_default=[],
     )
     uid = UidDicomField(data_key="PyramidUID", allow_none=True, dump_required=True)

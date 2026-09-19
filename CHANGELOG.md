@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A pyramid or overview with no optical paths was written without `Optical Path Sequence`, which is Type 1 and has to be there holding at least one item. Both now fall back to a single default optical path, as a label already did.
 - Reading the z offset of an image whose `Total Pixel Matrix Origin Sequence` is present but holds no item raised `IndexError` instead of falling back to the shared functional groups.
 - Saving metadata onto an instance rebuilt every attribute from its tag, so an attribute written as one of two value representations, such as `Smallest Image Pixel Value`, got the literal `US or SS` rather than the one it was read as. The elements are now carried over as they are.
 - `Pixel Spacing` was written and read by the metadata schema as the column spacing before the row spacing, the opposite of what DICOM states, so a spacing that was not square came out with its axes swapped. `WsiDataset` already wrote them in the stated order.
