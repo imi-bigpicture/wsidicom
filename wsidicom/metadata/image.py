@@ -334,9 +334,10 @@ class Image:
         The depth of field of the image.
     lossy_compressions : Sequence[LossyCompression] | None = None
         The lossy compressions method that has been applied to the image data.
-    content_datetime : datetime.datetime | datetime.date | None = None
-        When the pixel data of the image was created, as the date alone when
-        the time it was created at is not known.
+    content_datetime : datetime.datetime | None = None
+        When the pixel data of the image was created. A whole slide image
+        states the time it was created at as well as the date, so a dataset
+        holding only the date is read as midnight.
     """
 
     acquisition_datetime: datetime.datetime | None = None
@@ -347,7 +348,7 @@ class Image:
     focal_plane_spacing: float | None = None
     depth_of_field: float | None = None
     lossy_compressions: Sequence[LossyCompression] | None = None
-    content_datetime: datetime.datetime | datetime.date | None = None
+    content_datetime: datetime.datetime | None = None
 
     def remove_confidential(self) -> "Image":
         return replace(

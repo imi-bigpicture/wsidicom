@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `Settings.dicom_value_validation`, whether to check that the values wsidicom writes conform to their DICOM value representation. `written`, the default, checks what wsidicom builds from the metadata; `none` checks nothing. Values carried over from a source file are left alone, and pydicom's global validation mode is never used or modified.
-- `Image.content_datetime`, when the pixel data of an image was created, read and written as `Content Date` and `Content Time`.
+- `Image.content_datetime`, when the pixel data of an image was created, read and written as `Content Date` and `Content Time`. A dataset holding a date with no time is read at midnight, both attributes being Type 1 for a whole slide image.
 
 ### Changed
 

@@ -26,7 +26,6 @@ from wsidicom.metadata.image import (
 )
 from wsidicom.metadata.schema.common import LoadingSchema
 from wsidicom.metadata.schema.json.fields import (
-    DateTimeOrDateJsonField,
     PointMmJsonField,
     SizeMmJsonField,
 )
@@ -75,7 +74,7 @@ class ImageJsonSchema(LoadingSchema[Image]):
     lossy_compressions = fields.List(
         fields.Nested(LossyCompressionJsonSchema()), allow_none=True
     )
-    content_datetime = DateTimeOrDateJsonField(allow_none=True)
+    content_datetime = fields.DateTime(allow_none=True)
 
     @property
     def load_type(self):

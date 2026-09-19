@@ -232,11 +232,10 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
             content_datetime = image.acquisition_datetime
         if content_datetime is None:
             content_datetime = defaults.date_time
-        content_date, content_time = self._split_datetime(content_datetime)
         return {
             "acquisition_datetime": image.acquisition_datetime,
-            "content_date": content_date,
-            "content_time": content_time,
+            "content_date": content_datetime.date(),
+            "content_time": content_datetime.time(),
             "focus_method": image.focus_method,
             "extended_depth_of_field_bool": image.extended_depth_of_field is not None,
             "extended_depth_of_field": image.extended_depth_of_field,
@@ -252,34 +251,17 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         }
 
     @staticmethod
-    def _split_datetime(
-        datetime_value: datetime.datetime | datetime.date | None,
-    ) -> tuple[datetime.date | None, datetime.time | None]:
-        """Split a datetime into the date and the time it holds.
-
-        The time is None when the value is a date alone, and both are None when
-        there is no value, so that a time that was never given is not made up.
-        """
-        # A datetime is a date, so it has to be the one checked for first.
-        if isinstance(datetime_value, datetime.datetime):
-            return datetime_value.date(), datetime_value.time()
-        if isinstance(datetime_value, datetime.date):
-            return datetime_value, None
-        return None, None
-
-    @staticmethod
     def _join_datetime(
         date_value: datetime.date | None, time_value: datetime.time | None
-    ) -> datetime.datetime | datetime.date | None:
-        """Join a date and a time into the value the two of them hold.
+    ) -> datetime.datetime | None:
+        """Join a date and a time into the datetime the two of them hold.
 
-        Either may be missing on its own. A date with no time is kept as a date
-        rather than made into a datetime at a time that was never given, and a
-        time with no date is dropped, as there is no date to place it on.
+        Either may be missing on its own. A whole slide image states both, so a
+        date with no time is read at midnight, and a time with no date is
+        dropped, as there is no date to place it on.
 
-        What is returned is remade as a plain `datetime.date` or
-        `datetime.datetime`, so that a value read as a subclass of one of them
-        is not passed on as that subclass.
+        What is returned is remade as a plain `datetime.datetime`, so that a
+        value read as a subclass of one is not passed on as that subclass.
         """
         if date_value is None:
             if time_value is not None:
@@ -288,9 +270,9 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
                     "there is no date to place it on."
                 )
             return None
-        if time_value is None:
-            return datetime.date(date_value.year, date_value.month, date_value.day)
-        return datetime.datetime.combine(date_value, time_value)
+        return datetime.datetime.combine(
+            date_value, time_value if time_value is not None else datetime.time()
+        )
 
     @post_load
     def post_load(self, data: dict[str, Any], **kwargs):

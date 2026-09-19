@@ -294,8 +294,9 @@ class TestDicomSchema:
         ["content_date", "content_time", "expected"],
         [
             ["20200102", "030405.000060", datetime(2020, 1, 2, 3, 4, 5, 60)],
-            # A date with no time stays a date, a time with no date is dropped.
-            ["20200102", None, date(2020, 1, 2)],
+            # A date with no time is read at midnight, a time with no date is
+            # dropped.
+            ["20200102", None, datetime(2020, 1, 2, 0, 0)],
             [None, "030405.000060", None],
             [None, None, None],
         ],
@@ -357,11 +358,9 @@ class TestDicomSchema:
         assert serialized.ContentDate == date(2020, 1, 2)
         assert serialized.ContentTime == time(3, 4, 5, 60)
 
-    @pytest.mark.parametrize(
-        "content_datetime", [datetime(2020, 1, 2, 3, 4, 5, 60), date(2020, 1, 2)]
-    )
-    def test_image_content_datetime_round_trip(self, content_datetime: datetime | date):
+    def test_image_content_datetime_round_trip(self):
         # Arrange
+        content_datetime = datetime(2020, 1, 2, 3, 4, 5, 60)
         image = Image(content_datetime=content_datetime)
         schema = ImageDicomSchema()
 
@@ -371,18 +370,6 @@ class TestDicomSchema:
         # Assert
         assert round_tripped.content_datetime == content_datetime
         assert type(round_tripped.content_datetime) is type(content_datetime)
-
-    def test_serialize_image_content_date_writes_no_content_time(self):
-        # Arrange
-        image = Image(content_datetime=date(2020, 1, 2))
-        schema = ImageDicomSchema()
-
-        # Act
-        serialized = schema.dump(image)
-
-        # Assert
-        assert serialized.ContentDate == date(2020, 1, 2)
-        assert "ContentTime" not in serialized
 
     def test_serialize_image_content_datetime_defaults_to_acquisition_datetime(self):
         # Arrange
