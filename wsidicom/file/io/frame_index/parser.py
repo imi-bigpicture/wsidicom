@@ -17,6 +17,7 @@
 from abc import abstractmethod
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.constants import UNDEFINED_LENGTH
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
@@ -94,7 +95,7 @@ class FrameIndexParser:
                 f"Expected {expected_length} length when reading Pixel data, "
                 f"got {length}.",
             )
-        elif expected_length is None and length != 0xFFFFFFFF:
+        elif expected_length is None and length != UNDEFINED_LENGTH:
             raise WsiDicomFileError(
                 str(self._file),
                 f"Expected undefined length when reading Pixel data, got {length}.",

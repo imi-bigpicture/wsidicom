@@ -35,6 +35,7 @@ from upath import UPath
 from wsidicom.codec import Encoder
 from wsidicom.downsampler import Downsampler
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
+from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE
 from wsidicom.geometry import Size
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
 from wsidicom.instance import (
@@ -256,8 +257,6 @@ class ByteSizeSplitter(PartSplitter):
     encapsulated pixel data past `max_bytes` (each frame counted with its 8-byte
     item header)."""
 
-    _ITEM_HEADER_BYTES = 8
-
     def __init__(self, max_bytes: int) -> None:
         """Split by encapsulated pixel-data size.
 
@@ -271,10 +270,10 @@ class ByteSizeSplitter(PartSplitter):
         self._bytes = 0
 
     def should_start_new_part(self, next_tile: bytes) -> bool:
-        return self._bytes + len(next_tile) + self._ITEM_HEADER_BYTES > self._max_bytes
+        return self._bytes + len(next_tile) + TAG_AND_LENGTH_SIZE > self._max_bytes
 
     def account(self, tile: bytes) -> None:
-        self._bytes += len(tile) + self._ITEM_HEADER_BYTES
+        self._bytes += len(tile) + TAG_AND_LENGTH_SIZE
 
     def reset(self) -> None:
         self._bytes = 0

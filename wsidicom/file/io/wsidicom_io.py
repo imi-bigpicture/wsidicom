@@ -20,7 +20,7 @@ from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from datetime import datetime
 from struct import pack
-from typing import Any, BinaryIO, ClassVar, NamedTuple
+from typing import Any, BinaryIO, Final
 
 from fsspec.implementations.local import LocalFileSystem
 from pydicom import DataElement, Dataset, FileMetaDataset
@@ -44,6 +44,7 @@ from pydicom.valuerep import VR
 from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.constants import UNDEFINED_LENGTH
 from wsidicom.file.io.deferred_element import DeferredElement
 from wsidicom.tags import (
     InstanceCreationDateTag,
@@ -54,25 +55,8 @@ from wsidicom.tags import (
 )
 
 
-class StreamStart(NamedTuple):
-    """What reading the start of a stream gives.
-
-    Reading the file meta information is what finds where the dataset after it
-    starts, so the two are found together and kept together.
-    """
-
-    file_meta_info: FileMetaDataset
-    """File meta information of the stream."""
-
-    dataset_position: int
-    """Offset the dataset starts at, past the preamble and the file meta information."""
-
-
 class WsiDicomIO:
     """Class for reading or writing DICOM WSI to stream."""
-
-    UNDEFINED_LENGTH: ClassVar[int] = 0xFFFFFFFF
-    """Length stated by an item or a sequence that is delimited instead."""
 
     def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID):
         """Create a stream over a DICOM file or buffer.
@@ -271,20 +255,21 @@ class WsiDicomReadIO(WsiDicomIO):
             Path the stream is over. Used for error messages and for opening a
             second stream over the same file, so this is required.
         """
-        self._stream_start = self._read_stream_start(stream, filepath)
+        file_meta_info, dataset_position = self._read_stream_start(stream, filepath)
+        self.file_meta_info: Final = file_meta_info
+        """File meta information read from the start of the stream."""
+        self.dataset_position: Final = dataset_position
+        """Offset the dataset starts at, past the preamble and file meta info."""
         super().__init__(
             stream,
             filepath,
-            UID(self._stream_start.file_meta_info.TransferSyntaxUID),
+            UID(file_meta_info.TransferSyntaxUID),
         )
 
-    @property
-    def stream_start(self) -> StreamStart:
-        """What reading the start of the stream gave when it was opened."""
-        return self._stream_start
-
     @staticmethod
-    def _read_stream_start(stream: BinaryIO, filepath: UPath) -> StreamStart:
+    def _read_stream_start(
+        stream: BinaryIO, filepath: UPath
+    ) -> tuple[FileMetaDataset, int]:
         """Read the preamble and the file meta information from the start of a stream.
 
         The stream is left where it was. Read before the stream is one of these, what
@@ -299,13 +284,14 @@ class WsiDicomReadIO(WsiDicomIO):
 
         Returns
         -------
-        StreamStart
+        tuple[FileMetaDataset, int]
             File meta information of the stream, and where the dataset starts.
+            Found together, reading the one being what finds the other.
         """
         stream.seek(0)
         try:
             read_preamble(stream, False)
-            return StreamStart(_read_file_meta_info(stream), stream.tell())
+            return _read_file_meta_info(stream), stream.tell()
         except InvalidDicomError:
             raise WsiDicomFileError(
                 str(filepath), "is not a DICOM file or stream."
@@ -326,11 +312,6 @@ class WsiDicomReadIO(WsiDicomIO):
     def media_storage_sop_class_uid(self) -> UID:
         """Read Media Storage SOP Class UID from file meta info."""
         return self.file_meta_info.MediaStorageSOPClassUID
-
-    @property
-    def file_meta_info(self) -> FileMetaDataset:
-        """Read file meta info from stream."""
-        return self.stream_start.file_meta_info
 
     def read_dataset(self, force: bool = False) -> Dataset:
         """Read the entire dataset from the stream.
@@ -375,9 +356,7 @@ class WsiDicomReadIO(WsiDicomIO):
             The tag the read stopped at, or None if the stream ended before a tag
             ordered at or after `stop_tag`.
         """
-        return self.read_elements_from(
-            self.stream_start.dataset_position, stop_tag, into
-        )
+        return self.read_elements_from(self.dataset_position, stop_tag, into)
 
     def read_elements_from(
         self,
@@ -510,7 +489,7 @@ class WsiDicomReadIO(WsiDicomIO):
                 f"representation {value_representation!r}",
             )
         length = self.read_UL()
-        if length == self.UNDEFINED_LENGTH:
+        if length == UNDEFINED_LENGTH:
             length = None
         items: list[Dataset] = []
         deferred: list[DeferredElement] = []
@@ -530,7 +509,7 @@ class WsiDicomReadIO(WsiDicomIO):
                     f"Expected an item at {self.tell() - 4}, found {item_tag}",
                 )
             item_length = self.read_UL()
-            if item_length == self.UNDEFINED_LENGTH:
+            if item_length == UNDEFINED_LENGTH:
                 item_length = None
             item = read_elements(
                 self._stream,
@@ -649,7 +628,7 @@ class WsiDicomWriteIO(WsiDicomIO):
         if length is not None:
             self._dicom_io.write_UL(length)
         else:
-            self._dicom_io.write_UL(0xFFFFFFFF)
+            self._dicom_io.write_UL(UNDEFINED_LENGTH)
 
     def write_preamble(self):
         """Write DICOM preamble."""

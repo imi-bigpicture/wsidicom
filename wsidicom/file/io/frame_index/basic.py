@@ -19,6 +19,7 @@ from numpy.typing import NDArray
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.offset_table import OffsetTableFrameIndexParser
 from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
@@ -61,7 +62,7 @@ class BasicOffsetTableFrameIndexParser(OffsetTableFrameIndexParser):
         read from the pixel data.
         """
         lengths = np.empty(len(offsets), dtype=np.int64)
-        lengths[:-1] = np.diff(offsets) - self.HEADER_BYTES
+        lengths[:-1] = np.diff(offsets) - TAG_AND_LENGTH_SIZE
         lengths[-1] = self._read_last_frame_length(pixels_start, int(offsets[-1]))
         return lengths
 

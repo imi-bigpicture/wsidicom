@@ -14,13 +14,16 @@
 
 """Frame index for empty BOT, parsing the positions from the pixel data."""
 
-import struct
 from typing import ClassVar
 
 import numpy as np
-from pydicom.tag import ItemTag, SequenceDelimiterTag
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.constants import (
+    ITEM_TAG_BYTES,
+    SEQUENCE_DELIMITER_TAG_BYTES,
+    TAG_AND_LENGTH_SIZE,
+)
 from wsidicom.file.io.frame_index.basic import EmptyBasicTableOffsetException
 from wsidicom.file.io.frame_index.encapsulated_pixel_data import (
     EncapsulatedPixelDataFrameIndexParser,
@@ -32,20 +35,12 @@ from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
 class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
     """Frame index parsed from reading the sequence of pixel data delimiters."""
 
-    ITEM_TAG: ClassVar[bytes] = struct.pack("<HH", ItemTag.group, ItemTag.element)
-    """The item tag introducing a frame."""
-
     BUFFER_BYTES: ClassVar[int] = 4 * 1024 * 1024
     """Bytes to read at a time when reading through the sequence of frames.
 
     Measured as the best of sizes from 8 KiB to 64 MiB, on slides whose frames differ
     in size by more than ten times, and it matters most when the file is not already
     in the page cache."""
-
-    DELIMITER_TAG: ClassVar[bytes] = struct.pack(
-        "<HH", SequenceDelimiterTag.group, SequenceDelimiterTag.element
-    )
-    """The sequence delimiter tag ending the pixel data."""
 
     @property
     def offset_table_type(self) -> OffsetTableType:
@@ -69,15 +64,15 @@ class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         with self._file.buffered(self.BUFFER_BYTES) as stream:
             stream.seek(self._pixels_start)
             while True:
-                header = stream.read(self.HEADER_BYTES)
-                if header[:4] != self.ITEM_TAG:
+                header = stream.read(TAG_AND_LENGTH_SIZE)
+                if header[:4] != ITEM_TAG_BYTES:
                     break
                 length = int.from_bytes(header[4:], "little")
                 if length == 0 or length % 2:
                     raise WsiDicomFileError(str(self._file), "Invalid frame length")
                 lengths.append(length)
                 stream.seek(length, 1)
-            if header[:4] != self.DELIMITER_TAG:
+            if header[:4] != SEQUENCE_DELIMITER_TAG_BYTES:
                 raise WsiDicomFileError(str(self._file), "No sequence delimiter tag")
         return self._create_index(lengths)
 
@@ -99,7 +94,7 @@ class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
             Position and length of every frame.
         """
         frame_lengths = np.asarray(lengths, dtype=np.int64)
-        header_bytes = self.HEADER_BYTES
+        header_bytes = TAG_AND_LENGTH_SIZE
         sizes = frame_lengths + header_bytes
         positions = self._pixels_start + header_bytes + np.cumsum(sizes) - sizes
         return FrameIndex(positions, frame_lengths)

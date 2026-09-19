@@ -12,6 +12,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+"""The DICOM attributes wsidicom reads and writes."""
+
 from pydicom.tag import Tag
 
 PixelDataTag = Tag("PixelData")

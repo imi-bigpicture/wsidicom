@@ -45,7 +45,6 @@ from wsidicom.file.io.deferred_dataset_reader import FileDeferredDatasetReader
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
 from wsidicom.file.io.wsidicom_io import (
-    StreamStart,
     WsiDicomIO,
     WsiDicomWriteIO,
 )
@@ -68,7 +67,8 @@ class WsiDicomTestReadIO(WsiDicomReadIO):
     def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID):
         file_meta_info = FileMetaDataset()
         file_meta_info.TransferSyntaxUID = transfer_syntax
-        self._stream_start = StreamStart(file_meta_info, 0)
+        self.file_meta_info = file_meta_info
+        self.dataset_position = 0
         WsiDicomIO.__init__(self, stream, filepath, transfer_syntax)
 
 

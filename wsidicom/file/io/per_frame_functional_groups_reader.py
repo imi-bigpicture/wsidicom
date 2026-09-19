@@ -26,9 +26,17 @@ import numpy as np
 from numpy.typing import NDArray
 from pydicom.charset import convert_encodings, default_encoding
 from pydicom.filereader import read_dataset as read_elements
-from pydicom.tag import BaseTag, ItemTag, SequenceDelimiterTag
+from pydicom.tag import BaseTag, ItemTag
 from pydicom.uid import UID
 
+from wsidicom.file.io.constants import (
+    CHARACTER_SET_ESCAPE,
+    LONG_FORM_HEADER_SIZE,
+    SEQUENCE_DELIMITER_BYTES,
+    SHORT_FORM_HEADER_SIZE,
+    TAG_AND_VALUE_REPRESENTATION_SIZE,
+    UNDEFINED_LENGTH,
+)
 from wsidicom.file.io.wsidicom_io import WsiDicomIO
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.per_frame_group_positions import PerFrameGroupPositions
@@ -91,13 +99,6 @@ class SearchElement(metaclass=ABCMeta):
 
     Subclassed per value representation, into FixedLengthElement and
     VariableLengthElement.
-    """
-
-    VALUE_OFFSET: ClassVar[int] = 8
-    """Bytes from the start of an element to the start of its value.
-
-    A tag, a value representation and a length, of four, two and two bytes. That is the
-    short form, which every value representation searched for is written in.
     """
 
     VR: ClassVar[bytes]
@@ -197,7 +198,7 @@ class FixedLengthElement(SearchElement):
 
     @property
     def max_bytes(self) -> int:
-        return len(self.pattern) + self.VALUE_OFFSET + self.LENGTH
+        return len(self.pattern) + SHORT_FORM_HEADER_SIZE + self.LENGTH
 
     def find_values(
         self, search_buffer: SearchBuffer, found_to_file_position: int
@@ -231,7 +232,7 @@ class FixedLengthElement(SearchElement):
         # Where the last of them ended, which findall does not report. Bounded so that
         # it cannot land on an element running past where the search stops, which
         # findall would not have taken and which is left for the next chunk.
-        whole = self.VALUE_OFFSET + self.LENGTH
+        whole = SHORT_FORM_HEADER_SIZE + self.LENGTH
         last = buffer.rfind(
             self.pattern, search_from, search_to - whole + len(self.pattern)
         )
@@ -246,7 +247,7 @@ class VariableLengthElement(SearchElement):
 
     @property
     def max_bytes(self) -> int:
-        return len(self.pattern) + self.VALUE_OFFSET + self.MAX_VALUE_LENGTH
+        return len(self.pattern) + SHORT_FORM_HEADER_SIZE + self.MAX_VALUE_LENGTH
 
     def find_values(
         self, search_buffer: SearchBuffer, found_to_file_position: int
@@ -276,7 +277,7 @@ class VariableLengthElement(SearchElement):
             # No value of this element in what is left of the buffer, so there is no
             # length to go by and nothing to find.
             return FoundValues([], found_to_file_position)
-        if first + self.VALUE_OFFSET > len(buffer):
+        if first + SHORT_FORM_HEADER_SIZE > len(buffer):
             # The length has not been read yet, so it is left for the next chunk.
             return FoundValues([], found_to_file_position)
         assumed_length = struct.unpack_from("<H", buffer, first + len(self.pattern))[0]
@@ -318,7 +319,7 @@ class VariableLengthElement(SearchElement):
         """
         buffer = search_buffer.buffer
         search_to = search_buffer.search_to
-        whole = self.VALUE_OFFSET + assumed_length
+        whole = SHORT_FORM_HEADER_SIZE + assumed_length
         fits_to = search_to - whole + len(self.pattern)
         found = self._matcher_for(assumed_length).findall(
             buffer, search_from, search_to
@@ -351,7 +352,7 @@ class VariableLengthElement(SearchElement):
         """
         buffer = search_buffer.buffer
         search_to = search_buffer.search_to
-        value_offset = self.VALUE_OFFSET
+        value_offset = SHORT_FORM_HEADER_SIZE
         pattern = self.pattern
         raw: list[bytes] = []
         at = buffer.find(pattern, search_from, search_to)
@@ -432,9 +433,6 @@ class ShortStringElement(VariableLengthElement):
     MAX_VALUE_LENGTH = 16
     """A short string is at most 16 bytes, by PS3.5 Table 6.2-1."""
 
-    ESCAPE: ClassVar[int] = 0x1B
-    """Byte introducing a character set escape sequence."""
-
     def __init__(self, tag: BaseTag, encodings: Sequence[str]):
         """Create an element to search for.
 
@@ -468,7 +466,9 @@ class ShortStringElement(VariableLengthElement):
             If a value switches character set within itself, which one codec cannot
             read.
         """
-        if self.has_code_extensions and any(self.ESCAPE in value for value in raw):
+        if self.has_code_extensions and any(
+            CHARACTER_SET_ESCAPE in value for value in raw
+        ):
             raise ValueError(
                 "A value switches character set within itself, which takes more than "
                 "the one codec the values are decoded with."
@@ -540,13 +540,9 @@ class PerFrameFunctionalGroupsReader:
     """Fewest bytes read at a time, so that an instance of very few frames does not
     read a byte at a time."""
 
-    SEQUENCE_DELIMITER: ClassVar[bytes] = struct.pack(
-        "<HHI", SequenceDelimiterTag.group, SequenceDelimiterTag.element, 0
-    )
-    """The sequence delimiter, tag and zero length, ending a delimited sequence."""
-
     DELIMITER_CANDIDATE: ClassVar[re.Pattern[bytes]] = re.compile(
-        re.escape(SEQUENCE_DELIMITER) + rb"[\s\S][\x52-\xff][\s\S][\s\S][A-Z][A-Z]"
+        re.escape(SEQUENCE_DELIMITER_BYTES)
+        + rb"[\s\S][\x52-\xff][\s\S][\s\S][A-Z][A-Z]"
     )
     """A delimiter that could be the end of the sequence, with what follows it.
 
@@ -557,16 +553,6 @@ class PerFrameFunctionalGroupsReader:
     delimiter followed by a high group and by two letters naming a value representation
     is therefore worth looking at.
     """
-
-    UNDEFINED_LENGTH: ClassVar[int] = 0xFFFFFFFF
-    """Length a sequence states when it is delimited rather than of a stated length."""
-
-    SEQUENCE_HEADER_BYTES: ClassVar[int] = 12
-    """Bytes of tag, value representation and length introducing a sequence."""
-
-    TAG_AND_VR_BYTES: ClassVar[int] = 6
-    """Bytes of tag and value representation introducing an element, which is as much
-    of the element after the sequence as is needed to recognise it."""
 
     def __init__(
         self,
@@ -761,9 +747,7 @@ class PerFrameFunctionalGroupsReader:
         sequence_length = self._read_sequence_length()
         if sequence_length is not None:
             end_of_sequence = (
-                self._sequence_file_position
-                + self.SEQUENCE_HEADER_BYTES
-                + sequence_length
+                self._sequence_file_position + LONG_FORM_HEADER_SIZE + sequence_length
             )
         else:
             _, end_of_sequence = self._search(sequence_length, ())
@@ -912,14 +896,14 @@ class PerFrameFunctionalGroupsReader:
         # and for a delimiter with the start of the element after it.
         max_carried_bytes = max(
             max(element.max_bytes for element in self._position_elements),
-            len(self.SEQUENCE_DELIMITER) + self.TAG_AND_VR_BYTES,
+            len(SEQUENCE_DELIMITER_BYTES) + TAG_AND_VALUE_REPRESENTATION_SIZE,
         )
         # None while the sequence states no length, as there is then no telling how
         # much is left until the delimiter turns up.
         unread_bytes = sequence_length
         # The buffer starts at the first byte of the sequence content and moves through
         # it, so its position is where the offsets found in it are counted from.
-        buffer_file_position = self._sequence_file_position + self.SEQUENCE_HEADER_BYTES
+        buffer_file_position = self._sequence_file_position + LONG_FORM_HEADER_SIZE
         end_of_sequence = (
             None if sequence_length is None else buffer_file_position + sequence_length
         )
@@ -980,7 +964,7 @@ class PerFrameFunctionalGroupsReader:
                     found_values,
                     buffer_file_position
                     + delimiter_buffer_position
-                    + len(self.SEQUENCE_DELIMITER),
+                    + len(SEQUENCE_DELIMITER_BYTES),
                 )
             if len(chunk) == 0:
                 return found_values, end_of_sequence
@@ -1008,7 +992,7 @@ class PerFrameFunctionalGroupsReader:
         int | None
             Offset in the buffer of the delimiter, or None if it is not there.
         """
-        delimiter_length = len(self.SEQUENCE_DELIMITER)
+        delimiter_length = len(SEQUENCE_DELIMITER_BYTES)
         for candidate in self.DELIMITER_CANDIDATE.finditer(buffer):
             if self._starts_top_level_element(candidate.group()[delimiter_length:]):
                 return candidate.start()
@@ -1021,7 +1005,7 @@ class PerFrameFunctionalGroupsReader:
         Parameters
         ----------
         header: bytes
-            The `TAG_AND_VR_BYTES` bytes after a candidate delimiter.
+            The `TAG_AND_VALUE_REPRESENTATION_SIZE` bytes after a candidate delimiter.
 
         Returns
         -------
@@ -1069,4 +1053,4 @@ class PerFrameFunctionalGroupsReader:
                 f"Expected the Per Frame Functional Groups Sequence at "
                 f"{self._sequence_file_position}, found {tag} {vr}."
             )
-        return None if length == self.UNDEFINED_LENGTH else length
+        return None if length == UNDEFINED_LENGTH else length

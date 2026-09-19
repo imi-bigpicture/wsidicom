@@ -96,7 +96,7 @@ class TestReadSequenceDeferringValues:
 
         # Act
         sequence, deferred, _ = stream.read_sequence(
-            stream.stream_start.dataset_position, DEFER_SIZE
+            stream.dataset_position, DEFER_SIZE
         )
 
         # Assert
@@ -113,7 +113,7 @@ class TestReadSequenceDeferringValues:
 
         # Act
         _, _, end_of_sequence = stream.read_sequence(
-            stream.stream_start.dataset_position, DEFER_SIZE
+            stream.dataset_position, DEFER_SIZE
         )
 
         # Assert
@@ -135,7 +135,7 @@ class TestReadSequenceDeferringValues:
 
         # Act
         sequence, deferred, _ = stream.read_sequence(
-            stream.stream_start.dataset_position, DEFER_SIZE
+            stream.dataset_position, DEFER_SIZE
         )
         for value in deferred:
             stream.seek(value.offset)
@@ -153,7 +153,7 @@ class TestReadSequenceDeferringValues:
 
         # Act
         sequence, deferred, _ = stream.read_sequence(
-            stream.stream_start.dataset_position, DEFER_SIZE
+            stream.dataset_position, DEFER_SIZE
         )
 
         # Assert
@@ -164,7 +164,7 @@ class TestReadSequenceDeferringValues:
         # Arrange
         stream = create_stream(Sequence([create_item()]))
         sequence, deferred, _ = stream.read_sequence(
-            stream.stream_start.dataset_position, DEFER_SIZE
+            stream.dataset_position, DEFER_SIZE
         )
 
         # Act
@@ -182,7 +182,7 @@ class TestReadSequenceDeferringValues:
         # Arrange
         stream = create_stream(Sequence([create_item(with_nested_sequence=True)]))
         sequence, deferred, _ = stream.read_sequence(
-            stream.stream_start.dataset_position, DEFER_SIZE
+            stream.dataset_position, DEFER_SIZE
         )
         assert {value.value_representation for value in deferred} == {"SQ", "OB"}
 

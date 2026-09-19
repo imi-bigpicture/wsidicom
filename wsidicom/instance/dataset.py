@@ -1834,9 +1834,14 @@ class WsiDataset:
 
     @property
     def _has_parsed_per_frame_positions(self) -> bool:
-        """Whether the per frame functional groups sequence is in the dataset and its
-        items carry tile positions (PlanePositionSlideSequence). Checks the first frame
-        as representative."""
+        """Whether the dataset holds per frame groups that carry tile positions.
+
+        A dataset read from a file holds no per frame functional groups sequence at
+        all: the read passes over it and takes the positions from it instead, so
+        this is False there and `frame_positions` is where they come from. A dataset
+        that was not read that way can hold the sequence, and then its items are
+        looked at for a Plane Position (Slide), the first frame standing for the
+        rest."""
         frames = self.get_sequence(self._dataset, PerFrameFunctionalGroupsSequenceTag)
         return len(frames) > 0 and PlanePositionSlideSequenceTag in frames[0]
 

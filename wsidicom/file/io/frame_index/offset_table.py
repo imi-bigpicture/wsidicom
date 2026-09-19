@@ -20,6 +20,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE
 from wsidicom.file.io.frame_index.encapsulated_pixel_data import (
     EncapsulatedPixelDataFrameIndexParser,
 )
@@ -103,4 +104,4 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
                 str(self._file),
                 f"Invalid frame length {lengths[frame]} for frame {frame}",
             )
-        return FrameIndex(pixels_start + offsets + self.HEADER_BYTES, lengths)
+        return FrameIndex(pixels_start + offsets + TAG_AND_LENGTH_SIZE, lengths)
