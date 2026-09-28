@@ -25,6 +25,7 @@ from typing import Any, BinaryIO, Final
 from fsspec.implementations.local import LocalFileSystem
 from pydicom import DataElement, Dataset, FileMetaDataset
 from pydicom.config import RAISE
+from pydicom.datadict import dictionary_has_tag, dictionary_VR
 from pydicom.dataelem import RawDataElement, convert_raw_data_element
 from pydicom.errors import InvalidDicomError
 from pydicom.filebase import DicomIO
@@ -44,8 +45,12 @@ from pydicom.valuerep import VR
 from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
-from wsidicom.file.io.constants import UNDEFINED_LENGTH
-from wsidicom.file.io.deferred_element import DeferredElement
+from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE, UNDEFINED_LENGTH
+from wsidicom.file.io.deferred_element import (
+    NestedDeferredElement,
+    RootDeferredElement,
+)
+from wsidicom.file.io.sequence_walker import SequenceWalker
 from wsidicom.tags import (
     InstanceCreationDateTag,
     InstanceCreationTimeTag,
@@ -266,14 +271,14 @@ class WsiDicomReadIO(WsiDicomIO):
             UID(file_meta_info.TransferSyntaxUID),
         )
 
-    @staticmethod
     def _read_stream_start(
-        stream: BinaryIO, filepath: UPath
+        self, stream: BinaryIO, filepath: UPath
     ) -> tuple[FileMetaDataset, int]:
         """Read the preamble and the file meta information from the start of a stream.
 
         The stream is left where it was. Read before the stream is one of these, what
-        it holds being what states how the rest of the stream is to be read.
+        it holds being what states how the rest of the stream is to be read. A method
+        rather than a function so that a stream without them can be given its own.
 
         Parameters
         ----------
@@ -363,6 +368,7 @@ class WsiDicomReadIO(WsiDicomIO):
         position: int,
         stop_tag: BaseTag,
         into: dict[BaseTag, DataElement | RawDataElement],
+        undefined_length_sequences_to_read: frozenset[BaseTag] | None = None,
     ) -> BaseTag | None:
         """Read elements from `position` into `into`, stopping at `stop_tag`.
 
@@ -377,21 +383,43 @@ class WsiDicomReadIO(WsiDicomIO):
             First tag not to read.
         into: dict[BaseTag, DataElement | RawDataElement]
             Elements read so far, which the elements read here are added to.
+        undefined_length_sequences_to_read: frozenset[BaseTag] | None = None
+            Undefined length sequences to read. If given, the read also stops at any
+            other undefined length sequence, leaving the stream at its tag. Defined
+            length sequences are always read, as pydicom defers parsing them, as are
+            implicit VR sequences the dictionary does not know. If None, all
+            sequences are read.
 
         Returns
         -------
         BaseTag | None
             The tag the read stopped at, or None if the stream ended before a tag
-            ordered at or after `stop_tag`.
+            ordered at or after `stop_tag`. A tag before `stop_tag` is an undefined
+            length sequence not in `undefined_length_sequences_to_read`.
         """
         stopped_at: BaseTag | None = None
 
         def _stop_at(tag: BaseTag, vr: str | None, length: int) -> bool:
             nonlocal stopped_at
-            if tag < stop_tag:
-                return False
-            stopped_at = tag
-            return True
+            if tag >= stop_tag:
+                stopped_at = tag
+                return True
+            if (
+                undefined_length_sequences_to_read is not None
+                and length == UNDEFINED_LENGTH
+                and tag not in undefined_length_sequences_to_read
+                and (
+                    vr == "SQ"
+                    or (
+                        vr is None
+                        and dictionary_has_tag(tag)
+                        and dictionary_VR(tag) == "SQ"
+                    )
+                )
+            ):
+                stopped_at = tag
+                return True
+            return False
 
         self.seek(position)
         # What the stream states it is need not be what it is, so the first bytes
@@ -463,7 +491,7 @@ class WsiDicomReadIO(WsiDicomIO):
 
     def read_sequence(
         self, position: int, defer_size: int
-    ) -> tuple[DicomSequence, list[DeferredElement], int]:
+    ) -> tuple[DicomSequence, list[NestedDeferredElement], int]:
         """Read the sequence at `position`, deferring values above `defer_size`.
 
         Parameters
@@ -475,24 +503,15 @@ class WsiDicomReadIO(WsiDicomIO):
 
         Returns
         -------
-        tuple[DicomSequence, list[DeferredElement], int]
+        tuple[DicomSequence, list[NestedDeferredElement], int]
             The sequence, the deferred elements, and the offset just past the
             sequence.
         """
-        self.seek(position)
-        tag = self.read_tag()
-        value_representation = self.read_tag_vr()
-        if value_representation not in (None, b"SQ"):
-            raise WsiDicomFileError(
-                str(self),
-                f"Expected a sequence at {position}, found {tag} with value "
-                f"representation {value_representation!r}",
-            )
-        length = self.read_UL()
+        _, _, length = self._read_sequence_header(position)
         if length == UNDEFINED_LENGTH:
             length = None
         items: list[Dataset] = []
-        deferred: list[DeferredElement] = []
+        deferred: list[NestedDeferredElement] = []
         end_of_sequence = None if length is None else self.tell() + length
         # End at stated length or when at the sequence delimiter
         while end_of_sequence is None or self.tell() < end_of_sequence:
@@ -525,7 +544,83 @@ class WsiDicomReadIO(WsiDicomIO):
         sequence.is_undefined_length = length is None
         return sequence, deferred, self.tell()
 
-    def _take_deferred_elements(self, dataset: Dataset) -> Iterable[DeferredElement]:
+    def step_over_sequence(self, position: int) -> RootDeferredElement:
+        """Step over the undefined length sequence at `position` without reading it.
+
+        The stream is left just past the sequence.
+
+        Parameters
+        ----------
+        position: int
+            Offset of the tag of the sequence.
+
+        Returns
+        -------
+        RootDeferredElement
+            Element for reading the sequence later.
+
+        Raises
+        ------
+        WsiDicomFileError
+            If there is no undefined length sequence at `position`.
+        UnwalkableSequenceException
+            If the framing of the sequence cannot be followed.
+        """
+        tag, value_representation, length = self._read_sequence_header(position)
+        if length != UNDEFINED_LENGTH:
+            raise WsiDicomFileError(
+                str(self),
+                f"Expected an undefined length sequence at {position}, found {tag} "
+                f"with length {length}.",
+            )
+        items_position = self.tell()
+        # A walker per sequence, so that the block it reads is not kept alive.
+        walker = SequenceWalker(self.stream, self.transfer_syntax)
+        end_position = walker.seek_past_sequence(items_position)
+        # Exclude the sequence delimiter from the value, as pydicom writes it when
+        # writing an undefined length sequence.
+        return RootDeferredElement(
+            tag,
+            None if value_representation is None else value_representation.decode(),
+            items_position,
+            end_position - TAG_AND_LENGTH_SIZE - items_position,
+            self.is_implicit_VR,
+            self.is_little_endian,
+        )
+
+    def _read_sequence_header(self, position: int) -> tuple[BaseTag, bytes | None, int]:
+        """Read the header of the sequence at `position`.
+
+        Parameters
+        ----------
+        position: int
+            Offset of the tag of the sequence.
+
+        Returns
+        -------
+        tuple[BaseTag, bytes | None, int]
+            Tag, value representation (None if implicit VR) and stated length of the
+            sequence. The stream is left at the first item.
+
+        Raises
+        ------
+        WsiDicomFileError
+            If the element at `position` is not a sequence.
+        """
+        self.seek(position)
+        tag = self.read_tag()
+        value_representation = self.read_tag_vr()
+        if value_representation not in (None, b"SQ"):
+            raise WsiDicomFileError(
+                str(self),
+                f"Expected a sequence at {position}, found {tag} with value "
+                f"representation {value_representation!r}",
+            )
+        return tag, value_representation, self.read_UL()
+
+    def _take_deferred_elements(
+        self, dataset: Dataset
+    ) -> Iterable[NestedDeferredElement]:
         """Take out the elements `dataset` holds whose values were deferred.
 
         Parameters
@@ -535,29 +630,29 @@ class WsiDicomReadIO(WsiDicomIO):
 
         Returns
         -------
-        Iterable[DeferredElement]
+        Iterable[NestedDeferredElement]
             One per value taken out.
         """
         elements = (
             dataset.get_item(tag, keep_deferred=True) for tag in list(dataset.keys())
         )
-        deferred_elements = (
+        nested_deferred_elements = (
             element
             for element in elements
             if isinstance(element, RawDataElement)
             and element.value is None
             and element.length
         )
-        for element in deferred_elements:
+        for element in nested_deferred_elements:
             del dataset[element.tag]
-            yield DeferredElement(
-                dataset,
+            yield NestedDeferredElement(
                 element.tag,
                 element.VR,
                 element.value_tell,
                 element.length,
                 self._dicom_io.is_implicit_VR,
                 self._dicom_io.is_little_endian,
+                dataset,
             )
 
 

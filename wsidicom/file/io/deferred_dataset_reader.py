@@ -20,7 +20,11 @@ from typing import Final
 from pydicom import DataElement
 from pydicom.dataset import Dataset
 
-from wsidicom.file.io.deferred_element import DeferredElement
+from wsidicom.file.io.deferred_element import (
+    DeferredElement,
+    NestedDeferredElement,
+    RootDeferredElement,
+)
 from wsidicom.file.io.per_frame_functional_groups_reader import (
     PerFrameFunctionalGroupsReader,
 )
@@ -38,10 +42,9 @@ from wsidicom.tags import (
 class FileDeferredDatasetReader(DeferredDatasetReader):
     """Reads the rest of a dataset that was read only as far as opening needs.
 
-    Opening stops at the per frame functional groups sequence and passes over the
-    values too large to be worth reading, neither of which the way to a tile goes
-    through. What was left is read here when something asks for it: the tile
-    positions when a frame is read, and the rest when the whole dataset is wanted.
+    Opening stops at the per frame functional groups sequence, steps over sequences
+    it does not need, and defers large values. These are read on demand: the tile
+    positions when a frame is read, and the rest when the whole dataset is requested.
 
     The sequence holds the tile positions and says where the pixel data starts, so
     it is read once whichever of them is asked for first, and not at all for an
@@ -53,7 +56,8 @@ class FileDeferredDatasetReader(DeferredDatasetReader):
         self,
         io: WsiDicomReadIO,
         dataset: Dataset,
-        deferred_elements: Iterable[DeferredElement],
+        nested_deferred_elements: Iterable[NestedDeferredElement],
+        root_deferred_elements: Iterable[RootDeferredElement],
         per_frame_position: int | None,
         pixel_data_position: int | None,
     ):
@@ -65,8 +69,10 @@ class FileDeferredDatasetReader(DeferredDatasetReader):
             File the dataset was read from.
         dataset: Dataset
             The dataset, as far as it has been read.
-        deferred_elements: Iterable[DeferredElement]
+        nested_deferred_elements: Iterable[NestedDeferredElement]
             Elements whose values were passed over while reading.
+        root_deferred_elements: Iterable[RootDeferredElement]
+            Sequences stepped over while reading, which belong in the root dataset.
         per_frame_position: int | None
             Offset of the per frame functional groups sequence the read stopped at,
             or None where the instance has no sequence to stop at.
@@ -76,7 +82,8 @@ class FileDeferredDatasetReader(DeferredDatasetReader):
         """
         self._io: Final = io
         self._dataset: Final = dataset
-        self._deferred_elements: Final = list(deferred_elements)
+        self._nested_deferred_elements: Final = list(nested_deferred_elements)
+        self._root_deferred_elements: Final = list(root_deferred_elements)
         self._per_frame_position: Final = per_frame_position
         self._pixel_data_position = pixel_data_position
         self._end_of_per_frame_groups: int | None = None
@@ -147,10 +154,30 @@ class FileDeferredDatasetReader(DeferredDatasetReader):
         """
         with self._io.exclusive():
             self.seek_to_pixel_data()
-            while self._deferred_elements:
-                element = self._deferred_elements.pop()
-                self._io.seek(element.offset)
-                element.set(self._io.read(element.length, need_exact_length=True))
+            while self._nested_deferred_elements:
+                element = self._nested_deferred_elements[-1]
+                element.set(self._read_deferred_value(element))
+                self._nested_deferred_elements.pop()
+            while self._root_deferred_elements:
+                sequence = self._root_deferred_elements[-1]
+                sequence.set(self._dataset, self._read_deferred_value(sequence))
+                self._root_deferred_elements.pop()
+
+    def _read_deferred_value(self, element: DeferredElement) -> bytes:
+        """Read the value of a deferred element.
+
+        Parameters
+        ----------
+        element: DeferredElement
+            Element to read the value of.
+
+        Returns
+        -------
+        bytes
+            The value of the element.
+        """
+        self._io.seek(element.offset)
+        return self._io.read(element.length, need_exact_length=True)
 
     def _read_per_frame_groups(
         self, per_frame_position: int

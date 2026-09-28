@@ -65,11 +65,16 @@ class WsiDicomTestReadIO(WsiDicomReadIO):
     """
 
     def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID):
+        self._given_transfer_syntax = transfer_syntax
+        super().__init__(stream, filepath)
+
+    def _read_stream_start(
+        self, stream: BinaryIO, filepath: UPath
+    ) -> tuple[FileMetaDataset, int]:
+        """Make up the file meta information, there being none to read."""
         file_meta_info = FileMetaDataset()
-        file_meta_info.TransferSyntaxUID = transfer_syntax
-        self.file_meta_info = file_meta_info
-        self.dataset_position = 0
-        WsiDicomIO.__init__(self, stream, filepath, transfer_syntax)
+        file_meta_info.TransferSyntaxUID = self._given_transfer_syntax
+        return file_meta_info, 0
 
 
 class WsiDicomTestReader(WsiDicomReader):
@@ -86,7 +91,6 @@ class WsiDicomTestReader(WsiDicomReader):
     ):
         self._stream = stream
         self._frame_count = frame_count
-        self._deferred_elements = []
         self._transfer_syntax_uid = transfer_syntax
         dataset = Dataset()
         dataset.BitsAllocated = (bits // 8) * 8
@@ -99,7 +103,7 @@ class WsiDicomTestReader(WsiDicomReader):
         self._dataset = WsiDataset(dataset)
         # No sequence to pass, and the pixel data at the start of the stream.
         self._deferred_reader = FileDeferredDatasetReader(
-            stream, dataset, [], per_frame_position=None, pixel_data_position=0
+            stream, dataset, [], [], per_frame_position=None, pixel_data_position=0
         )
         self._frame_index_parser: FrameIndexParser | None = None
         self._frame_index: FrameIndex | None = None

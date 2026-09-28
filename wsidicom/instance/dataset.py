@@ -207,6 +207,20 @@ class WsiDataset:
     format). Datasets missing any of these are rejected by
     `is_supported`."""
 
+    SEQUENCES_READ_WHILE_OPENING: ClassVar[frozenset[BaseTag]] = frozenset(
+        (
+            OpticalPathSequenceTag,
+            SharedFunctionalGroupsSequenceTag,
+            TotalPixelMatrixOriginSequenceTag,
+        )
+    )
+    """Top level sequences that are needed when opening an instance.
+
+    Other top level sequences are only needed for metadata, and may be read when
+    requested. Nested sequences are read with the sequence holding them. The per
+    frame functional groups sequence is not here, as reading the dataset stops at
+    it and the frame positions are read from it separately."""
+
     SUPPORTED_PHOTOMETRIC_INTERPRETATIONS: ClassVar[frozenset[str]] = frozenset(
         {
             "MONOCHROME2",
@@ -272,10 +286,9 @@ class WsiDataset:
         deliberate act and plain to find; what is read from a WSI dataset should
         come from the readers here.
 
-        Whole, so that what leaves this class is what the file states. A value that
-        element was deferred when the dataset was read is read now, which is why
-        the
-        attributes read here go to the dataset directly instead.
+        Whole, so that what leaves this class is what the file states: values and
+        sequences deferred when the dataset was read are read from file now. The
+        attributes read here go to the dataset as it is instead.
         """
         return self._complete_dataset
 
@@ -678,9 +691,13 @@ class WsiDataset:
         return self.replace({element.tag: element for element in dataset})
 
     def __eq__(self, other: object) -> bool:
+        if other is self:
+            return True
         if isinstance(other, WsiDataset):
-            return self._dataset == other.as_dataset()
-        return self._dataset == other
+            return self._complete_dataset == other.as_dataset()
+        if isinstance(other, Dataset):
+            return self._complete_dataset == other
+        return NotImplemented
 
     @property
     def frame_positions(self) -> PerFrameGroupPositions:
@@ -1302,12 +1319,18 @@ class WsiDataset:
             and self.tile_size == other_dataset.tile_size
             and self.tile_type == other_dataset.tile_type
             and (
-                self.get_sequence(self._dataset, TotalPixelMatrixOriginSequenceTag)
-                == self.get_sequence(
-                    other_dataset.as_dataset(), TotalPixelMatrixOriginSequenceTag
-                )
+                self.total_pixel_matrix_origin
+                == other_dataset.total_pixel_matrix_origin
             )
         )
+
+    @property
+    def total_pixel_matrix_origin(self) -> DicomSequence:
+        """The total pixel matrix origin sequence, empty if the dataset has none.
+
+        Read while opening, so it is there without completing the dataset.
+        """
+        return self.get_sequence(self._dataset, TotalPixelMatrixOriginSequenceTag)
 
     def matches_series(self, uids: SlideUids, tile_size: Size | None = None) -> bool:
         """Check if instance is valid (Uids and tile size match).

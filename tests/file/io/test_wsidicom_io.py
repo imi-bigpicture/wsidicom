@@ -48,6 +48,7 @@ from pydicom.uid import (
 from upath import UPath
 
 from wsidicom.errors import WsiDicomFileError
+from wsidicom.file.io.sequence_walker import UnwalkableSequenceException
 from wsidicom.file.io.wsidicom_io import (
     WsiDicomIO,
     WsiDicomReadIO,
@@ -292,6 +293,303 @@ class TestWsiDicomIO:
         read = WsiDataset.make_dataset(elements, io.transfer_syntax)
         assert read.ContainerIdentifier == "Test456"
         assert read == dataset
+        io.close()
+
+    @pytest.mark.parametrize(
+        ["states_length", "is_named", "expected_to_stop"],
+        [
+            (False, False, True),
+            # Sequences in `undefined_length_sequences_to_read` are read.
+            (False, True, False),
+            # Defined length sequences are already deferred by pydicom.
+            (True, False, False),
+            (True, True, False),
+        ],
+    )
+    def test_read_elements_from_stops_at_a_sequence_to_be_stepped_over(
+        self,
+        buffer_with_file_meta: BinaryIO,
+        placeholder_path: UPath,
+        states_length: bool,
+        is_named: bool,
+        expected_to_stop: bool,
+    ):
+        """Read stops at an undefined length sequence not to be read."""
+        # Arrange
+        specimen_description_tag = Tag("SpecimenDescriptionSequence")
+        item = Dataset()
+        item.SpecimenIdentifier = "S1"
+        dataset = Dataset()
+        dataset.PatientID = "Test123"
+        dataset.SpecimenDescriptionSequence = Sequence([item])
+        dataset[specimen_description_tag].is_undefined_length = not states_length
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+        named = frozenset({specimen_description_tag} if is_named else ())
+
+        # Act
+        stopped_at = io.read_elements_from(
+            io.dataset_position,
+            ExtendedOffsetTableTag,
+            elements,
+            undefined_length_sequences_to_read=named,
+        )
+
+        # Assert
+        if expected_to_stop:
+            assert stopped_at == specimen_description_tag
+            assert specimen_description_tag not in elements
+            assert io.read_tag() == specimen_description_tag
+        else:
+            assert stopped_at is None
+            assert specimen_description_tag in elements
+        io.close()
+
+    @pytest.mark.parametrize("syntax", [ExplicitVRLittleEndian, ImplicitVRLittleEndian])
+    def test_read_elements_from_stops_at_a_sequence_however_it_is_encoded(
+        self, placeholder_path: UPath, syntax: UID
+    ):
+        """Read stops at an undefined length sequence for explicit and implicit VR.
+
+        The test files are all explicit VR, so implicit VR is only covered here.
+        """
+        # Arrange
+        specimen_description_tag = Tag("SpecimenDescriptionSequence")
+        item = Dataset()
+        item.SpecimenIdentifier = "S1"
+        dataset = Dataset()
+        dataset.PatientID = "Test123"
+        dataset.SpecimenDescriptionSequence = Sequence([item])
+        dataset[specimen_description_tag].is_undefined_length = True
+        dataset.file_meta = FileMetaDataset()
+        dataset.file_meta.TransferSyntaxUID = syntax
+        dataset.file_meta.MediaStorageSOPClassUID = VLWholeSlideMicroscopyImageStorage
+        dataset.file_meta.MediaStorageSOPInstanceUID = generate_uid()
+        buffer = BytesIO()
+        dataset.save_as(buffer, enforce_file_format=True)
+        io = WsiDicomReadIO(buffer, filepath=placeholder_path)
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+
+        # Act
+        stopped_at = io.read_elements_from(
+            io.dataset_position,
+            ExtendedOffsetTableTag,
+            elements,
+            undefined_length_sequences_to_read=frozenset(),
+        )
+
+        # Assert
+        assert stopped_at == specimen_description_tag
+        assert specimen_description_tag not in elements
+        io.close()
+
+    def test_read_elements_from_reads_a_private_sequence_of_implicit_representation(
+        self, placeholder_path: UPath
+    ):
+        """With implicit VR, a private sequence is read rather than stepped over.
+
+        The dictionary does not know private sequences, so one stepped over would be
+        read back as UN.
+        """
+        # Arrange
+        private_tag = Tag(0x0009, 0x1001)
+        item = Dataset()
+        item.PatientID = "Test123"
+        dataset = Dataset()
+        dataset.add_new(Tag(0x0009, 0x0010), "LO", "NOT IN THE DICTIONARY")
+        dataset.add_new(private_tag, "SQ", Sequence([item]))
+        dataset[private_tag].is_undefined_length = True
+        dataset.file_meta = FileMetaDataset()
+        dataset.file_meta.TransferSyntaxUID = ImplicitVRLittleEndian
+        dataset.file_meta.MediaStorageSOPClassUID = VLWholeSlideMicroscopyImageStorage
+        dataset.file_meta.MediaStorageSOPInstanceUID = generate_uid()
+        buffer = BytesIO()
+        dataset.save_as(buffer, enforce_file_format=True)
+        io = WsiDicomReadIO(buffer, filepath=placeholder_path)
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+
+        # Act
+        stopped_at = io.read_elements_from(
+            io.dataset_position,
+            ExtendedOffsetTableTag,
+            elements,
+            undefined_length_sequences_to_read=frozenset(),
+        )
+
+        # Assert
+        assert stopped_at is None
+        read = WsiDataset.make_dataset(elements, io.transfer_syntax)
+        assert read[private_tag].VR == "SQ"
+        assert read[private_tag].value[0].PatientID == "Test123"
+        io.close()
+
+    def test_read_elements_from_reads_every_sequence_when_none_are_named(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        """Without `undefined_length_sequences_to_read`, all sequences are read."""
+        # Arrange
+        specimen_description_tag = Tag("SpecimenDescriptionSequence")
+        item = Dataset()
+        item.SpecimenIdentifier = "S1"
+        dataset = Dataset()
+        dataset.SpecimenDescriptionSequence = Sequence([item])
+        dataset[specimen_description_tag].is_undefined_length = True
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        elements: dict[BaseTag, DataElement | RawDataElement] = {}
+
+        # Act
+        stopped_at = io.read_elements_from(
+            io.dataset_position, ExtendedOffsetTableTag, elements
+        )
+
+        # Assert
+        assert stopped_at is None
+        assert specimen_description_tag in elements
+        io.close()
+
+    def test_step_over_sequence_leaves_the_stream_past_it_and_the_value_readable(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        """The element points at the value, without the delimiter, and the stream is
+        left where the next element starts."""
+        # Arrange
+        specimen_description_tag = Tag("SpecimenDescriptionSequence")
+        item = Dataset()
+        item.SpecimenIdentifier = "S1"
+        dataset = Dataset()
+        dataset.SpecimenDescriptionSequence = Sequence([item])
+        dataset[specimen_description_tag].is_undefined_length = True
+        dataset.TotalPixelMatrixColumns = 4096
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+
+        # Act
+        stepped_over = io.step_over_sequence(io.dataset_position)
+
+        # Assert
+        assert stepped_over.tag == specimen_description_tag
+        assert stepped_over.value_representation == "SQ"
+        assert io.read_tag() == Tag("TotalPixelMatrixColumns")
+        io.seek(stepped_over.offset)
+        value = io.read(stepped_over.length, need_exact_length=True)
+        assert value.startswith(b"\xfe\xff\x00\xe0")
+        assert not value.endswith(b"\xfe\xff\xdd\xe0\x00\x00\x00\x00")
+        read = Dataset()
+        stepped_over.set(read, value)
+        assert read.SpecimenDescriptionSequence[0].SpecimenIdentifier == "S1"
+        io.close()
+
+    def test_step_over_sequence_raises_on_a_sequence_stating_its_length(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        # Arrange
+        item = Dataset()
+        item.SpecimenIdentifier = "S1"
+        dataset = Dataset()
+        dataset.SpecimenDescriptionSequence = Sequence([item])
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+
+        # Act & Assert
+        with pytest.raises(WsiDicomFileError, match="undefined length"):
+            io.step_over_sequence(io.dataset_position)
+        io.close()
+
+    def test_step_over_sequence_raises_on_an_element_that_is_not_a_sequence(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        # Arrange
+        dataset = Dataset()
+        dataset.PatientID = "Test123"
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+
+        # Act & Assert
+        with pytest.raises(WsiDicomFileError, match="Expected a sequence"):
+            io.step_over_sequence(io.dataset_position)
+        io.close()
+
+    def test_step_over_sequence_raises_when_the_framing_cannot_be_followed(
+        self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
+    ):
+        # Arrange
+        # An item delimiter where an item belongs.
+        specimen_description_tag = Tag("SpecimenDescriptionSequence")
+        dataset = Dataset()
+        dataset.SpecimenDescriptionSequence = Sequence([])
+        dataset[specimen_description_tag].is_undefined_length = True
+        dataset.save_as(
+            buffer_with_file_meta,
+            enforce_file_format=False,
+            little_endian=True,
+            implicit_vr=False,
+        )
+        io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
+        io.seek(io.dataset_position + 12)
+        io.stream.write(b"\xfe\xff\x0d\xe0\x00\x00\x00\x00")
+
+        # Act & Assert
+        with pytest.raises(UnwalkableSequenceException):
+            io.step_over_sequence(io.dataset_position)
+        io.close()
+
+    def test_step_over_sequence_in_implicit_vr_states_no_value_representation(
+        self, placeholder_path: UPath
+    ):
+        """The element read back gets its VR from the dictionary, as pydicom would."""
+        # Arrange
+        specimen_description_tag = Tag("SpecimenDescriptionSequence")
+        item = Dataset()
+        item.SpecimenIdentifier = "S1"
+        dataset = Dataset()
+        dataset.SpecimenDescriptionSequence = Sequence([item])
+        dataset[specimen_description_tag].is_undefined_length = True
+        dataset.file_meta = FileMetaDataset()
+        dataset.file_meta.TransferSyntaxUID = ImplicitVRLittleEndian
+        dataset.file_meta.MediaStorageSOPClassUID = VLWholeSlideMicroscopyImageStorage
+        dataset.file_meta.MediaStorageSOPInstanceUID = generate_uid()
+        buffer = BytesIO()
+        dataset.save_as(buffer, enforce_file_format=True)
+        io = WsiDicomReadIO(buffer, filepath=placeholder_path)
+
+        # Act
+        stepped_over = io.step_over_sequence(io.dataset_position)
+
+        # Assert
+        assert stepped_over.value_representation is None
+        assert stepped_over.is_implicit_value_representation
+        io.seek(stepped_over.offset)
+        read = Dataset()
+        stepped_over.set(read, io.read(stepped_over.length, need_exact_length=True))
+        assert read[specimen_description_tag].VR == "SQ"
+        assert read.SpecimenDescriptionSequence[0].SpecimenIdentifier == "S1"
         io.close()
 
     def test_read_elements_from_makes_values_against_the_character_set_read_before(

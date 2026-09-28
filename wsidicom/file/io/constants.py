@@ -21,10 +21,23 @@ a number gets two names, and two sizes that happen to be equal keep separate nam
 import struct
 from typing import Final
 
-from pydicom.tag import ItemTag, SequenceDelimiterTag
+from pydicom.tag import ItemDelimiterTag, ItemTag, SequenceDelimiterTag
+from pydicom.valuerep import EXPLICIT_VR_LENGTH_32
 
 UNDEFINED_LENGTH: Final = 0xFFFFFFFF
 """Length stated by an element that ends at a delimiter instead."""
+
+DELIMITER_GROUP_NUMBER: Final = ItemTag.group
+"""Group number of items and delimiters."""
+
+ITEM_ELEMENT_NUMBER: Final = ItemTag.element
+"""Element number of an item, in a sequence or among fragments."""
+
+ITEM_DELIMITER_ELEMENT_NUMBER: Final = ItemDelimiterTag.element
+"""Element number of the delimiter ending an item."""
+
+SEQUENCE_DELIMITER_ELEMENT_NUMBER: Final = SequenceDelimiterTag.element
+"""Element number of the delimiter ending a sequence or fragments."""
 
 ITEM_TAG_BYTES: Final = struct.pack("<HH", ItemTag.group, ItemTag.element)
 """Tag of an item, as written."""
@@ -49,8 +62,22 @@ SHORT_FORM_HEADER_SIZE: Final = 8
 LONG_FORM_HEADER_SIZE: Final = 12
 """Size of a long form element header: tag, VR, reserved and four byte length."""
 
+TAG_SIZE: Final = 4
+"""Size of a tag, and offset of the length in an item or implicit VR header."""
+
 TAG_AND_VALUE_REPRESENTATION_SIZE: Final = 6
 """Size of a tag and VR, and offset of the length in a short form header."""
 
+TAG_VALUE_REPRESENTATION_AND_RESERVED_SIZE: Final = 8
+"""Offset of the length in a long form header."""
+
 CHARACTER_SET_ESCAPE: Final = 0x1B
 """Byte starting a character set escape sequence."""
+
+SEQUENCE_VALUE_REPRESENTATION: Final = b"SQ"
+"""Value representation of a sequence, as written."""
+
+LONG_FORM_VALUE_REPRESENTATIONS: Final = frozenset(
+    value_representation.encode() for value_representation in EXPLICIT_VR_LENGTH_32
+)
+"""Value representations whose header is in the long form."""

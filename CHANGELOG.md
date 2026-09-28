@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Building the frame index of an image with an offset table is faster. The table is parsed in one pass rather than one frame at a time, and an extended offset table takes its frame lengths from `Extended Offset Table Lengths` rather than deriving them from the distance between offsets.
 - Opening an image without an offset table is now faster, as pixel data is read in blocks rather than one frame at a time.
 - ICC profiles in `OpticalPathSequence` are now deferred on open.
+- Faster opening of files with undefined length sequences. Top level sequences that are not needed for opening, such as `Specimen Description Sequence`, `Acquisition Context Sequence` and `Dimension Organization Sequence`, are now skipped instead of parsed, and read when needed. Defined length sequences are not affected, as pydicom already defers parsing them. Neither are private sequences in implicit VR files.
 - wsidicom logs through a logger per module rather than the root logger, so `logging.getLogger("wsidicom")` controls the package and a single module can be silenced on its own.
 
 ### Fixed

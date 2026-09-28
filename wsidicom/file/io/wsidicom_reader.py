@@ -26,7 +26,10 @@ from upath import UPath
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotSupportedError, WsiDicomOutOfBoundsError
 from wsidicom.file.io.deferred_dataset_reader import FileDeferredDatasetReader
-from wsidicom.file.io.deferred_element import DeferredElement
+from wsidicom.file.io.deferred_element import (
+    NestedDeferredElement,
+    RootDeferredElement,
+)
 from wsidicom.file.io.frame_index import (
     BasicOffsetTableFrameIndexParser,
     EmptyBasicTableOffsetException,
@@ -41,6 +44,7 @@ from wsidicom.file.io.frame_index.tiff import (
     EmptyTiffFrameTagsException,
     TiffFrameIndexParser,
 )
+from wsidicom.file.io.sequence_walker import UnwalkableSequenceException
 from wsidicom.file.io.wsidicom_io import WsiDicomReadIO
 from wsidicom.instance import WsiDataset
 from wsidicom.metadata import ImageType
@@ -99,6 +103,10 @@ class WsiDicomReader:
         left there. What follows it, and where the pixel data starts, is read when a
         frame is.
 
+        Undefined length sequences not needed for opening are stepped over, and read
+        if the whole dataset is requested. Defined length sequences are already
+        deferred by pydicom.
+
         The elements are gathered as they are read and made into the dataset once,
         rather than a part at a time into a dataset that is added to, which costs an
         insert per element and a dataset per part that is thrown away again.
@@ -116,13 +124,14 @@ class WsiDicomReader:
                 f"that is not read."
             )
 
-        self._stream.read_elements_from(
-            self._stream.tell(), OpticalPathSequenceTag, elements
+        stepped_over: list[RootDeferredElement] = []
+        self._read_elements_stepping_over_sequences(
+            self._stream.tell(), OpticalPathSequenceTag, elements, stepped_over
         )
-        continue_from, deferred_elements = self._read_optical_paths(elements)
+        continue_from, nested_deferred_elements = self._read_optical_paths(elements)
 
-        stopped_at = self._stream.read_elements_from(
-            continue_from, PerFrameFunctionalGroupsSequenceTag, elements
+        stopped_at = self._read_elements_stepping_over_sequences(
+            continue_from, PerFrameFunctionalGroupsSequenceTag, elements, stepped_over
         )
         if not WsiDataset.is_supported(elements):
             raise WsiDicomNotSupportedError(
@@ -135,8 +144,8 @@ class WsiDicomReader:
             per_frame_position = self._stream.tell()
             pixel_data_position = None
         else:
-            self._stream.read_elements_from(
-                self._stream.tell(), ExtendedOffsetTableTag, elements
+            self._read_elements_stepping_over_sequences(
+                self._stream.tell(), ExtendedOffsetTableTag, elements, stepped_over
             )
             per_frame_position = None
             pixel_data_position = self._stream.tell()
@@ -144,14 +153,75 @@ class WsiDicomReader:
         return dataset, FileDeferredDatasetReader(
             self._stream,
             dataset,
-            deferred_elements,
+            nested_deferred_elements,
+            stepped_over,
             per_frame_position,
             pixel_data_position,
         )
 
+    def _read_elements_stepping_over_sequences(
+        self,
+        position: int,
+        stop_tag: BaseTag,
+        into: dict[BaseTag, DataElement | RawDataElement],
+        stepped_over: list[RootDeferredElement],
+    ) -> BaseTag | None:
+        """Read elements from `position` into `into`, stopping at `stop_tag`.
+
+        Undefined length sequences not needed for opening are stepped over and added
+        to `stepped_over`, to be read if the whole dataset is requested. If a
+        sequence cannot be stepped over, it and the remaining elements are read.
+
+        Parameters
+        ----------
+        position: int
+            Offset of the first element to read.
+        stop_tag: BaseTag
+            First tag not to read.
+        into: dict[BaseTag, DataElement | RawDataElement]
+            Elements read so far, which the elements read here are added to.
+        stepped_over: list[RootDeferredElement]
+            Sequences stepped over so far, to which new ones are added.
+
+        Returns
+        -------
+        BaseTag | None
+            The tag the read stopped at, or None if the stream ended before a tag
+            ordered at or after `stop_tag`.
+        """
+        read_from = position
+        while True:
+            stopped_at = self._stream.read_elements_from(
+                read_from,
+                stop_tag,
+                into,
+                undefined_length_sequences_to_read=(
+                    WsiDataset.SEQUENCES_READ_WHILE_OPENING
+                ),
+            )
+            if stopped_at is None or stopped_at >= stop_tag:
+                return stopped_at
+            sequence_position = self._stream.tell()
+            try:
+                sequence = self._stream.step_over_sequence(sequence_position)
+            except UnwalkableSequenceException as exception:
+                logger.debug(
+                    "Could not follow the framing of %s in %s (%s). Reading it, and "
+                    "what follows it, into the dataset instead.",
+                    stopped_at,
+                    self._stream,
+                    exception,
+                )
+                # Fall back to reading with pydicom, which may be more lenient.
+                return self._stream.read_elements_from(
+                    sequence_position, stop_tag, into
+                )
+            stepped_over.append(sequence)
+            read_from = self._stream.tell()
+
     def _read_optical_paths(
         self, elements: dict[BaseTag, DataElement | RawDataElement]
-    ) -> tuple[int, list[DeferredElement]]:
+    ) -> tuple[int, list[NestedDeferredElement]]:
         """Read the optical path sequence, deferring the values (e.g. ICC profile) that
         are large.
 
@@ -162,7 +232,7 @@ class WsiDicomReader:
 
         Returns
         -------
-        tuple[int, list[DeferredElement]]
+        tuple[int, list[NestedDeferredElement]]
             Offset the rest of the dataset is to be read from, and the elements
             whose values were deferred.
         """
