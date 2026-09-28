@@ -81,9 +81,8 @@ class Settings:
     built datasets with the mode passed per value, so pydicom's own validation
     mode is never set and a process using wsidicom keeps the mode it chose."""
     truncate_long_dicom_strings_on_validation_error: bool = False
-    """If long DICOM strings should be truncated. This is only used if
-    `strict_dicom_value_validation` is set. If set to `True` long strings will be
-    truncated if needed to pass validation."""
+    """If long DICOM strings should be truncated. If set to `True` a string longer
+    than its value representation allows is truncated to fit, with a warning."""
     decoded_frame_cache_size: int = 100 * 1024 * 1024
     """Size of the decoded frame cache. Default is 100 MB."""
     encoded_frame_cache_size: int = 100 * 1024 * 1024

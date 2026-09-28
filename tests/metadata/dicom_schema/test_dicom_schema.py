@@ -680,6 +680,44 @@ class TestDicomSchema:
         assert "ICCProfile" not in serialized
 
     @pytest.mark.parametrize(
+        ["optical_path", "unset_attribute", "set_attribute"],
+        [
+            (
+                OpticalPath(objective=Objectives(objective_power=20.0)),
+                "LensesCodeSequence",
+                "ObjectiveLensPower",
+            ),
+            (
+                OpticalPath(
+                    light_path_filter=LightPathFilter(low_pass=400, high_pass=600)
+                ),
+                "LightPathFilterTypeStackCodeSequence",
+                "LightPathFilterPassBand",
+            ),
+            (
+                OpticalPath(
+                    image_path_filter=ImagePathFilter(low_pass=400, high_pass=600)
+                ),
+                "ImagePathFilterTypeStackCodeSequence",
+                "ImagePathFilterPassBand",
+            ),
+        ],
+    )
+    def test_serialize_optical_path_with_unset_list(
+        self, optical_path: OpticalPath, unset_attribute: str, set_attribute: str
+    ):
+        # Arrange
+        schema = OpticalPathDicomSchema()
+
+        # Act
+        serialized = schema.dump(optical_path)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert unset_attribute not in serialized
+        assert set_attribute in serialized
+
+    @pytest.mark.parametrize(
         "illumination", [IlluminationColorCode("Full Spectrum"), 400.0, None]
     )
     @pytest.mark.parametrize(

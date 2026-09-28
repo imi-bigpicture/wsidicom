@@ -681,7 +681,7 @@ class ListDicomField(AttributeDicomField, fields.List):
                 "must contain at least one item; populate the metadata "
                 "field before dumping."
             )
-        if self._dump_none_if_empty and value is None or len(value) == 0:
+        if value is None or len(value) == 0:
             return None
         return super()._serialize(value, attr, obj, **kwargs)
 

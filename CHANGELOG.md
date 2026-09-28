@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Writing an optical path raised `TypeError` when an objective stated no lenses, or a light path or image path filter stated no filters, such as an objective with only a power or a filter with only a pass band.
+
 ## [0.36.0] - 2026-09-28
 
 ### Added
