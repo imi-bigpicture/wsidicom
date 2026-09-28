@@ -1017,6 +1017,7 @@ class TestDicomSchema:
         image_type: ImageType,
     ):
         # Arrange
+        assert wsi_metadata.overview is not None
         metadata = replace(
             wsi_metadata,
             pyramid=replace(wsi_metadata.pyramid, optical_paths=[]),
