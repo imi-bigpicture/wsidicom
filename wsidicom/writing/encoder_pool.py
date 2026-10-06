@@ -222,12 +222,18 @@ class EncoderPool:
     ) -> np.ndarray:
         """Downsample a block of tiles into one output tile.
 
-        Chooses between reduce-each-then-stitch (fast path when the downsampler
-        supports it) and stitch-then-halve (standard path). Both halve the block
-        by exactly 2x; the result is then padded to the full output tile size,
-        which matters at the right and bottom edges of a level where the input
-        block is smaller than 2x2.
+        Takes the downsampler's one-call block reduction where it has one (it
+        halves and pads in one pass). Otherwise chooses between
+        reduce-each-then-stitch (fast path when the downsampler supports it) and
+        stitch-then-halve (standard path). Both halve the block by exactly 2x; the
+        result is then padded to the full output tile size, which matters at the
+        right and bottom edges of a level where the input block is smaller than
+        2x2.
         """
+        fill = np.atleast_1d(self._blank_tile[0, 0])
+        block = self._downsampler.reduce_block(tiles, self._tile_size, fill)
+        if block is not None:
+            return block
         if self._downsampler.commutes_with_stitch:
             reduced = [
                 [self._downsampler.reduce_by_half(tile) for tile in row]
