@@ -1,0 +1,7 @@
+# Single-letter names: only the coordinates x and y, and T for a type parameter.
+allowed-idents-below-min-chars = ["x", "y", "T"]
+# Tests may unwrap, expect, panic and print: a failure there is the point.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true

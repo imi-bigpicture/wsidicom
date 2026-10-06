@@ -1,0 +1,38 @@
+# cargo-deny: advisories, licences, duplicate crates and sources of the
+# Rust dependency tree. Run `cargo deny check` in kernels/.
+
+[graph]
+# The platforms wheels are built for.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+
+[advisories]
+# Vulnerabilities fail the check; unmaintained crates fail only when a
+# direct dependency is unmaintained.
+unmaintained = "workspace"
+yanked = "deny"
+
+[licenses]
+# Permissive licences compatible with distributing under Apache-2.0.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "wsidicom-kernels"
+version = "0.1.0"
+description = "Fast tile compositing and downscaling (planar + HWC, sub-pixel, SIMD) for numpy."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "THIRD-PARTY-LICENSES.md"]
+authors = [{ name = "Erik O Gabrielsson", email = "erik.o.gabrielsson@sectra.com" }]
+keywords = ["image", "tile", "compose", "stitch", "mosaic", "downscale", "resize", "pyramid", "simd"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Graphics",
+    "Programming Language :: Python :: 3",
+]
+dependencies = ["numpy>=2.0"]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.2.0,<10.0.0",
+    "pillow>=10",
+    "hypothesis>=6.100",
+]
+
+[project.urls]
+Repository = "https://github.com/imi-bigpicture/wsidicom"
+
+[tool.maturin]
+python-source = "src"
+module-name = "wsidicom_kernels._kernels"
+features = ["pyo3/extension-module"]
+
+[tool.cibuildwheel]
+# One abi3 wheel (cp311-abi3) per platform; cp314 tests that same wheel on the
+# newest Python.
+build = ["cp311-*", "cp314-*"]
+# The runner's own architecture only (no emulated builds); musllinux needs
+# its own toolchain setup and is not built yet.
+archs = ["native"]
+skip = ["*-musllinux_*"]
+build-frontend = "build"
+test-requires = ["pytest", "pillow", "hypothesis"]
+test-command = "pytest {package}/tests -p no:cacheprovider"
+
+[tool.cibuildwheel.linux]
+# The manylinux images have no Rust toolchain.
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
