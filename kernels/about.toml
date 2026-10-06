@@ -1,0 +1,14 @@
+# cargo-about configuration. Regenerate the bundled attributions with:
+#   cargo about generate about.hbs > THIRD-PARTY-LICENSES.md
+# `accepted` lists every SPDX license present in the dependency tree; a new
+# dependency under any other license will make `cargo about` fail loudly.
+# Order matters for OR-licensed crates: MIT is listed first so dual
+# "MIT OR Apache-2.0" deps resolve to MIT (one tidy section, simpler notice).
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "Zlib",
+    "Unicode-3.0",
+]
