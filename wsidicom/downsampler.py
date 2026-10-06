@@ -15,6 +15,7 @@
 """Downsampler for image processing."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 
 import numpy as np
 from PIL import Image
@@ -27,6 +28,11 @@ try:
     import cv2
 except ImportError:
     cv2 = None
+
+try:
+    import wsidicom_kernels
+except ImportError:
+    wsidicom_kernels = None
 
 
 class Downsampler(ABC):
@@ -63,6 +69,10 @@ class Downsampler(ABC):
                 resample = settings.resampling_filter
             if preferred is None:
                 preferred = settings.preferred_downsampler
+        if preferred in (None, DownsamplerOption.KERNELS):
+            kernels_downsampler = KernelsDownsampler.from_filter(resample)
+            if kernels_downsampler is not None:
+                return kernels_downsampler
         if preferred != DownsamplerOption.PILLOW:
             cv2_downsampler = Cv2Downsampler.from_filter(resample)
             if cv2_downsampler is not None:
@@ -126,6 +136,32 @@ class Downsampler(ABC):
         """
         half = Size(max(array.shape[1] // 2, 1), max(array.shape[0] // 2, 1))
         return self.downsample(array, half)
+
+    def reduce_block(
+        self,
+        tiles: Sequence[Sequence[np.ndarray]],
+        tile_size: Size,
+        fill: np.ndarray,
+    ) -> np.ndarray | None:
+        """Halve a block of tiles into one output tile in a single call, or None
+        where the backend has none (the caller then stitches and halves).
+
+        Parameters
+        ----------
+        tiles: Sequence[Sequence[np.ndarray]]
+            Rows of tiles (one or two of each), ``(rows, columns[, samples])``.
+        tile_size: Size
+            Size of the output tile; the halved block lands at its top left.
+        fill: np.ndarray
+            The background pixel around a halved block smaller than the tile:
+            one sample per channel, in the tiles' dtype.
+
+        Returns
+        -------
+        np.ndarray | None
+            The output tile, or None.
+        """
+        return None
 
     @abstractmethod
     def thumbnail(self, array: np.ndarray, max_size: Size) -> np.ndarray:
@@ -291,6 +327,113 @@ class Cv2Downsampler(Downsampler):
             array,
             (output_size.width, output_size.height),
             interpolation=self._interpolation,
+        )
+
+    def thumbnail(self, array: np.ndarray, max_size: Size) -> np.ndarray:
+        height, width = array.shape[0], array.shape[1]
+        factor = min(max_size.width / width, max_size.height / height, 1.0)
+        if factor == 1.0:
+            return array
+        output_size = Size(
+            max(round(width * factor), 1), max(round(height * factor), 1)
+        )
+        return self.downsample(array, output_size)
+
+
+class KernelsDownsampler(Downsampler):
+    """Downsampler using wsidicom-kernels' SIMD resampling. Requires the optional
+    ``kernels`` extra."""
+
+    _KERNEL_FILTERS = (
+        {
+            ResampleFilterOption.NEAREST: wsidicom_kernels.ResizeFilter.NEAREST,
+            ResampleFilterOption.BOX: wsidicom_kernels.ResizeFilter.BOX,
+            ResampleFilterOption.BILINEAR: wsidicom_kernels.ResizeFilter.BILINEAR,
+            # Pillow's BICUBIC is the a = -0.5 cubic, Catmull-Rom.
+            ResampleFilterOption.BICUBIC: wsidicom_kernels.ResizeFilter.CATMULLROM,
+            ResampleFilterOption.LANCZOS: wsidicom_kernels.ResizeFilter.LANCZOS3,
+        }
+        if wsidicom_kernels is not None
+        else {}
+    )
+
+    def __init__(self, resample: ResampleFilterOption = ResampleFilterOption.BILINEAR):
+        """Create a wsidicom-kernels downsampler.
+
+        Parameters
+        ----------
+        resample: ResampleFilterOption
+            Resampling filter to use, any but HAMMING. Default is BILINEAR.
+        """
+        if wsidicom_kernels is None:
+            raise ImportError(
+                "KernelsDownsampler requires wsidicom-kernels; install the "
+                "'kernels' extra."
+            )
+        self._kernels = wsidicom_kernels
+        self._filter = resample
+        self._kernel_filter = self._KERNEL_FILTERS[resample]
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """Whether wsidicom-kernels is installed."""
+        return wsidicom_kernels is not None
+
+    @classmethod
+    def from_filter(cls, resample: ResampleFilterOption) -> "KernelsDownsampler | None":
+        """Return a downsampler for a resampling filter, or None if
+        wsidicom-kernels is unavailable or lacks the filter (HAMMING), so the
+        caller falls back to another backend.
+
+        Box at an exact 2x reduction is bit-identical to Pillow's reduce(2) and
+        OpenCV's INTER_AREA; the other filters are Pillow's (antialiased, kernel
+        scaled with the reduction), within a level of Pillow's results.
+        """
+        if wsidicom_kernels is None or resample not in cls._KERNEL_FILTERS:
+            return None
+        return cls(resample)
+
+    @property
+    def commutes_with_stitch(self) -> bool:
+        """True for BOX, whose 2x2 footprint stays within each tile."""
+        return self._filter == ResampleFilterOption.BOX
+
+    def downsample(self, array: np.ndarray, output_size: Size) -> np.ndarray:
+        return self._kernels.resize(
+            np.ascontiguousarray(array),
+            output_size.height,
+            output_size.width,
+            self._kernel_filter,
+        )
+
+    def reduce_by_half(self, array: np.ndarray) -> np.ndarray:
+        height, width = array.shape[0], array.shape[1]
+        if (
+            self._filter != ResampleFilterOption.BOX
+            or height % 2
+            or width % 2
+            or min(height, width) < 2
+        ):
+            return super().reduce_by_half(array)
+        return self._kernels.downscale(
+            np.ascontiguousarray(array), 2, self._kernel_filter
+        )
+
+    def reduce_block(
+        self,
+        tiles: Sequence[Sequence[np.ndarray]],
+        tile_size: Size,
+        fill: np.ndarray,
+    ) -> np.ndarray:
+        """The block halved by ``downscale_grid`` into a tile filled around it:
+        box reduces each tile in place, other filters stitch first."""
+        return self._kernels.downscale_grid(
+            [np.ascontiguousarray(tile) for row in tiles for tile in row],
+            len(tiles[0]),
+            2,
+            self._kernel_filter,
+            size=(tile_size.height, tile_size.width),
+            fill=fill,
         )
 
     def thumbnail(self, array: np.ndarray, max_size: Size) -> np.ndarray:

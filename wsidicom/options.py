@@ -76,6 +76,9 @@ class ResampleFilterOption(Option):
 class DownsamplerOption(Option):
     """Downsampler backend to use when rescaling images."""
 
+    KERNELS = "kernels"
+    """wsidicom-kernels (the ``kernels`` extra): SIMD resampling for every filter
+    but HAMMING."""
     OPENCV = "opencv"
     PILLOW = "pillow"
 

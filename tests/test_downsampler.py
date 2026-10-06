@@ -15,9 +15,9 @@
 """Tests for Downsampler.
 
 The shape/layout contract holds for every implementation, so ``TestDownsampler``
-runs it against both ``PillowDownsampler`` and ``Cv2Downsampler`` (the latter
-skipped when opencv is absent). Behaviour specific to one backend lives in its
-own class.
+runs it against ``PillowDownsampler``, ``Cv2Downsampler`` and
+``KernelsDownsampler`` (the latter two skipped when their extra is absent).
+Behaviour specific to one backend lives in its own class.
 """
 
 from typing import cast
@@ -26,10 +26,12 @@ import numpy as np
 import pytest
 from wsidicom_data import TestData
 
+from wsidicom import downsampler as downsampler_module
 from wsidicom.config import Settings, use_settings
 from wsidicom.downsampler import (
     Cv2Downsampler,
     Downsampler,
+    KernelsDownsampler,
     PillowDownsampler,
     ResampleFilterOption,
 )
@@ -57,8 +59,15 @@ def image_array(
                 not Cv2Downsampler.is_available(), reason="opencv not installed"
             ),
         ),
+        pytest.param(
+            KernelsDownsampler,
+            marks=pytest.mark.skipif(
+                not KernelsDownsampler.is_available(),
+                reason="wsidicom-kernels not installed",
+            ),
+        ),
     ],
-    ids=["pillow", "cv2"],
+    ids=["pillow", "cv2", "kernels"],
 )
 def downsampler(request: pytest.FixtureRequest) -> Downsampler:
     """Each Downsampler implementation, so the contract is tested against all."""
@@ -322,14 +331,53 @@ class TestDownsamplerCreate:
             assert isinstance(Downsampler.create(), PillowDownsampler)
 
     @pytest.mark.skipif(
+        not KernelsDownsampler.is_available(), reason="wsidicom-kernels not installed"
+    )
+    def test_none_setting_prefers_kernels_when_available(self):
+        # Act & Assert
+        with use_settings(Settings(preferred_downsampler=None)):
+            assert isinstance(
+                Downsampler.create(resample=ResampleFilterOption.BOX),
+                KernelsDownsampler,
+            )
+
+    @pytest.mark.skipif(
         not Cv2Downsampler.is_available(), reason="opencv not installed"
     )
-    def test_none_setting_prefers_cv2_when_available(self):
+    def test_none_setting_prefers_cv2_without_kernels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        # Arrange — as if the kernels extra were not installed
+        monkeypatch.setattr(downsampler_module, "wsidicom_kernels", None)
+
         # Act & Assert
         with use_settings(Settings(preferred_downsampler=None)):
             assert isinstance(
                 Downsampler.create(resample=ResampleFilterOption.BOX), Cv2Downsampler
             )
+
+    @pytest.mark.skipif(
+        not KernelsDownsampler.is_available(), reason="wsidicom-kernels not installed"
+    )
+    def test_kernels_argument_selects_kernels(self):
+        # Act & Assert
+        assert isinstance(
+            Downsampler.create(
+                resample=ResampleFilterOption.BILINEAR,
+                preferred=DownsamplerOption.KERNELS,
+            ),
+            KernelsDownsampler,
+        )
+
+    def test_kernels_argument_falls_back_for_unsupported_filter(self):
+        # Act & Assert — HAMMING has no kernels (nor cv2) equivalent
+        assert isinstance(
+            Downsampler.create(
+                resample=ResampleFilterOption.HAMMING,
+                preferred=DownsamplerOption.KERNELS,
+            ),
+            PillowDownsampler,
+        )
 
     def test_unknown_name_raises(self):
         # Arrange — an invalid value (cast so the test targets runtime coercion)
@@ -433,3 +481,197 @@ class TestBackendEquivalence:
             opencv_result.astype(np.float64).ravel(),
         )[0, 1]
         assert correlation > 0.97
+
+
+@pytest.mark.unittest
+@pytest.mark.skipif(
+    not KernelsDownsampler.is_available(), reason="wsidicom-kernels not installed"
+)
+class TestKernelsDownsampler:
+    @pytest.mark.parametrize(
+        ["resample", "kernel_filter"],
+        [
+            (ResampleFilterOption.NEAREST, "nearest"),
+            (ResampleFilterOption.BOX, "box"),
+            (ResampleFilterOption.BILINEAR, "bilinear"),
+            (ResampleFilterOption.BICUBIC, "catmullrom"),
+            (ResampleFilterOption.LANCZOS, "lanczos3"),
+        ],
+    )
+    def test_maps_filter_to_kernel_filter(
+        self, resample: ResampleFilterOption, kernel_filter: str
+    ):
+        # Act
+        downsampler = KernelsDownsampler.from_filter(resample)
+
+        # Assert
+        assert downsampler is not None
+        assert downsampler._kernel_filter == kernel_filter
+
+    def test_filter_without_equivalent_returns_none(self):
+        # Act & Assert
+        assert KernelsDownsampler.from_filter(ResampleFilterOption.HAMMING) is None
+
+    @pytest.mark.parametrize(
+        ["resample", "expected"],
+        [
+            (ResampleFilterOption.BOX, True),
+            (ResampleFilterOption.BILINEAR, False),
+            (ResampleFilterOption.NEAREST, False),
+        ],
+    )
+    def test_commutes_with_stitch(self, resample: ResampleFilterOption, expected: bool):
+        # Act & Assert
+        assert KernelsDownsampler(resample=resample).commutes_with_stitch is expected
+
+    @pytest.mark.parametrize(
+        "resample", [ResampleFilterOption.BOX, ResampleFilterOption.BILINEAR]
+    )
+    @pytest.mark.parametrize(
+        ["grid_width", "grid_height"], [(2, 2), (1, 2), (2, 1), (1, 1)]
+    )
+    @pytest.mark.parametrize(
+        ["samples", "dtype", "fill"],
+        [
+            (3, np.uint8, np.array([255, 255, 255], np.uint8)),
+            (1, np.uint8, np.array([0], np.uint8)),
+            (1, np.uint16, np.array([0], np.uint16)),
+        ],
+    )
+    def test_reduce_block_equals_stitch_halve_and_pad(
+        self,
+        resample: ResampleFilterOption,
+        grid_width: int,
+        grid_height: int,
+        samples: int,
+        dtype: type[np.unsignedinteger],
+        fill: np.ndarray,
+    ):
+        """One reduce_block call equals the encoder pool's default block step:
+        the tiles stitched, halved, and padded with the background."""
+        # Arrange
+        rng = np.random.default_rng(1)
+        tile_size = Size(64, 64)
+        shape = (64, 64) if samples == 1 else (64, 64, samples)
+        top = np.iinfo(dtype).max
+        tiles = [
+            [rng.integers(0, top, shape, dtype=dtype) for _ in range(grid_width)]
+            for _ in range(grid_height)
+        ]
+        downsampler = KernelsDownsampler(resample=resample)
+        stitched = np.concatenate([np.concatenate(row, axis=1) for row in tiles])
+        half = downsampler.downsample(
+            stitched, Size(stitched.shape[1] // 2, stitched.shape[0] // 2)
+        )
+        expected = np.empty(shape, dtype)
+        expected[...] = fill
+        expected[: half.shape[0], : half.shape[1]] = half
+
+        # Act
+        block = downsampler.reduce_block(tiles, tile_size, fill)
+
+        # Assert
+        assert np.array_equal(block, expected)
+
+    def test_reduce_by_half_of_odd_size_resamples(self):
+        """An odd size has no exact 2x box; the default resample halves it."""
+        # Arrange
+        array = np.full((65, 33, 3), 77, np.uint8)
+
+        # Act
+        result = KernelsDownsampler(resample=ResampleFilterOption.BOX).reduce_by_half(
+            array
+        )
+
+        # Assert
+        assert result.shape == (32, 16, 3)
+        assert np.all(result == 77)
+
+
+@pytest.mark.unittest
+@pytest.mark.skipif(
+    not KernelsDownsampler.is_available(), reason="wsidicom-kernels not installed"
+)
+class TestKernelsEquivalence:
+    """wsidicom-kernels agrees with Pillow where the pipeline relies on it: the
+    exact-2x box reduction bit-identical, the other filters within a level of
+    Pillow's results."""
+
+    @pytest.fixture
+    def image(self) -> np.ndarray:
+        return np.asarray(TestData.image(8, 3))
+
+    def test_box_reduce_by_half_is_bit_exact(self, image: np.ndarray):
+        # Arrange
+        pillow = PillowDownsampler(resample=ResampleFilterOption.BOX)
+        kernels = KernelsDownsampler(resample=ResampleFilterOption.BOX)
+
+        # Act & Assert
+        assert np.array_equal(
+            pillow.reduce_by_half(image), kernels.reduce_by_half(image)
+        )
+
+    def test_box_reduce_by_half_bit_exact_on_rounding_ties(self):
+        """Every 2x2 sum of 2 mod 4 (a .5 tie) rounds as Pillow's reduce(2)."""
+        # Arrange
+        values = np.arange(0, 254, dtype=np.uint8)
+        block = np.empty((2, 2 * len(values)), dtype=np.uint8)
+        block[0, 0::2] = values
+        block[0, 1::2] = values
+        block[1, 0::2] = values
+        block[1, 1::2] = values + 2
+        image = np.dstack([block, block, block])
+        pillow = PillowDownsampler(resample=ResampleFilterOption.BOX)
+        kernels = KernelsDownsampler(resample=ResampleFilterOption.BOX)
+
+        # Act & Assert
+        assert np.array_equal(
+            pillow.reduce_by_half(image), kernels.reduce_by_half(image)
+        )
+
+    @pytest.mark.parametrize(
+        ["resample", "max_difference", "max_fraction_beyond_one"],
+        [
+            (ResampleFilterOption.BOX, 2, 1.0),
+            (ResampleFilterOption.BILINEAR, 2, 1.0),
+            # Pillow rounds and clamps an 8-bit intermediate between its passes,
+            # so where these filters overshoot (sharp edges) it lands a few
+            # levels off the exact convolution, which wsidicom-kernels stays
+            # within one level of.
+            (ResampleFilterOption.BICUBIC, 8, 0.01),
+            (ResampleFilterOption.LANCZOS, 8, 0.01),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("source_size", "output_size"),
+        [
+            (Size(240, 240), Size(150, 150)),
+            (Size(240, 160), Size(120, 80)),
+            (Size(240, 160), Size(97, 61)),
+        ],
+    )
+    def test_downsample_stays_close_to_pillow(
+        self,
+        image: np.ndarray,
+        resample: ResampleFilterOption,
+        max_difference: int,
+        max_fraction_beyond_one: float,
+        source_size: Size,
+        output_size: Size,
+    ):
+        """The same antialiased filters as Pillow: equal up to rounding, never
+        transposed or shifted."""
+        # Arrange
+        source = image[: source_size.height, : source_size.width]
+        pillow = PillowDownsampler(resample=resample)
+        kernels = KernelsDownsampler(resample=resample)
+
+        # Act
+        pillow_result = pillow.downsample(source, output_size)
+        kernels_result = kernels.downsample(source, output_size)
+
+        # Assert
+        difference = np.abs(pillow_result.astype(int) - kernels_result.astype(int))
+        assert kernels_result.shape == pillow_result.shape
+        assert difference.max() <= max_difference
+        assert np.mean(difference > 1) <= max_fraction_beyond_one

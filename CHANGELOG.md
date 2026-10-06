@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `kernels` extra: wsidicom-kernels, SIMD resampling built from `kernels/` in this repository and released on its own. When installed, `KernelsDownsampler` is the default downsampler for every filter but HAMMING (`DownsamplerOption.KERNELS`; the preference without a setting is now kernels, then OpenCV, then Pillow). The box reduction of a pyramid level is bit-identical to Pillow's and OpenCV's; the other filters are Pillow's, within a level of the exact convolution (Pillow itself is up to a few levels off near sharp edges with BICUBIC and LANCZOS). A pyramid block is halved and padded in one call (`Downsampler.reduce_block`).
+
 ### Fixed
 
 - Code values that Code Value (SH, at most 16 characters) cannot hold, such as SNOMED CT extension concept ids or URN and URL codes, are written as Long Code Value or URN Code Value. Previously such a code made writing metadata fail, and a graphical annotation wrote it as an invalid Code Value. Codes are also read from whichever of the three attributes holds the value, so codes with only Long Code Value or URN Code Value no longer fail to read.
