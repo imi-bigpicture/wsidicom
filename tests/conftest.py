@@ -20,6 +20,7 @@ import sys
 from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, ThreadPoolExecutor
 from copy import deepcopy
+from dataclasses import replace
 from enum import Enum
 from pathlib import Path
 from random import Random
@@ -40,7 +41,7 @@ from pydicom.uid import (
 
 from tests.file.io.test_wsidicom_writer import WsiDicomTestImageData
 from wsidicom import WsiDicom
-from wsidicom.config import Settings
+from wsidicom.config import get_settings
 from wsidicom.file import OffsetTableType
 from wsidicom.geometry import Size
 from wsidicom.instance import TileType
@@ -326,7 +327,9 @@ def wsi_factory(
                 test_definition["series_instance_uid"],
                 [JPEGBaseline8Bit, JPEG2000, ExplicitVRLittleEndian],
                 read_executor=read_executor,
-                settings=Settings(open_web_threads=1),
+                # The active settings (a test's pinned downsampler, say) with one
+                # web thread, not a fresh Settings that would reset them.
+                settings=replace(get_settings(), open_web_threads=1),
             )
         else:
             raise NotImplementedError()
