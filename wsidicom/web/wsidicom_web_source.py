@@ -30,8 +30,9 @@ from pydicom.uid import (
     RLELossless,
 )
 
+from wsidicom.cache import EncodedFrameCache
 from wsidicom.codec import Codec
-from wsidicom.config import get_settings
+from wsidicom.config import get_settings, use_settings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -85,6 +86,12 @@ class WsiDicomWebSource(Source):
 
         """
         super().__init__()
+        # Encoded frames are cached for DICOMweb only, as there a frame costs a
+        # request to read again.
+        with use_settings() as settings:
+            self._encoded_frame_cache = EncodedFrameCache(
+                settings.web_encoded_frame_cache_size
+            )
         self._level_instances: list[WsiInstance] = []
         self._label_instances: list[WsiInstance] = []
         self._overview_instances: list[WsiInstance] = []
@@ -212,6 +219,16 @@ class WsiDicomWebSource(Source):
 
     def close(self) -> None:
         pass
+
+    def clear_cache(self) -> None:
+        """Clear the frame caches."""
+        super().clear_cache()
+        self._encoded_frame_cache.clear()
+
+    def resize_cache(self, size: int) -> None:
+        """Resize the frame caches."""
+        super().resize_cache(size)
+        self._encoded_frame_cache.resize(size)
 
     def _determine_transfer_syntax(
         self,

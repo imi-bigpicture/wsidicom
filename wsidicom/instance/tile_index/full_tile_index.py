@@ -15,7 +15,9 @@
 from collections.abc import Sequence
 from functools import cached_property
 
-from wsidicom.cache import lru_cached_method
+import numpy as np
+from numpy.typing import NDArray
+
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.geometry import Point
 from wsidicom.instance.dataset import WsiDataset
@@ -89,6 +91,12 @@ class FullTileIndex(TileIndex):
         )
         return plane_offset + z_offset + path_offset
 
+    def get_plane_frame_indices(self, z: float, path: str) -> NDArray[np.int64]:
+        """Return the frame index of every tile of a plane, which in a full tile
+        index are consecutive from the frame of the first tile."""
+        first = self.get_frame_index(Point(0, 0), z, path)
+        return np.arange(first, first + self.tiled_size.area, dtype=np.int64)
+
     def _read_focal_planes_from_datasets(
         self,
     ) -> list[float]:
@@ -126,7 +134,25 @@ class FullTileIndex(TileIndex):
                 focal_planes.add(z)
         return sorted(focal_planes)
 
-    @lru_cached_method()
+    @cached_property
+    def _optical_path_indices(self) -> dict[str, int]:
+        """Index of each optical path identifier in the optical path sequence.
+
+        A dict rather than a cached method, as it is looked up for every tile read
+        and a dict lookup costs a fraction of a cached method call."""
+        indices: dict[str, int] = {}
+        for index, path in enumerate(self._optical_paths):
+            indices.setdefault(path, index)
+        return indices
+
+    @cached_property
+    def _focal_plane_indices(self) -> dict[float, int]:
+        """Index of each focal plane (in um), see `_optical_path_indices`."""
+        indices: dict[float, int] = {}
+        for index, plane in enumerate(self.focal_planes):
+            indices.setdefault(plane, index)
+        return indices
+
     def _get_optical_path_index(self, path: str) -> int:
         """Return index of the optical path in instance.
         This assumes that all files in a concatenated set contains all the
@@ -144,17 +170,10 @@ class FullTileIndex(TileIndex):
             sequence.
         """
         try:
-            return next(
-                (
-                    index
-                    for index, plane_path in enumerate(self._optical_paths)
-                    if plane_path == path
-                )
-            )
-        except StopIteration:
+            return self._optical_path_indices[path]
+        except KeyError:
             raise WsiDicomNotFoundError(f"Optical path {path}", str(self)) from None
 
-    @lru_cached_method()
     def _get_focal_plane_index(self, z: float) -> int:
         """Return index of the focal plane of z.
 
@@ -169,8 +188,6 @@ class FullTileIndex(TileIndex):
             Focal plane index for z coordinate.
         """
         try:
-            return next(
-                index for index, plane in enumerate(self.focal_planes) if plane == z
-            )
-        except StopIteration:
+            return self._focal_plane_indices[z]
+        except KeyError:
             raise WsiDicomNotFoundError(f"Z {z} in instance", str(self)) from None

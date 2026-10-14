@@ -12,7 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor, wait
 from hashlib import md5
 from pathlib import Path
 from typing import Any
@@ -23,13 +25,16 @@ from PIL import Image as Pillow
 from pydicom.uid import UID
 
 from tests.conftest import (
+    SLIDE_FOLDER,
     WsiInputType,
     WsiTestDefinitions,
     skip_if_hash_unstable,
 )
 from wsidicom import WsiDicom
 from wsidicom.config import Settings, use_settings
+from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point
+from wsidicom.instance import WsiDicomImageData
 from wsidicom.options import ConcatenationByFrames, DownsamplerOption
 from wsidicom.series.pyramid import Pyramid
 from wsidicom.thread import ReadExecutor
@@ -171,6 +176,106 @@ class TestWsiDicomIntegration:
 
         # Assert — pixel-for-pixel identical
         assert np.array_equal(array, np.asarray(image))
+
+    @pytest.mark.parametrize("crop_to_image_boundary", [True, False])
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_read_encoded_tile_is_encoded_tile_of_level(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+        crop_to_image_boundary: bool,
+    ):
+        """A tile read with the tile locations of a local file is the one read
+        through the level."""
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        tiles_per_level = 50
+        reads = [
+            (level, Point(index % tiled_size.width, index // tiled_size.width))
+            for level in wsi.levels
+            for tiled_size in [level.default_instance.image_data.tiled_size]
+            for index in range(
+                0, tiled_size.area, max(1, tiled_size.area // tiles_per_level)
+            )
+        ]
+
+        # Act
+        mismatches = [
+            (level.level, tile)
+            for level, tile in reads
+            if wsi.read_encoded_tile(
+                level.level,
+                tile.to_tuple(),
+                crop_to_image_boundary=crop_to_image_boundary,
+            )
+            != level.get_encoded_tile(
+                tile, crop_to_image_boundary=crop_to_image_boundary
+            )
+        ]
+
+        # Assert
+        assert mismatches == []
+
+    @pytest.mark.parametrize("past", ["column", "row", "negative"])
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_read_encoded_tile_outside_level_raises(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+        past: str,
+    ):
+        """A tile outside the tiled size is not read at the location of another."""
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        base_level = wsi.levels.base_level
+        tiled_size = base_level.default_instance.image_data.tiled_size
+        tile = {
+            "column": (tiled_size.width, 0),
+            "row": (0, tiled_size.height),
+            "negative": (-1, 0),
+        }[past]
+
+        # Act & Assert
+        with pytest.raises(WsiDicomOutOfBoundsError):
+            wsi.read_encoded_tile(base_level.level, tile, crop_to_image_boundary=False)
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_plane_frame_indices_are_frame_index_of_each_tile(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+    ):
+        """The frame indices of a plane made at once, which the tile locations are
+        made from, are those of the tiles one by one, for full and sparse tiling."""
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        tile_indices = [
+            image_data.tiles
+            for level in wsi.levels
+            for image_data in [level.default_instance.image_data]
+            if isinstance(image_data, WsiDicomImageData)
+        ]
+
+        # Act
+        mismatches = [
+            (str(tiles), z, path)
+            for tiles in tile_indices
+            for z in tiles.focal_planes
+            for path in tiles.optical_paths
+            if tiles.get_plane_frame_indices(z, path).tolist()
+            != [
+                tiles.get_frame_index(Point(x, y), z, path)
+                for y in range(tiles.tiled_size.height)
+                for x in range(tiles.tiled_size.width)
+            ]
+        ]
+
+        # Assert
+        assert tile_indices != []
+        assert mismatches == []
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_get_scaled_tile_pads_to_tile_size_when_not_cropping(
@@ -445,3 +550,130 @@ class TestWsiDicomSave:
         # Assert
         assert len(filepaths) > 0
         assert all(filepath.is_absolute() for filepath in filepaths), filepaths
+
+
+WAIT_SECONDS = 10
+"""Longest a test waits for another thread, so that a fault fails the test rather than
+hanging it."""
+
+NOT_RETURNED_SECONDS = 0.2
+"""How long a read is given to return when it should be waiting. A read that is slow
+to start passes too, as it has not returned either."""
+
+
+@pytest.fixture()
+def own_wsi() -> Iterator[WsiDicom]:
+    """A slide opened for the test alone, as the test replaces how it makes the tile
+    locations of a plane."""
+    folders = [
+        SLIDE_FOLDER.joinpath(WsiTestDefinitions.test_definitions[name]["path"])
+        for name in WsiTestDefinitions.wsi_names()
+    ]
+    folder = next((folder for folder in folders if folder.exists()), None)
+    if folder is None:
+        pytest.skip("No test slide found.")
+    with WsiDicom.open(folder) as wsi:
+        yield wsi
+
+
+@pytest.mark.integration
+class TestTileLocationsOfPlanes:
+    """Tile locations are made when a tile of a plane is first read. Reads of a plane
+    being made wait for it, reads of other planes do not."""
+
+    def test_other_plane_is_made_while_a_plane_is_being_made(
+        self, own_wsi: WsiDicom, monkeypatch: pytest.MonkeyPatch
+    ):
+        # Arrange
+        started = threading.Event()
+        release = threading.Event()
+
+        def create_tile_locations(pyramid: int, level: int, z, path):
+            if level == 0:
+                started.set()
+                release.wait(WAIT_SECONDS)
+            return None
+
+        monkeypatch.setattr(own_wsi, "_create_tile_locations", create_tile_locations)
+        with ThreadPoolExecutor(1) as executor:
+            being_made = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            assert started.wait(WAIT_SECONDS)
+
+            # Act
+            other = own_wsi._get_tile_locations(0, 1, None, None)
+            done_before_release = being_made.done()
+            release.set()
+
+        # Assert
+        assert other is None
+        assert not done_before_release
+        assert being_made.result(WAIT_SECONDS) is None
+
+    def test_reads_of_a_plane_at_once_make_it_once(
+        self, own_wsi: WsiDicom, monkeypatch: pytest.MonkeyPatch
+    ):
+        # Arrange
+        started = threading.Event()
+        release = threading.Event()
+        made = []
+
+        def create_tile_locations(pyramid: int, level: int, z, path):
+            made.append((pyramid, level, z, path))
+            started.set()
+            release.wait(WAIT_SECONDS)
+            return None
+
+        monkeypatch.setattr(own_wsi, "_create_tile_locations", create_tile_locations)
+        with ThreadPoolExecutor(2) as executor:
+            first = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            assert started.wait(WAIT_SECONDS)
+
+            # Act
+            second = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            wait([second], NOT_RETURNED_SECONDS)
+            second_done_before_release = second.done()
+            release.set()
+
+        # Assert
+        assert not second_done_before_release
+        assert first.result(WAIT_SECONDS) is None
+        assert second.result(WAIT_SECONDS) is None
+        assert made == [(0, 0, None, None)]
+
+    def test_failure_to_make_a_plane_reaches_reads_waiting_and_is_tried_again(
+        self, own_wsi: WsiDicom, monkeypatch: pytest.MonkeyPatch
+    ):
+        # Arrange
+        started = threading.Event()
+        release = threading.Event()
+        made = []
+
+        def fail_to_create_tile_locations(pyramid: int, level: int, z, path):
+            made.append((pyramid, level, z, path))
+            started.set()
+            release.wait(WAIT_SECONDS)
+            raise ValueError("Failed to make tile locations.")
+
+        monkeypatch.setattr(
+            own_wsi, "_create_tile_locations", fail_to_create_tile_locations
+        )
+        with ThreadPoolExecutor(2) as executor:
+            first = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            assert started.wait(WAIT_SECONDS)
+            second = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            wait([second], NOT_RETURNED_SECONDS)
+            release.set()
+            first_exception = first.exception(WAIT_SECONDS)
+            second_exception = second.exception(WAIT_SECONDS)
+        monkeypatch.setattr(
+            own_wsi, "_create_tile_locations", lambda pyramid, level, z, path: None
+        )
+
+        # Act
+        again = own_wsi._get_tile_locations(0, 0, None, None)
+
+        # Assert
+        assert isinstance(first_exception, ValueError)
+        assert isinstance(second_exception, ValueError)
+        assert made == [(0, 0, None, None)]
+        assert again is None

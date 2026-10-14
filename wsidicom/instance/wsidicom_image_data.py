@@ -19,10 +19,10 @@ from uuid import uuid4
 
 import numpy as np
 
-from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
+from wsidicom.cache import DecodedFrameCache
 from wsidicom.codec import Codec, Decoder, Encoder
 from wsidicom.errors import WsiDicomOutOfBoundsError
-from wsidicom.geometry import Point, Region, Size, SizeMm
+from wsidicom.geometry import Point, Size, SizeMm
 from wsidicom.instance.dataset import TileType, WsiDataset
 from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.tile_index.full_tile_index import FullTileIndex
@@ -37,12 +37,20 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         datasets: Sequence[WsiDataset],
         codec: Codec,
         decoded_frame_cache: DecodedFrameCache,
-        encoded_frame_cache: EncodedFrameCache,
     ):
+        """
+        Parameters
+        ----------
+        datasets: Sequence[WsiDataset]
+            Datasets of the image.
+        codec: Codec
+            Codec of the frames.
+        decoded_frame_cache: DecodedFrameCache
+            Cache of decoded frames.
+        """
         self._datasets = datasets
         self._decoder = codec.decoder
         self._decoded_frame_cache = decoded_frame_cache
-        self._encoded_frame_cache = encoded_frame_cache
         self._cache_id = uuid4().int
         super().__init__(codec.encoder)
 
@@ -168,10 +176,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         frame_index = self._get_frame_index(tile, z, path)
         if frame_index == -1:
             return self.blank_encoded_tile
-
-        return self._encoded_frame_cache.get_tile_frame(
-            self._cache_id, frame_index, self._get_tile_frame
-        )
+        return self._get_encoded_tile_frame(frame_index)
 
     def get_decoded_tile(
         self,
@@ -239,10 +244,8 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     ) -> Iterator[bytes]:
         """Return bytes for multiple tiles, fetching frames in a batch."""
         frame_indices = [self._get_frame_index(tile, z, path) for tile in tiles]
-        frames = self._encoded_frame_cache.get_tile_frames(
-            self._cache_id,
-            [frame_index for frame_index in frame_indices if frame_index != -1],
-            self._get_tile_frames,
+        frames = self._get_encoded_tile_frames(
+            [frame_index for frame_index in frame_indices if frame_index != -1]
         )
         for frame_index in frame_indices:
             if frame_index == -1:
@@ -270,11 +273,21 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
     ) -> tuple[bytes, np.ndarray]:
         if frame_index == -1:
             return self.blank_encoded_tile, self.blank_tile
-        encoded = self._encoded_frame_cache.get_tile_frame(
-            self._cache_id, frame_index, self._get_tile_frame
-        )
+        encoded = self._get_encoded_tile_frame(frame_index)
         decoded = self.decoder.decode(encoded)
         return encoded, decoded
+
+    def _get_encoded_tile_frame(self, frame_index: int) -> bytes:
+        """Return tile frame for frame index to serve as an encoded tile.
+
+        Override to serve it from a cache, when a frame costs more to read again
+        than to get from one."""
+        return self._get_tile_frame(frame_index)
+
+    def _get_encoded_tile_frames(self, frame_indices: Sequence[int]) -> Iterator[bytes]:
+        """Return tile frames for frame indices to serve as encoded tiles, see
+        `_get_encoded_tile_frame()`."""
+        return self._get_tile_frames(frame_indices)
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """
@@ -296,13 +309,20 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         int
             Tile frame index
         """
-        tile_region = Region(position=tile, size=Size(0, 0))
-        if not self.valid_tiles(tile_region, z, path):
+        tiled_size = self.tiles.tiled_size
+        # Compared directly rather than as a region, as this is done for every tile
+        # read. A tile one past the last column or row is outside, as its frame index
+        # would be that of a tile in the next row or plane.
+        if not (
+            0 <= tile.x < tiled_size.width
+            and 0 <= tile.y < tiled_size.height
+            and z in self.focal_planes
+            and path in self.optical_paths
+        ):
             raise WsiDicomOutOfBoundsError(
-                f"Tile region {tile_region}", f"plane {self.tiles.tiled_size}"
+                f"Tile {tile} of z {z} and path {path}", f"plane {tiled_size}"
             )
-        frame_index = self.tiles.get_frame_index(tile, z, path)
-        return frame_index
+        return self.tiles.get_frame_index(tile, z, path)
 
     def is_sparse(self, tile: Point, z: float, path: str) -> bool:
         return self.tiles.get_frame_index(tile, z, path) == -1

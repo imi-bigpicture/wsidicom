@@ -15,7 +15,7 @@
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
 
-from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
+from wsidicom.cache import DecodedFrameCache
 from wsidicom.config import use_settings
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -36,9 +36,6 @@ class Source(metaclass=ABCMeta):
         with use_settings() as settings:
             self._decoded_frame_cache = DecodedFrameCache(
                 settings.decoded_frame_cache_size
-            )
-            self._encoded_frame_cache = EncodedFrameCache(
-                settings.encoded_frame_cache_size
             )
 
     def __enter__(self):
@@ -91,9 +88,7 @@ class Source(metaclass=ABCMeta):
     def clear_cache(self) -> None:
         """Clear the frame caches."""
         self._decoded_frame_cache.clear()
-        self._encoded_frame_cache.clear()
 
     def resize_cache(self, size: int) -> None:
-        """Clear the frame caches."""
+        """Resize the frame caches."""
         self._decoded_frame_cache.resize(size)
-        self._encoded_frame_cache.resize(size)

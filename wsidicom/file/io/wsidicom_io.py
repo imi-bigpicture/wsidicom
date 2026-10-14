@@ -44,12 +44,14 @@ from pydicom.uid import UID
 from pydicom.valuerep import VR
 from upath import UPath
 
+from wsidicom.config import get_settings
 from wsidicom.errors import WsiDicomFileError
 from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE, UNDEFINED_LENGTH
 from wsidicom.file.io.deferred_element import (
     NestedDeferredElement,
     RootDeferredElement,
 )
+from wsidicom.file.io.file_handle_pool import FileHandlePool
 from wsidicom.file.io.sequence_walker import SequenceWalker
 from wsidicom.tags import (
     InstanceCreationDateTag,
@@ -270,6 +272,54 @@ class WsiDicomReadIO(WsiDicomIO):
             filepath,
             UID(file_meta_info.TransferSyntaxUID),
         )
+        self._handle_pool = self._create_handle_pool(filepath)
+
+    @staticmethod
+    def _create_handle_pool(filepath: UPath) -> FileHandlePool | None:
+        """Return a pool to read the file at positions with, if it is a local file.
+
+        For another file, the stream this instance holds is all there is to read it
+        with."""
+        if not isinstance(filepath.fs, LocalFileSystem) or not filepath.is_file():
+            return None
+        return FileHandlePool(str(filepath), get_settings().max_file_handles_per_file)
+
+    @property
+    def frame_reader(self) -> FileHandlePool | None:
+        """Return a thread safe reader that reads frames at their positions without
+        holding the stream, or None if the file is not a local one."""
+        return self._handle_pool
+
+    def read_at(self, position: int, length: int) -> bytes:
+        """Return `length` bytes from `position`, or fewer if the stream ends before.
+
+        Unlike seeking and reading, this leaves the position of the stream as it
+        is, and does not hold the stream for reads at once from other threads to
+        wait for when the file is a local one.
+
+        Parameters
+        ----------
+        position: int
+            Position to read from.
+        length: int
+            Number of bytes to read.
+
+        Returns
+        -------
+        bytes
+            The bytes read.
+        """
+        if self._handle_pool is not None:
+            return self._handle_pool.read(position, length)
+        with self.exclusive():
+            self._stream.seek(position, 0)
+            return self._stream.read(length)
+
+    def close(self) -> None:
+        """Close stream, and the handles read at positions with."""
+        if self._handle_pool is not None:
+            self._handle_pool.close()
+        super().close()
 
     def _read_stream_start(
         self, stream: BinaryIO, filepath: UPath

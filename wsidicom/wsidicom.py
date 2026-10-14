@@ -14,8 +14,9 @@
 
 import logging
 import os
+import threading
 from collections.abc import Callable, Iterable, Sequence
-from concurrent.futures import Executor
+from concurrent.futures import Executor, Future
 from pathlib import Path
 from typing import (
     Any,
@@ -47,6 +48,7 @@ from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level, Thumbnail
 from wsidicom.instance import WsiDataset, WsiInstance
+from wsidicom.instance.tile_locations import FrameReader, TileLocations
 from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.options import (
@@ -99,6 +101,18 @@ class WsiDicom:
         self._source_owned = source_owned
         self._read_executor = read_executor
         self._settings = settings
+        self._tile_locations: dict[
+            tuple[int, int, float | None, str | None],
+            tuple[TileLocations, Sequence[FrameReader]] | None,
+        ] = {}
+        self._tile_locations_building: dict[
+            tuple[int, int, float | None, str | None],
+            Future[tuple[TileLocations, Sequence[FrameReader]] | None],
+        ] = {}
+        """Locations of planes being made, for reads of the same plane to wait on.
+        The lock guards both dicts, but is not held while locations are made, so
+        that reads of other planes do not wait for them."""
+        self._tile_locations_lock = threading.Lock()
         with use_settings(settings):
             self._pyramids = Pyramids.open(
                 source.level_instances, source.thumbnail_instances
@@ -1126,10 +1140,20 @@ class WsiDicom:
         bytes
             Tile in file encoding.
         """
+        pyramid_index = pyramid if pyramid is not None else self._selected_pyramid
+        try:
+            stored_tiles = self._tile_locations[(pyramid_index, level, z, path)]
+        except KeyError:
+            stored_tiles = self._get_tile_locations(pyramid_index, level, z, path)
+        if stored_tiles is not None:
+            locations, readers = stored_tiles
+            encoded_tile = self._read_stored_tile(
+                locations, readers, tile[0], tile[1], crop_to_image_boundary
+            )
+            if encoded_tile is not None:
+                return encoded_tile
         tile_point = Point.from_tuple(tile)
-        wsi_pyramid = self.pyramids.get(
-            pyramid if pyramid is not None else self._selected_pyramid
-        )
+        wsi_pyramid = self.pyramids.get(pyramid_index)
         try:
             wsi_level = wsi_pyramid.get(level)
             return wsi_level.get_encoded_tile(
@@ -1181,8 +1205,158 @@ class WsiDicom:
 
     def close(self) -> None:
         """Close source if owned by this instance."""
+        self._tile_locations.clear()
         if self._source_owned:
             self._source.close()
+
+    @staticmethod
+    def _read_stored_tile(
+        locations: TileLocations,
+        readers: Sequence[FrameReader],
+        x: int,
+        y: int,
+        crop_to_image_boundary: bool,
+    ) -> bytes | None:
+        """Return the encoded tile at (x, y) read with a single read at its location,
+        or None if it is to be read through the level.
+
+        A tile is to be read through the level if it is outside the image (for the
+        level to raise), if it is not stored as a single run of bytes, or if it is to
+        be cropped to the image boundary (which requires re-encoding it).
+
+        Parameters
+        ----------
+        locations: TileLocations
+            Where the tiles of the plane are stored.
+        readers: Sequence[FrameReader]
+            Readers of the files of the image data, in the order of the file indices
+            of the locations.
+        x: int
+            Column of the tile.
+        y: int
+            Row of the tile.
+        crop_to_image_boundary: bool
+            If a tile that extends outside the image is to be cropped.
+
+        Returns
+        -------
+        bytes | None
+            The encoded tile, or None.
+        """
+        servable = (
+            locations.whole_tiled_size
+            if crop_to_image_boundary
+            else locations.tiled_size
+        )
+        # Checked, as a position outside the tiled size would otherwise index the
+        # location of another tile.
+        if not (0 <= x < servable.width and 0 <= y < servable.height):
+            return None
+        index = y * locations.tiled_size.width + x
+        length = locations.lengths[index]
+        if length < 0:
+            return None
+        if locations.file_indices is None:
+            reader = readers[0]
+        else:
+            reader = readers[locations.file_indices[index]]
+        return reader.read(locations.positions[index], length)
+
+    def _get_tile_locations(
+        self, pyramid: int, level: int, z: float | None, path: str | None
+    ) -> tuple[TileLocations, Sequence[FrameReader]] | None:
+        """Return where the encoded tiles of a plane of a level are stored, and the
+        readers to read them with, made when a tile of the plane is first read and
+        kept for later reads of the plane. None if they are not stored so that a tile
+        can be read with a single read, or if the level or plane is not in the
+        pyramid (so that reading a tile through the level scales it or raises).
+
+        Parameters
+        ----------
+        pyramid: int
+            Index of pyramid.
+        level: int
+            Pyramid level.
+        z: float | None
+            Z coordinate as asked for, the default of the instance if None.
+        path: str | None
+            Optical path as asked for, the default of the instance if None.
+
+        Returns
+        -------
+        tuple[TileLocations, Sequence[FrameReader]] | None
+            Where the encoded tiles of the plane are stored and the readers of the
+            files of the image data, or None.
+        """
+        key = (pyramid, level, z, path)
+        with self._tile_locations_lock:
+            # Asked again with the lock held, so that reads of the plane at once make
+            # the locations once between them.
+            if key in self._tile_locations:
+                return self._tile_locations[key]
+            building = self._tile_locations_building.get(key)
+            builds_here = building is None
+            if building is None:
+                building = Future()
+                self._tile_locations_building[key] = building
+        if not builds_here:
+            # Waits only for the read making the locations of this plane, not for
+            # those of other planes.
+            return building.result()
+        try:
+            stored_tiles = self._create_tile_locations(pyramid, level, z, path)
+        except BaseException as exception:
+            # Left unmade, so that a later read tries again.
+            with self._tile_locations_lock:
+                del self._tile_locations_building[key]
+            building.set_exception(exception)
+            raise
+        with self._tile_locations_lock:
+            self._tile_locations[key] = stored_tiles
+            del self._tile_locations_building[key]
+        building.set_result(stored_tiles)
+        return stored_tiles
+
+    def _create_tile_locations(
+        self, pyramid: int, level: int, z: float | None, path: str | None
+    ) -> tuple[TileLocations, Sequence[FrameReader]] | None:
+        """Make where the encoded tiles of a plane of a level are stored, and the
+        readers to read them with, see `_get_tile_locations()`.
+
+        Parameters
+        ----------
+        pyramid: int
+            Index of pyramid.
+        level: int
+            Pyramid level.
+        z: float | None
+            Z coordinate as asked for, the default of the instance if None.
+        path: str | None
+            Optical path as asked for, the default of the instance if None.
+
+        Returns
+        -------
+        tuple[TileLocations, Sequence[FrameReader]] | None
+            Where the encoded tiles of the plane are stored and the readers of the
+            files of the image data, or None.
+        """
+        try:
+            instance = self.pyramids.get(pyramid).get(level).get_instance(z, path)
+        except WsiDicomNotFoundError:
+            return None
+        image_data = instance.image_data
+        # Readers first, so that no locations are made for image data whose tiles are
+        # not to be read with them.
+        readers = image_data.get_frame_readers()
+        if readers is None:
+            return None
+        locations = image_data.get_tile_locations(
+            z if z is not None else instance.default_z,
+            path if path is not None else instance.default_path,
+        )
+        if locations is None:
+            return None
+        return locations, readers
 
     def clear_cache(self):
         """Clear cache of encoded and decoded tiles."""

@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ImageData.get_tile_locations()`, returning a `TileLocations` of where the encoded tiles of a plane are stored (position, length and file of each tile), and `ImageData.get_frame_readers()`, returning a `FrameReader` for each file to read them with, ready to serve. `WsiDicom.read_encoded_tile()` gets both when a tile of a plane is first read, and reads later tiles of the plane with a single read instead of through the level, instance and image data. Tiles that are to be cropped, or that are not stored as a single run of bytes, are read as before. Implemented for local DICOM files.
+
+### Changed
+
+- Only DICOMweb instances cache encoded frames. Frames of files are no longer cached. To cache frames of a file opened through fsspec, use a caching file system of fsspec. The encoded frame cache moved from `Source` to `WsiDicomWebSource`, and from `WsiDicomImageData` to `WsiDicomWebImageData`; `WsiDicomImageData` and `WsiDicomFileImageData` no longer take one. A subclass of `WsiDicomImageData` can serve encoded frames from a cache by overriding `_get_encoded_tile_frame()` and `_get_encoded_tile_frames()`. `Settings.encoded_frame_cache_size` is renamed `Settings.web_encoded_frame_cache_size`.
+- Frames of a local file are read through a pool of unbuffered file handles instead of the shared buffered stream, so reads from several threads no longer wait for each other. At most `Settings.max_file_handles_per_file` handles (default 8) are opened to a file; a read beyond waits for a handle to be returned.
+- Frame index lookups for a tile (focal plane, optical path and file of a concatenation) use plain lookups instead of cached methods, which cost more than they saved.
+
 ### Fixed
 
 - Code values that Code Value (SH, at most 16 characters) cannot hold, such as SNOMED CT extension concept ids or URN and URL codes, are written as Long Code Value or URN Code Value. Previously such a code made writing metadata fail, and a graphical annotation wrote it as an invalid Code Value. Codes are also read from whichever of the three attributes holds the value, so codes with only Long Code Value or URN Code Value no longer fail to read.
+- Reading a tile one past the last column or row of a DICOM image served another tile (the first of the next row or focal plane) instead of raising `WsiDicomOutOfBoundsError`.
 
 ## [0.36.1] - 2026-09-28
 

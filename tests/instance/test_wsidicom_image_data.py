@@ -20,6 +20,7 @@ from pydicom.uid import UID
 from wsidicom import WsiDicom
 from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
 from wsidicom.codec import Codec
+from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point
 from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
@@ -28,7 +29,9 @@ CACHE_SIZE = 100 * 1024 * 1024
 
 
 class WsiDicomTestImageData(WsiDicomImageData):
-    """Image data serving one frame of its own, given at construction."""
+    """Image data serving one frame of its own, given at construction, through an
+    encoded frame cache it may share with other image data (as DICOMweb image data
+    do)."""
 
     def __init__(
         self,
@@ -41,7 +44,8 @@ class WsiDicomTestImageData(WsiDicomImageData):
     ):
         self._transfer_syntax = transfer_syntax
         self._frame = frame
-        super().__init__(datasets, codec, decoded_frame_cache, encoded_frame_cache)
+        self._encoded_frame_cache = encoded_frame_cache
+        super().__init__(datasets, codec, decoded_frame_cache)
 
     @property
     def transfer_syntax(self) -> UID:
@@ -49,6 +53,11 @@ class WsiDicomTestImageData(WsiDicomImageData):
 
     def _get_tile_frame(self, frame_index: int) -> bytes:
         return self._frame
+
+    def _get_encoded_tile_frame(self, frame_index: int) -> bytes:
+        return self._encoded_frame_cache.get_tile_frame(
+            self._cache_id, frame_index, self._get_tile_frame
+        )
 
 
 @pytest.mark.unittest
@@ -110,3 +119,24 @@ class TestWsiDicomImageData:
             f"{len(mismatches)} of {image_data_count} image data were served "
             f"another image data's frame, first {mismatches[0]}"
         )
+
+    @pytest.mark.parametrize("past", ["column", "row"])
+    def test_get_encoded_tile_one_past_last_column_or_row_raises(
+        self, wsi: WsiDicom, past: str
+    ):
+        """A tile one past the last column is not served the first tile of the next
+        row (nor one past the last row the first tile of the next plane)."""
+        # Arrange
+        image_data = next(iter(wsi.pyramid.levels[0].instances.values())).image_data
+        tiled_size = image_data.tiled_size
+        tile = (
+            Point(tiled_size.width, 0)
+            if past == "column"
+            else Point(0, tiled_size.height)
+        )
+
+        # Act & Assert
+        with pytest.raises(WsiDicomOutOfBoundsError):
+            image_data.get_encoded_tile(
+                tile, image_data.default_z, image_data.default_path
+            )

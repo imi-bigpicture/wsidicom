@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 
 from pydicom.uid import UID
 
@@ -49,6 +49,10 @@ class WsiDicomWebImageData(WsiDicomImageData):
         transfer_syntax: UID
             Transfer syntax to request for image data, for example
             UID("1.2.840.10008.1.2.4.50") for JPEGBaseline8Bit.
+        decoded_frame_cache: DecodedFrameCache
+            Cache of decoded frames.
+        encoded_frame_cache: EncodedFrameCache
+            Cache of encoded frames, as a frame costs a request to read again.
         """
         self._client = client
         self._study_uid = dataset.uids.slide.study_instance
@@ -62,7 +66,8 @@ class WsiDicomWebImageData(WsiDicomImageData):
             dataset.tile_size,
             dataset.photometric_interpretation,
         )
-        super().__init__([dataset], codec, decoded_frame_cache, encoded_frame_cache)
+        self._encoded_frame_cache = encoded_frame_cache
+        super().__init__([dataset], codec, decoded_frame_cache)
 
     @property
     def transfer_syntax(self) -> UID:
@@ -89,4 +94,17 @@ class WsiDicomWebImageData(WsiDicomImageData):
             self._instance_uid,
             [frame_index + 1 for frame_index in frame_indices],
             self._transfer_syntax,
+        )
+
+    def _get_encoded_tile_frame(self, frame_index: int) -> bytes:
+        """Return tile frame for frame index from the encoded frame cache."""
+        return self._encoded_frame_cache.get_tile_frame(
+            self._cache_id, frame_index, self._get_tile_frame
+        )
+
+    def _get_encoded_tile_frames(self, frame_indices: Sequence[int]) -> Iterator[bytes]:
+        """Return tile frames for frame indices from the encoded frame cache,
+        requesting the ones not in it in one batch."""
+        return self._encoded_frame_cache.get_tile_frames(
+            self._cache_id, frame_indices, self._get_tile_frames
         )

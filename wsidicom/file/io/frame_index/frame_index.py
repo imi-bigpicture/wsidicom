@@ -45,6 +45,16 @@ class FrameIndex:
         self._positions = positions
         self._lengths = lengths
 
+    @property
+    def positions(self) -> NDArray[np.int64]:
+        """Position in the file of the first byte of each frame."""
+        return self._positions
+
+    @property
+    def lengths(self) -> NDArray[np.int64]:
+        """Length in bytes of each frame."""
+        return self._lengths
+
     def __getitem__(self, index: int) -> tuple[int, int]:
         """Return the position and length of the frame at the given index.
 

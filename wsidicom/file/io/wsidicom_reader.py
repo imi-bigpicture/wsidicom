@@ -46,7 +46,7 @@ from wsidicom.file.io.frame_index.tiff import (
 )
 from wsidicom.file.io.sequence_walker import UnwalkableSequenceException
 from wsidicom.file.io.wsidicom_io import WsiDicomReadIO
-from wsidicom.instance import WsiDataset
+from wsidicom.instance import FrameReader, WsiDataset
 from wsidicom.metadata import ImageType
 from wsidicom.tags import (
     ExtendedOffsetTableTag,
@@ -330,6 +330,13 @@ class WsiDicomReader:
         """Return the filepath the stream is backed by."""
         return self._stream.filepath
 
+    @property
+    def frame_reader(self) -> FrameReader | None:
+        """Return a thread safe reader that reads a frame at its position of the
+        frame index without holding the stream, or None if the file is not a local
+        one. A frame of a DICOM file is served as it is stored."""
+        return self._stream.frame_reader
+
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
 
@@ -353,9 +360,7 @@ class WsiDicomReader:
                 f"{self.frame_offset + len(self.frame_index) - 1} in file",
             )
         frame_position, frame_length = self.frame_index[index_in_file]
-        with self._stream.exclusive():
-            self._stream.seek(frame_position, 0)
-            return self._stream.read(frame_length)
+        return self._stream.read_at(frame_position, frame_length)
 
     def _get_frame_index_parser(self) -> FrameIndexParser:
         """Create frame index for stream."""

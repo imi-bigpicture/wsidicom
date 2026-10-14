@@ -293,9 +293,7 @@ class WsiDicomFileSource(Source):
         return (
             WsiInstance(
                 [file.dataset for file in instance_files],
-                WsiDicomFileImageData(
-                    instance_files, self._decoded_frame_cache, self._encoded_frame_cache
-                ),
+                WsiDicomFileImageData(instance_files, self._decoded_frame_cache),
             )
             for instance_files in files_grouped_by_instance.values()
         )
