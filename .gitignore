@@ -6,3 +6,6 @@ Pipfile.lock*
 .vscode
 typings
 tests/testdata/slides
+.venv
+dev
+benchmarks
