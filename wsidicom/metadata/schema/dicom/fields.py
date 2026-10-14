@@ -61,7 +61,7 @@ from pydicom.valuerep import (
     validate_vr_length,
 )
 
-from wsidicom.conceptcode import CodeType, UnitCode
+from wsidicom.conceptcode import CodeLike, CodeType, CodeValueAttribute, UnitCode
 from wsidicom.config import dicom_validation_mode, get_settings
 from wsidicom.geometry import Orientation, PointMm, SizeMm
 from wsidicom.metadata.sample import (
@@ -74,7 +74,6 @@ from wsidicom.metadata.sample import (
 from wsidicom.options import DicomValueValidationOption
 from wsidicom.tags import (
     CodeMeaningTag,
-    CodeValueTag,
     CodingSchemeDesignatorTag,
     CodingSchemeVersionTag,
     ConceptCodeSequenceTag,
@@ -403,6 +402,34 @@ class DatasetDicomField(fields.Field[ValueType], Generic[ValueType]):
             value,
             validation_mode=dicom_validation_mode(),
         )
+
+    @classmethod
+    def _code_dataset(cls, code: CodeLike) -> Dataset:
+        """The dataset of a code, its attributes checked as they are set.
+
+        The value is written in whichever of Code Value, Long Code Value or URN
+        Code Value can hold it, and a scheme that states no version says so by
+        not being written, as an empty version is no version.
+
+        Parameters
+        ----------
+        code: CodeLike
+            The code to make the dataset of.
+
+        Returns
+        -------
+        Dataset
+            Dataset of the code.
+        """
+        dataset = Dataset()
+        cls._set_attribute(
+            dataset, CodeValueAttribute.keyword_for(code.value), code.value
+        )
+        cls._set_attribute(dataset, CodingSchemeDesignatorTag, code.scheme_designator)
+        cls._set_attribute(dataset, CodeMeaningTag, code.meaning)
+        if code.scheme_version is not None and code.scheme_version != "":
+            cls._set_attribute(dataset, CodingSchemeVersionTag, code.scheme_version)
+        return dataset
 
 
 class StringDicomField(AttributeDicomField[str]):
@@ -749,7 +776,6 @@ class CodeDicomField(DatasetDicomField[CodeType], Generic[CodeType]):
     """
 
     _held = (
-        ("value", CodeValueTag),
         ("scheme_designator", CodingSchemeDesignatorTag),
         ("meaning", CodeMeaningTag),
         ("scheme_version", CodingSchemeVersionTag),
@@ -764,28 +790,21 @@ class CodeDicomField(DatasetDicomField[CodeType], Generic[CodeType]):
     ) -> Dataset | None:
         if value is None:
             return None
-        dataset = Dataset()
-        self._set_attribute(dataset, CodeValueTag, value.value)
-        self._set_attribute(dataset, CodingSchemeDesignatorTag, value.scheme_designator)
-        self._set_attribute(dataset, CodeMeaningTag, value.meaning)
-        # A scheme that states no version says so by not being written, and an
-        # empty version is no version.
-        if value.scheme_version is not None and value.scheme_version != "":
-            self._set_attribute(dataset, CodingSchemeVersionTag, value.scheme_version)
-        return dataset
+        return self._code_dataset(value)
 
     def _deserialize(
         self, value: Dataset, attr: str | None, data: Any, **kwargs
     ) -> CodeType:
         held = {name: value.get(tag, None) for name, tag in self._held}
         return self._load_type(
+            value=CodeValueAttribute.read(value),
             **{
                 # An attribute that is there but empty holds nothing, which is
                 # not something the code can be made with.
                 name: element.value
                 for name, element in held.items()
                 if element is not None and element.value != ""
-            }
+            },
         )
 
 
@@ -1003,17 +1022,9 @@ class NestedDatasetDicomField(DatasetDicomField[ValueType], fields.Nested):
 class ContentItemDicomField(DatasetDicomField[ValueType]):
     def name_item(self, item: Dataset, name: Code) -> Dataset:
         """Name an item this made, so what it holds is known by what names it."""
-        name_dataset = Dataset()
-        self._set_attribute(name_dataset, CodeValueTag, name.value)
         self._set_attribute(
-            name_dataset, CodingSchemeDesignatorTag, name.scheme_designator
+            item, ConceptNameCodeSequenceTag, [self._code_dataset(name)]
         )
-        self._set_attribute(name_dataset, CodeMeaningTag, name.meaning)
-        if name.scheme_version is not None and name.scheme_version != "":
-            self._set_attribute(
-                name_dataset, CodingSchemeVersionTag, name.scheme_version
-            )
-        self._set_attribute(item, ConceptNameCodeSequenceTag, [name_dataset])
         return item
 
     @abstractmethod
@@ -1038,31 +1049,22 @@ class CodeItemDicomField(ContentItemDicomField[CodeType], Generic[CodeType]):
     ) -> Dataset | None:
         if value is None:
             return None
-        code_dataset = Dataset()
-        self._set_attribute(code_dataset, CodeValueTag, value.value)
-        self._set_attribute(
-            code_dataset, CodingSchemeDesignatorTag, value.scheme_designator
-        )
-        self._set_attribute(code_dataset, CodeMeaningTag, value.meaning)
-        if value.scheme_version is not None and value.scheme_version != "":
-            self._set_attribute(
-                code_dataset, CodingSchemeVersionTag, value.scheme_version
-            )
         dataset = Dataset()
         self._set_attribute(dataset, ValueTypeTag, "CODE")
-        self._set_attribute(dataset, ConceptCodeSequenceTag, [code_dataset])
+        self._set_attribute(
+            dataset, ConceptCodeSequenceTag, [self._code_dataset(value)]
+        )
         return dataset
 
     def _deserialize(
         self, value: Dataset, attr: str | None, data: Any, **kwargs
     ) -> CodeType:
-        dataset = value
-        version = _scheme_version_of(dataset.ConceptCodeSequence[0])
+        code_dataset = value.ConceptCodeSequence[0]
         return self._load_type(
-            value=dataset.ConceptCodeSequence[0].CodeValue,
-            scheme_designator=dataset.ConceptCodeSequence[0].CodingSchemeDesignator,
-            meaning=dataset.ConceptCodeSequence[0].CodeMeaning,
-            scheme_version=version,
+            value=CodeValueAttribute.read(code_dataset),
+            scheme_designator=code_dataset.CodingSchemeDesignator,
+            meaning=code_dataset.CodeMeaning,
+            scheme_version=_scheme_version_of(code_dataset),
         )
 
 
@@ -1111,17 +1113,9 @@ class MeasurementItemDicomField(ContentItemDicomField[Measurement | None]):
         self._set_attribute(dataset, ValueTypeTag, "NUMERIC")
         self._set_attribute(dataset, NumericValueTag, DSfloat(value.value))
         self._set_attribute(dataset, FloatingPointValueTag, value.value)
-        unit_dataset = Dataset()
-        self._set_attribute(unit_dataset, CodeValueTag, value.unit.value)
         self._set_attribute(
-            unit_dataset, CodingSchemeDesignatorTag, value.unit.scheme_designator
+            dataset, MeasurementUnitsCodeSequenceTag, [self._code_dataset(value.unit)]
         )
-        self._set_attribute(unit_dataset, CodeMeaningTag, value.unit.meaning)
-        if value.unit.scheme_version is not None and value.unit.scheme_version != "":
-            self._set_attribute(
-                unit_dataset, CodingSchemeVersionTag, value.unit.scheme_version
-            )
-        self._set_attribute(dataset, MeasurementUnitsCodeSequenceTag, [unit_dataset])
         return dataset
 
     def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
@@ -1134,7 +1128,7 @@ class MeasurementItemDicomField(ContentItemDicomField[Measurement | None]):
         unit_dataset = dataset.MeasurementUnitsCodeSequence[0]
         version = _scheme_version_of(unit_dataset)
         unit = UnitCode(
-            value=unit_dataset.CodeValue,
+            value=CodeValueAttribute.read(unit_dataset),
             scheme_designator=unit_dataset.CodingSchemeDesignator,
             meaning=unit_dataset.CodeMeaning,
             scheme_version=version,

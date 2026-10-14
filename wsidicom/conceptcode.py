@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import re
 from dataclasses import dataclass
 from typing import ClassVar, Optional, Protocol, TypeVar
 
@@ -57,6 +58,73 @@ class CodeLike(Protocol):
 
 
 CodeType = TypeVar("CodeType", bound=CodeLike)
+
+
+class CodeValueAttribute:
+    """Which of the three attributes the value of a code is written in.
+
+    Code Value (SH) holds at most 16 characters. A value that is a URN or a URL
+    is written as URN Code Value (UR) whatever its length, and any other value
+    longer than 16 characters, such as a SNOMED CT extension concept id, as
+    Long Code Value (UC). A code dataset holds exactly one of the three.
+    """
+
+    CODE_VALUE = "CodeValue"
+    LONG_CODE_VALUE = "LongCodeValue"
+    URN_CODE_VALUE = "URNCodeValue"
+    MAXIMUM_CODE_VALUE_LENGTH = 16
+
+    # A URN, or a URL with an authority. A colon alone does not make a value a
+    # URN, as codes of other schemes may hold one.
+    _URN_OR_URL = re.compile(r"^(urn:|[a-z][a-z0-9+.-]*://)", re.IGNORECASE)
+
+    @classmethod
+    def keyword_for(cls, value: str) -> str:
+        """The keyword of the attribute to write a code value in.
+
+        Parameters
+        ----------
+        value: str
+            The code value to write.
+
+        Returns
+        -------
+        str
+            Keyword of Code Value, Long Code Value or URN Code Value.
+        """
+        if cls._URN_OR_URL.match(value):
+            return cls.URN_CODE_VALUE
+        if len(value) > cls.MAXIMUM_CODE_VALUE_LENGTH:
+            return cls.LONG_CODE_VALUE
+        return cls.CODE_VALUE
+
+    @classmethod
+    def read(cls, dataset: Dataset) -> str:
+        """The code value of a code dataset, from whichever attribute holds it.
+
+        Parameters
+        ----------
+        dataset: Dataset
+            Dataset of the code.
+
+        Returns
+        -------
+        str
+            The code value.
+
+        Raises
+        ------
+        ValueError
+            If none of the three attributes holds a value.
+        """
+        for keyword in (cls.CODE_VALUE, cls.LONG_CODE_VALUE, cls.URN_CODE_VALUE):
+            value = dataset.get(keyword, None)
+            if value is not None and value != "":
+                return str(value)
+        raise ValueError(
+            "The code holds no value, as none of Code Value, Long Code Value or "
+            "URN Code Value is set."
+        )
 
 
 ConceptCodeType = TypeVar("ConceptCodeType", bound="ConceptCode")
@@ -115,7 +183,7 @@ class ConceptCode:
 
         """
         ds = Dataset()
-        ds.CodeValue = self.value
+        setattr(ds, CodeValueAttribute.keyword_for(self.value), self.value)
         ds.CodingSchemeDesignator = self.scheme_designator
         ds.CodeMeaning = self.meaning
         if self.scheme_version is not None:
@@ -166,7 +234,7 @@ class ConceptCode:
             return None
         return [
             cls(
-                value=code_ds.CodeValue,
+                value=CodeValueAttribute.read(code_ds),
                 scheme_designator=code_ds.CodingSchemeDesignator,
                 meaning=code_ds.CodeMeaning,
                 scheme_version=code_ds.get("CodingSchemeVersion", None),
@@ -537,7 +605,7 @@ def dataset_to_code(dataset: Dataset) -> Code:
     if version == "":
         version = None
     return Code(
-        dataset.CodeValue,
+        CodeValueAttribute.read(dataset),
         dataset.CodingSchemeDesignator,
         dataset.CodeMeaning,
         version,

@@ -15,7 +15,7 @@
 import pytest
 from pydicom import Dataset
 
-from wsidicom.conceptcode import UnitCode
+from wsidicom.conceptcode import CodeValueAttribute, SpecimenStainsCode, UnitCode
 
 
 @pytest.mark.unittest
@@ -88,3 +88,100 @@ class TestConceptCode:
 
         # Assert
         assert "CodingSchemeVersion" not in dataset
+
+
+@pytest.mark.unittest
+class TestCodeValueAttribute:
+    @pytest.mark.parametrize(
+        ["value", "expected"],
+        [
+            ("85756007", "CodeValue"),
+            ("1234567890123456", "CodeValue"),
+            ("abc:def", "CodeValue"),
+            ("12345678901234567", "LongCodeValue"),
+            ("999000011000000103", "LongCodeValue"),
+            ("urn:oid:1.2.3", "URNCodeValue"),
+            ("URN:oid:1.2.3", "URNCodeValue"),
+            ("http://example.org/codes/1", "URNCodeValue"),
+            ("https://example.org/codes/a-much-longer-code", "URNCodeValue"),
+        ],
+    )
+    def test_keyword_for(self, value: str, expected: str):
+        """Up to 16 characters is Code Value, longer is Long Code Value, and a URN
+        or URL is URN Code Value whatever its length."""
+        # Arrange
+
+        # Act
+        keyword = CodeValueAttribute.keyword_for(value)
+
+        # Assert
+        assert keyword == expected
+
+    @pytest.mark.parametrize("keyword", ["CodeValue", "LongCodeValue", "URNCodeValue"])
+    def test_read_reads_whichever_attribute_holds_the_value(self, keyword: str):
+        # Arrange
+        dataset = Dataset()
+        setattr(dataset, keyword, "value")
+
+        # Act
+        value = CodeValueAttribute.read(dataset)
+
+        # Assert
+        assert value == "value"
+
+    def test_read_skips_an_empty_attribute(self):
+        # Arrange
+        dataset = Dataset()
+        dataset.CodeValue = ""
+        dataset.LongCodeValue = "999000011000000103"
+
+        # Act
+        value = CodeValueAttribute.read(dataset)
+
+        # Assert
+        assert value == "999000011000000103"
+
+    def test_read_without_a_value_raises(self):
+        # Arrange
+        dataset = Dataset()
+        dataset.CodingSchemeDesignator = "SCT"
+
+        # Act & Assert
+        with pytest.raises(ValueError):
+            CodeValueAttribute.read(dataset)
+
+
+@pytest.mark.unittest
+class TestConceptCodeValueAttribute:
+    @pytest.mark.parametrize(
+        ["value", "keyword"],
+        [
+            ("999000011000000103", "LongCodeValue"),
+            ("urn:oid:1.2.3", "URNCodeValue"),
+        ],
+    )
+    def test_to_ds_writes_a_value_code_value_cannot_hold_elsewhere(
+        self, value: str, keyword: str
+    ):
+        # Arrange
+        code = SpecimenStainsCode(value=value, scheme_designator="SCT", meaning="x")
+
+        # Act
+        dataset = code.to_ds()
+
+        # Assert
+        assert dataset[keyword].value == value
+        assert "CodeValue" not in dataset
+
+    @pytest.mark.parametrize("value", ["999000011000000103", "urn:oid:1.2.3"])
+    def test_from_ds_reads_a_value_code_value_cannot_hold(self, value: str):
+        # Arrange
+        code = SpecimenStainsCode(value=value, scheme_designator="SCT", meaning="x")
+        dataset = Dataset()
+        code.insert_into_ds(dataset)
+
+        # Act
+        read = SpecimenStainsCode.from_ds(dataset)
+
+        # Assert
+        assert read == code

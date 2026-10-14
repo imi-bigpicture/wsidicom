@@ -362,6 +362,81 @@ class TestDicomFields:
         assert isinstance(deserialized, Code)
         assert deserialized == code
 
+    @pytest.mark.parametrize(
+        ["value", "keyword"],
+        [
+            ("85756007", "CodeValue"),
+            ("999000011000000103", "LongCodeValue"),
+            ("urn:oid:1.2.3", "URNCodeValue"),
+        ],
+    )
+    def test_code_field_serialize_writes_the_value_where_it_fits(
+        self, value: str, keyword: str
+    ):
+        # Arrange
+        code = Code(value, "SCT", "meaning")
+        field = CodeDicomField(Code)
+
+        # Act
+        serialized = field.serialize("attribute", {"attribute": code})
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert serialized[keyword].value == value
+        written = {"CodeValue", "LongCodeValue", "URNCodeValue"} & set(serialized.dir())
+        assert written == {keyword}
+
+    @pytest.mark.parametrize("keyword", ["LongCodeValue", "URNCodeValue"])
+    def test_code_field_deserialize_reads_the_value_wherever_it_is(self, keyword: str):
+        # Arrange
+        dataset = Dataset()
+        setattr(dataset, keyword, "urn:oid:1.2.3")
+        dataset.CodingSchemeDesignator = "SCT"
+        dataset.CodeMeaning = "meaning"
+        field = CodeDicomField(Code)
+
+        # Act
+        deserialized = field.deserialize(dataset)
+
+        # Assert
+        assert deserialized == Code("urn:oid:1.2.3", "SCT", "meaning")
+
+    def test_code_content_item_round_trips_a_long_code_value(self):
+        # Arrange
+        code = Code("999000011000000103", "SCT", "meaning")
+        field = CodeItemDicomField(Code)
+
+        # Act
+        serialized = field.serialize("attribute", {"attribute": code})
+        deserialized = field.deserialize(serialized)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert serialized.ConceptCodeSequence[0].LongCodeValue == "999000011000000103"
+        assert deserialized == code
+
+    def test_measurement_content_item_round_trips_a_long_unit_code_value(self):
+        # Arrange
+        unit = UnitCode(
+            value="g/ml{SUVlbm(Janma)}",
+            scheme_designator="UCUM",
+            meaning="SUV lean body mass",
+        )
+        measurement = Measurement(1.0, unit)
+        field = MeasurementItemDicomField()
+
+        # Act
+        serialized = field.serialize("attribute", {"attribute": measurement})
+        deserialized = field.deserialize(serialized)
+
+        # Assert
+        assert isinstance(serialized, Dataset)
+        assert (
+            serialized.MeasurementUnitsCodeSequence[0].LongCodeValue
+            == "g/ml{SUVlbm(Janma)}"
+        )
+        assert deserialized == measurement
+
     def test_flatten_on_dump_nested_dicom_field_load(self):
         # Arrange
         schema = ParentFlattenOnDumpSchema()
