@@ -54,7 +54,9 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
         return PatientDeIdentification
 
     @pre_dump
-    def pre_dump(self, de_identification: PatientDeIdentification, **kwargs):
+    def pre_dump(
+        self, de_identification: PatientDeIdentification, **kwargs: Any
+    ) -> dict[str, Any]:
         fields = {"identity_removed": de_identification.identity_removed}
         if de_identification.methods is not None:
             de_identification_fields = defaultdict(list)
@@ -67,7 +69,7 @@ class PatientDeIdentificationDicomSchema(DicomSchema[PatientDeIdentification]):
         return fields
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> PatientDeIdentification:
         method_strings = data.pop("method_strings", [])
         method_codes = data.pop("method_codes", [])
         methods = method_strings + method_codes
@@ -114,7 +116,7 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
         return Patient
 
     @pre_dump
-    def pre_dump(self, patient: Patient, **kwargs):
+    def pre_dump(self, patient: Patient, **kwargs: Any) -> dict[str, Any]:
         fields = {
             "name": patient.name,
             "identifier": patient.identifier,
@@ -131,7 +133,7 @@ class PatientDicomSchema(ModuleDicomSchema[Patient]):
         return fields
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> Patient:
         species_description_string = data.pop("species_description_string", None)
         species_description_code = data.pop("species_description_code", None)
         if species_description_code is not None:

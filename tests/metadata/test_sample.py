@@ -29,20 +29,20 @@ class TestIssuerOfIdentifier:
     @pytest.mark.parametrize(
         ["value", "expected"],
         [
-            ["issuer", LocalIssuerOfIdentifier("issuer")],
-            [
+            ("issuer", LocalIssuerOfIdentifier("issuer")),
+            (
                 "^issuer^UUID",
                 UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID),
-            ],
-            [
+            ),
+            (
                 "local^issuer^UUID",
                 UniversalIssuerOfIdentifier(
                     "issuer", UniversalIssuerType.UUID, "local"
                 ),
-            ],
+            ),
         ],
     )
-    def test_from_hl7v2(self, value: str, expected: IssuerOfIdentifier):
+    def test_from_hl7v2(self, value: str, expected: IssuerOfIdentifier) -> None:
         # Arrange
 
         # Act
@@ -54,20 +54,20 @@ class TestIssuerOfIdentifier:
     @pytest.mark.parametrize(
         ["issuer", "expected"],
         [
-            [LocalIssuerOfIdentifier("issuer"), "issuer"],
-            [
+            (LocalIssuerOfIdentifier("issuer"), "issuer"),
+            (
                 UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID),
                 "^issuer^UUID",
-            ],
-            [
+            ),
+            (
                 UniversalIssuerOfIdentifier(
                     "issuer", UniversalIssuerType.UUID, "local"
                 ),
                 "local^issuer^UUID",
-            ],
+            ),
         ],
     )
-    def test_to_hlv2(self, issuer: IssuerOfIdentifier, expected: str):
+    def test_to_hlv2(self, issuer: IssuerOfIdentifier, expected: str) -> None:
         # Arrange
 
         # Act
@@ -82,39 +82,39 @@ class TestSpecimenIdentifier:
     @pytest.mark.parametrize(
         ["first", "second", "expected"],
         [
-            ["identifier", "identifier", True],
-            ["identifier", "other", False],
-            ["identifier", SpecimenIdentifier("identifier"), True],
-            ["identifier", SpecimenIdentifier("other"), False],
-            [SpecimenIdentifier("identifier"), "identifier", True],
-            [SpecimenIdentifier("identifier"), "other", False],
-            [SpecimenIdentifier("identifier"), SpecimenIdentifier("identifier"), True],
-            [SpecimenIdentifier("identifier"), SpecimenIdentifier("other"), False],
-            [
+            ("identifier", "identifier", True),
+            ("identifier", "other", False),
+            ("identifier", SpecimenIdentifier("identifier"), True),
+            ("identifier", SpecimenIdentifier("other"), False),
+            (SpecimenIdentifier("identifier"), "identifier", True),
+            (SpecimenIdentifier("identifier"), "other", False),
+            (SpecimenIdentifier("identifier"), SpecimenIdentifier("identifier"), True),
+            (SpecimenIdentifier("identifier"), SpecimenIdentifier("other"), False),
+            (
                 "identifier",
                 SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("local")),
                 False,
-            ],
-            [
+            ),
+            (
                 SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("local")),
                 "identifier",
                 False,
-            ],
-            [
+            ),
+            (
                 SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("local")),
                 SpecimenIdentifier("identifier"),
                 False,
-            ],
-            [
+            ),
+            (
                 SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("local")),
                 SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("local")),
                 True,
-            ],
-            [
+            ),
+            (
                 SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("local")),
                 SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("other")),
                 False,
-            ],
+            ),
         ],
     )
     def test_equal(
@@ -122,7 +122,7 @@ class TestSpecimenIdentifier:
         first: str | SpecimenIdentifier,
         second: str | SpecimenIdentifier,
         expected: bool,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -134,19 +134,19 @@ class TestSpecimenIdentifier:
     @pytest.mark.parametrize(
         ["identifier", "expected"],
         [
-            [SpecimenIdentifier("identifier"), ("identifier", None)],
-            [
+            (SpecimenIdentifier("identifier"), ("identifier", None)),
+            (
                 SpecimenIdentifier("identifier", LocalIssuerOfIdentifier("local")),
                 ("identifier", "local"),
-            ],
-            [
+            ),
+            (
                 SpecimenIdentifier(
                     "identifier",
                     UniversalIssuerOfIdentifier("issuer", UniversalIssuerType.UUID),
                 ),
                 ("identifier", "^issuer^UUID"),
-            ],
-            [
+            ),
+            (
                 SpecimenIdentifier(
                     "identifier",
                     UniversalIssuerOfIdentifier(
@@ -154,12 +154,12 @@ class TestSpecimenIdentifier:
                     ),
                 ),
                 ("identifier", "local^issuer^UUID"),
-            ],
+            ),
         ],
     )
     def test_to_string_identifier_and_issuer(
         self, identifier: SpecimenIdentifier, expected: tuple[str, str | None]
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -170,13 +170,13 @@ class TestSpecimenIdentifier:
 
     @pytest.mark.parametrize(
         ["identifier", "expected"],
-        [["identifier", ("identifier", None)]],
+        [("identifier", ("identifier", None))],
     )
     def test_get_string_identifier_and_issuer(
         self,
         identifier: str | SpecimenIdentifier,
         expected: tuple[str, str | None],
-    ):
+    ) -> None:
         # Arrange
 
         # Act

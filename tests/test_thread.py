@@ -18,6 +18,7 @@ import contextvars
 import time
 from concurrent.futures import Executor, Future
 from threading import Thread, get_ident
+from typing import Never
 
 import pytest
 from decoy import Decoy, matchers
@@ -35,7 +36,7 @@ from wsidicom.thread import (
 
 @pytest.mark.unittest
 class TestCompletionTracker:
-    def test_increment_and_decrement(self):
+    def test_increment_and_decrement(self) -> None:
         """Test basic increment/decrement cycle."""
         tracker = CompletionTracker()
         tracker.increment()
@@ -44,7 +45,7 @@ class TestCompletionTracker:
         tracker.decrement()
         tracker.wait_for_zero()  # Should not block
 
-    def test_wait_for_zero_when_already_zero(self):
+    def test_wait_for_zero_when_already_zero(self) -> None:
         """Test that wait_for_zero returns immediately when count is zero."""
         tracker = CompletionTracker()
         tracker.wait_for_zero()  # Should not block
@@ -52,7 +53,7 @@ class TestCompletionTracker:
 
 @pytest.mark.unittest
 class TestCancellationToken:
-    def test_not_cancelled_initially(self):
+    def test_not_cancelled_initially(self) -> None:
         """A fresh token is not cancelled and holds no exception."""
         # Arrange
         token = CancellationToken()
@@ -61,7 +62,7 @@ class TestCancellationToken:
         assert token.is_cancelled() is False
         assert token.exception is None
 
-    def test_cancel_records_exception_and_sets(self):
+    def test_cancel_records_exception_and_sets(self) -> None:
         """Cancelling records the cause and sets the flag."""
         # Arrange
         token = CancellationToken()
@@ -74,7 +75,7 @@ class TestCancellationToken:
         assert token.is_cancelled() is True
         assert token.exception is error
 
-    def test_first_cancel_wins(self):
+    def test_first_cancel_wins(self) -> None:
         """The first recorded cause is preserved across later cancels."""
         # Arrange
         token = CancellationToken()
@@ -88,7 +89,7 @@ class TestCancellationToken:
         # Assert
         assert token.exception is first
 
-    def test_raise_if_cancelled_reraises_cause(self):
+    def test_raise_if_cancelled_reraises_cause(self) -> None:
         """raise_if_cancelled re-raises the recorded exception."""
         # Arrange
         token = CancellationToken()
@@ -98,7 +99,7 @@ class TestCancellationToken:
         with pytest.raises(ValueError, match="boom"):
             token.raise_if_cancelled()
 
-    def test_raise_if_cancelled_noop_when_not_cancelled(self):
+    def test_raise_if_cancelled_noop_when_not_cancelled(self) -> None:
         """raise_if_cancelled does nothing when the token is live."""
         # Arrange
         token = CancellationToken()
@@ -109,7 +110,7 @@ class TestCancellationToken:
 
 @pytest.mark.unittest
 class TestCancelableQueue:
-    def test_put_get_roundtrip(self):
+    def test_put_get_roundtrip(self) -> None:
         """An item put on the queue is returned by get."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue()
@@ -121,7 +122,7 @@ class TestCancelableQueue:
         # Assert
         assert queue.get(token) == "item"
 
-    def test_priority_ordering(self):
+    def test_priority_ordering(self) -> None:
         """A prioritized queue returns items in priority order."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue()
@@ -134,7 +135,7 @@ class TestCancelableQueue:
         # Assert
         assert [queue.get(token) for _ in range(3)] == [1, 2, 3]
 
-    def test_fifo_ordering_allows_incomparable_items(self):
+    def test_fifo_ordering_allows_incomparable_items(self) -> None:
         """A FIFO queue preserves arrival order and needs no item ordering."""
         # Arrange
         queue: FifoCancelableQueue = FifoCancelableQueue()
@@ -148,7 +149,7 @@ class TestCancelableQueue:
         # Assert
         assert [queue.get(token) for _ in range(3)] == items
 
-    def test_get_raises_if_already_cancelled(self):
+    def test_get_raises_if_already_cancelled(self) -> None:
         """An already-cancelled token takes precedence over an available item."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue()
@@ -160,7 +161,7 @@ class TestCancelableQueue:
         with pytest.raises(Cancelled):
             queue.get(token)
 
-    def test_put_raises_if_already_cancelled(self):
+    def test_put_raises_if_already_cancelled(self) -> None:
         """An already-cancelled token prevents enqueueing into a full queue."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue(maxsize=1)
@@ -172,7 +173,7 @@ class TestCancelableQueue:
         with pytest.raises(Cancelled):
             queue.put("blocked", token)
 
-    def test_get_unblocks_on_cancel_when_empty(self):
+    def test_get_unblocks_on_cancel_when_empty(self) -> None:
         """A get blocked on an empty queue raises Cancelled once cancelled."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue()
@@ -197,7 +198,7 @@ class TestCancelableQueue:
         assert thread.is_alive() is False
         assert outcome.get("cancelled") is True
 
-    def test_put_unblocks_on_cancel_when_full(self):
+    def test_put_unblocks_on_cancel_when_full(self) -> None:
         """A put blocked on a full queue raises Cancelled once cancelled."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue(maxsize=1)
@@ -223,7 +224,7 @@ class TestCancelableQueue:
         assert thread.is_alive() is False
         assert outcome.get("cancelled") is True
 
-    def test_cancel_wakes_all_blocked_getters(self):
+    def test_cancel_wakes_all_blocked_getters(self) -> None:
         """One cancel releases every thread blocked on an empty-queue get."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue()
@@ -250,7 +251,7 @@ class TestCancelableQueue:
         assert all(not thread.is_alive() for thread in threads)
         assert len(cancelled) == 5
 
-    def test_cancel_wakes_all_blocked_putters(self):
+    def test_cancel_wakes_all_blocked_putters(self) -> None:
         """One cancel releases every thread blocked on a full-queue put."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue(maxsize=1)
@@ -278,7 +279,7 @@ class TestCancelableQueue:
         assert all(not thread.is_alive() for thread in threads)
         assert len(cancelled) == 5
 
-    def test_priority_orders_shutdown_sentinel_last(self):
+    def test_priority_orders_shutdown_sentinel_last(self) -> None:
         """A ShutdownSentinel dequeues after real items, regardless of arrival."""
         # Arrange
         queue: PriorityCancelableQueue = PriorityCancelableQueue()
@@ -297,7 +298,7 @@ class TestCancelableQueue:
 
 @pytest.mark.unittest
 class TestReadExecutor:
-    def test_workers_explicit_value(self):
+    def test_workers_explicit_value(self) -> None:
         """An explicit thread count is used as the worker budget."""
         # Arrange
         expected_workers = 4
@@ -309,7 +310,7 @@ class TestReadExecutor:
         # Assert
         assert workers == expected_workers
 
-    def test_workers_none_without_shared_is_one(self):
+    def test_workers_none_without_shared_is_one(self) -> None:
         """No count and no shared executor reads single-threaded."""
         # Arrange
         expected_workers = 1
@@ -323,7 +324,7 @@ class TestReadExecutor:
 
     def test_workers_none_with_shared_is_cpu_count(
         self, decoy: Decoy, monkeypatch: pytest.MonkeyPatch
-    ):
+    ) -> None:
         """No count with a shared executor fans out across cpu_count."""
         # Arrange
         expected_workers = 7
@@ -337,8 +338,8 @@ class TestReadExecutor:
         # Assert
         assert workers == expected_workers
 
-    def test_single_worker_runs_inline_on_calling_thread(self):
-        """workers == 1 runs the callable on the calling thread, not a worker."""
+    def test_single_worker_runs_inline_on_calling_thread(self) -> None:
+        """Workers == 1 runs the callable on the calling thread, not a worker."""
         # Arrange
         this_thread_id = get_ident()
         read_executor = ReadExecutor(1, None)
@@ -349,11 +350,11 @@ class TestReadExecutor:
         # Assert — that thread is this (calling) thread, i.e. it ran inline
         assert future.result() == this_thread_id
 
-    def test_inline_exception_is_captured_in_future(self):
+    def test_inline_exception_is_captured_in_future(self) -> None:
         """An inline callable's exception is delivered through the future."""
 
         # Arrange
-        def boom():
+        def boom() -> Never:
             raise ValueError("boom")
 
         read_executor = ReadExecutor(1, None)
@@ -365,9 +366,11 @@ class TestReadExecutor:
         with pytest.raises(ValueError, match="boom"):
             future.result()
 
-    def test_delegates_to_shared_executor(self, decoy: Decoy):
-        """With workers > 1 and a shared executor, submit forwards the call and
-        returns the shared executor's future."""
+    def test_delegates_to_shared_executor(self, decoy: Decoy) -> None:
+        """With workers > 1 and a shared executor, submit forwards the call.
+
+        It returns the shared executor's future.
+        """
         # Arrange
         shared = decoy.mock(cls=Executor)
         read_executor = ReadExecutor(4, shared)
@@ -389,7 +392,7 @@ class TestReadExecutor:
         # Assert — the shared executor's future is returned unchanged
         assert result is expected_future
 
-    def test_propagates_context_to_workers(self):
+    def test_propagates_context_to_workers(self) -> None:
         """A context-local value set by the caller is visible in pool workers.
 
         Guards the copy_context wrap in submit: without it, worker threads start
@@ -409,7 +412,7 @@ class TestReadExecutor:
         # Assert
         assert set(results) == {"scoped"}
 
-    def test_does_not_shut_down_shared_executor(self, decoy: Decoy):
+    def test_does_not_shut_down_shared_executor(self, decoy: Decoy) -> None:
         """Closing a ReadExecutor never shuts down a borrowed shared executor."""
         # Arrange
         shared = decoy.mock(cls=Executor)
@@ -421,9 +424,11 @@ class TestReadExecutor:
         # Assert
         decoy.verify(shared.shutdown(), times=0)
 
-    def test_owns_and_shuts_down_per_read_pool(self):
-        """With workers > 1 and no shared executor, the owned pool is created and
-        shut down on close."""
+    def test_owns_and_shuts_down_per_read_pool(self) -> None:
+        """With workers > 1 and no shared executor, the owned pool is created.
+
+        It is shut down on close.
+        """
         # Arrange
         read_executor = ReadExecutor(2, None)
         expected = object()

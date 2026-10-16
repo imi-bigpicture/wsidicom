@@ -28,5 +28,5 @@ class EquipmentJsonSchema(LoadingSchema[Equipment]):
     software_versions = fields.List(fields.String(), allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Equipment]:
         return Equipment

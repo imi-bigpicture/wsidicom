@@ -13,18 +13,20 @@
 #    limitations under the License.
 
 from abc import abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, MutableMapping, Sequence
 from dataclasses import dataclass
 from threading import Condition, Lock
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar, cast
 
 import numpy as np
 from cachetools import LRUCache, cachedmethod
 
+MethodType = TypeVar("MethodType", bound=Callable[..., Any])
+
 
 def lru_cached_method(
     maxsize: int | Callable[[], int | None] | None = 128,
-):
+) -> Callable[[MethodType], MethodType]:
     """Cache a method's return values in a per-instance LRU cache.
 
     Like ``functools.lru_cache`` but bound to the instance rather than the class,
@@ -43,11 +45,11 @@ def lru_cached_method(
         runtime configuration is honoured.
     """
 
-    def decorator(method: Callable):
+    def decorator(method: MethodType) -> MethodType:
         cache_attr = f"_{method.__name__}_cache"
         condition_attr = f"_{method.__name__}_condition"
 
-        def get_cache(self):
+        def get_cache(self: object) -> MutableMapping[Any, Any]:
             cache = self.__dict__.get(cache_attr)
             if cache is None:
                 size = maxsize() if callable(maxsize) else maxsize
@@ -55,13 +57,15 @@ def lru_cached_method(
                 cache = self.__dict__.setdefault(cache_attr, default)
             return cache
 
-        def get_condition(self):
+        def get_condition(self: object) -> Condition:
             condition = self.__dict__.get(condition_attr)
             if condition is None:
                 condition = self.__dict__.setdefault(condition_attr, Condition())
             return condition
 
-        return cachedmethod(get_cache, condition=get_condition)(method)
+        return cast(
+            MethodType, cachedmethod(get_cache, condition=get_condition)(method)
+        )
 
     return decorator
 
@@ -77,7 +81,7 @@ class CacheItem(Generic[CacheItemType]):
 
 
 class LRU(Generic[CacheKeyType, CacheItemType]):
-    def __init__(self, maxsize: int):
+    def __init__(self, maxsize: int) -> None:
         self._lock = Lock()
         self._cache: dict[CacheKeyType, CacheItem[CacheItemType]] = {}
         self._maxsize = maxsize
@@ -119,7 +123,7 @@ class LRU(Generic[CacheKeyType, CacheItemType]):
 class FrameCache(Generic[CacheItemType]):
     """Cache of frames, keyed by image data and frame index."""
 
-    def __init__(self, size: int):
+    def __init__(self, size: int) -> None:
         self._size = size
         self._lru_cache = LRU[tuple[int, int], CacheItemType](size)
 

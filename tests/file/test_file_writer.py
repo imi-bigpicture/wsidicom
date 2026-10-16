@@ -19,6 +19,7 @@ import tempfile
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, Never
 
 import pytest
 from decoy import Decoy, matchers
@@ -47,7 +48,7 @@ def decoy() -> Decoy:
 class SplitOnlyWriter(BaseFileWriter):
     """Minimal concrete writer to exercise `_split_planes_paths` in isolation."""
 
-    def __init__(self, instance_split: InstanceSplit):
+    def __init__(self, instance_split: InstanceSplit) -> None:
         super().__init__(
             output_path=UPath("."),
             uid_generator=None,  # type: ignore[arg-type]
@@ -58,7 +59,7 @@ class SplitOnlyWriter(BaseFileWriter):
             instance_split=instance_split,
         )
 
-    def write(self):  # pragma: no cover - not exercised
+    def write(self) -> list[UPath]:  # pragma: no cover - not exercised
         raise NotImplementedError()
 
 
@@ -66,7 +67,7 @@ class SplitOnlyWriter(BaseFileWriter):
 class TestPyramidFileWriterHelpers:
     """Tests for PyramidFileWriter static helper methods."""
 
-    def test_source_level_of_regenerating_is_always_the_base(self):
+    def test_source_level_of_regenerating_is_always_the_base(self) -> None:
         """Regenerating derives every level from the base, ignoring stored levels."""
         # Act
         source_level = PyramidFileWriter._source_level_of(
@@ -76,7 +77,7 @@ class TestPyramidFileWriterHelpers:
         # Assert
         assert source_level == 0
 
-    def test_source_level_of_is_the_closest_read_level_below(self):
+    def test_source_level_of_is_the_closest_read_level_below(self) -> None:
         """A level is derived from the closest level below that is read."""
         # Arrange - the source stores 0, 2 and 4, and all of them are read
         read_levels = {0, 2, 4}
@@ -90,7 +91,7 @@ class TestPyramidFileWriterHelpers:
                 == expected
             )
 
-    def test_source_level_of_skips_a_stored_level_that_is_not_read(self):
+    def test_source_level_of_skips_a_stored_level_that_is_not_read(self) -> None:
         """A stored level that is not written is not read, so is not derived from.
 
         Regression: level 5 was derived from the stored level 4 even when level 4
@@ -104,7 +105,7 @@ class TestPyramidFileWriterHelpers:
         # Assert - derived from 0, not from the unread stored level 4
         assert source_level == 0
 
-    def test_source_level_of_without_a_level_below_raises(self):
+    def test_source_level_of_without_a_level_below_raises(self) -> None:
         """A generated level with nothing read below it cannot be derived."""
         # Act & Assert
         with pytest.raises(ValueError, match="no level below it is read"):
@@ -142,7 +143,7 @@ class TestBaseFileWriterSplit:
         self,
         split: InstanceSplit,
         expected: list[tuple[list[float], list[str]]],
-    ):
+    ) -> None:
         # Arrange — a complete grid: both optical paths have both focal planes.
         writer = SplitOnlyWriter(split)
 
@@ -152,7 +153,7 @@ class TestBaseFileWriterSplit:
         # Assert
         assert buckets == expected
 
-    def test_unequally_spaced_focal_planes_split_even_without_flag(self):
+    def test_unequally_spaced_focal_planes_split_even_without_flag(self) -> None:
         # Arrange — unequally spaced focal planes cannot share one TILED_FULL
         # instance, so they are split per plane even with InstanceSplit.NONE.
         writer = SplitOnlyWriter(InstanceSplit.NONE)
@@ -163,7 +164,7 @@ class TestBaseFileWriterSplit:
         # Assert
         assert buckets == [([0.0], ["0"]), ([0.5], ["0"]), ([2.0], ["0"])]
 
-    def test_equally_spaced_focal_planes_stay_combined(self):
+    def test_equally_spaced_focal_planes_stay_combined(self) -> None:
         # Arrange
         writer = SplitOnlyWriter(InstanceSplit.NONE)
 
@@ -173,7 +174,7 @@ class TestBaseFileWriterSplit:
         # Assert
         assert buckets == [([0.0, 1.0, 2.0], ["0"])]
 
-    def test_sparse_grid_splits_optical_paths_even_without_flag(self):
+    def test_sparse_grid_splits_optical_paths_even_without_flag(self) -> None:
         # Arrange — optical path "1" is missing focal plane 1.0, so the grid is
         # sparse and the optical paths must be split into separate instances.
         writer = SplitOnlyWriter(InstanceSplit.NONE)
@@ -184,7 +185,7 @@ class TestBaseFileWriterSplit:
         # Assert — each bucket is a complete grid.
         assert buckets == [([0.0, 1.0], ["0"]), ([0.0], ["1"])]
 
-    def test_split_covers_every_present_cell_exactly_once(self):
+    def test_split_covers_every_present_cell_exactly_once(self) -> None:
         # Arrange — a sparse grid.
         focal_planes_by_optical_path = {"a": [0.0, 1.0, 2.0], "b": [0.0]}
         writer = SplitOnlyWriter(InstanceSplit.NONE)
@@ -220,7 +221,7 @@ class TestPyramidFileWriterIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Test generating a full pyramid preserves all existing levels."""
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -250,7 +251,7 @@ class TestPyramidFileWriterIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Test generating a full pyramid from only the base level."""
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -283,7 +284,7 @@ class TestPyramidFileWriterIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Regenerating a pyramid whose levels are not consecutive.
 
         A sparse pyramid (an SVS typically stores levels 0, 2, 4) leaves gaps, and
@@ -326,7 +327,7 @@ class TestPyramidFileWriterIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Test that generated files produce readable image data."""
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -357,7 +358,7 @@ class TestPyramidFileWriterIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Test that a downsampled level is visually close to the original."""
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -421,7 +422,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Test generating a full pyramid with bottom-up threading model."""
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -451,7 +452,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Test generating from base only with bottom-up threading model."""
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -489,7 +490,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Test generating a full pyramid with sequential bottom-up model."""
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -520,7 +521,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: UidGenerator,
-    ):
+    ) -> None:
         """Test generating from base only with sequential bottom-up model."""
         # Arrange
         wsi = wsi_factory(wsi_name)
@@ -550,8 +551,10 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
 
 @pytest.mark.integration
 class TestPyramidFileWriterFailFast:
-    """The pull-based pipeline must fail fast — surface the cause and clean up,
-    rather than deadlock — when a stage raises mid-stream."""
+    """The pull-based pipeline must fail fast when a stage raises mid-stream.
+
+    It surfaces the cause and cleans up, rather than deadlocking.
+    """
 
     @pytest.mark.parametrize("source_workers", [None, 1])
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
@@ -564,9 +567,12 @@ class TestPyramidFileWriterFailFast:
         tmp_path: Path,
         decoy: Decoy,
         monkeypatch: pytest.MonkeyPatch,
-    ):
-        """A transcoder that always fails to encode must make write() raise the
-        injected error promptly (not hang) and remove its temp directory."""
+    ) -> None:
+        """A transcoder that always fails to encode makes write() fail fast.
+
+        write() must raise the injected error promptly (not hang) and remove its temp
+        directory.
+        """
 
         # Arrange — a transcoder that mimics the source encoder but fails to encode
         class InjectedEncodeError(Exception):
@@ -574,7 +580,7 @@ class TestPyramidFileWriterFailFast:
 
         wsi = wsi_factory(wsi_name)
         pyramid = wsi.pyramids[0]
-        source_image_data = list(pyramid.base_level.instances.values())[0].image_data
+        source_image_data = next(iter(pyramid.base_level.instances.values())).image_data
 
         failing_encoder = decoy.mock(cls=Encoder)
         decoy.when(failing_encoder.transfer_syntax).then_return(
@@ -596,7 +602,7 @@ class TestPyramidFileWriterFailFast:
         created_temp_dirs: list = []
         real_mkdtemp = tempfile.mkdtemp
 
-        def capturing_mkdtemp(*args, **kwargs):
+        def capturing_mkdtemp(*args: Any, **kwargs: Any) -> str:
             path = real_mkdtemp(*args, **kwargs)
             created_temp_dirs.append(path)
             return path
@@ -645,9 +651,12 @@ class TestPyramidFileWriterFailFast:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-    ):
-        """A source whose tile read raises must make write() raise that error
-        promptly (not hang) and remove its temp directory."""
+    ) -> None:
+        """A source whose tile read raises makes write() fail fast.
+
+        write() must raise that error promptly (not hang) and remove its temp
+        directory.
+        """
 
         # Arrange — make every read on the base-level source raise
         class InjectedReadError(Exception):
@@ -656,7 +665,7 @@ class TestPyramidFileWriterFailFast:
         wsi = wsi_factory(wsi_name)
         pyramid = wsi.pyramids[0]
 
-        def raising_read(*args, **kwargs):
+        def raising_read(*args: Any, **kwargs: Any) -> Never:
             raise InjectedReadError("injected source read failure")
 
         for instance in pyramid.base_level.instances.values():
@@ -670,7 +679,7 @@ class TestPyramidFileWriterFailFast:
         created_temp_dirs: list = []
         real_mkdtemp = tempfile.mkdtemp
 
-        def capturing_mkdtemp(*args, **kwargs):
+        def capturing_mkdtemp(*args: Any, **kwargs: Any) -> str:
             path = real_mkdtemp(*args, **kwargs)
             created_temp_dirs.append(path)
             return path

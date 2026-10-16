@@ -97,16 +97,17 @@ class Subsampling(Enum):
 
 
 class Settings(metaclass=ABCMeta):
-    def __init__(self, bits: int, channels: Channels):
+    def __init__(self, bits: int, channels: Channels) -> None:
         """
         Initialize encoding settings.
 
-        Parameters:
+        Parameters
         ----------
             bits: int
                 Number of bits per pixel.
             channels: Channels
-                Color channels in encoded image."""
+                Color channels in encoded image.
+        """
         self._bits = bits
         self._channels = channels
 
@@ -162,7 +163,7 @@ class Settings(metaclass=ABCMeta):
     ) -> "Settings":
         """Create settings based on properties in dataset and transfer syntax.
 
-        Parameters:
+        Parameters
         ----------
             transfer_syntax: UID
                 Transfer syntax to create settings for.
@@ -171,8 +172,8 @@ class Settings(metaclass=ABCMeta):
             photometric_interpretation: str
                 Photometric interpretation of image.
 
-        Returns:
-        ----------
+        Returns
+        -------
             Settings
                 Settings matching dataset and transfer syntax.
         """
@@ -249,11 +250,11 @@ class JpegSettings(Settings):
         bits: int = 8,
         channels: Channels = Channels.YBR,
         subsampling: Subsampling = Subsampling.R422,
-    ):
+    ) -> None:
         """
         Initialize JPEG encoding settings.
 
-        Parameters:
+        Parameters
         ----------
             quality: int = 80
                 JPEG quality factor. 0-100, recommended to not use higher than 95.
@@ -309,11 +310,11 @@ class JpegLosslessSettings(Settings):
         predictor: int = 1,
         bits: int = 8,
         channels: Channels = Channels.YBR,
-    ):
+    ) -> None:
         """
         Initialize JPEG lossless encoding settings.
 
-        Parameters:
+        Parameters
         ----------
             predictor: int = 1
                 JPEG predictor setting. 1-7. Use 1 for SV1.
@@ -325,7 +326,7 @@ class JpegLosslessSettings(Settings):
         self._predictor = predictor
         super().__init__(bits, channels)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(predictor={self.predictor}, bits={self.bits}, "
             f"channels={self.channels})"
@@ -361,11 +362,11 @@ class JpegLsSettings(Settings):
         level: int = 0,
         bits: int = 8,
         channels: Channels = Channels.RGB,
-    ):
+    ) -> None:
         """
         Initialize JPEG-LS lossless encoding settings. Only supports grayscale images.
 
-        Parameters:
+        Parameters
         ----------
             level: int = 0
                 JPEG-LS near-lossless level. 0-9. 0 is lossless.
@@ -406,11 +407,11 @@ class Jpeg2kSettings(Settings):
         levels: float | Sequence[float] = 80,
         bits: int = 8,
         channels: Channels = Channels.YBR,
-    ):
+    ) -> None:
         """
         Initialize JPEG 2000 encoding settings.
 
-        Parameters:
+        Parameters
         ----------
             levels: float | Sequence[float] = 80
                 JPEG 2000 compression levels in dB. Set to 0 for lossless.
@@ -479,10 +480,11 @@ class JpegXlSettings(Settings):
         level: int | None = None,
         bits: int = 8,
         channels: Channels = Channels.YBR,
-    ):
+    ) -> None:
         """
         Initialize JPEG XL encoding settings.
-        Parameters:
+
+        Parameters
         ----------
             level: int | None = None
                 JPEG XL compression level. -100-100. Set to 100 for lossless.
@@ -531,11 +533,11 @@ class NumpySettings(Settings):
         channels: Literal[Channels.GRAYSCALE, Channels.RGB] = Channels.RGB,
         little_endian: bool = True,
         implicit_vr: bool = False,
-    ):
+    ) -> None:
         """
         Initialize numpy encoding settings.
 
-        Parameters:
+        Parameters
         ----------
             bits: int = 8
                 Number of bits per pixel.
@@ -586,7 +588,7 @@ class NumpySettings(Settings):
 
 
 class RleSettings(Settings):
-    def __init__(self, bits: int = 8, channels: Channels = Channels.RGB):
+    def __init__(self, bits: int = 8, channels: Channels = Channels.RGB) -> None:
         super().__init__(bits, channels)
 
     def __repr__(self) -> str:

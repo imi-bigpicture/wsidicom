@@ -14,6 +14,8 @@
 
 """Tests for PyramidTileAccumulator."""
 
+from typing import Never
+
 import numpy as np
 import pytest
 
@@ -40,7 +42,7 @@ def token() -> CancellationToken:
 class TestChainDepth:
     """Tests for chain_depth traversal."""
 
-    def test_single_accumulator_has_depth_1(self, token: CancellationToken):
+    def test_single_accumulator_has_depth_1(self, token: CancellationToken) -> None:
         # Arrange
         accumulator = WritingPyramidTileAccumulator(
             token=token,
@@ -55,7 +57,7 @@ class TestChainDepth:
         # Assert
         assert depth == 1
 
-    def test_two_level_chain(self, token: CancellationToken):
+    def test_two_level_chain(self, token: CancellationToken) -> None:
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
         upper = WritingPyramidTileAccumulator(
@@ -80,7 +82,7 @@ class TestChainDepth:
         assert lower_depth == 2
         assert upper_depth == 1
 
-    def test_three_level_chain(self, token: CancellationToken):
+    def test_three_level_chain(self, token: CancellationToken) -> None:
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
         top = WritingPyramidTileAccumulator(
@@ -119,7 +121,7 @@ class TestChainDepth:
 class TestBlockPositions:
     """Tests for _block_positions edge-block handling."""
 
-    def test_full_2x2_block_interior(self, token: CancellationToken):
+    def test_full_2x2_block_interior(self, token: CancellationToken) -> None:
         # Arrange
         accumulator = WritingPyramidTileAccumulator(
             token=token,
@@ -134,7 +136,7 @@ class TestBlockPositions:
         # Assert
         assert positions == [[(4, 6), (5, 6)], [(4, 7), (5, 7)]]
 
-    def test_right_edge_block(self, token: CancellationToken):
+    def test_right_edge_block(self, token: CancellationToken) -> None:
         # Arrange — input width=5 means input column 5 is out of bounds
         accumulator = WritingPyramidTileAccumulator(
             token=token,
@@ -149,7 +151,7 @@ class TestBlockPositions:
         # Assert — only one column per row
         assert positions == [[(4, 0)], [(4, 1)]]
 
-    def test_bottom_edge_block(self, token: CancellationToken):
+    def test_bottom_edge_block(self, token: CancellationToken) -> None:
         # Arrange — input height=5 means input row 5 is out of bounds
         accumulator = WritingPyramidTileAccumulator(
             token=token,
@@ -164,7 +166,7 @@ class TestBlockPositions:
         # Assert — only one row
         assert positions == [[(0, 4), (1, 4)]]
 
-    def test_corner_1x1_block(self, token: CancellationToken):
+    def test_corner_1x1_block(self, token: CancellationToken) -> None:
         # Arrange
         accumulator = WritingPyramidTileAccumulator(
             token=token,
@@ -184,7 +186,7 @@ class TestBlockPositions:
 class TestSingleAccumulatorDrain:
     """Tests for accumulator consumer loop and block-completion behaviour."""
 
-    def test_full_2x2_block_submits_task(self, token: CancellationToken):
+    def test_full_2x2_block_submits_task(self, token: CancellationToken) -> None:
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
         accumulator = WritingPyramidTileAccumulator(
@@ -222,7 +224,7 @@ class TestSingleAccumulatorDrain:
         finally:
             accumulator.shutdown()
 
-    def test_partial_block_does_not_submit(self, token: CancellationToken):
+    def test_partial_block_does_not_submit(self, token: CancellationToken) -> None:
         # Arrange
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
         accumulator = WritingPyramidTileAccumulator(
@@ -246,7 +248,7 @@ class TestSingleAccumulatorDrain:
 
     def test_unwritten_level_submits_task_without_output_queue(
         self, token: CancellationToken
-    ):
+    ) -> None:
         """An intermediate level cascades but produces no output to encode.
 
         Levels that only bridge a gap in a sparse pyramid are downsampled to feed
@@ -278,7 +280,7 @@ class TestSingleAccumulatorDrain:
         finally:
             accumulator.shutdown()
 
-    def test_tile_outside_input_grid_raises(self, token: CancellationToken):
+    def test_tile_outside_input_grid_raises(self, token: CancellationToken) -> None:
         """A tile outside the input grid fails loudly, naming the coordinate.
 
         Regression: `_block_positions` returned no positions for such a tile, the
@@ -311,7 +313,7 @@ class TestSingleAccumulatorDrain:
 class TestCascadeShutdown:
     """Tests for shutdown sentinel propagation through the cascade chain."""
 
-    def test_shutdown_propagates_through_chain(self, token: CancellationToken):
+    def test_shutdown_propagates_through_chain(self, token: CancellationToken) -> None:
         # Arrange — two-level chain: lower (chain start) → upper
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
         upper = WritingPyramidTileAccumulator(
@@ -341,7 +343,7 @@ class TestCascadeShutdown:
 
     def test_non_chain_start_does_not_send_sentinel_on_shutdown(
         self, token: CancellationToken
-    ):
+    ) -> None:
         # Arrange — upper accumulator with is_chain_start=False
         encoder_pool_queue: PriorityCancelableQueue = PriorityCancelableQueue()
         upper = WritingPyramidTileAccumulator(
@@ -369,7 +371,7 @@ class TestCascadeShutdown:
 class TestCleanup:
     """Tests for cleanup() error-path behaviour."""
 
-    def test_cleanup_unblocks_consumer_thread(self, token: CancellationToken):
+    def test_cleanup_unblocks_consumer_thread(self, token: CancellationToken) -> None:
         # Arrange — non-chain-start accumulator (cleanup must still unblock)
         accumulator = WritingPyramidTileAccumulator(
             token=token,
@@ -391,10 +393,14 @@ class TestCleanup:
 class TestConsumerFailureWatchdog:
     """Consumer thread failures must surface on shutdown and unblock the cascade."""
 
-    def test_consumer_failure_raised_on_shutdown(self, token: CancellationToken):
+    def test_consumer_failure_raised_on_shutdown(
+        self, token: CancellationToken
+    ) -> None:
         # Arrange — encoder_pool_queue that raises on put to simulate a worker error
         class FailingQueue:
-            def put(self, item, token):
+            def put(
+                self, item: DownsampleEncodeTask, token: CancellationToken
+            ) -> Never:
                 raise RuntimeError("encoder pool put failed")
 
         accumulator = WritingPyramidTileAccumulator(
@@ -415,11 +421,13 @@ class TestConsumerFailureWatchdog:
 
     def test_consumer_failure_propagates_shutdown_to_next(
         self, token: CancellationToken
-    ):
+    ) -> None:
         # Arrange — two-level chain sharing one cancellation token; lower consumer
         # fails, and upper must still exit (via the shared cancellation token).
         class FailingQueue:
-            def put(self, item, token):
+            def put(
+                self, item: DownsampleEncodeTask, token: CancellationToken
+            ) -> Never:
                 raise RuntimeError("encoder pool put failed")
 
         upper = WritingPyramidTileAccumulator(

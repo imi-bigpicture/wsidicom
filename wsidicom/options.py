@@ -27,8 +27,9 @@ class Option(Enum):
     @classmethod
     def coerce(cls: type[OptionT], value: "OptionT | str | None") -> "OptionT | None":
         """Coerce ``value`` to a member: a member or its string value (e.g.
-        ``"pillow"``) returns the member, ``None`` passes through, and an unknown
-        string raises ``ValueError``.
+
+        ``"pillow"``) returns the member, ``None`` passes through, and an unknown string
+        raises ``ValueError``.
         """
         return None if value is None else cls(value)
 
@@ -51,8 +52,10 @@ class DicomValueValidationOption(Option):
 
 
 class ResampleFilterOption(Option):
-    """Backend-neutral resampling filter, mapped by each downsampler to its
-    native equivalent."""
+    """Backend-neutral resampling filter.
+
+    Each downsampler maps the filter to its native equivalent.
+    """
 
     NEAREST = "nearest"
     """Does not average, so it aliases when shrinking; use only where exact source
@@ -125,9 +128,10 @@ class ConcatenationByFrames:
 
 @dataclass(frozen=True)
 class ConcatenationByBytes:
-    """Split each level into concatenated instances whose encapsulated pixel data
-    is at most `size` bytes. The dataset header is not counted, so set `size` below
-    any hard limit.
+    """Split each level into concatenated instances by encapsulated pixel data size.
+
+    The encapsulated pixel data of each instance is at most `size` bytes. The
+    dataset header is not counted, so set `size` below any hard limit.
 
     `size` is a byte count, optionally given as a string with a binary suffix:
     ``"500K"``, ``"100M"``, or ``"2G"`` (multiples of 1024), with an optional

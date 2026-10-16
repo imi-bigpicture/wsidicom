@@ -21,11 +21,11 @@ from wsidicom.instance.numpy_image_data import NumpyImageData
 from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
 
 __all__ = [
-    "WsiInstance",
-    "WsiDataset",
     "ConcatenationPart",
-    "TileType",
     "ImageData",
-    "WsiDicomImageData",
     "NumpyImageData",
+    "TileType",
+    "WsiDataset",
+    "WsiDicomImageData",
+    "WsiInstance",
 ]

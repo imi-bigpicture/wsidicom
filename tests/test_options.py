@@ -26,7 +26,7 @@ class TestConcatenationByFrames:
         # Arrange
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"count must be positive"):
             ConcatenationByFrames(count)
 
     @pytest.mark.parametrize("count", [2, 10, 100])
@@ -43,7 +43,7 @@ class TestConcatenationByFrames:
 @pytest.mark.unittest
 class TestConcatenationByBytes:
     @pytest.mark.parametrize(
-        ("size", "expected"),
+        ["size", "expected"],
         [
             (1000, 1000),
             ("1000", 1000),
@@ -70,7 +70,7 @@ class TestConcatenationByBytes:
         # Arrange
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"size must be positive"):
             ConcatenationByBytes(size)
 
     @pytest.mark.parametrize("size", ["100X", "100XB", "100xb"])
@@ -78,5 +78,5 @@ class TestConcatenationByBytes:
         # Arrange
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"invalid literal for int\(\)"):
             ConcatenationByBytes(size)

@@ -290,7 +290,7 @@ def create_layer_file(
     filename: Path,
     dataset: Dataset | None = None,
     file_meta: FileMetaDataset | None = None,
-):
+) -> None:
     if dataset is None:
         dataset = create_main_dataset()
     if file_meta is None:

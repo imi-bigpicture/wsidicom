@@ -39,12 +39,14 @@ from wsidicom.uid import SlideUids
 
 
 class WsiInstance:
-    """Represents a level, label, or overview wsi image, containing image data
-    and datasets with metadata."""
+    """Represents a level, label, or overview wsi image.
+
+    Contains image data and datasets with metadata.
+    """
 
     def __init__(
         self, datasets: WsiDataset | Sequence[WsiDataset], image_data: ImageData
-    ):
+    ) -> None:
         """Create a WsiInstance from datasets with metadata and image data.
 
         Parameters
@@ -160,8 +162,11 @@ class WsiInstance:
 
     @property
     def identifier(self) -> UID:
-        """Return identifier (instance uid for single file instance or
-        concatenation uid for multiple file instance)."""
+        """Return identifier.
+
+        Instance uid for single file instance or concatenation uid for multiple file
+        instance.
+        """
         return self._identifier
 
     @property
@@ -186,7 +191,7 @@ class WsiInstance:
 
     @property
     def uids(self) -> SlideUids:
-        """Return base uids"""
+        """Return base uids."""
         return self._uids
 
     @property
@@ -492,9 +497,11 @@ class WsiInstance:
     def check_duplicate_instance(
         instances: Sequence["WsiInstance"], self: object
     ) -> None:
-        """Check for duplicates in list of instances. Instances are duplicate
-        if instance identifier (file instance uid or concatenation uid) match.
-        Stops at first found duplicate and raises WsiDicomUidDuplicateError.
+        """Check for duplicates in list of instances.
+
+        Instances are duplicate if instance identifier (file instance uid or
+        concatenation uid) match. Stops at first found duplicate and raises
+        WsiDicomUidDuplicateError.
 
         Parameters
         ----------
@@ -514,8 +521,9 @@ class WsiInstance:
     def _validate_instance(
         self, datasets: Sequence[WsiDataset]
     ) -> tuple[UID, SlideUids]:
-        """Check that no files in instance are duplicate, that all files in
-        instance matches (uid, type and size).
+        """Check that no files in instance are duplicate and that all files match.
+
+        All files in instance should match (uid, type and size).
         Raises WsiDicomMatchError otherwise.
         Returns the matching file uid.
 

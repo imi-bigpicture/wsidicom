@@ -14,6 +14,8 @@
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
+from types import TracebackType
+from typing import Self
 
 from wsidicom.cache import DecodedFrameCache, EncodedFrameCache
 from wsidicom.config import use_settings
@@ -32,7 +34,7 @@ class Source(metaclass=ABCMeta):
     instances.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         with use_settings() as settings:
             self._decoded_frame_cache = DecodedFrameCache(
                 settings.decoded_frame_cache_size
@@ -41,10 +43,15 @@ class Source(metaclass=ABCMeta):
                 settings.encoded_frame_cache_size
             )
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     @property

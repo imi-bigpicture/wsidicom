@@ -35,7 +35,7 @@ class WsiDicomStreamOpener:
     def __init__(
         self,
         file_options: dict[str, Any] | None = None,
-    ):
+    ) -> None:
         """Create a WsiDicomStreamOpener.
 
         Parameters
@@ -43,7 +43,6 @@ class WsiDicomStreamOpener:
         file_options: dict[str, Any] | None = None
             Keyword arguments for opening filesystems.
         """
-
         self._file_options = file_options or {}
 
     def open(
@@ -146,8 +145,10 @@ class WsiDicomStreamOpener:
     def _resolve(
         self, path: str | Path | UPath
     ) -> tuple[AbstractFileSystem, str, UPath]:
-        """Resolve path into the filesystem to use, the path within that
-        filesystem, and the path as an `UPath`.
+        """Resolve path into filesystem, path within filesystem, and `UPath`.
+
+        That is, the filesystem to use, the path within that filesystem, and the
+        path as an `UPath`.
 
         The path within the filesystem has the protocol stripped, as the
         filesystem holds it instead, and is only usable together with it.

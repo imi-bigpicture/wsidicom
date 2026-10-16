@@ -16,6 +16,8 @@
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable, Sequence
 from datetime import datetime
+from types import TracebackType
+from typing import Self
 
 from pydicom.encaps import itemize_frame
 from pydicom.tag import ItemTag, SequenceDelimiterTag
@@ -375,10 +377,15 @@ class WsiDicomWriter:
     def close(self) -> None:
         self._file.close()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     @classmethod

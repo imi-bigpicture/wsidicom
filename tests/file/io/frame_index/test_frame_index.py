@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections.abc import Iterator
 from io import BytesIO
 from struct import pack
 
@@ -44,12 +45,12 @@ from wsidicom.tags import (
 
 
 @pytest.fixture
-def transfer_syntax():
-    yield JPEGBaseline8Bit
+def transfer_syntax() -> UID:
+    return JPEGBaseline8Bit
 
 
 @pytest.fixture
-def buffer(transfer_syntax: UID, placeholder_path: UPath):
+def buffer(transfer_syntax: UID, placeholder_path: UPath) -> Iterator[WsiDicomWriteIO]:
     with WsiDicomWriteIO(
         BytesIO(), filepath=placeholder_path, transfer_syntax=transfer_syntax
     ) as buffer:
@@ -57,8 +58,8 @@ def buffer(transfer_syntax: UID, placeholder_path: UPath):
 
 
 @pytest.fixture
-def tiles(bits: int):
-    yield [
+def tiles(bits: int) -> list[bytes]:
+    return [
         bytes([1 for _ in range(bits // 8)]),
         bytes([2 for _ in range(bits // 8)]),
         bytes([3 for _ in range(bits // 8)]),
@@ -78,7 +79,7 @@ class TestFrameIndexParser:
         buffer: WsiDicomWriteIO,
         tiles: list[bytes],
         bits: int,
-    ):
+    ) -> None:
         # Arrange
         buffer.write_tag_of_vr_and_length(PixelDataTag, "OB", len(tiles) * bits // 8)
         expected_frame_index: list[tuple[int, int]] = []
@@ -98,7 +99,9 @@ class TestFrameIndexParser:
         assert list(frame_index) == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_pixel_data_offset_table(self, buffer: WsiDicomWriteIO, tiles: list[bytes]):
+    def test_pixel_data_offset_table(
+        self, buffer: WsiDicomWriteIO, tiles: list[bytes]
+    ) -> None:
         # Arrange
         EMPTY_BOT = 16
         ITEM_TAG_AND_LENGTH = 8
@@ -126,7 +129,7 @@ class TestFrameIndexParser:
     @pytest.mark.parametrize("bits", [8])
     def test_pixel_data_without_a_sequence_delimiter(
         self, buffer: WsiDicomWriteIO, tiles: list[bytes]
-    ):
+    ) -> None:
         # Arrange - the frames end where the pixel data does, with nothing after them.
         buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
         buffer.write(encapsulate(tiles, has_bot=False))
@@ -139,7 +142,7 @@ class TestFrameIndexParser:
     @pytest.mark.parametrize("bits", [8])
     def test_pixel_data_with_an_odd_frame_length(
         self, buffer: WsiDicomWriteIO, tiles: list[bytes]
-    ):
+    ) -> None:
         # Arrange - a frame is required to be padded to an even length.
         ITEM_TAG_AND_LENGTH = 8
         FIRST_LENGTH = slice(ITEM_TAG_AND_LENGTH + 4, ITEM_TAG_AND_LENGTH + 8)
@@ -159,7 +162,7 @@ class TestFrameIndexParser:
     @pytest.mark.parametrize("bits", [8])
     def test_basic_offset_table_with_an_offset_that_runs_backwards(
         self, buffer: WsiDicomWriteIO, tiles: list[bytes]
-    ):
+    ) -> None:
         # Arrange - offsets that do not grow give a frame a length of zero or less.
         ITEM_TAG_AND_LENGTH = 8
         SECOND_OFFSET = slice(ITEM_TAG_AND_LENGTH + 4, ITEM_TAG_AND_LENGTH + 8)
@@ -176,7 +179,9 @@ class TestFrameIndexParser:
             parser.parse_frame_index()
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_basic_offset_table(self, buffer: WsiDicomWriteIO, tiles: list[bytes]):
+    def test_basic_offset_table(
+        self, buffer: WsiDicomWriteIO, tiles: list[bytes]
+    ) -> None:
         # Arrange
         BOT = 16 + len(tiles) * 4
         ITEM_TAG_AND_LENGTH = 8
@@ -203,7 +208,7 @@ class TestFrameIndexParser:
     @pytest.mark.parametrize("bits", [8])
     def test_basic_offset_table_with_non_zero_first_offset(
         self, buffer: WsiDicomWriteIO, tiles: list[bytes]
-    ):
+    ) -> None:
         # Arrange
         ITEM_TAG_AND_LENGTH = 8
         FIRST_OFFSET = slice(ITEM_TAG_AND_LENGTH, ITEM_TAG_AND_LENGTH + 4)
@@ -221,7 +226,9 @@ class TestFrameIndexParser:
             parser.parse_frame_index()
 
     @pytest.mark.parametrize("bits", [8, 16])
-    def test_extended_offset_table(self, buffer: WsiDicomWriteIO, tiles: list[bytes]):
+    def test_extended_offset_table(
+        self, buffer: WsiDicomWriteIO, tiles: list[bytes]
+    ) -> None:
         # Arrange
         EMPTY_BOT = 16
         ITEM_TAG_AND_LENGTH = 8

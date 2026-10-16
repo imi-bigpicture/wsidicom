@@ -40,8 +40,10 @@ from wsidicom.writing.models import (
 
 
 class PyramidTileAccumulator:
-    """Buffers tiles from the higher-resolution pyramid level, builds 2x2 blocks,
-    submits downsample tasks, and cascades the downsampled result up the pyramid.
+    """Buffers tiles from the higher-resolution pyramid level and downsamples them.
+
+    Builds 2x2 blocks, submits downsample tasks, and cascades the downsampled result
+    up the pyramid.
 
     Each accumulator handles one generated pyramid level. It receives decoded
     tiles from the level immediately below (one level higher in resolution)
@@ -93,7 +95,7 @@ class PyramidTileAccumulator:
         queue_maxsize: int = 100,
         *,
         token: CancellationToken,
-    ):
+    ) -> None:
         """Create an accumulator for one generated pyramid level.
 
         Parameters
@@ -159,15 +161,12 @@ class PyramidTileAccumulator:
 
     @property
     def next_accumulator(self) -> Optional["PyramidTileAccumulator"]:
-        """The accumulator one pyramid level higher than this one, or None
-        at the top of the chain.
-        """
+        """Return the accumulator one pyramid level higher, or None at the top."""
         return self._next
 
     @property
     def chain_depth(self) -> int:
-        """Count of this accumulator plus every accumulator higher up the
-        pyramid in this chain.
+        """Count of this accumulator plus every accumulator higher up the chain.
 
         The chain extends via `next_accumulator` to the accumulator one
         level higher — coarser, lower-resolution, smaller image — and
@@ -355,7 +354,7 @@ class WritingPyramidTileAccumulator(PyramidTileAccumulator):
         queue_maxsize: int = 100,
         *,
         token: CancellationToken,
-    ):
+    ) -> None:
         """Create an accumulator for one written pyramid level.
 
         See `PyramidTileAccumulator` for the parameters. The output queue is

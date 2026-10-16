@@ -61,7 +61,7 @@ def create_stream(
 
 
 def file_meta(transfer_syntax: UID) -> bytes:
-    """The preamble and file meta information a stream that is read starts with."""
+    """Return the preamble and file meta information a read stream starts with."""
     dataset = FileMetaDataset()
     dataset.TransferSyntaxUID = transfer_syntax
     dataset.MediaStorageSOPClassUID = VLWholeSlideMicroscopyImageStorage
@@ -76,7 +76,7 @@ def file_meta(transfer_syntax: UID) -> bytes:
 
 
 def create_item(with_nested_sequence: bool = False) -> Dataset:
-    """An optical path item holding a large value, and a large sequence if asked."""
+    """Return an optical path item holding a large value, and a large sequence if asked."""
     item = Dataset()
     item.OpticalPathIdentifier = "1"
     item.ICCProfile = LARGE_VALUE
@@ -90,7 +90,7 @@ def create_item(with_nested_sequence: bool = False) -> Dataset:
 @pytest.mark.unittest
 class TestReadSequenceDeferringValues:
     @pytest.mark.parametrize("undefined_length", [True, False])
-    def test_a_large_value_is_passed_over(self, undefined_length: bool):
+    def test_a_large_value_is_passed_over(self, undefined_length: bool) -> None:
         # Arrange
         stream = create_stream(Sequence([create_item()]), undefined_length)
 
@@ -104,9 +104,11 @@ class TestReadSequenceDeferringValues:
         assert [value.length for value in deferred] == [len(LARGE_VALUE)]
 
     @pytest.mark.parametrize("undefined_length", [True, False])
-    def test_the_read_ends_just_past_the_sequence(self, undefined_length: bool):
-        """The rest of the dataset is read from where this says the sequence ends,
-        so saying it wrongly loses or repeats what follows."""
+    def test_the_read_ends_just_past_the_sequence(self, undefined_length: bool) -> None:
+        """The rest of the dataset is read from where this says the sequence ends.
+
+        So saying it wrongly loses or repeats what follows.
+        """
         # Arrange
         stream = create_stream(Sequence([create_item()]), undefined_length)
         length = len(stream.stream.getvalue())  # type: ignore[attr-defined]
@@ -124,10 +126,12 @@ class TestReadSequenceDeferringValues:
     )
     def test_a_large_value_survives_an_implicit_value_representation(
         self, transfer_syntax: UID
-    ):
-        """A transfer syntax that states value representations implicitly writes none
-        to read, so there is none to check the sequence by and none to read the value
-        back with but the one the dictionary gives."""
+    ) -> None:
+        """An implicit value representation syntax writes no value representation.
+
+        So there is none to check the sequence by and none to read the value back with
+        but the one the dictionary gives.
+        """
         # Arrange
         stream = create_stream(
             Sequence([create_item()]), transfer_syntax=transfer_syntax
@@ -144,7 +148,7 @@ class TestReadSequenceDeferringValues:
         # Assert
         assert sequence[0].ICCProfile == LARGE_VALUE
 
-    def test_a_small_value_is_not_passed_over(self):
+    def test_a_small_value_is_not_passed_over(self) -> None:
         # Arrange
         item = Dataset()
         item.OpticalPathIdentifier = "1"
@@ -160,7 +164,7 @@ class TestReadSequenceDeferringValues:
         assert sequence[0].ICCProfile == b"small!"
         assert deferred == []
 
-    def test_a_value_passed_over_is_put_back_as_it_was(self):
+    def test_a_value_passed_over_is_put_back_as_it_was(self) -> None:
         # Arrange
         stream = create_stream(Sequence([create_item()]))
         sequence, deferred, _ = stream.read_sequence(
@@ -175,10 +179,12 @@ class TestReadSequenceDeferringValues:
         # Assert
         assert sequence[0].ICCProfile == LARGE_VALUE
 
-    def test_a_large_nested_sequence_is_a_sequence_again_when_put_back(self):
-        """What is deferred is chosen by length alone, so a sequence longer than
-        the size read at is deferred whole and has to come back a sequence rather
-        than the bytes it was deferred as."""
+    def test_a_large_nested_sequence_is_a_sequence_again_when_put_back(self) -> None:
+        """A sequence longer than the size read at comes back a sequence.
+
+        What is deferred is chosen by length alone, so such a sequence is deferred whole
+        and has to come back a sequence rather than the bytes it was deferred as.
+        """
         # Arrange
         stream = create_stream(Sequence([create_item(with_nested_sequence=True)]))
         sequence, deferred, _ = stream.read_sequence(

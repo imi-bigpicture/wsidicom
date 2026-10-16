@@ -17,7 +17,7 @@ from typing import Any
 
 
 def str_indent(indent: int = 0) -> str:
-    """Returns a string for indentation
+    """Return a string for indentation.
 
     Parameters
     ----------
@@ -25,7 +25,7 @@ def str_indent(indent: int = 0) -> str:
         Number of double whitespaces to indent
 
     Returns
-    ----------
+    -------
     str
         string with whitespaces
 
@@ -41,7 +41,8 @@ def list_pretty_str(
     list_new_lines: int = 1,
     space: bool = False,
 ) -> str:
-    """Returns a pretty-printed string items
+    """Return a pretty-printed string of items.
+
     String is indented and new lines are added before the list
     and/or between each item in the list.
     Each item is pretty-printed with increased indent.
@@ -62,7 +63,7 @@ def list_pretty_str(
         Use space instead of newline
 
     Returns
-    ----------
+    -------
     str
         Pretty-printed string of items
 
@@ -86,7 +87,8 @@ def dict_pretty_str(
     list_new_lines: int = 1,
     space: bool = False,
 ) -> str:
-    """Returns a pretty-printed string items
+    """Return a pretty-printed string of items.
+
     String is indented and new lines are added before the list
     and/or between each item in the list.
     Each item is pretty-printed with increased indent.
@@ -107,7 +109,7 @@ def dict_pretty_str(
         Use space instead of newline
 
     Returns
-    ----------
+    -------
     str
         Pretty-printed string of items
 

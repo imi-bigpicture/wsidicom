@@ -32,7 +32,7 @@ class TestWsiDicomFileTarget:
     def test_select_included_levels_include_indices_is_none_returns_all_candidates(
         self,
         candidate_levels: Sequence[int],
-    ):
+    ) -> None:
         # Act
         selected = PyramidFileWriter._select_included_levels(candidate_levels, None)
 
@@ -70,7 +70,7 @@ class TestWsiDicomFileTarget:
         candidate_levels: Sequence[int],
         include_indices: Sequence[int],
         expected: set[int],
-    ):
+    ) -> None:
         # Act
         selected = PyramidFileWriter._select_included_levels(
             candidate_levels, include_indices
@@ -79,7 +79,7 @@ class TestWsiDicomFileTarget:
         # Assert
         assert selected == expected
 
-    def test_select_included_levels_empty_indices_returns_empty(self):
+    def test_select_included_levels_empty_indices_returns_empty(self) -> None:
         # Act
         selected = PyramidFileWriter._select_included_levels([0, 1, 2], [])
 
@@ -109,7 +109,7 @@ class TestWsiDicomFileTarget:
         candidate_levels: Sequence[int],
         include_indices: Sequence[int],
         expected: set[int],
-    ):
+    ) -> None:
         # Act
         selected = PyramidFileWriter._select_included_levels(
             candidate_levels, include_indices
@@ -160,7 +160,7 @@ class TestWsiDicomFileTargetOutputPath:
         tmp_path.joinpath("existing.dcm").touch()
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"is not empty"):
             WsiDicomFileTarget(UPath(tmp_path), CallableUidGenerator(), 1, None, None)
 
     def test_output_path_that_is_a_file_raises(self, tmp_path: Path) -> None:
@@ -169,5 +169,5 @@ class TestWsiDicomFileTargetOutputPath:
         file.touch()
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"is not a folder"):
             WsiDicomFileTarget(UPath(file), CallableUidGenerator(), 1, None, None)

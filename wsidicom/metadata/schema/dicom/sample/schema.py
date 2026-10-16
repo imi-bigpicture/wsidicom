@@ -16,8 +16,8 @@
 
 import datetime
 import logging
-from collections.abc import Iterable, Sequence
-from typing import Any
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, ClassVar
 
 from marshmallow import ValidationError, fields, post_load
 from pydicom import Dataset
@@ -119,7 +119,7 @@ class SampleLocalizationDicomSchema(ItemSequenceDicomSchema[SampleLocalization])
     visual_marking = StringItemDicomField(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[SampleLocalization]:
         return SampleLocalization
 
     @property
@@ -139,7 +139,7 @@ class SampleLocalizationDicomSchema(ItemSequenceDicomSchema[SampleLocalization])
 
 
 class BasePreparationStepDicomSchema(ItemSequenceDicomSchema[LoadType]):
-    _dump_only_fields = ["processing_type"]
+    _dump_only_fields: ClassVar[list[str]] = ["processing_type"]
 
     identifier = StringItemDicomField()
     issuer_of_identifier = StringItemDicomField(allow_none=True, load_default=None)
@@ -165,8 +165,10 @@ class BasePreparationStepDicomSchema(ItemSequenceDicomSchema[LoadType]):
 
     @property
     def item_fields(self) -> dict[str, ItemField]:
-        """TID 8001 Specimen Preparation, excluding Collection, Sampling, and Specimen
-        fields."""
+        """Return the fields of TID 8001 Specimen Preparation.
+
+        Excluding the Collection, Sampling, and Specimen fields.
+        """
         return {
             "identifier": ItemField(SampleCodes.identifier, (str,), False),
             "issuer_of_identifier": ItemField(
@@ -207,7 +209,7 @@ class SamplingDicomSchema(BasePreparationStepDicomSchema[SamplingDicomModel]):
     location_z = MeasurementItemDicomField(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[SamplingDicomModel]:
         return SamplingDicomModel
 
     @property
@@ -270,7 +272,7 @@ class CollectionDicomSchema(BasePreparationStepDicomSchema[CollectionDicomModel]
     method = CodeItemDicomField(SpecimenCollectionProcedureCode)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[CollectionDicomModel]:
         return CollectionDicomModel
 
     @property
@@ -307,7 +309,7 @@ class ProcessingDicomSchema(BasePreparationStepDicomSchema[ProcessingDicomModel]
     )
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[ProcessingDicomModel]:
         return ProcessingDicomModel
 
 
@@ -324,9 +326,9 @@ class SubstanceItemDicomField(
     def _serialize(
         self,
         value: str | Sequence[SpecimenStainsCode] | None,
-        attr,
-        obj,
-        **kwargs,
+        attr: str | None,
+        obj: Any,
+        **kwargs: Any,
     ) -> Sequence[Dataset] | None:
         if value is None:
             return None
@@ -339,7 +341,11 @@ class SubstanceItemDicomField(
         return [item for item in items if item is not None]
 
     def _deserialize(
-        self, value: Dataset | Sequence[Dataset], attr, data, **kwargs
+        self,
+        value: Dataset | Sequence[Dataset],
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
     ) -> str | Sequence[SpecimenStainsCode] | None:
         datasets = [value] if isinstance(value, Dataset) else value
         first_value = datasets[0]
@@ -361,7 +367,7 @@ class StainingDicomSchema(BasePreparationStepDicomSchema[StainingDicomModel]):
     substances = SubstanceItemDicomField()
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[StainingDicomModel]:
         return StainingDicomModel
 
     @property
@@ -395,7 +401,7 @@ class ReceivingDicomSchema(BasePreparationStepDicomSchema[ReceivingDicomModel]):
     )
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[ReceivingDicomModel]:
         return ReceivingDicomModel
 
 
@@ -407,7 +413,7 @@ class StorageDicomSchema(BasePreparationStepDicomSchema[StorageDicomModel]):
     )
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[StorageDicomModel]:
         return StorageDicomModel
 
 
@@ -434,16 +440,16 @@ class PreparationStepDicomField(
     from a step, and from the processing type a step states, is worked out from the
     schemas rather than stated again here."""
 
-    _schema_by_step: dict[
-        type[SpecimenPreparationStepDicomModel], type[ItemSequenceDicomSchema]
+    _schema_by_step: ClassVar[
+        dict[type[SpecimenPreparationStepDicomModel], type[ItemSequenceDicomSchema]]
     ] = {schema().load_type: schema for schema in PREPARATION_STEP_SCHEMAS}
 
-    _schema_by_processing_type: dict[Code, type[ItemSequenceDicomSchema]] = {
+    _schema_by_processing_type: ClassVar[dict[Code, type[ItemSequenceDicomSchema]]] = {
         schema().fields["processing_type"].dump_default: schema
         for schema in PREPARATION_STEP_SCHEMAS
     }
 
-    def __init__(self, data_key: str, **kwargs):
+    def __init__(self, data_key: str, **kwargs: Any) -> None:
         self._data_key = data_key
         super().__init__(data_key=data_key, **kwargs)
 
@@ -452,9 +458,9 @@ class PreparationStepDicomField(
         value: SpecimenPreparationStepDicomModel | None,
         attr: str | None,
         obj: Any,
-        **kwargs,
+        **kwargs: Any,
     ) -> Dataset | None:
-        """The item holding the content items the step is written as."""
+        """Return the item holding the content items the step is written as."""
         if value is None:
             return None
         dataset = Dataset()
@@ -462,9 +468,9 @@ class PreparationStepDicomField(
         return dataset
 
     def _deserialize(
-        self, value: Dataset, attr: str | None, data: Any, **kwargs
+        self, value: Dataset, attr: str | None, data: Any, **kwargs: Any
     ) -> SpecimenPreparationStepDicomModel | None:
-        """The step the content items of the item hold."""
+        """Return the step the content items of the item hold."""
         return self._subschema_load(getattr(value, self._data_key))
 
     def _subschema_load(
@@ -555,12 +561,12 @@ class SpecimenDescriptionDicomSchema(DicomSchema[SpecimenDescriptionDicomModel])
     )
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[SpecimenDescriptionDicomModel]:
         return SpecimenDescriptionDicomModel
 
     @post_load
     def post_load(
-        self, data: dict[str, Any], **kwargs
+        self, data: dict[str, Any], **kwargs: Any
     ) -> SpecimenDescriptionDicomModel:
         """Remove None values from steps before loading to object."""
         data["steps"] = [step for step in data["steps"] if step is not None]

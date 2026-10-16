@@ -1,5 +1,5 @@
 from enum import Enum
-from struct import error as StructError
+from struct import error as StructError  # noqa: N812 - names it as the error it is
 
 import numpy as np
 from PIL.TiffImagePlugin import ImageFileDirectory_v2
@@ -22,15 +22,20 @@ class TiffTags(Enum):
 
 
 class TiffFrameIndexParser(PixelDataFrameIndexParser):
-    """Frame index for TIFF, parsing the index from `TileOffsets`and TileByteCounts`
-    if present. Only works with `DICOM-TIFF dual files."""
+    """Frame index for TIFF.
 
-    def __init__(self, file: WsiDicomIO, pixel_data_start: int, frame_count: int):
+    Parses the index from `TileOffsets`and TileByteCounts` if present. Only works
+    with `DICOM-TIFF dual files.
+    """
+
+    def __init__(
+        self, file: WsiDicomIO, pixel_data_start: int, frame_count: int
+    ) -> None:
         super().__init__(file, pixel_data_start, frame_count)
         self._offsets, self._lengths = self._get_tags()
 
     @property
-    def offset_table_type(self):
+    def offset_table_type(self) -> OffsetTableType:
         return OffsetTableType.TIFF
 
     def _get_index(self) -> FrameIndex:
@@ -39,7 +44,7 @@ class TiffFrameIndexParser(PixelDataFrameIndexParser):
             np.asarray(self._lengths, dtype=np.int64),
         )
 
-    def _get_tags(self):
+    def _get_tags(self) -> tuple[list[int], list[int]]:
         """Return the tags used for the TIFF table."""
         directory = self._read_image_file_directory()
         try:

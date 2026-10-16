@@ -74,27 +74,27 @@ in the dataset
 
 
 @pytest.fixture
-def issuer_of_identifier():
+def issuer_of_identifier() -> str:
     return "Case Medical Center"
 
 
 @pytest.fixture
-def slide_identifier():
+def slide_identifier() -> str:
     return "S07-100 A 5 1"
 
 
 @pytest.fixture
-def specimen_uid():
+def specimen_uid() -> UID:
     return UID("1.2.840.99790.986.33.1677.1.1.19.5")
 
 
 @pytest.fixture
-def slide_short_description():
+def slide_short_description() -> str:
     return "Part A: LEFT UPPER LOBE, Block 5: Mass (2 pc), Slide 1: H&E"
 
 
 @pytest.fixture
-def slide_detailed_description():
+def slide_detailed_description() -> str:
     return (
         "A: Received fresh for intraoperative consultation, labeled with the "
         'patient\'s name, number and "left upper lobe," is a pink-tan, '
@@ -112,112 +112,112 @@ def slide_detailed_description():
 
 
 @pytest.fixture
-def primary_anatomic_structure():
+def primary_anatomic_structure() -> Code:
     return Code("44714003", "SCT", "Left upper lobe of lung")
 
 
 @pytest.fixture
-def specimen_identifier():
+def specimen_identifier() -> str:
     return "S07-100 A"
 
 
 @pytest.fixture
-def specimen_container():
+def specimen_container() -> ContainerTypeCode:
     return ContainerTypeCode("Specimen container")
 
 
 @pytest.fixture
-def specimen_type():
+def specimen_type() -> AnatomicPathologySpecimenTypesCode:
     return AnatomicPathologySpecimenTypesCode("tissue specimen")
 
 
 @pytest.fixture
-def collection_method():
+def collection_method() -> SpecimenCollectionProcedureCode:
     return SpecimenCollectionProcedureCode("Excision")
 
 
 @pytest.fixture
-def collection_description():
+def collection_description() -> str:
     return "Taken"
 
 
 @pytest.fixture
-def collection_datetime():
+def collection_datetime() -> datetime.datetime:
     return datetime.datetime(2007, 3, 23, 8, 27)
 
 
 @pytest.fixture
-def specimen_receiving_datetime():
+def specimen_receiving_datetime() -> datetime.datetime:
     return datetime.datetime(2007, 3, 23, 9, 43)
 
 
 @pytest.fixture
-def block_identifier():
+def block_identifier() -> str:
     return "S07-100 A 5"
 
 
 @pytest.fixture
-def block_container():
+def block_container() -> ContainerTypeCode:
     return ContainerTypeCode("Tissue cassette")
 
 
 @pytest.fixture
-def block_type():
+def block_type() -> AnatomicPathologySpecimenTypesCode:
     return AnatomicPathologySpecimenTypesCode("Gross specimen")
 
 
 @pytest.fixture
-def block_sampling_method():
+def block_sampling_method() -> SpecimenSamplingProcedureCode:
     return SpecimenSamplingProcedureCode("Dissection")
 
 
 @pytest.fixture
-def block_sampling_description():
+def block_sampling_description() -> str:
     return "Block Creation"
 
 
 @pytest.fixture
-def block_sampling_location():
+def block_sampling_location() -> str:
     return "Mass"
 
 
 @pytest.fixture
-def block_fixation_datetime():
+def block_fixation_datetime() -> datetime.datetime:
     return datetime.datetime(2007, 3, 23, 19, 0)
 
 
 @pytest.fixture
-def block_fixative():
+def block_fixative() -> SpecimenFixativesCode:
     return SpecimenFixativesCode("Formalin")
 
 
 @pytest.fixture
-def block_fixation_description():
+def block_fixation_description() -> str:
     return "Standard Block Processing (Formalin)"
 
 
 @pytest.fixture
-def block_embedding_datetime():
+def block_embedding_datetime() -> datetime.datetime:
     return datetime.datetime(2007, 3, 24, 5, 0)
 
 
 @pytest.fixture
-def block_embedding_medium():
+def block_embedding_medium() -> SpecimenEmbeddingMediaCode:
     return SpecimenEmbeddingMediaCode("Paraffin wax")
 
 
 @pytest.fixture
-def block_embedding_description():
+def block_embedding_description() -> str:
     return "Embedding (paraffin)"
 
 
 @pytest.fixture
-def staining_datetime():
+def staining_datetime() -> datetime.datetime:
     return datetime.datetime(2007, 3, 24, 7, 0)
 
 
 @pytest.fixture
-def staining_substances():
+def staining_substances() -> list[SpecimenStainsCode]:
     return [
         SpecimenStainsCode("hematoxylin stain"),
         SpecimenStainsCode("water soluble eosin stain"),
@@ -255,7 +255,7 @@ class TestExampleSpecimenModule:
         block_embedding_description: str,
         staining_datetime: datetime.datetime,
         staining_substances: Sequence[SpecimenStainsCode],
-    ):
+    ) -> None:
         # Arrange
         steps: list[list[Dataset]] = [
             # Part Collection in OR
@@ -522,7 +522,7 @@ class TestExampleSpecimenModule:
         block_embedding_description: str,
         staining_datetime: datetime.datetime,
         staining_substances: Sequence[SpecimenStainsCode],
-    ):
+    ) -> None:
         local_issuer_of_identifier = LocalIssuerOfIdentifier(issuer_of_identifier)
         specimen = Specimen(
             identifier=SpecimenIdentifier(

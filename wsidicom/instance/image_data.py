@@ -39,7 +39,7 @@ class ImageData(metaclass=ABCMeta):
 
     _default_z: float | None = None
 
-    def __init__(self, encoder: Encoder):
+    def __init__(self, encoder: Encoder) -> None:
         self._encoder = encoder
 
     @property
@@ -110,17 +110,22 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def lossy_compression(self) -> list[LossyCompression] | None:
-        """Should return None if the image has never been lossy compressed, otherwise a
+        """Return the lossy compressions of the image, or None if never lossy.
+
+        Should return None if the image has never been lossy compressed, otherwise a
         list of the lossy compression method and ratio (30.0 means 30:1 compression)
         or an empty list if compression method is not in DICOM standard or ratio is
-        unknown."""
+        unknown.
+        """
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def transcoder(self) -> Encoder | None:
-        """Return transcoder used for image data if image data can't read encoded data
-        directly. Return None if no transcoder is needed."""
+        """Return transcoder used if image data can't read encoded data directly.
+
+        Return None if no transcoder is needed.
+        """
         raise NotImplementedError()
 
     @abstractmethod
@@ -324,8 +329,10 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     def dtype(self) -> np.dtype:
-        """Return the numpy dtype of the image data: uint8 for up to 8 bits per
-        sample, uint16 for up to 16."""
+        """Return the numpy dtype of the image data.
+
+        uint8 for up to 8 bits per sample, uint16 for up to 16.
+        """
         if self.bits <= 8:
             return np.dtype(np.uint8)
         if self.bits <= 16:
@@ -337,7 +344,7 @@ class ImageData(metaclass=ABCMeta):
         """Return the background tile pixels."""
         shape: tuple[int, ...] = (self.tile_size.height, self.tile_size.width)
         if self.samples_per_pixel != 1:
-            shape = shape + (self.samples_per_pixel,)
+            shape = (*shape, self.samples_per_pixel)
         return np.full(shape, self.blank_color, self.dtype)
 
     @cached_property
@@ -371,8 +378,7 @@ class ImageData(metaclass=ABCMeta):
         return self.optical_paths[0]
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
-        """Check if tile region is inside image and z coordinate and optical path
-        exists.
+        """Check if tile region is inside image and z and optical path exists.
 
         Parameters
         ----------

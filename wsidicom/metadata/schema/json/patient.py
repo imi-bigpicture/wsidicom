@@ -26,7 +26,7 @@ class PatientDeIdentificationJsonSchema(LoadingSchema[PatientDeIdentification]):
     methods = fields.List(StringOrCodeJsonField(), allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[PatientDeIdentification]:
         return PatientDeIdentification
 
 
@@ -42,5 +42,5 @@ class PatientJsonSchema(LoadingSchema[Patient]):
     comments = fields.String(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Patient]:
         return Patient

@@ -31,7 +31,7 @@ def determine_media_type(transfer_syntax: UID) -> str:
         Transfer syntax to determine media type for.
 
     Returns
-    ----------
+    -------
     str
         Media type.
     """

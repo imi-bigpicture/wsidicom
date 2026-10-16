@@ -17,7 +17,7 @@
 import io
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from typing import Generic, Optional, TypeVar
+from typing import ClassVar, Generic, Optional, TypeVar
 
 import numpy as np
 from PIL import Image as Pillow
@@ -92,7 +92,7 @@ class LossyCompressionIsoStandard(Enum):
 class Encoder(Generic[SettingsType], metaclass=ABCMeta):
     """Abstract base class for encoders."""
 
-    def __init__(self, settings: SettingsType):
+    def __init__(self, settings: SettingsType) -> None:
         """Initialize encoder.
 
         Parameters
@@ -267,13 +267,13 @@ class Encoder(Generic[SettingsType], metaclass=ABCMeta):
 class PillowEncoder(Encoder[JpegSettings | Jpeg2kSettings]):
     """Encoder that uses pillow to encode image."""
 
-    _supported_subsamplings = {
+    _supported_subsamplings: ClassVar[dict[Subsampling, int]] = {
         Subsampling.R444: 0,
         Subsampling.R422: 1,
         Subsampling.R420: 2,
     }
 
-    def __init__(self, settings: JpegSettings | Jpeg2kSettings):
+    def __init__(self, settings: JpegSettings | Jpeg2kSettings) -> None:
         if isinstance(settings, JpegSettings):
             if settings.subsampling not in self._supported_subsamplings:
                 raise ValueError(f"Unsupported subsampling: {settings.subsampling}.")
@@ -605,8 +605,11 @@ class RleEncoder(Encoder[RleSettings]):
 
     @abstractmethod
     def _rle_encode(self, pixels: np.ndarray) -> bytes:
-        """Run-length encode the pixels. Called by `encode` with the pixels
-        already converted and cast to the encoded dtype."""
+        """Run-length encode the pixels.
+
+        Called by `encode` with the pixels already converted and cast to the encoded
+        dtype.
+        """
         raise NotImplementedError()
 
 

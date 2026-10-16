@@ -16,6 +16,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from typing import ClassVar
 
 import numpy as np
 from PIL import Image
@@ -81,14 +82,20 @@ class Downsampler(ABC):
 
     @classmethod
     def create_for_read(cls) -> "Downsampler":
-        """Create the downsampler for rescaling on read, using the configured
-        read filter (``settings.resampling_filter``)."""
+        """Create the downsampler for rescaling on read.
+
+        The downsampler uses the configured read filter
+        (``settings.resampling_filter``).
+        """
         return cls.create(resample=get_settings().resampling_filter)
 
     @classmethod
     def create_for_pyramid(cls) -> "Downsampler":
-        """Create the downsampler for generating pyramid levels, using the
-        configured pyramid filter (``settings.pyramid_resampling_filter``)."""
+        """Create the downsampler for generating pyramid levels.
+
+        The downsampler uses the configured pyramid filter
+        (``settings.pyramid_resampling_filter``).
+        """
         return cls.create(resample=get_settings().pyramid_resampling_filter)
 
     @property
@@ -143,8 +150,10 @@ class Downsampler(ABC):
         tile_size: Size,
         fill: np.ndarray,
     ) -> np.ndarray | None:
-        """Halve a block of tiles into one output tile in a single call, or None
-        where the backend has none (the caller then stitches and halves).
+        """Halve a block of tiles into one output tile in a single call.
+
+        Return None where the backend has no such call (the caller then stitches
+        and halves).
 
         Parameters
         ----------
@@ -189,7 +198,7 @@ class Downsampler(ABC):
 class PillowDownsampler(Downsampler):
     """Downsampler using Pillow's resize with configurable resampling filter."""
 
-    _PILLOW_FILTERS = {
+    _PILLOW_FILTERS: ClassVar[dict[ResampleFilterOption, Image.Resampling]] = {
         ResampleFilterOption.NEAREST: Image.Resampling.NEAREST,
         ResampleFilterOption.BOX: Image.Resampling.BOX,
         ResampleFilterOption.BILINEAR: Image.Resampling.BILINEAR,
@@ -198,7 +207,9 @@ class PillowDownsampler(Downsampler):
         ResampleFilterOption.LANCZOS: Image.Resampling.LANCZOS,
     }
 
-    def __init__(self, resample: ResampleFilterOption = ResampleFilterOption.BILINEAR):
+    def __init__(
+        self, resample: ResampleFilterOption = ResampleFilterOption.BILINEAR
+    ) -> None:
         """Create a Pillow-based downsampler.
 
         Parameters
@@ -245,9 +256,10 @@ class PillowDownsampler(Downsampler):
         return self._from_image(image, array.dtype)
 
     def _to_image(self, array: np.ndarray) -> Image.Image:
-        """Wrap an array as a Pillow image, widening 16-bit ``I;16`` to ``I``
-        since Pillow cannot resample ``I;16``. ``_from_image`` narrows the
-        resampled result back to the input dtype.
+        """Wrap an array as a Pillow image.
+
+        16-bit ``I;16`` is widened to ``I`` since Pillow cannot resample ``I;16``.
+        ``_from_image`` narrows the resampled result back to the input dtype.
         """
         image = Image.fromarray(np.ascontiguousarray(array))
         if image.mode.startswith("I;16"):
@@ -256,8 +268,10 @@ class PillowDownsampler(Downsampler):
 
     @staticmethod
     def _from_image(image: Image.Image, dtype: np.dtype) -> np.ndarray:
-        """Convert a resampled image back to an array of the input dtype,
-        undoing the ``I;16`` to ``I`` widening ``_to_image`` applies."""
+        """Convert a resampled image back to an array of the input dtype.
+
+        This undoes the ``I;16`` to ``I`` widening ``_to_image`` applies.
+        """
         array = np.asarray(image)
         if array.dtype != dtype:
             # The 16-bit resize ran in Pillow's signed "I" (int32) mode; an
@@ -270,7 +284,7 @@ class PillowDownsampler(Downsampler):
 class Cv2Downsampler(Downsampler):
     """Downsampler using OpenCV's resize. Requires the optional ``opencv`` extra."""
 
-    def __init__(self, interpolation: int | None = None):
+    def __init__(self, interpolation: int | None = None) -> None:
         """Create an OpenCV-based downsampler.
 
         Parameters
@@ -293,9 +307,10 @@ class Cv2Downsampler(Downsampler):
 
     @classmethod
     def from_filter(cls, resample: ResampleFilterOption) -> "Cv2Downsampler | None":
-        """Return a downsampler using cv2's equivalent of a resampling filter, or
-        None if opencv is unavailable or the filter has no suitable cv2 match (so
-        the caller falls back to Pillow).
+        """Return a downsampler using cv2's equivalent of a resampling filter.
+
+        Return None if opencv is unavailable or the filter has no suitable cv2
+        match (so the caller falls back to Pillow).
 
         Only NEAREST and BOX qualify: INTER_NEAREST_EXACT reproduces NEAREST
         bit-exactly, and INTER_AREA matches BOX (bit-exact at the 2x pyramid
@@ -341,8 +356,10 @@ class Cv2Downsampler(Downsampler):
 
 
 class KernelsDownsampler(Downsampler):
-    """Downsampler using wsidicom-kernels' SIMD resampling. Requires the optional
-    ``kernels`` extra."""
+    """Downsampler using wsidicom-kernels' SIMD resampling.
+
+    Requires the optional ``kernels`` extra.
+    """
 
     _KERNEL_FILTERS = (
         {
@@ -357,7 +374,9 @@ class KernelsDownsampler(Downsampler):
         else {}
     )
 
-    def __init__(self, resample: ResampleFilterOption = ResampleFilterOption.BILINEAR):
+    def __init__(
+        self, resample: ResampleFilterOption = ResampleFilterOption.BILINEAR
+    ) -> None:
         """Create a wsidicom-kernels downsampler.
 
         Parameters
@@ -381,9 +400,10 @@ class KernelsDownsampler(Downsampler):
 
     @classmethod
     def from_filter(cls, resample: ResampleFilterOption) -> "KernelsDownsampler | None":
-        """Return a downsampler for a resampling filter, or None if
-        wsidicom-kernels is unavailable or lacks the filter (HAMMING), so the
-        caller falls back to another backend.
+        """Return a downsampler for a resampling filter.
+
+        Return None if wsidicom-kernels is unavailable or lacks the filter
+        (HAMMING), so the caller falls back to another backend.
 
         Box at an exact 2x reduction is bit-identical to Pillow's reduce(2) and
         OpenCV's INTER_AREA; the other filters are Pillow's (antialiased, kernel
@@ -425,8 +445,10 @@ class KernelsDownsampler(Downsampler):
         tile_size: Size,
         fill: np.ndarray,
     ) -> np.ndarray:
-        """The block halved by ``downscale_grid`` into a tile filled around it:
-        box reduces each tile in place, other filters stitch first."""
+        """Return the block halved by ``downscale_grid`` into a tile filled around it.
+
+        Box reduces each tile in place, other filters stitch first.
+        """
         return self._kernels.downscale_grid(
             [np.ascontiguousarray(tile) for row in tiles for tile in row],
             len(tiles[0]),

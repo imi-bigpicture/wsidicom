@@ -30,7 +30,7 @@ PROFILE = b"a profile" * 1000
 class FakeDeferredDatasetReader(DeferredDatasetReader):
     """Puts a value into the item it belongs in, counting the times it is asked."""
 
-    def __init__(self, item: Dataset):
+    def __init__(self, item: Dataset) -> None:
         self._item = item
         self.reads = 0
 
@@ -45,7 +45,7 @@ class FakeDeferredDatasetReader(DeferredDatasetReader):
 
 
 def create_dataset() -> tuple[WsiDataset, FakeDeferredDatasetReader]:
-    """A dataset holding an optical path whose profile was deferred."""
+    """Return a dataset holding an optical path whose profile was deferred."""
     item = Dataset()
     item.OpticalPathIdentifier = "1"
     dataset = Dataset()
@@ -58,10 +58,12 @@ def create_dataset() -> tuple[WsiDataset, FakeDeferredDatasetReader]:
 
 @pytest.mark.unittest
 class TestDeferredElements:
-    def test_reading_an_attribute_does_not_read_a_deferred_value(self):
-        """The way to a tile goes through the attributes here, so they are what must
-        not pay for a value that is only wanted by something describing the whole
-        instance."""
+    def test_reading_an_attribute_does_not_read_a_deferred_value(self) -> None:
+        """The attributes on the way to a tile do not read a deferred value.
+
+        The way to a tile goes through the attributes here, so they are what must not
+        pay for a value that is only wanted by something describing the whole instance.
+        """
         # Arrange
         dataset, reader = create_dataset()
 
@@ -72,7 +74,7 @@ class TestDeferredElements:
         assert identifiers == ["1"]
         assert reader.reads == 0
 
-    def test_as_dataset_reads_deferred_elements(self):
+    def test_as_dataset_reads_deferred_elements(self) -> None:
         # Arrange
         dataset, reader = create_dataset()
 
@@ -83,9 +85,11 @@ class TestDeferredElements:
         assert given.OpticalPathSequence[0].ICCProfile == PROFILE
         assert reader.reads == 1
 
-    def test_replacing_an_attribute_keeps_deferred_elements(self):
-        """A copy stands on its own, with no way back to what was deferred, so it
-        has to be made from the whole dataset."""
+    def test_replacing_an_attribute_keeps_deferred_elements(self) -> None:
+        """A copy has to be made from the whole dataset.
+
+        A copy stands on its own, with no way back to what was deferred.
+        """
         # Arrange
         dataset, reader = create_dataset()
 
@@ -96,7 +100,7 @@ class TestDeferredElements:
         assert replaced.as_dataset().OpticalPathSequence[0].ICCProfile == PROFILE
         assert reader.reads == 1
 
-    def test_metadata_reads_deferred_elements(self):
+    def test_metadata_reads_deferred_elements(self) -> None:
         # Arrange
         dataset, reader = create_dataset()
 
@@ -107,9 +111,11 @@ class TestDeferredElements:
         assert metadata is not None
         assert reader.reads == 1
 
-    def test_a_dataset_without_deferred_elements_is_given_out_whole(self):
-        """Nothing is deferred when a dataset does not come from a file, so one
-        made without a reader gives out what it holds."""
+    def test_a_dataset_without_deferred_elements_is_given_out_whole(self) -> None:
+        """A dataset made without a reader gives out what it holds.
+
+        Nothing is deferred when a dataset does not come from a file.
+        """
         # Arrange
         item = Dataset()
         item.OpticalPathIdentifier = "1"

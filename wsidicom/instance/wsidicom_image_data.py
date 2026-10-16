@@ -38,7 +38,7 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         codec: Codec,
         decoded_frame_cache: DecodedFrameCache,
         encoded_frame_cache: EncodedFrameCache,
-    ):
+    ) -> None:
         self._datasets = datasets
         self._decoder = codec.decoder
         self._decoded_frame_cache = decoded_frame_cache

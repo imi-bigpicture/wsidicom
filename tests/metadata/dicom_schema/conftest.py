@@ -41,23 +41,23 @@ from wsidicom.metadata.schema.dicom.optical_path import LutDicomField
 from wsidicom.metadata.schema.dicom.slide import SlideDicomSchema
 
 
-@pytest.fixture()
-def valid_dicom():
-    yield True
+@pytest.fixture
+def valid_dicom() -> bool:
+    return True
 
 
-@pytest.fixture()
-def dicom_equipment(equipment: Equipment):
+@pytest.fixture
+def dicom_equipment(equipment: Equipment) -> Dataset:
     dataset = Dataset()
     dataset.Manufacturer = equipment.manufacturer
     dataset.ManufacturerModelName = equipment.model_name
     dataset.DeviceSerialNumber = equipment.device_serial_number
     dataset.SoftwareVersions = equipment.software_versions
-    yield dataset
+    return dataset
 
 
-@pytest.fixture()
-def dicom_pyramid(pyramid: Pyramid):
+@pytest.fixture
+def dicom_pyramid(pyramid: Pyramid) -> Dataset:
     dataset = create_dicom_image(
         pyramid.image, valid_dicom=True, image_type=ImageType.VOLUME
     )
@@ -75,10 +75,12 @@ def dicom_pyramid(pyramid: Pyramid):
     dataset.BurnedInAnnotation = bool_to_dicom_literal(pyramid.contains_phi)
     if pyramid.comments is not None:
         dataset.ImageComments = pyramid.comments
-    yield dataset
+    return dataset
 
 
-def create_dicom_image(image: Image, valid_dicom: bool, image_type: ImageType):
+def create_dicom_image(
+    image: Image, valid_dicom: bool, image_type: ImageType
+) -> Dataset:
     dataset = Dataset()
     dataset.ImageType = ["ORIGINAL", "PRIMARY", image_type.value, "DERIVED"]
     dataset.AcquisitionDateTime = DT(image.acquisition_datetime)
@@ -146,27 +148,27 @@ def create_dicom_image(image: Image, valid_dicom: bool, image_type: ImageType):
     return dataset
 
 
-@pytest.fixture()
-def dicom_image(image: Image, valid_dicom: bool):
+@pytest.fixture
+def dicom_image(image: Image, valid_dicom: bool) -> Dataset:
     return create_dicom_image(image, valid_dicom, ImageType.VOLUME)
 
 
-@pytest.fixture()
-def dicom_label(label: Label, image_type: ImageType):
+@pytest.fixture
+def dicom_label(label: Label, image_type: ImageType) -> Dataset:
     return create_dicom_label(label, image_type)
 
 
-@pytest.fixture()
-def dicom_label_label(label: Label):
+@pytest.fixture
+def dicom_label_label(label: Label) -> Dataset:
     return create_dicom_label(label, ImageType.LABEL)
 
 
-@pytest.fixture()
-def dicom_overview_label(label: Label):
+@pytest.fixture
+def dicom_overview_label(label: Label) -> Dataset:
     return create_dicom_label(label, ImageType.OVERVIEW)
 
 
-def create_dicom_label(label: Label, image_type: ImageType):
+def create_dicom_label(label: Label, image_type: ImageType) -> Dataset:
     dataset = Dataset()
     dataset.ImageType = ["ORIGINAL", "PRIMARY", image_type.value]
     dataset.LabelText = label.text
@@ -191,12 +193,12 @@ def create_dicom_label(label: Label, image_type: ImageType):
     return dataset
 
 
-@pytest.fixture()
-def dicom_overview(overview: Overview):
+@pytest.fixture
+def dicom_overview(overview: Overview) -> Dataset:
     return create_dicom_overview(overview)
 
 
-def create_dicom_overview(overview: Overview):
+def create_dicom_overview(overview: Overview) -> Dataset:
     dataset = Dataset()
     dataset.ImageType = ["ORIGINAL", "PRIMARY", ImageType.OVERVIEW.value]
     dataset.ImageComments = overview.comments
@@ -216,7 +218,7 @@ def create_dicom_overview(overview: Overview):
     return dataset
 
 
-def create_dicom_optical_path(optical_path: OpticalPath):
+def create_dicom_optical_path(optical_path: OpticalPath) -> Dataset:
     dataset = Dataset()
     dataset.OpticalPathIdentifier = optical_path.identifier
     dataset.OpticalPathDescription = optical_path.description
@@ -275,13 +277,13 @@ def create_dicom_optical_path(optical_path: OpticalPath):
     return dataset
 
 
-@pytest.fixture()
-def dicom_optical_path(optical_path: OpticalPath):
-    yield create_dicom_optical_path(optical_path)
+@pytest.fixture
+def dicom_optical_path(optical_path: OpticalPath) -> Dataset:
+    return create_dicom_optical_path(optical_path)
 
 
-@pytest.fixture()
-def dicom_patient(patient: Patient):
+@pytest.fixture
+def dicom_patient(patient: Patient) -> Dataset:
     dataset = Dataset()
     dataset.PatientName = patient.name
     dataset.PatientID = patient.identifier
@@ -313,11 +315,11 @@ def dicom_patient(patient: Patient):
             ]
     if patient.comments is not None:
         dataset.PatientComments = patient.comments
-    yield dataset
+    return dataset
 
 
-@pytest.fixture()
-def dicom_series(series: Series):
+@pytest.fixture
+def dicom_series(series: Series) -> Dataset:
     dataset = Dataset()
     dataset.SeriesInstanceUID = series.uid
     dataset.SeriesNumber = series.number
@@ -325,11 +327,11 @@ def dicom_series(series: Series):
         dataset.SeriesDescription = series.description
     if series.body_part_examined is not None:
         dataset.BodyPartExamined = series.body_part_examined
-    yield dataset
+    return dataset
 
 
-@pytest.fixture()
-def dicom_study(study: Study):
+@pytest.fixture
+def dicom_study(study: Study) -> Dataset:
     dataset = Dataset()
     dataset.StudyInstanceUID = study.uid
     dataset.StudyID = study.identifier
@@ -339,16 +341,16 @@ def dicom_study(study: Study):
     dataset.ReferringPhysicianName = study.referring_physician_name
     if study.description is not None:
         dataset.StudyDescription = study.description
-    yield dataset
+    return dataset
 
 
-@pytest.fixture()
-def dicom_slide(slide: Slide):
+@pytest.fixture
+def dicom_slide(slide: Slide) -> Dataset:
     schema = SlideDicomSchema()
-    yield schema.dump(slide)
+    return schema.dump(slide)
 
 
-@pytest.fixture()
+@pytest.fixture
 def pyramid_dataset(
     wsi_metadata: WsiMetadata,
     dicom_equipment: Dataset,
@@ -357,7 +359,7 @@ def pyramid_dataset(
     dicom_study: Dataset,
     dicom_series: Dataset,
     dicom_patient: Dataset,
-):
+) -> Dataset:
     dataset = Dataset()
     dataset.update(dicom_equipment)
     dataset.update(dicom_pyramid)
@@ -372,4 +374,4 @@ def pyramid_dataset(
         dimension_organization_sequence.append(dimension_organization)
     dataset.DimensionOrganizationSequence = dimension_organization_sequence
     dataset.FrameOfReferenceUID = wsi_metadata.frame_of_reference_uid
-    yield dataset
+    return dataset

@@ -17,4 +17,4 @@
 from wsidicom.group.group import Instances, Label, Overview, Thumbnail
 from wsidicom.group.level import Level
 
-__all__ = ["Instances", "Label", "Overview", "Thumbnail", "Level"]
+__all__ = ["Instances", "Label", "Level", "Overview", "Thumbnail"]

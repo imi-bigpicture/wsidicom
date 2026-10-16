@@ -14,6 +14,8 @@
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
+from types import TracebackType
+from typing import Self
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
@@ -22,8 +24,11 @@ from wsidicom.series import Labels, Overviews, Pyramids
 
 
 class Target(metaclass=ABCMeta):
-    """A target should be initiated with a path or similar, and enable saving of
-    instances into that path."""
+    """A target for saving instances.
+
+    A target should be initiated with a path or similar, and enable saving of
+    instances into that path.
+    """
 
     def __init__(
         self,
@@ -102,11 +107,16 @@ class Target(metaclass=ABCMeta):
 
     @abstractmethod
     def close(self) -> None:
-        """Should close any by the object opened resources."""
+        """Close any resources opened by the object."""
         raise NotImplementedError()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()

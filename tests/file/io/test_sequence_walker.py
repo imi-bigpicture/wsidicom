@@ -49,14 +49,14 @@ class Written:
 
     @classmethod
     def short(cls, tag: BaseTag, value_representation: bytes, value: bytes) -> bytes:
-        """An element with a short form header."""
+        """Return an element with a short form header."""
         return (
             cls.tag(tag) + value_representation + struct.pack("<H", len(value)) + value
         )
 
     @classmethod
     def long(cls, tag: BaseTag, value_representation: bytes, value: bytes) -> bytes:
-        """An element with a long form header."""
+        """Return an element with a long form header."""
         return (
             cls.tag(tag)
             + value_representation
@@ -67,29 +67,29 @@ class Written:
 
     @classmethod
     def opens_sequence(cls, tag: BaseTag) -> bytes:
-        """The header of an undefined length sequence."""
+        """Return the header of an undefined length sequence."""
         return cls.tag(tag) + b"SQ" + b"\x00\x00" + UNDEFINED
 
     @classmethod
     def item(cls, content: bytes) -> bytes:
-        """A defined length item."""
+        """Return a defined length item."""
         return ITEM + struct.pack("<I", len(content)) + content
 
     @classmethod
     def open_item(cls, content: bytes) -> bytes:
-        """An undefined length item, ending with an item delimiter."""
+        """Return an undefined length item, ending with an item delimiter."""
         return ITEM + UNDEFINED + content + ITEM_END
 
     @classmethod
     def fragmented(cls, tag: BaseTag, fragments: list[bytes]) -> bytes:
-        """A value encoded in fragments, ending with a sequence delimiter."""
+        """Return a value encoded in fragments, ending with a sequence delimiter."""
         written = cls.tag(tag) + b"OB" + b"\x00\x00" + UNDEFINED
         for fragment in fragments:
             written += ITEM + struct.pack("<I", len(fragment)) + fragment
         return written + SEQUENCE_END
 
 
-@pytest.fixture()
+@pytest.fixture
 def walker_over() -> Callable[..., SequenceWalker]:
     """Make a walker over given bytes."""
 
@@ -105,7 +105,7 @@ def walker_over() -> Callable[..., SequenceWalker]:
 class TestSequenceWalker:
     def test_walks_past_a_sequence_holding_one_item(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         written = (
             Written.opens_sequence(SPECIMEN_DESCRIPTION)
@@ -122,7 +122,7 @@ class TestSequenceWalker:
 
     def test_walks_past_a_sequence_holding_none(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         written = Written.opens_sequence(SPECIMEN_DESCRIPTION) + SEQUENCE_END
         walker = walker_over(written)
@@ -135,7 +135,7 @@ class TestSequenceWalker:
 
     def test_walks_past_a_sequence_nested_in_an_item(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         nested = (
             Written.opens_sequence(Tag(0x0040, 0x059A))
@@ -157,7 +157,7 @@ class TestSequenceWalker:
 
     def test_walks_past_a_value_sent_in_fragments(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         # The fragment content looks like a sequence delimiter, which must not be
         # taken for the end of the sequence.
@@ -178,7 +178,7 @@ class TestSequenceWalker:
 
     def test_walks_past_a_long_form_value_that_is_not_a_sequence(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         written = (
             Written.opens_sequence(SPECIMEN_DESCRIPTION)
@@ -193,7 +193,7 @@ class TestSequenceWalker:
         # Assert
         assert end == len(written)
 
-    def test_leaves_the_stream_past_the_sequence(self):
+    def test_leaves_the_stream_past_the_sequence(self) -> None:
         # Arrange
         # An element after the sequence, so that the end of the sequence is not the
         # end of the file, where the stream is left after reading a block.
@@ -214,7 +214,7 @@ class TestSequenceWalker:
 
     def test_lands_where_the_parser_lands(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         item = Dataset()
         item.SpecimenIdentifier = "S1"
@@ -248,7 +248,7 @@ class TestSequenceWalker:
 
     def test_walks_past_a_sequence_stating_no_value_representation(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         # With implicit VR, lengths are four bytes and an undefined length element
         # is a sequence.
@@ -270,7 +270,7 @@ class TestSequenceWalker:
 
     def test_raises_on_an_unexpected_element_of_the_delimiter_group(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         # Not an item or delimiter, though in the delimiter group.
         written = (
@@ -287,7 +287,7 @@ class TestSequenceWalker:
 
     def test_raises_on_an_unexpected_element_among_fragments(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         # An element where only fragments and a delimiter are allowed.
         fragments = (
@@ -311,7 +311,7 @@ class TestSequenceWalker:
 
     def test_raises_on_an_item_written_with_implicit_vr(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         # An implicit VR element in an explicit VR file, which pydicom detects per
         # item. Its length is where the VR belongs.
@@ -331,7 +331,7 @@ class TestSequenceWalker:
 
     def test_raises_on_a_fragment_of_undefined_length(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         # An undefined length UN element is a sequence with implicit VR content, and
         # its items can have undefined length, which a fragment never has.
@@ -376,7 +376,7 @@ class TestSequenceWalker:
     )
     def test_raises_on_framing_that_does_not_alternate(
         self, walker_over: Callable[..., SequenceWalker], name: str, body: bytes
-    ):
+    ) -> None:
         """Items and attributes out of turn cannot be walked."""
         # Arrange
         walker = walker_over(Written.opens_sequence(SPECIMEN_DESCRIPTION) + body)
@@ -387,7 +387,7 @@ class TestSequenceWalker:
 
     def test_raises_on_a_sequence_nested_too_deeply(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         # Well formed, but nested deeper than the interpreter allows recursing.
         levels = 2000
@@ -407,7 +407,7 @@ class TestSequenceWalker:
 
     def test_raises_when_the_file_ends_within_the_sequence(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         written = Written.opens_sequence(SPECIMEN_DESCRIPTION) + ITEM
         walker = walker_over(written)
@@ -418,7 +418,7 @@ class TestSequenceWalker:
 
     def test_walks_past_a_sequence_longer_than_a_block(
         self, walker_over: Callable[..., SequenceWalker]
-    ):
+    ) -> None:
         # Arrange
         # More items than one block holds, so the walker reads several blocks, and
         # of a size that does not divide the block, so that headers straddle them.

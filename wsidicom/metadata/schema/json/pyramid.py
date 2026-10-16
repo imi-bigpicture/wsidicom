@@ -34,5 +34,5 @@ class PyramidJsonSchema(LoadingSchema[Pyramid]):
     comments = fields.String(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Pyramid]:
         return Pyramid

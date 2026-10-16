@@ -53,7 +53,7 @@ class TestFields:
     )
     def test_measurement_serialize(
         self, measurement: Measurement, expected: dict[str, Any]
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -76,7 +76,7 @@ class TestFields:
     )
     def test_measurement_deserialize(
         self, measurement: dict[str, Any], expected: Measurement
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -100,7 +100,9 @@ class TestFields:
             ),
         ],
     )
-    def test_specimen_identifier_serialize(self, identifier: str | SpecimenIdentifier):
+    def test_specimen_identifier_serialize(
+        self, identifier: str | SpecimenIdentifier
+    ) -> None:
         # Arrange
 
         # Act
@@ -138,7 +140,9 @@ class TestFields:
             },
         ],
     )
-    def test_specimen_identifier_deserialize(self, identifier: str | dict[str, Any]):
+    def test_specimen_identifier_deserialize(
+        self, identifier: str | dict[str, Any]
+    ) -> None:
         # Arrange
 
         # Act
@@ -175,7 +179,7 @@ class TestFields:
             else:
                 assert loaded.issuer is None
 
-    def test_point_mm_serialize(self):
+    def test_point_mm_serialize(self) -> None:
         # Arrange
         point = PointMm(1.0, 2.0)
 
@@ -187,7 +191,7 @@ class TestFields:
         assert dumped["x"] == point.x
         assert dumped["y"] == point.y
 
-    def test_point_mm_deserialize(self):
+    def test_point_mm_deserialize(self) -> None:
         # Arrange
         dumped = {"x": 1.0, "y": 2.0}
 
@@ -199,7 +203,7 @@ class TestFields:
         assert loaded.x == dumped["x"]
         assert loaded.y == dumped["y"]
 
-    def test_uid_serialize(self):
+    def test_uid_serialize(self) -> None:
         # Arrange
         uid = UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423")
 
@@ -209,7 +213,7 @@ class TestFields:
         # Assert
         assert dumped == str(uid)
 
-    def test_uid_deserialize(self):
+    def test_uid_deserialize(self) -> None:
         # Arrange
         dumped = "1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"
 
@@ -219,7 +223,7 @@ class TestFields:
         # Assert
         assert loaded == UID(dumped)
 
-    def test_code_serialize(self):
+    def test_code_serialize(self) -> None:
         # Arrange
         code = Code("value", "scheme", "meaning")
 
@@ -230,7 +234,7 @@ class TestFields:
         assert isinstance(dumped, dict)
         assert_dict_equals_code(dumped, code)
 
-    def test_code_deserialize(self):
+    def test_code_deserialize(self) -> None:
         # Arrange
         dumped = {"value": "value", "scheme_designator": "scheme", "meaning": "meaning"}
 
@@ -242,7 +246,7 @@ class TestFields:
         assert_dict_equals_code(dumped, loaded)
 
     @pytest.mark.parametrize("value", ["value", Code("value", "scheme", "meaning")])
-    def test_string_or_code_serialize(self, value: str | Code):
+    def test_string_or_code_serialize(self, value: str | Code) -> None:
         # Arrange
 
         # Act
@@ -262,7 +266,7 @@ class TestFields:
             {"value": "value", "scheme_designator": "scheme", "meaning": "meaning"},
         ],
     )
-    def test_string_or_code_deserialize(self, dumped: str | dict[str, str]):
+    def test_string_or_code_deserialize(self, dumped: str | dict[str, str]) -> None:
         # Arrange
 
         # Act
@@ -281,7 +285,7 @@ class TestFields:
     )
     def test_float_or_concept_code_serialize(
         self, value: float | IlluminationColorCode
-    ):
+    ) -> None:
         # Arrange
         field = JsonFieldFactory.float_or_concept_code(IlluminationColorCode)
 
@@ -307,7 +311,9 @@ class TestFields:
             },
         ],
     )
-    def test_float_or_concept_code_deserialize(self, dumped: float | dict[str, str]):
+    def test_float_or_concept_code_deserialize(
+        self, dumped: float | dict[str, str]
+    ) -> None:
         # Arrange
         field = JsonFieldFactory.float_or_concept_code(IlluminationColorCode)
 
@@ -327,7 +333,9 @@ class TestFields:
         "value",
         ["value", IlluminationColorCode("Full Spectrum")],
     )
-    def test_str_or_concept_code_serialize(self, value: str | IlluminationColorCode):
+    def test_str_or_concept_code_serialize(
+        self, value: str | IlluminationColorCode
+    ) -> None:
         # Arrange
         field = JsonFieldFactory.str_or_concept_code(IlluminationColorCode)
 
@@ -351,7 +359,9 @@ class TestFields:
             },
         ],
     )
-    def test_str_or_concept_code_deserialize(self, dumped: str | dict[str, str]):
+    def test_str_or_concept_code_deserialize(
+        self, dumped: str | dict[str, str]
+    ) -> None:
         # Arrange
         field = JsonFieldFactory.str_or_concept_code(IlluminationColorCode)
 
@@ -365,7 +375,7 @@ class TestFields:
             assert isinstance(loaded, IlluminationColorCode)
             assert_dict_equals_code(dumped, loaded)
 
-    def test_concept_code_serialize(self):
+    def test_concept_code_serialize(self) -> None:
         # Arrange
         value = IlluminationColorCode("Full Spectrum")
         field = JsonFieldFactory.concept_code(IlluminationColorCode)
@@ -376,7 +386,7 @@ class TestFields:
         # Assert
         assert_dict_equals_code(dumped, value)
 
-    def test_concept_code_deserialize(self):
+    def test_concept_code_deserialize(self) -> None:
         # Arrange
         dumped = {
             "value": "414298005",

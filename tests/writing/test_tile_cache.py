@@ -45,8 +45,8 @@ LEVEL = 0
 
 
 @pytest.mark.unittest
-class Test_FileTileStore:
-    def test_save_and_load(self, temp_cache_dir, test_tile):
+class TestFileTileStore:
+    def test_save_and_load(self, temp_cache_dir: UPath, test_tile: bytes) -> None:
         """Test saving and loading from file cache."""
         # Arrange
         cache = FileTileStore(temp_cache_dir)
@@ -64,7 +64,7 @@ class Test_FileTileStore:
         assert loaded_tile == test_tile
         assert not has_after_load
 
-    def test_different_indices(self, temp_cache_dir, test_tile):
+    def test_different_indices(self, temp_cache_dir: UPath, test_tile: bytes) -> None:
         """Test that file cache creates different files for different indices."""
         # Arrange
         cache = FileTileStore(temp_cache_dir)
@@ -79,7 +79,7 @@ class Test_FileTileStore:
         assert cache.has(LEVEL, 100)
         assert cache.has(LEVEL, 200)
 
-    def test_load_nonexistent(self, temp_cache_dir):
+    def test_load_nonexistent(self, temp_cache_dir: UPath) -> None:
         """Test loading a tile that doesn't exist."""
         # Arrange
         cache = FileTileStore(temp_cache_dir)
@@ -90,7 +90,7 @@ class Test_FileTileStore:
         # Assert
         assert tile is None
 
-    def test_clear(self, temp_cache_dir, test_tile):
+    def test_clear(self, temp_cache_dir: UPath, test_tile: bytes) -> None:
         """Test clearing all cached files."""
         # Arrange
         cache = FileTileStore(temp_cache_dir)
@@ -107,7 +107,7 @@ class Test_FileTileStore:
 
 @pytest.mark.unittest
 class TestDictTileCache:
-    def test_save_and_load_sequential(self, test_tile):
+    def test_save_and_load_sequential(self, test_tile: bytes) -> None:
         """Test saving and loading tiles sequentially."""
         # Arrange
         cache = DictTileCache()
@@ -120,7 +120,7 @@ class TestDictTileCache:
         # Assert
         assert loaded == tiles
 
-    def test_out_of_order(self, test_tile):
+    def test_out_of_order(self, test_tile: bytes) -> None:
         """Test saving out of order, load_sequential returns consecutive run."""
         # Arrange
         cache = DictTileCache()
@@ -134,7 +134,7 @@ class TestDictTileCache:
         # Assert - should get 0, 1, 2 consecutively
         assert loaded == [b"tile_0", b"tile_1", b"tile_2"]
 
-    def test_load_stops_at_gap(self):
+    def test_load_stops_at_gap(self) -> None:
         """Test that load_sequential stops when next index is missing."""
         # Arrange
         cache = DictTileCache()
@@ -148,7 +148,7 @@ class TestDictTileCache:
         assert len(loaded) == 2
         assert loaded == [b"tile_0", b"tile_1"]
 
-    def test_clear(self, test_tile):
+    def test_clear(self, test_tile: bytes) -> None:
         """Test that clear removes all tiles for a level."""
         # Arrange
         cache = DictTileCache()
@@ -161,7 +161,7 @@ class TestDictTileCache:
         # Assert
         assert list(cache.load_sequential(LEVEL, 0)) == []
 
-    def test_levels_isolated(self, test_tile):
+    def test_levels_isolated(self, test_tile: bytes) -> None:
         """Test that different levels don't interfere."""
         # Arrange
         cache = DictTileCache()
@@ -176,7 +176,7 @@ class TestDictTileCache:
         assert loaded_0 == [b"level0_tile0"]
         assert loaded_1 == [b"level1_tile0"]
 
-    def test_clear_one_level(self, test_tile):
+    def test_clear_one_level(self, test_tile: bytes) -> None:
         """Test that clearing one level doesn't affect another."""
         # Arrange
         cache = DictTileCache()
@@ -192,8 +192,8 @@ class TestDictTileCache:
 
 
 @pytest.mark.unittest
-class Test_ByteBudgetMemoryTileStore:
-    def test_save_and_load(self, test_tile):
+class TestByteBudgetMemoryTileStore:
+    def test_save_and_load(self, test_tile: bytes) -> None:
         """Test saving and loading from byte-budget memory cache."""
         # Arrange
         cache = ByteBudgetMemoryTileStore(budget_bytes=1024)
@@ -210,7 +210,7 @@ class Test_ByteBudgetMemoryTileStore:
         assert loaded == test_tile
         assert not has_after
 
-    def test_budget_enforcement(self, test_tile):
+    def test_budget_enforcement(self, test_tile: bytes) -> None:
         """Test that cache rejects tiles when budget would be exceeded."""
         # Arrange - budget for exactly one tile
         cache = ByteBudgetMemoryTileStore(budget_bytes=len(test_tile))
@@ -225,7 +225,7 @@ class Test_ByteBudgetMemoryTileStore:
         assert cache.has(LEVEL, 0)
         assert not cache.has(LEVEL, 1)
 
-    def test_budget_after_load_frees_space(self, test_tile):
+    def test_budget_after_load_frees_space(self, test_tile: bytes) -> None:
         """Test that loading a tile frees budget for new tiles."""
         # Arrange - budget for exactly one tile
         cache = ByteBudgetMemoryTileStore(budget_bytes=len(test_tile))
@@ -239,7 +239,7 @@ class Test_ByteBudgetMemoryTileStore:
         assert saved
         assert cache.has(LEVEL, 1)
 
-    def test_clear(self, test_tile):
+    def test_clear(self, test_tile: bytes) -> None:
         """Test clearing the cache."""
         # Arrange
         cache = ByteBudgetMemoryTileStore(budget_bytes=1024)
@@ -254,7 +254,7 @@ class Test_ByteBudgetMemoryTileStore:
         assert not cache.has(LEVEL, 1)
         assert not cache.has_tiles
 
-    def test_empty_budget_rejects_all(self, test_tile):
+    def test_empty_budget_rejects_all(self, test_tile: bytes) -> None:
         """Test that zero budget rejects all tiles."""
         # Arrange
         cache = ByteBudgetMemoryTileStore(budget_bytes=0)
@@ -265,7 +265,7 @@ class Test_ByteBudgetMemoryTileStore:
         # Assert
         assert not saved
 
-    def test_has_tiles(self, test_tile):
+    def test_has_tiles(self, test_tile: bytes) -> None:
         """Test has_tiles property."""
         # Arrange
         cache = ByteBudgetMemoryTileStore(budget_bytes=1024)
@@ -279,7 +279,7 @@ class Test_ByteBudgetMemoryTileStore:
         # Assert - has tile
         assert cache.has_tiles
 
-    def test_shared_budget_across_levels(self, test_tile):
+    def test_shared_budget_across_levels(self, test_tile: bytes) -> None:
         """Test that budget is shared across levels."""
         # Arrange - budget for exactly one tile
         cache = ByteBudgetMemoryTileStore(budget_bytes=len(test_tile))
@@ -294,7 +294,9 @@ class Test_ByteBudgetMemoryTileStore:
 
 @pytest.mark.unittest
 class TestByteBudgetTileCache:
-    def test_save_to_memory_within_budget(self, temp_cache_dir, test_tile):
+    def test_save_to_memory_within_budget(
+        self, temp_cache_dir: UPath, test_tile: bytes
+    ) -> None:
         """Test that tiles within budget go to memory."""
         # Arrange
         cache = ByteBudgetTileCache(
@@ -309,7 +311,7 @@ class TestByteBudgetTileCache:
         assert cache._memory_store.has(LEVEL, 0)
         assert not cache._file_store.has(LEVEL, 0)
 
-    def test_overflow_to_disk(self, temp_cache_dir, test_tile):
+    def test_overflow_to_disk(self, temp_cache_dir: UPath, test_tile: bytes) -> None:
         """Test that tiles exceeding budget overflow to disk."""
         # Arrange - budget for exactly one tile
         cache = ByteBudgetTileCache(
@@ -324,7 +326,7 @@ class TestByteBudgetTileCache:
         assert cache._memory_store.has(LEVEL, 0)
         assert cache._file_store.has(LEVEL, 1)
 
-    def test_load_sequential(self, temp_cache_dir, test_tile):
+    def test_load_sequential(self, temp_cache_dir: UPath, test_tile: bytes) -> None:
         """Test loading sequential tiles from mixed cache."""
         # Arrange
         cache = ByteBudgetTileCache(
@@ -342,7 +344,9 @@ class TestByteBudgetTileCache:
         assert tiles[0] == test_tile
         assert tiles[1] == test_tile
 
-    def test_load_sequential_stops_at_gap(self, temp_cache_dir, test_tile):
+    def test_load_sequential_stops_at_gap(
+        self, temp_cache_dir: UPath, test_tile: bytes
+    ) -> None:
         """Test that load_sequential stops at a gap."""
         # Arrange
         cache = ByteBudgetTileCache(
@@ -358,7 +362,7 @@ class TestByteBudgetTileCache:
         # Assert
         assert len(tiles) == 2
 
-    def test_clear(self, temp_cache_dir, test_tile):
+    def test_clear(self, temp_cache_dir: UPath, test_tile: bytes) -> None:
         """Test clearing a level's cache."""
         # Arrange
         cache = ByteBudgetTileCache(
@@ -378,7 +382,9 @@ class TestByteBudgetTileCache:
         assert not cache._file_store.has(LEVEL, 1)
         assert list(cache.load_sequential(LEVEL, 0)) == []
 
-    def test_zero_budget_all_to_disk(self, temp_cache_dir, test_tile):
+    def test_zero_budget_all_to_disk(
+        self, temp_cache_dir: UPath, test_tile: bytes
+    ) -> None:
         """Test that zero budget sends everything to disk."""
         # Arrange
         cache = ByteBudgetTileCache(
@@ -393,7 +399,9 @@ class TestByteBudgetTileCache:
         assert not cache._memory_store.has(LEVEL, 0)
         assert cache._file_store.has(LEVEL, 0)
 
-    def test_large_budget_all_in_memory(self, temp_cache_dir, test_tile):
+    def test_large_budget_all_in_memory(
+        self, temp_cache_dir: UPath, test_tile: bytes
+    ) -> None:
         """Test that large budget keeps everything in memory."""
         # Arrange
         cache = ByteBudgetTileCache(

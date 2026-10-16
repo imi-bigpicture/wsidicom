@@ -113,7 +113,7 @@ def create_parsed_dataset(
 
 @pytest.mark.unittest
 class TestSparseTileIndex:
-    def test_places_frames_at_their_tiles(self):
+    def test_places_frames_at_their_tiles(self) -> None:
         # Arrange - positions are one based, so 1 is the first tile and 21 the third.
         dataset = create_dataset(columns=[1, 21, 11], rows=[1, 1, 21])
 
@@ -125,7 +125,7 @@ class TestSparseTileIndex:
         assert index.get_frame_index(Point(2, 0), 0, "0") == 1
         assert index.get_frame_index(Point(1, 2), 0, "0") == 2
 
-    def test_missing_tile_is_reported_as_missing(self):
+    def test_missing_tile_is_reported_as_missing(self) -> None:
         # Arrange
         dataset = create_dataset(columns=[1], rows=[1])
 
@@ -135,7 +135,7 @@ class TestSparseTileIndex:
         # Assert
         assert index.get_frame_index(Point(2, 2), 0, "0") == -1
 
-    def test_frames_without_a_z_offset_are_in_the_plane_at_zero(self):
+    def test_frames_without_a_z_offset_are_in_the_plane_at_zero(self) -> None:
         # Arrange
         dataset = create_dataset(columns=[1], rows=[1])
 
@@ -146,7 +146,7 @@ class TestSparseTileIndex:
         assert index.focal_planes == [0]
         assert index.get_frame_index(Point(0, 0), 0, "0") == 0
 
-    def test_splits_frames_into_focal_planes(self):
+    def test_splits_frames_into_focal_planes(self) -> None:
         # Arrange - the same tile at two focal planes, and a third tile at one of them.
         dataset = create_dataset(
             columns=[1, 1, 21], rows=[1, 1, 1], z_offsets=[0.0, 1.5, 1.5]
@@ -162,7 +162,7 @@ class TestSparseTileIndex:
         assert index.get_frame_index(Point(2, 0), 1.5, "0") == 2
         assert index.get_frame_index(Point(2, 0), 0.0, "0") == -1
 
-    def test_splits_frames_into_optical_paths(self):
+    def test_splits_frames_into_optical_paths(self) -> None:
         # Arrange - the same tile down two optical paths.
         dataset = create_dataset(
             columns=[1, 1], rows=[1, 1], optical_path_identifiers=["0", "1"]
@@ -175,7 +175,7 @@ class TestSparseTileIndex:
         assert index.get_frame_index(Point(0, 0), 0, "0") == 0
         assert index.get_frame_index(Point(0, 0), 0, "1") == 1
 
-    def test_splits_frames_into_focal_planes_and_optical_paths(self):
+    def test_splits_frames_into_focal_planes_and_optical_paths(self) -> None:
         # Arrange - every combination of two focal planes and two optical paths.
         dataset = create_dataset(
             columns=[1, 1, 1, 1],
@@ -194,7 +194,7 @@ class TestSparseTileIndex:
         assert index.get_frame_index(Point(0, 0), 1.0, "0") == 2
         assert index.get_frame_index(Point(0, 0), 1.0, "1") == 3
 
-    def test_z_offsets_are_rounded_into_the_same_focal_plane(self):
+    def test_z_offsets_are_rounded_into_the_same_focal_plane(self) -> None:
         # Arrange - closer together than the decimals a focal plane is keyed by.
         dataset = create_dataset(columns=[1, 21], rows=[1, 1], z_offsets=[1.0, 1.00001])
 
@@ -205,7 +205,7 @@ class TestSparseTileIndex:
         assert index.focal_planes == [1.0]
         assert index.get_frame_index(Point(2, 0), 1.0, "0") == 1
 
-    def test_frames_of_a_concatenated_instance_keep_their_frame_numbers(self):
+    def test_frames_of_a_concatenated_instance_keep_their_frame_numbers(self) -> None:
         # Arrange - the second dataset holds the frames after the first.
         first = create_dataset(columns=[1, 21], rows=[1, 1])
         second = create_dataset(columns=[1], rows=[21], frame_offset=2)
@@ -231,7 +231,7 @@ class TestSparseTileIndex:
         self,
         z_offsets: Sequence[float] | None,
         optical_path_identifiers: Sequence[str] | None,
-    ):
+    ) -> None:
         # Arrange - the same frames, once as read positions and once as a sequence.
         columns, rows = [1, 21], [1, 11]
         read = create_dataset(columns, rows, z_offsets, optical_path_identifiers)
@@ -260,9 +260,12 @@ class TestSparseTileIndex:
     )
     def test_refuses_a_frame_outside_the_tiling(
         self, columns: Sequence[int], rows: Sequence[int], why: str
-    ):
-        """A position above the tiling would be an IndexError from numpy, and one
-        below it no error at all, as a negative index counts from the far end."""
+    ) -> None:
+        """A position outside the tiling raises.
+
+        A position above the tiling would be an IndexError from numpy, and one below it
+        no error at all, as a negative index counts from the far end.
+        """
         # Arrange - positions are one based, so zero is before the first tile.
         dataset = create_dataset(columns=columns, rows=rows)
 

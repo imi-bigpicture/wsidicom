@@ -12,9 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from io import BytesIO
 from struct import pack
+from typing import Never
 
 import pytest
 from PIL import Image as Pillow
@@ -41,7 +42,7 @@ SLIDE_SIZE = (200000, 100000)
 
 
 @pytest.fixture
-def buffer(placeholder_path: UPath):
+def buffer(placeholder_path: UPath) -> Iterator[WsiDicomWriteIO]:
     with WsiDicomWriteIO(
         BytesIO(), filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit
     ) as buffer:
@@ -101,7 +102,7 @@ class TestTiffFrameIndexParser:
         buffer: WsiDicomWriteIO,
         write_dual_file: Callable[..., int],
         big_tiff: bool,
-    ):
+    ) -> None:
         # Arrange
         offsets = [1000, 2000, 3000, 4000]
         lengths = [110, 220, 330, 440]
@@ -120,7 +121,7 @@ class TestTiffFrameIndexParser:
         buffer: WsiDicomWriteIO,
         write_dual_file: Callable[..., int],
         monkeypatch: pytest.MonkeyPatch,
-    ):
+    ) -> None:
         """Tags are read from the image file directory alone.
 
         Opening the file as an image is refused for one larger than
@@ -131,7 +132,7 @@ class TestTiffFrameIndexParser:
         lengths = [110, 220]
         pixel_data_start = write_dual_file(offsets, lengths)
 
-        def fail_if_opened(*args: object, **kwargs: object):
+        def fail_if_opened(*args: object, **kwargs: object) -> Never:
             raise AssertionError("Tiff file should not be opened as an image.")
 
         monkeypatch.setattr(Pillow, "open", fail_if_opened)
@@ -145,7 +146,7 @@ class TestTiffFrameIndexParser:
 
     def test_parse_frame_index_leaves_decompression_bomb_limit_unchanged(
         self, buffer: WsiDicomWriteIO, write_dual_file: Callable[..., int]
-    ):
+    ) -> None:
         # Arrange
         offsets = [1000, 2000]
         lengths = [110, 220]
@@ -164,7 +165,7 @@ class TestTiffFrameIndexParser:
         buffer: WsiDicomWriteIO,
         write_dual_file: Callable[..., int],
         missing_tag: int,
-    ):
+    ) -> None:
         # Arrange
         offsets = [1000, 2000]
         lengths = [110, 220]
@@ -179,7 +180,7 @@ class TestTiffFrameIndexParser:
 
     def test_raises_empty_tiff_frame_tags_when_tag_lengths_differ(
         self, buffer: WsiDicomWriteIO, write_dual_file: Callable[..., int]
-    ):
+    ) -> None:
         # Arrange
         offsets = [1000, 2000, 3000]
         lengths = [110, 220]
@@ -204,7 +205,7 @@ class TestTiffFrameIndexParser:
     )
     def test_raises_empty_tiff_frame_tags_when_not_a_valid_tiff(
         self, buffer: WsiDicomWriteIO, content: bytes
-    ):
+    ) -> None:
         # Arrange
         buffer.write(content)
         pixel_data_start = buffer.tell()

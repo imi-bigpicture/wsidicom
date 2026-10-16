@@ -21,7 +21,7 @@ class WsiTestInstance(WsiInstance):
         frame_of_reference_uid: UID,
         image_coordinate_system: ImageCoordinateSystem,
         ext_depth_of_field: tuple[int, float] | None,
-    ):
+    ) -> None:
         self._size = size
         self._tile_size = tile_size
         self._pixel_spacing = pixel_spacing
@@ -83,7 +83,7 @@ def create_pyramid_instance(
     study_instance_uid: UID,
     series_instance_uid: UID,
     frame_of_reference_uid: UID,
-):
+) -> WsiTestInstance:
     size = Size(100, 100)
     tile_size = Size(10, 10)
     pixel_spacing = SizeMm(0.5, 0.5)
@@ -99,18 +99,18 @@ def create_pyramid_instance(
     )
 
 
-@pytest.fixture()
-def study_instance_uid():
+@pytest.fixture
+def study_instance_uid() -> UID:
     return generate_uid()
 
 
-@pytest.fixture()
-def series_instance_uid():
+@pytest.fixture
+def series_instance_uid() -> UID:
     return generate_uid()
 
 
-@pytest.fixture()
-def frame_of_reference_uid():
+@pytest.fixture
+def frame_of_reference_uid() -> UID:
     return generate_uid()
 
 
@@ -122,41 +122,41 @@ class TestPyramids:
             "expected_pyramid_count",
         ],
         [
-            [
+            (
                 [
                     (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), None),
                     (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), None),
                 ],
                 1,
-            ],
-            [
+            ),
+            (
                 [
                     (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), (5, 0.5)),
                     (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), (5, 0.5)),
                 ],
                 1,
-            ],
-            [
+            ),
+            (
                 [
                     (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), None),
                     (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), (5, 0.5)),
                 ],
                 2,
-            ],
-            [
+            ),
+            (
                 [
                     (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), None),
                     (PointMm(2, 2), Orientation((0, -1, 0, 1, 0, 0)), None),
                 ],
                 2,
-            ],
-            [
+            ),
+            (
                 [
                     (PointMm(0, 0), Orientation((0, -1, 0, 1, 0, 0)), None),
                     (PointMm(0.001, 0.001), Orientation((0, -1, 0, 1, 0, 0)), None),
                 ],
                 1,
-            ],
+            ),
         ],
     )
     def test_open_number_of_created_pyramids(
@@ -168,7 +168,7 @@ class TestPyramids:
         series_instance_uid: UID,
         frame_of_reference_uid: UID,
         expected_pyramid_count: int,
-    ):
+    ) -> None:
         # Arrange
         instances = [
             create_pyramid_instance(
