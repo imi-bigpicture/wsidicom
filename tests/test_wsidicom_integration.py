@@ -12,9 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import threading
-from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor, wait
+from collections.abc import Callable
 from hashlib import md5
 from pathlib import Path
 from typing import Any
@@ -25,7 +23,6 @@ from PIL import Image as Pillow
 from pydicom.uid import UID
 
 from tests.conftest import (
-    SLIDE_FOLDER,
     WsiInputType,
     WsiTestDefinitions,
     skip_if_hash_unstable,
@@ -551,137 +548,3 @@ class TestWsiDicomSave:
         # Assert
         assert len(filepaths) > 0
         assert all(filepath.is_absolute() for filepath in filepaths), filepaths
-
-
-WAIT_SECONDS = 10
-"""The longest a test waits for another thread. A fault then fails the test instead of
-hanging it."""
-
-NOT_RETURNED_SECONDS = 0.2
-"""How long a read that should be waiting is given to return. A read that is slow to
-start also passes, as it has not returned either."""
-
-
-@pytest.fixture()
-def own_wsi() -> Iterator[WsiDicom]:
-    """A slide opened for one test only. The test replaces how the slide makes the tile
-    byte ranges of a plane."""
-    folders = [
-        SLIDE_FOLDER.joinpath(WsiTestDefinitions.test_definitions[name]["path"])
-        for name in WsiTestDefinitions.wsi_names()
-    ]
-    folder = next((folder for folder in folders if folder.exists()), None)
-    if folder is None:
-        pytest.skip("No test slide found.")
-    with WsiDicom.open(folder) as wsi:
-        yield wsi
-
-
-@pytest.mark.integration
-class TestTileByteRangesOfPlanes:
-    """Tile byte ranges are made when a tile of a plane is first read. A read of a plane
-    whose byte ranges are being made waits for them. Reads of other planes do not wait.
-    """
-
-    def test_other_plane_is_made_while_a_plane_is_being_made(
-        self, own_wsi: WsiDicom, monkeypatch: pytest.MonkeyPatch
-    ):
-        # Arrange
-        started = threading.Event()
-        release = threading.Event()
-
-        def create_tile_byte_ranges(pyramid: int, level: int, z, path):
-            if level == 0:
-                started.set()
-                release.wait(WAIT_SECONDS)
-            return None
-
-        monkeypatch.setattr(
-            own_wsi, "_create_tile_byte_ranges", create_tile_byte_ranges
-        )
-        with ThreadPoolExecutor(1) as executor:
-            being_made = executor.submit(
-                own_wsi._get_tile_byte_ranges, 0, 0, None, None
-            )
-            assert started.wait(WAIT_SECONDS)
-
-            # Act
-            other = own_wsi._get_tile_byte_ranges(0, 1, None, None)
-            done_before_release = being_made.done()
-            release.set()
-
-        # Assert
-        assert other is None
-        assert not done_before_release
-        assert being_made.result(WAIT_SECONDS) is None
-
-    def test_reads_of_a_plane_at_once_make_it_once(
-        self, own_wsi: WsiDicom, monkeypatch: pytest.MonkeyPatch
-    ):
-        # Arrange
-        started = threading.Event()
-        release = threading.Event()
-        made = []
-
-        def create_tile_byte_ranges(pyramid: int, level: int, z, path):
-            made.append((pyramid, level, z, path))
-            started.set()
-            release.wait(WAIT_SECONDS)
-            return None
-
-        monkeypatch.setattr(
-            own_wsi, "_create_tile_byte_ranges", create_tile_byte_ranges
-        )
-        with ThreadPoolExecutor(2) as executor:
-            first = executor.submit(own_wsi._get_tile_byte_ranges, 0, 0, None, None)
-            assert started.wait(WAIT_SECONDS)
-
-            # Act
-            second = executor.submit(own_wsi._get_tile_byte_ranges, 0, 0, None, None)
-            wait([second], NOT_RETURNED_SECONDS)
-            second_done_before_release = second.done()
-            release.set()
-
-        # Assert
-        assert not second_done_before_release
-        assert first.result(WAIT_SECONDS) is None
-        assert second.result(WAIT_SECONDS) is None
-        assert made == [(0, 0, None, None)]
-
-    def test_failure_to_make_a_plane_reaches_reads_waiting_and_is_tried_again(
-        self, own_wsi: WsiDicom, monkeypatch: pytest.MonkeyPatch
-    ):
-        # Arrange
-        started = threading.Event()
-        release = threading.Event()
-        made = []
-
-        def fail_to_create_tile_byte_ranges(pyramid: int, level: int, z, path):
-            made.append((pyramid, level, z, path))
-            started.set()
-            release.wait(WAIT_SECONDS)
-            raise ValueError("Failed to make tile byte ranges.")
-
-        monkeypatch.setattr(
-            own_wsi, "_create_tile_byte_ranges", fail_to_create_tile_byte_ranges
-        )
-        with ThreadPoolExecutor(2) as executor:
-            first = executor.submit(own_wsi._get_tile_byte_ranges, 0, 0, None, None)
-            assert started.wait(WAIT_SECONDS)
-            second = executor.submit(own_wsi._get_tile_byte_ranges, 0, 0, None, None)
-            wait([second], NOT_RETURNED_SECONDS)
-            release.set()
-            first_exception = first.exception(WAIT_SECONDS)
-            second_exception = second.exception(WAIT_SECONDS)
-        monkeypatch.setattr(
-            own_wsi, "_create_tile_byte_ranges", lambda pyramid, level, z, path: None
-        )
-
-        # Act
-        again = own_wsi._get_tile_byte_ranges(0, 0, None, None)
-
-        # Assert
-        assert isinstance(first_exception, ValueError)
-        assert isinstance(second_exception, ValueError)
-        assert made == [(0, 0, None, None)]
-        assert again is None

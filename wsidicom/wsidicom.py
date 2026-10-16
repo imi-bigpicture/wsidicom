@@ -14,9 +14,8 @@
 
 import logging
 import os
-import threading
 from collections.abc import Callable, Iterable, Sequence
-from concurrent.futures import Executor, Future
+from concurrent.futures import Executor
 from pathlib import Path
 from typing import (
     Any,
@@ -48,7 +47,6 @@ from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level, Thumbnail
 from wsidicom.instance import WsiDataset, WsiInstance
-from wsidicom.instance.tile_byte_ranges import FrameReader, TileByteRanges
 from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.options import (
@@ -56,6 +54,7 @@ from wsidicom.options import (
     ConcatenationByFrames,
     InstanceSplit,
 )
+from wsidicom.plane_tile_readers import PlaneTileReaders
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -101,18 +100,6 @@ class WsiDicom:
         self._source_owned = source_owned
         self._read_executor = read_executor
         self._settings = settings
-        self._tile_byte_ranges: dict[
-            tuple[int, int, float | None, str | None],
-            tuple[TileByteRanges, Sequence[FrameReader]] | None,
-        ] = {}
-        self._tile_byte_ranges_building: dict[
-            tuple[int, int, float | None, str | None],
-            Future[tuple[TileByteRanges, Sequence[FrameReader]] | None],
-        ] = {}
-        """Byte ranges of planes that are being made, for reads of the same plane to
-        wait for. The lock guards both dicts. It is not held while byte ranges are made,
-        so reads of other planes do not wait."""
-        self._tile_byte_ranges_lock = threading.Lock()
         with use_settings(settings):
             self._pyramids = Pyramids.open(
                 source.level_instances, source.thumbnail_instances
@@ -121,6 +108,7 @@ class WsiDicom:
             self._overviews = Overviews.open(source.overview_instances)
             self._annotations = list(source.annotation_instances)
             self._uids = self._validate_collection()
+        self._plane_tile_readers = PlaneTileReaders(self._pyramids)
 
     @classmethod
     def open(
@@ -1141,17 +1129,11 @@ class WsiDicom:
             Tile in file encoding.
         """
         pyramid_index = pyramid if pyramid is not None else self._selected_pyramid
-        try:
-            stored_tiles = self._tile_byte_ranges[(pyramid_index, level, z, path)]
-        except KeyError:
-            stored_tiles = self._get_tile_byte_ranges(pyramid_index, level, z, path)
-        if stored_tiles is not None:
-            byte_ranges, readers = stored_tiles
-            encoded_tile = self._read_stored_tile(
-                byte_ranges, readers, tile[0], tile[1], crop_to_image_boundary
-            )
-            if encoded_tile is not None:
-                return encoded_tile
+        encoded_tile = self._plane_tile_readers.read(
+            pyramid_index, level, tile, z, path, crop_to_image_boundary
+        )
+        if encoded_tile is not None:
+            return encoded_tile
         tile_point = Point.from_tuple(tile)
         wsi_pyramid = self.pyramids.get(pyramid_index)
         try:
@@ -1205,160 +1187,9 @@ class WsiDicom:
 
     def close(self) -> None:
         """Close source if owned by this instance."""
-        self._tile_byte_ranges.clear()
+        self._plane_tile_readers.clear()
         if self._source_owned:
             self._source.close()
-
-    @staticmethod
-    def _read_stored_tile(
-        byte_ranges: TileByteRanges,
-        readers: Sequence[FrameReader],
-        x: int,
-        y: int,
-        crop_to_image_boundary: bool,
-    ) -> bytes | None:
-        """Return the encoded tile at (x, y), read with a single read at its byte range.
-        Returns None if the tile is to be read through the level instead.
-
-        A tile is read through the level if it is outside the image (so that the level
-        raises), if it is not stored as a single run of bytes, or if it is to be cropped
-        to the image boundary (which requires re-encoding it).
-
-        Parameters
-        ----------
-        byte_ranges: TileByteRanges
-            Where the tiles of the plane are stored.
-        readers: Sequence[FrameReader]
-            Readers of the files of the image data, in the order of the file indices
-            of the byte ranges.
-        x: int
-            Column of the tile.
-        y: int
-            Row of the tile.
-        crop_to_image_boundary: bool
-            If a tile that extends outside the image is to be cropped.
-
-        Returns
-        -------
-        bytes | None
-            The encoded tile, or None.
-        """
-        servable = (
-            byte_ranges.whole_tiled_size
-            if crop_to_image_boundary
-            else byte_ranges.tiled_size
-        )
-        # Checked, because a position outside the tiled size would otherwise index the
-        # byte range of another tile.
-        if not (0 <= x < servable.width and 0 <= y < servable.height):
-            return None
-        index = y * byte_ranges.tiled_size.width + x
-        length = byte_ranges.lengths[index]
-        if length < 0:
-            return None
-        if byte_ranges.file_indices is None:
-            reader = readers[0]
-        else:
-            reader = readers[byte_ranges.file_indices[index]]
-        return reader.read(byte_ranges.positions[index], length)
-
-    def _get_tile_byte_ranges(
-        self, pyramid: int, level: int, z: float | None, path: str | None
-    ) -> tuple[TileByteRanges, Sequence[FrameReader]] | None:
-        """Return where the encoded tiles of a plane of a level are stored, together
-        with the readers of the files. They are made when a tile of the plane is first
-        read, and kept for later reads.
-
-        Returns None if a tile cannot be read with a single read, or if the level or
-        plane is not in the pyramid. Reading a tile through the level then scales it or
-        raises.
-
-        Parameters
-        ----------
-        pyramid: int
-            Index of pyramid.
-        level: int
-            Pyramid level.
-        z: float | None
-            Z coordinate as asked for, the default of the instance if None.
-        path: str | None
-            Optical path as asked for, the default of the instance if None.
-
-        Returns
-        -------
-        tuple[TileByteRanges, Sequence[FrameReader]] | None
-            Where the encoded tiles of the plane are stored and the readers of the
-            files of the image data, or None.
-        """
-        key = (pyramid, level, z, path)
-        with self._tile_byte_ranges_lock:
-            # Checked again with the lock held, so that reads of the plane at the same
-            # time make the byte ranges only once.
-            if key in self._tile_byte_ranges:
-                return self._tile_byte_ranges[key]
-            building = self._tile_byte_ranges_building.get(key)
-            builds_here = building is None
-            if building is None:
-                building = Future()
-                self._tile_byte_ranges_building[key] = building
-        if not builds_here:
-            # Waits only for the read making the byte ranges of this plane, not for
-            # those of other planes.
-            return building.result()
-        try:
-            stored_tiles = self._create_tile_byte_ranges(pyramid, level, z, path)
-        except BaseException as exception:
-            # Left unmade, so that a later read tries again.
-            with self._tile_byte_ranges_lock:
-                del self._tile_byte_ranges_building[key]
-            building.set_exception(exception)
-            raise
-        with self._tile_byte_ranges_lock:
-            self._tile_byte_ranges[key] = stored_tiles
-            del self._tile_byte_ranges_building[key]
-        building.set_result(stored_tiles)
-        return stored_tiles
-
-    def _create_tile_byte_ranges(
-        self, pyramid: int, level: int, z: float | None, path: str | None
-    ) -> tuple[TileByteRanges, Sequence[FrameReader]] | None:
-        """Make the byte ranges of the encoded tiles of a plane of a level, and the
-        readers of the files. See `_get_tile_byte_ranges()`.
-
-        Parameters
-        ----------
-        pyramid: int
-            Index of pyramid.
-        level: int
-            Pyramid level.
-        z: float | None
-            Z coordinate as asked for, the default of the instance if None.
-        path: str | None
-            Optical path as asked for, the default of the instance if None.
-
-        Returns
-        -------
-        tuple[TileByteRanges, Sequence[FrameReader]] | None
-            Where the encoded tiles of the plane are stored and the readers of the
-            files of the image data, or None.
-        """
-        try:
-            instance = self.pyramids.get(pyramid).get(level).get_instance(z, path)
-        except WsiDicomNotFoundError:
-            return None
-        image_data = instance.image_data
-        # Readers first, so that no byte ranges are made for image data whose tiles
-        # cannot be read with them.
-        readers = image_data.get_frame_readers()
-        if readers is None:
-            return None
-        byte_ranges = image_data.get_tile_byte_ranges(
-            z if z is not None else instance.default_z,
-            path if path is not None else instance.default_path,
-        )
-        if byte_ranges is None:
-            return None
-        return byte_ranges, readers
 
     def clear_cache(self):
         """Clear cache of encoded and decoded tiles."""
