@@ -9,14 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `ImageData.get_tile_locations()`, the position, length and file of each encoded tile of a plane, and `ImageData.get_frame_readers()`. `WsiDicom.read_encoded_tile()` uses them to read a tile with a single read; tiles to be cropped, or not stored as one run of bytes, are read as before. Implemented for local DICOM files.
 - `Settings.max_file_handles_per_file` (default 8), the most handles open to a local file at once. A read beyond waits for a handle.
 
 ### Changed
 
-- Frames of local files are read through a pool of unbuffered file handles instead of a shared buffered stream, so reads from several threads no longer wait for each other.
-- Only DICOMweb instances cache encoded frames; for files opened through fsspec, use a caching file system of fsspec. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`. The cache moved from `Source` and `WsiDicomImageData` to `WsiDicomWebSource` and `WsiDicomWebImageData`, and `WsiDicomImageData` and `WsiDicomFileImageData` no longer take one; a subclass can cache by overriding `_get_encoded_tile_frame()` and `_get_encoded_tile_frames()`.
-- Frame index lookups use plain lookups instead of cached methods, which cost more than they saved.
+- Faster reading of encoded tiles from local DICOM files, which are read through a pool of file handles so that reads from several threads no longer wait for each other.
+- Only DICOMweb instances cache encoded frames; for files opened through fsspec, use a caching file system of fsspec. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
 
 ### Fixed
 
