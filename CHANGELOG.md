@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `WsiFile` (`WsiLevelFile`, `WsiThumbnailFile` or `WsiAssociatedFile`) describes a file of a WSI, as opened or as written.
 - `FileUids.matches_concatenation()` tells if two files are parts of the same concatenation.
-- `ImageData.get_tile_locations()`, the position, length and file of each encoded tile of a plane, and `ImageData.get_frame_readers()`. `WsiDicom.read_encoded_tile()` uses them to read a tile with a single read; tiles to be cropped, or not stored as one run of bytes, are read as before. Implemented for local DICOM files.
 - `Settings.max_file_handles_per_file` (default 8), the most handles open to a local file at once. A read beyond waits for a handle.
 
 ### Changed
@@ -19,16 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WsiDicom.save()` and `WsiDicom.files` return a `dict` from path to `WsiFile` instead of a list of paths. Indexing such as `files[0]` no longer works.
 - `FileUids` compare equal when all their UIDs are equal. Previously they compared equal only when both were parts of the same concatenation, which is now `matches_concatenation()`.
 - Thumbnails without Pixel Spacing are ignored with a warning when opening, and `Thumbnail` raises `WsiDicomNoResolutionError` if created without it.
-- Frames of local files are read through a pool of unbuffered file handles instead of a shared buffered stream, so reads from several threads no longer wait for each other.
-- Only DICOMweb instances cache encoded frames; for files opened through fsspec, use a caching file system of fsspec. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`. The cache moved from `Source` and `WsiDicomImageData` to `WsiDicomWebSource` and `WsiDicomWebImageData`, and `WsiDicomImageData` and `WsiDicomFileImageData` no longer take one; a subclass can cache by overriding `_get_encoded_tile_frame()` and `_get_encoded_tile_frames()`.
-- Frame index lookups use plain lookups instead of cached methods, which cost more than they saved.
+- Faster reading of encoded tiles from local DICOM files, which are read through a pool of file handles so that reads from several threads no longer wait for each other.
+- Only DICOMweb instances cache encoded frames; for files opened through fsspec, use a caching file system of fsspec. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
 
 ### Fixed
 
 - `WsiDicom.files` listed files left out for not belonging to the slide.
 - Files whose Extended Offset Table Lengths state an odd frame length failed to open with "Invalid frame length" (#240).
 - Extended Offset Table Lengths are written without the byte an odd frame is padded with, as the standard specifies.
-
 - Code values that Code Value (SH, at most 16 characters) cannot hold, such as SNOMED CT extension concept ids or URN and URL codes, are written as Long Code Value or URN Code Value. Previously such a code made writing metadata fail, and a graphical annotation wrote it as an invalid Code Value. Codes are also read from whichever of the three attributes holds the value, so codes with only Long Code Value or URN Code Value no longer fail to read.
 - Reading a tile one past the last column or row served another tile instead of raising `WsiDicomOutOfBoundsError`.
 
