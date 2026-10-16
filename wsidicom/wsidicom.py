@@ -54,6 +54,7 @@ from wsidicom.options import (
     ConcatenationByFrames,
     InstanceSplit,
 )
+from wsidicom.plane_tile_readers import PlaneTileReaders
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -107,6 +108,7 @@ class WsiDicom:
             self._overviews = Overviews.open(source.overview_instances)
             self._annotations = list(source.annotation_instances)
             self._uids = self._validate_collection()
+        self._plane_tile_readers = PlaneTileReaders(self._pyramids)
 
     @classmethod
     def open(
@@ -1126,10 +1128,14 @@ class WsiDicom:
         bytes
             Tile in file encoding.
         """
-        tile_point = Point.from_tuple(tile)
-        wsi_pyramid = self.pyramids.get(
-            pyramid if pyramid is not None else self._selected_pyramid
+        pyramid_index = pyramid if pyramid is not None else self._selected_pyramid
+        encoded_tile = self._plane_tile_readers.read(
+            pyramid_index, level, tile, z, path, crop_to_image_boundary
         )
+        if encoded_tile is not None:
+            return encoded_tile
+        tile_point = Point.from_tuple(tile)
+        wsi_pyramid = self.pyramids.get(pyramid_index)
         try:
             wsi_level = wsi_pyramid.get(level)
             return wsi_level.get_encoded_tile(
@@ -1181,6 +1187,7 @@ class WsiDicom:
 
     def close(self) -> None:
         """Close source if owned by this instance."""
+        self._plane_tile_readers.clear()
         if self._source_owned:
             self._source.close()
 

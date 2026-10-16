@@ -16,6 +16,8 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
 from typing import ClassVar
 
+import numpy as np
+from numpy.typing import NDArray
 from pydicom.dataset import Dataset
 
 from wsidicom.geometry import Point, Size
@@ -87,6 +89,26 @@ class TileIndex(metaclass=ABCMeta):
     @abstractmethod
     def get_frame_index(self, tile: Point, z: float, path: str) -> int:
         """Abstract method for getting the frame index for a tile"""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_plane_frame_indices(self, z: float, path: str) -> NDArray[np.int64]:
+        """Return the frame index of every tile of a plane at once, as
+        `get_frame_index()` would for each tile.
+
+        Parameters
+        ----------
+        z: float
+            Z coordinate of the plane. Assumed to be valid.
+        path: str
+            Optical path of the plane. Assumed to be valid.
+
+        Returns
+        -------
+        NDArray[np.int64]
+            Frame index of each tile in row-major order (row by row), -1 for a tile
+            that has no frame.
+        """
         raise NotImplementedError()
 
     @staticmethod

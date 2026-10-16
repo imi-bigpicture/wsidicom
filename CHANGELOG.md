@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Settings.max_file_handles_per_file` (default 8), the most handles open to a local file at once. A read beyond waits for a handle.
+
+### Changed
+
+- Faster reading of encoded tiles from local DICOM files, which are read through a pool of file handles so that reads from several threads no longer wait for each other.
+- Only DICOMweb instances cache encoded frames. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
+
 ### Fixed
 
 - Code values that Code Value (SH, at most 16 characters) cannot hold, such as SNOMED CT extension concept ids or URN and URL codes, are written as Long Code Value or URN Code Value. Previously such a code made writing metadata fail, and a graphical annotation wrote it as an invalid Code Value. Codes are also read from whichever of the three attributes holds the value, so codes with only Long Code Value or URN Code Value no longer fail to read.
+- Reading a tile one past the last column or row served another tile instead of raising `WsiDicomOutOfBoundsError`.
 
 ## [0.36.1] - 2026-09-28
 

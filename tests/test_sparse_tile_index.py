@@ -218,6 +218,43 @@ class TestSparseTileIndex:
         assert index.get_frame_index(Point(2, 0), 0, "0") == 1
         assert index.get_frame_index(Point(0, 2), 0, "0") == 2
 
+    def test_plane_frame_indices_are_frame_index_of_each_tile_row_by_row(self):
+        # Arrange - frames at three of the nine tiles of two focal planes.
+        dataset = create_dataset(
+            columns=[1, 21, 11, 21], rows=[1, 1, 21, 11], z_offsets=[0, 0, 0, 1]
+        )
+        index = SparseTileIndex([dataset])
+        tiles = [Point(x, y) for y in range(3) for x in range(3)]
+
+        # Act
+        frame_indices = {
+            z: index.get_plane_frame_indices(z, "0") for z in index.focal_planes
+        }
+
+        # Assert
+        for z, indices in frame_indices.items():
+            assert indices.tolist() == [
+                index.get_frame_index(tile, z, "0") for tile in tiles
+            ]
+        assert frame_indices[0].tolist() == [0, -1, 1, -1, -1, -1, -1, 2, -1]
+
+    def test_plane_frame_indices_of_plane_without_frames_are_all_missing(self):
+        # Arrange - focal plane 1 has frames only in path "0". Path "1" has frames only
+        # at focal plane 0.
+        dataset = create_dataset(
+            columns=[1, 1],
+            rows=[1, 1],
+            z_offsets=[0, 1],
+            optical_path_identifiers=["1", "0"],
+        )
+        index = SparseTileIndex([dataset])
+
+        # Act
+        frame_indices = index.get_plane_frame_indices(1, "1")
+
+        # Assert
+        assert frame_indices.tolist() == [-1] * 9
+
     @pytest.mark.parametrize(
         ["z_offsets", "optical_path_identifiers"],
         [

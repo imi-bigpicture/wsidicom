@@ -14,7 +14,7 @@
 
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 
 import numpy as np
@@ -22,6 +22,7 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.geometry import Point, Region, Size, SizeMm
+from wsidicom.instance.tile_byte_ranges import FrameReader, TileByteRanges
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 
 
@@ -173,6 +174,43 @@ class ImageData(metaclass=ABCMeta):
             Tile as bytes.
         """
         raise NotImplementedError()
+
+    def get_tile_byte_ranges(self, z: float, path: str) -> TileByteRanges | None:
+        """Return where the encoded tiles of a plane are stored. Returns None if a tile
+        cannot be read with a single read.
+
+        Override this together with `get_frame_readers()` when `get_encoded_tile()` only
+        reads a tile with a frame reader, and going through it costs noticeably more
+        than the read. The byte ranges are asked for when a tile of the plane is first
+        read, and are kept for later reads. Making them may take some time, but they
+        must stay valid while the image data is open.
+
+        Parameters
+        ----------
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        -------
+        TileByteRanges | None
+            Where the encoded tiles are stored, or None.
+        """
+        return None
+
+    def get_frame_readers(self) -> Sequence[FrameReader] | None:
+        """Return one reader for each file of the image data, for reading tiles at their
+        `get_tile_byte_ranges()`. The readers return tiles ready to serve, and are in
+        the order that the file indices of the byte ranges refer to. Returns None if
+        tiles are not to be read this way.
+
+        Returns
+        -------
+        Sequence[FrameReader] | None
+            Readers for the files of the image data, or None.
+        """
+        return None
 
     def get_decoded_tiles(
         self,

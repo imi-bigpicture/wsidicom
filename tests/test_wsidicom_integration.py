@@ -29,7 +29,9 @@ from tests.conftest import (
 )
 from wsidicom import WsiDicom
 from wsidicom.config import Settings, use_settings
+from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point
+from wsidicom.instance import WsiDicomImageData
 from wsidicom.options import ConcatenationByFrames, DownsamplerOption
 from wsidicom.series.pyramid import Pyramid
 from wsidicom.thread import ReadExecutor
@@ -171,6 +173,107 @@ class TestWsiDicomIntegration:
 
         # Assert — pixel-for-pixel identical
         assert np.array_equal(array, np.asarray(image))
+
+    @pytest.mark.parametrize("crop_to_image_boundary", [True, False])
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_read_encoded_tile_is_encoded_tile_of_level(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+        crop_to_image_boundary: bool,
+    ):
+        """Reading a tile of a local file at its byte range gives the same tile as
+        reading it through the level."""
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        tiles_per_level = 50
+        reads = [
+            (level, Point(index % tiled_size.width, index // tiled_size.width))
+            for level in wsi.levels
+            for tiled_size in [level.default_instance.image_data.tiled_size]
+            for index in range(
+                0, tiled_size.area, max(1, tiled_size.area // tiles_per_level)
+            )
+        ]
+
+        # Act
+        mismatches = [
+            (level.level, tile)
+            for level, tile in reads
+            if wsi.read_encoded_tile(
+                level.level,
+                tile.to_tuple(),
+                crop_to_image_boundary=crop_to_image_boundary,
+            )
+            != level.get_encoded_tile(
+                tile, crop_to_image_boundary=crop_to_image_boundary
+            )
+        ]
+
+        # Assert
+        assert mismatches == []
+
+    @pytest.mark.parametrize("past", ["column", "row", "negative"])
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_read_encoded_tile_outside_level_raises(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+        past: str,
+    ):
+        """A tile outside the tiled size is not read at the byte range of another tile."""
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        base_level = wsi.levels.base_level
+        tiled_size = base_level.default_instance.image_data.tiled_size
+        tile = {
+            "column": (tiled_size.width, 0),
+            "row": (0, tiled_size.height),
+            "negative": (-1, 0),
+        }[past]
+
+        # Act & Assert
+        with pytest.raises(WsiDicomOutOfBoundsError):
+            wsi.read_encoded_tile(base_level.level, tile, crop_to_image_boundary=False)
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_plane_frame_indices_are_frame_index_of_each_tile(
+        self,
+        wsi_name: str,
+        input_type: WsiInputType,
+        wsi_factory: Callable[[str, WsiInputType], WsiDicom],
+    ):
+        """The frame indices of a whole plane are those of its tiles looked up one by
+        one, for both full and sparse tiling. The tile byte ranges are made from them.
+        """
+        # Arrange
+        wsi = wsi_factory(wsi_name, input_type)
+        tile_indices = [
+            image_data.tiles
+            for level in wsi.levels
+            for image_data in [level.default_instance.image_data]
+            if isinstance(image_data, WsiDicomImageData)
+        ]
+
+        # Act
+        mismatches = [
+            (str(tiles), z, path)
+            for tiles in tile_indices
+            for z in tiles.focal_planes
+            for path in tiles.optical_paths
+            if tiles.get_plane_frame_indices(z, path).tolist()
+            != [
+                tiles.get_frame_index(Point(x, y), z, path)
+                for y in range(tiles.tiled_size.height)
+                for x in range(tiles.tiled_size.width)
+            ]
+        ]
+
+        # Assert
+        assert tile_indices != []
+        assert mismatches == []
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_get_scaled_tile_pads_to_tile_size_when_not_cropping(
