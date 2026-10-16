@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Faster reading of encoded tiles from local DICOM files, which are read through a pool of file handles so that reads from several threads no longer wait for each other.
-- Only DICOMweb instances cache encoded frames; for files opened through fsspec, use a caching file system of fsspec. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
+- Only DICOMweb instances cache encoded frames. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
 
 ### Fixed
 
