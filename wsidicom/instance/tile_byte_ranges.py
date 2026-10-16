@@ -48,7 +48,7 @@ class FrameReader(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class TileLocations:
+class TileByteRanges:
     """Where the encoded tiles of a plane (focal plane and optical path) of an image
     are stored, for reading a tile with a single read instead of through the image
     data.
@@ -103,8 +103,8 @@ class TileLocations:
         positions: NDArray[np.int64],
         lengths: NDArray[np.int64],
         file_indices: NDArray[np.int64] | None = None,
-    ) -> "TileLocations":
-        """Create tile locations from arrays of the positions and lengths.
+    ) -> "TileByteRanges":
+        """Create tile byte ranges from arrays of the positions and lengths.
 
         The arrays are not copied if they already are contiguous int64 arrays, but
         held through read-only views, so they are not to be changed after.
@@ -124,8 +124,8 @@ class TileLocations:
 
         Returns
         -------
-        TileLocations
-            The tile locations.
+        TileByteRanges
+            The tile byte ranges.
         """
         return cls(
             image_size.ceil_div(tile_size),

@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from wsidicom.geometry import Size
-from wsidicom.instance import TileLocations
+from wsidicom.instance import TileByteRanges
 
 IMAGE_SIZE = Size(25, 15)
 """Tiled 3 x 2 by tiles of 10 x 10, of which the last column and row are cropped."""
@@ -24,37 +24,37 @@ TILE_SIZE = Size(10, 10)
 
 
 @pytest.mark.unittest
-class TestTileLocations:
-    def test_from_arrays_holds_locations_of_each_tile(self):
+class TestTileByteRanges:
+    def test_from_arrays_holds_byte_ranges_of_each_tile(self):
         # Arrange
 
         # Act
-        locations = TileLocations.from_arrays(
+        byte_ranges = TileByteRanges.from_arrays(
             IMAGE_SIZE,
             TILE_SIZE,
             np.arange(0, 60, 10, dtype=np.int64),
-            np.array([4, TileLocations.READ_THROUGH_IMAGE_DATA, 4, 4, 4, 4]),
+            np.array([4, TileByteRanges.READ_THROUGH_IMAGE_DATA, 4, 4, 4, 4]),
         )
 
         # Assert
-        assert locations.tiled_size == Size(3, 2)
-        assert locations.whole_tiled_size == Size(2, 1)
-        assert locations.positions.tolist() == [0, 10, 20, 30, 40, 50]
-        assert locations.lengths.tolist() == [
+        assert byte_ranges.tiled_size == Size(3, 2)
+        assert byte_ranges.whole_tiled_size == Size(2, 1)
+        assert byte_ranges.positions.tolist() == [0, 10, 20, 30, 40, 50]
+        assert byte_ranges.lengths.tolist() == [
             4,
-            TileLocations.READ_THROUGH_IMAGE_DATA,
+            TileByteRanges.READ_THROUGH_IMAGE_DATA,
             4,
             4,
             4,
             4,
         ]
-        assert locations.file_indices is None
+        assert byte_ranges.file_indices is None
 
     def test_from_arrays_holds_file_indices_of_each_tile(self):
         # Arrange
 
         # Act
-        locations = TileLocations.from_arrays(
+        byte_ranges = TileByteRanges.from_arrays(
             IMAGE_SIZE,
             TILE_SIZE,
             np.zeros(6, dtype=np.int64),
@@ -63,30 +63,30 @@ class TestTileLocations:
         )
 
         # Assert
-        assert locations.file_indices is not None
-        assert locations.file_indices.tolist() == [0, 1, 0, 1, 0, 1]
+        assert byte_ranges.file_indices is not None
+        assert byte_ranges.file_indices.tolist() == [0, 1, 0, 1, 0, 1]
 
     def test_from_arrays_shares_int64_arrays_read_only(self):
-        """The locations are views of arrays made by the image data, not copies,
+        """The byte ranges are views of arrays made by the image data, not copies,
         and cannot be changed through them."""
         # Arrange
         positions = np.arange(0, 60, 10, dtype=np.int64)
 
         # Act
-        locations = TileLocations.from_arrays(
+        byte_ranges = TileByteRanges.from_arrays(
             IMAGE_SIZE, TILE_SIZE, positions, np.zeros(6, dtype=np.int64)
         )
 
         # Assert
-        assert np.shares_memory(np.asarray(locations.positions), positions)
-        assert locations.positions.readonly
+        assert np.shares_memory(np.asarray(byte_ranges.positions), positions)
+        assert byte_ranges.positions.readonly
         assert positions.flags.writeable
 
-    def test_item_of_locations_is_int(self):
+    def test_item_of_byte_ranges_is_int(self):
         """An item is a plain int, as a numpy integer costs more to index with and
         to read at."""
         # Arrange
-        locations = TileLocations.from_arrays(
+        byte_ranges = TileByteRanges.from_arrays(
             IMAGE_SIZE,
             TILE_SIZE,
             np.arange(0, 60, 10, dtype=np.int64),
@@ -94,7 +94,7 @@ class TestTileLocations:
         )
 
         # Act
-        position = locations.positions[1]
+        position = byte_ranges.positions[1]
 
         # Assert
         assert type(position) is int
@@ -105,7 +105,7 @@ class TestTileLocations:
 
         # Act & Assert
         with pytest.raises(ValueError):
-            TileLocations.from_arrays(
+            TileByteRanges.from_arrays(
                 IMAGE_SIZE,
                 TILE_SIZE,
                 np.zeros(5, dtype=np.int64),
@@ -117,7 +117,7 @@ class TestTileLocations:
 
         # Act & Assert
         with pytest.raises(ValueError):
-            TileLocations.from_arrays(
+            TileByteRanges.from_arrays(
                 IMAGE_SIZE,
                 TILE_SIZE,
                 np.zeros(6, dtype=np.int64),
