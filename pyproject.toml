@@ -78,6 +78,7 @@ ignore = ["S101"]
 Professer = "Professer"
 SEH = "SEH"
 PN = "PN"
+writeable = "writeable"  # numpy array flag
 
 [build-system]
 requires = ["hatchling"]
