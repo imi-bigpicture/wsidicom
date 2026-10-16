@@ -24,7 +24,7 @@ from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.io import WsiDicomReader
 from wsidicom.instance import WsiDicomImageData
-from wsidicom.instance.tile_locations import FrameReader, TileLocations
+from wsidicom.instance.tile_byte_ranges import FrameReader, TileByteRanges
 
 
 class WsiDicomFileImageData(WsiDicomImageData):
@@ -113,7 +113,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
             raise WsiDicomNotFoundError(f"Frame index {frame_index}", "instance")
         return self._readers[index]
 
-    def get_tile_locations(self, z: float, path: str) -> TileLocations | None:
+    def get_tile_byte_ranges(self, z: float, path: str) -> TileByteRanges | None:
         """Return where the frames of the tiles of a plane are in the files, or None
         if the plane is not in the image data."""
         if z not in self.focal_planes or path not in self.optical_paths:
@@ -121,7 +121,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         frame_count = self._reader_frame_ends[-1]
         frame_positions = np.zeros(frame_count, np.int64)
         frame_lengths = np.full(
-            frame_count, TileLocations.READ_THROUGH_IMAGE_DATA, np.int64
+            frame_count, TileByteRanges.READ_THROUGH_IMAGE_DATA, np.int64
         )
         frame_files = np.zeros(frame_count, np.int64)
         for file_index, reader in enumerate(self._readers):
@@ -137,7 +137,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         stored_frames = frame_indices[stored]
         positions = np.zeros(len(frame_indices), np.int64)
         lengths = np.full(
-            len(frame_indices), TileLocations.READ_THROUGH_IMAGE_DATA, np.int64
+            len(frame_indices), TileByteRanges.READ_THROUGH_IMAGE_DATA, np.int64
         )
         positions[stored] = frame_positions[stored_frames]
         lengths[stored] = frame_lengths[stored_frames]
@@ -145,7 +145,7 @@ class WsiDicomFileImageData(WsiDicomImageData):
         if len(self._readers) > 1:
             file_indices = np.zeros(len(frame_indices), np.int64)
             file_indices[stored] = frame_files[stored_frames]
-        return TileLocations.from_arrays(
+        return TileByteRanges.from_arrays(
             self.image_size, self.tile_size, positions, lengths, file_indices
         )
 

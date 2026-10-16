@@ -18,7 +18,7 @@ from wsidicom.instance.dataset import ConcatenationPart, TileType, WsiDataset
 from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.instance import WsiInstance
 from wsidicom.instance.numpy_image_data import NumpyImageData
-from wsidicom.instance.tile_locations import FrameReader, TileLocations
+from wsidicom.instance.tile_byte_ranges import FrameReader, TileByteRanges
 from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
 
 __all__ = [
@@ -30,5 +30,5 @@ __all__ = [
     "WsiDicomImageData",
     "NumpyImageData",
     "FrameReader",
-    "TileLocations",
+    "TileByteRanges",
 ]

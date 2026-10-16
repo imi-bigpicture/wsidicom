@@ -22,7 +22,7 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.geometry import Point, Region, Size, SizeMm
-from wsidicom.instance.tile_locations import FrameReader, TileLocations
+from wsidicom.instance.tile_byte_ranges import FrameReader, TileByteRanges
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 
 
@@ -175,14 +175,14 @@ class ImageData(metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    def get_tile_locations(self, z: float, path: str) -> TileLocations | None:
+    def get_tile_byte_ranges(self, z: float, path: str) -> TileByteRanges | None:
         """Return where the encoded tiles of a plane are stored, for reading a tile
         with a single read, or None if they are not stored so that it can be.
 
         Override when `get_encoded_tile()` does no more than read a tile with a
         frame reader, and reading a tile through it costs noticeably more than the
         read, together with `get_frame_readers()` to read the tiles with. The
-        locations are asked for when a tile of the plane is first read, and kept for
+        byte ranges are asked for when a tile of the plane is first read, and kept for
         later reads, so they may take some time to make, but must stay valid while
         the image data is open.
 
@@ -195,15 +195,15 @@ class ImageData(metaclass=ABCMeta):
 
         Returns
         -------
-        TileLocations | None
+        TileByteRanges | None
             Where the encoded tiles are stored, or None.
         """
         return None
 
     def get_frame_readers(self) -> Sequence[FrameReader] | None:
-        """Return readers to read tiles at their `get_tile_locations()` with, ready
+        """Return readers to read tiles at their `get_tile_byte_ranges()` with, ready
         to serve, one for each file of the image data in the order the file indices
-        of the locations refer to, or None if tiles are not to be read so.
+        of the byte ranges refer to, or None if tiles are not to be read so.
 
         Returns
         -------

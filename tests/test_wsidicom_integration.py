@@ -186,7 +186,7 @@ class TestWsiDicomIntegration:
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         crop_to_image_boundary: bool,
     ):
-        """A tile read with the tile locations of a local file is the one read
+        """A tile read with the tile byte ranges of a local file is the one read
         through the level."""
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
@@ -248,7 +248,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
     ):
-        """The frame indices of a plane made at once, which the tile locations are
+        """The frame indices of a plane made at once, which the tile byte ranges are
         made from, are those of the tiles one by one, for full and sparse tiling."""
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
@@ -564,7 +564,7 @@ to start passes too, as it has not returned either."""
 @pytest.fixture()
 def own_wsi() -> Iterator[WsiDicom]:
     """A slide opened for the test alone, as the test replaces how it makes the tile
-    locations of a plane."""
+    byte ranges of a plane."""
     folders = [
         SLIDE_FOLDER.joinpath(WsiTestDefinitions.test_definitions[name]["path"])
         for name in WsiTestDefinitions.wsi_names()
@@ -577,8 +577,8 @@ def own_wsi() -> Iterator[WsiDicom]:
 
 
 @pytest.mark.integration
-class TestTileLocationsOfPlanes:
-    """Tile locations are made when a tile of a plane is first read. Reads of a plane
+class TestTileByteRangesOfPlanes:
+    """Tile byte ranges are made when a tile of a plane is first read. Reads of a plane
     being made wait for it, reads of other planes do not."""
 
     def test_other_plane_is_made_while_a_plane_is_being_made(
@@ -588,19 +588,23 @@ class TestTileLocationsOfPlanes:
         started = threading.Event()
         release = threading.Event()
 
-        def create_tile_locations(pyramid: int, level: int, z, path):
+        def create_tile_byte_ranges(pyramid: int, level: int, z, path):
             if level == 0:
                 started.set()
                 release.wait(WAIT_SECONDS)
             return None
 
-        monkeypatch.setattr(own_wsi, "_create_tile_locations", create_tile_locations)
+        monkeypatch.setattr(
+            own_wsi, "_create_tile_byte_ranges", create_tile_byte_ranges
+        )
         with ThreadPoolExecutor(1) as executor:
-            being_made = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            being_made = executor.submit(
+                own_wsi._get_tile_byte_ranges, 0, 0, None, None
+            )
             assert started.wait(WAIT_SECONDS)
 
             # Act
-            other = own_wsi._get_tile_locations(0, 1, None, None)
+            other = own_wsi._get_tile_byte_ranges(0, 1, None, None)
             done_before_release = being_made.done()
             release.set()
 
@@ -617,19 +621,21 @@ class TestTileLocationsOfPlanes:
         release = threading.Event()
         made = []
 
-        def create_tile_locations(pyramid: int, level: int, z, path):
+        def create_tile_byte_ranges(pyramid: int, level: int, z, path):
             made.append((pyramid, level, z, path))
             started.set()
             release.wait(WAIT_SECONDS)
             return None
 
-        monkeypatch.setattr(own_wsi, "_create_tile_locations", create_tile_locations)
+        monkeypatch.setattr(
+            own_wsi, "_create_tile_byte_ranges", create_tile_byte_ranges
+        )
         with ThreadPoolExecutor(2) as executor:
-            first = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            first = executor.submit(own_wsi._get_tile_byte_ranges, 0, 0, None, None)
             assert started.wait(WAIT_SECONDS)
 
             # Act
-            second = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            second = executor.submit(own_wsi._get_tile_byte_ranges, 0, 0, None, None)
             wait([second], NOT_RETURNED_SECONDS)
             second_done_before_release = second.done()
             release.set()
@@ -648,29 +654,29 @@ class TestTileLocationsOfPlanes:
         release = threading.Event()
         made = []
 
-        def fail_to_create_tile_locations(pyramid: int, level: int, z, path):
+        def fail_to_create_tile_byte_ranges(pyramid: int, level: int, z, path):
             made.append((pyramid, level, z, path))
             started.set()
             release.wait(WAIT_SECONDS)
-            raise ValueError("Failed to make tile locations.")
+            raise ValueError("Failed to make tile byte ranges.")
 
         monkeypatch.setattr(
-            own_wsi, "_create_tile_locations", fail_to_create_tile_locations
+            own_wsi, "_create_tile_byte_ranges", fail_to_create_tile_byte_ranges
         )
         with ThreadPoolExecutor(2) as executor:
-            first = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            first = executor.submit(own_wsi._get_tile_byte_ranges, 0, 0, None, None)
             assert started.wait(WAIT_SECONDS)
-            second = executor.submit(own_wsi._get_tile_locations, 0, 0, None, None)
+            second = executor.submit(own_wsi._get_tile_byte_ranges, 0, 0, None, None)
             wait([second], NOT_RETURNED_SECONDS)
             release.set()
             first_exception = first.exception(WAIT_SECONDS)
             second_exception = second.exception(WAIT_SECONDS)
         monkeypatch.setattr(
-            own_wsi, "_create_tile_locations", lambda pyramid, level, z, path: None
+            own_wsi, "_create_tile_byte_ranges", lambda pyramid, level, z, path: None
         )
 
         # Act
-        again = own_wsi._get_tile_locations(0, 0, None, None)
+        again = own_wsi._get_tile_byte_ranges(0, 0, None, None)
 
         # Assert
         assert isinstance(first_exception, ValueError)
