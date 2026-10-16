@@ -109,9 +109,9 @@ class WsiDicom:
             tuple[int, int, float | None, str | None],
             Future[tuple[TileByteRanges, Sequence[FrameReader]] | None],
         ] = {}
-        """Byte ranges of planes being made, for reads of the same plane to wait on.
-        The lock guards both dicts, but is not held while byte ranges are made, so
-        that reads of other planes do not wait for them."""
+        """Byte ranges of planes that are being made, for reads of the same plane to
+        wait for. The lock guards both dicts. It is not held while byte ranges are made,
+        so reads of other planes do not wait."""
         self._tile_byte_ranges_lock = threading.Lock()
         with use_settings(settings):
             self._pyramids = Pyramids.open(
@@ -1217,12 +1217,12 @@ class WsiDicom:
         y: int,
         crop_to_image_boundary: bool,
     ) -> bytes | None:
-        """Return the encoded tile at (x, y) read with a single read at its location,
-        or None if it is to be read through the level.
+        """Return the encoded tile at (x, y), read with a single read at its byte range.
+        Returns None if the tile is to be read through the level instead.
 
-        A tile is to be read through the level if it is outside the image (for the
-        level to raise), if it is not stored as a single run of bytes, or if it is to
-        be cropped to the image boundary (which requires re-encoding it).
+        A tile is read through the level if it is outside the image (so that the level
+        raises), if it is not stored as a single run of bytes, or if it is to be cropped
+        to the image boundary (which requires re-encoding it).
 
         Parameters
         ----------
@@ -1248,8 +1248,8 @@ class WsiDicom:
             if crop_to_image_boundary
             else byte_ranges.tiled_size
         )
-        # Checked, as a position outside the tiled size would otherwise index the
-        # location of another tile.
+        # Checked, because a position outside the tiled size would otherwise index the
+        # byte range of another tile.
         if not (0 <= x < servable.width and 0 <= y < servable.height):
             return None
         index = y * byte_ranges.tiled_size.width + x
@@ -1265,11 +1265,13 @@ class WsiDicom:
     def _get_tile_byte_ranges(
         self, pyramid: int, level: int, z: float | None, path: str | None
     ) -> tuple[TileByteRanges, Sequence[FrameReader]] | None:
-        """Return where the encoded tiles of a plane of a level are stored, and the
-        readers to read them with, made when a tile of the plane is first read and
-        kept for later reads of the plane. None if they are not stored so that a tile
-        can be read with a single read, or if the level or plane is not in the
-        pyramid (so that reading a tile through the level scales it or raises).
+        """Return where the encoded tiles of a plane of a level are stored, together
+        with the readers of the files. They are made when a tile of the plane is first
+        read, and kept for later reads.
+
+        Returns None if a tile cannot be read with a single read, or if the level or
+        plane is not in the pyramid. Reading a tile through the level then scales it or
+        raises.
 
         Parameters
         ----------
@@ -1290,8 +1292,8 @@ class WsiDicom:
         """
         key = (pyramid, level, z, path)
         with self._tile_byte_ranges_lock:
-            # Asked again with the lock held, so that reads of the plane at once make
-            # the byte ranges once between them.
+            # Checked again with the lock held, so that reads of the plane at the same
+            # time make the byte ranges only once.
             if key in self._tile_byte_ranges:
                 return self._tile_byte_ranges[key]
             building = self._tile_byte_ranges_building.get(key)
@@ -1320,8 +1322,8 @@ class WsiDicom:
     def _create_tile_byte_ranges(
         self, pyramid: int, level: int, z: float | None, path: str | None
     ) -> tuple[TileByteRanges, Sequence[FrameReader]] | None:
-        """Make where the encoded tiles of a plane of a level are stored, and the
-        readers to read them with, see `_get_tile_byte_ranges()`.
+        """Make the byte ranges of the encoded tiles of a plane of a level, and the
+        readers of the files. See `_get_tile_byte_ranges()`.
 
         Parameters
         ----------
@@ -1345,8 +1347,8 @@ class WsiDicom:
         except WsiDicomNotFoundError:
             return None
         image_data = instance.image_data
-        # Readers first, so that no byte ranges are made for image data whose tiles are
-        # not to be read with them.
+        # Readers first, so that no byte ranges are made for image data whose tiles
+        # cannot be read with them.
         readers = image_data.get_frame_readers()
         if readers is None:
             return None

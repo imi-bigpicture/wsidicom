@@ -332,9 +332,9 @@ class WsiDicomReader:
 
     @property
     def frame_reader(self) -> FrameReader | None:
-        """Return a thread safe reader that reads a frame at its position of the
-        frame index without holding the stream, or None if the file is not a local
-        one. A frame of a DICOM file is served as it is stored."""
+        """Return a thread-safe reader of the frames in the frame index. The reader does
+        not hold the stream, and serves a frame as it is stored. Returns None if the
+        file is not local."""
         return self._stream.frame_reader
 
     def read_frame(self, frame_index: int) -> bytes:

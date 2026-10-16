@@ -29,9 +29,9 @@ CACHE_SIZE = 100 * 1024 * 1024
 
 
 class WsiDicomTestImageData(WsiDicomImageData):
-    """Image data serving one frame of its own, given at construction, through an
-    encoded frame cache it may share with other image data (as DICOMweb image data
-    do)."""
+    """Image data that serves one frame, given at construction. The frame is served
+    through an encoded frame cache that the image data may share with other image data,
+    as DICOMweb image data do."""
 
     def __init__(
         self,
@@ -124,8 +124,9 @@ class TestWsiDicomImageData:
     def test_get_encoded_tile_one_past_last_column_or_row_raises(
         self, wsi: WsiDicom, past: str
     ):
-        """A tile one past the last column is not served the first tile of the next
-        row (nor one past the last row the first tile of the next plane)."""
+        """A tile one past the last column raises instead of being served as the first
+        tile of the next row. A tile one past the last row likewise raises instead of
+        being served as the first tile of the next plane."""
         # Arrange
         image_data = next(iter(wsi.pyramid.levels[0].instances.values())).image_data
         tiled_size = image_data.tiled_size

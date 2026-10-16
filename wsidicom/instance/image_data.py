@@ -176,15 +176,14 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     def get_tile_byte_ranges(self, z: float, path: str) -> TileByteRanges | None:
-        """Return where the encoded tiles of a plane are stored, for reading a tile
-        with a single read, or None if they are not stored so that it can be.
+        """Return where the encoded tiles of a plane are stored. Returns None if a tile
+        cannot be read with a single read.
 
-        Override when `get_encoded_tile()` does no more than read a tile with a
-        frame reader, and reading a tile through it costs noticeably more than the
-        read, together with `get_frame_readers()` to read the tiles with. The
-        byte ranges are asked for when a tile of the plane is first read, and kept for
-        later reads, so they may take some time to make, but must stay valid while
-        the image data is open.
+        Override this together with `get_frame_readers()` when `get_encoded_tile()` only
+        reads a tile with a frame reader, and going through it costs noticeably more
+        than the read. The byte ranges are asked for when a tile of the plane is first
+        read, and are kept for later reads. Making them may take some time, but they
+        must stay valid while the image data is open.
 
         Parameters
         ----------
@@ -201,9 +200,10 @@ class ImageData(metaclass=ABCMeta):
         return None
 
     def get_frame_readers(self) -> Sequence[FrameReader] | None:
-        """Return readers to read tiles at their `get_tile_byte_ranges()` with, ready
-        to serve, one for each file of the image data in the order the file indices
-        of the byte ranges refer to, or None if tiles are not to be read so.
+        """Return one reader for each file of the image data, for reading tiles at their
+        `get_tile_byte_ranges()`. The readers return tiles ready to serve, and are in
+        the order that the file indices of the byte ranges refer to. Returns None if
+        tiles are not to be read this way.
 
         Returns
         -------

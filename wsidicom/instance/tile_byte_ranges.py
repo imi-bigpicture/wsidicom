@@ -24,10 +24,10 @@ from wsidicom.geometry import Size
 
 
 class FrameReader(Protocol):
-    """Reads frames stored at positions of a file, ready to serve. Is thread safe.
+    """Reads frames stored in a file, ready to serve. Is thread safe.
 
-    A reader may do more than read the bytes stored, e.g. put the jpeg tables of a
-    tiff page in place of the header of an abbreviated jpeg frame."""
+    A reader may do more than read the stored bytes. For example, it may put the jpeg
+    tables of a tiff page in place of the header of an abbreviated jpeg frame."""
 
     def read(self, position: int, length: int, /) -> bytes:
         """Return the frame of `length` bytes stored at `position`.
@@ -49,22 +49,21 @@ class FrameReader(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class TileByteRanges:
-    """Where the encoded tiles of a plane (focal plane and optical path) of an image
-    are stored, for reading a tile with a single read instead of through the image
-    data.
+    """Where the encoded tiles of a plane (focal plane and optical path) of an image are
+    stored.
 
-    The encoded tile at (x, y) is stored as the `lengths[i]` bytes at
-    `positions[i]` of file `file_indices[i]` of the image data (or its only file if
-    there are no file indices), where `i = y * tiled_size.width + x`, and is read
-    with the frame reader of that file (see `ImageData.get_frame_readers()`). A
-    tile whose length is `READ_THROUGH_IMAGE_DATA` is not stored as a frame, and is
-    to be read through the image data.
+    A tile can then be read with a single read instead of through the image data. The
+    encoded tile at (x, y) is the `lengths[i]` bytes at `positions[i]` of file
+    `file_indices[i]` of the image data, where `i = y * tiled_size.width + x`. Without
+    file indices, the image data has only one file. The tile is read with the frame
+    reader of its file (see `ImageData.get_frame_readers()`). A tile with length
+    `READ_THROUGH_IMAGE_DATA` is not stored as a frame, and is to be read through the
+    image data.
 
-    Positions, lengths and file indices are read-only memoryviews of int64 arrays
-    rather than the arrays themselves, as an item of a memoryview is a plain int got
-    several times faster than one of an array. They are not lists, which would cost
-    about as little to index but take four to five times the memory, and copy
-    arrays that can instead be shared with the image data that made them.
+    Positions, lengths and file indices are read-only memoryviews of int64 arrays. An
+    item of a memoryview is a plain int, and is got several times faster than an item of
+    an array. Lists would be about as fast to index, but take four to five times the
+    memory. They would also copy arrays that can instead be shared with the image data.
     """
 
     READ_THROUGH_IMAGE_DATA: ClassVar[int] = -1
@@ -73,7 +72,7 @@ class TileByteRanges:
     tiled_size: Size
     """Number of tiles in each direction."""
     whole_tiled_size: Size
-    """Number of tiles in each direction that lie wholly within the image, and so
+    """Number of tiles in each direction that lie wholly within the image. These tiles
     are not cropped to the image boundary."""
     positions: memoryview
     """Position of the bytes of each tile, in row-major order."""
@@ -106,8 +105,8 @@ class TileByteRanges:
     ) -> "TileByteRanges":
         """Create tile byte ranges from arrays of the positions and lengths.
 
-        The arrays are not copied if they already are contiguous int64 arrays, but
-        held through read-only views, so they are not to be changed after.
+        Contiguous int64 arrays are not copied, but held through read-only views. They
+        must therefore not be changed afterwards.
 
         Parameters
         ----------
@@ -140,8 +139,9 @@ class TileByteRanges:
 
     @staticmethod
     def _read_only_view(values: NDArray[np.int64]) -> memoryview:
-        """Return a read-only memoryview of the values as contiguous int64, sharing
-        their memory when they already are, without changing the array given."""
+        """Return a read-only memoryview of the values as contiguous int64. The memory
+        is shared if the values already are contiguous int64. The given array is not
+        changed."""
         view = np.ascontiguousarray(values, dtype=np.int64).view()
         view.flags.writeable = False
         return memoryview(view)

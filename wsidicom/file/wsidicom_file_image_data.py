@@ -47,9 +47,9 @@ class WsiDicomFileImageData(WsiDicomImageData):
         readers: WsiDicomReader | Sequence[WsiDicomReader]
             Single or list of WsiDicomReader containing frame data.
         decoded_frame_cache: DecodedFrameCache
-            Cache of decoded frames. Encoded frames are not cached, as a frame of a
-            local file costs about as little to read again as to get from a cache,
-            and a file opened through fsspec can be cached by fsspec.
+            Cache of decoded frames. Encoded frames are not cached. Reading a frame
+            of a local file again costs about as little as getting it from a cache,
+            and fsspec can cache a file opened through it.
         """
         if not isinstance(readers, Sequence):
             readers = [readers]
@@ -95,8 +95,8 @@ class WsiDicomFileImageData(WsiDicomImageData):
 
         Raises WsiDicomNotFoundError if frame is not found.
 
-        Looked up for every frame read, so the frame ranges of the files are
-        bisected rather than the lookup cached, which would cost more than it saves.
+        This is called for every frame read, so the frame ranges of the files are
+        bisected. Caching the lookup would cost more than it saves.
 
         Parameters
         ----------
@@ -150,8 +150,8 @@ class WsiDicomFileImageData(WsiDicomImageData):
         )
 
     def get_frame_readers(self) -> Sequence[FrameReader] | None:
-        """Return the readers of the files, or None if a file is not a local one
-        (and so costs more to read a frame at a time from)."""
+        """Return the readers of the files. Returns None if a file is not local, as
+        reading one frame at a time from such a file costs more."""
         readers = [reader.frame_reader for reader in self._readers]
         if any(reader is None for reader in readers):
             return None

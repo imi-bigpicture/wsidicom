@@ -65,8 +65,8 @@ class SparseTilePlane:
 
     @property
     def frame_indices(self) -> NDArray[np.int64]:
-        """Frame index of every tile in row-major order (row by row), -1 for a tile
-        that has no frame. A copy, as the plane is indexed column first."""
+        """Frame index of every tile in row-major order (row by row), or -1 for a tile
+        that has no frame. This is a copy, because the plane is indexed column first."""
         return self.plane.T.astype(np.int64).ravel()
 
     def add_frames(
@@ -162,8 +162,8 @@ class SparseTileIndex(TileIndex):
         return frame_index
 
     def get_plane_frame_indices(self, z: float, path: str) -> NDArray[np.int64]:
-        """Return the frame index of every tile of a plane, all -1 for a plane of a
-        focal plane and optical path that are each in the index but have no frames
+        """Return the frame index of every tile of a plane. All values are -1 if the
+        focal plane and the optical path are both in the index but have no frames
         together."""
         plane = self.planes.get((z, path))
         if plane is None:

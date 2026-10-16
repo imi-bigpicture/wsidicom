@@ -276,26 +276,24 @@ class WsiDicomReadIO(WsiDicomIO):
 
     @staticmethod
     def _create_handle_pool(filepath: UPath) -> FileHandlePool | None:
-        """Return a pool to read the file at positions with, if it is a local file.
-
-        For another file, the stream this instance holds is all there is to read it
-        with."""
+        """Return a pool for reading the file, or None if it is not a local file. A file
+        that is not local is read through the stream that this instance holds."""
         if not isinstance(filepath.fs, LocalFileSystem) or not filepath.is_file():
             return None
         return FileHandlePool(str(filepath), get_settings().max_file_handles_per_file)
 
     @property
     def frame_reader(self) -> FileHandlePool | None:
-        """Return a thread safe reader that reads frames at their positions without
-        holding the stream, or None if the file is not a local one."""
+        """Return a thread-safe reader of frames that does not hold the stream. Returns
+        None if the file is not local."""
         return self._handle_pool
 
     def read_at(self, position: int, length: int) -> bytes:
-        """Return `length` bytes from `position`, or fewer if the stream ends before.
+        """Return `length` bytes from `position`, or fewer if the stream ends first.
 
-        Unlike seeking and reading, this leaves the position of the stream as it
-        is, and does not hold the stream for reads at once from other threads to
-        wait for when the file is a local one.
+        Unlike seeking and reading, this does not move the position of the stream. For a
+        local file it does not hold the stream either, so reads from other threads do
+        not wait.
 
         Parameters
         ----------
@@ -316,7 +314,7 @@ class WsiDicomReadIO(WsiDicomIO):
             return self._stream.read(length)
 
     def close(self) -> None:
-        """Close stream, and the handles read at positions with."""
+        """Close the stream and the pool of file handles."""
         if self._handle_pool is not None:
             self._handle_pool.close()
         super().close()

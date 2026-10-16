@@ -52,7 +52,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
         decoded_frame_cache: DecodedFrameCache
             Cache of decoded frames.
         encoded_frame_cache: EncodedFrameCache
-            Cache of encoded frames, as a frame costs a request to read again.
+            Cache of encoded frames. Reading a frame again costs a request.
         """
         self._client = client
         self._study_uid = dataset.uids.slide.study_instance

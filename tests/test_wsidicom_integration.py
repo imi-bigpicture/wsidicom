@@ -186,8 +186,8 @@ class TestWsiDicomIntegration:
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         crop_to_image_boundary: bool,
     ):
-        """A tile read with the tile byte ranges of a local file is the one read
-        through the level."""
+        """Reading a tile of a local file at its byte range gives the same tile as
+        reading it through the level."""
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
         tiles_per_level = 50
@@ -226,7 +226,7 @@ class TestWsiDicomIntegration:
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         past: str,
     ):
-        """A tile outside the tiled size is not read at the location of another."""
+        """A tile outside the tiled size is not read at the byte range of another tile."""
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
         base_level = wsi.levels.base_level
@@ -248,8 +248,9 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
     ):
-        """The frame indices of a plane made at once, which the tile byte ranges are
-        made from, are those of the tiles one by one, for full and sparse tiling."""
+        """The frame indices of a whole plane are those of its tiles looked up one by
+        one, for both full and sparse tiling. The tile byte ranges are made from them.
+        """
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
         tile_indices = [
@@ -553,17 +554,17 @@ class TestWsiDicomSave:
 
 
 WAIT_SECONDS = 10
-"""Longest a test waits for another thread, so that a fault fails the test rather than
+"""The longest a test waits for another thread. A fault then fails the test instead of
 hanging it."""
 
 NOT_RETURNED_SECONDS = 0.2
-"""How long a read is given to return when it should be waiting. A read that is slow
-to start passes too, as it has not returned either."""
+"""How long a read that should be waiting is given to return. A read that is slow to
+start also passes, as it has not returned either."""
 
 
 @pytest.fixture()
 def own_wsi() -> Iterator[WsiDicom]:
-    """A slide opened for the test alone, as the test replaces how it makes the tile
+    """A slide opened for one test only. The test replaces how the slide makes the tile
     byte ranges of a plane."""
     folders = [
         SLIDE_FOLDER.joinpath(WsiTestDefinitions.test_definitions[name]["path"])
@@ -578,8 +579,9 @@ def own_wsi() -> Iterator[WsiDicom]:
 
 @pytest.mark.integration
 class TestTileByteRangesOfPlanes:
-    """Tile byte ranges are made when a tile of a plane is first read. Reads of a plane
-    being made wait for it, reads of other planes do not."""
+    """Tile byte ranges are made when a tile of a plane is first read. A read of a plane
+    whose byte ranges are being made waits for them. Reads of other planes do not wait.
+    """
 
     def test_other_plane_is_made_while_a_plane_is_being_made(
         self, own_wsi: WsiDicom, monkeypatch: pytest.MonkeyPatch

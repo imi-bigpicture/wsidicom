@@ -22,7 +22,7 @@ from wsidicom.file.io.file_handle_pool import FileHandlePool
 
 CONTENT = bytes(range(256)) * 64
 MAX_HANDLES = 2
-"""Fewer than the threads reading at once in the tests, so that reads wait for a
+"""Fewer than the threads that read at once in the tests. This makes reads wait for a
 handle."""
 
 
@@ -77,8 +77,8 @@ class TestFileHandlePool:
     def test_reads_from_more_threads_than_max_handles_open_max_handles(
         self, pool: FileHandlePool
     ):
-        """Reads beyond the most handles wait for one instead of opening another,
-        and still read their own bytes."""
+        """When all handles are taken, a read waits for one instead of opening another.
+        Each read still gets its own bytes."""
         # Arrange
         positions = [position for _ in range(20) for position in range(0, 16000, 97)]
 
