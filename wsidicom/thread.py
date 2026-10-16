@@ -32,8 +32,10 @@ class WriteOnlyQueue(Protocol[QueueItemType]):
     """Queue capability restricted to producer-side operations."""
 
     def put(self, item: QueueItemType, token: "CancellationToken") -> None:
-        """Put `item` on the queue, blocking until there is space or `token`
-        is cancelled."""
+        """Put `item` on the queue.
+
+        Blocks until there is space or `token` is cancelled.
+        """
         ...
 
 
@@ -41,14 +43,18 @@ class ReadOnlyQueue(Protocol[QueueItemTypeOut]):
     """Queue capability restricted to consumer-side operations."""
 
     def get(self, token: "CancellationToken") -> QueueItemTypeOut:
-        """Get an item from the queue, blocking until one is available or
-        `token` is cancelled."""
+        """Get an item from the queue.
+
+        Blocks until one is available or `token` is cancelled.
+        """
         ...
 
 
 class ShutdownSentinel:
-    """Sentinel that compares greater than any other object, thus processed last
-    in priority queue."""
+    """Sentinel that compares greater than any other object.
+
+    The sentinel is thus processed last in a priority queue.
+    """
 
     def __lt__(self, other: object) -> bool:
         return False
@@ -166,8 +172,9 @@ class CancellationToken:
 
 
 class CancelableQueue(Generic[ItemType], ABC):
-    """Bounded queue whose `get`/`put` are woken by a `CancellationToken`
-    without polling.
+    """Bounded queue whose `get`/`put` are woken by a `CancellationToken`.
+
+    The calls are woken without polling.
 
     A blocked `get`/`put` wakes either on the normal queue event (an item
     arriving / space freeing) or on `token.cancel(...)`, which `notify_all`s the

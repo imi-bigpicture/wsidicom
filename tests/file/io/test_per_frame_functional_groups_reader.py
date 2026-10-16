@@ -122,7 +122,7 @@ def create_reader(
 
 
 def create_reading_stream(decoy: Decoy, data: bytes) -> tuple[BytesIO, list[int]]:
-    """A mocked stream over `data`, and the sizes of the reads that search it.
+    """Return a mocked stream over `data`, and the sizes of the reads that search it.
 
     Mocked so that the reads come through something the test holds, and reading
     real bytes because the reader has to get through the sequence for there to be
@@ -192,7 +192,7 @@ def create_file_without_sequence() -> WsiDicomIO:
 class TestPerFrameFunctionalGroupsReader:
     @pytest.mark.parametrize("undefined_length", [True, False])
     @pytest.mark.parametrize("frame_count", [1, 2, 17])
-    def test_read_positions(self, frame_count: int, undefined_length: bool):
+    def test_read_positions(self, frame_count: int, undefined_length: bool) -> None:
         # Arrange
         frames = [
             create_frame(column=index + 1, row=index + 2)
@@ -209,10 +209,14 @@ class TestPerFrameFunctionalGroupsReader:
         assert list(positions.rows) == [index + 2 for index in range(frame_count)]
 
     @pytest.mark.parametrize("chunk_size", [None, 256])
-    def test_read_positions_of_values_of_differing_length(self, chunk_size: int | None):
+    def test_read_positions_of_values_of_differing_length(
+        self, chunk_size: int | None
+    ) -> None:
         """Values of one element are taken in one pass when they are all of a length.
+
         These are not, as a decimal string is only padded to an even length, so they
-        have to be found one at a time instead."""
+        have to be found one at a time instead.
+        """
         # Arrange - "0.5" is padded to four bytes and "0.125" takes six.
         frames = [
             create_frame(1, 2, z_offset="0.5"),
@@ -230,7 +234,7 @@ class TestPerFrameFunctionalGroupsReader:
         assert positions.z_offsets is not None
         assert list(positions.z_offsets) == [0.5, 0.125, 0.5]
 
-    def test_read_positions_of_every_element(self):
+    def test_read_positions_of_every_element(self) -> None:
         # Arrange
         reader = create_reader(
             [
@@ -251,7 +255,7 @@ class TestPerFrameFunctionalGroupsReader:
         assert positions.optical_path_identifiers is not None
         assert list(positions.optical_path_identifiers) == ["1", "2"]
 
-    def test_read_positions_ends_at_next_element(self):
+    def test_read_positions_ends_at_next_element(self) -> None:
         # Arrange
         file = create_file([create_frame(1, 1), create_frame(2, 1)])
         reader = PerFrameFunctionalGroupsReader(file, 0, 2)
@@ -263,15 +267,15 @@ class TestPerFrameFunctionalGroupsReader:
         file.seek(reader.end_of_sequence)
         assert file.read(4) == b"\xe0\x7f\x10\x00"  # PixelData follows the sequence
 
-    def test_end_of_sequence_before_reading(self):
+    def test_end_of_sequence_before_reading(self) -> None:
         # Arrange
         reader = create_reader([create_frame(1, 1)])
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"Positions have not been read yet"):
             assert reader.end_of_sequence
 
-    def test_read_positions_without_z_offsets(self):
+    def test_read_positions_without_z_offsets(self) -> None:
         # Arrange
         reader = create_reader(
             [create_frame(1, 1, z_offset=None), create_frame(2, 1, z_offset=None)]
@@ -284,7 +288,7 @@ class TestPerFrameFunctionalGroupsReader:
         assert positions is not None
         assert positions.z_offsets is None
 
-    def test_read_positions_without_optical_path_identifiers(self):
+    def test_read_positions_without_optical_path_identifiers(self) -> None:
         # Arrange
         reader = create_reader([create_frame(1, 1), create_frame(2, 1)])
 
@@ -295,7 +299,7 @@ class TestPerFrameFunctionalGroupsReader:
         assert positions is not None
         assert positions.optical_path_identifiers is None
 
-    def test_searching_refused_when_element_is_in_some_frames_only(self):
+    def test_searching_refused_when_element_is_in_some_frames_only(self) -> None:
         """A value present in some frames cannot be matched to frames by position."""
         # Arrange
         reader = create_reader(
@@ -306,7 +310,7 @@ class TestPerFrameFunctionalGroupsReader:
         with pytest.raises(UnscannablePerFrameGroupsException):
             reader._search_positions()
 
-    def test_searching_refused_when_frame_count_does_not_match(self):
+    def test_searching_refused_when_frame_count_does_not_match(self) -> None:
         # Arrange
         reader = create_reader([create_frame(1, 1), create_frame(2, 1)], frame_count=3)
 
@@ -314,7 +318,7 @@ class TestPerFrameFunctionalGroupsReader:
         with pytest.raises(UnscannablePerFrameGroupsException):
             reader._search_positions()
 
-    def test_raises_when_not_positioned_at_sequence(self):
+    def test_raises_when_not_positioned_at_sequence(self) -> None:
         # Arrange
         reader = PerFrameFunctionalGroupsReader(create_file_without_sequence(), 0, 1)
 
@@ -322,7 +326,7 @@ class TestPerFrameFunctionalGroupsReader:
         with pytest.raises(UnscannablePerFrameGroupsException):
             reader.read_positions()
 
-    def test_items_are_parsed_for_implicit_vr(self):
+    def test_items_are_parsed_for_implicit_vr(self) -> None:
         """The bytes of an implicit value representation data set are not searched."""
         # Arrange
         reader = create_reader(
@@ -339,7 +343,7 @@ class TestPerFrameFunctionalGroupsReader:
         assert list(positions.rows) == [1, 3]
 
     @pytest.mark.parametrize("frame_count", [0, -1])
-    def test_items_are_parsed_without_frames(self, frame_count: int):
+    def test_items_are_parsed_without_frames(self, frame_count: int) -> None:
         """Nothing to match the values against, so the items are read instead."""
         # Arrange
         reader = create_reader([create_frame(1, 1)], frame_count=frame_count)
@@ -359,7 +363,7 @@ class TestPerFrameFunctionalGroupsReader:
             (ImplicitVRLittleEndian, False),
         ],
     )
-    def test_is_scannable(self, transfer_syntax: UID, expected: bool):
+    def test_is_scannable(self, transfer_syntax: UID, expected: bool) -> None:
         # Arrange
 
         # Act
@@ -372,7 +376,7 @@ class TestPerFrameFunctionalGroupsReader:
     @pytest.mark.parametrize("chunk_size", [16, 64, 256])
     def test_read_positions_across_chunk_boundaries(
         self, chunk_size: int, undefined_length: bool
-    ):
+    ) -> None:
         """A hit split across two reads has to be found exactly once."""
         # Arrange
         frames = [create_frame(column=index + 1, row=1) for index in range(20)]
@@ -390,10 +394,12 @@ class TestPerFrameFunctionalGroupsReader:
     @pytest.mark.parametrize("undefined_length", [True, False])
     def test_read_positions_of_sequence_longer_than_the_overlap(
         self, undefined_length: bool
-    ):
-        """Buffered bytes are dropped once they are behind the overlap kept between
-        reads, so a sequence longer than that is where a value can be taken twice or
-        lost. Every frame still has to be found exactly once."""
+    ) -> None:
+        """Every frame is found exactly once in a sequence longer than the overlap.
+
+        Buffered bytes are dropped once they are behind the overlap kept between reads,
+        so a sequence longer than that is where a value can be taken twice or lost.
+        """
         # Arrange
         frame_count = 1500
         frames = [
@@ -418,9 +424,11 @@ class TestPerFrameFunctionalGroupsReader:
     @pytest.mark.parametrize("frame_count", [1, 17])
     def test_read_end_of_sequence_agrees_with_reading_the_positions(
         self, frame_count: int, undefined_length: bool
-    ):
-        """Where the sequence ends is what the rest of the dataset is read from, so
-        finding only the end has to land where finding the positions lands."""
+    ) -> None:
+        """Finding only the end lands where finding the positions lands.
+
+        Where the sequence ends is what the rest of the dataset is read from.
+        """
         # Arrange
         frames = [
             create_frame(column=index + 1, row=index + 2)
@@ -440,9 +448,11 @@ class TestPerFrameFunctionalGroupsReader:
 
     def test_read_end_of_sequence_of_a_sequence_stating_a_length_reads_nothing(
         self, decoy: Decoy
-    ):
-        """A stated length says where the sequence ends, so there is nothing to
-        search and nothing to read."""
+    ) -> None:
+        """A stated length says where the sequence ends.
+
+        So there is nothing to search and nothing to read.
+        """
         # Arrange
         frames = [create_frame(column=index + 1, row=1) for index in range(300)]
         reader, searching_reads = create_reader_over_mocked_stream(
@@ -455,9 +465,12 @@ class TestPerFrameFunctionalGroupsReader:
         # Assert
         assert searching_reads == []
 
-    def test_first_read_is_sized_from_the_frame_count(self, decoy: Decoy):
-        """A sequence that states no length is read from what the frame count says it
-        should take, rather than by pulling a whole chunk of the file."""
+    def test_first_read_is_sized_from_the_frame_count(self, decoy: Decoy) -> None:
+        """A sequence that states no length is read by what the frame count says.
+
+        That is, from what the frame count says it should take, rather than by pulling
+        a whole chunk of the file.
+        """
         # Arrange
         frame_count = 300
         frames = [create_frame(column=index + 1, row=1) for index in range(frame_count)]
@@ -473,9 +486,12 @@ class TestPerFrameFunctionalGroupsReader:
         assert searching_reads == [expected]
         assert list(positions.columns) == [index + 1 for index in range(frame_count)]
 
-    def test_reads_grow_when_items_are_larger_than_assumed(self, decoy: Decoy):
-        """Assuming too little only costs another read, which asks for twice what the
-        one before it did so that a sequence of large items is not crawled through."""
+    def test_reads_grow_when_items_are_larger_than_assumed(self, decoy: Decoy) -> None:
+        """Assuming too little only costs another read.
+
+        That read asks for twice what the one before it did, so that a sequence of
+        large items is not crawled through.
+        """
         # Arrange
         frame_count = 300
         frames = []
@@ -499,9 +515,13 @@ class TestPerFrameFunctionalGroupsReader:
         )
         assert list(positions.columns) == [index + 1 for index in range(frame_count)]
 
-    def test_sequence_stating_a_length_is_read_to_that_length(self, decoy: Decoy):
-        """A sequence that states a length says exactly how much to read, so the frame
-        count is not guessed from."""
+    def test_sequence_stating_a_length_is_read_to_that_length(
+        self, decoy: Decoy
+    ) -> None:
+        """A sequence that states a length says exactly how much to read.
+
+        So the frame count is not guessed from.
+        """
         # Arrange
         frame_count = 300
         frames = [create_frame(column=index + 1, row=1) for index in range(frame_count)]
@@ -522,8 +542,11 @@ class TestPerFrameFunctionalGroupsReader:
 
 @pytest.mark.unittest
 class TestShortStringElement:
-    """A text value is decoded with the character set the instance states, which is
-    read before the sequence and so is known before the search starts."""
+    """A text value is decoded with the character set the instance states.
+
+    The character set is read before the sequence and so is known before the
+    search starts.
+    """
 
     @pytest.mark.parametrize(
         ["specific_character_set", "value", "expected"],
@@ -538,7 +561,7 @@ class TestShortStringElement:
         specific_character_set: str | list[str] | None,
         value: bytes,
         expected: str,
-    ):
+    ) -> None:
         # Arrange
         element = ShortStringElement(
             OpticalPathIdentifierTag, convert_encodings(specific_character_set)
@@ -550,7 +573,7 @@ class TestShortStringElement:
         # Assert
         assert values.tolist() == [expected]
 
-    def test_refuses_a_value_that_switches_character_set(self):
+    def test_refuses_a_value_that_switches_character_set(self) -> None:
         # Arrange - an escape sequence needs more than the one codec values are read
         # with, so the sequence is left to be read into datasets instead.
         element = ShortStringElement(
@@ -559,5 +582,5 @@ class TestShortStringElement:
         value = bytes([0x1B, 0x24, 0x42]) + b"abc"
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"switches character set within itself"):
             element.decode_values([value])

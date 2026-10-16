@@ -20,7 +20,7 @@ from wsidicom.conceptcode import CodeValueAttribute, SpecimenStainsCode, UnitCod
 
 @pytest.mark.unittest
 class TestConceptCode:
-    def test_to_ds_writes_the_code(self):
+    def test_to_ds_writes_the_code(self) -> None:
         """Value, scheme designator and meaning are written as their attributes."""
         # Arrange
         code = UnitCode(value="mm", scheme_designator="UCUM", meaning="millimeter")
@@ -33,7 +33,7 @@ class TestConceptCode:
         assert dataset.CodingSchemeDesignator == "UCUM"
         assert dataset.CodeMeaning == "millimeter"
 
-    def test_from_ds_reads_the_code(self):
+    def test_from_ds_reads_the_code(self) -> None:
         # Arrange
         code = UnitCode(
             value="mm",
@@ -50,7 +50,7 @@ class TestConceptCode:
         # Assert
         assert read == code
 
-    def test_from_ds_without_a_scheme_version_reads_none(self):
+    def test_from_ds_without_a_scheme_version_reads_none(self) -> None:
         # Arrange
         code = UnitCode(value="mm", scheme_designator="UCUM", meaning="millimeter")
         dataset = Dataset()
@@ -63,7 +63,7 @@ class TestConceptCode:
         assert read is not None
         assert read.scheme_version is None
 
-    def test_to_ds_writes_the_scheme_version(self):
+    def test_to_ds_writes_the_scheme_version(self) -> None:
         """The version is written as Coding Scheme Version, the attribute for it."""
         # Arrange
         code = UnitCode(
@@ -79,7 +79,7 @@ class TestConceptCode:
         # Assert
         assert dataset.CodingSchemeVersion == "1.4"
 
-    def test_to_ds_without_a_scheme_version_writes_none(self):
+    def test_to_ds_without_a_scheme_version_writes_none(self) -> None:
         # Arrange
         code = UnitCode(value="mm", scheme_designator="UCUM", meaning="millimeter")
 
@@ -106,9 +106,12 @@ class TestCodeValueAttribute:
             ("https://example.org/codes/a-much-longer-code", "URNCodeValue"),
         ],
     )
-    def test_keyword_for(self, value: str, expected: str):
-        """Up to 16 characters is Code Value, longer is Long Code Value, and a URN
-        or URL is URN Code Value whatever its length."""
+    def test_keyword_for(self, value: str, expected: str) -> None:
+        """Up to 16 characters is Code Value, longer is Long Code Value.
+
+        A URN
+        or URL is URN Code Value whatever its length.
+        """
         # Arrange
 
         # Act
@@ -118,7 +121,7 @@ class TestCodeValueAttribute:
         assert keyword == expected
 
     @pytest.mark.parametrize("keyword", ["CodeValue", "LongCodeValue", "URNCodeValue"])
-    def test_read_reads_whichever_attribute_holds_the_value(self, keyword: str):
+    def test_read_reads_whichever_attribute_holds_the_value(self, keyword: str) -> None:
         # Arrange
         dataset = Dataset()
         setattr(dataset, keyword, "value")
@@ -129,7 +132,7 @@ class TestCodeValueAttribute:
         # Assert
         assert value == "value"
 
-    def test_read_skips_an_empty_attribute(self):
+    def test_read_skips_an_empty_attribute(self) -> None:
         # Arrange
         dataset = Dataset()
         dataset.CodeValue = ""
@@ -141,13 +144,13 @@ class TestCodeValueAttribute:
         # Assert
         assert value == "999000011000000103"
 
-    def test_read_without_a_value_raises(self):
+    def test_read_without_a_value_raises(self) -> None:
         # Arrange
         dataset = Dataset()
         dataset.CodingSchemeDesignator = "SCT"
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="holds no value"):
             CodeValueAttribute.read(dataset)
 
 
@@ -162,7 +165,7 @@ class TestConceptCodeValueAttribute:
     )
     def test_to_ds_writes_a_value_code_value_cannot_hold_elsewhere(
         self, value: str, keyword: str
-    ):
+    ) -> None:
         # Arrange
         code = SpecimenStainsCode(value=value, scheme_designator="SCT", meaning="x")
 
@@ -174,7 +177,7 @@ class TestConceptCodeValueAttribute:
         assert "CodeValue" not in dataset
 
     @pytest.mark.parametrize("value", ["999000011000000103", "urn:oid:1.2.3"])
-    def test_from_ds_reads_a_value_code_value_cannot_hold(self, value: str):
+    def test_from_ds_reads_a_value_code_value_cannot_hold(self, value: str) -> None:
         # Arrange
         code = SpecimenStainsCode(value=value, scheme_designator="SCT", meaning="x")
         dataset = Dataset()

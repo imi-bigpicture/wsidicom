@@ -68,7 +68,7 @@ class WsiDicomWebSource(Source):
         study_uid: UID,
         series_uids: Iterable[UID],
         requested_transfer_syntaxes: Sequence[UID] | None = None,
-    ):
+    ) -> None:
         """Create a WsiDicomWebSource.
 
         Parameters

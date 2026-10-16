@@ -38,7 +38,7 @@ class WsiDicomTestImageData(WsiDicomImageData):
         encoded_frame_cache: EncodedFrameCache,
         transfer_syntax: UID,
         frame: bytes,
-    ):
+    ) -> None:
         self._transfer_syntax = transfer_syntax
         self._frame = frame
         super().__init__(datasets, codec, decoded_frame_cache, encoded_frame_cache)
@@ -55,7 +55,7 @@ class WsiDicomTestImageData(WsiDicomImageData):
 class TestWsiDicomImageData:
     def test_serves_own_frame_when_sharing_a_cache_with_collected_image_data(
         self, wsi: WsiDicom
-    ):
+    ) -> None:
         """An image data serves its own frames, never those of a collected one.
 
         The frame caches are held by the source and shared by every image data it

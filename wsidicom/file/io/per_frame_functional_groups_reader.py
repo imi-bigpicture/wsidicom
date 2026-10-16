@@ -53,8 +53,10 @@ logger = logging.getLogger(__name__)
 
 
 class UnscannablePerFrameGroupsException(Exception):
-    """Exception raised when the values could not be found in the bytes of the
-    sequence, leaving no way to get them but to build a dataset for every item."""
+    """Exception raised when the values could not be found in the sequence bytes.
+
+    This leaves no way to get them but to build a dataset for every item.
+    """
 
     pass
 
@@ -104,7 +106,7 @@ class SearchElement(metaclass=ABCMeta):
     VR: ClassVar[bytes]
     """Value representation of the element."""
 
-    def __init__(self, tag: BaseTag):
+    def __init__(self, tag: BaseTag) -> None:
         """Create an element to search for.
 
         Parameters
@@ -186,7 +188,7 @@ class FixedLengthElement(SearchElement):
     LENGTH: ClassVar[int]
     """Length of the value, which the value representation fixes."""
 
-    def __init__(self, tag: BaseTag):
+    def __init__(self, tag: BaseTag) -> None:
         super().__init__(tag)
         self.pattern += struct.pack("<H", self.LENGTH)
 
@@ -433,7 +435,7 @@ class ShortStringElement(VariableLengthElement):
     MAX_VALUE_LENGTH = 16
     """A short string is at most 16 bytes, by PS3.5 Table 6.2-1."""
 
-    def __init__(self, tag: BaseTag, encodings: Sequence[str]):
+    def __init__(self, tag: BaseTag, encodings: Sequence[str]) -> None:
         """Create an element to search for.
 
         Parameters
@@ -561,7 +563,7 @@ class PerFrameFunctionalGroupsReader:
         frame_count: int,
         specific_character_set: str | MutableSequence[str] | None = None,
         chunk_size: int | None = None,
-    ):
+    ) -> None:
         """Create a reader for the sequence at `sequence_file_position`.
 
         Parameters
@@ -620,9 +622,11 @@ class PerFrameFunctionalGroupsReader:
 
     @property
     def end_of_sequence(self) -> int:
-        """Offset of the first byte after the sequence, known once the positions have
-        been read. Whatever element is ordered next starts there, which is usually but
-        not necessarily the extended offset table or the pixel data.
+        """Offset of the first byte after the sequence.
+
+        Known once the positions have been read. Whatever element is ordered next
+        starts there, which is usually but not necessarily the extended offset table
+        or the pixel data.
 
         Returns
         -------

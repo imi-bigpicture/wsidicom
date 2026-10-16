@@ -40,7 +40,7 @@ class OffsetTableWriter(metaclass=ABCMeta):
         self._file = file
 
     @abstractmethod
-    def reserve(self, number_of_frames: int):
+    def reserve(self, number_of_frames: int) -> None:
         """Reserve space in file for offset table.
 
         Parameters
@@ -74,7 +74,7 @@ class OffsetTableWriter(metaclass=ABCMeta):
 
 
 class BotWriter(OffsetTableWriter):
-    def reserve(self, number_of_frames: int):
+    def reserve(self, number_of_frames: int) -> None:
         self._table_start = self._file.tell()
         BYTES_PER_ITEM = 4
         tag_lengths = BYTES_PER_ITEM * number_of_frames
@@ -108,7 +108,7 @@ class BotWriter(OffsetTableWriter):
 
 
 class EotWriter(OffsetTableWriter):
-    def reserve(self, number_of_frames: int):
+    def reserve(self, number_of_frames: int) -> None:
         self._table_start = self._file.tell()
         BYTES_PER_ITEM = 8
         eot_length = BYTES_PER_ITEM * number_of_frames

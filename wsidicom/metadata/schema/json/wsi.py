@@ -58,5 +58,5 @@ class WsiMetadataJsonSchema(LoadingSchema[WsiMetadata]):
     )
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[WsiMetadata]:
         return WsiMetadata

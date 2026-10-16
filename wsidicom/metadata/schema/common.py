@@ -27,7 +27,7 @@ LoadType = TypeVar("LoadType")
 
 
 class LoadingSchema(Schema, Generic[LoadType]):
-    """Schema for loading metadata"""
+    """Schema for loading metadata."""
 
     @property
     @abstractmethod
@@ -36,16 +36,16 @@ class LoadingSchema(Schema, Generic[LoadType]):
         raise NotImplementedError()
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs) -> LoadType:
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> LoadType:
         """Load object from dictionary."""
         return self.load_type(**data)
 
 
 class DataclassLoadingSchema(LoadingSchema[LoadType]):
-    """Schema for loading metadata"""
+    """Schema for loading metadata."""
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs) -> LoadType:
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> LoadType:
         """Return a object of given load class using the defined dataclass fields."""
         assert dataclasses.is_dataclass(self.load_type)
         return self.load_type(

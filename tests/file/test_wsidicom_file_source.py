@@ -26,7 +26,7 @@ class TestWsiDicomFileSource:
     @pytest.mark.parametrize(
         "wsi_folder_and_counts", WsiTestDefinitions.folders_and_counts()
     )
-    def test_open(self, wsi_folder_and_counts: tuple[Path, int, bool, bool]):
+    def test_open(self, wsi_folder_and_counts: tuple[Path, int, bool, bool]) -> None:
         # Arrange
         wsi_folder, level_count, label, overview = wsi_folder_and_counts
 
@@ -42,7 +42,9 @@ class TestWsiDicomFileSource:
         assert len(overview_instances) == (1 if overview else 0)
 
     @pytest.mark.parametrize("path_is_folder", [True, False])
-    def test_open_dicomdir(self, tmp_path: Path, wsi_file: Path, path_is_folder: bool):
+    def test_open_dicomdir(
+        self, tmp_path: Path, wsi_file: Path, path_is_folder: bool
+    ) -> None:
         # Arrange
         dicom_dir_path = tmp_path.joinpath("dicomdir")
         dicom_dir = FileSet()

@@ -62,7 +62,7 @@ class TileSequencer:
         optical_paths: Sequence[str],
         input_queue: ReadOnlyQueue[EncodingTaskResult | ShutdownSentinel],
         token: CancellationToken,
-    ):
+    ) -> None:
         """Create a tile sequencer.
 
         Parameters
@@ -147,7 +147,7 @@ class TileSequencer:
         self._tile_cache.clear(self._level_index)
 
     def _writer_loop(self) -> None:
-        """Main loop running in worker thread.
+        """Run the main loop of the worker thread.
 
         Stops on a `ShutdownSentinel` (graceful), when the token is cancelled
         by another stage (`Cancelled`), or on its own failure — which it

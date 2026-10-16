@@ -31,5 +31,5 @@ class SlideJsonSchema(LoadingSchema[Slide]):
     samples = fields.Nested(BaseSpecimenJsonSchema(), allow_none=True, many=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Slide]:
         return Slide

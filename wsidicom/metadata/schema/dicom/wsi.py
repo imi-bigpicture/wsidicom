@@ -17,7 +17,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from marshmallow import fields
 from PIL import ImageCms
@@ -133,7 +133,7 @@ class WsiMetadataDicomSchema:
         metadata: WsiMetadata,
         image_type: ImageType,
         require_icc_profile: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> Dataset:
         base_dataset = BaseWsiMetadataDicomSchema().dump(
             BaseWsiMetadata(
@@ -213,7 +213,7 @@ class WsiMetadataDicomSchema:
         pyramid_dataset: Dataset,
         label_dataset: Dataset | None = None,
         overview_dataset: Dataset | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> WsiMetadata:
         metadata = BaseWsiMetadataDicomSchema().load(pyramid_dataset)
         pyramid = PyramidDicomSchema().load(pyramid_dataset)

@@ -183,9 +183,10 @@ class DeferredDatasetReader(metaclass=ABCMeta):
 
 
 class WsiDataset:
-    """Extend pydicom.dataset.Dataset (containing WSI metadata) with simple
-    parsers for attributes specific for WSI. Use snake case to avoid name
-    collision with dicom fields (that are handled by pydicom.dataset.Dataset).
+    """Extend pydicom.dataset.Dataset (containing WSI metadata) with WSI parsers.
+
+    The simple parsers are for attributes specific for WSI. Use snake case to avoid
+    name collision with dicom fields (that are handled by pydicom.dataset.Dataset).
     """
 
     REQUIRED_ATTRIBUTES: ClassVar[tuple[BaseTag, ...]] = (
@@ -247,7 +248,7 @@ class WsiDataset:
         dataset: Dataset,
         frame_positions: PerFrameGroupPositions | None = None,
         deferred_reader: DeferredDatasetReader | None = None,
-    ):
+    ) -> None:
         """Create a WSI dataset around a pydicom dataset.
 
         The dataset is wrapped rather than subclassed: what this adds is reading
@@ -270,7 +271,7 @@ class WsiDataset:
         self._deferred_reader = deferred_reader
 
     def __deepcopy__(self, memo: dict[int, Any]) -> "WsiDataset":
-        """A copy of this holding a copy of the dataset.
+        """Return a copy of this holding a copy of the dataset.
 
         Defined so that the readers cached on this are not carried over to the
         copy by the default copying of the attributes of an object: what was
@@ -280,7 +281,7 @@ class WsiDataset:
         return WsiDataset(deepcopy(self._complete_dataset, memo), self._frame_positions)
 
     def as_dataset(self) -> Dataset:
-        """The wrapped dataset, for giving to something that takes a dataset.
+        """Return the wrapped dataset, for giving to something that takes one.
 
         A method rather than a property so that stepping out of this class is a
         deliberate act and plain to find; what is read from a WSI dataset should
@@ -489,7 +490,7 @@ class WsiDataset:
         )
 
     def replace(self, changes: Mapping[str | BaseTag, Any]) -> "WsiDataset":
-        """A copy of this with the given attributes changed.
+        """Return a copy of this with the given attributes changed.
 
         A WSI dataset offers no way to change it in place: what wsidicom writes
         is written by making a changed copy, so that the values it writes are
@@ -534,7 +535,7 @@ class WsiDataset:
         tag: BaseTag,
         default: Any = None,
     ) -> Any:
-        """The value of an attribute of a dataset, or `default` if it is not there.
+        """Return an attribute's value in a dataset, or `default` if it is not there.
 
         Asking a dataset for a tag gives the element holding the value, where
         asking it for a keyword gives the value itself. This gives the value,
@@ -558,8 +559,9 @@ class WsiDataset:
     def get_optional_sequence(
         dataset: Dataset | dict[BaseTag, DataElement], tag: BaseTag
     ) -> DicomSequence | None:
-        """The items of a sequence attribute of a dataset, or None if the dataset
-        does not hold the attribute.
+        """Return the items of a sequence attribute of a dataset.
+
+        None if the dataset does not hold the attribute.
 
         Tells an attribute that is not there from one that is there and holds no
         items. Use `get_sequence` where that difference does not matter.
@@ -581,7 +583,7 @@ class WsiDataset:
     def get_sequence(
         cls, dataset: Dataset | dict[BaseTag, DataElement], tag: BaseTag
     ) -> DicomSequence:
-        """The items of a sequence attribute of a dataset.
+        """Return the items of a sequence attribute of a dataset.
 
         Empty when the attribute holds no items and when it is not there at
         all: a sequence that is not there holds nothing, which is what most
@@ -601,8 +603,9 @@ class WsiDataset:
     def get_sequence_item(
         cls, dataset: Dataset | dict[BaseTag, DataElement], tag: BaseTag
     ) -> Dataset | None:
-        """The first item of a sequence attribute of a dataset, or None if the
-        dataset does not hold the attribute or holds it with no items.
+        """Return the first item of a sequence attribute of a dataset.
+
+        None if the dataset does not hold the attribute or holds it with no items.
 
         For the sequences that are defined to hold exactly one item, which is
         every one read through here. How many items a sequence may hold is said
@@ -666,7 +669,7 @@ class WsiDataset:
             dataset.add(value)
 
     def overlay(self, dataset: Dataset) -> "WsiDataset":
-        """A copy of this with the attributes of `dataset` set on it.
+        """Return a copy of this with the attributes of `dataset` set on it.
 
         The elements are carried over as they are, keeping the value
         representation each was made with, which the dictionary cannot always
@@ -861,9 +864,9 @@ class WsiDataset:
 
     @cached_property
     def frame_offset(self) -> int:
-        """Return frame offset (offset to first frame in instance if
-        concatenated). Is zero if non-concatenated instance or first instance
-        in concatenated instance.
+        """Return frame offset (offset to first frame in instance if concatenated).
+
+        Is zero if non-concatenated instance or first instance in concatenated instance.
 
         Returns
         -------
@@ -900,8 +903,9 @@ class WsiDataset:
 
     @cached_property
     def tile_type(self) -> TileType:
-        """Return tiling type of dataset. Raises WsiDicomError if type
-        is undetermined.
+        """Return tiling type of dataset.
+
+        Raises WsiDicomError if type is undetermined.
 
         Returns
         -------
@@ -978,14 +982,15 @@ class WsiDataset:
 
     @property
     def ext_depth_of_field(self) -> bool:
-        """Return true if instance has extended depth of field
-        (several focal planes are combined to one plane)."""
+        """Return true if instance has extended depth of field.
+
+        With extended depth of field several focal planes are combined to one plane.
+        """
         return self._ext_depth_of_field[0]
 
     @property
     def ext_depth_of_field_planes(self) -> int | None:
-        """Return number of focal planes used for extended depth of
-        field."""
+        """Return number of focal planes used for extended depth of field."""
         return self._ext_depth_of_field[1]
 
     @property
@@ -1279,9 +1284,10 @@ class WsiDataset:
     def check_duplicate_dataset(
         datasets: Sequence["WsiDataset"], caller: object
     ) -> None:
-        """Check for duplicates in a list of datasets. Datasets are duplicate
-        if instance uids match. Stops at first found duplicate and raises
-        WsiDicomUidDuplicateError.
+        """Check for duplicates in a list of datasets.
+
+        Datasets are duplicate if instance uids match. Stops at first found duplicate
+        and raises WsiDicomUidDuplicateError.
 
         Parameters
         ----------
@@ -1312,7 +1318,6 @@ class WsiDataset:
         bool
             True if same instance.
         """
-
         return (
             self.uids == other_dataset.uids
             and self.image_size == other_dataset.image_size
@@ -1334,8 +1339,9 @@ class WsiDataset:
 
     def matches_series(self, uids: SlideUids, tile_size: Size | None = None) -> bool:
         """Check if instance is valid (Uids and tile size match).
-        Base uids should match for instances in all types of series,
-        tile size should only match for level series.
+
+        Base uids should match for instances in all types of series, tile size should
+        only match for level series.
         """
         if tile_size is not None and tile_size != self.tile_size:
             return False
@@ -1415,8 +1421,10 @@ class WsiDataset:
         return None if identifier is None else str(identifier.value)
 
     def _get_multi_value(self, tag: BaseTag) -> list[Any]:
-        """Return values for tag as list of values. If tag is not found, return empty
-        list. If tag is not multi value, return list with one value.
+        """Return values for tag as list of values.
+
+        If tag is not found, return empty list. If tag is not multi value, return list
+        with one value.
 
         Parameters
         ----------
@@ -1443,7 +1451,7 @@ class WsiDataset:
         frame_count: int | None = None,
         concatenation: ConcatenationPart | None = None,
     ) -> "WsiDataset":
-        """A copy of this identified as one instance being written.
+        """Return a copy of this identified as one instance being written.
 
         Parameters
         ----------
@@ -1487,9 +1495,10 @@ class WsiDataset:
         tiled_size: Size,
         scale: int = 1,
     ) -> "WsiDataset":
-        """Return copy of dataset with properties set to reflect a tiled full
-        arrangement of the listed image data. Optionally set properties to
-        reflect scaled data.
+        """Return copy of dataset reflecting a tiled full arrangement.
+
+        The properties are set to reflect a tiled full arrangement of the listed
+        image data. Optionally set properties to reflect scaled data.
 
         Parameters
         ----------
@@ -1608,7 +1617,7 @@ class WsiDataset:
         return WsiDataset(dataset).replace(changes)
 
     def update_for_transcoding(self, transcoder: Encoder, scale: int) -> "WsiDataset":
-        """A copy of this with the metadata of the transcoded image data.
+        """Return a copy of this with the metadata of the transcoded image data.
 
         Parameters
         ----------
@@ -1843,9 +1852,10 @@ class WsiDataset:
 
     @property
     def _has_per_frame_positions(self) -> bool:
-        """Whether the frames carry per-frame tile positions, the marker of a sparse,
-        explicitly-positioned image. This is the condition a sparse tile index needs,
-        so :func:`tile_type` gates on it.
+        """Return whether the frames carry per-frame tile positions.
+
+        Tile positions are the marker of a sparse, explicitly-positioned image. This
+        is the condition a sparse tile index needs, so :func:`tile_type` gates on it.
 
         Positions from the reader answer the same question: they only exist when it
         found a tile position for every frame, and then the sequence itself is not in
@@ -1864,14 +1874,16 @@ class WsiDataset:
         this is False there and `frame_positions` is where they come from. A dataset
         that was not read that way can hold the sequence, and then its items are
         looked at for a Plane Position (Slide), the first frame standing for the
-        rest."""
+        rest.
+        """
         frames = self.get_sequence(self._dataset, PerFrameFunctionalGroupsSequenceTag)
         return len(frames) > 0 and PlanePositionSlideSequenceTag in frames[0]
 
     @cached_property
     def _ext_depth_of_field(self) -> tuple[bool, int | None, float | None]:
-        """Return extended depth of field (enabled, number of focal planes,
-        distance between focal planes) from dataset.
+        """Return extended depth of field from dataset.
+
+        As enabled, number of focal planes, and distance between focal planes.
 
         Returns
         -------
@@ -1918,9 +1930,9 @@ class WsiDataset:
     def _get_spacing_between_slices_for_focal_planes(
         focal_planes: Sequence[float],
     ) -> float | None:
-        """Return spacing between slices in mm for focal planes (defined in
-        um). Spacing must be the same between all focal planes for TILED_FULL
-        arrangement.
+        """Return spacing between slices in mm for focal planes (defined in um).
+
+        Spacing must be the same between all focal planes for TILED_FULL arrangement.
 
         Parameters
         ----------

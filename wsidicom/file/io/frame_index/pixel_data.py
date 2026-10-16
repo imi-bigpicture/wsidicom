@@ -47,8 +47,9 @@ class PixelDataFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         return OffsetTableType.EMPTY
 
     def _get_index(self) -> FrameIndex:
-        """Get frame positions and length from the sequence of frames, which ends with
-        a tag that is not the item tag.
+        """Get frame positions and length from the sequence of frames.
+
+        The sequence ends with a tag that is not the item tag.
 
         Each frame contains:
         item tag (4 bytes)

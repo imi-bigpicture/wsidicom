@@ -14,6 +14,7 @@
 
 from collections import UserDict
 from collections.abc import Callable, Iterable
+from typing import Any
 
 from wsidicom.metadata.sample import (
     BaseSpecimen,
@@ -31,9 +32,9 @@ class SpecimenDictionary(UserDict[str | SpecimenIdentifier, BaseSpecimen]):
     def __init__(
         self,
         create_missing: Callable[[str | SpecimenIdentifier], BaseSpecimen],
-        *args,
-        **kwargs,
-    ):
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         """Initialize dictionary.
 
         Parameters
@@ -54,7 +55,7 @@ class SpecimenDictionary(UserDict[str | SpecimenIdentifier, BaseSpecimen]):
 class SpecimenJsonParser:
     """Factory for creating specimens from json models."""
 
-    def __init__(self, specimen_models: Iterable[BaseSpecimenJsonModel]):
+    def __init__(self, specimen_models: Iterable[BaseSpecimenJsonModel]) -> None:
         """Initiate factory.
 
         Parameters
@@ -68,7 +69,7 @@ class SpecimenJsonParser:
         }
 
     def create_specimens(self) -> list[BaseSpecimen]:
-        """Create specimens
+        """Create specimens.
 
         Returns
         -------

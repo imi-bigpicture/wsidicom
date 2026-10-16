@@ -34,7 +34,7 @@ class TestWsiDicomCode:
     @pytest.mark.parametrize("case", [None, "lower", "upper"])
     def test_create_code_from_meaning(
         self, code_class: type[CidConceptCode], code: Code, case: str | None
-    ):
+    ) -> None:
         # Arrange
         if case == "lower":
             meaning = code.meaning.lower()

@@ -23,16 +23,19 @@ from wsidicom.instance.dataset import WsiDataset
 
 
 class TileIndex(metaclass=ABCMeta):
-    """Index for mapping tile position to frame number. Is subclassed into
-    FullTileIndex and SparseTileIndex."""
+    """Index for mapping tile position to frame number.
+
+    Is subclassed into FullTileIndex and SparseTileIndex.
+    """
 
     Z_DECIMALS: ClassVar[int] = 3
     """Decimals kept when rounding a z offset into a focal plane key. Focal planes are
     keys in a dict, so every path that produces one has to round the same way."""
 
-    def __init__(self, datasets: Sequence[WsiDataset]):
-        """Create tile index for frames in datasets. Requires equal tile
-        size for all tile planes.
+    def __init__(self, datasets: Sequence[WsiDataset]) -> None:
+        """Create tile index for frames in datasets.
+
+        Requires equal tile size for all tile planes.
 
         Parameters
         ----------
@@ -86,7 +89,7 @@ class TileIndex(metaclass=ABCMeta):
 
     @abstractmethod
     def get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Abstract method for getting the frame index for a tile"""
+        """Abstract method for getting the frame index for a tile."""
         raise NotImplementedError()
 
     @staticmethod

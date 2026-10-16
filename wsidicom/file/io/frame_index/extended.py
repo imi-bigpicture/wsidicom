@@ -75,8 +75,9 @@ class ExtendedOffsetFrameIndexParser(OffsetTableFrameIndexParser):
         return self._file.tell()
 
     def _read_tables(self) -> tuple[bytes, bytes]:
-        """Read extended table offset (EOT) and EOT lengths. Filepointer should be
-        positionend to extended offset table.
+        """Read extended table offset (EOT) and EOT lengths.
+
+        Filepointer should be positionend to extended offset table.
 
         Returns
         -------

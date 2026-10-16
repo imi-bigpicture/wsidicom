@@ -33,5 +33,5 @@ class LabelJsonSchema(LoadingSchema[Label]):
     comments = fields.String(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Label]:
         return Label

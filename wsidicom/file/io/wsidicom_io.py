@@ -20,7 +20,8 @@ from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from datetime import datetime
 from struct import pack
-from typing import Any, BinaryIO, Final
+from types import TracebackType
+from typing import Any, BinaryIO, Final, Self
 
 from fsspec.implementations.local import LocalFileSystem
 from pydicom import DataElement, Dataset, FileMetaDataset
@@ -63,7 +64,7 @@ from wsidicom.tags import (
 class WsiDicomIO:
     """Class for reading or writing DICOM WSI to stream."""
 
-    def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID):
+    def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID) -> None:
         """Create a stream over a DICOM file or buffer.
 
         Parameters
@@ -86,10 +87,15 @@ class WsiDicomIO:
         self._dicom_io.is_implicit_VR = transfer_syntax.is_implicit_VR
         self.__enter__()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     def __str__(self) -> str:
@@ -151,27 +157,27 @@ class WsiDicomIO:
             yield buffered
 
     @property
-    def seek(self):
+    def seek(self) -> Callable[..., int]:
         return self._stream.seek
 
     @property
-    def tell(self):
+    def tell(self) -> Callable[[], int]:
         return self._stream.tell
 
     @property
-    def parent_read(self):
+    def parent_read(self) -> Callable[..., bytes]:
         return self._stream.read
 
     @property
-    def is_little_endian(self):
+    def is_little_endian(self) -> bool:
         return self._dicom_io.is_little_endian
 
     @property
-    def is_implicit_VR(self):
+    def is_implicit_VR(self) -> bool:  # noqa: N802 - mirrors pydicom's is_implicit_VR
         return self._dicom_io.is_implicit_VR
 
     @property
-    def stream(self):
+    def stream(self) -> BinaryIO:
         return self._stream
 
     def read(self, size: int, need_exact_length: bool = False) -> bytes:
@@ -198,7 +204,7 @@ class WsiDicomIO:
             return vr[0:2]
         return None
 
-    def read_UL(self) -> int:
+    def read_UL(self) -> int:  # noqa: N802 - mirrors pydicom's read_UL
         """Read unsigned long integer (32 bits)."""
         return self._dicom_io.read_UL()
 
@@ -249,7 +255,7 @@ class WsiDicomReadIO(WsiDicomIO):
     the stream is opened, which is also what finds where the dataset after it starts.
     """
 
-    def __init__(self, stream: BinaryIO, filepath: UPath):
+    def __init__(self, stream: BinaryIO, filepath: UPath) -> None:
         """Create a stream to read a DICOM file over.
 
         Parameters
@@ -305,7 +311,7 @@ class WsiDicomReadIO(WsiDicomIO):
             stream.seek(0)
 
     @property
-    def is_dicom(self):
+    def is_dicom(self) -> bool:
         rewind = self.tell()
         self.seek(0)
         self.stream.read(128)  # preamble
@@ -667,7 +673,7 @@ class WsiDicomWriteIO(WsiDicomIO):
     def write(self) -> Callable[[bytes], int]:
         return self._stream.write
 
-    def write_unsigned_long_long(self, value: int):
+    def write_unsigned_long_long(self, value: int) -> None:
         """Write unsigned long long integer (64 bits).
 
         Parameters
@@ -679,7 +685,7 @@ class WsiDicomWriteIO(WsiDicomIO):
         format = "<Q" if self._dicom_io.is_little_endian else ">Q"
         self.write(pack(format, value))
 
-    def write_tag(self, tag: BaseTag):
+    def write_tag(self, tag: BaseTag) -> None:
         """Write tag to stream.
 
         Parameters
@@ -690,7 +696,7 @@ class WsiDicomWriteIO(WsiDicomIO):
         """
         self._dicom_io.write_tag(tag)
 
-    def write_UL(self, value: int):
+    def write_UL(self, value: int) -> None:  # noqa: N802 - mirrors pydicom's write_UL
         """Write unsigned long integer (32 bits).
 
         Parameters
@@ -703,7 +709,7 @@ class WsiDicomWriteIO(WsiDicomIO):
 
     def write_tag_of_vr_and_length(
         self, tag: BaseTag, value_representation: str, length: int | None = None
-    ):
+    ) -> None:
         """Write tag, tag VR and length.
 
         Parameters
@@ -725,7 +731,7 @@ class WsiDicomWriteIO(WsiDicomIO):
         else:
             self._dicom_io.write_UL(UNDEFINED_LENGTH)
 
-    def write_preamble(self):
+    def write_preamble(self) -> None:
         """Write DICOM preamble."""
         self.seek(0)
         preamble = b"\x00" * 128
@@ -734,7 +740,7 @@ class WsiDicomWriteIO(WsiDicomIO):
 
     def write_file_meta_info(
         self, instance_uid: UID, sop_class_uid: UID, transfer_syntax: UID
-    ):
+    ) -> None:
         """Write file meta info.
 
         Parameters
@@ -766,7 +772,7 @@ class WsiDicomWriteIO(WsiDicomIO):
         )
         write_file_meta_info(self._dicom_io, meta)
 
-    def write_dataset(self, dataset: Dataset, creation_datetime: datetime):
+    def write_dataset(self, dataset: Dataset, creation_datetime: datetime) -> None:
         """Write dataset to stream.
 
         Parameters
@@ -788,7 +794,7 @@ class WsiDicomWriteIO(WsiDicomIO):
         dataset.add(creation_time)
         write_dataset(self._dicom_io, dataset)
 
-    def update_dataset(self, dataset_start: int, update: dict[BaseTag, Any]):
+    def update_dataset(self, dataset_start: int, update: dict[BaseTag, Any]) -> None:
         """Update dataset in place.
 
         The element value representation must allow padding,
@@ -803,7 +809,6 @@ class WsiDicomWriteIO(WsiDicomIO):
         update: dict[BaseTag, Any]
             Dictionary with tags to update and their new values.
         """
-
         rewind = self.tell()
         self.seek(dataset_start)
         for element in data_element_generator(

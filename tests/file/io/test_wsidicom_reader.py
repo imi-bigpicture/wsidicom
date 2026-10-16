@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections.abc import Iterator
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
@@ -65,25 +66,27 @@ FILE_SETTINGS = {
 }
 
 
-@pytest.fixture()
-def meta_dataset():
-    yield create_meta_dataset()
+@pytest.fixture
+def meta_dataset() -> FileMetaDataset:
+    return create_meta_dataset()
 
 
-@pytest.fixture()
-def padded_test_frame():
-    yield TESTFRAME + b"\x00" * (len(TESTFRAME) % 2)
+@pytest.fixture
+def padded_test_frame() -> bytes:
+    return TESTFRAME + b"\x00" * (len(TESTFRAME) % 2)
 
 
-@pytest.fixture()
-def dataset(name: str):
+@pytest.fixture
+def dataset(name: str) -> Dataset:
     file_setting = FILE_SETTINGS[name]
     dataset = create_main_dataset(file_setting["tile_type"], file_setting["bot_type"])
-    yield dataset
+    return dataset
 
 
-@pytest.fixture()
-def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
+@pytest.fixture
+def test_file(
+    name: str, dataset: Dataset, meta_dataset: FileMetaDataset
+) -> Iterator[WsiDicomReader]:
     file_setting = FILE_SETTINGS[name]
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath(file_setting["name"])
@@ -93,12 +96,14 @@ def test_file(name: str, dataset: Dataset, meta_dataset: FileMetaDataset):
         reader.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def file_with_element_after_sequence(
     name: str, dataset: Dataset, meta_dataset: FileMetaDataset
-):
-    """A file holding an element ordered between the per frame sequence and the pixel
-    data, which the read of the dataset has to pick up rather than stop at."""
+) -> Iterator[WsiDicomReader]:
+    """Return a file with an element between the per frame sequence and pixel data.
+
+    The read of the dataset has to pick that element up rather than stop at it.
+    """
     dataset.add_new(TAG_AFTER_SEQUENCE, "LO", "After the sequence")
     with TemporaryDirectory() as tempdir:
         path = Path(tempdir).joinpath(FILE_SETTINGS[name]["name"])
@@ -108,10 +113,15 @@ def file_with_element_after_sequence(
         reader.close()
 
 
-@pytest.fixture()
-def file_with_unreadable_sequence(meta_dataset: FileMetaDataset):
-    """A file whose per frame sequence cannot be read without parsing it: it holds more
-    items than the instance has frames, so the positions cannot be matched to frames."""
+@pytest.fixture
+def file_with_unreadable_sequence(
+    meta_dataset: FileMetaDataset,
+) -> Iterator[WsiDicomReader]:
+    """Return a file whose per frame sequence cannot be read without parsing it.
+
+    It holds more items than the instance has frames, so the positions cannot be
+    matched to frames.
+    """
     dataset = create_main_dataset(TileType.SPARSE, OffsetTableType.BASIC)
     dataset.PerFrameFunctionalGroupsSequence.append(
         deepcopy(dataset.PerFrameFunctionalGroupsSequence[0])
@@ -124,10 +134,14 @@ def file_with_unreadable_sequence(meta_dataset: FileMetaDataset):
         reader.close()
 
 
-@pytest.fixture()
-def file_without_sequence_with_element_after_it(meta_dataset: FileMetaDataset):
-    """The same, for a file with no per frame sequence at all, where the read stops at
-    the element itself rather than at the sequence."""
+@pytest.fixture
+def file_without_sequence_with_element_after_it(
+    meta_dataset: FileMetaDataset,
+) -> Iterator[WsiDicomReader]:
+    """Return the same, for a file with no per frame sequence at all.
+
+    There the read stops at the element itself rather than at the sequence.
+    """
     dataset = create_main_dataset(TileType.FULL, OffsetTableType.BASIC)
     del dataset[PerFrameFunctionalGroupsSequenceTag]
     dataset.add_new(TAG_AFTER_SEQUENCE, "LO", "After the sequence")
@@ -151,9 +165,11 @@ SEQUENCES_WRITTEN_WITHOUT_A_LENGTH = (
 )
 
 
-@pytest.fixture()
-def file_with_sequences_without_a_length(meta_dataset: FileMetaDataset):
-    """A file with undefined length sequences, which can be stepped over.
+@pytest.fixture
+def file_with_sequences_without_a_length(
+    meta_dataset: FileMetaDataset,
+) -> Iterator[tuple[WsiDicomReader, Path]]:
+    """Return a file with undefined length sequences, which can be stepped over.
 
     Also with an ICC profile large enough to be deferred, so that both kinds of
     deferred element are in play.
@@ -176,7 +192,7 @@ def file_with_sequences_without_a_length(meta_dataset: FileMetaDataset):
 class TestSteppingOverSequences:
     def test_the_sequences_opening_does_not_read_are_stepped_over(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
-    ):
+    ) -> None:
         """Only sequences not needed for opening are stepped over.
 
         Uses private state, as a stepped over sequence read back cannot be told
@@ -200,7 +216,7 @@ class TestSteppingOverSequences:
 
     def test_a_sequence_that_cannot_be_walked_is_read_instead(
         self, meta_dataset: FileMetaDataset
-    ):
+    ) -> None:
         """A sequence that cannot be stepped over is read by pydicom instead."""
         # Arrange
         # An item delimiter where an item belongs, which pydicom reads as an empty
@@ -234,7 +250,7 @@ class TestSteppingOverSequences:
 
     def test_completed_dataset_writes_back_framed_as_it_was_read(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
-    ):
+    ) -> None:
         """A stepped over sequence is written back with a single delimiter.
 
         The sequences are not accessed before writing, so pydicom writes the raw
@@ -253,6 +269,7 @@ class TestSteppingOverSequences:
         # Assert
         written = dcmread(BytesIO(buffer.getvalue()))
         # Check tags only, as accessing elements would fail on a stray delimiter.
+        # Iterating a Dataset yields its elements; keys() yields only the tags.
         assert not any(tag.group == 0xFFFE for tag in written.keys())  # noqa: SIM118
         for keyword in SEQUENCES_WRITTEN_WITHOUT_A_LENGTH:
             assert written[Tag(keyword)].value == original[Tag(keyword)].value
@@ -265,7 +282,7 @@ class TestSteppingOverSequences:
         file_with_sequences_without_a_length: tuple[WsiDicomReader, Path],
         monkeypatch: pytest.MonkeyPatch,
         failing_read: int,
-    ):
+    ) -> None:
         """An element whose read failed is read when the dataset is next completed.
 
         The deferred ICC profile is read first and the stepped over sequences after
@@ -300,7 +317,7 @@ class TestSteppingOverSequences:
 
     def test_a_stepped_over_sequence_is_read_back_in_the_character_set(
         self, meta_dataset: FileMetaDataset
-    ):
+    ) -> None:
         """A value in a stepped over sequence is decoded with the character set."""
         # Arrange
         dataset = create_main_dataset(TileType.FULL, OffsetTableType.BASIC)
@@ -323,7 +340,7 @@ class TestSteppingOverSequences:
 
     def test_completed_dataset_holds_what_was_stepped_over(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
-    ):
+    ) -> None:
         """The complete dataset contains the stepped over sequences."""
         # Arrange
         reader, path = file_with_sequences_without_a_length
@@ -338,7 +355,7 @@ class TestSteppingOverSequences:
 
     def test_stepped_over_sequences_keep_the_framing_they_were_written_with(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
-    ):
+    ) -> None:
         """Stepped over sequences are read back with undefined length."""
         # Arrange
         reader, _ = file_with_sequences_without_a_length
@@ -352,7 +369,7 @@ class TestSteppingOverSequences:
 
     def test_sequences_read_while_opening_are_not_stepped_over(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
-    ):
+    ) -> None:
         """Sequences needed for opening are read without completing the dataset."""
         # Arrange
         reader, _ = file_with_sequences_without_a_length
@@ -367,9 +384,11 @@ class TestSteppingOverSequences:
 
     def test_a_sequence_after_where_the_per_frame_sequence_belongs_is_stepped_over(
         self, meta_dataset: FileMetaDataset
-    ):
-        """In a file with no per frame sequence, the read on to the pixel data steps
-        over sequences too."""
+    ) -> None:
+        """The read on to the pixel data steps over sequences too.
+
+        That is, in a file with no per frame sequence.
+        """
         # Arrange
         # A private sequence ordered after the per frame functional groups sequence,
         # as in a file from PixelMed.
@@ -404,20 +423,20 @@ class TestSteppingOverSequences:
 
     def test_comparing_to_something_else_reads_nothing(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
-    ):
+    ) -> None:
         """Comparing to what cannot be equal does not complete the dataset."""
         # Arrange
         reader, _ = file_with_sequences_without_a_length
         reader.close()
 
         # Act & Assert
-        assert reader.dataset != None  # noqa: E711
+        assert reader.dataset != None  # noqa: E711 - exercises WsiDataset.__ne__
         assert reader.dataset != "a string"
         assert reader.dataset == reader.dataset
 
     def test_reading_a_frame_does_not_need_the_stepped_over_sequences(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
-    ):
+    ) -> None:
         """The frame index is read without the stepped over sequences."""
         # Arrange
         reader, _ = file_with_sequences_without_a_length
@@ -430,7 +449,7 @@ class TestSteppingOverSequences:
 
     def test_datasets_of_the_same_file_are_equal_before_either_is_completed(
         self, file_with_sequences_without_a_length: tuple[WsiDicomReader, Path]
-    ):
+    ) -> None:
         """Equality does not depend on whether a dataset has been completed."""
         # Arrange
         reader, path = file_with_sequences_without_a_length
@@ -449,7 +468,7 @@ class TestWWsiDicomReader:
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_offset_table_type_property(
         self, test_file: WsiDicomReader, settings: dict[str, Any]
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -461,7 +480,7 @@ class TestWWsiDicomReader:
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_tile_type_property(
         self, test_file: WsiDicomReader, settings: dict[str, Any]
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -471,7 +490,7 @@ class TestWWsiDicomReader:
         assert tile_type == settings["tile_type"]
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_dataset_property(self, test_file: WsiDicomReader):
+    def test_dataset_property(self, test_file: WsiDicomReader) -> None:
         # Arrange
         path = test_file.filepath
         assert isinstance(path, Path)
@@ -489,7 +508,7 @@ class TestWWsiDicomReader:
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_frame_positions_match_parsed_sequence(
         self, test_file: WsiDicomReader, settings: dict[str, Any]
-    ):
+    ) -> None:
         """Positions read out of the sequence have to say what parsing it says."""
         # Arrange
         path = test_file.filepath
@@ -526,7 +545,7 @@ class TestWWsiDicomReader:
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
     def test_element_after_sequence_is_read(
         self, file_with_element_after_sequence: WsiDicomReader
-    ):
+    ) -> None:
         """The dataset read stops at the sequence, so it has to carry on past it."""
         # Arrange
         reader = file_with_element_after_sequence
@@ -540,7 +559,7 @@ class TestWWsiDicomReader:
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
     def test_element_after_sequence_leaves_pixel_data_findable(
         self, file_with_element_after_sequence: WsiDicomReader, padded_test_frame: bytes
-    ):
+    ) -> None:
         """An element after the sequence must not be taken for the pixel data."""
         # Arrange
         reader = file_with_element_after_sequence
@@ -554,10 +573,13 @@ class TestWWsiDicomReader:
     @pytest.mark.parametrize(["name", "settings"], FILE_SETTINGS.items())
     def test_frame_positions_of_a_tiled_full_image(
         self, test_file: WsiDicomReader, settings: dict[str, Any]
-    ):
-        """The per frame groups of a tiled full image state no tile positions, so
-        asking for them has to say so rather than answer from the shared groups or
-        from an empty sequence."""
+    ) -> None:
+        """Asking for the tile positions of a tiled full image says there are none.
+
+        The per frame groups of a tiled full image state no tile positions, so asking
+        for them has to say so rather than answer from the shared groups or from an
+        empty sequence.
+        """
         # Arrange
         dataset = test_file.dataset
         if settings["tile_type"] is not TileType.FULL:
@@ -569,7 +591,7 @@ class TestWWsiDicomReader:
 
     def test_unreadable_sequence_is_parsed_instead(
         self, file_with_unreadable_sequence: WsiDicomReader
-    ):
+    ) -> None:
         """Where the bytes cannot be searched, parsing the sequence gives the same."""
         # Arrange
         reader = file_with_unreadable_sequence
@@ -586,7 +608,7 @@ class TestWWsiDicomReader:
 
     def test_unreadable_sequence_is_not_kept_in_the_dataset(
         self, file_with_unreadable_sequence: WsiDicomReader
-    ):
+    ) -> None:
         """Parsed for the positions and let go of, as a searched one is."""
         # Arrange
         reader = file_with_unreadable_sequence
@@ -599,7 +621,7 @@ class TestWWsiDicomReader:
 
     def test_unreadable_sequence_leaves_pixel_data_findable(
         self, file_with_unreadable_sequence: WsiDicomReader, padded_test_frame: bytes
-    ):
+    ) -> None:
         # Arrange
         reader = file_with_unreadable_sequence
 
@@ -611,9 +633,11 @@ class TestWWsiDicomReader:
 
     def test_element_after_missing_sequence_is_read(
         self, file_without_sequence_with_element_after_it: WsiDicomReader
-    ):
-        """Without a sequence the read stops at the element itself, not at the pixel
-        data, so it still has to carry on."""
+    ) -> None:
+        """Without a sequence the read stops at the element itself.
+
+        That is not at the pixel data, so it still has to carry on.
+        """
         # Arrange
         reader = file_without_sequence_with_element_after_it
 
@@ -627,7 +651,7 @@ class TestWWsiDicomReader:
         self,
         file_without_sequence_with_element_after_it: WsiDicomReader,
         padded_test_frame: bytes,
-    ):
+    ) -> None:
         # Arrange
         reader = file_without_sequence_with_element_after_it
 
@@ -641,7 +665,7 @@ class TestWWsiDicomReader:
     def test_image_type_property(
         self,
         test_file: WsiDicomReader,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -651,7 +675,7 @@ class TestWWsiDicomReader:
         assert image_type == ImageType.VOLUME
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_uids_property(self, test_file: WsiDicomReader, dataset: Dataset):
+    def test_uids_property(self, test_file: WsiDicomReader, dataset: Dataset) -> None:
         # Arrange
 
         # Act
@@ -669,7 +693,7 @@ class TestWWsiDicomReader:
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
     def test_transfer_syntax_property(
         self, test_file: WsiDicomReader, meta_dataset: FileMetaDataset
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -679,7 +703,7 @@ class TestWWsiDicomReader:
         assert transfer_syntax == meta_dataset.TransferSyntaxUID
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_frame_offset_property(self, test_file: WsiDicomReader):
+    def test_frame_offset_property(self, test_file: WsiDicomReader) -> None:
         # Arrange
 
         # Act
@@ -689,7 +713,7 @@ class TestWWsiDicomReader:
         assert frame_offset == 0
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_frame_count_property(self, test_file: WsiDicomReader):
+    def test_frame_count_property(self, test_file: WsiDicomReader) -> None:
         # Arrange
 
         # Act
@@ -699,7 +723,9 @@ class TestWWsiDicomReader:
         assert frame_count == 1
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_read_frame_before_first_frame_in_file(self, test_file: WsiDicomReader):
+    def test_read_frame_before_first_frame_in_file(
+        self, test_file: WsiDicomReader
+    ) -> None:
         # Arrange
         before_first_frame = test_file.frame_offset - 1
 
@@ -708,7 +734,9 @@ class TestWWsiDicomReader:
             test_file.read_frame(before_first_frame)
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_read_frame_after_last_frame_in_file(self, test_file: WsiDicomReader):
+    def test_read_frame_after_last_frame_in_file(
+        self, test_file: WsiDicomReader
+    ) -> None:
         # Arrange
         after_last_frame = test_file.frame_offset + len(test_file.frame_index)
 
@@ -717,7 +745,9 @@ class TestWWsiDicomReader:
             test_file.read_frame(after_last_frame)
 
     @pytest.mark.parametrize("name", FILE_SETTINGS.keys())
-    def test_read_frame(self, test_file: WsiDicomReader, padded_test_frame: bytes):
+    def test_read_frame(
+        self, test_file: WsiDicomReader, padded_test_frame: bytes
+    ) -> None:
         # Arrange
 
         # Act

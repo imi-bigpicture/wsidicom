@@ -17,6 +17,7 @@
 import io
 from abc import ABCMeta, abstractmethod
 from collections.abc import Callable
+from typing import Any, ClassVar
 
 import numpy as np
 from PIL import Image as Pillow
@@ -58,7 +59,7 @@ from wsidicom.codec.optionals import (
     rle_decode_frame,
 )
 from wsidicom.codec.optionals import (
-    JPEGXL as JPEGXLCodec,
+    JPEGXL as JPEGXL_CODEC,
 )
 from wsidicom.codec.rle import RleCodec
 from wsidicom.config import get_settings
@@ -254,7 +255,7 @@ class Decoder(metaclass=ABCMeta):
 class PillowDecoder(Decoder):
     """Decoder that uses Pillow to decode images."""
 
-    _supported_transfer_syntaxes = [
+    _supported_transfer_syntaxes: ClassVar[list[UID]] = [
         JPEGBaseline8Bit,
         JPEG2000,
         JPEG2000Lossless,
@@ -295,10 +296,12 @@ class PillowDecoder(Decoder):
         return Pillow.frombuffer("RGB", image.size, image.tobytes(), "raw", "RGB", 0, 1)
 
     def _should_suppress_color_transform(self, image: Image) -> bool:
-        """Return True if Pillow's YCbCr to RGB transform should be suppressed:
-        the metadata declares RGB but the JPEG itself signals no RGB color space
-        (no Adobe APP14 marker and no 'R','G','B' component ids). Reads only
-        fields Pillow already parsed from the header."""
+        """Return True if Pillow's YCbCr to RGB transform should be suppressed.
+
+        That is when the metadata declares RGB but the JPEG itself signals no RGB
+        color space (no Adobe APP14 marker and no 'R','G','B' component ids). Reads
+        only fields Pillow already parsed from the header.
+        """
         if self._photometric_interpretation != "RGB" or not isinstance(
             image, JpegImageFile
         ):
@@ -337,7 +340,7 @@ class PydicomDecoder(Decoder):
         bits_allocated: int,
         bits_stored: int,
         photometric_interpretation: str,
-    ):
+    ) -> None:
         """Initialize decoder.
 
         Parameters
@@ -425,7 +428,10 @@ class PydicomDecoder(Decoder):
 class ImageCodecsDecoder(Decoder):
     """Decoder that uses imagecodecs to decode images."""
 
-    _supported_transfer_syntaxes = {
+    # imagecodecs has no type information, so its codec classes are untyped.
+    _supported_transfer_syntaxes: ClassVar[
+        dict[UID, tuple[Callable[..., np.ndarray] | None, Any]]
+    ] = {
         JPEGBaseline8Bit: (jpeg8_decode, JPEG8),
         JPEGExtended12Bit: (jpeg8_decode, JPEG8),
         JPEGLossless: (jpeg8_decode, JPEG8),
@@ -437,9 +443,9 @@ class ImageCodecsDecoder(Decoder):
         HTJ2K: (jpeg2k_decode, JPEG2K),
         HTJ2KLossless: (jpeg2k_decode, JPEG2K),
         HTJ2KLosslessRPCL: (jpeg2k_decode, JPEG2K),
-        JPEGXL: (jpegxl_decode, JPEGXLCodec),
-        JPEGXLJPEGRecompression: (jpegxl_decode, JPEGXLCodec),
-        JPEGXLLossless: (jpegxl_decode, JPEGXLCodec),
+        JPEGXL: (jpegxl_decode, JPEGXL_CODEC),
+        JPEGXLJPEGRecompression: (jpegxl_decode, JPEGXL_CODEC),
+        JPEGXLLossless: (jpegxl_decode, JPEGXL_CODEC),
     }
 
     def __init__(
@@ -501,14 +507,15 @@ class ImageCodecsDecoder(Decoder):
         if transfer_syntax not in cls._supported_transfer_syntaxes:
             return None
         decoder, codec = cls._supported_transfer_syntaxes[transfer_syntax]
-        assert decoder is not None and codec is not None
+        assert decoder is not None
+        assert codec is not None
         if not codec.available:
             return None
         return decoder
 
 
 class RleDecoder(Decoder):
-    def __init__(self, size: Size, samples_per_pixel: int, bits: int):
+    def __init__(self, size: Size, samples_per_pixel: int, bits: int) -> None:
         if not self.is_supported(RLELossless, samples_per_pixel, bits):
             raise ValueError(
                 f"Unsupported combination of samples per pixel {samples_per_pixel} "
@@ -541,7 +548,7 @@ class RleDecoder(Decoder):
 
 class ImageCodecsRleDecoder(RleDecoder):
     @classmethod
-    def is_available(cls):
+    def is_available(cls) -> bool:
         return IMAGE_CODECS_AVAILABLE
 
     def decode(self, frame: bytes) -> np.ndarray:

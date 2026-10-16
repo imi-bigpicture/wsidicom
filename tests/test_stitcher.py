@@ -20,7 +20,7 @@ reference). The two agreeing is itself the cross-check that the numpy stitcher
 composes tiles correctly.
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 
 import numpy as np
 import pytest
@@ -52,8 +52,10 @@ def tile_slot(result: np.ndarray, column: int, row: int) -> np.ndarray:
     ]
 
 
-def fetch_from(tiles: dict[Point, np.ndarray]):
-    """A fetch callable yielding one tile per requested point, in order."""
+def fetch_from(
+    tiles: dict[Point, np.ndarray],
+) -> Callable[[Sequence[Point]], Iterator[np.ndarray]]:
+    """Return a fetch callable yielding one tile per requested point, in order."""
 
     def fetch(points: Sequence[Point]) -> Iterator[np.ndarray]:
         for point in points:
@@ -63,7 +65,7 @@ def fetch_from(tiles: dict[Point, np.ndarray]):
 
 
 def full_pixel_region(tile_region: Region) -> Region:
-    """The pixel region covering every tile in ``tile_region`` (no clipping)."""
+    """Return the pixel region covering every tile in ``tile_region`` (no clipping)."""
     return Region(tile_region.start * TILE_SIZE, tile_region.size * TILE_SIZE)
 
 
@@ -74,19 +76,19 @@ def stitcher(request: pytest.FixtureRequest) -> Stitcher:
 
 @pytest.fixture
 def single_thread_executor() -> ReadExecutor:
-    """An inline, single-thread read executor."""
+    """Provide an inline, single-thread read executor."""
     return ReadExecutor(1, None)
 
 
 @pytest.fixture
 def parallel_executor() -> ReadExecutor:
-    """A multi-worker read executor, so the region is split into chunks."""
+    """Provide a multi-worker read executor, so the region is split into chunks."""
     return ReadExecutor(4, None)
 
 
 @pytest.mark.unittest
 class TestStitchGrid:
-    def test_dimensions(self, stitcher: Stitcher):
+    def test_dimensions(self, stitcher: Stitcher) -> None:
         """Composed shape = grid dimensions times tile size."""
         # Arrange
         grid = [[solid_tile((255, 0, 0)) for _ in range(3)] for _ in range(2)]
@@ -97,7 +99,7 @@ class TestStitchGrid:
         # Assert
         assert result.shape == (2 * TILE_SIZE, 3 * TILE_SIZE, 3)
 
-    def test_row_major_layout(self, stitcher: Stitcher):
+    def test_row_major_layout(self, stitcher: Stitcher) -> None:
         """Tiles land at their row-major grid positions."""
         # Arrange
         grid = [
@@ -112,7 +114,7 @@ class TestStitchGrid:
         for (column, row), color in COLORS.items():
             assert np.array_equal(tile_slot(result, column, row), solid_tile(color))
 
-    def test_variable_edge_blocks(self, stitcher: Stitcher):
+    def test_variable_edge_blocks(self, stitcher: Stitcher) -> None:
         """A rectangular grid with a narrower last column and shorter last row."""
         # Arrange - column widths [4, 2], row heights [4, 3]
         grid = [
@@ -130,7 +132,7 @@ class TestStitchGrid:
         assert np.array_equal(result[4:, :4], np.full((3, 4, 3), 3, np.uint8))
         assert np.array_equal(result[4:, 4:], np.full((3, 2, 3), 4, np.uint8))
 
-    def test_irregular_rows_raises(self, stitcher: Stitcher):
+    def test_irregular_rows_raises(self, stitcher: Stitcher) -> None:
         # Arrange
         grid = [
             [solid_tile((0, 0, 0))],
@@ -141,7 +143,7 @@ class TestStitchGrid:
         with pytest.raises(ValueError, match="same length"):
             stitcher.stitch_grid(grid)
 
-    def test_empty_grid_raises(self, stitcher: Stitcher):
+    def test_empty_grid_raises(self, stitcher: Stitcher) -> None:
         # Act & Assert
         with pytest.raises(ValueError, match="empty tile grid"):
             stitcher.stitch_grid([])
@@ -151,7 +153,9 @@ class TestStitchGrid:
 
 @pytest.mark.unittest
 class TestStitchParallel:
-    def test_dimensions(self, stitcher: Stitcher, single_thread_executor: ReadExecutor):
+    def test_dimensions(
+        self, stitcher: Stitcher, single_thread_executor: ReadExecutor
+    ) -> None:
         """Canvas shape = pixel region size."""
         # Arrange
         tile_region = Region(Point(0, 0), Size(3, 2))
@@ -176,7 +180,7 @@ class TestStitchParallel:
 
     def test_positions_from_region_start(
         self, stitcher: Stitcher, single_thread_executor: ReadExecutor
-    ):
+    ) -> None:
         """tile_region.start maps to canvas position (0, 0)."""
         # Arrange - region offset so start != origin
         start = Point(5, 7)
@@ -204,9 +208,11 @@ class TestStitchParallel:
 
     def test_clips_tiles_to_region(
         self, stitcher: Stitcher, single_thread_executor: ReadExecutor
-    ):
-        """A region straddling all four tiles is filled from each tile's clipped
-        corner, into a region-sized canvas."""
+    ) -> None:
+        """A region straddling all four tiles is filled from each tile's clipped corner.
+
+        The corners are stitched into a region-sized canvas.
+        """
         # Arrange - 2x2 solid-color tiles cover pixels (0,0)-(8,8); the region is
         # the central 4x4 window, taking a corner from each tile.
         tile_region = Region(Point(0, 0), Size(2, 2))
@@ -242,7 +248,7 @@ class TestStitchParallel:
 
     def test_multiple_chunks_assembled_correctly(
         self, stitcher: Stitcher, parallel_executor: ReadExecutor
-    ):
+    ) -> None:
         """A region split across workers reassembles in the right positions."""
         # Arrange
         tile_region = Region(Point(0, 0), Size(4, 4))
@@ -273,7 +279,7 @@ class TestStitchParallel:
 
     def test_worker_exception_propagates(
         self, stitcher: Stitcher, single_thread_executor: ReadExecutor
-    ):
+    ) -> None:
         """An exception from fetch propagates through stitch_parallel."""
         # Arrange
         tile_region = Region(Point(0, 0), Size(2, 2))
@@ -297,7 +303,7 @@ class TestStitchParallel:
 
     def test_fetch_returns_too_few_tiles_raises(
         self, stitcher: Stitcher, single_thread_executor: ReadExecutor
-    ):
+    ) -> None:
         # Arrange - two points requested, one tile yielded
         tile_region = Region(Point(0, 0), Size(2, 1))
         region = full_pixel_region(tile_region)
@@ -306,7 +312,7 @@ class TestStitchParallel:
             yield solid_tile((0, 0, 0))
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"zip\(\) argument 2 is shorter"):
             stitcher.stitch_parallel(
                 region,
                 tile_region,
@@ -319,7 +325,7 @@ class TestStitchParallel:
 
     def test_fetch_returns_too_many_tiles_raises(
         self, stitcher: Stitcher, single_thread_executor: ReadExecutor
-    ):
+    ) -> None:
         # Arrange - one point requested, two tiles yielded
         tile_region = Region(Point(0, 0), Size(1, 1))
         region = full_pixel_region(tile_region)
@@ -329,7 +335,7 @@ class TestStitchParallel:
             yield solid_tile((0, 0, 0))
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"zip\(\) argument 2 is longer"):
             stitcher.stitch_parallel(
                 region,
                 tile_region,
@@ -343,10 +349,12 @@ class TestStitchParallel:
 
 @pytest.mark.unittest
 class TestReferenceAgreement:
-    """The Pillow reference must compose to the same array as the numpy
-    stitcher; this is what makes it a valid cross-check."""
+    """The Pillow reference must compose to the same array as the numpy stitcher.
 
-    def test_stitch_grid_agrees(self):
+    This is what makes it a valid cross-check.
+    """
+
+    def test_stitch_grid_agrees(self) -> None:
         # Arrange - random tiles so agreement is not trivial
         rng = np.random.default_rng(0)
         grid = [
@@ -364,7 +372,7 @@ class TestReferenceAgreement:
         # Assert
         assert np.array_equal(numpy_result, pillow_result)
 
-    def test_stitch_parallel_agrees(self, single_thread_executor: ReadExecutor):
+    def test_stitch_parallel_agrees(self, single_thread_executor: ReadExecutor) -> None:
         # Arrange
         rng = np.random.default_rng(1)
         tile_region = Region(Point(0, 0), Size(3, 2))
@@ -394,7 +402,9 @@ class TestReferenceAgreement:
         # Assert
         assert np.array_equal(numpy_result, pillow_result)
 
-    def test_stitch_parallel_clipped_agrees(self, single_thread_executor: ReadExecutor):
+    def test_stitch_parallel_clipped_agrees(
+        self, single_thread_executor: ReadExecutor
+    ) -> None:
         """Agreement must also hold when the region is clipped inside its tiles."""
         # Arrange - a misaligned region straddling a 3x3 tile block
         rng = np.random.default_rng(2)

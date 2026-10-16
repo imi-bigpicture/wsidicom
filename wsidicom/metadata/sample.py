@@ -238,8 +238,10 @@ class SpecimenIdentifier:
         return self
 
     def relaxed_matching(self, other: "SpecimenIdentifier") -> bool:
-        """Determine if other specimen identifiers is equal to this, but does not
-        require issuer to be the same if one of the issuers is None."""
+        """Determine if other specimen identifiers is equal to this.
+
+        Does not require issuer to be the same if one of the issuers is None.
+        """
         if self == other:
             return True
         if self.value != other.value:
@@ -538,9 +540,11 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
     def is_sampling_constraint_is_unambiguous(
         self,
         constraints: Iterable[str | SpecimenIdentifier],
-    ):
-        """Check that the sampling tree for the specimen is is not branching when
-        following the constraints."""
+    ) -> bool:
+        """Check that the sampling tree for the specimen is is not branching.
+
+        The tree is followed along the constraints.
+        """
         if len(self.sampled_from_list) == 0:
             # No sampling tree, is unambiguous
             return True
@@ -579,9 +583,10 @@ class SampledSpecimen(BaseSpecimen, metaclass=ABCMeta):
 
 @dataclass(frozen=True)
 class Specimen(BaseSpecimen):
-    """A specimen that has been extracted/taken from a patient in some way. Does not
-    need to represent the actual first specimen in the collection tree, but should
-    represent the first known (i.e. that we have metadata for) specimen in the
+    """A specimen that has been extracted/taken from a patient in some way.
+
+    Does not need to represent the actual first specimen in the collection tree, but
+    should represent the first known (i.e. that we have metadata for) specimen in the
     collection tree.
 
     Parameters
@@ -608,7 +613,7 @@ class Specimen(BaseSpecimen):
     steps: list[PreparationStep] = field(default_factory=list)
     container: ContainerTypeCode | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.extraction_step is not None and (
             len(self.steps) == 0
             or (len(self.steps) > 0 and self.steps[0] != self.extraction_step)
@@ -630,8 +635,7 @@ class Specimen(BaseSpecimen):
         description: str | None = None,
         location: SamplingLocation | None = None,
     ) -> BaseSampling:
-        """Create a sampling from the specimen that can be used to create a new
-        sample."""
+        """Create a sampling from the specimen, to create a new sample from."""
         if method is None or self.type is None:
             sampling = UnknownSampling(
                 specimen=self,
@@ -690,8 +694,7 @@ class Sample(SampledSpecimen):
         sampling_constraints: Sequence[BaseSampling] | None = None,
         location: SamplingLocation | None = None,
     ) -> BaseSampling:
-        """Create a sampling from the specimen that can be used to create a new
-        sample."""
+        """Create a sampling from the specimen, to create a new sample from."""
         self._check_sampling_constraints_in_sampling_tree(sampling_constraints)
         if method is None or self.type is None:
             sampling = UnknownSampling(
@@ -754,10 +757,10 @@ class SlideSample(SampledSpecimen):
         init=False, default=AnatomicPathologySpecimenTypesCode("Slide")
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._check_slide_sample_sampling_constraints()
 
-    def _check_slide_sample_sampling_constraints(self):
+    def _check_slide_sample_sampling_constraints(self) -> None:
         """Check that the sampling tree for the slide sample is not branching."""
         if self.sampled_from is None or not isinstance(
             self.sampled_from.specimen, SampledSpecimen

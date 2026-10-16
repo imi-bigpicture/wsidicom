@@ -25,7 +25,7 @@ def item(value: bytes) -> CacheItem[bytes]:
 
 @pytest.mark.unittest
 class TestLRU:
-    def test_evicts_least_recently_used_when_over_maxsize(self):
+    def test_evicts_least_recently_used_when_over_maxsize(self) -> None:
         # Arrange
         cache = LRU[str, bytes](2 * ITEM_SIZE)
         cache.put("a", item(b"a" * ITEM_SIZE))
@@ -39,7 +39,7 @@ class TestLRU:
         assert cache.get("b") == b"b" * ITEM_SIZE
         assert cache.get("c") == b"c" * ITEM_SIZE
 
-    def test_caches_again_after_clear(self):
+    def test_caches_again_after_clear(self) -> None:
         # Arrange
         cache = LRU[str, bytes](ITEM_SIZE)
         cache.put("a", item(b"a" * ITEM_SIZE))
@@ -51,7 +51,7 @@ class TestLRU:
         # Assert
         assert cache.get("b") == b"b" * ITEM_SIZE
 
-    def test_replacing_an_item_does_not_consume_extra_capacity(self):
+    def test_replacing_an_item_does_not_consume_extra_capacity(self) -> None:
         # Arrange
         cache = LRU[str, bytes](2 * ITEM_SIZE)
         cache.put("a", item(b"a" * ITEM_SIZE))
@@ -64,7 +64,7 @@ class TestLRU:
         assert cache.get("a") == b"A" * ITEM_SIZE
         assert cache.get("b") == b"b" * ITEM_SIZE
 
-    def test_replacing_an_item_makes_it_most_recently_used(self):
+    def test_replacing_an_item_makes_it_most_recently_used(self) -> None:
         # Arrange
         cache = LRU[str, bytes](2 * ITEM_SIZE)
         cache.put("a", item(b"a" * ITEM_SIZE))
@@ -81,7 +81,7 @@ class TestLRU:
 
 @pytest.mark.unittest
 class TestFrameCache:
-    def test_caches_frames_again_after_clear(self):
+    def test_caches_frames_again_after_clear(self) -> None:
         # Arrange
         FRAME = b"z" * 100
         FRAME_COUNT = 10

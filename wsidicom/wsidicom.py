@@ -17,9 +17,11 @@ import os
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import Executor
 from pathlib import Path
+from types import TracebackType
 from typing import (
     Any,
     Literal,
+    Self,
     Union,
     overload,
 )
@@ -74,7 +76,7 @@ class WsiDicom:
         read_executor: Executor | None = None,
         *,
         settings: Settings | None = None,
-    ):
+    ) -> None:
         """Hold WSI DICOM levels, labels and overviews.
 
         Note that WsiDicom.open() should be used for opening DICOM WSI files.
@@ -263,12 +265,13 @@ class WsiDicom:
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
     ) -> list[UPath]:
         """
-        Save wsi as DICOM-files in path. By default instances for the same
-        pyramid level are combined when possible to one file (e.g. not split
-        for optical paths or focal planes); use `instance_split` to write a
-        separate instance per focal plane and/or optical path instead. If
-        instances are sparse tiled they will be converted to full tiled by
-        inserting blank tiles. All instance uids will be changed.
+        Save wsi as DICOM-files in path.
+
+        By default instances for the same pyramid level are combined when possible to
+        one file (e.g. not split for optical paths or focal planes); use
+        `instance_split` to write a separate instance per focal plane and/or optical
+        path instead. If instances are sparse tiled they will be converted to full tiled
+        by inserting blank tiles. All instance uids will be changed.
 
         Parameters
         ----------
@@ -414,8 +417,9 @@ class WsiDicom:
         file_options: dict[str, Any] | None = None,
     ) -> bool | None:
         """
-        Return true if files in path are formatted for fast viewing, i.e.
-        have TILED_FULL tile arrangement and have an offset table.
+        Return true if files in path are formatted for fast viewing.
+
+        That is, the files have TILED_FULL tile arrangement and an offset table.
 
         Parameters
         ----------
@@ -427,6 +431,7 @@ class WsiDicom:
             Optional options for when opening files.
 
         Returns
+        -------
             True if files in path are formatted for fast viewing, None if no DICOM WSI
             files are in the path.
         """
@@ -439,8 +444,9 @@ class WsiDicom:
         files: str | Path | UPath | Iterable[str | Path | UPath],
         file_options: dict[str, Any] | None = None,
     ) -> bool:
-        """Return true if files in path have at least one level that can be read with
-        WsiDicom.
+        """Return true if files in path have a level that WsiDicom can read.
+
+        At least one level must be readable with WsiDicom.
 
         Parameters
         ----------
@@ -450,6 +456,7 @@ class WsiDicom:
             Optional options for when opening files.
 
         Returns
+        -------
             True if files in path have one level that can be read with WsiDicom.
         """
         source = WsiDicomFileSource.open(files, file_options)
@@ -576,8 +583,10 @@ class WsiDicom:
     def read_label(
         self, index: int = 0, *, as_array: bool = False
     ) -> Image | np.ndarray:
-        """Read label image of the whole slide. If several label
-        images are present, index can be used to select a specific image.
+        """Read label image of the whole slide.
+
+        If several label images are present, index can be used to select a specific
+        image.
 
         Parameters
         ----------
@@ -613,8 +622,10 @@ class WsiDicom:
     def read_overview(
         self, index: int = 0, *, as_array: bool = False
     ) -> Image | np.ndarray:
-        """Read overview image of the whole slide. If several overview
-        images are present, index can be used to select a specific image.
+        """Read overview image of the whole slide.
+
+        If several overview images are present, index can be used to select a specific
+        image.
 
         Parameters
         ----------
@@ -674,8 +685,9 @@ class WsiDicom:
         *,
         as_array: bool = False,
     ) -> Image | np.ndarray:
-        """Read thumbnail image of the whole slide with dimensions no larger than given
-        size.
+        """Read thumbnail image of the whole slide.
+
+        The thumbnail has dimensions no larger than given size.
 
         Parameters
         ----------
@@ -984,7 +996,7 @@ class WsiDicom:
             If to return the region as a numpy array instead of a Pillow image.
 
         Returns
-        --------
+        -------
         Union[Image, np.ndarray]
             Region as Pillow image, or as a numpy array if `as_array`.
         """
@@ -1102,8 +1114,10 @@ class WsiDicom:
         pyramid: int | None = None,
         crop_to_image_boundary: bool = True,
     ) -> bytes:
-        """Read tile in pyramid level as encoded bytes. For non-existing levels
-        the tile is scaled down from a lower level, using the similar encoding.
+        """Read tile in pyramid level as encoded bytes.
+
+        For non-existing levels the tile is scaled down from a lower level, using the
+        similar encoding.
 
         Parameters
         ----------
@@ -1184,11 +1198,11 @@ class WsiDicom:
         if self._source_owned:
             self._source.close()
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear cache of encoded and decoded tiles."""
         self._source.clear_cache()
 
-    def resize_cache(self, size: int):
+    def resize_cache(self, size: int) -> None:
         """Resize cache of encoded and decoded tiles."""
         self._source.resize_cache(size)
 
@@ -1202,8 +1216,9 @@ class WsiDicom:
 
     def _validate_collection(self) -> SlideUids:
         """
-        Check that no files or instance in collection is duplicate, and, if
-        strict, that all series have the same base uids.
+        Check that no files or instance in collection is duplicate.
+
+        If strict, also check that all series have the same base uids.
         Raises WsiDicomMatchError otherwise. Returns base uid for collection.
 
         Returns
@@ -1237,10 +1252,15 @@ class WsiDicom:
                     logger.warning("Annotations uids does not match.")
         return slide_uids
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     def __repr__(self) -> str:

@@ -73,7 +73,7 @@ def unsplit_dir(
 
 @pytest.fixture
 def unsplit_region(unsplit_dir: Path, strip_size: Size) -> Image.Image:
-    """A base-level strip from the unsplit save."""
+    """Return a base-level strip from the unsplit save."""
     with WsiDicom.open(unsplit_dir) as unsplit_wsi:
         return _read_strip(unsplit_wsi, strip_size)
 
@@ -107,7 +107,7 @@ class TestConcatenation:
         unsplit_region: Image.Image,
         strip_size: Size,
         split_dir: Path,
-    ):
+    ) -> None:
         # Arrange — a frame budget that forces the base level into several parts.
         concatenation = ConcatenationByFrames(frame_count // 3)
 
@@ -131,7 +131,7 @@ class TestConcatenation:
         largest_encapsulated_bytes: int,
         strip_size: Size,
         split_dir: Path,
-    ):
+    ) -> None:
         # Arrange — a byte budget ~1/3 of the base level's pixel data.
         max_bytes = largest_encapsulated_bytes // 3
         concatenation = ConcatenationByBytes(max_bytes)

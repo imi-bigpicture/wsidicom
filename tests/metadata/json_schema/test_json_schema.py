@@ -58,12 +58,12 @@ class TestJsonSchema:
     @pytest.mark.parametrize(
         ["manufacturer", "model_name", "serial_number", "versions"],
         [
-            ["manufacturer", "model_name", "serial_number", ["version"]],
-            ["manufacturer", "model_name", "serial_number", ["version 1", "version 2"]],
-            [None, None, None, None],
+            ("manufacturer", "model_name", "serial_number", ["version"]),
+            ("manufacturer", "model_name", "serial_number", ["version 1", "version 2"]),
+            (None, None, None, None),
         ],
     )
-    def test_equipment_serialize(self, equipment: Equipment):
+    def test_equipment_serialize(self, equipment: Equipment) -> None:
         # Arrange
 
         # Act
@@ -79,12 +79,12 @@ class TestJsonSchema:
     @pytest.mark.parametrize(
         ["manufacturer", "model_name", "serial_number", "versions"],
         [
-            ["manufacturer", "model_name", "serial_number", ["version"]],
-            ["manufacturer", "model_name", "serial_number", ["version 1", "version 2"]],
-            [None, None, None, None],
+            ("manufacturer", "model_name", "serial_number", ["version"]),
+            ("manufacturer", "model_name", "serial_number", ["version 1", "version 2"]),
+            (None, None, None, None),
         ],
     )
-    def test_equipment_deserialize(self, equipment: Equipment):
+    def test_equipment_deserialize(self, equipment: Equipment) -> None:
         # Arrange
         dumped = {
             "manufacturer": equipment.manufacturer,
@@ -111,7 +111,7 @@ class TestJsonSchema:
             "depth_of_field",
         ],
         [
-            [
+            (
                 datetime(2023, 8, 5),
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
@@ -119,8 +119,8 @@ class TestJsonSchema:
                 SizeMm(0.01, 0.01),
                 0.001,
                 0.01,
-            ],
-            [
+            ),
+            (
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
@@ -128,11 +128,11 @@ class TestJsonSchema:
                 SizeMm(0.02, 0.02),
                 0.002,
                 0.02,
-            ],
-            [None, None, None, None, None, None, None],
+            ),
+            (None, None, None, None, None, None, None),
         ],
     )
-    def test_image_serialize(self, image: Image):
+    def test_image_serialize(self, image: Image) -> None:
         # Arrange
 
         # Act
@@ -145,14 +145,14 @@ class TestJsonSchema:
     @pytest.mark.parametrize(
         ["pixel_spacing", "image_coordinate_system"],
         [
-            [
+            (
                 SizeMm(0.01, 0.01),
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
-            ],
-            [None, None],
+            ),
+            (None, None),
         ],
     )
-    def test_image_deserialize(self, image: Image):
+    def test_image_deserialize(self, image: Image) -> None:
         # Arrange
         dumped = {
             "acquisition_datetime": (
@@ -215,20 +215,20 @@ class TestJsonSchema:
             "pixel_spacing",
         ],
         [
-            [
+            (
                 True,
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
                 SizeMm(0.01, 0.01),
-            ],
-            [
+            ),
+            (
                 False,
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
                 SizeMm(0.02, 0.02),
-            ],
-            [True, None, None],
+            ),
+            (True, None, None),
         ],
     )
-    def test_pyramid_serialize(self, pyramid: Pyramid):
+    def test_pyramid_serialize(self, pyramid: Pyramid) -> None:
         # Arrange
 
         # Act
@@ -252,20 +252,20 @@ class TestJsonSchema:
             "pixel_spacing",
         ],
         [
-            [
+            (
                 True,
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
                 SizeMm(0.01, 0.01),
-            ],
-            [
+            ),
+            (
                 False,
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
                 SizeMm(0.02, 0.02),
-            ],
-            [True, None, None],
+            ),
+            (True, None, None),
         ],
     )
-    def test_pyramid_deserialize(self, pyramid: Pyramid, icc_file: Path):
+    def test_pyramid_deserialize(self, pyramid: Pyramid, icc_file: Path) -> None:
         # Arrange
         optical_paths = [
             OpticalPathJsonSchema().dump(path) for path in pyramid.optical_paths
@@ -298,24 +298,24 @@ class TestJsonSchema:
             "label_pixel_spacing",
         ],
         [
-            [
+            (
                 "Label text",
                 "label barcode",
                 True,
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
                 SizeMm(0.01, 0.01),
-            ],
-            [
+            ),
+            (
                 "Label text 2",
                 "label barcode 2",
                 False,
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
                 SizeMm(0.02, 0.02),
-            ],
-            [None, None, True, None, None],
+            ),
+            (None, None, True, None, None),
         ],
     )
-    def test_label_serialize(self, label: Label):
+    def test_label_serialize(self, label: Label) -> None:
         # Arrange
 
         # Act
@@ -349,24 +349,24 @@ class TestJsonSchema:
             "label_pixel_spacing",
         ],
         [
-            [
+            (
                 "Label text",
                 "label barcode",
                 True,
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
                 SizeMm(0.01, 0.01),
-            ],
-            [
+            ),
+            (
                 "Label text 2",
                 "label barcode 2",
                 False,
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
                 SizeMm(0.02, 0.02),
-            ],
-            [None, None, True, None, None],
+            ),
+            (None, None, True, None, None),
         ],
     )
-    def test_label_deserialize(self, label: Label, icc_file: Path):
+    def test_label_deserialize(self, label: Label, icc_file: Path) -> None:
         # Arrange
         optical_paths = (
             [OpticalPathJsonSchema().dump(path) for path in label.optical_paths]
@@ -399,22 +399,22 @@ class TestJsonSchema:
             "overview_pixel_spacing",
         ],
         [
-            [
+            (
                 True,
                 True,
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
                 SizeMm(0.01, 0.01),
-            ],
-            [
+            ),
+            (
                 False,
                 False,
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
                 SizeMm(0.02, 0.02),
-            ],
-            [True, True, None, None],
+            ),
+            (True, True, None, None),
         ],
     )
-    def test_overview_serialize(self, overview: Overview):
+    def test_overview_serialize(self, overview: Overview) -> None:
         # Arrange
 
         # Act
@@ -440,22 +440,22 @@ class TestJsonSchema:
             "overview_pixel_spacing",
         ],
         [
-            [
+            (
                 True,
                 True,
                 ImageCoordinateSystem(PointMm(20.0, 30.0), 90.0),
                 SizeMm(0.01, 0.01),
-            ],
-            [
+            ),
+            (
                 False,
                 False,
                 ImageCoordinateSystem(PointMm(50.0, 20.0), 180.0),
                 SizeMm(0.02, 0.02),
-            ],
-            [True, True, None, None],
+            ),
+            (True, True, None, None),
         ],
     )
-    def test_overview_deserialize(self, overview: Overview, icc_file: Path):
+    def test_overview_deserialize(self, overview: Overview, icc_file: Path) -> None:
         # Arrange
         optical_paths = [
             OpticalPathJsonSchema().dump(path) for path in overview.optical_paths
@@ -480,7 +480,7 @@ class TestJsonSchema:
     @pytest.mark.parametrize(
         "illumination", [IlluminationColorCode("Full Spectrum"), 400.0]
     )
-    def test_optical_path_serialize(self, optical_path: OpticalPath):
+    def test_optical_path_serialize(self, optical_path: OpticalPath) -> None:
         # Arrange
 
         # Act
@@ -497,7 +497,9 @@ class TestJsonSchema:
             400.0,
         ],
     )
-    def test_optical_path_deserialize(self, optical_path: OpticalPath, icc_file: Path):
+    def test_optical_path_deserialize(
+        self, optical_path: OpticalPath, icc_file: Path
+    ) -> None:
         dumped = {
             "identifier": optical_path.identifier,
             "description": optical_path.description,
@@ -601,7 +603,7 @@ class TestJsonSchema:
         assert isinstance(loaded, OpticalPath)
         assert loaded == optical_path
 
-    def test_patient_serialize(self, patient: Patient):
+    def test_patient_serialize(self, patient: Patient) -> None:
         # Arrange
 
         # Act
@@ -659,7 +661,7 @@ class TestJsonSchema:
     def test_patient_deserialize(
         self,
         patient: Patient,
-    ):
+    ) -> None:
         # Arrange
         dumped = {
             "name": patient.name,
@@ -710,7 +712,7 @@ class TestJsonSchema:
         assert isinstance(loaded, Patient)
         assert loaded == patient
 
-    def test_series_serialize(self, series: Series):
+    def test_series_serialize(self, series: Series) -> None:
         # Arrange
 
         # Act
@@ -723,7 +725,7 @@ class TestJsonSchema:
         assert dumped["description"] == series.description
         assert dumped["body_part_examined"] == series.body_part_examined
 
-    def test_series_deserialize(self, series: Series):
+    def test_series_deserialize(self, series: Series) -> None:
         dumped = {
             "uid": str(series.uid),
             "number": series.number,
@@ -738,7 +740,7 @@ class TestJsonSchema:
         assert isinstance(loaded, Series)
         assert loaded == series
 
-    def test_study_serialize(self, study: Study):
+    def test_study_serialize(self, study: Study) -> None:
         # Arrange
 
         # Act
@@ -756,7 +758,7 @@ class TestJsonSchema:
         dumped["referring_physician_name"] = study.referring_physician_name
         dumped["description"] = study.description
 
-    def test_study_deserialize(self, study: Study):
+    def test_study_deserialize(self, study: Study) -> None:
         # Arrange
         dumped = {
             "uid": str(study.uid),
@@ -784,7 +786,7 @@ class TestJsonSchema:
     def test_metadata_serialize(
         self,
         wsi_metadata: WsiMetadata,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
