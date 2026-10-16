@@ -278,10 +278,9 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         return encoded, decoded
 
     def _get_encoded_tile_frame(self, frame_index: int) -> bytes:
-        """Return tile frame for frame index to serve as an encoded tile.
-
-        Override to serve it from a cache, when a frame costs more to read again
-        than to get from one."""
+        """Return the tile frame at the frame index, to serve as an encoded tile.
+        Override to serve it from a cache, when reading a frame again costs more than
+        getting it from a cache."""
         return self._get_tile_frame(frame_index)
 
     def _get_encoded_tile_frames(self, frame_indices: Sequence[int]) -> Iterator[bytes]:
@@ -310,9 +309,9 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
             Tile frame index
         """
         tiled_size = self.tiles.tiled_size
-        # Compared directly rather than as a region, as this is done for every tile
-        # read. A tile one past the last column or row is outside, as its frame index
-        # would be that of a tile in the next row or plane.
+        # Compared directly rather than as a region, because this runs for every tile
+        # read. A tile one past the last column or row is outside. Its frame index would
+        # be that of a tile in the next row or plane.
         if not (
             0 <= tile.x < tiled_size.width
             and 0 <= tile.y < tiled_size.height

@@ -239,7 +239,8 @@ class TestSparseTileIndex:
         assert frame_indices[0].tolist() == [0, -1, 1, -1, -1, -1, -1, 2, -1]
 
     def test_plane_frame_indices_of_plane_without_frames_are_all_missing(self):
-        # Arrange - focal plane 1 has frames down path "0" only, path "1" at 0 only.
+        # Arrange - focal plane 1 has frames only in path "0". Path "1" has frames only
+        # at focal plane 0.
         dataset = create_dataset(
             columns=[1, 1],
             rows=[1, 1],

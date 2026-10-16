@@ -19,7 +19,8 @@ from wsidicom.geometry import Size
 from wsidicom.instance import TileByteRanges
 
 IMAGE_SIZE = Size(25, 15)
-"""Tiled 3 x 2 by tiles of 10 x 10, of which the last column and row are cropped."""
+"""Three by two tiles of 10 x 10 pixels. The tiles of the last column and row are
+cropped."""
 TILE_SIZE = Size(10, 10)
 
 
@@ -67,8 +68,8 @@ class TestTileByteRanges:
         assert byte_ranges.file_indices.tolist() == [0, 1, 0, 1, 0, 1]
 
     def test_from_arrays_shares_int64_arrays_read_only(self):
-        """The byte ranges are views of arrays made by the image data, not copies,
-        and cannot be changed through them."""
+        """The byte ranges are read-only views of the arrays made by the image data.
+        They are not copies."""
         # Arrange
         positions = np.arange(0, 60, 10, dtype=np.int64)
 
@@ -83,8 +84,8 @@ class TestTileByteRanges:
         assert positions.flags.writeable
 
     def test_item_of_byte_ranges_is_int(self):
-        """An item is a plain int, as a numpy integer costs more to index with and
-        to read at."""
+        """An item is a plain int. A numpy integer is slower to index with and to read
+        at."""
         # Arrange
         byte_ranges = TileByteRanges.from_arrays(
             IMAGE_SIZE,

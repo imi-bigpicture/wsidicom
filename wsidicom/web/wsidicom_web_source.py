@@ -86,8 +86,8 @@ class WsiDicomWebSource(Source):
 
         """
         super().__init__()
-        # Encoded frames are cached for DICOMweb only, as there a frame costs a
-        # request to read again.
+        # Encoded frames are cached only for DICOMweb, where reading a frame again costs
+        # a request.
         with use_settings() as settings:
             self._encoded_frame_cache = EncodedFrameCache(
                 settings.web_encoded_frame_cache_size
