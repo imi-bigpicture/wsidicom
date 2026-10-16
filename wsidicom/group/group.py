@@ -39,12 +39,15 @@ from wsidicom.uid import SlideUids
 
 
 class Instances:
-    """Represents a group of instances having the same size, but possibly
-    different z coordinate and/or optical path."""
+    """Represents a group of instances having the same size.
 
-    def __init__(self, instances: Iterable[WsiInstance]):
-        """Create a group of WsiInstances. Instances should match in the common
-        uids, wsi type, and tile size.
+    The instances can have different z coordinate and/or optical path.
+    """
+
+    def __init__(self, instances: Iterable[WsiInstance]) -> None:
+        """Create a group of WsiInstances.
+
+        Instances should match in the common uids, wsi type, and tile size.
 
         Parameters
         ----------
@@ -84,39 +87,39 @@ class Instances:
 
     @property
     def uids(self) -> SlideUids:
-        """Return uids"""
+        """Return uids."""
         return self._uids
 
     @property
     def image_type(self) -> ImageType:
-        """Return wsi type"""
+        """Return wsi type."""
         return self._image_type
 
     @property
     def size(self) -> Size:
-        """Return image size in pixels"""
+        """Return image size in pixels."""
         return self._size
 
     @property
     def mpp(self) -> SizeMm | None:
-        """Return pixel spacing in um/pixel"""
+        """Return pixel spacing in um/pixel."""
         if self.pixel_spacing is None:
             return None
         return self.pixel_spacing * 1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm | None:
-        """Return pixel spacing in mm/pixel"""
+        """Return pixel spacing in mm/pixel."""
         return self._pixel_spacing
 
     @property
     def instances(self) -> dict[UID, WsiInstance]:
-        """Return contained instances"""
+        """Return contained instances."""
         return self._instances
 
     @property
     def default_instance(self) -> WsiInstance:
-        """Return default instance"""
+        """Return default instance."""
         return self.instances[self._default_instance_uid]
 
     @cached_property
@@ -194,8 +197,9 @@ class Instances:
         return self.default_instance.image_coordinate_system
 
     def matches(self, other_group: "Instances") -> bool:
-        """Check if group matches other group. If strict common Uids should
-        match. Wsi type should always match.
+        """Check if group matches other group.
+
+        If strict common Uids should match. Wsi type should always match.
 
         Parameters
         ----------
@@ -233,8 +237,8 @@ class Instances:
         self, z: float | None = None, path: str | None = None
     ) -> WsiInstance:
         """Search for instance fulfilling the parameters.
-        The behavior when z and/or path is none could be made more
-        clear.
+
+        The behavior when z and/or path is none could be made more clear.
 
         Parameters
         ----------
@@ -411,7 +415,6 @@ class Instances:
         Image
             Region as image
         """
-
         instance = self.get_instance(z, path)
         if z is None:
             z = instance.default_z
@@ -681,7 +684,6 @@ class Instances:
         Image
             The tile as image
         """
-
         instance = self.get_instance(z, path)
         if z is None:
             z = instance.default_z
@@ -746,9 +748,11 @@ class Instances:
             )
         return pixel_region
 
-    def _validate_group(self):
-        """Check that no file or instance in group is duplicate, and if strict
-        instances in group matches. Raises WsiDicomMatchError otherwise.
+    def _validate_group(self) -> None:
+        """Check that no file or instance in group is duplicate.
+
+        If strict, also check that the instances in group match. Raises
+        WsiDicomMatchError otherwise.
         """
         instances = list(self.instances.values())
         base_instance = instances[0]

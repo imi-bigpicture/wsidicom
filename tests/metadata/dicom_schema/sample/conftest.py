@@ -60,80 +60,80 @@ from wsidicom.metadata.schema.dicom.sample.model import (
 from wsidicom.metadata.schema.dicom.sample.schema import SampleCodes
 
 
-@pytest.fixture()
-def specimen_id():
-    yield "specimen"
+@pytest.fixture
+def specimen_id() -> str:
+    return "specimen"
 
 
-@pytest.fixture()
-def slide_sample_id():
-    yield "slide sample"
+@pytest.fixture
+def slide_sample_id() -> str:
+    return "slide sample"
 
 
-@pytest.fixture()
-def slide_sample_uid():
-    yield UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445424")
+@pytest.fixture
+def slide_sample_uid() -> UID:
+    return UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445424")
 
 
-@pytest.fixture()
-def specimen_type():
-    yield AnatomicPathologySpecimenTypesCode("tissue specimen")
+@pytest.fixture
+def specimen_type() -> AnatomicPathologySpecimenTypesCode:
+    return AnatomicPathologySpecimenTypesCode("tissue specimen")
 
 
-@pytest.fixture()
-def collection_method():
-    yield SpecimenCollectionProcedureCode("Excision")
+@pytest.fixture
+def collection_method() -> SpecimenCollectionProcedureCode:
+    return SpecimenCollectionProcedureCode("Excision")
 
 
-@pytest.fixture()
-def specimen_sampling_method():
-    yield SpecimenSamplingProcedureCode("Dissection")
+@pytest.fixture
+def specimen_sampling_method() -> SpecimenSamplingProcedureCode:
+    return SpecimenSamplingProcedureCode("Dissection")
 
 
-@pytest.fixture()
-def block_id():
-    yield "block"
+@pytest.fixture
+def block_id() -> str:
+    return "block"
 
 
-@pytest.fixture()
-def block_sampling_method():
-    yield SpecimenSamplingProcedureCode("Block sectioning")
+@pytest.fixture
+def block_sampling_method() -> SpecimenSamplingProcedureCode:
+    return SpecimenSamplingProcedureCode("Block sectioning")
 
 
-@pytest.fixture()
-def block_type():
-    yield AnatomicPathologySpecimenTypesCode("tissue specimen")
+@pytest.fixture
+def block_type() -> AnatomicPathologySpecimenTypesCode:
+    return AnatomicPathologySpecimenTypesCode("tissue specimen")
 
 
-@pytest.fixture()
-def sample_localization():
-    yield SampleLocalization(description="left")
+@pytest.fixture
+def sample_localization() -> SampleLocalization:
+    return SampleLocalization(description="left")
 
 
-@pytest.fixture()
-def sampling_location():
-    yield SamplingLocation(description="left")
+@pytest.fixture
+def sampling_location() -> SamplingLocation:
+    return SamplingLocation(description="left")
 
 
-@pytest.fixture()
-def primary_anatomic_structures():
-    yield [Code("value", "schema", "meaning")]
+@pytest.fixture
+def primary_anatomic_structures() -> list[Code]:
+    return [Code("value", "schema", "meaning")]
 
 
-@pytest.fixture()
-def container():
-    yield ContainerTypeCode("Specimen container")
+@pytest.fixture
+def container() -> ContainerTypeCode:
+    return ContainerTypeCode("Specimen container")
 
 
-@pytest.fixture()
-def stains():
-    yield [
+@pytest.fixture
+def stains() -> list[SpecimenStainsCode]:
+    return [
         SpecimenStainsCode("hematoxylin stain"),
         SpecimenStainsCode("water soluble eosin stain"),
     ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def collection_dicom(
     collection: Collection,
     identifier: str | SpecimenIdentifier,
@@ -142,9 +142,9 @@ def collection_dicom(
     processing_method: SpecimenPreparationStepsCode | None,
     container: ContainerTypeCode | None,
     specimen_type: AnatomicPathologySpecimenTypesCode | None,
-):
+) -> CollectionDicomModel:
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
-    yield CollectionDicomModel(
+    return CollectionDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
         date_time=collection.date_time,
@@ -158,15 +158,15 @@ def collection_dicom(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def collection_dataset(
     collection_dicom: CollectionDicomModel,
     identifier: str | SpecimenIdentifier,
-):
-    yield create_collection_dataset(collection_dicom, identifier)
+) -> Dataset:
+    return create_collection_dataset(collection_dicom, identifier)
 
 
-@pytest.fixture()
+@pytest.fixture
 def sampling_dicom(
     sampling: Sampling,
     identifier: str | SpecimenIdentifier,
@@ -175,7 +175,7 @@ def sampling_dicom(
     processing_method: SpecimenPreparationStepsCode | None,
     container: ContainerTypeCode | None,
     specimen_type: AnatomicPathologySpecimenTypesCode | None,
-):
+) -> SamplingDicomModel:
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
     (
         parent_identifier,
@@ -183,7 +183,7 @@ def sampling_dicom(
     ) = SpecimenIdentifier.get_string_identifier_and_issuer(
         sampling.specimen.identifier
     )
-    yield SamplingDicomModel(
+    return SamplingDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
         date_time=sampling.date_time,
@@ -209,15 +209,15 @@ def sampling_dicom(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def sampling_dataset(
     sampling_dicom: SamplingDicomModel,
     identifier: str | SpecimenIdentifier,
-):
-    yield create_sampling_dataset(sampling_dicom, identifier)
+) -> Dataset:
+    return create_sampling_dataset(sampling_dicom, identifier)
 
 
-@pytest.fixture()
+@pytest.fixture
 def processing_dicom(
     processing: Processing,
     identifier: str | SpecimenIdentifier,
@@ -225,9 +225,9 @@ def processing_dicom(
     medium: SpecimenEmbeddingMediaCode | None,
     container: ContainerTypeCode | None,
     specimen_type: AnatomicPathologySpecimenTypesCode | None,
-):
+) -> ProcessingDicomModel:
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
-    yield ProcessingDicomModel(
+    return ProcessingDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
         date_time=processing.date_time,
@@ -240,15 +240,15 @@ def processing_dicom(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def processing_dataset(
     processing_dicom: ProcessingDicomModel,
     identifier: str | SpecimenIdentifier,
-):
-    yield create_processing_dataset(processing_dicom, identifier)
+) -> Dataset:
+    return create_processing_dataset(processing_dicom, identifier)
 
 
-@pytest.fixture()
+@pytest.fixture
 def staining_dicom(
     staining: Staining,
     identifier: str | SpecimenIdentifier,
@@ -257,9 +257,9 @@ def staining_dicom(
     processing_method: SpecimenPreparationStepsCode | None,
     container: ContainerTypeCode | None,
     specimen_type: AnatomicPathologySpecimenTypesCode | None,
-):
+) -> StainingDicomModel:
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
-    yield StainingDicomModel(
+    return StainingDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
         date_time=staining.date_time,
@@ -273,15 +273,15 @@ def staining_dicom(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def staining_dataset(
     staining_dicom: StainingDicomModel,
     identifier: str | SpecimenIdentifier,
-):
-    yield create_staining_dataset(staining_dicom, identifier)
+) -> Dataset:
+    return create_staining_dataset(staining_dicom, identifier)
 
 
-@pytest.fixture()
+@pytest.fixture
 def receiving_dicom(
     receiving: Receiving,
     identifier: str | SpecimenIdentifier,
@@ -290,9 +290,9 @@ def receiving_dicom(
     processing_method: SpecimenPreparationStepsCode | None,
     container: ContainerTypeCode | None,
     specimen_type: AnatomicPathologySpecimenTypesCode | None,
-):
+) -> ReceivingDicomModel:
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
-    yield ReceivingDicomModel(
+    return ReceivingDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
         date_time=receiving.date_time,
@@ -305,15 +305,15 @@ def receiving_dicom(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def receiving_dataset(
     receiving_dicom: ReceivingDicomModel,
     identifier: str | SpecimenIdentifier,
-):
-    yield create_receiving_dataset(receiving_dicom, identifier)
+) -> Dataset:
+    return create_receiving_dataset(receiving_dicom, identifier)
 
 
-@pytest.fixture()
+@pytest.fixture
 def storage_dicom(
     storage: Storage,
     identifier: str | SpecimenIdentifier,
@@ -322,9 +322,9 @@ def storage_dicom(
     processing_method: SpecimenPreparationStepsCode | None,
     container: ContainerTypeCode | None,
     specimen_type: AnatomicPathologySpecimenTypesCode | None,
-):
+) -> StorageDicomModel:
     identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(identifier)
-    yield StorageDicomModel(
+    return StorageDicomModel(
         identifier=identifier,
         issuer_of_identifier=issuer,
         date_time=storage.date_time,
@@ -337,16 +337,16 @@ def storage_dicom(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def storage_dataset(
     storage_dicom: StorageDicomModel,
     identifier: str | SpecimenIdentifier,
-):
-    yield create_storage_dataset(storage_dicom, identifier)
+) -> Dataset:
+    return create_storage_dataset(storage_dicom, identifier)
 
 
-@pytest.fixture()
-def invalid_preparation_step_dataset(invalid_preparation_step_type: str):
+@pytest.fixture
+def invalid_preparation_step_dataset(invalid_preparation_step_type: str) -> Dataset:
     identifier = "identifier"
     items = create_identifier_items(identifier)
     if invalid_preparation_step_type == "missing_processing_type":

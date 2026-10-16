@@ -32,9 +32,11 @@ def optical_path_sequence(identifiers: list[str]) -> DicomSequence:
 
 @pytest.mark.unittest
 class TestTileIndex:
-    """Optical paths must be read in Optical Path Sequence order (DICOM PS3.3
-    C.7.6.17.3), as that defines the TILED_FULL frame order. They must not be
-    sorted or set-ordered, which would misattribute frames."""
+    """Optical paths must be read in Optical Path Sequence order.
+
+    That order (DICOM PS3.3 C.7.6.17.3) defines the TILED_FULL frame order. They
+    must not be sorted or set-ordered, which would misattribute frames.
+    """
 
     @pytest.mark.parametrize(
         ["identifiers", "expected"],
@@ -45,7 +47,7 @@ class TestTileIndex:
     )
     def test_read_optical_paths_from_dataset(
         self, optical_path_sequence: DicomSequence, expected: list[str]
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         dataset.OpticalPathSequence = optical_path_sequence
@@ -59,7 +61,7 @@ class TestTileIndex:
     @pytest.mark.parametrize("identifiers", [["1", "0"]])
     def test_read_optical_paths_dedups_across_datasets(
         self, optical_path_sequence: DicomSequence
-    ):
+    ) -> None:
         # Arrange — the same paths appear in two datasets.
         first = Dataset()
         first.OpticalPathSequence = optical_path_sequence
@@ -74,7 +76,7 @@ class TestTileIndex:
         # Assert — deduped, first-seen order preserved.
         assert paths == ["1", "0"]
 
-    def test_read_optical_paths_defaults_to_zero_when_absent(self):
+    def test_read_optical_paths_defaults_to_zero_when_absent(self) -> None:
         # Arrange
         dataset = WsiDataset(Dataset())
 

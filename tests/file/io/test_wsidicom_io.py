@@ -64,53 +64,55 @@ from wsidicom.tags import (
 
 
 @pytest.fixture
-def temp_path(tmpdir):
-    yield Path(tmpdir).joinpath("test.dcm")
+def temp_path(tmp_path: Path) -> Path:
+    return tmp_path.joinpath("test.dcm")
 
 
 @pytest.fixture
-def buffer():
-    yield BytesIO()
+def buffer() -> BytesIO:
+    return BytesIO()
 
 
 @pytest.fixture
-def buffer_with_preamble(buffer: BinaryIO):
+def buffer_with_preamble(buffer: BinaryIO) -> BinaryIO:
     preamble = b"\x00" * 128
     buffer.write(preamble)
     buffer.write(b"DICM")
-    yield buffer
+    return buffer
 
 
 @pytest.fixture
 def buffer_with_file_meta(
     buffer_with_preamble: BinaryIO, file_meta_dataset: FileMetaDataset
-):
+) -> BinaryIO:
     write_file_meta_info(DicomFileLike(buffer_with_preamble), file_meta_dataset)
-    yield buffer_with_preamble
+    return buffer_with_preamble
 
 
 @pytest.fixture
-def uid():
-    yield generate_uid()
+def uid() -> UID:
+    return generate_uid()
 
 
 @pytest.fixture
-def transfer_syntax():
-    yield JPEGBaseline8Bit
+def transfer_syntax() -> UID:
+    return JPEGBaseline8Bit
 
 
 @pytest.fixture
-def sop_class_uid():
-    yield VLWholeSlideMicroscopyImageStorage
+def sop_class_uid() -> UID:
+    return VLWholeSlideMicroscopyImageStorage
 
 
 @pytest.fixture
-def file_meta_dataset(uid: UID, transfer_syntax: UID, sop_class_uid: UID):
+def file_meta_dataset(
+    uid: UID, transfer_syntax: UID, sop_class_uid: UID
+) -> FileMetaDataset:
     dataset = FileMetaDataset()
     dataset.TransferSyntaxUID = transfer_syntax
     dataset.MediaStorageSOPInstanceUID = uid
     dataset.MediaStorageSOPClassUID = sop_class_uid
-    yield dataset
+    return dataset
 
 
 @pytest.mark.unittest
@@ -129,7 +131,7 @@ class TestWsiDicomIO:
         buffer: BinaryIO,
         transfer_syntax: UID,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -143,7 +145,7 @@ class TestWsiDicomIO:
 
     def test_close(
         self, buffer: BinaryIO, transfer_syntax: UID, placeholder_path: UPath
-    ):
+    ) -> None:
         # Arrange
         io = WsiDicomIO(buffer, placeholder_path, transfer_syntax)
 
@@ -167,7 +169,7 @@ class TestWsiDicomIO:
         buffer_with_file_meta: BinaryIO,
         file_meta_dataset: FileMetaDataset,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
 
@@ -192,7 +194,7 @@ class TestWsiDicomIO:
         buffer_with_file_meta: BinaryIO,
         file_meta_dataset: FileMetaDataset,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         io = WsiDicomReadIO(buffer_with_file_meta, filepath=placeholder_path)
 
@@ -217,7 +219,7 @@ class TestWsiDicomIO:
         buffer_with_file_meta: BinaryIO,
         transfer_syntax: UID,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         dataset.PatientID = "Test123"
@@ -238,7 +240,7 @@ class TestWsiDicomIO:
 
     def test_read_elements_until_stops_at_stop_tag(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         dataset.PatientID = "Test123"
@@ -268,7 +270,7 @@ class TestWsiDicomIO:
 
     def test_read_elements_from_carries_on_from_where_the_read_stopped(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         """Elements the read stopped short of can be picked up from where they start."""
         # Arrange
         container_identifier_tag = Tag("ContainerIdentifier")
@@ -313,7 +315,7 @@ class TestWsiDicomIO:
         states_length: bool,
         is_named: bool,
         expected_to_stop: bool,
-    ):
+    ) -> None:
         """Read stops at an undefined length sequence not to be read."""
         # Arrange
         specimen_description_tag = Tag("SpecimenDescriptionSequence")
@@ -354,7 +356,7 @@ class TestWsiDicomIO:
     @pytest.mark.parametrize("syntax", [ExplicitVRLittleEndian, ImplicitVRLittleEndian])
     def test_read_elements_from_stops_at_a_sequence_however_it_is_encoded(
         self, placeholder_path: UPath, syntax: UID
-    ):
+    ) -> None:
         """Read stops at an undefined length sequence for explicit and implicit VR.
 
         The test files are all explicit VR, so implicit VR is only covered here.
@@ -391,7 +393,7 @@ class TestWsiDicomIO:
 
     def test_read_elements_from_reads_a_private_sequence_of_implicit_representation(
         self, placeholder_path: UPath
-    ):
+    ) -> None:
         """With implicit VR, a private sequence is read rather than stepped over.
 
         The dictionary does not know private sequences, so one stepped over would be
@@ -431,7 +433,7 @@ class TestWsiDicomIO:
 
     def test_read_elements_from_reads_every_sequence_when_none_are_named(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         """Without `undefined_length_sequences_to_read`, all sequences are read."""
         # Arrange
         specimen_description_tag = Tag("SpecimenDescriptionSequence")
@@ -461,9 +463,11 @@ class TestWsiDicomIO:
 
     def test_step_over_sequence_leaves_the_stream_past_it_and_the_value_readable(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
-        """The element points at the value, without the delimiter, and the stream is
-        left where the next element starts."""
+    ) -> None:
+        """The element points at the value, without the delimiter.
+
+        The stream is left where the next element starts.
+        """
         # Arrange
         specimen_description_tag = Tag("SpecimenDescriptionSequence")
         item = Dataset()
@@ -498,7 +502,7 @@ class TestWsiDicomIO:
 
     def test_step_over_sequence_raises_on_a_sequence_stating_its_length(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         # Arrange
         item = Dataset()
         item.SpecimenIdentifier = "S1"
@@ -519,7 +523,7 @@ class TestWsiDicomIO:
 
     def test_step_over_sequence_raises_on_an_element_that_is_not_a_sequence(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         dataset.PatientID = "Test123"
@@ -538,7 +542,7 @@ class TestWsiDicomIO:
 
     def test_step_over_sequence_raises_when_the_framing_cannot_be_followed(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         # Arrange
         # An item delimiter where an item belongs.
         specimen_description_tag = Tag("SpecimenDescriptionSequence")
@@ -562,7 +566,7 @@ class TestWsiDicomIO:
 
     def test_step_over_sequence_in_implicit_vr_states_no_value_representation(
         self, placeholder_path: UPath
-    ):
+    ) -> None:
         """The element read back gets its VR from the dictionary, as pydicom would."""
         # Arrange
         specimen_description_tag = Tag("SpecimenDescriptionSequence")
@@ -594,7 +598,7 @@ class TestWsiDicomIO:
 
     def test_read_elements_from_makes_values_against_the_character_set_read_before(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         """A part read after the one stating the character set is made against it."""
         # Arrange
         series_description = "Gr\u00f6nr\u00f6d v\u00e4vnad"
@@ -626,7 +630,7 @@ class TestWsiDicomIO:
 
     def test_make_dataset_states_how_the_dataset_was_encoded(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         """What a dataset is written back as is what it was read as."""
         # Arrange
         dataset = Dataset()
@@ -652,7 +656,7 @@ class TestWsiDicomIO:
 
     def test_read_dataset_into_reads_elements_after_position_into_a_dataset(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         """Elements the read stopped short of can be picked up from where they start."""
         # Arrange
         container_identifier_tag = Tag("ContainerIdentifier")
@@ -681,7 +685,7 @@ class TestWsiDicomIO:
 
     def test_read_dataset_into_makes_values_against_the_character_set_read_before(
         self, buffer_with_file_meta: BinaryIO, placeholder_path: UPath
-    ):
+    ) -> None:
         """A part read after the one stating the character set is made against it."""
         # Arrange
         series_description = "Gr\u00f6nr\u00f6d v\u00e4vnad"
@@ -729,7 +733,7 @@ class TestWsiDicomIO:
         long: bool,
         length: int,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         format = "<" if little_endian else ">"
         if long:
@@ -758,8 +762,11 @@ class TestWsiDicomIO:
 
     @pytest.mark.parametrize("is_implicit_VR", [True, False])
     def test_read_tag_vr(
-        self, buffer: BinaryIO, is_implicit_VR: bool, placeholder_path: UPath
-    ):
+        self,
+        buffer: BinaryIO,
+        is_implicit_VR: bool,  # noqa: N803 - mirrors WsiDicomIO.is_implicit_VR
+        placeholder_path: UPath,
+    ) -> None:
         # Arrange
         vr = bytes("OB", "iso8859")
         buffer.write(vr)
@@ -807,7 +814,7 @@ class TestWsiDicomIO:
         length: int,
         transfer_syntax: UID,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         format = "<" if transfer_syntax.is_little_endian else ">"
         buffer.write(struct.pack(format + "H", tag.group))
@@ -855,7 +862,7 @@ class TestWsiDicomIO:
         expected_length: int,
         transfer_syntax: UID,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         format = "<" if transfer_syntax.is_little_endian else ">"
         buffer.write(struct.pack(format + "H", tag.group))
@@ -883,7 +890,7 @@ class TestWsiDicomIO:
         little_endian: bool,
         value: int,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         format = "<Q" if little_endian else ">Q"
         # buffer.write(struct.pack(format, value))
@@ -921,7 +928,7 @@ class TestWsiDicomIO:
         length: int,
         transfer_syntax: UID,
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         format = "<" if transfer_syntax.is_little_endian else ">"
 
@@ -957,7 +964,7 @@ class TestWsiDicomIO:
     )
     def test_write_preamble(
         self, buffer: BinaryIO, transfer_syntax: UID, placeholder_path: UPath
-    ):
+    ) -> None:
         # Arrange
         io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=transfer_syntax
@@ -991,7 +998,7 @@ class TestWsiDicomIO:
     )
     def test_write_meta(
         self, buffer: BinaryIO, transfer_syntax: UID, placeholder_path: UPath
-    ):
+    ) -> None:
         # Arrange
         instance_uid = generate_uid()
         class_uid = VLWholeSlideMicroscopyImageStorage
@@ -1025,7 +1032,7 @@ class TestWsiDicomIO:
         original_values: list[str],
         update_values: str | list[str],
         placeholder_path: UPath,
-    ):
+    ) -> None:
         # Arrange
         io = WsiDicomWriteIO(
             buffer, filepath=placeholder_path, transfer_syntax=JPEGBaseline8Bit

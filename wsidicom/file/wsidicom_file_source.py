@@ -18,7 +18,8 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
 
 from pydicom.fileset import FileSet
 from pydicom.uid import (
@@ -235,10 +236,15 @@ class WsiDicomFileSource(Source):
         for annotation in self._annotations:
             annotation.close()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         self.close()
 
     @staticmethod

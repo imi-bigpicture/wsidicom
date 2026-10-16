@@ -15,7 +15,7 @@
 import logging
 from collections.abc import Iterable, Iterator
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Self
 
 from dicomweb_client.api import DICOMfileClient, DICOMwebClient
 from dicomweb_client.session_utils import create_session_from_auth
@@ -42,7 +42,7 @@ ANNOTATION_MODALITY = "ANN"
 
 
 class WsiDicomWebClient:
-    def __init__(self, client: DICOMwebClient | DICOMfileClient):
+    def __init__(self, client: DICOMwebClient | DICOMfileClient) -> None:
         """Create a WsiDicomWebClient.
 
         Parameters
@@ -59,7 +59,7 @@ class WsiDicomWebClient:
         qido_prefix: str | None = None,
         wado_prefix: str | None = None,
         auth: AuthBase | Session | None = None,
-    ):
+    ) -> Self:
         """Create a WsiDicomWebClient.
 
         Parameters
@@ -246,8 +246,10 @@ class WsiDicomWebClient:
         sop_class_uid: UID,
         modality: str,
     ) -> Iterator[tuple[UID, UID, set[UID] | None]]:
-        """Get series, instance, and optionally available transfer syntax uids for
-        instances of SOP class in study.
+        """Get uids for instances of SOP class in study.
+
+        The uids are series, instance, and optionally available transfer syntax
+        uids.
 
         Parameters
         ----------

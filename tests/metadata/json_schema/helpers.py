@@ -32,14 +32,14 @@ from wsidicom.metadata.optical_path import (
 
 def assert_dict_equals_code(
     dumped_code: dict[str, str], expected_code: Code | ConceptCode
-):
+) -> None:
     assert dumped_code["value"] == expected_code.value
     assert dumped_code["scheme_designator"] == expected_code.scheme_designator
     assert dumped_code["meaning"] == expected_code.meaning
     assert dumped_code.get("scheme_version") == expected_code.scheme_version
 
 
-def assert_lut_is_equal(dumped: dict[str, Any], lut: Lut):
+def assert_lut_is_equal(dumped: dict[str, Any], lut: Lut) -> None:
     assert dumped["bits"] == 8 * lut.data_type().itemsize
     for dumped_component, component in zip(
         (dumped["red"], dumped["green"], dumped["blue"]),
@@ -51,7 +51,7 @@ def assert_lut_is_equal(dumped: dict[str, Any], lut: Lut):
             assert_lut_segment_is_equal(dumped_segment, segment)
 
 
-def assert_lut_segment_is_equal(dumped: dict[str, Any], segment: LutSegment):
+def assert_lut_segment_is_equal(dumped: dict[str, Any], segment: LutSegment) -> None:
     if isinstance(segment, LinearLutSegment):
         assert dumped["start_value"] == segment.start_value
         assert dumped["end_value"] == segment.end_value
@@ -66,7 +66,7 @@ def assert_lut_segment_is_equal(dumped: dict[str, Any], segment: LutSegment):
 def assert_image_coordinate_system_is_equal(
     dumped: dict[str, Any] | None,
     image_coordinate_system: ImageCoordinateSystem | None,
-):
+) -> None:
     if image_coordinate_system is None:
         assert dumped is None
         return
@@ -83,7 +83,7 @@ def assert_image_coordinate_system_is_equal(
 def assert_pixel_spacing_is_equal(
     dumped: dict[str, Any] | None,
     pixel_spacing: SizeMm | None,
-):
+) -> None:
     if pixel_spacing is None:
         assert dumped is None
         return
@@ -95,7 +95,7 @@ def assert_pixel_spacing_is_equal(
 def assert_lossy_compression_is_equal(
     dumped: Sequence[dict[str, Any]] | None,
     lossy_compression: Sequence[LossyCompression] | None,
-):
+) -> None:
     if lossy_compression is None:
         assert dumped is None
         return
@@ -108,7 +108,7 @@ def assert_lossy_compression_is_equal(
         assert dumped_compression["ratio"] == expected_compression.ratio
 
 
-def assert_image_is_equal(dumped: dict[str, Any], image: Image):
+def assert_image_is_equal(dumped: dict[str, Any], image: Image) -> None:
     if image.acquisition_datetime is None:
         assert dumped["acquisition_datetime"] is None
     else:
@@ -147,7 +147,9 @@ def assert_image_is_equal(dumped: dict[str, Any], image: Image):
     )
 
 
-def assert_optical_path_is_equal(dumped: dict[str, Any], optical_path: OpticalPath):
+def assert_optical_path_is_equal(
+    dumped: dict[str, Any], optical_path: OpticalPath
+) -> None:
     assert dumped["identifier"] == optical_path.identifier
     assert dumped["description"] == optical_path.description
     if optical_path.illumination_types is None:

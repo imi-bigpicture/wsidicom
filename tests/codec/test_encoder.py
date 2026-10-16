@@ -46,7 +46,7 @@ from wsidicom.instance.dataset import WsiDataset
 
 
 @pytest.fixture
-def dataset(image: np.ndarray, settings: Settings):
+def dataset(image: np.ndarray, settings: Settings) -> WsiDataset:
     dataset = Dataset()
     dataset.PhotometricInterpretation = settings.photometric_interpretation
     dataset.BitsStored = settings.bits
@@ -56,11 +56,11 @@ def dataset(image: np.ndarray, settings: Settings):
     dataset.SamplesPerPixel = settings.samples_per_pixel
     dataset.PixelRepresentation = 0
     dataset.PlanarConfiguration = 0
-    yield WsiDataset(dataset)
+    return WsiDataset(dataset)
 
 
 @pytest.fixture
-def decoder(settings: Settings, dataset: WsiDataset):
+def decoder(settings: Settings, dataset: WsiDataset) -> Decoder:
     if (
         Decoder.select_decoder(
             settings.transfer_syntax, dataset.samples_per_pixel, dataset.bits
@@ -68,7 +68,7 @@ def decoder(settings: Settings, dataset: WsiDataset):
         is None
     ):
         pytest.skip("Decoder not available")
-    yield Decoder.create(
+    return Decoder.create(
         settings.transfer_syntax,
         dataset.samples_per_pixel,
         dataset.bits,
@@ -154,7 +154,7 @@ class TestEncoder:
         encoder_type: type[Encoder],
         settings: Settings,
         allowed_rms: float,
-    ):
+    ) -> None:
         # Arrange
         if not encoder_type.is_available():
             pytest.skip("Encoder not available")

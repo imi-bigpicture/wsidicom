@@ -12,8 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Module with metadata models and schemas for serialization to and from DICOM or
-json."""
+"""Metadata models and schemas for serialization to and from DICOM or json."""
 
 from wsidicom.metadata.contributing_equipment import ContributingEquipment
 from wsidicom.metadata.equipment import Equipment
@@ -67,51 +66,51 @@ from wsidicom.metadata.uid_generator import CallableUidGenerator, UidGenerator
 from wsidicom.metadata.wsi import WsiMetadata
 
 __all__ = [
+    "CallableUidGenerator",
+    "Collection",
+    "ConstantLutSegment",
     "ContributingEquipment",
+    "DiscreteLutSegment",
+    "Embedding",
     "Equipment",
     "ExtendedDepthOfField",
+    "Fixation",
     "FocusMethod",
     "Image",
     "ImageCoordinateSystem",
+    "ImagePathFilter",
     "ImageType",
     "Label",
-    "ConstantLutSegment",
-    "DiscreteLutSegment",
-    "ImagePathFilter",
     "LightPathFilter",
     "LinearLutSegment",
+    "LocalIssuerOfIdentifier",
+    "LossyCompression",
     "Lut",
+    "Measurement",
     "Objectives",
     "OpticalPath",
     "Overview",
     "Patient",
     "PatientDeIdentification",
     "PatientSex",
-    "Pyramid",
-    "Collection",
-    "Embedding",
-    "Fixation",
-    "LocalIssuerOfIdentifier",
-    "LossyCompression",
-    "Measurement",
     "Processing",
+    "Pyramid",
     "Receiving",
     "Sample",
     "SampleLocalization",
     "Sampling",
     "SamplingLocation",
+    "Series",
+    "Slide",
     "SlideSample",
     "Specimen",
     "SpecimenIdentifier",
     "Staining",
     "Storage",
+    "Study",
+    "UidGenerator",
     "UniversalIssuerOfIdentifier",
     "UniversalIssuerType",
     "UnknownSampling",
-    "Series",
-    "Slide",
-    "Study",
-    "CallableUidGenerator",
-    "UidGenerator",
     "WsiMetadata",
 ]

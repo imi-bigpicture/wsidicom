@@ -73,7 +73,7 @@ def make_batch(
     level: int = 0,
     count: int = 1,
 ) -> EncodingTaskResult:
-    """Helper to create EncodingTaskResult."""
+    """Create an EncodingTaskResult."""
     return EncodingTaskResult(
         coordinates=PyramidTilePosition(
             level=level,
@@ -98,7 +98,7 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test writing tiles in sequential order."""
         # Arrange
         written_data: list[bytes] = []
@@ -152,7 +152,7 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test writing tiles out of order."""
         # Arrange
         written_data: list[bytes] = []
@@ -220,7 +220,7 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test that finalizing with missing tiles raises error."""
         # Arrange
         written_data: list[bytes] = []
@@ -276,7 +276,7 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test writing tiles with multiple z-planes."""
         # Arrange
         written_data: list[bytes] = []
@@ -348,7 +348,7 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test writing tiles with multiple optical paths."""
         # Arrange
         written_data: list[bytes] = []
@@ -420,7 +420,7 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test submitting multiple tiles in a batch."""
         # Arrange
         written_data: list[bytes] = []
@@ -470,7 +470,7 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test that shutdown clears the level's cache."""
         # Arrange
         tiled_size = Size(2, 2)
@@ -502,9 +502,11 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
-        """A tile_writer failure (the worker's own work) surfaces on finalize and
-        cancels the shared token."""
+    ) -> None:
+        """A tile_writer failure (the worker's own work) surfaces on finalize.
+
+        It also cancels the shared token.
+        """
         # Arrange
         tiled_size = Size(1, 1)
         focal_planes = [0.0]
@@ -537,7 +539,7 @@ class TestTileSequencer:
         tile_cache: DictTileCache,
         input_queue: "PriorityCancelableQueue[EncodingTaskResult | ShutdownSentinel]",
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test that starting twice raises error."""
         # Arrange
         tiled_size = Size(0, 0)
@@ -572,7 +574,7 @@ def _run_with_real_cache(
     batches: dict[int, EncodingTaskResult],
     submission_order: list[int],
 ) -> list[bytes]:
-    """Helper to run TileSequencer with a real DictTileCache.
+    """Run TileSequencer with a real DictTileCache.
 
     Parameters
     ----------
@@ -639,7 +641,7 @@ class TestTileSequencerWithRealCache:
     and then stop (not spin forever as ``while tiles:`` would).
     """
 
-    def test_all_in_order(self, decoy: Decoy):
+    def test_all_in_order(self, decoy: Decoy) -> None:
         """Sequential submission — no caching needed."""
         tiled_size = Size(3, 2)
         batches = {
@@ -654,7 +656,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in order for t in batches[i].tiles]
         assert written == expected
 
-    def test_fully_reversed(self, decoy: Decoy):
+    def test_fully_reversed(self, decoy: Decoy) -> None:
         """All tiles arrive in reverse — everything cached, single flush."""
         tiled_size = Size(4, 1)
         batches = {x: make_batch(x=x, y=0) for x in range(4)}
@@ -665,7 +667,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in range(4) for t in batches[i].tiles]
         assert written == expected
 
-    def test_reverse_3x3_grid(self, decoy: Decoy):
+    def test_reverse_3x3_grid(self, decoy: Decoy) -> None:
         """3x3 grid submitted in reverse row-major order."""
         tiled_size = Size(3, 3)
         batches = {
@@ -680,7 +682,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in range(tiled_size.area) for t in batches[i].tiles]
         assert written == expected
 
-    def test_interleaved_arrivals(self, decoy: Decoy):
+    def test_interleaved_arrivals(self, decoy: Decoy) -> None:
         """Even indices first, then odd — triggers multiple partial flushes."""
         tiled_size = Size(6, 1)
         batches = {x: make_batch(x=x, y=0) for x in range(6)}
@@ -692,7 +694,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in range(6) for t in batches[i].tiles]
         assert written == expected
 
-    def test_gap_then_fill(self, decoy: Decoy):
+    def test_gap_then_fill(self, decoy: Decoy) -> None:
         """Tiles arrive with gaps, then gaps are filled in.
 
         Order: 0, 3, 1, 4, 2, 5. After tile 0 is written directly, tiles
@@ -710,7 +712,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in range(6) for t in batches[i].tiles]
         assert written == expected
 
-    def test_single_tile(self, decoy: Decoy):
+    def test_single_tile(self, decoy: Decoy) -> None:
         """Edge case: 1x1 grid, single tile."""
         tiled_size = Size(1, 1)
         batches = {0: make_batch(x=0, y=0)}
@@ -719,7 +721,7 @@ class TestTileSequencerWithRealCache:
 
         assert written == list(batches[0].tiles)
 
-    def test_batch_tiles_with_real_cache(self, decoy: Decoy):
+    def test_batch_tiles_with_real_cache(self, decoy: Decoy) -> None:
         """Multi-tile batches (count > 1) submitted out of order."""
         tiled_size = Size(4, 2)
         # Each batch covers a full row (4 tiles)
@@ -735,7 +737,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in sorted(batches) for t in batches[i].tiles]
         assert written == expected
 
-    def test_multiple_z_planes_with_real_cache(self, decoy: Decoy):
+    def test_multiple_z_planes_with_real_cache(self, decoy: Decoy) -> None:
         """Multiple focal planes submitted out of order."""
         tiled_size = Size(2, 2)
         focal_planes = [0.0, 5.0]
@@ -756,7 +758,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in range(total) for t in batches[i].tiles]
         assert written == expected
 
-    def test_multiple_optical_paths_with_real_cache(self, decoy: Decoy):
+    def test_multiple_optical_paths_with_real_cache(self, decoy: Decoy) -> None:
         """Multiple optical paths submitted out of order."""
         tiled_size = Size(2, 2)
         optical_paths = ["0", "1"]
@@ -776,7 +778,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in range(total) for t in batches[i].tiles]
         assert written == expected
 
-    def test_large_grid_reverse(self, decoy: Decoy):
+    def test_large_grid_reverse(self, decoy: Decoy) -> None:
         """Larger 5x5 grid submitted fully reversed."""
         tiled_size = Size(5, 5)
         batches = {
@@ -791,7 +793,7 @@ class TestTileSequencerWithRealCache:
         expected = [t for i in range(tiled_size.area) for t in batches[i].tiles]
         assert written == expected
 
-    def test_multiple_z_and_paths_interleaved(self, decoy: Decoy):
+    def test_multiple_z_and_paths_interleaved(self, decoy: Decoy) -> None:
         """2x2 grid with 2 z-planes and 2 optical paths, interleaved order."""
         tiled_size = Size(2, 2)
         focal_planes = [0.0, 5.0]
@@ -830,7 +832,7 @@ def _run_with_byte_budget_cache(
     submission_order: list[int],
     memory_budget_bytes: int = 1024 * 1024,
 ) -> list[bytes]:
-    """Helper to run TileSequencer with a ByteBudgetTileCache.
+    """Run TileSequencer with a ByteBudgetTileCache.
 
     Parameters
     ----------
@@ -898,7 +900,7 @@ def _run_with_byte_budget_cache(
 class TestTileSequencerWithByteBudgetCache:
     """Integration tests using ByteBudgetTileCache with TileSequencer."""
 
-    def test_all_in_order(self, decoy: Decoy, tmp_path: UPath):
+    def test_all_in_order(self, decoy: Decoy, tmp_path: UPath) -> None:
         """Sequential submission — no caching needed."""
         tiled_size = Size(3, 2)
         batches = {
@@ -915,7 +917,7 @@ class TestTileSequencerWithByteBudgetCache:
         expected = [t for i in order for t in batches[i].tiles]
         assert written == expected
 
-    def test_fully_reversed(self, decoy: Decoy, tmp_path: UPath):
+    def test_fully_reversed(self, decoy: Decoy, tmp_path: UPath) -> None:
         """All tiles arrive in reverse — everything cached, single flush."""
         tiled_size = Size(4, 1)
         batches = {x: make_batch(x=x, y=0) for x in range(4)}
@@ -928,7 +930,7 @@ class TestTileSequencerWithByteBudgetCache:
         expected = [t for i in range(4) for t in batches[i].tiles]
         assert written == expected
 
-    def test_disk_overflow(self, decoy: Decoy, tmp_path: UPath):
+    def test_disk_overflow(self, decoy: Decoy, tmp_path: UPath) -> None:
         """Tiles overflow to disk when memory budget is exceeded."""
         tiled_size = Size(8, 1)
         batches = {x: make_batch(x=x, y=0) for x in range(8)}
@@ -949,7 +951,7 @@ class TestTileSequencerWithByteBudgetCache:
         expected = [t for i in range(8) for t in batches[i].tiles]
         assert written == expected
 
-    def test_interleaved_arrivals(self, decoy: Decoy, tmp_path: UPath):
+    def test_interleaved_arrivals(self, decoy: Decoy, tmp_path: UPath) -> None:
         """Even indices first, then odd — triggers multiple partial flushes."""
         tiled_size = Size(6, 1)
         batches = {x: make_batch(x=x, y=0) for x in range(6)}
@@ -962,7 +964,7 @@ class TestTileSequencerWithByteBudgetCache:
         expected = [t for i in range(6) for t in batches[i].tiles]
         assert written == expected
 
-    def test_zero_budget_all_to_disk(self, decoy: Decoy, tmp_path: UPath):
+    def test_zero_budget_all_to_disk(self, decoy: Decoy, tmp_path: UPath) -> None:
         """Zero budget forces all tiles to disk — still works correctly."""
         tiled_size = Size(4, 1)
         batches = {x: make_batch(x=x, y=0) for x in range(4)}
@@ -982,7 +984,7 @@ class TestTileSequencerWithByteBudgetCache:
         expected = [t for i in range(4) for t in batches[i].tiles]
         assert written == expected
 
-    def test_multiple_z_and_paths(self, decoy: Decoy, tmp_path: UPath):
+    def test_multiple_z_and_paths(self, decoy: Decoy, tmp_path: UPath) -> None:
         """Multiple z-planes and optical paths with byte-budget cache."""
         tiled_size = Size(2, 2)
         focal_planes = [0.0, 5.0]
@@ -1018,7 +1020,7 @@ def _run_with_dict_cache_fifo(
     batches: dict[int, EncodingTaskResult],
     submission_order: list[int],
 ) -> list[bytes]:
-    """Helper to run TileSequencer with DictTileCache + FIFO Queue.
+    """Run TileSequencer with DictTileCache + FIFO Queue.
 
     Parameters
     ----------
@@ -1079,7 +1081,7 @@ def _run_with_dict_cache_fifo(
 class TestTileSequencerWithDictCacheFifo:
     """Integration tests using DictTileCache + FIFO Queue with TileSequencer."""
 
-    def test_fifo_queue_with_dict_cache_sequential(self, decoy: Decoy):
+    def test_fifo_queue_with_dict_cache_sequential(self, decoy: Decoy) -> None:
         """Submit tiles in order via FIFO queue with DictTileCache."""
         tiled_size = Size(3, 2)
         batches = {
@@ -1096,7 +1098,7 @@ class TestTileSequencerWithDictCacheFifo:
         expected = [t for i in order for t in batches[i].tiles]
         assert written == expected
 
-    def test_fifo_queue_with_dict_cache_reversed(self, decoy: Decoy):
+    def test_fifo_queue_with_dict_cache_reversed(self, decoy: Decoy) -> None:
         """Submit tiles in reverse via FIFO queue with DictTileCache."""
         tiled_size = Size(4, 1)
         batches = {x: make_batch(x=x, y=0) for x in range(4)}
@@ -1109,7 +1111,7 @@ class TestTileSequencerWithDictCacheFifo:
         expected = [t for i in range(4) for t in batches[i].tiles]
         assert written == expected
 
-    def test_fifo_queue_with_dict_cache_interleaved(self, decoy: Decoy):
+    def test_fifo_queue_with_dict_cache_interleaved(self, decoy: Decoy) -> None:
         """Submit tiles interleaved via FIFO queue with DictTileCache."""
         tiled_size = Size(6, 1)
         batches = {x: make_batch(x=x, y=0) for x in range(6)}
@@ -1122,7 +1124,7 @@ class TestTileSequencerWithDictCacheFifo:
         expected = [t for i in range(6) for t in batches[i].tiles]
         assert written == expected
 
-    def test_fifo_queue_with_dict_cache_batch_tiles(self, decoy: Decoy):
+    def test_fifo_queue_with_dict_cache_batch_tiles(self, decoy: Decoy) -> None:
         """Multi-tile batches submitted out of order via FIFO queue."""
         tiled_size = Size(4, 2)
         batches = {

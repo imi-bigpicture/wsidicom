@@ -12,6 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from collections.abc import Iterator
 from contextlib import suppress
 from dataclasses import FrozenInstanceError
 from typing import cast
@@ -36,28 +37,28 @@ from wsidicom.options import DicomValueValidationOption, ResampleFilterOption
 class TestSettings:
     """The immutable `Settings` value: defaults, coercion and immutability."""
 
-    def test_read_filter_defaults_to_bilinear(self):
+    def test_read_filter_defaults_to_bilinear(self) -> None:
         # Arrange
         configured = Settings()
 
         # Act & Assert
         assert configured.resampling_filter == ResampleFilterOption.BILINEAR
 
-    def test_pyramid_filter_defaults_to_box(self):
+    def test_pyramid_filter_defaults_to_box(self) -> None:
         # Arrange
         configured = Settings()
 
         # Act & Assert
         assert configured.pyramid_resampling_filter == ResampleFilterOption.BOX
 
-    def test_read_and_pyramid_filters_are_separate_fields(self):
+    def test_read_and_pyramid_filters_are_separate_fields(self) -> None:
         # Act — set only the read filter
         configured = Settings(resampling_filter=ResampleFilterOption.LANCZOS)
 
         # Assert — the pyramid filter keeps its default
         assert configured.pyramid_resampling_filter == ResampleFilterOption.BOX
 
-    def test_option_field_accepts_its_string_value(self):
+    def test_option_field_accepts_its_string_value(self) -> None:
         # Arrange — the string form (cast since the field is typed as the enum)
         string_value = cast(ResampleFilterOption, "box")
 
@@ -67,7 +68,7 @@ class TestSettings:
         # Assert — coerced to the enum member
         assert configured.resampling_filter == ResampleFilterOption.BOX
 
-    def test_is_immutable(self):
+    def test_is_immutable(self) -> None:
         # Arrange
         configured = Settings()
 
@@ -78,26 +79,28 @@ class TestSettings:
 
 @pytest.mark.unittest
 class TestDefaultSettings:
-    """The process-wide default and the `use_settings` scope: `get_settings`
-    returns the scope-active `Settings` when one is active, else the default;
-    `set_default_settings` changes the default."""
+    """The process-wide default and the `use_settings` scope.
+
+    `get_settings` returns the scope-active `Settings` when one is active, else the
+    default; `set_default_settings` changes the default.
+    """
 
     @pytest.fixture(autouse=True)
-    def _restore_default_settings(self):
+    def _restore_default_settings(self) -> Iterator[None]:
         # The default is an immutable Settings that the setters rebind; snapshot
         # and restore the reference so a test does not leak into the others.
         original = config._default_settings
         yield
         config._default_settings = original
 
-    def test_resolves_to_default_outside_a_scope(self):
+    def test_resolves_to_default_outside_a_scope(self) -> None:
         # Act
         resampling_filter = get_settings().resampling_filter
 
         # Assert
         assert resampling_filter == ResampleFilterOption.BILINEAR
 
-    def test_use_settings_activates_within_scope_and_restores_after(self):
+    def test_use_settings_activates_within_scope_and_restores_after(self) -> None:
         # Arrange
         custom = Settings(resampling_filter=ResampleFilterOption.LANCZOS)
 
@@ -106,14 +109,14 @@ class TestDefaultSettings:
             assert get_settings().resampling_filter == ResampleFilterOption.LANCZOS
         assert get_settings().resampling_filter == ResampleFilterOption.BILINEAR
 
-    def test_set_default_settings_replaces_the_default(self):
+    def test_set_default_settings_replaces_the_default(self) -> None:
         # Act
         set_default_settings(Settings(resampling_filter=ResampleFilterOption.BOX))
 
         # Assert
         assert get_settings().resampling_filter == ResampleFilterOption.BOX
 
-    def test_default_change_targets_the_default_not_the_active_scope(self):
+    def test_default_change_targets_the_default_not_the_active_scope(self) -> None:
         # Arrange
         custom = Settings(resampling_filter=ResampleFilterOption.LANCZOS)
 
@@ -134,7 +137,7 @@ class TestPydicomGlobalValidationMode:
     @pytest.mark.parametrize("option", list(DicomValueValidationOption))
     def test_pydicom_global_validation_mode_is_never_touched(
         self, option: DicomValueValidationOption
-    ):
+    ) -> None:
         """Whichever mode wsidicom is set to, it reaches pydicom per value.
 
         Checking through pydicom's global mode would be the other way to do it,

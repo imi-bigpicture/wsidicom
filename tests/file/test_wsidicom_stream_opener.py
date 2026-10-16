@@ -27,7 +27,7 @@ class TestWsiDicomStreamOpener:
     @pytest.mark.parametrize(
         "wsi_folder_and_counts", WsiTestDefinitions.folders_and_instance_counts()
     )
-    def test_open_folder(self, wsi_folder_and_counts: tuple[Path, int]):
+    def test_open_folder(self, wsi_folder_and_counts: tuple[Path, int]) -> None:
         # Arrange
         wsi_folder, instances_count = wsi_folder_and_counts
 
@@ -44,7 +44,7 @@ class TestWsiDicomStreamOpener:
     @pytest.mark.parametrize(
         "wsi_folder_and_counts", WsiTestDefinitions.folders_and_instance_counts()
     )
-    def test_open_files(self, wsi_folder_and_counts: tuple[Path, int]):
+    def test_open_files(self, wsi_folder_and_counts: tuple[Path, int]) -> None:
         # Arrange
         wsi_folder, instances_count = wsi_folder_and_counts
         files = list(wsi_folder.iterdir())
@@ -63,7 +63,9 @@ class TestWsiDicomStreamOpener:
         ["pattern", "expected_count"],
         [("memory://test-glob/*.dcm", 1), ("memory://test-glob/**/*.dcm", 2)],
     )
-    def test_open_glob_pattern(self, pattern: str, expected_count: int, wsi_file: Path):
+    def test_open_glob_pattern(
+        self, pattern: str, expected_count: int, wsi_file: Path
+    ) -> None:
         # Arrange
         filesystem = fsspec.filesystem("memory")
         for path in ("/test-glob/one.dcm", "/test-glob/sub/two.dcm"):
@@ -77,7 +79,7 @@ class TestWsiDicomStreamOpener:
         # Assert
         assert len(streams) == expected_count
 
-    def test_open_for_writing_fsspec_path_should_keep_protocol(self):
+    def test_open_for_writing_fsspec_path_should_keep_protocol(self) -> None:
         # Arrange
         path = "memory://test-opener/instance.dcm"
 

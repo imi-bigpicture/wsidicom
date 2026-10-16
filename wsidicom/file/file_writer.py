@@ -135,8 +135,10 @@ class PartFactory:
 
     @cached_property
     def _source_uid(self) -> UID:
-        """The notional source SOP Instance UID shared by all parts, minted on
-        first use."""
+        """Return the notional source SOP Instance UID shared by all parts.
+
+        The UID is minted on first use.
+        """
         return self._uid_generator.concatenation_source_uid(
             self._base_dataset.as_dataset()
         )
@@ -184,8 +186,11 @@ class PartFactory:
 
 
 class PartSplitter(metaclass=ABCMeta):
-    """Decides where a level's raster-ordered tiles are split into concatenation
-    parts, and — when it can — how many frames the next part will hold."""
+    """Decides where a level's raster-ordered tiles are split into parts.
+
+    The parts are concatenation parts. When it can, the splitter also decides how
+    many frames the next part will hold.
+    """
 
     @abstractmethod
     def should_start_new_part(self, next_tile: bytes) -> bool:
@@ -196,8 +201,10 @@ class PartSplitter(metaclass=ABCMeta):
 
     @abstractmethod
     def account(self, tile: bytes) -> None:
-        """Account for `tile` now in the current part (update the running measure
-        `should_start_new_part` reads)."""
+        """Account for `tile` now in the current part.
+
+        Updates the running measure `should_start_new_part` reads.
+        """
 
     @abstractmethod
     def reset(self) -> None:
@@ -205,8 +212,11 @@ class PartSplitter(metaclass=ABCMeta):
 
     @abstractmethod
     def next_part_frame_count(self, remaining_frames: int) -> int | None:
-        """The next part's frame count if fixed in advance (so it can be streamed
-        straight to its file), else None (the part must be buffered until full)."""
+        """Return the next part's frame count if fixed in advance, else None.
+
+        A fixed count lets the part be streamed straight to its file; with None the
+        part must be buffered until full.
+        """
 
 
 class NoSplitter(PartSplitter):
@@ -253,9 +263,11 @@ class FrameCountSplitter(PartSplitter):
 
 
 class ByteSizeSplitter(PartSplitter):
-    """Splits off a new part when the next tile would push the current part's
-    encapsulated pixel data past `max_bytes` (each frame counted with its 8-byte
-    item header)."""
+    """Splits off a new part when the next tile would push it past `max_bytes`.
+
+    The measure is the current part's encapsulated pixel data, each frame counted
+    with its 8-byte item header.
+    """
 
     def __init__(self, max_bytes: int) -> None:
         """Split by encapsulated pixel-data size.
@@ -299,8 +311,10 @@ class PartSink(metaclass=ABCMeta):
 
 
 class DirectPartSink(PartSink):
-    """Streams a part's tiles straight to an already-open instance file, used when
-    the frame count is fixed in advance (frame-count splitting)."""
+    """Streams a part's tiles straight to an already-open instance file.
+
+    Used when the frame count is fixed in advance (frame-count splitting).
+    """
 
     def __init__(
         self, writer: WsiDicomWriter, dataset: WsiDataset, transcoder: Encoder | None
@@ -334,8 +348,9 @@ class DirectPartSink(PartSink):
 
 
 class BufferedPartSink(PartSink):
-    """Buffers a part's raster-order tiles to one sequential scratch file and, on
-    finalize, opens the instance with the now-known frame count and writes the
+    """Buffers a part's raster-order tiles to one sequential scratch file.
+
+    On finalize, opens the instance with the now-known frame count and writes the
     tiles into it — used when the count is discovered only as tiles arrive
     (byte-size splitting).
     """
@@ -414,8 +429,9 @@ class BufferedPartSink(PartSink):
 
 
 class InstanceFileWriter:
-    """Writes a level to files provided by `part_factory`, splitting into parts where
-    `splitter` says.
+    """Writes a level to files provided by `part_factory`.
+
+    The level is split into parts where `splitter` says.
     """
 
     def __init__(
@@ -459,8 +475,11 @@ class InstanceFileWriter:
         return list(self._filepaths)
 
     def write_tiles(self, tiles: Iterable[bytes]) -> int:
-        """Batch same-part tiles to the current sink, splitting where the splitter
-        says (a batch that crosses a part boundary is split)."""
+        """Batch same-part tiles to the current sink.
+
+        Splits where the splitter says (a batch that crosses a part boundary is
+        split).
+        """
         count = 0
         batch: list[bytes] = []
         for tile in tiles:
@@ -495,9 +514,11 @@ class InstanceFileWriter:
         self._sink.write(batch)
 
     def _open_sink(self) -> PartSink:
-        """Open the next part's sink: a streaming `DirectPartSink` when the
-        splitter fixes the frame count in advance, else a buffering
-        `BufferedPartSink`."""
+        """Open the next part's sink.
+
+        A streaming `DirectPartSink` when the splitter fixes the frame count in
+        advance, else a buffering `BufferedPartSink`.
+        """
         remaining = self._total_frames - self._frame_offset
         expected = self._splitter.next_part_frame_count(remaining)
         if expected is not None:
@@ -518,8 +539,10 @@ class InstanceFileWriter:
         )
 
     def _finalize_part(self, concatenated: bool) -> None:
-        """Finalize the current part, if one is open, and advance the frame offset
-        and per-part accounting for the next one."""
+        """Finalize the current part, if one is open.
+
+        Advances the frame offset and per-part accounting for the next one.
+        """
         if self._sink is None:
             return
         self._filepaths.append(self._sink.finalize(concatenated))
@@ -543,7 +566,7 @@ class BaseFileWriter(metaclass=ABCMeta):
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
-    ):
+    ) -> None:
         """Initialize shared writer state.
 
         Parameters
@@ -778,7 +801,7 @@ class PyramidFileWriter(BaseFileWriter):
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
-    ):
+    ) -> None:
         """Create a pull-based pyramid writer.
 
         Parameters
@@ -870,7 +893,7 @@ class PyramidFileWriter(BaseFileWriter):
             Paths to created DICOM files, one per level.
         """
         # Get source info
-        base_instance = list(self._pyramid.base_level.instances.values())[0]
+        base_instance = next(iter(self._pyramid.base_level.instances.values()))
         source_image_data = base_instance.image_data
 
         # Resolve encoder and whether transcoding is needed
@@ -1571,7 +1594,7 @@ class GroupFileWriter(BaseFileWriter):
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
-    ):
+    ) -> None:
         """Create a GroupFileWriter.
 
         Parameters

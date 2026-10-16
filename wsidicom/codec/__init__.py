@@ -31,18 +31,18 @@ from wsidicom.codec.settings import (
 )
 
 __all__ = [
+    "Channels",
     "Codec",
     "Decoder",
     "Encoder",
-    "LossyCompressionIsoStandard",
-    "determine_media_type",
-    "Channels",
     "Jpeg2kSettings",
     "JpegLosslessSettings",
     "JpegLsSettings",
     "JpegSettings",
+    "LossyCompressionIsoStandard",
     "NumpySettings",
     "RleSettings",
     "Settings",
     "Subsampling",
+    "determine_media_type",
 ]

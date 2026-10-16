@@ -226,7 +226,7 @@ class LutDicomParser:
     @classmethod
     def _add_start_and_end(
         cls, start_length: int, total_length: int, segments: list[LutSegment]
-    ):
+    ) -> None:
         """Add start and end constant segments if needed."""
         start_segment = cls._create_start_segment(start_length, segments)
         end_segment = cls._create_end_segment(start_length, total_length, segments)
@@ -259,8 +259,8 @@ class LutDicomParser:
 
     @staticmethod
     def _create_end_segment(
-        start_length, total_length: int, segments: list[LutSegment]
-    ):
+        start_length: int, total_length: int, segments: list[LutSegment]
+    ) -> ConstantLutSegment | None:
         """Create a end segment if needed."""
         last_segment = segments[-1]
         length = sum(len(segment) for segment in segments)
@@ -366,7 +366,7 @@ class LutDicomParser:
 class LutDicomFormatter:
     @classmethod
     def packed(cls, lut: Lut) -> tuple[int, dict[str, int], dict[str, bytes]]:
-        """The length, the segment starts and the packed data of a lut."""
+        """Return the length, the segment starts and the packed data of a lut."""
         length = 0 if lut.length == 2**16 else lut.length
         starts: dict[str, int] = {}
         data: dict[str, bytes] = {}
@@ -429,7 +429,7 @@ class LutDicomFormatter:
         segment: DiscreteLutSegment,
         next_segment: LutSegment | None,
         data_format: str,
-    ):
+    ) -> None:
         values = list(segment.values)
         if isinstance(next_segment, LinearLutSegment):
             values.append(next_segment.start_value)
@@ -442,7 +442,7 @@ class LutDicomFormatter:
         segment: ConstantLutSegment,
         previous_segment: LutSegment | None,
         data_format: str,
-    ):
+    ) -> None:
         if not isinstance(previous_segment, DiscreteLutSegment):
             cls._pack_discrete_data(
                 buffer,
@@ -458,7 +458,7 @@ class LutDicomFormatter:
         segment: LinearLutSegment,
         previous_segment: LutSegment | None,
         data_format: str,
-    ):
+    ) -> None:
         if not isinstance(previous_segment, DiscreteLutSegment):
             cls._pack_discrete_data(
                 buffer,
@@ -474,7 +474,7 @@ class LutDicomFormatter:
         buffer: io.BytesIO,
         values: Sequence[int],
         data_format: str,
-    ):
+    ) -> None:
         """Pack discrete segment to buffer."""
         buffer.write(
             struct.pack(
@@ -492,7 +492,7 @@ class LutDicomFormatter:
         length: int,
         end_value: int,
         data_format: str,
-    ):
+    ) -> None:
         """Pack linear segment to buffer."""
         buffer.write(
             struct.pack(
@@ -506,7 +506,9 @@ class LutDicomFormatter:
 
 class LutDicomField(DatasetDicomField):
     # Makes the sequence holding the one item it builds.
-    def _serialize(self, value: Lut | None, attr: str | None, obj: Any, **kwargs):
+    def _serialize(
+        self, value: Lut | None, attr: str | None, obj: Any, **kwargs: Any
+    ) -> list[Dataset] | None:
         if value is None:
             return None
         length, starts, data = LutDicomFormatter.packed(value)
@@ -533,7 +535,7 @@ class LutDicomField(DatasetDicomField):
         value: Sequence[Dataset] | None,
         attr: str | None,
         data: Mapping[str, Any] | None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Lut | None:
         if value is None or len(value) == 0:
             return None
@@ -542,7 +544,7 @@ class LutDicomField(DatasetDicomField):
 
 class FilterDicomSchema(DicomSchema[LoadType]):
     @pre_dump
-    def pre_dump(self, filter: OpticalFilter, **kwargs):
+    def pre_dump(self, filter: OpticalFilter, **kwargs: Any) -> dict[str, Any]:
         return {
             "filters": filter.filters,
             "nominal": filter.nominal,
@@ -550,7 +552,7 @@ class FilterDicomSchema(DicomSchema[LoadType]):
         }
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> LoadType:
         filter_band = data.pop("filter_band", None)
         if filter_band is not None:
             data["low_pass"] = filter_band[0]
@@ -651,7 +653,7 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
         return OpticalPath
 
     @pre_dump
-    def pre_dump(self, optical_path: OpticalPath, **kwargs):
+    def pre_dump(self, optical_path: OpticalPath, **kwargs: Any) -> dict[str, Any]:
         fields = {
             "identifier": optical_path.identifier,
             "illumination_types": optical_path.illumination_types,
@@ -681,7 +683,7 @@ class OpticalPathDicomSchema(ModuleDicomSchema[OpticalPath]):
         return fields
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> OpticalPath:
         illumination_wavelength = data.pop("illumination_wavelength", None)
         illumination_color_code = data.pop("illumination_color_code", None)
         if illumination_wavelength is not None:

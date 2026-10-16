@@ -53,7 +53,7 @@ class TileAccumulator(Protocol):
 class TileReader(metaclass=ABCMeta):
     """Reads tiles from source and submits them for writing."""
 
-    def __init__(self, level_index: int, token: CancellationToken):
+    def __init__(self, level_index: int, token: CancellationToken) -> None:
         self._level_index = level_index
         self._token = token
 
@@ -147,7 +147,7 @@ class CascadingPassthroughTileReader(TileReader):
         level_index: int,
         accumulator: TileAccumulator,
         token: CancellationToken,
-    ):
+    ) -> None:
         super().__init__(level_index, token)
         self._accumulator = accumulator
 
@@ -195,7 +195,7 @@ class TranscodeTileReader(TileReader):
         level_index: int,
         encoder_pool_queue: WriteOnlyQueue[EncodeTask],
         token: CancellationToken,
-    ):
+    ) -> None:
         super().__init__(level_index, token)
         self._encoder_pool_queue = encoder_pool_queue
 
@@ -251,7 +251,7 @@ class CascadingTranscodeTileReader(TileReader):
         encoder_pool_queue: WriteOnlyQueue[EncodeTask],
         accumulator: TileAccumulator,
         token: CancellationToken,
-    ):
+    ) -> None:
         super().__init__(level_index, token)
         self._encoder_pool_queue = encoder_pool_queue
         self._accumulator = accumulator

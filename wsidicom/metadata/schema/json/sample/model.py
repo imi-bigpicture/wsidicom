@@ -56,9 +56,11 @@ class PreparationAction(Enum):
 
 @dataclass(frozen=True)
 class SamplingConstraintJsonModel:
-    """Simplified representation of a `Sampling` to use as sampling tree constraint,
-    replacing the sampling with the identifier of the sampled specimen and the index of
-    the sampling step within the step sequence of the specimen."""
+    """Simplified representation of a `Sampling` to use as sampling tree constraint.
+
+    Replaces the sampling with the identifier of the sampled specimen and the index of
+    the sampling step within the step sequence of the specimen.
+    """
 
     identifier: str | SpecimenIdentifier
     sampling_step_index: int
@@ -95,8 +97,11 @@ class SamplingConstraintJsonModel:
 
 @dataclass(frozen=True)
 class SamplingJsonModel:
-    """Simplified representation of a `Sampling`, replacing the sampled specimen with
-    the idententifier and sampling constraints with simplified sampling constraints."""
+    """Simplified representation of a `Sampling`.
+
+    Replaces the sampled specimen with the idententifier and sampling constraints with
+    simplified sampling constraints.
+    """
 
     method: SpecimenSamplingProcedureCode | None = None
     sampling_constraints: Sequence[SamplingConstraintJsonModel] | None = None
@@ -148,7 +153,7 @@ class SamplingJsonModel:
         Get list of constraint sampling this sampling.
 
         Parameters
-        ---------
+        ----------
         specimens: UserDict[
             str | SpecimenIdentifier, Specimen
         ]

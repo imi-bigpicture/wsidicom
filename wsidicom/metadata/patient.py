@@ -27,7 +27,7 @@ class PatientSex(Enum):
 
     F = "female"
     M = "male"
-    O = "other"  # noqa: E741
+    O = "other"  # noqa: E741 - the DICOM Patient's Sex code for other
 
 
 @dataclass(frozen=True)

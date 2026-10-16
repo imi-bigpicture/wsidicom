@@ -50,7 +50,7 @@ class TestRle:
             ),
         ],
     )
-    def test_encode(self, data: np.ndarray, expected_segment_count: int):
+    def test_encode(self, data: np.ndarray, expected_segment_count: int) -> None:
         # Arrange
         # Act
         encoded = RleCodec.encode(data)
@@ -114,7 +114,7 @@ class TestRle:
             ),
         ],
     )
-    def test_decode(self, data: bytes, expected_data: np.ndarray):
+    def test_decode(self, data: bytes, expected_data: np.ndarray) -> None:
         # Arrange
         rows = expected_data.shape[0]
         columns = expected_data.shape[1]

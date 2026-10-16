@@ -64,7 +64,7 @@ class WsiDicomTestReadIO(WsiDicomReadIO):
     nothing at its start to read the transfer syntax from and it is given instead.
     """
 
-    def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID):
+    def __init__(self, stream: BinaryIO, filepath: UPath, transfer_syntax: UID) -> None:
         self._given_transfer_syntax = transfer_syntax
         super().__init__(stream, filepath)
 
@@ -88,7 +88,7 @@ class WsiDicomTestReader(WsiDicomReader):
         bits: int,
         tile_size: Size,
         samples_per_pixel: int,
-    ):
+    ) -> None:
         self._stream = stream
         self._frame_count = frame_count
         self._transfer_syntax_uid = transfer_syntax
@@ -196,8 +196,8 @@ class WsiDicomTestImageData(ImageData):
         return self._data[tile.x + tile.y * self.tiled_size.width]
 
 
-@pytest.fixture()
-def dataset(image_data: ImageData, frame_count: int):
+@pytest.fixture
+def dataset(image_data: ImageData, frame_count: int) -> Dataset:
     assert image_data.pixel_spacing is not None
     dataset = Dataset()
     dataset.SOPClassUID = VLWholeSlideMicroscopyImageStorage
@@ -237,7 +237,7 @@ def dataset(image_data: ImageData, frame_count: int):
     dataset.NumberOfOpticalPaths = 1
     dataset.ExtendedDepthOfField = "NO"
     dataset.FocusMethod = "AUTO"
-    yield dataset
+    return dataset
 
 
 @pytest.mark.unittest
@@ -268,7 +268,7 @@ class TestWsiDicomWriter:
         bits: int,
         tile_size: Size,
         samples_per_pixel: int,
-    ):
+    ) -> None:
         # Arrange
         filepath = tmp_path.joinpath(str(written_table_type))
         wsi_dataset = WsiDataset(dataset)
@@ -332,7 +332,7 @@ class TestWsiDicomWriter:
         bits: int,
         tile_size: Size,
         samples_per_pixel: int,
-    ):
+    ) -> None:
         # Arrange
         filepath = tmp_path.joinpath(str(transfer_syntax))
         wsi_dataset = WsiDataset(dataset)
@@ -360,7 +360,7 @@ class TestWsiDicomWriter:
             )
             assert frame_position[1] == bits * tile_size.area * samples_per_pixel // 8
 
-    def test_write_pixel_end(self, tmp_path: Path):
+    def test_write_pixel_end(self, tmp_path: Path) -> None:
         # Arrange
         filepath = tmp_path.joinpath("1.dcm")
 
@@ -391,7 +391,7 @@ class TestWsiDicomWriter:
         frames: list[bytes],
         tmp_path: Path,
         transfer_syntax: UID,
-    ):
+    ) -> None:
         # Arrange
         filepath = tmp_path.joinpath("1.dcm")
 
@@ -429,7 +429,7 @@ class TestWsiDicomWriter:
         tmp_path: Path,
         table_type: OffsetTableType,
         transfer_syntax: UID,
-    ):
+    ) -> None:
         # Arrange
         filepath = tmp_path.joinpath(str(table_type))
         uid = generate_uid()
@@ -467,7 +467,7 @@ class TestWsiDicomWriter:
 class _FakePixelDataWriter:
     """Minimal PixelDataWriter for testing write_tiles/frame_positions."""
 
-    def __init__(self, positions: list[int]):
+    def __init__(self, positions: list[int]) -> None:
         self._positions_iter = iter(positions)
 
     def write_tile(self, tile: bytes) -> int:
@@ -477,11 +477,11 @@ class _FakePixelDataWriter:
 class _FakeWriter(WsiDicomWriter):
     """Minimal concrete WsiDicomWriter for testing write_tiles/frame_positions."""
 
-    def __init__(self, positions: list[int]):
+    def __init__(self, positions: list[int]) -> None:
         self._frame_positions: list[int] = []
         self._pixel_data_writer = _FakePixelDataWriter(positions)
 
-    def close(self, force=False):
+    def close(self, force: bool = False) -> None:
         pass
 
 
@@ -489,7 +489,7 @@ class _FakeWriter(WsiDicomWriter):
 class TestWsiDicomWriterWriteTiles:
     """Tests for WsiDicomWriter.write_tiles()."""
 
-    def test_write_tiles_calls_write_tile(self):
+    def test_write_tiles_calls_write_tile(self) -> None:
         """Test that write_tiles delegates to _write_tile for each tile."""
         # Arrange
         writer = _FakeWriter(positions=[100, 200, 300])
@@ -501,7 +501,7 @@ class TestWsiDicomWriterWriteTiles:
         assert count == 3
         assert writer.frame_positions == [100, 200, 300]
 
-    def test_frame_positions_empty_initially(self):
+    def test_frame_positions_empty_initially(self) -> None:
         """Test that frame_positions is empty before any writing."""
         # Arrange
         writer = _FakeWriter(positions=[])
@@ -509,7 +509,7 @@ class TestWsiDicomWriterWriteTiles:
         # Act & Assert
         assert writer.frame_positions == []
 
-    def test_frame_positions_accumulate(self):
+    def test_frame_positions_accumulate(self) -> None:
         """Test that frame_positions accumulate across multiple write_tiles calls."""
         # Arrange
         writer = _FakeWriter(positions=[10, 20, 30, 40])

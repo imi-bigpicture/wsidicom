@@ -66,7 +66,7 @@ class ParsedSpecimen:
 class StepsDirectory:
     """Class for holding specimen preparation steps ordered by specimen identifier."""
 
-    def __init__(self, steps: list[SpecimenPreparationStepDicomModel]):
+    def __init__(self, steps: list[SpecimenPreparationStepDicomModel]) -> None:
         """Initialize StepsDirectory.
 
         Parameters
@@ -226,7 +226,6 @@ class StepsDirectory:
         SpecimenIdentifier | None
             Identifier matching identifier.
         """
-
         if (
             get_settings().strict_specimen_identifier_check
             or identifier in steps_by_identifier
@@ -281,7 +280,7 @@ class SpecimenDicomParser:
     immediate parent specimen or a specimen further up the specimen branch.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._parsed_specimens: dict[SpecimenIdentifier, BaseSpecimen] = {}
         self._parsed_stainings: list[Staining] = []
 
@@ -297,7 +296,7 @@ class SpecimenDicomParser:
             Specimen descriptions to parse.
 
         Returns
-        ----------
+        -------
         tuple[list[SlideSample], list[Staining]]
             Samples and stainings parsed from descriptions.
 
@@ -322,7 +321,7 @@ class SpecimenDicomParser:
             Specimen description to parse.
 
         Returns
-        ----------
+        -------
         SlideSample
             Parsed sample.
 
@@ -367,7 +366,7 @@ class SpecimenDicomParser:
             Steps to parse.
 
         Returns
-        ----------
+        -------
         Iterator[Staining]
             Parsed stainings.
 
@@ -396,7 +395,7 @@ class SpecimenDicomParser:
             DICOM preparation steps ordered by specimen identifier.
 
         Returns
-        ----------
+        -------
         ParsedSpecimen
             Parsed steps for specimen.
 
@@ -707,7 +706,6 @@ class SpecimenDicomParser:
         BaseSampling | None
             Unknown sampling created from previous specimen.
         """
-
         previous_specimen = self._get_previous_specimen(identifier, steps_directory)
         if previous_specimen is None:
             return None
@@ -766,7 +764,7 @@ class SpecimenDicomParser:
 
 
         Returns
-        ----------
+        -------
         Specimen | Sample
             Created Specimen, if the specimen has no parents, or Specimen.
 

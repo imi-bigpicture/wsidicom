@@ -29,9 +29,60 @@ jobs:
         uses: astral-sh/setup-uv@v10.1.0
       # Pyright resolves imports against installed packages, so deps are required.
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --all-extras --all-packages
       - name: Pyright
         run: uv run pyright
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kernels
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Add the aarch64 target
+        run: rustup target add aarch64-unknown-linux-gnu
+      - name: Rustfmt
+        run: cargo fmt --check
+      - name: Clippy x86_64
+        run: cargo clippy --release -- -D warnings
+        env:
+          PYO3_PYTHON: python
+      - name: Clippy aarch64
+        run: cargo clippy --release --target aarch64-unknown-linux-gnu -- -D warnings
+        env:
+          PYO3_PYTHON: python
+          PYO3_CROSS_PYTHON_VERSION: "3.11"
+      # Doc comments: broken links and malformed markup fail the job.
+      - name: Rustdoc
+        run: cargo doc --no-deps --document-private-items
+        env:
+          PYO3_PYTHON: python
+          RUSTDOCFLAGS: -D warnings
+
+  rust-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kernels
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Install cargo-deny and cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-audit
+      # Advisories, licences, duplicate crates and sources (deny.toml).
+      - name: Cargo deny
+        run: cargo deny check
+      # RustSec advisories against Cargo.lock.
+      - name: Cargo audit
+        run: cargo audit
 
   typos:
     runs-on: ubuntu-latest
@@ -41,7 +92,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v10.1.0
       - name: Typos
-        run: uv run typos wsidicom tests README.md CHANGELOG.md
+        run: uv run typos wsidicom tests kernels README.md CHANGELOG.md
 
   audit:
     runs-on: ubuntu-latest

@@ -7,13 +7,18 @@ on:
 permissions:
   contents: read
 
+# Releases of the main package are tagged v*. wsidicom-kernels has its own workflow
+# and wsidicom-kernels-v* tags, so its GitHub releases are skipped here.
 jobs:
   lint:
+    if: startsWith(github.ref_name, 'v')
     uses: ./.github/workflows/lint.yml
   test:
+    if: startsWith(github.ref_name, 'v')
     uses: ./.github/workflows/pytest.yml
 
   pypi:
+    if: startsWith(github.ref_name, 'v')
     needs: [lint, test] # don't publish unless CI is green
     runs-on: ubuntu-latest
     environment: pypi

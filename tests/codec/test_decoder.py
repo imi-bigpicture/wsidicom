@@ -74,9 +74,11 @@ from wsidicom.options import DecoderOption
 
 
 def _pydicom_can_decode(transfer_syntax: UID) -> bool:
-    """Whether any available pydicom pixel data handler supports the transfer
-    syntax. Support for e.g. JPEG Lossless depends on optional extras such as
-    gdcm or pylibjpeg-libjpeg being installed."""
+    """Return whether any available pydicom pixel data handler supports the syntax.
+
+    Support for e.g. JPEG Lossless depends on optional extras such as gdcm or
+    pylibjpeg-libjpeg being installed.
+    """
     return any(
         handler.is_available() and handler.supports_transfer_syntax(transfer_syntax)
         for handler in pydicom_config.pixel_data_handlers
@@ -109,9 +111,11 @@ def rgb_image() -> np.ndarray:
 
 @pytest.fixture
 def rgb_jpeg_without_rgb_signal(rgb_image: np.ndarray) -> bytes:
-    """An RGB (untransformed) baseline JPEG with the Adobe APP14 marker stripped
-    and the component ids reset to 1, 2, 3, so the stream carries no in-band RGB
-    signal (decoders default to YCbCr)."""
+    """Return an RGB (untransformed) baseline JPEG without in-band RGB signal.
+
+    The Adobe APP14 marker is stripped and the component ids are reset to 1, 2, 3,
+    so the stream carries no in-band RGB signal (decoders default to YCbCr).
+    """
     if jpeg8_encode is None:
         pytest.skip("imagecodecs required")
     frame = bytearray(
@@ -148,10 +152,12 @@ def rgb_jpeg_without_rgb_signal(rgb_image: np.ndarray) -> bytes:
 
 @pytest.mark.unittest
 class TestDecoderSelection:
-    """select_decoder honors the preferred argument, falling back to
-    settings.preferred_decoder when it is None."""
+    """select_decoder honors the preferred argument.
 
-    def test_preferred_argument_selects_decoder(self):
+    It falls back to settings.preferred_decoder when the argument is None.
+    """
+
+    def test_preferred_argument_selects_decoder(self) -> None:
         # Act — Pillow is always available and supports JPEG baseline
         selected = Decoder.select_decoder(
             JPEGBaseline8Bit, 3, 8, preferred=DecoderOption.PILLOW
@@ -160,7 +166,7 @@ class TestDecoderSelection:
         # Assert
         assert selected is PillowDecoder
 
-    def test_preferred_argument_overrides_settings(self):
+    def test_preferred_argument_overrides_settings(self) -> None:
         # Act — the argument wins over a different preference in settings
         with config.use_settings(
             config.Settings(preferred_decoder=DecoderOption.PYDICOM)
@@ -196,7 +202,7 @@ class TestPillowDecoder:
             (HTJ2KLosslessRPCL, True),
         ],
     )
-    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool) -> None:
         # Arrange
 
         # Act
@@ -233,7 +239,7 @@ class TestPillowDecoder:
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
-    ):
+    ) -> None:
         # Arrange
         decoder = PillowDecoder()
 
@@ -245,7 +251,7 @@ class TestPillowDecoder:
 
     def test_uses_photometric_interpretation(
         self, rgb_image: np.ndarray, rgb_jpeg_without_rgb_signal: bytes
-    ):
+    ) -> None:
         # A stream storing RGB samples but signalling no color space (no APP14,
         # ids 1, 2, 3) must decode as RGB when the metadata declares RGB.
         # Arrange
@@ -259,7 +265,7 @@ class TestPillowDecoder:
 
     def test_rgb_metadata_does_not_break_stream_signalling_rgb_by_ids(
         self, rgb_image: np.ndarray
-    ):
+    ) -> None:
         # The RGB hint must not corrupt a stream that already signals RGB via
         # 'R', 'G', 'B' component ids (regression for the draft hack).
         # Arrange
@@ -310,7 +316,7 @@ class TestPydicomDecoder:
             (HTJ2KLosslessRPCL, False),
         ],
     )
-    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool) -> None:
         # Arrange
 
         # Act
@@ -334,7 +340,9 @@ class TestPydicomDecoder:
             NumpySettings(8, Channels.RGB, False, True),
         ],
     )
-    def test_decode(self, image: np.ndarray, encoded: bytes, settings: Settings):
+    def test_decode(
+        self, image: np.ndarray, encoded: bytes, settings: Settings
+    ) -> None:
         # Arrange
         decoder = PydicomDecoder(
             settings.transfer_syntax,
@@ -375,7 +383,7 @@ class TestImageCodecsDecoder:
             (HTJ2KLosslessRPCL, IMAGE_CODECS_AVAILABLE),
         ],
     )
-    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool) -> None:
         # Arrange
 
         # Act
@@ -424,7 +432,7 @@ class TestImageCodecsDecoder:
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
-    ):
+    ) -> None:
         # Arrange
         decoder = ImageCodecsDecoder(settings.transfer_syntax)
         if not decoder.is_available():
@@ -438,7 +446,7 @@ class TestImageCodecsDecoder:
 
     def test_uses_photometric_interpretation(
         self, rgb_image: np.ndarray, rgb_jpeg_without_rgb_signal: bytes
-    ):
+    ) -> None:
         # A stream storing RGB samples but signalling no color space (no APP14,
         # ids 1, 2, 3) must decode as RGB when the metadata declares RGB.
         # Arrange
@@ -474,7 +482,7 @@ class TestPylibjpegRleDecoder:
             (HTJ2KLosslessRPCL, False),
         ],
     )
-    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool) -> None:
         # Arrange
 
         # Act
@@ -494,7 +502,9 @@ class TestPylibjpegRleDecoder:
             RleSettings(16, Channels.GRAYSCALE),
         ],
     )
-    def test_decode(self, image: np.ndarray, encoded: bytes, settings: Settings):
+    def test_decode(
+        self, image: np.ndarray, encoded: bytes, settings: Settings
+    ) -> None:
         # Arrange
         decoder = PylibjpegRleDecoder(
             Size(image.shape[1], image.shape[0]),
@@ -532,7 +542,7 @@ class TestImagecodecsRleDecoder:
             (HTJ2KLosslessRPCL, False),
         ],
     )
-    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool) -> None:
         # Arrange
 
         # Act
@@ -549,7 +559,9 @@ class TestImagecodecsRleDecoder:
             RleSettings(16, Channels.GRAYSCALE),
         ],
     )
-    def test_decode(self, image: np.ndarray, encoded: bytes, settings: Settings):
+    def test_decode(
+        self, image: np.ndarray, encoded: bytes, settings: Settings
+    ) -> None:
         # Arrange
         decoder = ImageCodecsRleDecoder(
             Size(image.shape[1], image.shape[0]),
@@ -573,7 +585,7 @@ class TestPyJpegLsDecoder:
             (JPEGLSNearLossless, PyJpegLsDecoder.is_available()),
         ],
     )
-    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool) -> None:
         # Arrange
 
         # Act
@@ -602,7 +614,7 @@ class TestPyJpegLsDecoder:
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
-    ):
+    ) -> None:
         # Arrange
         decoder = PyJpegLsDecoder()
         if not decoder.is_available():
@@ -627,7 +639,7 @@ class TestPyLibJpegOpenJpegDecoder:
             (HTJ2KLosslessRPCL, PYLIBJPEGOPENJPEG_AVAILABLE),
         ],
     )
-    def test_is_supported(self, transfer_syntax: UID, expected_result: bool):
+    def test_is_supported(self, transfer_syntax: UID, expected_result: bool) -> None:
         # Arrange
 
         # Act
@@ -659,7 +671,7 @@ class TestPyLibJpegOpenJpegDecoder:
         encoded: bytes,
         settings: Settings,
         allowed_rms: float,
-    ):
+    ) -> None:
         # Arrange
         decoder = PyLibJpegOpenJpegDecoder()
         if not decoder.is_available():

@@ -34,7 +34,7 @@ class NativePixelDataFrameIndexParser(FrameIndexParser):
         tile_size: Size,
         samples_per_pixel: int,
         bits: int,
-    ):
+    ) -> None:
         self._tile_size = tile_size
         self._samples_per_pixel = samples_per_pixel
         self._bits = bits

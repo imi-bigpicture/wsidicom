@@ -32,5 +32,5 @@ class ContributingEquipmentJsonSchema(LoadingSchema[ContributingEquipment]):
     contribution_datetime = fields.DateTime(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[ContributingEquipment]:
         return ContributingEquipment

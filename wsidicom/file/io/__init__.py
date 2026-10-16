@@ -24,10 +24,10 @@ from wsidicom.file.io.wsidicom_reader import WsiDicomReader
 from wsidicom.file.io.wsidicom_writer import WsiDicomWriter
 
 __all__ = [
+    "OffsetTableType",
     "WsiDicomIO",
     "WsiDicomReadIO",
-    "WsiDicomWriteIO",
     "WsiDicomReader",
+    "WsiDicomWriteIO",
     "WsiDicomWriter",
-    "OffsetTableType",
 ]

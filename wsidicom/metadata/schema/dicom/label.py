@@ -17,6 +17,7 @@
 from typing import Any
 
 from marshmallow import post_dump, pre_dump
+from pydicom import Dataset
 from pydicom.valuerep import VR
 
 from wsidicom.metadata.image import Image
@@ -63,14 +64,14 @@ class LabelOnlyDicomSchema(LabelBaseDicomSchema):
     """Schema to use for loading label metadata from non-label instances."""
 
     @pre_dump
-    def pre_dump(self, label: Label, **kwargs):
+    def pre_dump(self, label: Label, **kwargs: Any) -> dict[str, Any]:
         return {
             "text": label.text,
             "barcode": label.barcode,
         }
 
     @post_dump
-    def post_dump(self, data: dict[str, Any], **kwargs):
+    def post_dump(self, data: dict[str, Any], **kwargs: Any) -> Dataset:
         if all(
             data[key] is None or data[key].value is None
             for key in ("LabelText", "BarcodeValue")

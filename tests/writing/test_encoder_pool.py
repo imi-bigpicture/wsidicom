@@ -64,8 +64,11 @@ class ArrayEq:
 
 
 def array_eq(array: np.ndarray) -> np.ndarray:
-    """An ``ArrayEq`` matcher typed as ``np.ndarray`` so decoy call sites, which
-    pass a matcher where the real argument type is expected, type-check."""
+    """Return an ``ArrayEq`` matcher typed as ``np.ndarray``.
+
+    So decoy call sites, which pass a matcher where the real argument type is
+    expected, type-check.
+    """
     return cast(np.ndarray, ArrayEq(array))
 
 
@@ -121,7 +124,7 @@ def token() -> CancellationToken:
 class TestPyramidTilePosition:
     """Tests for PyramidTilePosition comparison and indexing."""
 
-    def test_comparison_by_level(self):
+    def test_comparison_by_level(self) -> None:
         """Test that lower levels are less than higher levels."""
         # Arrange
         coord_low = PyramidTilePosition(
@@ -137,7 +140,7 @@ class TestPyramidTilePosition:
         # Assert
         assert result
 
-    def test_comparison_by_optical_path(self):
+    def test_comparison_by_optical_path(self) -> None:
         """Test that lower optical paths are less than higher ones."""
         # Arrange
         coord1 = PyramidTilePosition(
@@ -153,7 +156,7 @@ class TestPyramidTilePosition:
         # Assert
         assert result
 
-    def test_comparison_by_z_index(self):
+    def test_comparison_by_z_index(self) -> None:
         """Test that lower z indices are less than higher ones."""
         # Arrange
         coord1 = PyramidTilePosition(
@@ -169,7 +172,7 @@ class TestPyramidTilePosition:
         # Assert
         assert result
 
-    def test_comparison_by_y_index(self):
+    def test_comparison_by_y_index(self) -> None:
         """Test that lower y indices are less than higher ones (top before bottom)."""
         # Arrange
         coord1 = PyramidTilePosition(
@@ -185,7 +188,7 @@ class TestPyramidTilePosition:
         # Assert
         assert result
 
-    def test_comparison_by_x_index(self):
+    def test_comparison_by_x_index(self) -> None:
         """Test that lower x indices are less than higher ones (left before right)."""
         # Arrange
         coord1 = PyramidTilePosition(
@@ -206,7 +209,9 @@ class TestPyramidTilePosition:
 class TestMixedTaskPriorityQueue:
     """Regression: PriorityQueue must accept both task types without TypeError."""
 
-    def test_encode_and_downsample_tasks_compare(self, token: CancellationToken):
+    def test_encode_and_downsample_tasks_compare(
+        self, token: CancellationToken
+    ) -> None:
         """EncodeTask and DownsampleEncodeTask with different coordinates compare."""
         # Arrange
         encode_task = EncodeTask(
@@ -232,7 +237,9 @@ class TestMixedTaskPriorityQueue:
         assert first is encode_task
         assert second is downsample_task
 
-    def test_tasks_with_equal_coordinates_compare(self, token: CancellationToken):
+    def test_tasks_with_equal_coordinates_compare(
+        self, token: CancellationToken
+    ) -> None:
         """Tasks with identical coordinates compare without TypeError."""
         # Arrange
         coords = PyramidTilePosition(0, 0, 0, 0, 0)
@@ -253,7 +260,8 @@ class TestMixedTaskPriorityQueue:
 
         # Assert — both come out; order between equal-coord tasks is unspecified
         out = [queue.get(token), queue.get(token)]
-        assert encode_task in out and downsample_task in out
+        assert encode_task in out
+        assert downsample_task in out
 
 
 @pytest.mark.unittest
@@ -269,7 +277,7 @@ class TestEncoderPool:
         tile_size: Size,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test that encoding works via the queue property."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
@@ -313,7 +321,7 @@ class TestEncoderPool:
         tile_size: Size,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test that encoding works via the queue property."""
         # Arrange
         test_tile_1 = np.full((256, 256, 3), (255, 0, 0), dtype=dtype)
@@ -370,7 +378,7 @@ class TestEncoderPool:
         tile_size: Size,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test encoding a batch with multiple tiles."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
@@ -419,7 +427,7 @@ class TestEncoderPool:
         tile_size: Size,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test that starting twice raises an error."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
@@ -449,7 +457,7 @@ class TestEncoderPool:
         tile_size: Size,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """An encoding failure cancels the shared token instead of deadlocking."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
@@ -492,7 +500,7 @@ class TestEncoderPool:
         tile_size: Size,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """Test that shutdown properly stops dispatcher and executor."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
@@ -521,7 +529,7 @@ class TestEncoderPool:
         stitcher: NumpyStitcher,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """EncoderPool stitches input tiles, downsamples, encodes, and cascades."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
@@ -600,7 +608,7 @@ class TestEncoderPool:
         stitcher: NumpyStitcher,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """When downsampler commutes with stitch, no downsample call is made."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)
@@ -664,7 +672,7 @@ class TestEncoderPool:
         tile_size: Size,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """An intermediate level is downsampled and cascaded, but not encoded.
 
         Such a level only exists to bridge a gap in a sparse pyramid, so nothing
@@ -717,7 +725,7 @@ class TestEncoderPool:
         tile_size: Size,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """A partial edge block is halved and padded back to a full tile.
 
         Regression: the reduce-then-stitch fast path returned the stitched block
@@ -777,7 +785,7 @@ class TestEncoderPool:
         stitcher: NumpyStitcher,
         blank_tile: np.ndarray,
         token: CancellationToken,
-    ):
+    ) -> None:
         """A downsampler exception cancels the token and still decrements the tracker."""
         # Arrange
         encoder = decoy.mock(cls=Encoder)

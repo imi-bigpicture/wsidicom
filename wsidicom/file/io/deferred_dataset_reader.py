@@ -60,7 +60,7 @@ class FileDeferredDatasetReader(DeferredDatasetReader):
         root_deferred_elements: Iterable[RootDeferredElement],
         per_frame_position: int | None,
         pixel_data_position: int | None,
-    ):
+    ) -> None:
         """Create a reader for the rest of a dataset.
 
         Parameters

@@ -57,8 +57,7 @@ def as_upath(
 def as_local_path(
     path: str | Path | UPath, file_options: dict[str, Any] | None = None
 ) -> Path | None:
-    """Return path as a `Path` on the local filesystem, or `None` if it is not
-    on it.
+    """Return path as a `Path` on the local filesystem, or `None` if it is not on it.
 
     Use for readers that open files by name rather than through a stream. A
     `file://` or `local://` url names a local file and is returned as a `Path`

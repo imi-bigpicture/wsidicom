@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import (
     Optional,
+    Self,
 )
 
 from pydicom.sr.coding import Code
@@ -66,7 +67,7 @@ class SpecimenPreparationStepDicomModel:
         processing: SpecimenPreparationStepsCode | None = None,
         specimen_type: AnatomicPathologySpecimenTypesCode | None = None,
         container: ContainerTypeCode | None = None,
-    ):
+    ) -> None:
         self.identifier = identifier
         self.issuer_of_identifier = issuer_of_identifier
         self.date_time = date_time
@@ -149,7 +150,7 @@ class SamplingDicomModel(SpecimenPreparationStepDicomModel):
     location_y: Measurement | None = None
     location_z: Measurement | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__init__(
             identifier=self.identifier,
             issuer_of_identifier=self.issuer_of_identifier,
@@ -265,7 +266,7 @@ class CollectionDicomModel(SpecimenPreparationStepDicomModel):
     specimen_type: AnatomicPathologySpecimenTypesCode | None = None
     container: ContainerTypeCode | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__init__(
             identifier=self.identifier,
             issuer_of_identifier=self.issuer_of_identifier,
@@ -330,7 +331,7 @@ class ReceivingDicomModel(SpecimenPreparationStepDicomModel):
         cls,
         step: Receiving,
         specimen: BaseSpecimen,
-    ):
+    ) -> Self:
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
             specimen.identifier
         )
@@ -361,7 +362,7 @@ class StorageDicomModel(SpecimenPreparationStepDicomModel):
         cls,
         step: Storage,
         specimen: BaseSpecimen,
-    ):
+    ) -> Self:
         identifier, issuer = SpecimenIdentifier.get_string_identifier_and_issuer(
             specimen.identifier
         )

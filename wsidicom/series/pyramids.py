@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 
 from wsidicom.config import get_settings
 from wsidicom.errors import WsiDicomNotFoundError
@@ -10,7 +10,7 @@ from wsidicom.series.pyramid import Pyramid
 class Pyramids:
     """A collection of pyramids."""
 
-    def __init__(self, pyramids: Iterable[Pyramid]):
+    def __init__(self, pyramids: Iterable[Pyramid]) -> None:
         self._pyramids = list(pyramids)
 
     def __getitem__(self, index: int) -> Pyramid:
@@ -31,7 +31,7 @@ class Pyramids:
     def __len__(self) -> int:
         return len(self._pyramids)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Pyramid]:
         return iter(self._pyramids)
 
     def get(self, index: int) -> Pyramid:

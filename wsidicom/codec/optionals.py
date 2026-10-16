@@ -15,14 +15,14 @@
 """Module with imports for optional codec packages."""
 
 __all__ = [
-    "PYLIBJPEGRLE_AVAILABLE",
-    "rle_decode_frame",
-    "rle_encode_frame",
     "IMAGE_CODECS_AVAILABLE",
     "JPEG2K",
     "JPEG8",
     "JPEGLS",
     "JPEGXL",
+    "PYLIBJPEGLS_AVAILABLE",
+    "PYLIBJPEGOPENJPEG_AVAILABLE",
+    "PYLIBJPEGRLE_AVAILABLE",
     "dicomrle_decode",
     "jpeg2k_decode",
     "jpeg2k_encode",
@@ -33,12 +33,12 @@ __all__ = [
     "jpegxl_decode",
     "jpegxl_encode",
     "packbits_encode",
-    "PYLIBJPEGLS_AVAILABLE",
     "pylibjpeg_ls_decode",
     "pylibjpeg_ls_encode",
-    "PYLIBJPEGOPENJPEG_AVAILABLE",
     "pylibjpeg_openjpeg_decode",
     "pylibjpeg_openjpeg_encode",
+    "rle_decode_frame",
+    "rle_encode_frame",
 ]
 
 try:

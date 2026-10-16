@@ -49,15 +49,17 @@ UNEQUAL_FOCAL_PLANES = [0.0, 0.5, 2.0]
 
 
 class MultiFocalPlaneImageData(ImageData):
-    """Wraps an ImageData and presents several focal planes, serving the source
-    tile for every plane."""
+    """Wraps an ImageData and presents several focal planes.
+
+    The source tile is served for every plane.
+    """
 
     def __init__(
         self,
         source: ImageData,
         focal_planes: list[float],
         optical_paths: list[str] | None = None,
-    ):
+    ) -> None:
         super().__init__(source.encoder)
         self._source = source
         self._focal_planes = focal_planes
@@ -135,14 +137,16 @@ class MultiFocalPlaneImageData(ImageData):
 
 
 @pytest.fixture
-def focal_planes():
-    yield FOCAL_PLANES
+def focal_planes() -> list[float]:
+    return FOCAL_PLANES
 
 
 @pytest.fixture
 def multi_focal_plane_pyramid(wsi: WsiDicom, focal_planes: list[float]) -> Pyramid:
-    """Build a single-level pyramid with several focal planes from the smallest
-    real level."""
+    """Build a single-level pyramid with several focal planes.
+
+    The pyramid is built from the smallest real level.
+    """
     level = wsi.pyramids[0][-1]
     source_instance = level.default_instance
     image_data = MultiFocalPlaneImageData(source_instance.image_data, focal_planes)
@@ -189,8 +193,10 @@ def sparse_instance(
 
 @pytest.fixture
 def sparse_pyramid(wsi: WsiDicom) -> Pyramid:
-    """Build a single-level pyramid with a sparse (path x plane) grid: optical
-    path "0" has two focal planes, optical path "1" has only one."""
+    """Build a single-level pyramid with a sparse (path x plane) grid.
+
+    Optical path "0" has two focal planes, optical path "1" has only one.
+    """
     level = wsi.pyramids[0][-1]
     source_instance = level.default_instance
     instances = [
@@ -202,8 +208,10 @@ def sparse_pyramid(wsi: WsiDicom) -> Pyramid:
 
 @pytest.fixture
 def non_uniform_pyramid(wsi: WsiDicom) -> Pyramid:
-    """Build a two-level pyramid where the levels disagree on focal planes: the
-    larger level has two, the smaller has one."""
+    """Build a two-level pyramid where the levels disagree on focal planes.
+
+    The larger level has two, the smaller has one.
+    """
     pyramid = wsi.pyramids[0]
     larger_level = pyramid[-2]
     smaller_level = pyramid[-1]
@@ -272,7 +280,7 @@ class TestInstanceSplitIntegration:
         instance_split: InstanceSplit,
         expected_files: int,
         expected_planes_per_file: int,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -295,7 +303,7 @@ class TestInstanceSplitIntegration:
         multi_focal_plane_pyramid: Pyramid,
         write_pyramid: Callable[..., list[UPath]],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -319,7 +327,7 @@ class TestInstanceSplitIntegration:
         write_pyramid: Callable[..., list[UPath]],
         tmp_path: Path,
         instance_split: InstanceSplit,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -338,7 +346,7 @@ class TestInstanceSplitIntegration:
         sparse_pyramid: Pyramid,
         write_pyramid: Callable[..., list[UPath]],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -362,7 +370,7 @@ class TestInstanceSplitIntegration:
         non_uniform_pyramid: Pyramid,
         write_pyramid: Callable[..., list[UPath]],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
 
         # Act — a pyramid whose levels disagree on focal planes is written with

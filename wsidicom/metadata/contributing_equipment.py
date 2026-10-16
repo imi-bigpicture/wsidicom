@@ -24,8 +24,9 @@ from wsidicom.conceptcode import ContributingEquipmentPurposeCode
 @dataclass(frozen=True)
 class ContributingEquipment:
     """
-    Equipment that contributed to the creation of the instance, other than the
-    acquisition equipment described by `Equipment`.
+    Equipment that contributed to the creation of the instance.
+
+    That is equipment other than the acquisition equipment described by `Equipment`.
 
     Corresponds to an item of the Contributing Equipment Sequence:
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.12.html

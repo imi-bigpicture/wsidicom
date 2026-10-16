@@ -29,6 +29,7 @@ from shapely import wkt
 from shapely.geometry import LineString as ShapelyLineString
 from shapely.geometry import Point as ShapelyPoint
 from shapely.geometry import Polygon as ShapelyPolygon
+from shapely.geometry.base import BaseGeometry
 
 from wsidicom import WsiDicom
 from wsidicom.conceptcode import (
@@ -80,7 +81,7 @@ point = Point(1, 1)
 @pytest.mark.unittest
 class TestWsiDicomAnnotation:
     @pytest.mark.parametrize("file_path", test_files["qupath_geojson"])
-    def test_qupath_geojson(self, file_path: Path):
+    def test_qupath_geojson(self, file_path: Path) -> None:
         with open(file_path) as f:
             # Arrange
             input_dict: dict[str, Any] = json.load(f)
@@ -105,7 +106,7 @@ class TestWsiDicomAnnotation:
             assert input_dict == output_dict
 
     @pytest.mark.parametrize("file_path", test_files["qupath_geojson_advanced"])
-    def test_qupath_geojson_advanced(self, file_path: Path):
+    def test_qupath_geojson_advanced(self, file_path: Path) -> None:
         with open(file_path) as f:
             # Arrange
             input_dict: dict = json.load(f)
@@ -185,7 +186,7 @@ class TestWsiDicomAnnotation:
                     assert output_annotation.geometry == input_annotation
 
     @pytest.mark.parametrize("file_path", test_files["asap"])
-    def test_asap(self, file_path: Path):
+    def test_asap(self, file_path: Path) -> None:
         with open(file_path) as f:
             # Arrange
             annotation_xml = xmltodict.parse(f.read())["ASAP_Annotations"]
@@ -217,7 +218,7 @@ class TestWsiDicomAnnotation:
             assert input_dict == output_dict
 
     @pytest.mark.parametrize("file_path", test_files["sectra"])
-    def test_sectra(self, file_path: Path):
+    def test_sectra(self, file_path: Path) -> None:
         with open(file_path) as f:
             # Arrange
             input_dict: dict[str, Any] | list[dict[str, Any]] = json.load(f)
@@ -249,7 +250,7 @@ class TestWsiDicomAnnotation:
             assert input_dict == output_dict
 
     @pytest.mark.parametrize("file_path", test_files["cytomine"])
-    def test_cytomine(self, file_path: Path):
+    def test_cytomine(self, file_path: Path) -> None:
         with open(file_path) as f:
             # Arrange
             input_dict = json.load(f)
@@ -301,7 +302,7 @@ class TestWsiDicomAnnotation:
             ),
         ],
     )
-    def test_shapely(self, input_geometry):
+    def test_shapely(self, input_geometry: BaseGeometry) -> None:
         # Arrange
         group = AnnotationGroup.from_geometries(
             [Geometry.from_shapely_like(input_geometry)],
@@ -327,7 +328,7 @@ class TestWsiDicomAnnotation:
             [Annotation(Point(0.0, 0.1)), Annotation(Point(0.0, 0.1))],
         ],
     )
-    def test_point_annotation(self, input_annotations: list[Annotation]):
+    def test_point_annotation(self, input_annotations: list[Annotation]) -> None:
         # Arrange
 
         # Act
@@ -364,7 +365,7 @@ class TestWsiDicomAnnotation:
             ],
         ],
     )
-    def test_line_annotation(self, input_annotations: list[Annotation]):
+    def test_line_annotation(self, input_annotations: list[Annotation]) -> None:
         # Arrange
 
         # Act
@@ -382,7 +383,7 @@ class TestWsiDicomAnnotation:
     @pytest.mark.parametrize("out_of_range_value", [0, -1])
     def test_polyline_group_with_out_of_range_point_index_raises(
         self, out_of_range_value: int
-    ):
+    ) -> None:
         # Arrange
         annotations = [
             Annotation(Polyline([(0.0, 0.1), (1.0, 1.1)])),
@@ -396,13 +397,13 @@ class TestWsiDicomAnnotation:
         ).tobytes()
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"Point index list is one-based"):
             PolylineAnnotationGroup.from_ds(ds, generate_uid())
 
     @pytest.mark.parametrize("out_of_range_index", [0, -1])
     def test_polyline_group_with_out_of_range_annotation_index_raises(
         self, out_of_range_index: int
-    ):
+    ) -> None:
         # Arrange
         measurements = [Measurement(MeasurementCode("Area"), 1.0, UnitCode("um2"))]
         annotations = [
@@ -418,10 +419,10 @@ class TestWsiDicomAnnotation:
         ).tobytes()
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"Annotation index list is one-based"):
             PolylineAnnotationGroup.from_ds(ds, generate_uid())
 
-    def test_float_32_to_32(self):
+    def test_float_32_to_32(self) -> None:
         # Arrange
         np_input = np.array([0.0254, 0.12405], dtype=np.float32)
         input_point = Point(float(np_input[0]), float(np_input[1]))
@@ -441,7 +442,7 @@ class TestWsiDicomAnnotation:
             np_output = np.array(output_point, dtype=np.float32)
             assert np_input.all() == np_output.all()
 
-    def test_float_32_to_64(self):
+    def test_float_32_to_64(self) -> None:
         # Arrange
         np_input = np.array([0.0254, 0.12405], dtype=np.float32)
         input_point = Point(float(np_input[0]), float(np_input[1]))
@@ -461,7 +462,7 @@ class TestWsiDicomAnnotation:
             np_output = np.array(output_point, dtype=np.float32)
             assert np_input.all() == np_output.all()
 
-    def test_float_64_to_64(self):
+    def test_float_64_to_64(self) -> None:
         # Arrange
         np_input = np.array([0.0254, 0.12405], dtype=np.float64)
         input_point = Point(float(np_input[0]), float(np_input[1]))
@@ -482,7 +483,7 @@ class TestWsiDicomAnnotation:
             np_output = np.array(output_point, dtype=np.float64)
             assert np_input.all() == np_output.all()
 
-    def test_float_64_to_32(self):
+    def test_float_64_to_32(self) -> None:
         # Arrange
         np_input = np.array([0.0254, 0.12405], dtype=np.float64)
         input_point = Point(float(np_input[0]), float(np_input[1]))
@@ -513,7 +514,7 @@ class TestWsiDicomAnnotation:
             ],
         ],
     )
-    def test_measurement(self, measurements: list[Measurement]):
+    def test_measurement(self, measurements: list[Measurement]) -> None:
         # Arrange
         point = Point(1, 1)
 
@@ -526,22 +527,22 @@ class TestWsiDicomAnnotation:
     @pytest.mark.parametrize(
         ["annotation1", "annotation2", "expected_result"],
         [
-            [
+            (
                 Annotation(point, [measurement0]),
                 Annotation(point, [measurement1]),
                 True,
-            ],
-            [Annotation(point, [measurement0]), Annotation(point, []), False],
-            [
+            ),
+            (Annotation(point, [measurement0]), Annotation(point, []), False),
+            (
                 Annotation(point, [measurement0, measurement1]),
                 Annotation(point, [measurement2]),
                 False,
-            ],
+            ),
         ],
     )
     def test_measurement_one_to_one(
         self, annotation1: Annotation, annotation2: Annotation, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         annotation_group = PointAnnotationGroup(
             [annotation1, annotation2], "label", category_code, type_code
@@ -553,7 +554,7 @@ class TestWsiDicomAnnotation:
             == expected_result
         )
 
-    def test_measurement_cycle(self):
+    def test_measurement_cycle(self) -> None:
         # Arrange
         area = MeasurementCode("Area")
         pixels = UnitCode("Pixels")
@@ -578,7 +579,7 @@ class TestWsiDicomAnnotation:
 
             assert measurement0 == annotation0.get_measurements(area, pixels)[0]
 
-    def test_large_number_of_annotations(self):
+    def test_large_number_of_annotations(self) -> None:
         # Arrange
         count = 10000
         point_annotations = [
@@ -599,7 +600,7 @@ class TestWsiDicomAnnotation:
             for i in range(count):
                 assert Point(float(i), float(i)) == output_group.annotations[i].geometry
 
-    def test_make_annotated_wsi_slide(self, wsi: WsiDicom, tmp_path: Path):
+    def test_make_annotated_wsi_slide(self, wsi: WsiDicom, tmp_path: Path) -> None:
         # Arrange
         point_annotation = Annotation(Point(10.0, 20.0))
         group = PointAnnotationGroup(
@@ -623,8 +624,9 @@ class TestWsiDicomAnnotation:
 
     @classmethod
     def dicom_round_trip(cls, dicom: AnnotationInstance) -> AnnotationInstance:
-        """Saves the annotation collection to temporary file, reads the file
-        and return the parsed annotation collection.
+        """Save the annotation collection to a temporary file and read it back.
+
+        Return the parsed annotation collection.
 
         Parameters
         ----------
@@ -641,7 +643,7 @@ class TestWsiDicomAnnotation:
             filename = "annotation_round_trip.dcm"
             dcm_path = str(Path(tempdir).joinpath(filename))
             dicom.save(dcm_path)
-            return list(AnnotationInstance.open([dcm_path]))[0]
+            return next(iter(AnnotationInstance.open([dcm_path])))
 
     @staticmethod
     def annotation_group_to_qupath(
@@ -746,7 +748,9 @@ class TestWsiDicomAnnotation:
         raise NotImplementedError()
 
     @staticmethod
-    def annotation_to_shapely(annotation: Annotation):
+    def annotation_to_shapely(
+        annotation: Annotation,
+    ) -> ShapelyPoint | ShapelyPolygon | ShapelyLineString:
         if isinstance(annotation.geometry, Point):
             return ShapelyPoint(annotation.geometry.to_coords())
         if isinstance(annotation.geometry, Polygon):

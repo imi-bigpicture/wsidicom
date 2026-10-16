@@ -40,7 +40,7 @@ def equipment() -> ContributingEquipment:
 
 @pytest.mark.unittest
 class TestContributingEquipmentDicomSchema:
-    def test_serialize(self, equipment: ContributingEquipment):
+    def test_serialize(self, equipment: ContributingEquipment) -> None:
         # Arrange
         schema = ContributingEquipmentDicomSchema()
 
@@ -61,7 +61,7 @@ class TestContributingEquipmentDicomSchema:
         )
         assert str(serialized.ContributionDateTime).startswith("20260708123015")
 
-    def test_round_trip(self, equipment: ContributingEquipment):
+    def test_round_trip(self, equipment: ContributingEquipment) -> None:
         # Arrange
         schema = ContributingEquipmentDicomSchema()
 
@@ -71,7 +71,7 @@ class TestContributingEquipmentDicomSchema:
         # Assert
         assert deserialized == equipment
 
-    def test_loaded_from_metadata_sequence(self):
+    def test_loaded_from_metadata_sequence(self) -> None:
         # Arrange
         equipment = ContributingEquipment(
             purpose=ContributingEquipmentPurposeCode("Modifying Equipment"),
@@ -88,7 +88,7 @@ class TestContributingEquipmentDicomSchema:
         # Assert
         assert list(metadata.contributing_equipment) == [equipment]
 
-    def test_absent_sequence_loads_empty(self):
+    def test_absent_sequence_loads_empty(self) -> None:
         # Arrange
         dataset = Dataset()
 

@@ -27,7 +27,7 @@ from wsidicom.metadata.optical_path import (
 
 @pytest.mark.unittest
 class TestAddColorSpaceFromIcc:
-    def test_sets_color_space_from_stripped_profile_description(self):
+    def test_sets_color_space_from_stripped_profile_description(self) -> None:
         # Arrange
         profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
         expected = ImageCms.getProfileDescription(profile).strip()
@@ -40,7 +40,7 @@ class TestAddColorSpaceFromIcc:
         assert updated.color_space == expected
         assert updated.color_space == expected.strip()
 
-    def test_does_not_overwrite_existing_color_space(self):
+    def test_does_not_overwrite_existing_color_space(self) -> None:
         # Arrange
         profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
         optical_path = OpticalPath(
@@ -53,7 +53,7 @@ class TestAddColorSpaceFromIcc:
         # Assert
         assert updated is optical_path
 
-    def test_force_overwrites_existing_color_space(self):
+    def test_force_overwrites_existing_color_space(self) -> None:
         # Arrange
         profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
         expected = ImageCms.getProfileDescription(profile).strip()
@@ -67,7 +67,7 @@ class TestAddColorSpaceFromIcc:
         # Assert
         assert updated.color_space == expected
 
-    def test_force_keeps_existing_color_space_when_profile_unreadable(self):
+    def test_force_keeps_existing_color_space_when_profile_unreadable(self) -> None:
         # Arrange
         optical_path = OpticalPath(
             icc_profile=b"not an icc profile", color_space="EXISTING"
@@ -83,7 +83,7 @@ class TestAddColorSpaceFromIcc:
     @pytest.mark.parametrize("icc_profile", [None, b"", b"not an icc profile"])
     def test_returns_unchanged_for_missing_or_invalid_profile(
         self, icc_profile: bytes | None
-    ):
+    ) -> None:
         # Arrange
         optical_path = OpticalPath(icc_profile=icc_profile)
 
@@ -107,7 +107,7 @@ class TestValidateIccProfile:
         profile[20:24] = pcs
         return bytes(profile)
 
-    def test_no_problems_for_conformant_profile(self):
+    def test_no_problems_for_conformant_profile(self) -> None:
         # Arrange
         optical_path = OpticalPath(icc_profile=self._profile(b"scnr", b"RGB ", b"XYZ "))
 
@@ -128,7 +128,7 @@ class TestValidateIccProfile:
     )
     def test_reports_one_problem_per_violated_constraint(
         self, device_class: bytes, color_space: bytes, pcs: bytes, expected_count: int
-    ):
+    ) -> None:
         # Arrange
         optical_path = OpticalPath(
             icc_profile=self._profile(device_class, color_space, pcs)
@@ -141,7 +141,7 @@ class TestValidateIccProfile:
         assert len(problems) == expected_count
 
     @pytest.mark.parametrize("icc_profile", [None, b""])
-    def test_no_problems_for_missing_profile(self, icc_profile: bytes | None):
+    def test_no_problems_for_missing_profile(self, icc_profile: bytes | None) -> None:
         # Arrange
         optical_path = OpticalPath(icc_profile=icc_profile)
 
@@ -151,7 +151,7 @@ class TestValidateIccProfile:
         # Assert
         assert problems == []
 
-    def test_reports_truncated_profile(self):
+    def test_reports_truncated_profile(self) -> None:
         # Arrange
         optical_path = OpticalPath(icc_profile=b"too short")
 
@@ -218,7 +218,9 @@ class TestDicomLut:
             ),
         ],
     )
-    def test_parse_to_table(self, lut: Lut, expected_table_component: np.ndarray):
+    def test_parse_to_table(
+        self, lut: Lut, expected_table_component: np.ndarray
+    ) -> None:
         # Arrange
 
         # Act

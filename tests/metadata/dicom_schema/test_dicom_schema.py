@@ -119,11 +119,11 @@ class TestDicomSchema:
     @pytest.mark.parametrize(
         ["manufacturer", "model_name", "serial_number", "versions"],
         [
-            ["manufacturer", "model_name", "serial_number", ["version"]],
-            ["manufacturer", "model_name", "serial_number", ["version 1", "version 2"]],
+            ("manufacturer", "model_name", "serial_number", ["version"]),
+            ("manufacturer", "model_name", "serial_number", ["version 1", "version 2"]),
         ],
     )
-    def test_serialize_eqipment(self, equipment: Equipment):
+    def test_serialize_eqipment(self, equipment: Equipment) -> None:
         # Arrange
         schema = EquipmentDicomSchema()
         assert equipment.software_versions is not None
@@ -135,7 +135,7 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert_dicom_equipment_equals_equipment(serialized, equipment)
 
-    def test_serialize_defaualt_eqipment(self):
+    def test_serialize_defaualt_eqipment(self) -> None:
         # Arrange
         equipment = Equipment()
         schema = EquipmentDicomSchema()
@@ -153,14 +153,14 @@ class TestDicomSchema:
     @pytest.mark.parametrize(
         ["manufacturer", "model_name", "serial_number", "versions"],
         [
-            ["manufacturer", "model_name", "serial_number", ["version"]],
-            ["manufacturer", "model_name", "serial_number", ["version 1", "version 2"]],
-            [None, None, None, None],
+            ("manufacturer", "model_name", "serial_number", ["version"]),
+            ("manufacturer", "model_name", "serial_number", ["version 1", "version 2"]),
+            (None, None, None, None),
         ],
     )
     def test_deserialize_equipment(
         self, dicom_equipment: Dataset, equipment: Equipment
-    ):
+    ) -> None:
         # Arrange
         schema = EquipmentDicomSchema()
 
@@ -183,7 +183,7 @@ class TestDicomSchema:
             "lossy_compressions",
         ],
         [
-            [
+            (
                 datetime(2023, 8, 5),
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
@@ -192,8 +192,8 @@ class TestDicomSchema:
                 0.25,
                 2.5,
                 None,
-            ],
-            [
+            ),
+            (
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
@@ -207,10 +207,10 @@ class TestDicomSchema:
                         LossyCompressionIsoStandard.JPEG_2000_IRREVERSIBLE, 0.2
                     ),
                 ],
-            ],
+            ),
         ],
     )
-    def test_serialize_image(self, image: Image):
+    def test_serialize_image(self, image: Image) -> None:
         # Arrange
         schema = ImageDicomSchema()
 
@@ -221,7 +221,7 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert_dicom_image_equals_image(serialized, image)
 
-    def test_serialize_default_image(self):
+    def test_serialize_default_image(self) -> None:
         # Arrange
         image = Image()
         schema = ImageDicomSchema()
@@ -252,7 +252,7 @@ class TestDicomSchema:
             "lossy_compressions",
         ],
         [
-            [
+            (
                 datetime(2023, 8, 5),
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
@@ -261,8 +261,8 @@ class TestDicomSchema:
                 0.25,
                 2.5,
                 None,
-            ],
-            [
+            ),
+            (
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
@@ -276,12 +276,12 @@ class TestDicomSchema:
                         LossyCompressionIsoStandard.JPEG_2000_IRREVERSIBLE, 0.2
                     ),
                 ],
-            ],
-            [None, None, None, None, None, None, None, None],
+            ),
+            (None, None, None, None, None, None, None, None),
         ],
     )
     @pytest.mark.parametrize("valid_dicom", [True, False])
-    def test_deserialize_image(self, dicom_image: Dataset, image: Image):
+    def test_deserialize_image(self, dicom_image: Dataset, image: Image) -> None:
         # Arrange
         schema = ImageDicomSchema()
 
@@ -293,12 +293,12 @@ class TestDicomSchema:
     @pytest.mark.parametrize(
         ["content_date", "content_time", "expected"],
         [
-            ["20200102", "030405.000060", datetime(2020, 1, 2, 3, 4, 5, 60)],
+            ("20200102", "030405.000060", datetime(2020, 1, 2, 3, 4, 5, 60)),
             # A date with no time is read at midnight, a time with no date is
             # dropped.
-            ["20200102", None, datetime(2020, 1, 2, 0, 0)],
-            [None, "030405.000060", None],
-            [None, None, None],
+            ("20200102", None, datetime(2020, 1, 2, 0, 0)),
+            (None, "030405.000060", None),
+            (None, None, None),
         ],
     )
     def test_deserialize_image_content_datetime(
@@ -306,7 +306,7 @@ class TestDicomSchema:
         content_date: str | None,
         content_time: str | None,
         expected: datetime | date | None,
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         dataset.AcquisitionDateTime = "20230805121314.000150"
@@ -328,7 +328,7 @@ class TestDicomSchema:
 
     def test_deserialize_image_content_time_without_content_date_warns(
         self, caplog: pytest.LogCaptureFixture
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         dataset.ContentTime = "030405.000060"
@@ -342,7 +342,7 @@ class TestDicomSchema:
         assert deserialized.content_datetime is None
         assert "holds a time but no date" in caplog.text
 
-    def test_serialize_image_content_datetime(self):
+    def test_serialize_image_content_datetime(self) -> None:
         # Arrange
         image = Image(
             acquisition_datetime=datetime(2023, 8, 5, 12, 13, 14, 150),
@@ -358,7 +358,7 @@ class TestDicomSchema:
         assert serialized.ContentDate == date(2020, 1, 2)
         assert serialized.ContentTime == time(3, 4, 5, 60)
 
-    def test_image_content_datetime_round_trip(self):
+    def test_image_content_datetime_round_trip(self) -> None:
         # Arrange
         content_datetime = datetime(2020, 1, 2, 3, 4, 5, 60)
         image = Image(content_datetime=content_datetime)
@@ -371,7 +371,9 @@ class TestDicomSchema:
         assert round_tripped.content_datetime == content_datetime
         assert type(round_tripped.content_datetime) is type(content_datetime)
 
-    def test_serialize_image_content_datetime_defaults_to_acquisition_datetime(self):
+    def test_serialize_image_content_datetime_defaults_to_acquisition_datetime(
+        self,
+    ) -> None:
         # Arrange
         image = Image(acquisition_datetime=datetime(2023, 8, 5, 12, 13, 14, 150))
         schema = ImageDicomSchema()
@@ -383,7 +385,7 @@ class TestDicomSchema:
         assert serialized.ContentDate == date(2023, 8, 5)
         assert serialized.ContentTime == time(12, 13, 14, 150)
 
-    def test_remove_confidential_removes_content_datetime(self):
+    def test_remove_confidential_removes_content_datetime(self) -> None:
         # Arrange
         image = Image(
             acquisition_datetime=datetime(2023, 8, 5, 12, 13, 14, 150),
@@ -397,7 +399,7 @@ class TestDicomSchema:
         assert without_confidential.acquisition_datetime is None
         assert without_confidential.content_datetime is None
 
-    def test_serialize_label_base(self, label: Label):
+    def test_serialize_label_base(self, label: Label) -> None:
         # Arrange
         schema = LabelOnlyDicomSchema()
 
@@ -409,7 +411,7 @@ class TestDicomSchema:
         assert_dicom_label_equals_label(serialized, label)
         assert "SpecimenLabelInImage" not in serialized
 
-    def test_serialize_label_image(self, label: Label):
+    def test_serialize_label_image(self, label: Label) -> None:
         # Arrange
         schema = LabelDicomSchema()
 
@@ -421,7 +423,7 @@ class TestDicomSchema:
         assert_dicom_label_equals_label(serialized, label)
         assert serialized.SpecimenLabelInImage == bool_to_dicom_literal(True)
 
-    def test_serialize_default_label_base(self):
+    def test_serialize_default_label_base(self) -> None:
         # Arrange
         label = Label()
         schema = LabelOnlyDicomSchema()
@@ -441,7 +443,9 @@ class TestDicomSchema:
         ["text", "barcode"],
         [("text", None), (None, "barcode")],
     )
-    def test_serialize_partial_label_base(self, text: str | None, barcode: str | None):
+    def test_serialize_partial_label_base(
+        self, text: str | None, barcode: str | None
+    ) -> None:
         # Arrange
         label = Label(text=text, barcode=barcode)
         schema = LabelOnlyDicomSchema()
@@ -458,7 +462,7 @@ class TestDicomSchema:
         assert serialized.LabelText == text
         assert serialized.BarcodeValue == barcode
 
-    def test_serialize_default_label_image(self):
+    def test_serialize_default_label_image(self) -> None:
         # Arrange
         label = Label()
         schema = LabelDicomSchema()
@@ -474,7 +478,7 @@ class TestDicomSchema:
         assert serialized.BurnedInAnnotation == "YES"
 
     @pytest.mark.parametrize("image_type", [ImageType.OVERVIEW, ImageType.VOLUME])
-    def test_deserialize_label_base(self, dicom_label: Dataset, label: Label):
+    def test_deserialize_label_base(self, dicom_label: Dataset, label: Label) -> None:
         # Arrange
         schema = LabelOnlyDicomSchema()
 
@@ -489,7 +493,7 @@ class TestDicomSchema:
         assert deserialized.optical_paths is None
 
     @pytest.mark.parametrize("image_type", [ImageType.LABEL])
-    def test_deserialize_label_image(self, dicom_label: Dataset, label: Label):
+    def test_deserialize_label_image(self, dicom_label: Dataset, label: Label) -> None:
         # Arrange
         schema = LabelDicomSchema()
 
@@ -505,7 +509,7 @@ class TestDicomSchema:
     )
     def test_fields_state_the_value_representation_of_the_attribute_they_write(
         self, schema: type[DicomSchema]
-    ):
+    ) -> None:
         """A field decides what is truncated, the tag decides what is written.
 
         They have to agree: a field stating a longer value representation than
@@ -526,7 +530,9 @@ class TestDicomSchema:
         # Assert
         assert [entry for entry in stated if entry[1] != entry[2]] == []
 
-    def test_serialize_series_description_truncates_at_the_length_of_its_vr(self):
+    def test_serialize_series_description_truncates_at_the_length_of_its_vr(
+        self,
+    ) -> None:
         """Series Description is LO, so a value over 64 characters is truncated."""
         # Arrange
         series = Series(uid=generate_uid(), description="S" * 100)
@@ -542,7 +548,7 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert len(str(serialized.SeriesDescription)) == MAX_VALUE_LEN["LO"]
 
-    def test_serialize_image_comments_keeps_what_its_vr_allows(self):
+    def test_serialize_image_comments_keeps_what_its_vr_allows(self) -> None:
         """Image Comments is LT, so a value over 64 characters is kept whole."""
         # Arrange
         comments = "C" * 200
@@ -559,7 +565,7 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert str(serialized.ImageComments) == comments
 
-    def test_serialize_overview(self, overview: Overview):
+    def test_serialize_overview(self, overview: Overview) -> None:
         # Arrange
         schema = OverviewDicomSchema()
 
@@ -570,7 +576,7 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert_dicom_overview_equals_overview(serialized, overview)
 
-    def test_serialize_default_overview(self):
+    def test_serialize_default_overview(self) -> None:
         # Arrange
         overview = Overview(image=Image(), optical_paths=[OpticalPath()])
         schema = OverviewDicomSchema()
@@ -581,7 +587,9 @@ class TestDicomSchema:
         # Assert
         assert isinstance(serialized, Dataset)
 
-    def test_deserialize_overview(self, dicom_overview: Dataset, overview: Overview):
+    def test_deserialize_overview(
+        self, dicom_overview: Dataset, overview: Overview
+    ) -> None:
         # Arrange
         schema = OverviewDicomSchema()
 
@@ -594,7 +602,7 @@ class TestDicomSchema:
     @pytest.mark.parametrize(
         "illumination", [IlluminationColorCode("Full Spectrum"), 400.0]
     )
-    def test_serialize_optical_path(self, optical_path: OpticalPath):
+    def test_serialize_optical_path(self, optical_path: OpticalPath) -> None:
         # Arrange
         schema = OpticalPathDicomSchema()
 
@@ -610,7 +618,7 @@ class TestDicomSchema:
     @pytest.mark.parametrize("device_class", [b"mntr", b"spac"])
     def test_serialize_warns_on_non_conformant_icc_profile(
         self, device_class: bytes, caplog: pytest.LogCaptureFixture
-    ):
+    ) -> None:
         # Arrange
         profile = bytearray(
             ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
@@ -632,7 +640,7 @@ class TestDicomSchema:
 
     def test_serialize_does_not_warn_on_conformant_icc_profile(
         self, caplog: pytest.LogCaptureFixture
-    ):
+    ) -> None:
         # Arrange
         profile = bytearray(
             ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
@@ -648,7 +656,7 @@ class TestDicomSchema:
         # Assert
         assert "not DICOM-conformant" not in caplog.text
 
-    def test_serialize_default_optical_path(self):
+    def test_serialize_default_optical_path(self) -> None:
         # Arrange
         optical_path = OpticalPath()
         schema = OpticalPathDicomSchema()
@@ -705,7 +713,7 @@ class TestDicomSchema:
     )
     def test_serialize_optical_path_with_unset_list(
         self, optical_path: OpticalPath, unset_attribute: str, set_attribute: str
-    ):
+    ) -> None:
         # Arrange
         schema = OpticalPathDicomSchema()
 
@@ -723,7 +731,7 @@ class TestDicomSchema:
     @pytest.mark.parametrize(
         ["light_path_filter", "image_path_filter", "objectives"],
         [
-            [
+            (
                 LightPathFilter(
                     [LightPathFilterCode("Green optical filter")],
                     500,
@@ -739,13 +747,13 @@ class TestDicomSchema:
                 Objectives(
                     [LenseCode("High power non-immersion lens")], 10.0, 20.0, 0.5
                 ),
-            ],
-            [None, None, None],
+            ),
+            (None, None, None),
         ],
     )
     def test_deserialize_optical_path(
         self, dicom_optical_path: Dataset, optical_path: OpticalPath
-    ):
+    ) -> None:
         # Arrange
         schema = OpticalPathDicomSchema()
 
@@ -755,7 +763,7 @@ class TestDicomSchema:
         # Assert
         assert deserialized == optical_path
 
-    def test_serialize_patient(self, patient: Patient):
+    def test_serialize_patient(self, patient: Patient) -> None:
         # Arrange
         schema = PatientDicomSchema()
 
@@ -766,7 +774,7 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert_dicom_patient_equals_patient(serialized, patient)
 
-    def test_serialize_default_patient(self):
+    def test_serialize_default_patient(self) -> None:
         # Arrange
         patient = Patient()
         schema = PatientDicomSchema()
@@ -784,7 +792,9 @@ class TestDicomSchema:
         assert "DeidentificationMethod" not in serialized
         assert "DeidentificationMethodCodeSequence" not in serialized
 
-    def test_deserialize_patient(self, dicom_patient: Dataset, patient: Patient):
+    def test_deserialize_patient(
+        self, dicom_patient: Dataset, patient: Patient
+    ) -> None:
         # Arrange
 
         schema = PatientDicomSchema()
@@ -796,7 +806,7 @@ class TestDicomSchema:
         assert isinstance(deserialized, Patient)
         assert deserialized == patient
 
-    def test_serialize_series(self, series: Series):
+    def test_serialize_series(self, series: Series) -> None:
         # Arrange
         schema = SeriesDicomSchema()
 
@@ -807,7 +817,7 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert_dicom_series_equals_series(serialized, series)
 
-    def test_serialize_default_series(self):
+    def test_serialize_default_series(self) -> None:
         # Arrange
         series = Series()
         schema = SeriesDicomSchema()
@@ -818,7 +828,7 @@ class TestDicomSchema:
         with pytest.raises(ValidationError, match="SeriesInstanceUID"):
             schema.dump(series)
 
-    def test_deserialize_series(self, dicom_series: Dataset, series: Series):
+    def test_deserialize_series(self, dicom_series: Dataset, series: Series) -> None:
         # Arrange
 
         schema = SeriesDicomSchema()
@@ -830,7 +840,7 @@ class TestDicomSchema:
         assert isinstance(deserialized, Series)
         assert deserialized == series
 
-    def test_serialize_study(self, study: Study):
+    def test_serialize_study(self, study: Study) -> None:
         # Arrange
         schema = StudyDicomSchema()
 
@@ -841,7 +851,7 @@ class TestDicomSchema:
         assert isinstance(serialized, Dataset)
         assert_dicom_study_equals_study(serialized, study)
 
-    def test_serialize_default_study(self):
+    def test_serialize_default_study(self) -> None:
         # Arrange
         study = Study()
         schema = StudyDicomSchema()
@@ -852,7 +862,7 @@ class TestDicomSchema:
         with pytest.raises(ValidationError, match="StudyInstanceUID"):
             schema.dump(study)
 
-    def test_deserialize_study(self, dicom_study: Dataset, study: Study):
+    def test_deserialize_study(self, dicom_study: Dataset, study: Study) -> None:
         # Arrange
         schema = StudyDicomSchema()
 
@@ -876,7 +886,7 @@ class TestDicomSchema:
             ),
         ],
     )
-    def test_serialize_slide(self, slide: Slide):
+    def test_serialize_slide(self, slide: Slide) -> None:
         # Arrange
         schema = SlideDicomSchema()
         if slide.samples is not None:
@@ -912,7 +922,7 @@ class TestDicomSchema:
             assert specimen_description.SpecimenIdentifier == sample.identifier
             assert specimen_description.SpecimenUID == sample.uid
 
-    def test_serialize_default_slide_raises(self):
+    def test_serialize_default_slide_raises(self) -> None:
         # Arrange: an unset slide has no samples.
         slide = Slide()
         schema = SlideDicomSchema()
@@ -935,7 +945,7 @@ class TestDicomSchema:
             ),
         ],
     )
-    def test_deserialize_slide(self, slide: Slide):
+    def test_deserialize_slide(self, slide: Slide) -> None:
         # Arrange
         schema = SlideDicomSchema()
         serialized = schema.dump(slide)
@@ -961,7 +971,7 @@ class TestDicomSchema:
             "depth_of_field",
         ],
         [
-            [
+            (
                 datetime(2023, 8, 5),
                 FocusMethod.AUTO,
                 ExtendedDepthOfField(5, 0.5),
@@ -969,8 +979,8 @@ class TestDicomSchema:
                 None,
                 None,
                 None,
-            ],
-            [
+            ),
+            (
                 datetime(2023, 8, 5, 12, 13, 14, 150),
                 FocusMethod.MANUAL,
                 ExtendedDepthOfField(15, 0.5),
@@ -978,7 +988,7 @@ class TestDicomSchema:
                 None,
                 None,
                 None,
-            ],
+            ),
         ],
     )
     @pytest.mark.parametrize(
@@ -995,7 +1005,7 @@ class TestDicomSchema:
         series: Series,
         patient: Patient,
         image_type: ImageType,
-    ):
+    ) -> None:
         # Arrange
         schema = WsiMetadataDicomSchema()
 
@@ -1053,7 +1063,7 @@ class TestDicomSchema:
         self,
         wsi_metadata: WsiMetadata,
         image_type: ImageType,
-    ):
+    ) -> None:
         # Arrange
         assert wsi_metadata.overview is not None
         metadata = replace(
@@ -1083,7 +1093,7 @@ class TestDicomSchema:
     def test_require_icc_profile_sets_srgb_color_space(
         self,
         wsi_metadata: WsiMetadata,
-    ):
+    ) -> None:
         # Arrange: no optical paths, so require_icc_profile inserts the default one
         metadata = replace(
             wsi_metadata, pyramid=replace(wsi_metadata.pyramid, optical_paths=[])
@@ -1106,7 +1116,7 @@ class TestDicomSchema:
     def test_serialize_wsi_metadata_sets_utf8_character_set(
         self,
         wsi_metadata: WsiMetadata,
-    ):
+    ) -> None:
         # Regression test for wsidicomizer#162: without SpecificCharacterSet a
         # non-ASCII PatientName (ideographic + phonetic groups) corrupts or
         # crashes on write.
@@ -1135,7 +1145,7 @@ class TestDicomSchema:
         series: Series,
         patient: Patient,
         image_type: ImageType,
-    ):
+    ) -> None:
         # Arrange
         slide = Slide(stainings=[], samples=[])
         wsi_metadata = WsiMetadata(
@@ -1169,7 +1179,7 @@ class TestDicomSchema:
         pyramid_dataset: Dataset,
         dicom_label_label: Dataset,
         dicom_overview: Dataset,
-    ):
+    ) -> None:
         # Arrange
         schema = WsiMetadataDicomSchema()
 
@@ -1195,7 +1205,7 @@ class TestDicomSchema:
 
     def test_deserialize_wsi_metadata_from_empty_dataset(
         self,
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         schema = WsiMetadataDicomSchema()
@@ -1210,7 +1220,7 @@ class TestDicomSchema:
     def test_serialize_image_coordinate_system(
         self,
         z_offset: float | None,
-    ):
+    ) -> None:
         # Arrange
         image_coordinate_system = ImageCoordinateSystem(
             PointMm(20.0, 30.0), 90, z_offset
@@ -1222,10 +1232,8 @@ class TestDicomSchema:
 
         # Assert
         assert isinstance(serialized, Dataset)
-        assert (
-            "TotalPixelMatrixOriginSequence" in serialized
-            and len(serialized.TotalPixelMatrixOriginSequence) == 1
-        )
+        assert "TotalPixelMatrixOriginSequence" in serialized
+        assert len(serialized.TotalPixelMatrixOriginSequence) == 1
         total_pixel_matrix_origin = serialized.TotalPixelMatrixOriginSequence[0]
 
         assert (
@@ -1252,7 +1260,7 @@ class TestDicomSchema:
         origin: PointMm | None,
         orientation: Orientation | None,
         z_offset: float | None,
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         origin_dataset = Dataset()

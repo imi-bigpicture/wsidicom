@@ -53,7 +53,7 @@ class TestSlideJsonSchema:
             ],
         ],
     )
-    def test_slide_serialize(self, slide: Slide):
+    def test_slide_serialize(self, slide: Slide) -> None:
         # Arrange
         assert slide.samples is not None
         sample = slide.samples[0]
@@ -126,7 +126,7 @@ class TestSlideJsonSchema:
             ),
         ],
     )
-    def test_slide_deserialize(self, json_slide: dict[str, Any]):
+    def test_slide_deserialize(self, json_slide: dict[str, Any]) -> None:
         # Arrange
 
         # Act

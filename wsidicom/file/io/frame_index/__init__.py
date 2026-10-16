@@ -33,14 +33,14 @@ from wsidicom.file.io.frame_index.pixel_data import PixelDataFrameIndexParser
 
 __all__ = [
     "BasicOffsetTableFrameIndexParser",
-    "PixelDataFrameIndexParser",
+    "BotWriter",
+    "EmptyBasicTableOffsetException",
+    "EotWriter",
     "ExtendedOffsetFrameIndexParser",
     "FrameIndex",
     "FrameIndexParser",
     "NativePixelDataFrameIndexParser",
     "OffsetTableType",
-    "BotWriter",
-    "EotWriter",
     "OffsetTableWriter",
-    "EmptyBasicTableOffsetException",
+    "PixelDataFrameIndexParser",
 ]

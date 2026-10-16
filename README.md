@@ -26,7 +26,7 @@ Please note that this is an early release and the API is not frozen yet. Functio
 
 ## Requirements
 
-*wsidicom* uses pydicom, numpy, Pillow, marshmallow, fsspec, universal-pathlib, and dicomweb-client. Imagecodecs, pylibjpeg-rle, pyjpegls, and pylibjpeg-openjpeg can be installed as optionals to support additional transfer syntaxes.
+*wsidicom* uses pydicom, numpy, Pillow, marshmallow, fsspec, universal-pathlib, and dicomweb-client. Imagecodecs, pylibjpeg-rle, pyjpegls, and pylibjpeg-openjpeg can be installed as optionals to support additional transfer syntaxes. For faster downsampling (region reads at a scale, thumbnails, and generated pyramid levels), the `kernels` extra installs wsidicom-kernels (SIMD resampling, built from `kernels/` in this repository), and the `opencv` extra OpenCV.
 
 ## Limitations
 

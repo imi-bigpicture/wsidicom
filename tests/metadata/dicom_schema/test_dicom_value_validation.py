@@ -28,17 +28,20 @@ from wsidicom.options import DicomValueValidationOption
 class TestDicomValueValidation:
     """Values are checked as wsidicom writes them, with the mode passed per value."""
 
-    def test_written_refuses_a_value_too_long_for_its_vr(self):
+    def test_written_refuses_a_value_too_long_for_its_vr(self) -> None:
         # Arrange
         written = Settings(dicom_value_validation=DicomValueValidationOption.WRITTEN)
         # Series Description is LO, which allows 64
         series = Series(uid=generate_uid(), description="X" * 100)
 
         # Act & Assert
-        with use_settings(written), pytest.raises(ValueError):
+        with (
+            use_settings(written),
+            pytest.raises(ValueError, match=r"exceeds the maximum length of 64"),
+        ):
             SeriesDicomSchema().dump(series)
 
-    def test_none_lets_it_through(self):
+    def test_none_lets_it_through(self) -> None:
         # Arrange
         none = Settings(dicom_value_validation=DicomValueValidationOption.NONE)
         series = Series(uid=generate_uid(), description="X" * 100)
@@ -50,7 +53,7 @@ class TestDicomValueValidation:
         # Assert
         assert dataset.SeriesDescription == "X" * 100
 
-    def test_a_conformant_value_passes(self):
+    def test_a_conformant_value_passes(self) -> None:
         # Arrange
         series = Series(uid=generate_uid(), description="a description")
 
@@ -60,7 +63,7 @@ class TestDicomValueValidation:
         # Assert
         assert dataset.SeriesDescription == "a description"
 
-    def test_a_value_in_a_sequence_item_is_checked(self):
+    def test_a_value_in_a_sequence_item_is_checked(self) -> None:
         """A field building a sequence item checks what it puts in it."""
         # Arrange
         written = Settings(dicom_value_validation=DicomValueValidationOption.WRITTEN)
@@ -71,10 +74,13 @@ class TestDicomValueValidation:
         )
 
         # Act & Assert
-        with use_settings(written), pytest.raises(ValueError):
+        with (
+            use_settings(written),
+            pytest.raises(ValueError, match=r"exceeds the maximum length of 64"),
+        ):
             field._serialize(measurement, "attribute", None)
 
-    def test_a_value_from_a_defaulting_field_is_checked(self):
+    def test_a_value_from_a_defaulting_field_is_checked(self) -> None:
         """A field that has a default checks its value as any other field does.
 
         Having a value to fall back on says nothing about how the attribute is
@@ -86,5 +92,8 @@ class TestDicomValueValidation:
         patient = Patient(name="X" * 100)
 
         # Act & Assert
-        with use_settings(written), pytest.raises(ValueError):
+        with (
+            use_settings(written),
+            pytest.raises(ValueError, match=r"PN component length \(100\) exceeds"),
+        ):
             PatientDicomSchema().dump(patient)

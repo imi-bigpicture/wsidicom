@@ -46,7 +46,9 @@ def metadata() -> WsiMetadata:
 
 @pytest.mark.unittest
 class TestUidGenerator:
-    def test_callable_default_produces_unique_per_role(self, metadata: WsiMetadata):
+    def test_callable_default_produces_unique_per_role(
+        self, metadata: WsiMetadata
+    ) -> None:
         # Arrange
         gen = CallableUidGenerator()
 
@@ -68,11 +70,11 @@ class TestUidGenerator:
     @pytest.mark.parametrize(
         ["identifier", "expected"],
         [
-            ["11", "1.2.3.11"],
-            ["22", "1.2.3.22"],
+            ("11", "1.2.3.11"),
+            ("22", "1.2.3.22"),
         ],
     )
-    def test_subclass_sees_entity_context(self, identifier: str, expected: str):
+    def test_subclass_sees_entity_context(self, identifier: str, expected: str) -> None:
         """Subclasses receive the entity, so they can derive UIDs from it."""
 
         # Arrange

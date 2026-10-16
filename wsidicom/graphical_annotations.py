@@ -52,7 +52,7 @@ from wsidicom.uid import SlideUids
 
 @dataclass(frozen=True)
 class LabColor:
-    l: int  # noqa: E741
+    l: int  # noqa: E741 - the L of CIELAB, a public field
     a: int
     b: int
 
@@ -68,7 +68,7 @@ def dcm_to_list(item: bytes, format: str) -> list[Any]:
         Struct format character.
 
     Returns
-    ----------
+    -------
     list[Any]
         List of values
     """
@@ -83,7 +83,7 @@ class Measurement:
     """Represents a measurement.
 
     Parameters
-        ----------
+    ----------
         code: MeasurementCode
             Type of measurement.
         value: float
@@ -96,7 +96,7 @@ class Measurement:
     value: float
     unit: UnitCode
 
-    def same_type(self, other_code: MeasurementCode, other_unit: UnitCode):
+    def same_type(self, other_code: MeasurementCode, other_unit: UnitCode) -> bool:
         """Return true if measurement base is same.
 
         Parameters
@@ -156,8 +156,9 @@ class Measurement:
         ds: Dataset,
         annotation_count: int,
     ) -> list[int]:
-        """Get measurement indices from dataset. Annotation index is stored as
-        starting at index 1. If Annotation index list is
+        """Get measurement indices from dataset.
+
+        Annotation index is stored as starting at index 1. If Annotation index list is
         missing measurements are one-to-one to annotations.
 
         Parameters
@@ -190,8 +191,10 @@ class Measurement:
     def _iterate_measurement_sequence(
         cls, sequence: DicomSequence, annotation_count: int
     ) -> Iterator[tuple[int, "Measurement"]]:
-        """Return generator for measurements in dataset. Yields a tuple of
-        the index of the annotation for the measurement and the measurement.
+        """Return generator for measurements in dataset.
+
+        Yields a tuple of the index of the annotation for the measurement and the
+        measurement.
 
         Parameters
         ----------
@@ -246,7 +249,7 @@ class Geometry(metaclass=ABCMeta):
     @property
     @abstractmethod
     def data(self) -> list[float]:
-        """Return geometry content as a list of floats"""
+        """Return geometry content as a list of floats."""
         raise NotImplementedError()
 
     @property
@@ -257,7 +260,7 @@ class Geometry(metaclass=ABCMeta):
 
     @abstractmethod
     def to_coords(self) -> list[tuple[float, float]]:
-        """Return geometry content as a list of tuple of floats"""
+        """Return geometry content as a list of tuple of floats."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -271,12 +274,12 @@ class Geometry(metaclass=ABCMeta):
     @classmethod
     @abstractmethod
     def from_list(cls, list: Sequence[float]) -> "Geometry":
-        """Return geometry object created from list of floats"""
+        """Return geometry object created from list of floats."""
         raise NotImplementedError()
 
     @classmethod
     def list_to_coords(cls, data: Sequence[float]) -> list[tuple[float, float]]:
-        """Return coordinates in list of floats as list of tuple of floats
+        """Return coordinates in list of floats as list of tuple of floats.
 
         Parameters
         ----------
@@ -301,7 +304,7 @@ class Geometry(metaclass=ABCMeta):
         x: str,
         y: str,
     ) -> list[tuple[float, float]]:
-        """Return coordinates in dictionary as list of tuple of floats
+        """Return coordinates in dictionary as list of tuple of floats.
 
         Parameters
         ----------
@@ -337,8 +340,9 @@ class Geometry(metaclass=ABCMeta):
 
     @classmethod
     def from_shapely_like(cls, item: Any) -> "Geometry":
-        """Return Geometry from shapely-like object. Object needs to have
-        shapely-like attributes.
+        """Return Geometry from shapely-like object.
+
+        Object needs to have shapely-like attributes.
 
         Parameters
         ----------
@@ -370,8 +374,9 @@ class Geometry(metaclass=ABCMeta):
 
     @classmethod
     def from_geojson(cls, dictionary: dict[str, Any]) -> list["Geometry"]:
-        """Return geometries from geojson geometry dictionary. Note that
-        MultiPoint returns multiple points.
+        """Return geometries from geojson geometry dictionary.
+
+        Note that MultiPoint returns multiple points.
 
         Parameters
         ----------
@@ -403,11 +408,11 @@ class Geometry(metaclass=ABCMeta):
 
 @dataclass
 class Point(Geometry):
-    """Geometry consisting of a single point"""
+    """Geometry consisting of a single point."""
 
     name = "POINT"
 
-    def __init__(self, x: float, y: float):
+    def __init__(self, x: float, y: float) -> None:
         self.x = float(x)
         self.y = float(y)
 
@@ -472,7 +477,7 @@ class Polyline(Geometry):
 
     name = "POLYLINE"
 
-    def __init__(self, points: Sequence[tuple[float, float]]):
+    def __init__(self, points: Sequence[tuple[float, float]]) -> None:
         self.points: list[Point] = [Point(point[0], point[1]) for point in points]
 
     def __len__(self) -> int:
@@ -530,7 +535,7 @@ class Polygon(Polyline):
 
     name = "POLYGON"
 
-    def __init__(self, points: Sequence[tuple[float, float]]):
+    def __init__(self, points: Sequence[tuple[float, float]]) -> None:
         super().__init__(points)
 
     @classmethod
@@ -555,9 +560,8 @@ class Polygon(Polyline):
 class Annotation:
     def __init__(
         self, geometry: Geometry, measurements: Sequence[Measurement] | None = None
-    ):
-        """Represents an annotation, with geometry and an optional list of
-        measurements.
+    ) -> None:
+        """Create an annotation, with geometry and an optional list of measurements.
 
         Parameters
         ----------
@@ -566,7 +570,6 @@ class Annotation:
         measurements: Sequence[Measurement] | None
             Optional measurements of the annotation.
         """
-
         self._geometry = geometry
         if measurements is None:
             measurements = []
@@ -655,8 +658,8 @@ class AnnotationGroup(Generic[GeometryType]):
         is_double: bool = True,
         instance: UID | None = None,
         uid_generator: UidGenerator | None = None,
-    ):
-        """Represents a group of annotations of the same type.
+    ) -> None:
+        """Create a group of annotations of the same type.
 
         Parameters
         ----------
@@ -845,8 +848,9 @@ class AnnotationGroup(Generic[GeometryType]):
 
     @staticmethod
     def _get_focal_planes_from_ds(ds: Dataset) -> list[float]:
-        """Return focal planes from dataset. If annotation applies to all focal
-        planes returns empty list.
+        """Return focal planes from dataset.
+
+        If annotation applies to all focal planes returns empty list.
 
         Parameters
         ----------
@@ -870,8 +874,9 @@ class AnnotationGroup(Generic[GeometryType]):
 
     @staticmethod
     def _get_optical_paths_from_ds(ds: Dataset) -> list[str]:
-        """Return optical paths from dataset. If annotation applies to all
-        optical paths returns empty list.
+        """Return optical paths from dataset.
+
+        If annotation applies to all optical paths returns empty list.
 
         Parameters
         ----------
@@ -1045,6 +1050,7 @@ class AnnotationGroup(Generic[GeometryType]):
         self, code: MeasurementCode, unit: UnitCode
     ) -> np.ndarray:
         """Return measurement indices for all measurements of specified type.
+
         Indices are stored starting at index 1.
 
         Parameters
@@ -1089,8 +1095,10 @@ class AnnotationGroup(Generic[GeometryType]):
     def _measurements_is_one_to_one(
         self, code: MeasurementCode, unit: UnitCode
     ) -> bool:
-        """Check if all annotations in group have strictly one measurement
-        of specified type-unit-pair.
+        """Check if all annotations in group have one measurement of type-unit-pair.
+
+        Each annotation must have strictly one measurement of the specified
+        type-unit-pair.
 
         Parameters
         ----------
@@ -1113,8 +1121,7 @@ class AnnotationGroup(Generic[GeometryType]):
     def _create_measurement_value_sequence(
         self, code: MeasurementCode, unit: UnitCode
     ) -> DicomSequence:
-        """Return Measurement Value Sequence of measurements of specified
-        code and unit.
+        """Return Measurement Value Sequence of measurements of specified code and unit.
 
         Parameters
         ----------
@@ -1142,8 +1149,7 @@ class AnnotationGroup(Generic[GeometryType]):
     def _create_measurement_sequence_item(
         self, code: MeasurementCode, unit: UnitCode
     ) -> Dataset:
-        """Return Measurement Sequence item of measurements of specified code
-        and unit.
+        """Return Measurement Sequence item of measurements of specified code and unit.
 
         Parameters
         ----------
@@ -1167,8 +1173,7 @@ class AnnotationGroup(Generic[GeometryType]):
         return ds
 
     def _set_planes_in_ds(self, ds: Dataset) -> Dataset:
-        """Insert the group focal plane attributes into the Annotation Group
-        Sequence.
+        """Insert the group focal plane attributes into the Annotation Group Sequence.
 
         Parameters
         ----------
@@ -1188,8 +1193,7 @@ class AnnotationGroup(Generic[GeometryType]):
         return ds
 
     def _set_optical_paths_in_ds(self, ds: Dataset) -> Dataset:
-        """Insert the group optical path attributes into the Annotation Group
-        Sequence.
+        """Insert the group optical path attributes into the Annotation Group Sequence.
 
         Parameters
         ----------
@@ -1209,8 +1213,7 @@ class AnnotationGroup(Generic[GeometryType]):
         return ds
 
     def _set_coordinates_data_in_ds(self, ds: Dataset) -> Dataset:
-        """Insert the group point coordinates into the Annotation Group
-        Sequence.
+        """Insert the group point coordinates into the Annotation Group Sequence.
 
         Parameters
         ----------
@@ -1250,8 +1253,7 @@ class AnnotationGroup(Generic[GeometryType]):
         return ds
 
     def to_ds(self, group_number: int) -> Dataset:
-        """Return annotation group as a Annotation Group Sequence
-        item.
+        """Return annotation group as a Annotation Group Sequence item.
 
         Parameters
         ----------
@@ -1286,7 +1288,7 @@ class AnnotationGroup(Generic[GeometryType]):
         return ds
 
     @classmethod
-    def validate_type(cls, annotations: Sequence[Annotation]):
+    def validate_type(cls, annotations: Sequence[Annotation]) -> None:
         """Check that list of annotations are of the requested type.
 
         Parameters
@@ -1330,8 +1332,9 @@ class AnnotationGroup(Generic[GeometryType]):
         type_code: AnnotationTypeCode,
         is_double: bool = True,
     ) -> "AnnotationGroup":
-        """Return AnnotationGroup created from list of geometries. The group
-        type is determined by the first geometry, and all geometries needs to
+        """Return AnnotationGroup created from list of geometries.
+
+        The group type is determined by the first geometry, and all geometries needs to
         have the same type.
 
         Parameters
@@ -1364,13 +1367,13 @@ class AnnotationGroup(Generic[GeometryType]):
 
 
 class PointAnnotationGroup(AnnotationGroup[Point]):
-    """Point annotation group"""
+    """Point annotation group."""
 
     _geometry_type = Point
 
     @classmethod
     def _get_geometries_from_ds(cls, ds: Dataset) -> Sequence[Point]:
-        """Returns point geometries from dataset.
+        """Return point geometries from dataset.
 
         Parameters
         ----------
@@ -1388,12 +1391,13 @@ class PointAnnotationGroup(AnnotationGroup[Point]):
 
 
 class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
-    """Meta class for line annotation group"""
+    """Meta class for line annotation group."""
 
     @property
     def point_index_list(self) -> np.ndarray:
-        """Return point index list for annotations in group. Indices are stored
-        starting at index 1 and in relation to geometry data length.
+        """Return point index list for annotations in group.
+
+        Indices are stored starting at index 1 and in relation to geometry data length.
 
         Returns
         -------
@@ -1409,9 +1413,10 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
 
     @staticmethod
     def _get_indices_from_ds(ds: Dataset) -> list[int]:
-        """Return line start indices from sup 222 dataset. Indices are stored
-        starting at with value 1, and are in relation to non-pared coordinates.
-        Returned list starts at 0 and is in relation to paired coordinates.
+        """Return line start indices from sup 222 dataset.
+
+        Indices are stored starting at with value 1, and are in relation to non-pared
+        coordinates. Returned list starts at 0 and is in relation to paired coordinates.
 
         Parameters
         ----------
@@ -1435,8 +1440,10 @@ class PolylineAnnotationGroupMeta(AnnotationGroup[GeometryType]):
 
     @classmethod
     def _get_geometries_from_ds(cls, ds: Dataset) -> Sequence[GeometryType]:
-        """Returns line geometries from dataset. Each line geometry consists of
-        multiple points, and the first coordinate in the coordinate list is
+        """Return line geometries from dataset.
+
+        Each line geometry consists of multiple points, and the first coordinate in the
+        coordinate list is
 
         Parameters
         ----------
@@ -1494,7 +1501,9 @@ class PolylineAnnotationGroup(PolylineAnnotationGroupMeta[Polyline]):
     _geometry_type = Polyline
 
     @staticmethod
-    def _get_line_geometry_from_coords(coordinates: Sequence[tuple[float, float]]):
+    def _get_line_geometry_from_coords(
+        coordinates: Sequence[tuple[float, float]],
+    ) -> Polyline:
         return Polyline(coordinates)
 
 
@@ -1502,16 +1511,18 @@ class PolygonAnnotationGroup(PolylineAnnotationGroupMeta[Polygon]):
     _geometry_type = Polygon
 
     @staticmethod
-    def _get_line_geometry_from_coords(coordinates: Sequence[tuple[float, float]]):
+    def _get_line_geometry_from_coords(
+        coordinates: Sequence[tuple[float, float]],
+    ) -> Polygon:
         return Polygon(coordinates)
 
 
 class AnnotationInstance:
-    """Class for handling microscope bulk simple annotations according to
-    sup-222. Point, polyline, and polygon graphic types are implemented,
-    ellipse and rectangle graphic types are not implemented. Annotation must
-    have common z-coordinate or apply to all z planes (annotation with 3D
-    PointCoordinateData is not implemented.)
+    """Class for handling microscope bulk simple annotations according to sup-222.
+
+    Point, polyline, and polygon graphic types are implemented, ellipse and rectangle
+    graphic types are not implemented. Annotation must have common z-coordinate or apply
+    to all z planes (annotation with 3D PointCoordinateData is not implemented.)
     """
 
     def __init__(
@@ -1519,8 +1530,8 @@ class AnnotationInstance:
         groups: Sequence[AnnotationGroup],
         coordinate_type: str,
         slide_uids: SlideUids,
-    ):
-        """Represents a collection of annotation groups.
+    ) -> None:
+        """Create a collection of annotation groups.
 
         Parameters
         ----------
@@ -1550,10 +1561,10 @@ class AnnotationInstance:
         little_endian: bool = True,
         implicit_vr: bool = False,
         uid_generator: UidGenerator | None = None,
-    ):
+    ) -> None:
         """Write annotations to DICOM file according to sup 222.
-        Note that the file will miss DICOM attributes that has not yet been
-        implemented.
+
+        Note that the file will miss DICOM attributes that has not yet been implemented.
 
         Parameters
         ----------

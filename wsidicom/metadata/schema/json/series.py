@@ -28,5 +28,5 @@ class SeriesJsonSchema(LoadingSchema[Series]):
     body_part_examined = fields.String(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Series]:
         return Series

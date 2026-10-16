@@ -87,7 +87,7 @@ class TestFrameCountSplitter:
         assert splitter.should_start_new_part(b"a") is False
 
     @pytest.mark.parametrize(
-        ("remaining", "expected"),
+        ["remaining", "expected"],
         [
             (_MAX_FRAMES * 2, _MAX_FRAMES),  # more than budget -> full part
             (_MAX_FRAMES // 2, _MAX_FRAMES // 2),  # fewer -> short last part

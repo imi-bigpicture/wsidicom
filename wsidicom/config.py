@@ -57,8 +57,9 @@ class Settings:
     preferred_decoder: DecoderOption | None = None
     """Preferred decoder to use."""
     preferred_downsampler: DownsamplerOption | None = None
-    """Preferred downsampler to use. None selects the fastest available (opencv
-    when installed, else pillow)."""
+    """Preferred downsampler to use. None selects the fastest available for the
+    filter (kernels when installed, else opencv when installed and matching the
+    filter, else pillow)."""
     open_web_threads: int | None = None
     """Number of threads to use when opening web instances."""
     resampling_filter: ResampleFilterOption = ResampleFilterOption.BILINEAR
@@ -123,8 +124,10 @@ _active_settings: contextvars.ContextVar[Settings | None] = contextvars.ContextV
 
 
 def get_settings() -> Settings:
-    """The settings in effect: those active in the current context (see
-    ``use_settings``), or the process-wide default when none is active.
+    """Return the settings in effect.
+
+    Those are the settings active in the current context (see ``use_settings``),
+    or the process-wide default when none is active.
 
     Use this for one-off reads (``get_settings().strict_uid_check``). To read
     several fields, ``with use_settings() as settings:`` binds them once.
@@ -177,7 +180,7 @@ def use_settings(active: Settings | None = None) -> Iterator[Settings]:
 
 
 def dicom_validation_mode() -> int:
-    """The pydicom validation mode to make an element with.
+    """Return the pydicom validation mode to make an element with.
 
     Given to `DataElement` rather than set on pydicom, so a value wsidicom sets
     is checked while the mode the rest of the process uses is left alone.

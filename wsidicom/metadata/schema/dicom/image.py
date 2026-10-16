@@ -82,14 +82,16 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem | None]
     def load_type(self) -> type[ImageCoordinateSystem]:
         return ImageCoordinateSystem
 
-    def load(self, data: Dataset, **kwargs) -> ImageCoordinateSystem | None:
+    def load(self, data: Dataset, **kwargs: Any) -> ImageCoordinateSystem | None:
         try:
             return super().load(data, **kwargs)
         except (TypeError, AttributeError, KeyError, IndexError):
             return None
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs) -> ImageCoordinateSystem | None:
+    def post_load(
+        self, data: dict[str, Any], **kwargs: Any
+    ) -> ImageCoordinateSystem | None:
         """Post load hook to handle separation of xy and z offset."""
         origin: tuple[ImageCoordinateSystem, float] = data.pop("origin")
         return super().post_load(
@@ -98,7 +100,7 @@ class ImageCoordinateSystemDicomSchema(DicomSchema[ImageCoordinateSystem | None]
 
     @pre_dump
     def pre_dump(
-        self, image_coordinate_system: ImageCoordinateSystem | None, **kwargs
+        self, image_coordinate_system: ImageCoordinateSystem | None, **kwargs: Any
     ) -> dict[str, Any]:
         """Pre dump hook to handle default dump value if value is None."""
         if image_coordinate_system is None:
@@ -154,7 +156,7 @@ class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):
 
     @pre_dump
     def pre_dump(
-        self, lossy_compressions: Sequence[LossyCompression], **kwargs
+        self, lossy_compressions: Sequence[LossyCompression], **kwargs: Any
     ) -> dict[str, Any]:
         return {
             "methods": [compression.method for compression in lossy_compressions],
@@ -163,7 +165,9 @@ class LossyCompressionsDicomSchema(DicomSchema[Sequence[LossyCompression]]):
         }
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs) -> Sequence[LossyCompression]:
+    def post_load(
+        self, data: dict[str, Any], **kwargs: Any
+    ) -> Sequence[LossyCompression]:
         methods = data.pop("methods", [])
         ratios = data.pop("ratios", [])
         if len(methods) != len(ratios):
@@ -226,7 +230,7 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         return Image
 
     @pre_dump
-    def pre_dump(self, image: Image, **kwargs):
+    def pre_dump(self, image: Image, **kwargs: Any) -> dict[str, Any]:
         content_datetime = image.content_datetime
         if content_datetime is None:
             content_datetime = image.acquisition_datetime
@@ -275,7 +279,7 @@ class ImageDicomSchema(ModuleDicomSchema[Image]):
         )
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> Image:
         data["content_datetime"] = self._join_datetime(
             data.pop("content_date", None), data.pop("content_time", None)
         )

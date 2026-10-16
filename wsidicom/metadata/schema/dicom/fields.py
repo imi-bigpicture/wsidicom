@@ -131,11 +131,11 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
 
     def __init__(
         self,
-        *args,
+        *args: Any,
         value_representation: str | None = None,
         default_if_none: ValueType | _Empty | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Make a field writing one DICOM attribute.
 
         Parameters
@@ -230,7 +230,7 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
     def get_value(
         self, obj: Any, attr: str, accessor: Any = None, default: Any = missing
     ) -> Any:
-        """The value to write, which is the default when the object has none."""
+        """Return the value to write, which is the default when the object has none."""
         value = super().get_value(obj, attr, accessor=accessor, default=default)
         if not self._writes_when_empty or not self._is_empty(value):
             return value
@@ -248,9 +248,9 @@ class AttributeDicomField(fields.Field[ValueType], Generic[ValueType]):
         attr: str,
         obj: Any,
         accessor: Callable[[Any, str, Any], Any] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Any:
-        """What the field writes, checked against how the attribute is written.
+        """Return what the field writes, checked against how the attribute is written.
 
         Wraps whatever the field made of the value, so that every field writing
         an attribute is checked the one way and none has to remember to do it.
@@ -405,7 +405,7 @@ class DatasetDicomField(fields.Field[ValueType], Generic[ValueType]):
 
     @classmethod
     def _code_dataset(cls, code: CodeLike) -> Dataset:
-        """The dataset of a code, its attributes checked as they are set.
+        """Return the dataset of a code, its attributes checked as they are set.
 
         The value is written in whichever of Code Value, Long Code Value or URN
         Code Value can hold it, and a scheme that states no version says so by
@@ -433,7 +433,7 @@ class DatasetDicomField(fields.Field[ValueType], Generic[ValueType]):
 
 
 class StringDicomField(AttributeDicomField[str]):
-    def __init__(self, value_representation: VR, **kwargs):
+    def __init__(self, value_representation: VR, **kwargs: Any) -> None:
         if value_representation not in STR_VR:
             raise ValueError(
                 f"Value representation {value_representation} is not a string."
@@ -441,7 +441,7 @@ class StringDicomField(AttributeDicomField[str]):
         super().__init__(value_representation=value_representation, **kwargs)
 
     def _serialize(
-        self, value: str | None, attr: str | None, obj: Any, **kwargs
+        self, value: str | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> str | None:
         if value is None:
             return None
@@ -459,7 +459,13 @@ class StringDicomField(AttributeDicomField[str]):
             value = value[:maximum_allowed_length]
         return super()._serialize(value, attr, obj, **kwargs)
 
-    def _deserialize(self, value, attr, data, **kwargs) -> Any:
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> Any:
         """By default pydicom returns empty string for empty string-like elements."""
         deserialized = super()._deserialize(value, attr, data, **kwargs)
         if deserialized == "":
@@ -468,7 +474,13 @@ class StringDicomField(AttributeDicomField[str]):
 
 
 class EnumDicomField(AttributeDicomField, fields.Enum):
-    def _deserialize(self, value, attr, data, **kwargs):
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> Enum | None:
         if value == "":
             return None
         return super()._deserialize(value, attr, data, **kwargs)
@@ -486,12 +498,18 @@ class DefaultOnValidationExceptionField(AttributeDicomField[Any]):
     else wsidicom writes.
     """
 
-    def __init__(self, inner: fields.Field, load_default, **kwargs):
+    def __init__(self, inner: fields.Field, load_default: Any, **kwargs: Any) -> None:
         self.inner = inner
         super().__init__(**kwargs)
         self.load_default = load_default
 
-    def _deserialize(self, value, attr, data, **kwargs):
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> Any:
         try:
             return self.inner._deserialize(value, attr, data, **kwargs)
         except ValidationError as exception:
@@ -502,7 +520,7 @@ class DefaultOnValidationExceptionField(AttributeDicomField[Any]):
             )
             return self.load_default
 
-    def _serialize(self, value: Any, attr, obj, **kwargs) -> Any:
+    def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs: Any) -> Any:
         return self.inner._serialize(value, attr, obj, **kwargs)
 
 
@@ -524,13 +542,19 @@ class DateTimeDicomField(AttributeDicomField[datetime.datetime]):
         value: datetime.datetime | None,
         attr: str | None,
         obj: Any,
-        **kwargs,
+        **kwargs: Any,
     ) -> DT | None:
         if value is None:
             return None
         return DT(value)
 
-    def _deserialize(self, value, attr, data, **kwargs) -> Any:
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> Any:
         if value is None:
             return None
         try:
@@ -541,13 +565,19 @@ class DateTimeDicomField(AttributeDicomField[datetime.datetime]):
 
 class DateDicomField(AttributeDicomField[datetime.date]):
     def _serialize(
-        self, value: datetime.date | None, attr: str | None, obj: Any, **kwargs
+        self, value: datetime.date | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> DA | None:
         if value is None:
             return None
         return DA(value)
 
-    def _deserialize(self, value, attr, data, **kwargs) -> Any:
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> Any:
         if value is None:
             return None
         try:
@@ -558,13 +588,19 @@ class DateDicomField(AttributeDicomField[datetime.date]):
 
 class TimeDicomField(AttributeDicomField[datetime.time]):
     def _serialize(
-        self, value: datetime.time | None, attr: str | None, obj: Any, **kwargs
+        self, value: datetime.time | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> TM | None:
         if value is None:
             return None
         return TM(value)
 
-    def _deserialize(self, value, attr, data, **kwargs) -> Any:
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> Any:
         if value is None:
             return None
         try:
@@ -578,8 +614,8 @@ class BooleanDicomField(AttributeDicomField[bool], fields.Boolean):
         self,
         truthy: str | None = None,
         falsy: str | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         if truthy is None:
             truthy = "YES"
         if falsy is None:
@@ -587,12 +623,18 @@ class BooleanDicomField(AttributeDicomField[bool], fields.Boolean):
         super().__init__(truthy=set([truthy]), falsy=set([falsy]), **kwargs)
 
     def _serialize(
-        self, value: bool | None, attr: str | None, obj: Any, **kwargs
+        self, value: bool | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> str:
         string_value = self.truthy if value else self.falsy
-        return list(string_value)[0]
+        return next(iter(string_value))
 
-    def _deserialize(self, value, attr, data, **kwargs) -> Any:
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> Any:
         deserialized = super()._deserialize(value, attr, data, **kwargs)
         if deserialized == "":
             return None
@@ -605,7 +647,7 @@ class OffsetInSlideCoordinateSystemDicomField(DatasetDicomField):
         value: tuple[PointMm, float | None] | None,
         attr: str | None,
         obj: Any,
-        **kwargs,
+        **kwargs: Any,
     ) -> list[Dataset] | None:
         origin = value
         if origin is None:
@@ -642,7 +684,7 @@ class OffsetInSlideCoordinateSystemDicomField(DatasetDicomField):
         value: DataElement,
         attr: str | None,
         data: Mapping[str, Any] | None,
-        **kwargs,
+        **kwargs: Any,
     ) -> tuple[PointMm, float | None]:
         z_offset = value[0].get(ZOffsetInSlideCoordinateSystemTag, None)
         return PointMm(
@@ -653,7 +695,7 @@ class OffsetInSlideCoordinateSystemDicomField(DatasetDicomField):
 
 class ImageOrientationSlideDicomField(AttributeDicomField[float]):
     def _serialize(
-        self, value: float | None, attr: str | None, obj: Any, **kwargs
+        self, value: float | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> list[float] | None:
         rotation = value
         if rotation is None:
@@ -671,7 +713,7 @@ class ImageOrientationSlideDicomField(AttributeDicomField[float]):
         value: tuple[float, float, float, float, float, float],
         attr: str | None,
         data: Mapping[str, Any] | None,
-        **kwargs,
+        **kwargs: Any,
     ) -> float:
         orientation = Orientation(value)
         return orientation.rotation
@@ -691,8 +733,8 @@ class ListDicomField(AttributeDicomField, fields.List):
         dump_none_if_empty: bool = False,
         *,
         dump_required: bool = False,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         self._dump_none_if_empty = dump_none_if_empty
         self._dump_required = dump_required
         super().__init__(cls_or_instance, **kwargs)
@@ -701,7 +743,7 @@ class ListDicomField(AttributeDicomField, fields.List):
         """Whether a value counts as no value, which a list without items does."""
         return super()._is_empty(value) or len(value) == 0
 
-    def _serialize(self, value, attr, obj, **kwargs) -> Any:
+    def _serialize(self, value: Any, attr: str | None, obj: Any, **kwargs: Any) -> Any:
         if self._dump_required and not value:
             raise ValidationError(
                 f"{self.data_key or attr} is a Type 1 DICOM attribute and "
@@ -712,7 +754,13 @@ class ListDicomField(AttributeDicomField, fields.List):
             return None
         return super()._serialize(value, attr, obj, **kwargs)
 
-    def _deserialize(self, value: Any | list[Any], attr, data, **kwargs) -> list[Any]:
+    def _deserialize(
+        self,
+        value: Any | list[Any],
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> list[Any]:
         if not isinstance(value, (MultiValue, DicomSequence)):
             value = [value]
         return super()._deserialize(value, attr, data, **kwargs)
@@ -726,7 +774,7 @@ class FlattenOnDumpNestedDicomField(fields.Nested):
     The flatten/deflatten is done by the parent schema.
     """
 
-    def __init__(self, nested: Schema, **kwargs):
+    def __init__(self, nested: Schema, **kwargs: Any) -> None:
         self._nested = nested
         super().__init__(nested=nested, **kwargs)
 
@@ -734,18 +782,26 @@ class FlattenOnDumpNestedDicomField(fields.Nested):
     def nested_schema(self) -> Schema:
         return self._nested
 
-    def _serialize(self, nested_obj, attr: str | None, obj: Any, **kwargs) -> Any:
+    def _serialize(
+        self, nested_obj: Any, attr: str | None, obj: Any, **kwargs: Any
+    ) -> Any:
         if nested_obj is None and self.dump_default != missing:
             nested_obj = self.dump_default
         return super()._serialize(nested_obj, attr, obj, **kwargs)
 
 
 class FloatDicomField(AttributeDicomField[float]):
-    def _deserialize(self, value: Any, attr, data, **kwargs) -> float:
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> float:
         return float(value)
 
     def _serialize(
-        self, value: float | None, attr: str | None, obj: Any, **kwargs
+        self, value: float | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> DSfloat | None:
         if value is None:
             return None
@@ -757,7 +813,7 @@ class FloatDicomField(AttributeDicomField[float]):
 
 
 def _scheme_version_of(dataset: Dataset) -> str | None:
-    """The coding scheme version a code dataset states, or None if it states none.
+    """Return the coding scheme version a code dataset states, or None if none.
 
     A version that is there but empty is no version, the same as one that is
     not there at all.
@@ -781,19 +837,19 @@ class CodeDicomField(DatasetDicomField[CodeType], Generic[CodeType]):
         ("scheme_version", CodingSchemeVersionTag),
     )
 
-    def __init__(self, load_type: type[CodeType], **kwargs) -> None:
+    def __init__(self, load_type: type[CodeType], **kwargs: Any) -> None:
         self._load_type = load_type
         super().__init__(**kwargs)
 
     def _serialize(
-        self, value: CodeType | None, attr: str | None, obj: Any, **kwargs
+        self, value: CodeType | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> Dataset | None:
         if value is None:
             return None
         return self._code_dataset(value)
 
     def _deserialize(
-        self, value: Dataset, attr: str | None, data: Any, **kwargs
+        self, value: Dataset, attr: str | None, data: Any, **kwargs: Any
     ) -> CodeType:
         held = {name: value.get(tag, None) for name, tag in self._held}
         return self._load_type(
@@ -817,14 +873,14 @@ class SingleCodeSequenceDicomField(AttributeDicomField[CodeType], Generic[CodeTy
     field holding one of these.
     """
 
-    def __init__(self, load_type: type[CodeType], **kwargs) -> None:
+    def __init__(self, load_type: type[CodeType], **kwargs: Any) -> None:
         self._item = CodeDicomField(load_type)
         super().__init__(**kwargs)
 
     def _serialize(
-        self, value: CodeType | None, attr: str | None, obj: Any, **kwargs
+        self, value: CodeType | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> list[Dataset] | None:
-        """The sequence holding the one code, as the attribute holds a sequence."""
+        """Return the sequence holding the one code, as the attribute is a sequence."""
         item = self._item._serialize(value, attr, obj, **kwargs)
         if item is None:
             return None
@@ -836,7 +892,7 @@ class SingleCodeSequenceDicomField(AttributeDicomField[CodeType], Generic[CodeTy
         value: Sequence[Dataset],
         attr: str | None,
         data: Mapping[str, Any] | None,
-        **kwargs,
+        **kwargs: Any,
     ) -> CodeType:
         return self._item._deserialize(value[0], attr, data, **kwargs)
 
@@ -850,12 +906,12 @@ class UidDicomField(StringDicomField):
     a missing/None value is accepted at deserialization.
     """
 
-    def __init__(self, *, dump_required: bool = False, **kwargs):
+    def __init__(self, *, dump_required: bool = False, **kwargs: Any) -> None:
         super().__init__(value_representation=VR.UI, **kwargs)
         self._dump_required = dump_required
 
     def _serialize(
-        self, value: Any, attr: str | None, obj: Any, **kwargs
+        self, value: Any, attr: str | None, obj: Any, **kwargs: Any
     ) -> str | None:
         if value is None and self._dump_required:
             raise ValidationError(
@@ -864,7 +920,13 @@ class UidDicomField(StringDicomField):
             )
         return super()._serialize(value, attr, obj, **kwargs)
 
-    def _deserialize(self, value: Any, attr, data, **kwargs):
+    def _deserialize(
+        self,
+        value: Any,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> UID | None:
         if value is None or value == "":
             return None
         if isinstance(value, UID):
@@ -880,12 +942,12 @@ class UidDatasetDicomField(DatasetDicomField[UID | None]):
     item belongs to.
     """
 
-    def __init__(self, data_key: str, **kwargs):
+    def __init__(self, data_key: str, **kwargs: Any) -> None:
         self._data_key = data_key
         super().__init__(data_key=data_key, **kwargs)
 
     def _serialize(
-        self, value: UID | None, attr: str | None, obj: Any, **kwargs
+        self, value: UID | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> Dataset | None:
         if value is None:
             return None
@@ -893,7 +955,13 @@ class UidDatasetDicomField(DatasetDicomField[UID | None]):
         self._set_attribute(dataset, self._data_key, value)
         return dataset
 
-    def _deserialize(self, value: Dataset, attr, data, **kwargs) -> UID | None:
+    def _deserialize(
+        self,
+        value: Dataset,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> UID | None:
         held = value.get(self._data_key, None)
         if held is None or held == "":
             return None
@@ -901,10 +969,18 @@ class UidDatasetDicomField(DatasetDicomField[UID | None]):
 
 
 class PersonNameDicomField(AttributeDicomField[str]):
-    def _deserialize(self, value: PersonName, attr, data, **kwargs) -> str:
+    def _deserialize(
+        self,
+        value: PersonName,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> str:
         return str(value)
 
-    def _serialize(self, value: str | None, attr, obj, **kwargs) -> PersonName | None:
+    def _serialize(
+        self, value: str | None, attr: str | None, obj: Any, **kwargs: Any
+    ) -> PersonName | None:
         if value is None:
             return None
         # A component longer than a person name allows is only warned about
@@ -918,7 +994,11 @@ class PersonNameDicomField(AttributeDicomField[str]):
 
 class IssuerOfIdentifierDicomField(DatasetDicomField):
     def _deserialize(
-        self, value: Sequence[Dataset] | None, attr, data, **kwargs
+        self,
+        value: Sequence[Dataset] | None,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
     ) -> IssuerOfIdentifier | None:
         if value is None or len(value) == 0:
             return None
@@ -935,7 +1015,11 @@ class IssuerOfIdentifierDicomField(DatasetDicomField):
         return None
 
     def _serialize(
-        self, value: IssuerOfIdentifier | None, attr, obj, **kwargs
+        self,
+        value: IssuerOfIdentifier | None,
+        attr: str | None,
+        obj: Any,
+        **kwargs: Any,
     ) -> Sequence[Dataset] | None:
         # An issuer that is not there is written as an empty sequence rather
         # than left out, so this cannot take the guard that gives nothing.
@@ -960,7 +1044,7 @@ class IssuerOfIdentifierDicomField(DatasetDicomField):
 
 class PixelSpacingDicomField(AttributeDicomField[SizeMm | None]):
     def _serialize(
-        self, value: SizeMm | None, attr: str | None, obj: Any, **kwargs
+        self, value: SizeMm | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> list[DSfloat] | None:
         if value is None:
             return None
@@ -970,11 +1054,16 @@ class PixelSpacingDicomField(AttributeDicomField[SizeMm | None]):
         width = DSfloat(value.width, True)
         # `DSfloat` hands back what it was given when it cannot make a decimal
         # string of it, which is never so for a float.
-        assert isinstance(height, DSfloat) and isinstance(width, DSfloat)
+        assert isinstance(height, DSfloat)
+        assert isinstance(width, DSfloat)
         return [height, width]
 
     def _deserialize(
-        self, value: Sequence[float] | None, attr, data, **kwargs
+        self,
+        value: Sequence[float] | None,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
     ) -> SizeMm | None:
         if value is None or len(value) == 0:
             return None
@@ -983,10 +1072,15 @@ class PixelSpacingDicomField(AttributeDicomField[SizeMm | None]):
 
 
 class NestedDatasetDicomField(DatasetDicomField[ValueType], fields.Nested):
-    """fields.Field for attribute of a single-item dataset sequence with a nested
-    sing-item dataset sequence with the item the nested schema should handle."""
+    """fields.Field for attribute of a single-item dataset sequence.
 
-    def __init__(self, nested: Schema, data_key: str, nested_data_key: str, **kwargs):
+    The sequence has a nested sing-item dataset sequence with the item the nested
+    schema should handle.
+    """
+
+    def __init__(
+        self, nested: Schema, data_key: str, nested_data_key: str, **kwargs: Any
+    ) -> None:
         self._nested = nested
         self._data_key = data_key
         self._nested_data_key = nested_data_key
@@ -996,7 +1090,7 @@ class NestedDatasetDicomField(DatasetDicomField[ValueType], fields.Nested):
     # `Field` names this parameter `value` and `Nested` names it `nested_obj`,
     # and this is both, so whichever name is taken one of them disagrees.
     def _serialize(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, nested_obj: ValueType | None, attr: str | None, obj: Any, **kwargs
+        self, nested_obj: ValueType | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> list[Dataset] | None:
         nested_value = super()._serialize(nested_obj, attr, obj, **kwargs)
         if nested_value is None:
@@ -1008,10 +1102,10 @@ class NestedDatasetDicomField(DatasetDicomField[ValueType], fields.Nested):
     def _deserialize(
         self,
         value: Sequence[Dataset],
-        attr,
-        data,
+        attr: str | None,
+        data: Mapping[str, Any] | None,
         partial: StrSequenceOrSet | bool | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Any:
         nested_value = getattr(value[0], self._nested_data_key, None)
         if nested_value is None:
@@ -1029,9 +1123,11 @@ class ContentItemDicomField(DatasetDicomField[ValueType]):
 
     @abstractmethod
     def _deserialize(
-        self, value: Dataset, attr: str | None, data: Any, **kwargs
+        self, value: Dataset, attr: str | None, data: Any, **kwargs: Any
     ) -> ValueType:
-        """What the item holds. A field making several takes the several.
+        """Return what the item holds.
+
+        A field making several takes the several.
 
         An item that holds nothing gives None, so a field for one that need not
         be there is for a value that may be None.
@@ -1040,12 +1136,12 @@ class ContentItemDicomField(DatasetDicomField[ValueType]):
 
 
 class CodeItemDicomField(ContentItemDicomField[CodeType], Generic[CodeType]):
-    def __init__(self, load_type: type[CodeType], **kwargs) -> None:
+    def __init__(self, load_type: type[CodeType], **kwargs: Any) -> None:
         self._load_type = load_type
         super().__init__(**kwargs)
 
     def _serialize(
-        self, value: CodeType | None, attr: str | None, obj: Any, **kwargs
+        self, value: CodeType | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> Dataset | None:
         if value is None:
             return None
@@ -1057,7 +1153,7 @@ class CodeItemDicomField(ContentItemDicomField[CodeType], Generic[CodeType]):
         return dataset
 
     def _deserialize(
-        self, value: Dataset, attr: str | None, data: Any, **kwargs
+        self, value: Dataset, attr: str | None, data: Any, **kwargs: Any
     ) -> CodeType:
         code_dataset = value.ConceptCodeSequence[0]
         return self._load_type(
@@ -1070,7 +1166,7 @@ class CodeItemDicomField(ContentItemDicomField[CodeType], Generic[CodeType]):
 
 class StringItemDicomField(ContentItemDicomField[str | None]):
     def _serialize(
-        self, value: str | None, attr: str | None, obj: Any, **kwargs
+        self, value: str | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> Dataset | None:
         if value is None:
             return None
@@ -1079,14 +1175,16 @@ class StringItemDicomField(ContentItemDicomField[str | None]):
         self._set_attribute(dataset, TextValueTag, value)
         return dataset
 
-    def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
+    def _deserialize(
+        self, value: Dataset, attr: str | None, data: Any, **kwargs: Any
+    ) -> str:
         dataset = value
         return dataset.TextValue
 
 
 class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime | None]):
     def _serialize(
-        self, value: datetime.datetime | None, attr: str | None, obj: Any, **kwargs
+        self, value: datetime.datetime | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> Dataset | None:
         if value is None:
             return None
@@ -1095,7 +1193,9 @@ class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime | None]):
         self._set_attribute(dataset, DateTimeTag, DT(value))
         return dataset
 
-    def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
+    def _deserialize(
+        self, value: Dataset, attr: str | None, data: Any, **kwargs: Any
+    ) -> datetime.datetime | None:
         dataset = value
         try:
             return DT(dataset.DateTime)
@@ -1105,7 +1205,7 @@ class DateTimeItemDicomField(ContentItemDicomField[datetime.datetime | None]):
 
 class MeasurementItemDicomField(ContentItemDicomField[Measurement | None]):
     def _serialize(
-        self, value: Measurement | None, attr: str | None, obj: Any, **kwargs
+        self, value: Measurement | None, attr: str | None, obj: Any, **kwargs: Any
     ) -> Dataset | None:
         if value is None:
             return None
@@ -1118,7 +1218,9 @@ class MeasurementItemDicomField(ContentItemDicomField[Measurement | None]):
         )
         return dataset
 
-    def _deserialize(self, value: Dataset, attr: str | None, data: Any, **kwargs):
+    def _deserialize(
+        self, value: Dataset, attr: str | None, data: Any, **kwargs: Any
+    ) -> Measurement:
         dataset = value
         if FloatingPointValueTag in dataset:
             measurement_value = dataset.FloatingPointValue

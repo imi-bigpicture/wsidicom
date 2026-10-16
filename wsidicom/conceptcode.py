@@ -80,7 +80,7 @@ class CodeValueAttribute:
 
     @classmethod
     def keyword_for(cls, value: str) -> str:
-        """The keyword of the attribute to write a code value in.
+        """Return the keyword of the attribute to write a code value in.
 
         Parameters
         ----------
@@ -100,7 +100,7 @@ class CodeValueAttribute:
 
     @classmethod
     def read(cls, dataset: Dataset) -> str:
-        """The code value of a code dataset, from whichever attribute holds it.
+        """Return the code value of a code dataset, from whichever attribute holds it.
 
         Parameters
         ----------
@@ -134,6 +134,7 @@ CidConceptCodeType = TypeVar("CidConceptCodeType", bound="CidConceptCode")
 @dataclass(frozen=True)
 class ConceptCode:
     """Help functions for handling SR codes.
+
     Provides functions for converting between Code and dicom dataset.
     """
 
@@ -143,7 +144,7 @@ class ConceptCode:
     scheme_version: str | None = None
     sequence_name: ClassVar[str]
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(
             (self.value, self.scheme_designator, self.meaning, self.scheme_version)
         )
@@ -248,8 +249,9 @@ class SingleConceptCode(ConceptCode):
 
     @classmethod
     def from_ds(cls: type[ConceptCodeType], ds: Dataset) -> Optional["ConceptCodeType"]:
-        """Return measurement code for value. Value can be a code meaning (str)
-        or a DICOM dataset containing the code.
+        """Return measurement code for value.
+
+        Value can be a code meaning (str) or a DICOM dataset containing the code.
 
         Parameters
         ----------
@@ -273,8 +275,9 @@ class MultipleConceptCode(ConceptCode):
 
     @classmethod
     def from_ds(cls: type[ConceptCodeType], ds: Dataset) -> list[ConceptCodeType]:
-        """Return measurement code for value. Value can be a code meaning (str)
-        or a DICOM dataset containing the code.
+        """Return measurement code for value.
+
+        Value can be a code meaning (str) or a DICOM dataset containing the code.
 
         Parameters
         ----------
@@ -304,7 +307,7 @@ class CidConceptCode(ConceptCode):
         value: str | None = None,
         scheme_designator: str | None = None,
         scheme_version: str | None = None,
-    ):
+    ) -> None:
         if value is None or scheme_designator is None:
             code = self._from_meaning(meaning)
             super().__init__(
@@ -348,7 +351,7 @@ class CidConceptCode(ConceptCode):
 
 
 class UnitCode(SingleConceptCode):
-    """Code for concepts representing units according to UCUM scheme"""
+    """Code for concepts representing units according to UCUM scheme."""
 
     sequence_name = "MeasurementUnitsCodeSequence"
 
@@ -358,7 +361,7 @@ class UnitCode(SingleConceptCode):
         value: str | None = None,
         scheme_designator: str | None = None,
         scheme_version: str | None = None,
-    ):
+    ) -> None:
         if value is None or scheme_designator is None:
             code = self._from_unit(meaning)
             super().__init__(
@@ -408,7 +411,7 @@ class UnitCode(SingleConceptCode):
             Code meaning.
 
         Returns
-        ----------
+        -------
         ConceptCode
             Code created from meaning.
 
@@ -437,21 +440,23 @@ class UnitCode(SingleConceptCode):
 class MeasurementCode(CidConceptCode, SingleConceptCode):
     """
     Concept code for measurement type.
+
     Microscopy Measurement Types
     """
 
     sequence_name = "ConceptNameCodeSequence"
-    cid = {"Area": Code("42798000", "SCT", "Area")}
+    cid: ClassVar[dict[str, Code]] = {"Area": Code("42798000", "SCT", "Area")}
 
 
 class AnnotationTypeCode(CidConceptCode, SingleConceptCode):
     """
     Concept code for annotation type.
+
     Microscopy Annotation Property Types
     """
 
     sequence_name = "AnnotationPropertyTypeCodeSequence"
-    cid = {
+    cid: ClassVar[dict[str, Code]] = {
         "Nucleus": Code("84640000", "SCT", "Nucleus"),
         "EntireCell": Code("4421005", "SCT", "Cell"),
     }
@@ -460,6 +465,7 @@ class AnnotationTypeCode(CidConceptCode, SingleConceptCode):
 class AnnotationCategoryCode(CidConceptCode, SingleConceptCode):
     """
     Concept code for annotation category.
+
     From CID 7150 Segmentation Property Categories
     """
 
@@ -470,6 +476,7 @@ class AnnotationCategoryCode(CidConceptCode, SingleConceptCode):
 class IlluminationCode(CidConceptCode, MultipleConceptCode):
     """
     Concept code for illumination type.
+
     From CID 8123 Microscopy Illumination Method
     """
 
@@ -480,6 +487,7 @@ class IlluminationCode(CidConceptCode, MultipleConceptCode):
 class LenseCode(CidConceptCode, MultipleConceptCode):
     """
     Concept code for lense.
+
     From CID 8121 Microscopy Lens Type
     """
 
@@ -490,6 +498,7 @@ class LenseCode(CidConceptCode, MultipleConceptCode):
 class LightPathFilterCode(CidConceptCode, MultipleConceptCode):
     """
     Concept code for light path filter.
+
     From CID 8124 Microscopy Filter
     """
 
@@ -500,6 +509,7 @@ class LightPathFilterCode(CidConceptCode, MultipleConceptCode):
 class ImagePathFilterCode(CidConceptCode, MultipleConceptCode):
     """
     Concept code for image path filter.
+
     From CID 8124 Microscopy Filter
     """
 
@@ -510,6 +520,7 @@ class ImagePathFilterCode(CidConceptCode, MultipleConceptCode):
 class IlluminationColorCode(CidConceptCode, SingleConceptCode):
     """
     Concept code for illumination color.
+
     From CID 8122 Microscopy Illuminator and Sensor Color
     """
 
@@ -520,6 +531,7 @@ class IlluminationColorCode(CidConceptCode, SingleConceptCode):
 class IlluminatorCode(CidConceptCode, SingleConceptCode):
     """
     Concept code for illuminator type.
+
     From CID 8125 Microscopy Illuminator Type
     """
 
@@ -530,6 +542,7 @@ class IlluminatorCode(CidConceptCode, SingleConceptCode):
 class ChannelDescriptionCode(CidConceptCode, MultipleConceptCode):
     """
     Concept code for channel descriptor.
+
     From CID 8122 Microscopy Illuminator and Sensor Color
     """
 

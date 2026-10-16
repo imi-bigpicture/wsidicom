@@ -17,10 +17,12 @@ import os
 import platform
 import random
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, ThreadPoolExecutor
+from dataclasses import replace
 from enum import Enum
 from pathlib import Path
+from random import Random
 from typing import Any
 
 import pytest
@@ -35,7 +37,7 @@ from pydicom.uid import (
 from tests.data_gen import create_layer_file
 from tests.file.io.test_wsidicom_writer import WsiDicomTestImageData
 from wsidicom import WsiDicom
-from wsidicom.config import Settings
+from wsidicom.config import get_settings
 from wsidicom.geometry import Size
 from wsidicom.metadata.uid_generator import CallableUidGenerator
 from wsidicom.thread import ReadExecutor
@@ -46,9 +48,10 @@ REGION_DEFINITIONS_FILE = "tests/testdata/region_definitions.json"
 
 
 def skip_if_hash_unstable(transfer_syntax: UID) -> None:
-    """Skip a pixel-hash test when the transfer syntax does not decode
-    byte-identically on the current platform, so its md5 comparison would
-    spuriously fail. Lossy JPEG2000 decodes differently on macOS.
+    """Skip a pixel-hash test if the syntax does not decode byte-identically here.
+
+    On such a platform the md5 comparison would spuriously fail. Lossy JPEG2000
+    decodes differently on macOS.
 
     Call at the top of a test that asserts an md5 checksum; tests that do not
     hash simply never call it and so are never skipped.
@@ -58,8 +61,9 @@ def skip_if_hash_unstable(transfer_syntax: UID) -> None:
 
 
 class SingleThreadDicomFileClient(DICOMfileClient):
-    """Test-only shim that runs the DICOMfileClient calls wsidicom uses on one
-    dedicated thread, draining returned iterators there.
+    """Test-only shim that runs DICOMfileClient calls on one dedicated thread.
+
+    The calls are those wsidicom uses, and returned iterators are drained there.
 
     DICOMfileClient creates a SQLite connection bound to the thread that
     constructs it, so reads through a shared multi-thread pool would otherwise
@@ -70,7 +74,7 @@ class SingleThreadDicomFileClient(DICOMfileClient):
     from the wrong thread.
     """
 
-    def __init__(self, url: str):
+    def __init__(self, url: str) -> None:
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="DicomFileClient"
         )
@@ -233,22 +237,22 @@ class WsiTestDefinitions:
         ]
 
 
-@pytest.fixture()
-def wsi_file(tmp_path: Path):
+@pytest.fixture
+def wsi_file(tmp_path: Path) -> Path:
     test_file_path = tmp_path.joinpath("test_im.dcm")
     create_layer_file(test_file_path)
-    yield test_file_path
+    return test_file_path
 
 
-@pytest.fixture()
-def wsi(wsi_file: Path):
+@pytest.fixture
+def wsi(wsi_file: Path) -> Iterator[WsiDicom]:
     with WsiDicom.open(wsi_file) as wsi:
         yield wsi
 
 
 @pytest.fixture(scope="module")
-def shared_threadpool_executor():
-    """A shared thread pool for exercising the supplied-executor read path.
+def shared_threadpool_executor() -> Iterator[ThreadPoolExecutor]:
+    """Provide a shared thread pool for exercising the supplied-executor read path.
 
     Module-scoped and requested by `wsi_factory` so it is torn down after the
     wsis that read through it are closed.
@@ -260,9 +264,12 @@ def shared_threadpool_executor():
 
 
 @pytest.fixture(scope="module")
-def wsi_factory(shared_threadpool_executor: Executor):
-    """Fixture providing a callable that takes a wsi name and input type and returns a
-    WsiDicom object. Caches opened objects and closes when tests using fixture are done.
+def wsi_factory(
+    shared_threadpool_executor: Executor,
+) -> Iterator[Callable[..., WsiDicom]]:
+    """Provide a callable that opens a WsiDicom from a wsi name and input type.
+
+    Caches opened objects and closes them when the tests using the fixture are done.
 
     The callable also takes an optional `read_executor` so tests can exercise the
     supplied-executor read path; wsis opened with and without one are cached
@@ -298,7 +305,9 @@ def wsi_factory(shared_threadpool_executor: Executor):
                 test_definition["series_instance_uid"],
                 [JPEGBaseline8Bit, JPEG2000, ExplicitVRLittleEndian],
                 read_executor=read_executor,
-                settings=Settings(open_web_threads=1),
+                # The active settings (a test's pinned downsampler, say) with one
+                # web thread, not a fresh Settings that would reset them.
+                settings=replace(get_settings(), open_web_threads=1),
             )
         else:
             raise NotImplementedError()
@@ -312,49 +321,49 @@ def wsi_factory(shared_threadpool_executor: Executor):
         file_client.shutdown()
 
 
-@pytest.fixture()
-def read_executor():
-    """An inline (single-threaded) read executor for read methods under test."""
-    yield ReadExecutor(None, None)
+@pytest.fixture
+def read_executor() -> ReadExecutor:
+    """Provide an inline (single-threaded) read executor for read methods under test."""
+    return ReadExecutor(None, None)
 
 
 @pytest.fixture(scope="module")
-def tiled_size():
-    yield Size(2, 2)
+def tiled_size() -> Size:
+    return Size(2, 2)
 
 
-@pytest.fixture()
-def frame_count(tiled_size: Size):
-    yield tiled_size.area
+@pytest.fixture
+def frame_count(tiled_size: Size) -> int:
+    return tiled_size.area
 
 
-@pytest.fixture()
-def rng():
+@pytest.fixture
+def rng() -> Random:
     SEED = 0
-    yield random.Random(SEED)
+    return random.Random(SEED)
 
 
 @pytest.fixture(scope="module")
-def bits():
-    yield 8
+def bits() -> int:
+    return 8
 
 
 @pytest.fixture(scope="module")
-def samples_per_pixel():
-    yield 3
+def samples_per_pixel() -> int:
+    return 3
 
 
 @pytest.fixture(scope="module")
-def tile_size():
-    yield Size(10, 10)
+def tile_size() -> Size:
+    return Size(10, 10)
 
 
 @pytest.fixture(scope="module")
-def transfer_syntax():
-    yield JPEGBaseline8Bit
+def transfer_syntax() -> UID:
+    return JPEGBaseline8Bit
 
 
-@pytest.fixture()
+@pytest.fixture
 def frames(
     rng: random.Random,
     transfer_syntax: UID,
@@ -362,7 +371,7 @@ def frames(
     bits: int,
     samples_per_pixel: int,
     tile_size: Size,
-):
+) -> list[bytes]:
     if not transfer_syntax.is_encapsulated:
         min_frame_length = bits * tile_size.area * samples_per_pixel // 8
         max_frame_length = min_frame_length
@@ -372,17 +381,17 @@ def frames(
     lengths = [
         rng.randint(min_frame_length, max_frame_length) for i in range(frame_count)
     ]
-    yield [
+    return [
         rng.getrandbits(length * 8).to_bytes(length, sys.byteorder)
         for length in lengths
     ]
 
 
-@pytest.fixture()
-def image_data(frames: list[bytes], tiled_size: Size):
-    yield WsiDicomTestImageData(frames, tiled_size)
+@pytest.fixture
+def image_data(frames: list[bytes], tiled_size: Size) -> WsiDicomTestImageData:
+    return WsiDicomTestImageData(frames, tiled_size)
 
 
 @pytest.fixture(scope="module")
-def uid_generator():
+def uid_generator() -> CallableUidGenerator:
     return CallableUidGenerator()
