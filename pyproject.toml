@@ -99,6 +99,7 @@ parametrize-values-row-type = "tuple"
 Professer = "Professer"
 SEH = "SEH"
 PN = "PN"
+writeable = "writeable"  # numpy array flag
 
 [build-system]
 requires = ["hatchling"]
