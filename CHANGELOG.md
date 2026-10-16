@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FileUids` compare equal when all their UIDs are equal. Previously they compared equal only when both were parts of the same concatenation, which is now `matches_concatenation()`.
 - Thumbnails without Pixel Spacing are ignored with a warning when opening, and `Thumbnail` raises `WsiDicomNoResolutionError` if created without it.
 - Faster reading of encoded tiles from local DICOM files, which are read through a pool of file handles so that reads from several threads no longer wait for each other.
-- Only DICOMweb instances cache encoded frames; for files opened through fsspec, use a caching file system of fsspec. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
+- Only DICOMweb instances cache encoded frames. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
 
 ### Fixed
 
