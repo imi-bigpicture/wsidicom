@@ -1486,6 +1486,7 @@ class WsiDataset:
         optical_paths: Sequence[str],
         tiled_size: Size,
         scale: int = 1,
+        optical_path_sources: Sequence["WsiDataset"] = (),
     ) -> "WsiDataset":
         """Return copy of dataset with properties set to reflect a tiled full
         arrangement of the listed image data. Optionally set properties to
@@ -1501,6 +1502,10 @@ class WsiDataset:
             Tiled size of image.
         scale: int = 1
             Optionally scale data.
+        optical_path_sources: Sequence[WsiDataset] = ()
+            Other datasets to take Optical Path Sequence items from, for optical
+            paths that this dataset does not describe (e.g. when instances that
+            each hold one optical path are combined into one instance).
 
         Returns
         -------
@@ -1569,11 +1574,20 @@ class WsiDataset:
 
         # Keep only the optical paths written to this instance, so the optical
         # path identity is preserved when the paths have been split across
-        # instances (e.g. one instance per optical path).
+        # instances (e.g. one instance per optical path). Paths this dataset does
+        # not describe are taken from the other sources, so that combining
+        # instances that each hold one optical path keeps all of them. The items
+        # are ordered as the optical paths, as that is the order of the frames.
+        optical_path_items: dict[str, Dataset] = {}
+        for source in (self, *optical_path_sources):
+            for item in self.get_sequence(source._dataset, OpticalPathSequenceTag):
+                identifier = str(item[OpticalPathIdentifierTag].value)
+                if identifier in optical_paths:
+                    optical_path_items.setdefault(identifier, item)
         kept_optical_paths = DicomSequence(
-            item
-            for item in self.get_sequence(self._dataset, OpticalPathSequenceTag)
-            if str(item[OpticalPathIdentifierTag].value) in optical_paths
+            optical_path_items[optical_path]
+            for optical_path in optical_paths
+            if optical_path in optical_path_items
         )
         if len(kept_optical_paths) != 0:
             changes[OpticalPathSequenceTag] = kept_optical_paths

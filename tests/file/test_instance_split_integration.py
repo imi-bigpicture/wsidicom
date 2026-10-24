@@ -201,6 +201,19 @@ def sparse_pyramid(wsi: WsiDicom) -> Pyramid:
 
 
 @pytest.fixture
+def instance_per_optical_path_pyramid(wsi: WsiDicom) -> Pyramid:
+    """Build a single-level pyramid where each of two optical paths, with the
+    same focal planes, is stored in its own instance."""
+    level = wsi.pyramids[0][-1]
+    source_instance = level.default_instance
+    instances = [
+        sparse_instance(source_instance, "0", [0.0]),
+        sparse_instance(source_instance, "1", [0.0]),
+    ]
+    return Pyramid([Level(instances, level.pixel_spacing)], [])
+
+
+@pytest.fixture
 def non_uniform_pyramid(wsi: WsiDicom) -> Pyramid:
     """Build a two-level pyramid where the levels disagree on focal planes: the
     larger level has two, the smaller has one."""
@@ -355,6 +368,30 @@ class TestInstanceSplitIntegration:
                 "0": [0.0, 1.0],
                 "1": [0.0],
             }
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_instances_per_optical_path_are_combined_with_all_paths(
+        self,
+        instance_per_optical_path_pyramid: Pyramid,
+        write_pyramid: Callable[..., list[UPath]],
+        tmp_path: Path,
+    ):
+        # Arrange
+
+        # Act
+        filepaths = write_pyramid(instance_per_optical_path_pyramid)
+
+        # Assert — one instance that describes both optical paths, and reopens
+        # with both.
+        assert len(filepaths) == 1
+        dataset = dcmread(filepaths[0])
+        assert dataset.NumberOfOpticalPaths == 2
+        assert [
+            str(item.OpticalPathIdentifier) for item in dataset.OpticalPathSequence
+        ] == ["0", "1"]
+        with WsiDicom.open(tmp_path) as saved_wsi:
+            base_level = saved_wsi.pyramids[0].base_level
+            assert sorted(base_level.optical_paths) == ["0", "1"]
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_non_uniform_pyramid_levels_keep_their_own_planes(
