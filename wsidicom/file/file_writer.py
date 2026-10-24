@@ -1196,6 +1196,7 @@ class PyramidFileWriter(BaseFileWriter):
                 paths,
                 source_group.tiled_size,
                 scale,
+                [source_group.instance_at(path, planes[0]).dataset for path in paths],
             )
             transcoder = encoder if transcode else None
             if transcoder is not None:
@@ -1647,6 +1648,10 @@ class GroupFileWriter(BaseFileWriter):
                     paths,
                     sub_instances.tiled_size,
                     1,
+                    [
+                        sub_instances.instance_at(path, planes[0]).dataset
+                        for path in paths
+                    ],
                 )
                 if transcoder is not None:
                     dataset = dataset.update_for_transcoding(transcoder, 1)

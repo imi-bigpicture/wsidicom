@@ -738,6 +738,28 @@ class TestWsiDataset:
         assert identifiers == ["1"]
         assert result.as_dataset().NumberOfOpticalPaths == 1
 
+    def test_as_tiled_full_takes_optical_paths_from_other_sources(self):
+        # Arrange — two sources that each describe one optical path, as when
+        # each optical path of a level is stored in its own instance.
+        first_source = create_main_dataset()
+        first_source.OpticalPathSequence[0].OpticalPathIdentifier = "1"
+        second_source = create_main_dataset()
+        second_source.OpticalPathSequence[0].OpticalPathIdentifier = "2"
+        dataset = WsiDataset(first_source)
+
+        # Act — combine both optical paths into one instance.
+        result = dataset.as_tiled_full(
+            [0.0], ["2", "1"], Size(2, 2), 1, [WsiDataset(second_source)]
+        )
+
+        # Assert — both paths are described, in the order of the frames.
+        identifiers = [
+            str(item.OpticalPathIdentifier)
+            for item in result.as_dataset().OpticalPathSequence
+        ]
+        assert identifiers == ["2", "1"]
+        assert result.as_dataset().NumberOfOpticalPaths == 2
+
     def test_as_tiled_full_drops_slice_spacing_for_single_focal_plane(self):
         # Arrange — a source with multi-plane slice spacing set.
         source = create_main_dataset()
