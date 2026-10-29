@@ -245,6 +245,7 @@ def write_pyramid(
     ) -> list[UPath]:
         writer = PyramidFileWriter(
             pyramid=pyramid,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=1,
@@ -252,7 +253,7 @@ def write_pyramid(
             add_missing_levels=False,
             instance_split=instance_split,
         )
-        return writer.write()
+        return list(writer.write())
 
     return write
 

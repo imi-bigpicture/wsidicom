@@ -402,6 +402,24 @@ with WsiDicom.open("path_to_folder") as slide:
     slide.save("path_to_output", transcoding=JpegSettings())
 ```
 
+`save()` returns the created files as a dictionary from path to a description of the file, as written. A pyramid level is described by a `CreatedLevelFile`, a thumbnail by a `CreatedThumbnailFile`, and a label or overview by a `CreatedAssociatedFile`:
+
+```python
+from wsidicom import CreatedAssociatedFile, CreatedLevelFile, CreatedThumbnailFile
+
+with WsiDicom.open("path_to_folder") as slide:
+    created_files = slide.save("path_to_output")
+
+for path, created_file in created_files.items():
+    match created_file:
+        case CreatedLevelFile():
+            print(path, "level", created_file.level_index, created_file.mpp)
+        case CreatedThumbnailFile():
+            print(path, "thumbnail of pyramid", created_file.pyramid_index)
+        case CreatedAssociatedFile():
+            print(path, created_file.image_type)
+```
+
 ## Settings
 
 Settings are held in the immutable `Settings` object. To change the process-wide default, build a `Settings` and pass it to `set_default_settings`:

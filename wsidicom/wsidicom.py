@@ -41,6 +41,7 @@ from wsidicom.errors import (
     WsiDicomOutOfBoundsError,
 )
 from wsidicom.file import (
+    CreatedFile,
     OffsetTableType,
     WsiDicomFileSource,
     WsiDicomFileTarget,
@@ -263,7 +264,7 @@ class WsiDicom:
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
-    ) -> list[UPath]:
+    ) -> dict[UPath, CreatedFile]:
         """
         Save wsi as DICOM-files in path.
 
@@ -351,8 +352,11 @@ class WsiDicom:
 
         Returns
         -------
-        list[UPath]
-            List of paths of created files.
+        dict[UPath, CreatedFile]
+            The created files, by path, in the order they were written. Each is
+            described as written: a `CreatedLevelFile` for a pyramid level, a
+            `CreatedThumbnailFile` for a thumbnail, and a `CreatedAssociatedFile`
+            for a label or overview. Iterating gives the paths.
 
         Notes
         -----
@@ -408,7 +412,7 @@ class WsiDicom:
             ) as target,
         ):
             target.save(self.pyramids, labels, overviews, include_thumbnails)
-            return target.filepaths
+            return target.created_files
 
     @classmethod
     def is_ready_for_viewing(

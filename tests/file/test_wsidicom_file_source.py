@@ -12,13 +12,43 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import logging
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from pydicom.dataset import Dataset
 from pydicom.fileset import FileSet
+from pydicom.uid import generate_uid
 
 from tests.conftest import WsiTestDefinitions
+from tests.data_gen import create_layer_file, create_main_dataset
 from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
+
+
+@pytest.fixture
+def level_dataset() -> Dataset:
+    return create_main_dataset()
+
+
+@pytest.fixture
+def level_file(tmp_path: Path, level_dataset: Dataset) -> Path:
+    path = tmp_path.joinpath("level.dcm")
+    create_layer_file(path, deepcopy(level_dataset))
+    return path
+
+
+def create_thumbnail_file(
+    path: Path, level_dataset: Dataset, with_pixel_spacing: bool
+) -> Path:
+    dataset = deepcopy(level_dataset)
+    dataset.SOPInstanceUID = generate_uid()
+    dataset.ImageType = ["DERIVED", "PRIMARY", "THUMBNAIL", "RESAMPLED"]
+    if not with_pixel_spacing:
+        pixel_measures = dataset.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence
+        del pixel_measures[0].PixelSpacing
+    create_layer_file(path, dataset)
+    return path
 
 
 @pytest.mark.unittest
@@ -58,4 +88,65 @@ class TestWsiDicomFileSource:
             instances = list(source.level_instances)
 
         # Assert
+        assert len(instances) == 1
+
+    def test_open_uses_thumbnail_with_pixel_spacing(
+        self, tmp_path: Path, level_dataset: Dataset, level_file: Path
+    ):
+        # Arrange
+        thumbnail_file = create_thumbnail_file(
+            tmp_path.joinpath("thumbnail.dcm"), level_dataset, True
+        )
+
+        # Act
+        with WsiDicomFileSource.open([level_file, thumbnail_file]) as source:
+            files = source.files
+            thumbnail_instances = list(source.thumbnail_instances)
+
+        # Assert
+        assert files == [level_file, thumbnail_file]
+        assert len(thumbnail_instances) == 1
+
+    def test_open_ignores_thumbnail_without_pixel_spacing(
+        self,
+        tmp_path: Path,
+        level_dataset: Dataset,
+        level_file: Path,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # Arrange
+        thumbnail_file = create_thumbnail_file(
+            tmp_path.joinpath("thumbnail.dcm"), level_dataset, False
+        )
+
+        # Act
+        with (
+            caplog.at_level(logging.WARNING),
+            WsiDicomFileSource.open([level_file, thumbnail_file]) as source,
+        ):
+            files = source.files
+            thumbnail_instances = list(source.thumbnail_instances)
+
+        # Assert
+        assert files == [level_file]
+        assert thumbnail_instances == []
+        assert "Ignoring thumbnail" in caplog.text
+
+    def test_open_leaves_out_files_of_other_slide(
+        self, tmp_path: Path, level_dataset: Dataset, level_file: Path
+    ):
+        # Arrange
+        other_dataset = deepcopy(level_dataset)
+        other_dataset.SOPInstanceUID = generate_uid()
+        other_dataset.StudyInstanceUID = generate_uid()
+        other_file = tmp_path.joinpath("other.dcm")
+        create_layer_file(other_file, other_dataset)
+
+        # Act
+        with WsiDicomFileSource.open([level_file, other_file]) as source:
+            files = source.files
+            instances = list(source.level_instances)
+
+        # Assert
+        assert files == [level_file]
         assert len(instances) == 1

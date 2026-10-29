@@ -773,14 +773,29 @@ class Label(Instances):
 
 
 class Thumbnail(Instances):
+    def __init__(self, instances: Iterable[WsiInstance]):
+        """Create a group of thumbnail instances.
+
+        Parameters
+        ----------
+        instances: Iterable[WsiInstance]
+            Instances to build the group.
+
+        Raises
+        ------
+        WsiDicomNoResolutionError
+            If the instances have no pixel spacing, which is required for
+            thumbnails. Sources leave out thumbnails without it.
+        """
+        super().__init__(instances)
+        if self._pixel_spacing is None:
+            raise WsiDicomNoResolutionError()
+        self._thumbnail_pixel_spacing = self._pixel_spacing
+
     @property
     def mpp(self) -> SizeMm:
-        if self.pixel_spacing is None:
-            raise WsiDicomNoResolutionError()
         return self.pixel_spacing * 1000.0
 
     @property
     def pixel_spacing(self) -> SizeMm:
-        if self._pixel_spacing is None:
-            raise WsiDicomNoResolutionError()
-        return self._pixel_spacing
+        return self._thumbnail_pixel_spacing

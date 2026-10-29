@@ -14,12 +14,24 @@
 
 """Module for handling DICOM WSI instances read from file."""
 
+from wsidicom.file.created_file import (
+    CreatedAssociatedFile,
+    CreatedFile,
+    CreatedFileBase,
+    CreatedLevelFile,
+    CreatedThumbnailFile,
+)
 from wsidicom.file.io.frame_index import OffsetTableType
 from wsidicom.file.wsidicom_file_source import WsiDicomFileSource
 from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
 from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 
 __all__ = [
+    "CreatedAssociatedFile",
+    "CreatedFile",
+    "CreatedFileBase",
+    "CreatedLevelFile",
+    "CreatedThumbnailFile",
     "OffsetTableType",
     "WsiDicomFileSource",
     "WsiDicomFileTarget",

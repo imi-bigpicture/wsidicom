@@ -24,13 +24,14 @@ from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
+from wsidicom.file.created_file import CreatedFile
 from wsidicom.file.file_writer import (
     BaseFileWriter,
     GroupFileWriter,
     PyramidFileWriter,
 )
 from wsidicom.file.io import OffsetTableType
-from wsidicom.group import Label, Level, Overview, Thumbnail
+from wsidicom.group import Label, Overview, Thumbnail
 from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.options import (
@@ -121,7 +122,7 @@ class WsiDicomFileTarget(Target):
             as_upath(output_path, file_options)
         )
         self._offset_table = offset_table
-        self._filepaths: list[UPath] = []
+        self._created_files: dict[UPath, CreatedFile] = {}
         self._chunk_size = chunk_size
         self._metadata = metadata
         self._replace_metadata = replace_metadata
@@ -141,7 +142,12 @@ class WsiDicomFileTarget(Target):
     @property
     def filepaths(self) -> list[UPath]:
         """Return filepaths for created files."""
-        return self._filepaths
+        return list(self._created_files)
+
+    @property
+    def created_files(self) -> dict[UPath, CreatedFile]:
+        """Return the created files, by path, in the order they were written."""
+        return dict(self._created_files)
 
     @staticmethod
     def _prepare_output_path(output_path: UPath) -> UPath:
@@ -192,9 +198,9 @@ class WsiDicomFileTarget(Target):
         for writer in self._collect_writers(
             pyramids, labels, overviews, include_thumbnails
         ):
-            filepaths = writer.write()
-            self._filepaths.extend(filepaths)
-            self._instance_number += len(filepaths)
+            created_files = writer.write()
+            self._created_files.update(created_files)
+            self._instance_number += len(created_files)
 
     def close(self) -> None:
         pass
@@ -207,14 +213,19 @@ class WsiDicomFileTarget(Target):
         include_thumbnails: bool,
     ) -> Iterator[BaseFileWriter]:
         """Collect all writers needed for the save operation."""
+        all_indices = range(len(pyramids))
         if self._include_pyramids is not None:
-            pyramids_to_save = [pyramids[index] for index in self._include_pyramids]
+            # Through the range, so that negative indices are given as the
+            # position they point to.
+            pyramid_indices = [all_indices[index] for index in self._include_pyramids]
         else:
-            pyramids_to_save = pyramids
+            pyramid_indices = list(all_indices)
 
-        for pyramid in pyramids_to_save:
+        for pyramid_index in pyramid_indices:
+            pyramid = pyramids[pyramid_index]
             yield PyramidFileWriter(
                 pyramid=pyramid,
+                pyramid_index=pyramid_index,
                 output_path=self._output_path,
                 uid_generator=self._uid_generator,
                 max_threads=self._workers,
@@ -233,7 +244,7 @@ class WsiDicomFileTarget(Target):
             )
             if include_thumbnails and pyramid.thumbnails is not None:
                 for group in pyramid.thumbnails.groups:
-                    yield self._make_group_writer(group)
+                    yield self._make_group_writer(group, pyramid_index)
 
         if overviews is not None:
             for overview in overviews:
@@ -244,9 +255,12 @@ class WsiDicomFileTarget(Target):
                 yield self._make_group_writer(label)
 
     def _make_group_writer(
-        self, group: Label | Level | Overview | Thumbnail
+        self,
+        group: Label | Overview | Thumbnail,
+        pyramid_index: int | None = None,
     ) -> GroupFileWriter:
-        """Create a GroupFileWriter for a group."""
+        """Create a GroupFileWriter for a group, with the index of the pyramid it
+        belongs to if it is a thumbnail."""
         return GroupFileWriter(
             group=group,
             output_path=self._output_path,
@@ -258,4 +272,5 @@ class WsiDicomFileTarget(Target):
             metadata=self._metadata,
             replace_metadata=self._replace_metadata,
             instance_split=self._instance_split,
+            pyramid_index=pyramid_index,
         )

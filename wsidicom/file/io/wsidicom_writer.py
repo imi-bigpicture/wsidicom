@@ -80,8 +80,15 @@ class PixelDataWriter(metaclass=ABCMeta):
         dataset: WsiDataset,
         frame_positions: Sequence[int],
         transcoder: Encoder | None,
-    ) -> None:
-        """Finalize the pixel data section."""
+    ) -> WsiDataset:
+        """Finalize the pixel data section.
+
+        Returns
+        -------
+        WsiDataset
+            The dataset as written to the file, which differs from `dataset`
+            where values were patched in when the pixel data was finalized.
+        """
         raise NotImplementedError()
 
 
@@ -118,11 +125,13 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
         dataset: WsiDataset,
         frame_positions: Sequence[int],
         transcoder: Encoder | None,
-    ) -> None:
+    ) -> WsiDataset:
         last_frame_end = self._file.tell()
         if transcoder is not None and transcoder.lossy:
             compressed_size = self._calculate_size(frame_positions, last_frame_end)
-            self._set_compression_ratio(dataset_start, dataset, compressed_size)
+            dataset = self._set_compression_ratio(
+                dataset_start, dataset, compressed_size
+            )
         self._finalize_pixel_data(
             offset_writer,
             pixels_start,
@@ -130,6 +139,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
             dataset_end,
             frame_positions,
         )
+        return dataset
 
     def _write_pixel_data_start(
         self, frame_count: int
@@ -242,7 +252,14 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
 
     def _set_compression_ratio(
         self, dataset_start: int, dataset: WsiDataset, compressed_size: int
-    ) -> None:
+    ) -> WsiDataset:
+        """Patch the ratio of the last compression step into the written dataset.
+
+        Returns
+        -------
+        WsiDataset
+            Copy of `dataset` with the ratio set, as it now stands in the file.
+        """
         uncompressed_size = (
             dataset.frame_count
             * dataset.tile_size.area
@@ -256,6 +273,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
             dataset_start,
             {LossyImageCompressionRatioTag: ratios},
         )
+        return dataset.replace({LossyImageCompressionRatioTag: ratios})
 
 
 class NativePixelDataWriter(PixelDataWriter):
@@ -290,8 +308,8 @@ class NativePixelDataWriter(PixelDataWriter):
         dataset: WsiDataset,
         frame_positions: Sequence[int],
         transcoder: Encoder | None,
-    ) -> None:
-        pass  # Native format has no closing tags
+    ) -> WsiDataset:
+        return dataset  # Native format has no closing tags
 
 
 class WsiDicomWriter:
@@ -357,13 +375,20 @@ class WsiDicomWriter:
         self,
         dataset: WsiDataset,
         transcoder: Encoder | None = None,
-    ) -> None:
-        """Finalize pixel data and close the writer."""
+    ) -> WsiDataset:
+        """Finalize pixel data and close the writer.
+
+        Returns
+        -------
+        WsiDataset
+            The dataset as written to the file, including values patched in
+            when the pixel data was finalized (the lossy compression ratio).
+        """
         if self._dataset_start is None or self._dataset_end is None:
             raise RuntimeError("write_header() must be called before finalize().")
         if self._pixels_start is None:
             raise RuntimeError("start_pixel_data() must be called before finalize().")
-        self._pixel_data_writer.write_pixel_data_end(
+        written = self._pixel_data_writer.write_pixel_data_end(
             self._offset_writer,
             self._pixels_start,
             self._dataset_start,
@@ -373,6 +398,7 @@ class WsiDicomWriter:
             transcoder,
         )
         self.close()
+        return written
 
     def close(self) -> None:
         self._file.close()

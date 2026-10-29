@@ -152,7 +152,16 @@ class WsiDicomWebSource(Source):
                 elif instance.image_type == ImageType.OVERVIEW:
                     self._overview_instances.append(instance)
                 elif instance.image_type == ImageType.THUMBNAIL:
-                    self._thumbnail_instances.append(instance)
+                    if instance.pixel_spacing is None:
+                        # Pixel Spacing is required for thumbnails (PS3.3
+                        # C.7.6.16.2.1). Without it the thumbnail cannot be
+                        # related to the pyramid, so it is not used.
+                        logger.warning(
+                            f"Ignoring thumbnail {instance.identifier} as it has "
+                            "no Pixel Spacing."
+                        )
+                    else:
+                        self._thumbnail_instances.append(instance)
             for annotation_instance in annotation_instances:
                 self._annotation_instances.append(
                     AnnotationInstance.open_dataset(annotation_instance)

@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `CreatedFile` (`CreatedLevelFile`, `CreatedThumbnailFile` or `CreatedAssociatedFile`) describes a written file as written.
+
+### Changed
+
+- `WsiDicom.save()` returns a `dict` from path to `CreatedFile` instead of a list of paths. Indexing such as `created[0]` no longer works.
+- Thumbnails without Pixel Spacing are ignored with a warning when opening, and `Thumbnail` raises `WsiDicomNoResolutionError` if created without it.
+
 ### Fixed
+
+- `WsiDicom.files` listed files left out for not belonging to the slide.
 
 - Code values that Code Value (SH, at most 16 characters) cannot hold, such as SNOMED CT extension concept ids or URN and URL codes, are written as Long Code Value or URN Code Value. Previously such a code made writing metadata fail, and a graphical annotation wrote it as an invalid Code Value. Codes are also read from whichever of the three attributes holds the value, so codes with only Long Code Value or URN Code Value no longer fail to read.
 
