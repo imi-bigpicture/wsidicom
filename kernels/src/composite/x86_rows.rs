@@ -513,19 +513,9 @@ pub(crate) fn widen_u16_row_avx2(src: &[u16], dst: &mut [f32]) {
     }
 }
 
-gen_bilinear!(
-    bilinear_row_u16_avx2,
-    u16 => u16,
-    |src_ptr: *const u16| {
-        // SAFETY: the kernel passes pointers to 8 elements inside a row.
-        let samples = unsafe { _mm_loadu_si128(src_ptr as *const __m128i) };
-        _mm256_cvtepi32_ps(_mm256_cvtepu16_epi32(samples))
-    },
-    store_u16x8_rounded
-);
-// `bilinear_row_u16_avx2` on rows already widened to f32 (exactly, by
-// `widen_u16_row_avx2`): the same FMA chain and rounding, so the same
-// results, without widening each sample once per tap.
+// The uint16 bilinear row on rows already widened to f32 (exactly, by
+// `widen_u16_row_avx2`), so each sample is widened once rather than once per
+// tap.
 gen_bilinear!(
     bilinear_row_widened_u16_avx2,
     f32 => u16,
@@ -716,11 +706,6 @@ mod tests {
             assert_bilinear_rows_match::<u8>(
                 bilinear_row_u8_avx2,
                 scalar_bilinear_row::<u8>,
-                Some(BILINEAR_ROUNDING_STEPS),
-            );
-            assert_bilinear_rows_match::<u16>(
-                bilinear_row_u16_avx2,
-                scalar_bilinear_row::<u16>,
                 Some(BILINEAR_ROUNDING_STEPS),
             );
             assert_bilinear_rows_match::<f32>(

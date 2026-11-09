@@ -25,7 +25,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from wsidicom_kernels import ResizeFilter, downscale, rgb_to_rgbx
+from wsidicom_kernels import ResizeFilter, downscale
 
 Image = pytest.importorskip("PIL.Image")
 
@@ -146,25 +146,3 @@ class TestBoxEqualsPillowReduce:
 
         # Assert
         assert (result.astype(np.int64) == pillow_reduce_u16(image)).all()
-
-
-@pytest.mark.unittest
-class TestRgbToRgbxEqualsPillow:
-    """rgb_to_rgbx against Pillow's RGBX packing."""
-
-    @pytest.mark.parametrize(["height", "width"], SIZES)
-    def test_equals_pillow_packing(
-        self, random_image: RandomImage, height: int, width: int
-    ) -> None:
-        """The color channels equal Pillow's "RGBX" raw packing."""
-        # Arrange
-        rgb = random_image((height, width, 3), np.uint8)
-        pillow = np.frombuffer(
-            Image.fromarray(rgb, "RGB").tobytes("raw", "RGBX"), np.uint8
-        ).reshape(height, width, 4)
-
-        # Act
-        result = rgb_to_rgbx(rgb, 0)
-
-        # Assert
-        assert (result[:, :, :3] == pillow[:, :, :3]).all()

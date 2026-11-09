@@ -166,8 +166,7 @@ binary runs on any CPU — full speed where SIMD exists, correct otherwise. No
 global `target-cpu` needed.
 
 Environment toggles (read once per process): `WSIDICOM_KERNELS_AVX512=0` drops to the
-AVX2 tier, `WSIDICOM_KERNELS_NT=0` disables non-temporal stores on large box outputs,
-and `WSIDICOM_KERNELS_PREFAULT=0` disables the page-prefault helper thread for large
+AVX2 tier, and `WSIDICOM_KERNELS_NT=0` disables non-temporal stores on large box
 outputs.
 
 The GIL is released around every kernel; parallelize across tiles with Python

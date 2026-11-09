@@ -45,7 +45,7 @@ CONVOLUTION_FILTERS = [
 ALL_FILTERS = [ResizeFilter.NEAREST, *CONVOLUTION_FILTERS]
 
 NATIVE_CASES: list[tuple[ImageSize, ImageSize]] = [
-    ((64, 96), (32, 48)),  # exact 2x: phased plan
+    ((64, 96), (32, 48)),  # exact 2x: exact kernels for bilinear and Catmull-Rom
     ((60, 90), (20, 30)),  # exact 3x
     ((64, 96), (16, 24)),  # exact 4x
     ((50, 70), (37, 52)),  # fractional: block plan
