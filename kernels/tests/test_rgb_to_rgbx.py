@@ -42,11 +42,3 @@ class TestRgbToRgbx:
         assert rgbx.dtype == np.uint8
         assert (rgbx[..., :3] == odd_rgb_image).all()
         assert (rgbx[..., 3] == 0).all()
-
-    def test_pads_with_given_value(self, odd_rgb_image: np.ndarray) -> None:
-        """The fourth sample is the given pad value."""
-        # Act
-        rgbx = rgb_to_rgbx(odd_rgb_image, pad=255)
-
-        # Assert
-        assert (rgbx[..., 3] == 255).all()

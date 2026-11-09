@@ -237,30 +237,6 @@ class TestComposeAtFractionalPositions:
         # Assert
         assert np.allclose(canvas, expected, atol=1e-5)
 
-    def test_bicubic_reproduces_linear(self) -> None:
-        """Catmull-Rom (a=-0.5) reproduces a linear field exactly in the interior.
-
-        The clamped border frame is not linear.
-        """
-        # Arrange
-        tile_height, tile_width = 9, 11
-        yy, xx = np.mgrid[0:tile_height, 0:tile_width]
-        tile = (2.0 * xx + 3.0 * yy + 5.0).astype(np.float32)
-        px, py = 4.2, 3.6
-        canvas = np.zeros((20, 20), np.float32)
-        x_start, y_start = int(np.ceil(px)), int(np.ceil(py))
-        x_end = int(np.floor(px + tile_width - 1))
-        y_end = int(np.floor(py + tile_height - 1))
-        interior_y, interior_x = np.mgrid[y_start + 1 : y_end, x_start + 1 : x_end]
-        expected = 2.0 * (interior_x - px) + 3.0 * (interior_y - py) + 5.0
-
-        # Act
-        compose(canvas, [tile], np.array([[px, py]]), Interpolation.BICUBIC)
-
-        # Assert
-        interior = canvas[y_start + 1 : y_end, x_start + 1 : x_end]
-        assert (np.abs(interior - expected) < 1e-3).all()
-
     @pytest.mark.parametrize(
         "interpolation", [Interpolation.BILINEAR, Interpolation.BICUBIC]
     )

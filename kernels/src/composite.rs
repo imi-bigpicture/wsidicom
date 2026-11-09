@@ -20,7 +20,7 @@ use crate::cpu::{has_avx2_fma, has_avx512};
 use crate::rgbx::expand_rgb_rgbx;
 use crate::sample::RGB;
 use geometry::{Canvas, Columns, EDGE_PAD_LEFT, HconvRing, Placement, Rect, Tile, cubic_weights};
-use rows::{ComposeSample, separable_bicubic, vconv4_rgbx};
+use rows::{ComposeSample, scalar_bilinear_row_rgb_to_rgbx, separable_bicubic, vconv4_rgbx};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Interpolation {
@@ -214,7 +214,7 @@ fn compose_tile_rgbx_interior(
         return;
     };
     if filter == Interpolation::Bilinear {
-        compose_bilinear_rgbx(canvas, tile, &placement, pad, scratch);
+        compose_bilinear_rgbx(canvas, tile, &placement, pad);
     } else {
         compose_bicubic_rgbx(canvas, tile, &placement, pad, scratch);
     }
@@ -326,13 +326,7 @@ pub(crate) unsafe fn compose_bilinear_widened(
     }
 }
 
-fn compose_bilinear_rgbx(
-    canvas: &mut Canvas<u8>,
-    tile: &Tile<u8>,
-    placement: &Placement,
-    pad: u8,
-    scratch: &mut Vec<u8>,
-) {
+fn compose_bilinear_rgbx(canvas: &mut Canvas<u8>, tile: &Tile<u8>, placement: &Placement, pad: u8) {
     let span = placement.covered;
     let width = span.width();
     let (src_x0, step, weights) = (
@@ -340,8 +334,6 @@ fn compose_bilinear_rgbx(
         placement.right_tap_step(RGB),
         placement.bilinear_weights(),
     );
-    scratch.clear();
-    scratch.resize(width * RGB, 0);
     for cy in span.y0..=span.y1 {
         canvas.prefetch_next_row(span.x0, cy, span.y1, width);
         let (row0, row1) = {
@@ -382,20 +374,7 @@ fn compose_bilinear_rgbx(
             };
             continue;
         }
-        // SAFETY: taps inside the rows (see `compose_bilinear`);
-        // `scratch` holds `width * RGB` elements.
-        unsafe {
-            <u8 as ComposeSample>::bilinear_row(
-                row0,
-                row1,
-                scratch,
-                src_x0,
-                width * RGB,
-                step,
-                weights,
-            );
-        }
-        expand_rgb_rgbx(scratch, dst, width, pad);
+        scalar_bilinear_row_rgb_to_rgbx(row0, row1, dst, src_x0, width, step, pad, weights);
     }
 }
 
@@ -1018,9 +997,10 @@ mod tests {
         }
     }
 
-    /// The uint16 tile path (rows widened once) writes exactly what the
-    /// row-by-row path writes, for tiles hanging off every edge and positions
-    /// with and without a fraction in each axis.
+    /// The uint16 tile path (rows widened once) writes what the scalar
+    /// row-by-row path writes, within 1 LSB (FMA against separate rounding),
+    /// for tiles hanging off every edge and positions with and without a
+    /// fraction in each axis.
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     #[test]
     fn widened_uint16_bilinear_equals_the_row_path() {
@@ -1062,11 +1042,13 @@ mod tests {
                         }
                         samples
                     };
-                    assert_eq!(
-                        compose(true),
-                        compose(false),
-                        "{width} x {height} x {channels} at ({px}, {py})"
-                    );
+                    let (widened, scalar) = (compose(true), compose(false));
+                    for (index, (got, expected)) in widened.iter().zip(&scalar).enumerate() {
+                        assert!(
+                            got.abs_diff(*expected) <= 1,
+                            "{width} x {height} x {channels} at ({px}, {py}): sample {index}: {got} vs {expected}"
+                        );
+                    }
                 }
             }
         }

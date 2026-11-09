@@ -9,7 +9,8 @@
 //! their own arguments are safe.
 
 use crate::exact::bilinear_x2::{bilinear_x2_scalar, window};
-use crate::exact::x86::{cover_steps, prefetch_next_rows};
+use crate::exact::x86::cover_steps;
+use crate::x86::prefetch_rows_after_window;
 
 /// The AVX2 kernel for one channel. A source pixel pair is one dword, so a
 /// row's even and odd pixels come from each load by a mask and a shift. The
@@ -64,7 +65,7 @@ pub(crate) unsafe fn bilinear_x2_u16_gray_avx2(
         let first = 2 * y as isize - 1;
         let rows: [*const u16; 4] = std::array::from_fn(|tap| row(first + tap as isize));
         let vstep = |k0: usize| {
-            prefetch_next_rows(src_bytes, 2 * y + 3, 2 * width, 4 * k0);
+            prefetch_rows_after_window(src_bytes.as_ptr(), 2 * y + 3, 2 * width, 4 * k0);
             let pairs = |tap: usize| {
                 // SAFETY: k0 + LANES <= ow (cover_steps), so the load's 16
                 // samples from 2 k0 lie within a src row of width = 2 ow
@@ -207,7 +208,7 @@ pub(crate) unsafe fn bilinear_x2_u16_hwc_avx2<const CHANNELS: usize>(
             }
         };
         let vstep = |k0: usize| {
-            prefetch_next_rows(src_bytes, 2 * y + 3, 2 * ws, 4 * k0 * CHANNELS);
+            prefetch_rows_after_window(src_bytes.as_ptr(), 2 * y + 3, 2 * ws, 4 * k0 * CHANNELS);
             for pair_index in [k0, k0 + 2] {
                 let widened = |tap: usize| {
                     let split_words = _mm256_shuffle_epi8(
