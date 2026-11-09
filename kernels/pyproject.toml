@@ -27,6 +27,12 @@ dev = [
     "pillow>=10",
     "hypothesis>=6.100",
 ]
+# The libraries bench/bench_libs.py compares against.
+bench = [
+    "pillow>=10",
+    "opencv-python-headless>=4.8",
+    "pyvips[binary]>=2.2",
+]
 
 [project.urls]
 Repository = "https://github.com/imi-bigpicture/wsidicom"
