@@ -52,3 +52,9 @@ test-command = "pytest {package}/tests -p no:cacheprovider"
 # The manylinux images have no Rust toolchain.
 before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
 environment = { PATH = "$HOME/.cargo/bin:$PATH" }
+
+[[tool.cibuildwheel.overrides]]
+# Rust targets macOS 10.12 or later on x86-64, above cibuildwheel's 10.9
+# default, so the wheel tag must say so.
+select = "*-macosx_x86_64"
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.12" }
