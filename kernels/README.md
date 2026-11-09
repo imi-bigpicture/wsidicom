@@ -233,4 +233,5 @@ touching kernel bounds.
 
 `bench/` holds the benchmarks; `bench/bench.py [filter]` is the everyday one
 (SIMD vs forced-scalar, interleaved, per kernel). Trust ratios measured within
-one run, not absolute times across runs.
+one run, not absolute times across runs. `bench/bench_libs.py` compares against
+Pillow, OpenCV and libvips; install those with `uv sync --group bench`.
