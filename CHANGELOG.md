@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `kernels` extra, installing wsidicom-kernels for faster downsampling, which is then the default downsampler (`DownsamplerOption.KERNELS`).
 - `WsiFile` (`WsiLevelFile`, `WsiThumbnailFile` or `WsiAssociatedFile`) describes a file of a WSI, as opened or as written.
 - `FileUids.matches_concatenation()` tells if two files are parts of the same concatenation.
 - `ImageData.get_tile_byte_ranges()` and `ImageData.get_frame_readers()`, for a source to tell where the encoded tiles of a plane are stored (a `TileByteRanges`) and to give a `FrameReader` for each file to read them with. Both return None by default, and the tiles are then read through the image data as before. Implemented for local DICOM files.
