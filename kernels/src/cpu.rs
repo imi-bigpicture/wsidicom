@@ -65,18 +65,9 @@ pub(crate) const LARGE_OUTPUT_BYTES: usize = 4 << 20;
 pub(crate) const PREFAULT_OUTPUT_BYTES: usize = 8 << 20;
 
 /// An environment switch: on unless set to "0" (unset: `default`).
+#[cfg(target_arch = "x86_64")]
 fn env_flag(name: &str, default: bool) -> bool {
     std::env::var(name).map_or(default, |value| value != "0")
-}
-
-/// `WSIDICOM_KERNELS_PREFAULT=0` disables `with_prefault`'s helper thread.
-/// x86-64 only: on aarch64 macOS the helper was measured without gain (large
-/// outputs come back from recycled pages) and slowed the fastest kernels.
-#[inline]
-fn prefault_enabled() -> bool {
-    static ON: std::sync::LazyLock<bool> =
-        std::sync::LazyLock::new(|| env_flag("WSIDICOM_KERNELS_PREFAULT", true));
-    cfg!(target_arch = "x86_64") && *ON
 }
 
 /// Run a row-range kernel body over `oh` output rows. For a large output, a
@@ -111,7 +102,10 @@ pub(crate) unsafe fn with_prefault(
     const MAX_STORE_SLOP: usize = 64;
     // Polls of `committed` before the waiting kernel yields its core.
     const SPINS_BEFORE_YIELD: u32 = 256;
-    if !(prefault_enabled() && total_bytes >= PREFAULT_OUTPUT_BYTES && oh >= 2) {
+    // x86-64 only: on aarch64 macOS the helper was measured without gain
+    // (large outputs come back from recycled pages) and slowed the fastest
+    // kernels.
+    if !(cfg!(target_arch = "x86_64") && total_bytes >= PREFAULT_OUTPUT_BYTES && oh >= 2) {
         return rows(0, oh);
     }
     // Bytes from dp below which the helper has touched every page (and past
@@ -351,7 +345,7 @@ mod tests {
         let row_bytes = 4096 + 12;
         let oh = PREFAULT_OUTPUT_BYTES.div_ceil(row_bytes) + 7;
         let bands = assert_bands_cover_the_rows(row_bytes, oh);
-        if prefault_enabled() {
+        if cfg!(target_arch = "x86_64") {
             assert!(bands.len() > 1);
         }
         // A single row, however large, is one band.
@@ -382,6 +376,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_arch = "x86_64")]
     #[test]
     fn unset_environment_flags_take_their_default() {
         let name = "WSIDICOM_KERNELS_TEST_FLAG_NEVER_SET";

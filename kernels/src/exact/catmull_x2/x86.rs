@@ -8,7 +8,8 @@
 //! kernels' own buffers at their loop guards.
 
 use super::{catmull_window, catmull_x2_scalar};
-use crate::exact::x86::{cover_steps, prefetch_next_rows};
+use crate::exact::x86::cover_steps;
+use crate::x86::prefetch_rows_after_window;
 
 /// The AVX-512 catmullrom kernel for RGB (`catmull_x2_avx512_split` covers
 /// 1 and 4 channels). Vertical: the symmetric
@@ -118,7 +119,7 @@ pub(crate) unsafe fn catmull_x2_avx512(
             let at = 2 * k0 * channels;
             // Plain loads where 32 bytes fit (the bytes past the step land in
             // lanes the stores leave out); masked at the row end.
-            prefetch_next_rows(src, 2 * y + 5, ws, at);
+            prefetch_rows_after_window(src.as_ptr(), 2 * y + 5, ws, at);
             let fits = at + 32 <= ws;
             let ld = |tap: usize| {
                 // SAFETY: the plain load is taken where its 32 bytes end
@@ -378,7 +379,7 @@ pub(crate) unsafe fn catmull_x2_avx512_split(
         let first = 2 * y as isize - 3;
         let rows: [*const u8; 8] = std::array::from_fn(|tap| row(first + tap as isize));
         let vstep = |k0: usize| {
-            prefetch_next_rows(src, 2 * y + 5, ws, 2 * k0 * channels);
+            prefetch_rows_after_window(src.as_ptr(), 2 * y + 5, ws, 2 * k0 * channels);
             let loaded: [__m512i; 8] = std::array::from_fn(|tap| {
                 // SAFETY: k0 + 32 / channels <= ow (cover_steps): the load's 64
                 // bytes from 2 k0 channels end within 2 ow channels <= ws of a
@@ -627,7 +628,7 @@ pub(crate) unsafe fn catmull_x2_avx2(
             }
         };
         let vstep = |k0: usize| {
-            prefetch_next_rows(src, 2 * y + 5, ws, 2 * k0 * channels);
+            prefetch_rows_after_window(src.as_ptr(), 2 * y + 5, ws, 2 * k0 * channels);
             let loaded: [__m256i; 8] = std::array::from_fn(|tap| load(tap, 2 * k0));
             // Per 128-bit lane, the low unpacks hold samples 0..8, the high
             // ones 8..16 (of 16 per lane).

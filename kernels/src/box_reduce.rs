@@ -181,25 +181,17 @@ pub(crate) trait BoxSample: Sample + pyramid::BlockMean {
         Self: Sized;
 
     /// Halve `src` (width x height) by 2x2 box average -> (out, width/2,
-    /// height/2). Default scalar; every dtype overrides with AVX2/NEON kernels.
+    /// height/2).
     fn box2x(src: &[Self], width: usize, height: usize) -> (Vec<Self>, usize, usize)
     where
-        Self: Sized,
-    {
-        assert_image(src, width, height, 1);
-        box2x_scalar::<Self>(src, width, height)
-    }
+        Self: Sized;
 
     /// Quarter `src` (width x height) by 4x4 box average -> (out, width/4,
     /// height/4), rounded once (closer to the true mean than two rounded 2x
-    /// passes) on every tier. Default scalar; overridden with AVX2/NEON.
+    /// passes) on every tier.
     fn box4x(src: &[Self], width: usize, height: usize) -> (Vec<Self>, usize, usize)
     where
-        Self: Sized,
-    {
-        assert_image(src, width, height, 1);
-        box4x_scalar(src, width, height)
-    }
+        Self: Sized;
 
     /// `box2x` (`channels` 1) or `box2x_hwc` written to `dst_ptr`, the
     /// output rows `dst_stride` samples apart, where this CPU has such a
@@ -220,8 +212,7 @@ pub(crate) trait BoxSample: Sample + pyramid::BlockMean {
         false
     }
 
-    /// Halve an interleaved HWC array (`channels` 3 or 4). Default scalar;
-    /// every dtype overrides with exact AVX2 and NEON (vldN) kernels.
+    /// Halve an interleaved HWC array (`channels` 3 or 4).
     fn box2x_hwc(
         src: &[Self],
         width: usize,
@@ -229,12 +220,7 @@ pub(crate) trait BoxSample: Sample + pyramid::BlockMean {
         channels: usize,
     ) -> (Vec<Self>, usize, usize)
     where
-        Self: Sized,
-    {
-        assert_image(src, width, height, channels);
-        assert_interleaved(channels);
-        box2x_interleaved::<Self>(src, width, height, channels)
-    }
+        Self: Sized;
 
     /// Reduce an interleaved HWC array by 4 (`levels` 2) or 8 (`levels` 3)
     /// in one pass, as the planar pyramid: a 4x mean, for 8x followed by a 2x

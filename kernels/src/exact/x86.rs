@@ -1,5 +1,5 @@
-//! x86 helpers shared by the exact kernels: covering a row in fixed steps,
-//! prefetching the next rows, keeping the even pixels of a row.
+//! x86 helpers shared by the exact kernels: covering a row in fixed steps and
+//! keeping the even pixels of a row.
 //!
 //! # Safety
 //! `keep_even_pixels` requires AVX2 (its dispatch checks it at runtime) and
@@ -19,21 +19,6 @@ pub(crate) fn cover_steps(len: usize, step: usize, step_at: &impl Fn(usize)) {
             break;
         }
         o0 += step;
-    }
-}
-
-/// Prefetches the line at sample `x` of rows `next` and `next + 1` (`ws`
-/// samples apart), the two rows the next output row's window adds, so a
-/// tile not in cache streams ahead of the vertical pass. Past the image the
-/// prefetch is a no-op (it never faults).
-#[inline(always)]
-pub(crate) fn prefetch_next_rows(src: &[u8], next: usize, ws: usize, x: usize) {
-    use std::arch::x86_64::*;
-    let next = src.as_ptr().wrapping_add(next * ws + x);
-    // SAFETY: a prefetch reads nothing architecturally and never faults.
-    unsafe {
-        _mm_prefetch::<_MM_HINT_T0>(next as *const i8);
-        _mm_prefetch::<_MM_HINT_T0>(next.wrapping_add(ws) as *const i8);
     }
 }
 
@@ -183,11 +168,5 @@ mod tests {
                 assert_eq!(dst, expected, "{channels} channels, {kept_pixels} pixels");
             }
         }
-    }
-
-    #[test]
-    fn prefetch_past_the_image_does_not_fault() {
-        let src = vec![0u8; 64];
-        prefetch_next_rows(&src, 1000, 64, 0);
     }
 }
