@@ -21,6 +21,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
+    ClassVar,
     Generic,
     TypeVar,
 )
@@ -55,7 +56,7 @@ class BaseDicomSchema(LoadingSchema[LoadType], Generic[LoadType, DumpType]):
         raise NotImplementedError()
 
     def load(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, data: DumpType, **kwargs
+        self, data: DumpType, **kwargs: Any
     ) -> LoadType:
         """Load object from DumpType."""
         item = super().load(data, **kwargs)  # type: ignore
@@ -63,7 +64,7 @@ class BaseDicomSchema(LoadingSchema[LoadType], Generic[LoadType, DumpType]):
         return item
 
     def dump(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, obj: LoadType, **kwargs
+        self, obj: LoadType, **kwargs: Any
     ) -> DumpType:
         """Dump object to DumpType."""
         dumped = super().dump(obj, **kwargs)
@@ -80,7 +81,7 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
 
     @post_dump
     def post_dump(
-        self, data: dict[str | BaseTag, Any], many: bool, **kwargs
+        self, data: dict[str | BaseTag, Any], many: bool, **kwargs: Any
     ) -> Dataset:
         """Create pydicom Dataset from attributes in dictionary.
 
@@ -176,7 +177,7 @@ class DicomSchema(BaseDicomSchema[LoadType, Dataset]):
         return nested
 
     @pre_load
-    def pre_load(self, dataset: Dataset, many: bool, **kwargs) -> dict[str, Any]:
+    def pre_load(self, dataset: Dataset, many: bool, **kwargs: Any) -> dict[str, Any]:
         """Return dictionary of attributes from dataset."""
         attributes = {}
         for key, field in self.fields.items():
@@ -200,7 +201,7 @@ class ModuleDicomSchema(DicomSchema[LoadType]):
     def module_name(self) -> str:
         raise NotImplementedError()
 
-    def load(self, data: Dataset, **kwargs) -> LoadType:
+    def load(self, data: Dataset, **kwargs: Any) -> LoadType:
         """Load dataset to LoadType. Return default LoadType if validation error."""
         try:
             return super().load(data, **kwargs)
@@ -222,7 +223,7 @@ class ItemField:
 class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
     """Base DICOM schema for sequence of content items (each a dataset)."""
 
-    _dump_only_fields: list[str] = []
+    _dump_only_fields: ClassVar[list[str]] = []
 
     @property
     @abstractmethod
@@ -241,12 +242,13 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
         Fields should be ordered as in TID if applicable. The key is the python name of
         the field, and the value is a ItemField with the DICOM code name of the field,
         the allowed value types (tuple of one or more types), and if the field can
-        hold multiple values (e.g. is a list)."""
+        hold multiple values (e.g. is a list).
+        """
         raise NotImplementedError()
 
     @post_dump
     def post_dump(
-        self, data: dict[str, Dataset | Sequence[Dataset]], many: bool, **kwargs
+        self, data: dict[str, Dataset | Sequence[Dataset]], many: bool, **kwargs: Any
     ) -> list[Dataset]:
         """Format content items into sequence in a dataset."""
         return [
@@ -257,7 +259,7 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
         ]
 
     def _item_field(self, key: str) -> ContentItemDicomField:
-        """The field making the items of `key`.
+        """Return the field making the items of `key`.
 
         Every item of the sequence is made by a field that can also name it: a
         field that cannot is one this schema cannot write, rather than one
@@ -274,7 +276,7 @@ class ItemSequenceDicomSchema(BaseDicomSchema[LoadType, Iterable[Dataset]]):
 
     @pre_load
     def pre_load(
-        self, sequence: Sequence[Dataset], many: bool, **kwargs
+        self, sequence: Sequence[Dataset], many: bool, **kwargs: Any
     ) -> dict[str, Any]:
         """Parse the sequence items from a dataset into a dictionary."""
         data = {

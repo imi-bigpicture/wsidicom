@@ -25,7 +25,7 @@ from wsidicom.geometry import Size
 
 
 class Codec:
-    def __init__(self, decoder: Decoder, encoder: Encoder):
+    def __init__(self, decoder: Decoder, encoder: Encoder) -> None:
         """Create codec with the given decoder and encoder."""
         self._decoder = decoder
         self._encoder = encoder
@@ -64,7 +64,6 @@ class Codec:
         Iterable[UID]
             Supported transfer syntaxes for the given parameters.
         """
-
         if possible_transfer_syntaxes is None:
             possible_transfer_syntaxes = AllTransferSyntaxes
         return (

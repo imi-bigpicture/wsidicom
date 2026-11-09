@@ -63,9 +63,21 @@ line-length = 88
 # E/F: pycodestyle+pyflakes (replaces the old flake8 dep)
 # I: import sorting, UP: pyupgrade, B: bugbear, SIM: simplify
 # S: flake8-bandit security rules (the free SAST baseline)
-select = ["E", "F", "I", "UP", "B", "SIM", "S"]
-# S101: asserts are used throughout for type narrowing and internal invariants.
-ignore = ["S101"]
+# ANN: type annotations, PT: pytest style, N: pep8 naming, RUF: ruff's own,
+# D: docstring format (numpy convention)
+select = ["E", "F", "I", "UP", "B", "SIM", "S", "ANN", "PT", "N", "RUF", "D"]
+ignore = [
+    # Asserts are used throughout for type narrowing and internal invariants.
+    "S101",
+    # Any is needed where values are genuinely untyped (e.g. NDArray[Any]).
+    "ANN401",
+    # Local constants are written in capitals.
+    "N806",
+    # Public exception names are API; renaming them would break callers.
+    "N818",
+    # Docstrings where a name needs one, not on every public item.
+    "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests legitimately use hardcoded credentials (S105/S106), pseudo-random test
@@ -73,6 +85,15 @@ ignore = ["S101"]
 # is managed by a fixture/wrapper rather than a context manager (SIM115), and long
 # lines from embedded test data such as base64 blobs, URLs, and checksums (E501).
 "tests/**" = ["S105", "S106", "S311", "S324", "SIM115", "E501"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.flake8-pytest-style]
+# The tests' style: a list of names, a list of tuples.
+parametrize-names-type = "list"
+parametrize-values-type = "list"
+parametrize-values-row-type = "tuple"
 
 [tool.typos.default.extend-words]
 Professer = "Professer"

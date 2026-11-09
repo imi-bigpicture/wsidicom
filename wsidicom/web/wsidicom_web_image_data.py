@@ -36,7 +36,7 @@ class WsiDicomWebImageData(WsiDicomImageData):
         transfer_syntax: UID,
         decoded_frame_cache: DecodedFrameCache,
         encoded_frame_cache: EncodedFrameCache,
-    ):
+    ) -> None:
         """
         Create WsiDicomWebImageData from  dataset and provided client.
 

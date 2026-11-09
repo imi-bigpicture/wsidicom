@@ -23,18 +23,20 @@ from wsidicom.metadata.sample import (
 )
 
 
-@pytest.fixture()
-def json_slide_identifier(slide_identifier: str | SpecimenIdentifier | None):
+@pytest.fixture
+def json_slide_identifier(
+    slide_identifier: str | SpecimenIdentifier | None,
+) -> str | dict[str, Any] | None:
     if slide_identifier is None:
-        yield None
+        return None
     elif isinstance(slide_identifier, str):
-        yield slide_identifier
+        return slide_identifier
     elif not isinstance(slide_identifier.issuer, UniversalIssuerOfIdentifier):
-        yield {
+        return {
             "value": slide_identifier.value,
         }
     else:
-        yield {
+        return {
             "value": slide_identifier.value,
             "issuer": {
                 "identifier": slide_identifier.issuer.identifier,
@@ -44,9 +46,9 @@ def json_slide_identifier(slide_identifier: str | SpecimenIdentifier | None):
         }
 
 
-@pytest.fixture()
-def json_slide(json_slide_identifier: str | dict[str, Any]):
-    yield {
+@pytest.fixture
+def json_slide(json_slide_identifier: str | dict[str, Any]) -> dict[str, Any]:
+    return {
         "identifier": json_slide_identifier,
         "stainings": [
             {
@@ -228,9 +230,9 @@ def json_slide(json_slide_identifier: str | dict[str, Any]):
 
 
 @pytest.fixture
-def icc_file(icc_profile: bytes, tmp_path: Path):
+def icc_file(icc_profile: bytes, tmp_path: Path) -> Path:
     icc_filename = "test.icc"
     icc_filepath = tmp_path.joinpath(icc_filename)
     with open(tmp_path.joinpath(icc_filepath), "wb") as file:
         file.write(icc_profile)
-    yield icc_filepath
+    return icc_filepath

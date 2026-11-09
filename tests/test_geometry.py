@@ -29,7 +29,7 @@ from wsidicom.metadata import ImageCoordinateSystem, ImageType
 
 @pytest.mark.unittest
 class TestWsiDicomGeometry:
-    def test_size_subtraction(self):
+    def test_size_subtraction(self) -> None:
         # Arrange
         size_0 = Size(10, 10)
         size_1 = Size(1, 1)
@@ -40,7 +40,7 @@ class TestWsiDicomGeometry:
         # Assert
         assert result == Size(9, 9)
 
-    def test_size_multiplication(self):
+    def test_size_multiplication(self) -> None:
         # Arrange
         size_0 = Size(10, 10)
 
@@ -50,7 +50,7 @@ class TestWsiDicomGeometry:
         # Assert
         assert result == Size(20, 20)
 
-    def test_size_division(self):
+    def test_size_division(self) -> None:
         # Arrange
         size_0 = Size(10, 10)
 
@@ -60,7 +60,7 @@ class TestWsiDicomGeometry:
         # Assert
         assert result == Size(3, 3)
 
-    def test_size_to_tuple(self):
+    def test_size_to_tuple(self) -> None:
         # Arrange
         size_0 = Size(10, 10)
 
@@ -81,7 +81,7 @@ class TestWsiDicomGeometry:
     )
     def test_size_any_less_than(
         self, size_1: Size, size_2: Size, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         # Act
         result = size_1.any_less_than(size_2)
@@ -103,7 +103,7 @@ class TestWsiDicomGeometry:
     )
     def test_size_any_less_than_or_equal(
         self, size_1: Size, size_2: Size, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         # Act
         result = size_1.any_less_than_or_equal(size_2)
@@ -122,7 +122,7 @@ class TestWsiDicomGeometry:
     )
     def test_size_any_greater_than(
         self, size_1: Size, size_2: Size, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         # Act
         result = size_1.any_greater_than(size_2)
@@ -144,7 +144,7 @@ class TestWsiDicomGeometry:
     )
     def test_size_any_greater_than_or_equal(
         self, size_1: Size, size_2: Size, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         # Act
         result = size_1.any_greater_than_or_equal(size_2)
@@ -163,7 +163,7 @@ class TestWsiDicomGeometry:
     )
     def test_size_all_less_than(
         self, size_1: Size, size_2: Size, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         # Act
         result = size_1.all_less_than(size_2)
@@ -185,7 +185,7 @@ class TestWsiDicomGeometry:
     )
     def test_size_all_less_than_or_equal(
         self, size_1: Size, size_2: Size, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         # Act
         result = size_1.all_less_than_or_equal(size_2)
@@ -204,7 +204,7 @@ class TestWsiDicomGeometry:
     )
     def test_size_all_greater_than(
         self, size_1: Size, size_2: Size, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         # Act
         result = size_1.all_greater_than(size_2)
@@ -226,7 +226,7 @@ class TestWsiDicomGeometry:
     )
     def test_size_all_greater_than_or_equal(
         self, size_1: Size, size_2: Size, expected_result: bool
-    ):
+    ) -> None:
         # Arrange
         # Act
         result = size_1.all_greater_than_or_equal(size_2)
@@ -238,7 +238,9 @@ class TestWsiDicomGeometry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(30, 20)), (Size(3, 2), Point(30, 20)), (2, Point(20, 20))],
     )
-    def test_point_multiplication(self, by: Point | Size | int, expected_result: Point):
+    def test_point_multiplication(
+        self, by: Point | Size | int, expected_result: Point
+    ) -> None:
         # Arrange
         point = Point(10, 10)
 
@@ -248,7 +250,7 @@ class TestWsiDicomGeometry:
         # Assert
         assert result == expected_result
 
-    def test_point_division(self):
+    def test_point_division(self) -> None:
         # Arrange
         point = Point(12, 10)
         expected_result = Point(4, 3)
@@ -268,7 +270,7 @@ class TestWsiDicomGeometry:
             (Size(2, 2), Point(0, 0)),
         ],
     )
-    def test_point_mod(self, by: Point | Size, expected_result: Point):
+    def test_point_mod(self, by: Point | Size, expected_result: Point) -> None:
         # Arrange
         point = Point(10, 10)
 
@@ -282,7 +284,9 @@ class TestWsiDicomGeometry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(13, 12)), (2, Point(12, 12)), (Size(3, 2), Point(13, 12))],
     )
-    def test_point_addition(self, by: Point | Size | int, expected_result: Point):
+    def test_point_addition(
+        self, by: Point | Size | int, expected_result: Point
+    ) -> None:
         # Arrange
         point = Point(10, 10)
 
@@ -296,7 +300,9 @@ class TestWsiDicomGeometry:
         ["by", "expected_result"],
         [(Point(3, 2), Point(7, 8)), (2, Point(8, 8)), (Size(3, 2), Point(7, 8))],
     )
-    def test_point_subtraction(self, by: Point | Size | int, expected_result: Point):
+    def test_point_subtraction(
+        self, by: Point | Size | int, expected_result: Point
+    ) -> None:
         # Arrange
         point = Point(10, 10)
 
@@ -306,7 +312,7 @@ class TestWsiDicomGeometry:
         # Assert
         assert result == expected_result
 
-    def test_point_max(self):
+    def test_point_max(self) -> None:
         # Arrange
         point_1 = Point(10, 1)
         point_2 = Point(2, 12)
@@ -318,7 +324,7 @@ class TestWsiDicomGeometry:
         # Assert
         assert result == expected_result
 
-    def test_point_min(self):
+    def test_point_min(self) -> None:
         # Arrange
         point_1 = Point(10, 1)
         point_2 = Point(2, 12)
@@ -330,7 +336,7 @@ class TestWsiDicomGeometry:
         # Assert
         assert result == expected_result
 
-    def test_point_to_tuple(self):
+    def test_point_to_tuple(self) -> None:
         # Arrange
         point = Point(1, 2)
         expected_result = (1, 2)
@@ -341,7 +347,7 @@ class TestWsiDicomGeometry:
         # Assert
         assert result == expected_result
 
-    def test_region_mm(self):
+    def test_region_mm(self) -> None:
         # Arrange
         # Act
         region = RegionMm(PointMm(1.0, 2.0), SizeMm(3.0, 4.0))
@@ -350,7 +356,7 @@ class TestWsiDicomGeometry:
         assert region.start == PointMm(1.0, 2.0)
         assert region.end == PointMm(4.0, 6.0)
 
-    def test_region_mm_subtract(self):
+    def test_region_mm_subtract(self) -> None:
         # Arrange
         region = RegionMm(PointMm(1.0, 2.0), SizeMm(3.0, 4.0))
 
@@ -361,7 +367,7 @@ class TestWsiDicomGeometry:
         assert region.start == PointMm(0.0, 0.0)
         assert region.end == PointMm(3.0, 4.0)
 
-    def test_region_mm_add(self):
+    def test_region_mm_add(self) -> None:
         # Arrange
         region = RegionMm(PointMm(1.0, 2.0), SizeMm(3.0, 4.0))
 
@@ -415,7 +421,7 @@ class TestWsiDicomGeometry:
         origin: ImageCoordinateSystem,
         expected_start: PointMm,
         expected_end: PointMm,
-    ):
+    ) -> None:
         # Arrange
         # Act
         transformed_region = origin.slide_to_image(region)
@@ -435,7 +441,9 @@ class TestWsiDicomGeometry:
             (Region(Point(4, 7), Size(2, 6)), Point(14, 27), 3.0),
         ],
     )
-    def test_region_zoom(self, region: Region, expected_start: Point, zoom: float):
+    def test_region_zoom(
+        self, region: Region, expected_start: Point, zoom: float
+    ) -> None:
         # Arrange
         # Act
         zoomed_region = region.zoom(zoom)
@@ -457,7 +465,7 @@ class TestWsiDicomGeometry:
     )
     def test_region_mm_zoom(
         self, region: RegionMm, expected_start: PointMm, zoom: float
-    ):
+    ) -> None:
         # Arrange
         # Act
         zoomed_region = region.zoom(zoom)
@@ -493,7 +501,7 @@ class TestWsiDicomGeometry:
     )
     def test_inside_crop(
         self, region: Region, point: Point, size: Size, expected_result: Region
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -526,7 +534,9 @@ class TestImageCoordinateSystemDefaultFor:
             (270, ImageType.LABEL, PointMm(0, 75)),
         ],
     )
-    def test_default_for_standard_slide(self, rotation, image_type, expected_origin):
+    def test_default_for_standard_slide(
+        self, rotation: int, image_type: ImageType, expected_origin: PointMm
+    ) -> None:
         # Act
         system = ImageCoordinateSystem.default_for(rotation, image_type)
 
@@ -544,7 +554,9 @@ class TestImageCoordinateSystemDefaultFor:
             (180, ImageType.LABEL, PointMm(30, 90)),
         ],
     )
-    def test_default_for_custom_slide_size(self, rotation, image_type, expected_origin):
+    def test_default_for_custom_slide_size(
+        self, rotation: int, image_type: ImageType, expected_origin: PointMm
+    ) -> None:
         # Act
         system = ImageCoordinateSystem.default_for(
             rotation,
@@ -556,7 +568,7 @@ class TestImageCoordinateSystemDefaultFor:
         # Assert
         assert system.origin == expected_origin
 
-    def test_default_for_passes_z_offset(self):
+    def test_default_for_passes_z_offset(self) -> None:
         # Act
         system = ImageCoordinateSystem.default_for(0, ImageType.VOLUME, z_offset=5.0)
 
@@ -564,7 +576,9 @@ class TestImageCoordinateSystemDefaultFor:
         assert system.z_offset == 5.0
 
     @pytest.mark.parametrize("rotation", [1, 45, 360, -90])
-    def test_default_for_unsupported_rotation_raises(self, rotation):
+    def test_default_for_unsupported_rotation_raises(self, rotation: int) -> None:
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(
+            ValueError, match=r"Unsupported default image coordinate system rotation"
+        ):
             ImageCoordinateSystem.default_for(rotation, ImageType.VOLUME)

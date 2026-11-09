@@ -64,7 +64,7 @@ class WsiDicomFileTarget(Target):
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
-    ):
+    ) -> None:
         """
         Create a WsiDicomFileTarget.
 

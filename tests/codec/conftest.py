@@ -20,8 +20,11 @@ from wsidicom.codec import Settings
 
 
 def max_band_rms(a: np.ndarray, b: np.ndarray) -> float:
-    """Maximum per-channel RMS difference between two images, normalized to an
-    8-bit (0-255) scale so the same tolerance applies at any bit depth."""
+    """Return the maximum per-channel RMS difference between two images.
+
+    The difference is normalized to an 8-bit (0-255) scale so the same tolerance
+    applies at any bit depth.
+    """
     scale = 255.0 / np.iinfo(a.dtype).max if np.issubdtype(a.dtype, np.integer) else 1.0
     diff = (a.astype(np.float64) - b.astype(np.float64)) * scale
     if diff.ndim == 3:
@@ -35,7 +38,7 @@ def image(settings: Settings) -> np.ndarray:
 
 
 @pytest.fixture
-def encoded(settings: Settings):
+def encoded(settings: Settings) -> bytes:
     file_path = EncodedTestData.get_filepath_for_encoder_settings(settings)
     with open(file_path, "rb") as file:
         return file.read()

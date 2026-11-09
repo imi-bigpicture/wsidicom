@@ -18,4 +18,4 @@ from wsidicom.series.pyramid import Pyramid
 from wsidicom.series.pyramids import Pyramids
 from wsidicom.series.series import Labels, Overviews
 
-__all__ = ["Pyramid", "Pyramids", "Labels", "Overviews"]
+__all__ = ["Labels", "Overviews", "Pyramid", "Pyramids"]

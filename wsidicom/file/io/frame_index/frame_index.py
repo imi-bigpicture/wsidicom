@@ -27,7 +27,9 @@ class FrameIndex:
     array each and a frame becomes a pair of numbers only when one is asked for.
     """
 
-    def __init__(self, positions: NDArray[np.int64], lengths: NDArray[np.int64]):
+    def __init__(
+        self, positions: NDArray[np.int64], lengths: NDArray[np.int64]
+    ) -> None:
         """Create a frame index.
 
         Parameters

@@ -12,8 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import itertools
 import struct
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from io import BytesIO
 
 import pytest
@@ -36,12 +37,12 @@ from wsidicom.tags import (
 
 
 @pytest.fixture
-def transfer_syntax():
-    yield JPEGBaseline8Bit
+def transfer_syntax() -> UID:
+    return JPEGBaseline8Bit
 
 
 @pytest.fixture
-def buffer(transfer_syntax: UID, placeholder_path: UPath):
+def buffer(transfer_syntax: UID, placeholder_path: UPath) -> Iterator[WsiDicomWriteIO]:
     with WsiDicomWriteIO(
         BytesIO(), filepath=placeholder_path, transfer_syntax=transfer_syntax
     ) as buffer:
@@ -49,14 +50,14 @@ def buffer(transfer_syntax: UID, placeholder_path: UPath):
 
 
 @pytest.fixture
-def positions():
-    yield [0, 100, 200, 300, 400]
+def positions() -> list[int]:
+    return [0, 100, 200, 300, 400]
 
 
 @pytest.mark.unittest
 class TestOffsetTableWriter:
     @pytest.mark.parametrize("frame_count", [1, 8])
-    def test_reserve_bot(self, buffer: WsiDicomWriteIO, frame_count: int):
+    def test_reserve_bot(self, buffer: WsiDicomWriteIO, frame_count: int) -> None:
         # Arrange
         writer = BotWriter(buffer)
 
@@ -72,10 +73,10 @@ class TestOffsetTableWriter:
         assert length == BOT_ITEM_LENGTH * frame_count
         for _frame in range(frame_count):
             assert buffer.read_UL() == 0
-        self.assertEndOfFile(buffer)
+        self.assert_end_of_file(buffer)
 
     @pytest.mark.parametrize("frame_count", [1, 8])
-    def test_reserve_eot(self, buffer: WsiDicomWriteIO, frame_count: int):
+    def test_reserve_eot(self, buffer: WsiDicomWriteIO, frame_count: int) -> None:
         # Arrange
         writer = EotWriter(buffer)
 
@@ -103,9 +104,9 @@ class TestOffsetTableWriter:
         assert length == EOT_ITEM_LENGTH * frame_count
         for _frame in range(frame_count):
             assert struct.unpack("<Q", buffer.read(EOT_ITEM_LENGTH))[0] == 0
-        self.assertEndOfFile(buffer)
+        self.assert_end_of_file(buffer)
 
-    def test_write_bot(self, buffer: WsiDicomWriteIO, positions: Sequence[int]):
+    def test_write_bot(self, buffer: WsiDicomWriteIO, positions: Sequence[int]) -> None:
         # Arrange
         # Write pixel data tag and reserve bot
         writer = BotWriter(buffer)
@@ -119,7 +120,7 @@ class TestOffsetTableWriter:
         buffer.seek(0)
         BasicOffsetTableFrameIndexParser(buffer, 0, len(positions))
 
-    def test_write_eot(self, buffer: WsiDicomWriteIO, positions: Sequence[int]):
+    def test_write_eot(self, buffer: WsiDicomWriteIO, positions: Sequence[int]) -> None:
         # Arrange
         # Reserve Eot, write pixel data tag and empty bot
         writer = EotWriter(buffer)
@@ -137,7 +138,7 @@ class TestOffsetTableWriter:
 
     def test_write_eot_lengths_are_of_the_frames(
         self, buffer: WsiDicomWriteIO, positions: Sequence[int]
-    ):
+    ) -> None:
         """The lengths state the frames, not the distance from one to the next.
 
         A frame position is where the item tag and length introducing the frame are,
@@ -151,7 +152,7 @@ class TestOffsetTableWriter:
         last_frame_end = 600
         expected = [
             next_position - position - HEADER_BYTES
-            for position, next_position in zip(positions, positions[1:], strict=False)
+            for position, next_position in itertools.pairwise(positions)
         ]
         expected.append(last_frame_end - positions[-1] - HEADER_BYTES)
         writer = EotWriter(buffer)
@@ -178,6 +179,6 @@ class TestOffsetTableWriter:
         assert written == expected
 
     @staticmethod
-    def assertEndOfFile(file: WsiDicomWriteIO):
+    def assert_end_of_file(file: WsiDicomWriteIO) -> None:
         with pytest.raises(EOFError):
             file.read(1, need_exact_length=True)

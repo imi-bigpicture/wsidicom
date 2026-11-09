@@ -23,13 +23,16 @@ from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
 class FullTileIndex(TileIndex):
-    """Index for mapping tile position to frame number for datasets containing
-    full tiles. Pixel data tiles are ordered by column, row, z and path, thus
-    the frame index for a tile can directly be calculated."""
+    """Index for mapping tile position to frame number for full tiles.
 
-    def __init__(self, datasets: Sequence[WsiDataset]):
-        """Create full tile index for frames in datasets. Requires equal tile
-        size for all tile planes.
+    For datasets containing full tiles. Pixel data tiles are ordered by column, row,
+    z and path, thus the frame index for a tile can directly be calculated.
+    """
+
+    def __init__(self, datasets: Sequence[WsiDataset]) -> None:
+        """Create full tile index for frames in datasets.
+
+        Requires equal tile size for all tile planes.
 
         Parameters
         ----------
@@ -63,8 +66,10 @@ class FullTileIndex(TileIndex):
         return string
 
     def get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Return frame index for a Point tile, z coordinate, and optical path
-        from full tile index. Assumes that tile, z, and path are valid.
+        """Return frame index for a Point tile, z coordinate, and optical path.
+
+        The index is from the full tile index. Assumes that tile, z, and path are
+        valid.
 
         Parameters
         ----------
@@ -92,8 +97,9 @@ class FullTileIndex(TileIndex):
     def _read_focal_planes_from_datasets(
         self,
     ) -> list[float]:
-        """Return list of focal planes in datasets. Values in Pixel Measures
-        Sequence are in mm.
+        """Return list of focal planes in datasets.
+
+        Values in Pixel Measures Sequence are in mm.
 
         Returns
         -------
@@ -129,8 +135,9 @@ class FullTileIndex(TileIndex):
     @lru_cached_method()
     def _get_optical_path_index(self, path: str) -> int:
         """Return index of the optical path in instance.
-        This assumes that all files in a concatenated set contains all the
-        optical path identifiers of the set.
+
+        This assumes that all files in a concatenated set contains all the optical path
+        identifiers of the set.
 
         Parameters
         ----------

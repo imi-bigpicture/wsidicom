@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from hashlib import md5
 from pathlib import Path
 from typing import Any
@@ -36,9 +36,12 @@ from wsidicom.thread import ReadExecutor
 
 
 @pytest.fixture(autouse=True)
-def pin_pillow_downsampler():
-    """Pin the Pillow downsampler for read goldens. Pillow's resampling is stable
-    across platforms, so its checksums are the golden values."""
+def pin_pillow_downsampler() -> Iterator[None]:
+    """Pin the Pillow downsampler for read goldens.
+
+    Pillow's resampling is stable across platforms, so its checksums are the golden
+    values.
+    """
     with use_settings(Settings(preferred_downsampler=DownsamplerOption.PILLOW)):
         yield
 
@@ -72,7 +75,7 @@ class TestWsiDicomIntegration:
         region: dict[str, Any],
         threads: int | None,
         use_shared: bool,
-    ):
+    ) -> None:
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type, use_shared)
@@ -101,7 +104,7 @@ class TestWsiDicomIntegration:
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: dict[str, Any],
         threads: int | None,
-    ):
+    ) -> None:
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
@@ -131,7 +134,7 @@ class TestWsiDicomIntegration:
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: dict[str, Any],
         threads: int | None,
-    ):
+    ) -> None:
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
@@ -159,7 +162,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: dict[str, Any],
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
         location = (region["location"]["x"], region["location"]["y"])
@@ -179,7 +182,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         read_executor: ReadExecutor,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
         base_level = wsi.pyramids[0].base_level
@@ -226,7 +229,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: dict[str, Any],
-    ):
+    ) -> None:
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
@@ -253,7 +256,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: dict[str, Any],
-    ):
+    ) -> None:
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
@@ -279,7 +282,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         region: dict[str, Any],
-    ):
+    ) -> None:
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
@@ -302,7 +305,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         expected_level_count: int,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
 
@@ -323,7 +326,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         expected_label_hash: bool | None,
-    ):
+    ) -> None:
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
@@ -348,7 +351,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         expected_overview_hash: str | None,
-    ):
+    ) -> None:
         # Arrange
         skip_if_hash_unstable(transfer_syntax)
         wsi = wsi_factory(wsi_name, input_type)
@@ -365,7 +368,7 @@ class TestWsiDicomIntegration:
     @pytest.mark.parametrize("wsi_path", WsiTestDefinitions.folders())
     def test_save_replace_label(
         self, wsi_path: Path, input_type: WsiInputType, tmp_path: Path
-    ):
+    ) -> None:
         # Arrange
         if not wsi_path.exists():
             pytest.skip(f"Folder {wsi_path} for wsi does not exist.")
@@ -386,7 +389,7 @@ class TestWsiDicomIntegration:
         wsi_name: str,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
 
@@ -403,7 +406,7 @@ class TestWsiDicomIntegration:
         wsi_name: str,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
 
@@ -425,7 +428,7 @@ class TestWsiDicomSave:
         tmp_path: Path,
         concatenation: ConcatenationByFrames | None,
         monkeypatch: pytest.MonkeyPatch,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         monkeypatch.chdir(tmp_path)

@@ -79,39 +79,39 @@ from wsidicom.metadata import (
 )
 
 
-@pytest.fixture()
-def slide_identifier():
-    yield "slide identifier"
+@pytest.fixture
+def slide_identifier() -> str:
+    return "slide identifier"
 
 
 @pytest.fixture
-def manufacturer():
-    yield "manufacturer"
+def manufacturer() -> str:
+    return "manufacturer"
 
 
 @pytest.fixture
-def model_name():
-    yield "model name"
+def model_name() -> str:
+    return "model name"
 
 
 @pytest.fixture
-def serial_number():
-    yield "serial number"
+def serial_number() -> str:
+    return "serial number"
 
 
 @pytest.fixture
-def versions():
-    yield ["versions"]
+def versions() -> list[str]:
+    return ["versions"]
 
 
-@pytest.fixture()
+@pytest.fixture
 def equipment(
     manufacturer: str | None,
     model_name: str | None,
     serial_number: str | None,
     versions: Sequence[str] | None,
-):
-    yield Equipment(
+) -> Equipment:
+    return Equipment(
         manufacturer,
         model_name,
         serial_number,
@@ -119,22 +119,22 @@ def equipment(
     )
 
 
-@pytest.fixture()
-def lossy_compressions():
-    yield [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 0.5)]
+@pytest.fixture
+def lossy_compressions() -> list[LossyCompression]:
+    return [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 0.5)]
 
 
-@pytest.fixture()
-def image_comments():
-    yield "comments"
+@pytest.fixture
+def image_comments() -> str:
+    return "comments"
 
 
-@pytest.fixture()
-def image_contains_phi():
-    yield False
+@pytest.fixture
+def image_contains_phi() -> bool:
+    return False
 
 
-@pytest.fixture()
+@pytest.fixture
 def image(
     acquisition_datetime: datetime.datetime | None,
     focus_method: FocusMethod | None,
@@ -144,8 +144,8 @@ def image(
     focal_plane_spacing: float | None,
     depth_of_field: float | None,
     lossy_compressions: Sequence[LossyCompression] | None,
-):
-    yield Image(
+) -> Image:
+    return Image(
         acquisition_datetime,
         focus_method,
         extended_depth_of_field,
@@ -157,22 +157,22 @@ def image(
     )
 
 
-@pytest.fixture()
-def pyramid_uid():
-    yield UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423")
+@pytest.fixture
+def pyramid_uid() -> UID:
+    return UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423")
 
 
-@pytest.fixture()
-def pyramid_description():
-    yield "pyramid description"
+@pytest.fixture
+def pyramid_description() -> str:
+    return "pyramid description"
 
 
-@pytest.fixture()
-def pyramid_label():
-    yield "pyramid label"
+@pytest.fixture
+def pyramid_label() -> str:
+    return "pyramid label"
 
 
-@pytest.fixture()
+@pytest.fixture
 def pyramid(
     image: Image,
     optical_path: OpticalPath,
@@ -181,8 +181,8 @@ def pyramid(
     pyramid_label: str,
     image_contains_phi: bool,
     image_comments: str | None,
-):
-    yield Pyramid(
+) -> Pyramid:
+    return Pyramid(
         image,
         [optical_path],
         pyramid_uid,
@@ -193,38 +193,38 @@ def pyramid(
     )
 
 
-@pytest.fixture()
-def label_text():
-    yield "text"
+@pytest.fixture
+def label_text() -> str:
+    return "text"
 
 
-@pytest.fixture()
-def label_barcode():
-    yield "barcode"
+@pytest.fixture
+def label_barcode() -> str:
+    return "barcode"
 
 
-@pytest.fixture()
-def label_contains_phi():
-    yield True
+@pytest.fixture
+def label_contains_phi() -> bool:
+    return True
 
 
-@pytest.fixture()
-def label_pixel_spacing():
-    yield None
+@pytest.fixture
+def label_pixel_spacing() -> None:
+    return None
 
 
-@pytest.fixture()
-def label_lossy_compressions():
-    yield [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 2)]
+@pytest.fixture
+def label_lossy_compressions() -> list[LossyCompression]:
+    return [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 2)]
 
 
-@pytest.fixture()
+@pytest.fixture
 def label_image(
     label_image_coordinate_system: ImageCoordinateSystem | None,
     label_pixel_spacing: SizeMm | None,
     label_lossy_compressions: Sequence[LossyCompression] | None,
-):
-    yield Image(
+) -> Image:
+    return Image(
         None,
         None,
         None,
@@ -236,11 +236,11 @@ def label_image(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def label_optical_path(
     icc_profile: bytes,
-):
-    yield OpticalPath(
+) -> OpticalPath:
+    return OpticalPath(
         "identifier",
         "description",
         [IlluminationCode("Brightfield illumination")],
@@ -248,12 +248,12 @@ def label_optical_path(
     )
 
 
-@pytest.fixture()
-def label_image_comments():
-    yield "comments"
+@pytest.fixture
+def label_image_comments() -> str:
+    return "comments"
 
 
-@pytest.fixture()
+@pytest.fixture
 def label(
     label_text: str | None,
     label_barcode: str | None,
@@ -261,8 +261,8 @@ def label(
     label_image: Image,
     label_optical_path: OpticalPath,
     label_image_comments: str | None,
-):
-    yield Label(
+) -> Label:
+    return Label(
         label_text,
         label_barcode,
         label_image,
@@ -272,33 +272,33 @@ def label(
     )
 
 
-@pytest.fixture()
-def overview_contains_phi():
-    yield True
+@pytest.fixture
+def overview_contains_phi() -> bool:
+    return True
 
 
-@pytest.fixture()
-def overview_pixel_spacing():
-    yield None
+@pytest.fixture
+def overview_pixel_spacing() -> None:
+    return None
 
 
-@pytest.fixture()
-def overview_lossy_compressions():
-    yield [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 2)]
+@pytest.fixture
+def overview_lossy_compressions() -> list[LossyCompression]:
+    return [LossyCompression(LossyCompressionIsoStandard.JPEG_LOSSY, 2)]
 
 
-@pytest.fixture()
-def overview_image_contains_slide_label():
-    yield True
+@pytest.fixture
+def overview_image_contains_slide_label() -> bool:
+    return True
 
 
-@pytest.fixture()
+@pytest.fixture
 def overview_image(
     overview_image_coordinate_system: ImageCoordinateSystem | None,
     overview_pixel_spacing: SizeMm | None,
     overview_lossy_compressions: Sequence[LossyCompression] | None,
-):
-    yield Image(
+) -> Image:
+    return Image(
         None,
         None,
         None,
@@ -310,11 +310,11 @@ def overview_image(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def overview_optical_path(
     icc_profile: bytes,
-):
-    yield OpticalPath(
+) -> OpticalPath:
+    return OpticalPath(
         "identifier",
         "description",
         [IlluminationCode("Brightfield illumination")],
@@ -322,20 +322,20 @@ def overview_optical_path(
     )
 
 
-@pytest.fixture()
-def overview_image_comments():
-    yield "comments"
+@pytest.fixture
+def overview_image_comments() -> str:
+    return "comments"
 
 
-@pytest.fixture()
+@pytest.fixture
 def overview(
     overview_contains_phi: bool,
     overview_image_contains_slide_label: bool,
     overview_image: Image,
     overview_optical_path: OpticalPath,
     overview_image_comments: str | None,
-):
-    yield Overview(
+) -> Overview:
+    return Overview(
         overview_image,
         [overview_optical_path],
         overview_image_contains_slide_label,
@@ -344,9 +344,9 @@ def overview(
     )
 
 
-@pytest.fixture()
-def light_path_filter():
-    yield LightPathFilter(
+@pytest.fixture
+def light_path_filter() -> LightPathFilter:
+    return LightPathFilter(
         [LightPathFilterCode("Green optical filter")],
         500,
         400,
@@ -354,9 +354,9 @@ def light_path_filter():
     )
 
 
-@pytest.fixture()
-def image_path_filter():
-    yield ImagePathFilter(
+@pytest.fixture
+def image_path_filter() -> ImagePathFilter:
+    return ImagePathFilter(
         [
             ImagePathFilterCode("Red optical filter"),
         ],
@@ -366,14 +366,14 @@ def image_path_filter():
     )
 
 
-@pytest.fixture()
-def objectives():
-    yield Objectives([LenseCode("High power non-immersion lens")], 10.0, 20.0, 0.5)
+@pytest.fixture
+def objectives() -> Objectives:
+    return Objectives([LenseCode("High power non-immersion lens")], 10.0, 20.0, 0.5)
 
 
-@pytest.fixture()
-def lut():
-    yield Lut(
+@pytest.fixture
+def lut() -> Lut:
+    return Lut(
         [ConstantLutSegment(0, 256)],
         [ConstantLutSegment(0, 256)],
         [LinearLutSegment(0, 255, 256)],
@@ -381,12 +381,12 @@ def lut():
     )
 
 
-@pytest.fixture()
-def icc_profile():
-    yield bytes([0x00, 0x01, 0x02, 0x03])
+@pytest.fixture
+def icc_profile() -> bytes:
+    return bytes([0x00, 0x01, 0x02, 0x03])
 
 
-@pytest.fixture()
+@pytest.fixture
 def optical_path(
     illumination: IlluminationColorCode | float,
     light_path_filter: LightPathFilter,
@@ -394,8 +394,8 @@ def optical_path(
     objectives: Objectives,
     lut: Lut,
     icc_profile: bytes,
-):
-    yield OpticalPath(
+) -> OpticalPath:
+    return OpticalPath(
         "identifier",
         "description",
         [IlluminationCode("Brightfield illumination")],
@@ -409,22 +409,22 @@ def optical_path(
 
 
 @pytest.fixture
-def species_description():
-    yield Code("value", "scheme", "meaning")
+def species_description() -> Code:
+    return Code("value", "scheme", "meaning")
 
 
 @pytest.fixture
-def patient_deidentification_method():
-    yield Code("value", "scheme", "meaning")
+def patient_deidentification_method() -> Code:
+    return Code("value", "scheme", "meaning")
 
 
-@pytest.fixture()
+@pytest.fixture
 def patient(
     species_description: str | Code,
     patient_deidentification_method: str | Code | None,
-):
+) -> Patient:
 
-    yield Patient(
+    return Patient(
         "name",
         "identifier",
         datetime.date(2023, 8, 5),
@@ -439,91 +439,91 @@ def patient(
     )
 
 
-@pytest.fixture()
-def date_time():
-    yield datetime.datetime(2023, 8, 5)
+@pytest.fixture
+def date_time() -> datetime.datetime:
+    return datetime.datetime(2023, 8, 5)
 
 
-@pytest.fixture()
-def description():
-    yield "description"
+@pytest.fixture
+def description() -> str:
+    return "description"
 
 
-@pytest.fixture()
-def medium():
-    yield SpecimenEmbeddingMediaCode("Paraffin wax")
+@pytest.fixture
+def medium() -> SpecimenEmbeddingMediaCode:
+    return SpecimenEmbeddingMediaCode("Paraffin wax")
 
 
-@pytest.fixture()
-def fixative():
-    yield SpecimenFixativesCode("Neutral Buffered Formalin")
+@pytest.fixture
+def fixative() -> SpecimenFixativesCode:
+    return SpecimenFixativesCode("Neutral Buffered Formalin")
 
 
-@pytest.fixture()
-def collection_method():
-    yield SpecimenCollectionProcedureCode("Specimen collection")
+@pytest.fixture
+def collection_method() -> SpecimenCollectionProcedureCode:
+    return SpecimenCollectionProcedureCode("Specimen collection")
 
 
-@pytest.fixture()
-def sampling_method():
-    yield SpecimenSamplingProcedureCode("Dissection")
+@pytest.fixture
+def sampling_method() -> SpecimenSamplingProcedureCode:
+    return SpecimenSamplingProcedureCode("Dissection")
 
 
-@pytest.fixture()
-def processing_method():
-    yield SpecimenPreparationStepsCode("Specimen clearing")
+@pytest.fixture
+def processing_method() -> SpecimenPreparationStepsCode:
+    return SpecimenPreparationStepsCode("Specimen clearing")
 
 
-@pytest.fixture()
+@pytest.fixture
 def embedding(
     date_time: datetime.datetime, description: str, medium: SpecimenEmbeddingMediaCode
-):
-    yield Embedding(
+) -> Embedding:
+    return Embedding(
         medium,
         date_time,
         description,
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def fixation(
     date_time: datetime.datetime, description: str, fixative: SpecimenFixativesCode
-):
-    yield Fixation(
+) -> Fixation:
+    return Fixation(
         fixative,
         date_time,
         description,
     )
 
 
-@pytest.fixture()
-def identifier():
-    yield "identifier"
+@pytest.fixture
+def identifier() -> str:
+    return "identifier"
 
 
-@pytest.fixture()
+@pytest.fixture
 def collection(
     date_time: datetime.datetime,
     description: str,
     collection_method: SpecimenCollectionProcedureCode,
-):
-    yield Collection(
+) -> Collection:
+    return Collection(
         collection_method,
         date_time,
         description,
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def sampling(
     extracted_specimen: Specimen,
     date_time: datetime.datetime,
     description: str,
     location: SamplingLocation,
     sampling_method: SpecimenSamplingProcedureCode,
-):
+) -> Sampling:
     assert extracted_specimen.type is not None
-    yield Sampling(
+    return Sampling(
         extracted_specimen,
         sampling_method,
         extracted_specimen.type,
@@ -534,59 +534,61 @@ def sampling(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def processing(
     date_time: datetime.datetime,
     description: str,
     processing_method: SpecimenPreparationStepsCode,
-):
-    yield Processing(
+) -> Processing:
+    return Processing(
         processing_method,
         date_time,
         description,
     )
 
 
-@pytest.fixture()
-def substances():
-    yield [
+@pytest.fixture
+def substances() -> list[SpecimenStainsCode]:
+    return [
         SpecimenStainsCode("hematoxylin stain"),
         SpecimenStainsCode("water soluble eosin stain"),
     ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def staining(
     substances: str | Sequence[SpecimenStainsCode],
     date_time: datetime.datetime,
     description: str,
-):
-    yield Staining(
+) -> Staining:
+    return Staining(
         substances,
         date_time=date_time,
         description=description,
     )
 
 
-@pytest.fixture()
-def storage(date_time: datetime.datetime, description: str):
-    yield Storage(
+@pytest.fixture
+def storage(date_time: datetime.datetime, description: str) -> Storage:
+    return Storage(
         date_time=date_time,
         description=description,
     )
 
 
-@pytest.fixture()
-def receiving(date_time: datetime.datetime, description: str):
-    yield Receiving(
+@pytest.fixture
+def receiving(date_time: datetime.datetime, description: str) -> Receiving:
+    return Receiving(
         date_time=date_time,
         description=description,
     )
 
 
-@pytest.fixture()
-def extracted_specimen(collection: Collection, identifier: str | SpecimenIdentifier):
-    yield Specimen(
+@pytest.fixture
+def extracted_specimen(
+    collection: Collection, identifier: str | SpecimenIdentifier
+) -> Specimen:
+    return Specimen(
         identifier,
         collection,
         AnatomicPathologySpecimenTypesCode("Gross specimen"),
@@ -594,13 +596,13 @@ def extracted_specimen(collection: Collection, identifier: str | SpecimenIdentif
     )
 
 
-@pytest.fixture()
-def sample(extracted_specimen: Specimen):
+@pytest.fixture
+def sample(extracted_specimen: Specimen) -> Sample:
     processing = Processing(
         SpecimenPreparationStepsCode("Specimen clearing"),
         datetime.datetime(2023, 8, 5),
     )
-    yield Sample(
+    return Sample(
         "sample",
         [
             extracted_specimen.sample(
@@ -615,9 +617,9 @@ def sample(extracted_specimen: Specimen):
     )
 
 
-@pytest.fixture()
-def slide_sample(sample: Sample):
-    yield SlideSample(
+@pytest.fixture
+def slide_sample(sample: Sample) -> SlideSample:
+    return SlideSample(
         "slide sample",
         [Code("value", "scheme", "meaning")],
         sample.sample(
@@ -630,8 +632,8 @@ def slide_sample(sample: Sample):
     )
 
 
-@pytest.fixture()
-def slide(slide_identifier: str | SpecimenIdentifier, staining: Staining):
+@pytest.fixture
+def slide(slide_identifier: str | SpecimenIdentifier, staining: Staining) -> Slide:
     part_1 = Specimen(
         "part 1",
         Collection(
@@ -713,14 +715,14 @@ def slide(slide_identifier: str | SpecimenIdentifier, staining: Staining):
         SampleLocalization(description="right"),
     )
 
-    yield Slide(
+    return Slide(
         identifier=slide_identifier, stainings=[staining], samples=[sample_1, sample_2]
     )
 
 
-@pytest.fixture()
-def series():
-    yield Series(
+@pytest.fixture
+def series() -> Series:
+    return Series(
         UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
         1,
         "Description",
@@ -728,9 +730,9 @@ def series():
     )
 
 
-@pytest.fixture()
-def study():
-    yield Study(
+@pytest.fixture
+def study() -> Study:
+    return Study(
         UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445423"),
         "identifier",
         datetime.date(2023, 8, 5),
@@ -741,72 +743,72 @@ def study():
     )
 
 
-@pytest.fixture()
-def illumination():
-    yield IlluminationColorCode("Full Spectrum")
+@pytest.fixture
+def illumination() -> IlluminationColorCode:
+    return IlluminationColorCode("Full Spectrum")
 
 
-@pytest.fixture()
-def acquisition_datetime():
-    yield datetime.datetime(2023, 8, 5)
+@pytest.fixture
+def acquisition_datetime() -> datetime.datetime:
+    return datetime.datetime(2023, 8, 5)
 
 
-@pytest.fixture()
-def focus_method():
-    yield FocusMethod.AUTO
+@pytest.fixture
+def focus_method() -> FocusMethod:
+    return FocusMethod.AUTO
 
 
-@pytest.fixture()
-def extended_depth_of_field():
-    yield ExtendedDepthOfField(5, 0.5)
+@pytest.fixture
+def extended_depth_of_field() -> ExtendedDepthOfField:
+    return ExtendedDepthOfField(5, 0.5)
 
 
-@pytest.fixture()
-def image_coordinate_system():
-    yield ImageCoordinateSystem(PointMm(20.0, 30.0), 180)
+@pytest.fixture
+def image_coordinate_system() -> ImageCoordinateSystem:
+    return ImageCoordinateSystem(PointMm(20.0, 30.0), 180)
 
 
-@pytest.fixture()
-def label_image_coordinate_system():
-    yield ImageCoordinateSystem(PointMm(25, 75), 180)
+@pytest.fixture
+def label_image_coordinate_system() -> ImageCoordinateSystem:
+    return ImageCoordinateSystem(PointMm(25, 75), 180)
 
 
-@pytest.fixture()
-def overview_image_coordinate_system():
-    yield ImageCoordinateSystem(PointMm(25, 75), 180)
+@pytest.fixture
+def overview_image_coordinate_system() -> ImageCoordinateSystem:
+    return ImageCoordinateSystem(PointMm(25, 75), 180)
 
 
-@pytest.fixture()
-def pixel_spacing():
-    yield None
+@pytest.fixture
+def pixel_spacing() -> None:
+    return None
 
 
-@pytest.fixture()
-def focal_plane_spacing():
-    yield None
+@pytest.fixture
+def focal_plane_spacing() -> None:
+    return None
 
 
-@pytest.fixture()
-def depth_of_field():
-    yield None
+@pytest.fixture
+def depth_of_field() -> None:
+    return None
 
 
-@pytest.fixture()
-def image_type():
-    yield ImageType.VOLUME
+@pytest.fixture
+def image_type() -> ImageType:
+    return ImageType.VOLUME
 
 
-@pytest.fixture()
+@pytest.fixture
 def frame_of_reference_uid() -> UID:
     return UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445425")
 
 
-@pytest.fixture()
+@pytest.fixture
 def dimension_organization_uids() -> list[UID]:
     return [UID("1.2.826.0.1.3680043.8.498.11522107373528810886192809691753445426")]
 
 
-@pytest.fixture()
+@pytest.fixture
 def wsi_metadata(
     study: Study,
     series: Series,
@@ -818,8 +820,8 @@ def wsi_metadata(
     overview: Overview,
     frame_of_reference_uid: UID,
     dimension_organization_uids: list[UID],
-):
-    yield WsiMetadata(
+) -> WsiMetadata:
+    return WsiMetadata(
         study=study,
         series=series,
         patient=patient,

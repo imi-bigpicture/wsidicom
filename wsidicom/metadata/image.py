@@ -89,9 +89,11 @@ class ImageCoordinateSystem:
         return Orientation.from_rotation(self.rotation)
 
     def image_to_slide(self, image: GeometryType) -> GeometryType:
-        """Translate a geometry (PointMm or RegionMm) from image coordinate system
-        (origin at image top-left corner) to slide coordinate system (origin at
-        slide corner).
+        """Translate a geometry from image to slide coordinate system.
+
+        The geometry is a PointMm or RegionMm. The image coordinate system has its
+        origin at the image top-left corner, the slide coordinate system at the slide
+        corner.
 
         Parameters
         ----------
@@ -111,9 +113,11 @@ class ImageCoordinateSystem:
         return RegionMm(start, SizeMm(end.x - start.x, end.y - start.y))
 
     def slide_to_image(self, slide: GeometryType) -> GeometryType:
-        """Translate a geometry (PointMm or RegionMm) from slide coordinate system
-        (origin at slide corner) to image coordinate system (origin at image top-left
-        corner).
+        """Translate a geometry from slide to image coordinate system.
+
+        The geometry is a PointMm or RegionMm. The slide coordinate system has its
+        origin at the slide corner, the image coordinate system at the image top-left
+        corner.
 
         Parameters
         ----------
@@ -140,8 +144,9 @@ class ImageCoordinateSystem:
     def to_other_coordinate_system(
         self, other: "ImageCoordinateSystem", image: GeometryType
     ) -> GeometryType:
-        """Translate a geometry (PointMm or RegionMm) from this image coordinate system
-        to another image coordinate system.
+        """Translate a geometry from this to another image coordinate system.
+
+        The geometry is a PointMm or RegionMm.
 
         Parameters
         ----------
@@ -166,8 +171,9 @@ class ImageCoordinateSystem:
         rotation: float,
         z_offset: float | None,
     ) -> "ImageCoordinateSystem":
-        """Create an image coordinate system that places the image in the middle of the
-        slide.
+        """Create an image coordinate system placing the image mid-slide.
+
+        The image is placed in the middle of the slide.
 
         Parameters
         ----------
@@ -266,8 +272,11 @@ class ImageCoordinateSystem:
 
     @staticmethod
     def _corner_for_rotation(region: RegionMm, rotation: float) -> PointMm:
-        """Return the first-pixel position for an image filling ``region`` rotated by
-        ``rotation`` degrees, i.e. the region corner the top-left pixel maps to."""
+        """Return the first-pixel position for an image filling ``region``.
+
+        The image is rotated by ``rotation`` degrees, and the position is the region
+        corner the top-left pixel maps to.
+        """
         if rotation == 0:
             return region.start
         if rotation == 90:

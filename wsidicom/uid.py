@@ -117,8 +117,9 @@ class FileUids:
 
     @property
     def identifier(self) -> UID:
-        """Return identifier for the instance the file belongs to. Either its
-        own instance uid or, if not none, the concnatenation uid.
+        """Return identifier for the instance the file belongs to.
+
+        Either its own instance uid or, if not none, the concnatenation uid.
 
         Returns
         -------
@@ -130,8 +131,10 @@ class FileUids:
         return self.instance
 
     def __eq__(self, other: object) -> bool:
-        """Return true if concatenation uid is not none, matches other
-        concatenation uid and base uids match.
+        """Return true if the concatenation and base uids match.
+
+        The concatenation uid must not be none and match the other concatenation
+        uid, and the base uids must match.
 
         Parameters
         ----------

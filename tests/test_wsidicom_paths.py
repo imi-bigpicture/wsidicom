@@ -25,7 +25,7 @@ from wsidicom.paths import as_local_path, as_upath
 @pytest.mark.unittest
 class TestAsPath:
     @pytest.mark.parametrize(
-        "path, expected",
+        ["path", "expected"],
         [
             # Relative string paths
             ("relative-output", Path.cwd().joinpath("relative-output")),

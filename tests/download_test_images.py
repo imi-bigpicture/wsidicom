@@ -135,7 +135,7 @@ def get_slide_dir() -> Path:
     return test_dir_folder
 
 
-def check_checksum(file_path: Path, checksum: str):
+def check_checksum(file_path: Path, checksum: str) -> None:
     sha_256 = sha256()
     with open(file_path, "rb") as file:
         while chunk := file.read(8092):
@@ -149,7 +149,7 @@ def check_checksum(file_path: Path, checksum: str):
             print(f"{file_path} checksum OK")
 
 
-def download_file(url: str, filename: Path):
+def download_file(url: str, filename: Path) -> None:
     with requests.get(url, stream=True, timeout=30) as request:
         request.raise_for_status()
         with open(filename, "wb") as file:
@@ -157,7 +157,7 @@ def download_file(url: str, filename: Path):
                 file.write(chunk)
 
 
-def main():
+def main() -> None:
     print("Downloading and/or checking testdata.")
     slide_dir = get_slide_dir()
     for slide in SLIDES.values():

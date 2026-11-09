@@ -245,9 +245,7 @@ class Size:
         )
 
     def ceil(self) -> "Size":
-        return Size(
-            width=int(math.ceil(self.width)), height=int(math.ceil(self.height))
-        )
+        return Size(width=math.ceil(self.width), height=math.ceil(self.height))
 
     @property
     def area(self) -> int:
@@ -398,8 +396,9 @@ class Region:
         )
 
     def crop(self, other_region: Union[Size, "Region"]) -> "Region":
-        """Crop other_region to be inside this region. If the other_region is
-        'Size', a region starting from Point(0, 0) is created.
+        """Crop other_region to be inside this region.
+
+        If the other_region is 'Size', a region starting from Point(0, 0) is created.
 
         Parameters
         ----------
@@ -500,7 +499,9 @@ class RegionMm:
 
 
 class Orientation:
-    def __init__(self, orientation: tuple[float, float, float, float, float, float]):
+    def __init__(
+        self, orientation: tuple[float, float, float, float, float, float]
+    ) -> None:
         if orientation[0] != -orientation[4] or orientation[1] != orientation[3]:
             logger.warning(
                 f"Orientation {orientation} is not "
@@ -528,13 +529,13 @@ class Orientation:
     def values(self) -> tuple[float, float, float, float, float, float]:
         return self._orientation
 
-    def apply_transform(self, point: PointMm):
+    def apply_transform(self, point: PointMm) -> PointMm:
         return PointMm(
             self._transform[0][0] * point.x + self._transform[0][1] * point.y,
             self._transform[1][0] * point.x + self._transform[1][1] * point.y,
         )
 
-    def apply_reverse_transform(self, point: PointMm):
+    def apply_reverse_transform(self, point: PointMm) -> PointMm:
         return PointMm(
             self._reverse[0][0] * point.x + self._reverse[0][1] * point.y,
             self._reverse[1][0] * point.x + self._reverse[1][1] * point.y,

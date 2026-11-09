@@ -16,7 +16,7 @@
 
 import dataclasses
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, ClassVar, cast
 
 from marshmallow import Schema, fields, post_load
 
@@ -50,7 +50,7 @@ class BaseLutSegmentJsonSchema(Schema):
     _load_class: type[LinearLutSegment | ConstantLutSegment | DiscreteLutSegment]
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs) -> LutSegment:
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> LutSegment:
         """Return a object of given load class using the defined dataclass fields."""
         return self._load_class(
             **{
@@ -82,14 +82,14 @@ class ConstantLutSegmentJsonSchema(BaseLutSegmentJsonSchema):
 class LutSegmentJsonSchema(Schema):
     """Mapping segment type to schema."""
 
-    _type_to_schema_mapping: dict[type[LutSegment], type[Schema]] = {
+    _type_to_schema_mapping: ClassVar[dict[type[LutSegment], type[Schema]]] = {
         DiscreteLutSegment: DiscreteLutSegmentJsonSchema,
         LinearLutSegment: LinearLutSegmentJsonSchema,
         ConstantLutSegment: ConstantLutSegmentJsonSchema,
     }
 
     """Mapping key in serialized segment to schema."""
-    _key_to_schema_mapping: dict[str, type[Schema]] = {
+    _key_to_schema_mapping: ClassVar[dict[str, type[Schema]]] = {
         "values": DiscreteLutSegmentJsonSchema,
         "start_value": LinearLutSegmentJsonSchema,
         "value": ConstantLutSegmentJsonSchema,
@@ -98,8 +98,8 @@ class LutSegmentJsonSchema(Schema):
     def dump(
         self,
         obj: LutSegment | Iterable[LutSegment],
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         if isinstance(obj, LutSegment):
             return self._subschema_dump(obj)
         return [self._subschema_dump(item) for item in obj]
@@ -107,8 +107,8 @@ class LutSegmentJsonSchema(Schema):
     def load(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         data: Mapping[str, Any] | Iterable[Mapping[str, Any]],
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> LutSegment | list[LutSegment]:
         if isinstance(data, Mapping):
             return self._subschema_load(data)
         return [self._subschema_load(step) for step in data]
@@ -127,10 +127,11 @@ class LutSegmentJsonSchema(Schema):
         assert isinstance(loaded, LutSegment)
         return loaded
 
-    def _subschema_dump(self, segment: LutSegment):
+    def _subschema_dump(self, segment: LutSegment) -> dict[str, Any]:
         """Select a schema and dump the step using the schema."""
         schema = self._type_to_schema_mapping[type(segment)]
-        return schema().dump(segment, many=False)
+        # A schema dumps a single object, as many=False, to a dictionary.
+        return cast(dict[str, Any], schema().dump(segment, many=False))
 
 
 class LutJsonSchema(LoadingSchema[Lut]):
@@ -140,7 +141,7 @@ class LutJsonSchema(LoadingSchema[Lut]):
     data_type = NpUIntDTypeField(data_key="bits")
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Lut]:
         return Lut
 
 
@@ -151,7 +152,7 @@ class LightPathFilterJsonSchema(LoadingSchema[LightPathFilter]):
     high_pass = fields.Float(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[LightPathFilter]:
         return LightPathFilter
 
 
@@ -162,12 +163,12 @@ class ImagePathFilterJsonSchema(LoadingSchema[ImagePathFilter]):
     high_pass = fields.Float(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[ImagePathFilter]:
         return ImagePathFilter
 
 
 class ObjectivesJsonSchema(LoadingSchema[Objectives]):
-    """Set of lens conditions for optical path"""
+    """Set of lens conditions for optical path."""
 
     lenses = fields.List(JsonFieldFactory.concept_code(LenseCode), allow_none=True)
     condenser_power = fields.Float(allow_none=True)
@@ -175,7 +176,7 @@ class ObjectivesJsonSchema(LoadingSchema[Objectives]):
     objective_numerical_aperture = fields.Float(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Objectives]:
         return Objectives
 
 

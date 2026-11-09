@@ -73,7 +73,7 @@ class TestSampleDicom:
     @pytest.mark.parametrize(
         ["slide_sample_ids", "slide_sample_uids", "specimen_ids"],
         [
-            [
+            (
                 ["slide sample"],
                 [
                     UID(
@@ -81,8 +81,8 @@ class TestSampleDicom:
                     )
                 ],
                 ["specimen"],
-            ],
-            [
+            ),
+            (
                 ["slide sample 1", "slide sample 2"],
                 [
                     UID(
@@ -93,7 +93,7 @@ class TestSampleDicom:
                     ),
                 ],
                 ["specimen 1", "specimen 2"],
-            ],
+            ),
         ],
     )
     @pytest.mark.parametrize(
@@ -119,7 +119,7 @@ class TestSampleDicom:
         ],
     )
     @pytest.mark.parametrize(
-        "primary_anatomic_structures", ([], [Code("value", "schema", "meaning")])
+        "primary_anatomic_structures", [[], [Code("value", "schema", "meaning")]]
     )
     def test_slide_sample_from_dataset(
         self,
@@ -142,7 +142,7 @@ class TestSampleDicom:
         detailed_description: str | None,
         specimen_container: ContainerTypeCode | None,
         block_container: ContainerTypeCode | None,
-    ):
+    ) -> None:
         # Arrange
         descriptions: list[Dataset] = []
         dataset = Dataset()
@@ -230,7 +230,7 @@ class TestSampleDicom:
     @pytest.mark.parametrize(
         ["slide_sample_ids", "slide_sample_uids", "specimen_ids"],
         [
-            [
+            (
                 ["slide sample"],
                 [
                     UID(
@@ -238,8 +238,8 @@ class TestSampleDicom:
                     )
                 ],
                 ["specimen"],
-            ],
-            [
+            ),
+            (
                 ["slide sample 1", "slide sample 2"],
                 [
                     UID(
@@ -250,7 +250,7 @@ class TestSampleDicom:
                     ),
                 ],
                 ["specimen 1", "specimen 2"],
-            ],
+            ),
         ],
     )
     @pytest.mark.parametrize(
@@ -276,7 +276,7 @@ class TestSampleDicom:
         ],
     )
     @pytest.mark.parametrize(
-        "primary_anatomic_structures", ([], [Code("value", "schema", "meaning")])
+        "primary_anatomic_structures", [[], [Code("value", "schema", "meaning")]]
     )
     def test_slide_sample_to_dataset(
         self,
@@ -299,7 +299,7 @@ class TestSampleDicom:
         detailed_description: str | None,
         specimen_container: ContainerTypeCode | None,
         block_container: ContainerTypeCode | None,
-    ):
+    ) -> None:
         # Arrange
         slide_samples = []
         for slide_sample_id, slide_sample_uid, specimen_id in zip(
@@ -602,7 +602,7 @@ class TestSampleDicom:
         block_id: str,
         block_sampling_method: SpecimenSamplingProcedureCode,
         block_type: AnatomicPathologySpecimenTypesCode,
-    ):
+    ) -> None:
         # Arrange
         sampling = create_sampling_dataset(
             SamplingDicomModel(
@@ -664,7 +664,7 @@ class TestSampleDicom:
         slide_sample_issuer: str | None,
         processing_issuer: str | None,
         processing_expected: bool,
-    ):
+    ) -> None:
         # Arrange
         if slide_sample_issuer is not None:
             local_slide_sample_issuer = LocalIssuerOfIdentifier(slide_sample_issuer)
@@ -715,7 +715,7 @@ class TestSampleDicom:
             for description in dataset.SpecimenDescriptionSequence
         ]
         with use_settings(Settings(strict_specimen_identifier_check=setting)):
-            slide_samples, stainings = SpecimenDicomParser().parse_descriptions(models)
+            slide_samples, _stainings = SpecimenDicomParser().parse_descriptions(models)
 
         # Assert
         assert len(slide_samples) == 1
@@ -731,7 +731,7 @@ class TestSampleDicom:
             assert isinstance(slide_sample.steps[0], Processing)
             assert slide_sample.steps[0].method == processing_1_method
 
-    def test_parse_specimen_without_type_as_unknown_sampling(self):
+    def test_parse_specimen_without_type_as_unknown_sampling(self) -> None:
         # Arrange: a specimen without a type, so that the sampling of it into
         # the block is not written and the block has no stated parent.
         specimen = Specimen(

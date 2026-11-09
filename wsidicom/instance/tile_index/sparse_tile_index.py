@@ -27,10 +27,12 @@ from wsidicom.instance.tile_index.tile_index import TileIndex
 
 
 class SparseTilePlane:
-    """Hold frame indices for the tiles in a sparse tiled file. Empty (sparse)
-    frames are represented by -1."""
+    """Hold frame indices for the tiles in a sparse tiled file.
 
-    def __init__(self, tiled_size: Size):
+    Empty (sparse) frames are represented by -1.
+    """
+
+    def __init__(self, tiled_size: Size) -> None:
         """Create a SparseTilePlane of specified size.
 
         Parameters
@@ -68,7 +70,7 @@ class SparseTilePlane:
         columns: NDArray[np.int64],
         rows: NDArray[np.int64],
         frame_indices: NDArray[np.int64],
-    ):
+    ) -> None:
         """Add the frame index of many tiles at once.
 
         Parameters
@@ -87,18 +89,21 @@ class SparseTilePlane:
 
 
 class SparseTileIndex(TileIndex):
-    """Index for mapping tile position to frame number for datasets containing
-    sparse tiles. Frame indices are retrieved from tile position, z, and path
-    by finding the corresponding matching SparseTilePlane (z and path) and
-    returning the frame index at tile position. If the tile is missing (due to
-    the sparseness), -1 is returned."""
+    """Index for mapping tile position to frame number for sparse tiles.
 
-    def __init__(self, datasets: Sequence[WsiDataset]):
-        """Create sparse tile index for frames in datasets. Requires equal tile
-        size for all tile planes. Pixel data tiles are identified by the Per
-        Frame Functional Groups Sequence that contains tile column, row, z,
-        path, and frame index. These are stored in a SparseTilePlane
-        (one plane for every combination of z and path).
+    For datasets containing sparse tiles. Frame indices are retrieved from tile
+    position, z, and path by finding the corresponding matching SparseTilePlane (z
+    and path) and returning the frame index at tile position. If the tile is
+    missing (due to the sparseness), -1 is returned.
+    """
+
+    def __init__(self, datasets: Sequence[WsiDataset]) -> None:
+        """Create sparse tile index for frames in datasets.
+
+        Requires equal tile size for all tile planes. Pixel data tiles are identified by
+        the Per Frame Functional Groups Sequence that contains tile column, row, z,
+        path, and frame index. These are stored in a SparseTilePlane (one plane for
+        every combination of z and path).
 
         Parameters
         ----------
@@ -129,8 +134,7 @@ class SparseTileIndex(TileIndex):
         )
 
     def get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Return frame index for a Point tile, z coordinate, and optical
-        path.
+        """Return frame index for a Point tile, z coordinate, and optical path.
 
         Parameters
         ----------

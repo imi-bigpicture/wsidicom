@@ -32,5 +32,5 @@ class OverviewJsonSchema(LoadingSchema[Overview]):
     comments = fields.String(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Overview]:
         return Overview

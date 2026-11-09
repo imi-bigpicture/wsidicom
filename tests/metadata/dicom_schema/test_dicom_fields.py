@@ -94,7 +94,7 @@ class DefaultingSchema(DicomSchema):
 
 @pytest.mark.unittest
 class TestDicomFields:
-    def test_code_content_item_dicom_field_serialize(self):
+    def test_code_content_item_dicom_field_serialize(self) -> None:
         # Arrange
         code = Code("1234", "DCM", "Test Code")
         field = CodeItemDicomField(Code)
@@ -114,7 +114,7 @@ class TestDicomFields:
         )
         assert serialized.ConceptCodeSequence[0].CodeMeaning == code.meaning
 
-    def test_code_content_item_dicom_field_deserialize(self):
+    def test_code_content_item_dicom_field_deserialize(self) -> None:
         # Arrange
         dataset = Dataset()
         dataset.ValueType = "CODE"
@@ -134,7 +134,7 @@ class TestDicomFields:
         assert deserialized.scheme_designator == "DCM"
         assert deserialized.meaning == "Test Code"
 
-    def test_text_content_item_dicom_field_serialize(self):
+    def test_text_content_item_dicom_field_serialize(self) -> None:
         # Arrange
         value = "test"
         field = StringItemDicomField()
@@ -149,7 +149,7 @@ class TestDicomFields:
         assert "TextValue" in serialized
         assert serialized.TextValue == value
 
-    def test_text_content_item_dicom_field_deserialize(self):
+    def test_text_content_item_dicom_field_deserialize(self) -> None:
         # Arrange
         dataset = Dataset()
         dataset.ValueType = "TEXT"
@@ -163,7 +163,7 @@ class TestDicomFields:
         assert isinstance(deserialized, str)
         assert deserialized == "test"
 
-    def test_datetime_content_item_dicom_field_serialize(self):
+    def test_datetime_content_item_dicom_field_serialize(self) -> None:
         # Arrange
         value = datetime.datetime(2021, 1, 1)
         field = DateTimeItemDicomField()
@@ -178,7 +178,7 @@ class TestDicomFields:
         assert "DateTime" in serialized
         assert serialized.DateTime == value
 
-    def test_datetime_content_item_dicom_field_deserialize(self):
+    def test_datetime_content_item_dicom_field_deserialize(self) -> None:
         # Arrange
         dataset = Dataset()
         dataset.ValueType = "DATETIME"
@@ -192,7 +192,7 @@ class TestDicomFields:
         assert isinstance(deserialized, datetime.datetime)
         assert deserialized == datetime.datetime(2021, 1, 1)
 
-    def test_float_content_item_dicom_field_serialize(self):
+    def test_float_content_item_dicom_field_serialize(self) -> None:
         # Arrange
         value = 1.0
         unit = UnitCode("mm", "UCUM", "mm")
@@ -218,7 +218,7 @@ class TestDicomFields:
         )
         assert serialized.MeasurementUnitsCodeSequence[0].CodeMeaning == unit.meaning
 
-    def test_float_content_item_dicom_field_deserialize(self):
+    def test_float_content_item_dicom_field_deserialize(self) -> None:
         # Arrange
         value = 1.0
         unit = Code("1234", "DCM", "Test Unit")
@@ -250,7 +250,7 @@ class TestDicomFields:
     )
     def test_issuer_of_identifier_field_serialize(
         self, issuer: IssuerOfIdentifier | None
-    ):
+    ) -> None:
         # Arrange
         field = IssuerOfIdentifierDicomField()
 
@@ -269,7 +269,7 @@ class TestDicomFields:
             assert_dicom_issuer_of_identifier_equals_issuer_of_identifier(item, issuer)
 
     @pytest.mark.parametrize("value_representation", FREE_TEXT_VR)
-    def test_string_field_serialize(self, value_representation: VR):
+    def test_string_field_serialize(self, value_representation: VR) -> None:
         # Arrange
         length = MAX_VALUE_LEN.get(value_representation.name, 10)
         value = "A" * length
@@ -285,7 +285,7 @@ class TestDicomFields:
     @pytest.mark.parametrize("value_representation", BOUNDED_FREE_TEXT_VR)
     def test_string_field_serialize_truncate_long_strings(
         self, value_representation: VR
-    ):
+    ) -> None:
         # Arrange
         pydicom_config.settings.writing_validation_mode = pydicom_config.RAISE
         maximum_allowed_length = MAX_VALUE_LEN[value_representation.name]
@@ -303,7 +303,7 @@ class TestDicomFields:
         assert serialized == value[:maximum_allowed_length]
 
     @pytest.mark.parametrize(
-        "value, expected",
+        ["value", "expected"],
         [
             ("ScanScope v1", "SCANSCOPE V1"),
             ("Segue_v3", "SEGUE_V3"),
@@ -314,7 +314,7 @@ class TestDicomFields:
     )
     def test_string_field_serialize_coerces_cs_repertoire(
         self, value: str, expected: str
-    ):
+    ) -> None:
         # Arrange
         field = StringDicomField(VR.CS)
 
@@ -325,7 +325,7 @@ class TestDicomFields:
         assert serialized == expected
 
     @pytest.mark.parametrize("code_version", [None, "version"])
-    def test_code_field_serialize(self, code_version: str | None):
+    def test_code_field_serialize(self, code_version: str | None) -> None:
         # Arrange
         code = Code("code", "scheme", "meaning", code_version)
         field = CodeDicomField(Code)
@@ -344,7 +344,7 @@ class TestDicomFields:
             assert "CodingSchemeVersion" not in serialized
 
     @pytest.mark.parametrize("code_version", [None, "version"])
-    def test_code_field_deserialize(self, code_version: str | None):
+    def test_code_field_deserialize(self, code_version: str | None) -> None:
         # Arrange
         code = Code("code", "scheme", "meaning", code_version)
         dataset = Dataset()
@@ -372,7 +372,7 @@ class TestDicomFields:
     )
     def test_code_field_serialize_writes_the_value_where_it_fits(
         self, value: str, keyword: str
-    ):
+    ) -> None:
         # Arrange
         code = Code(value, "SCT", "meaning")
         field = CodeDicomField(Code)
@@ -387,7 +387,9 @@ class TestDicomFields:
         assert written == {keyword}
 
     @pytest.mark.parametrize("keyword", ["LongCodeValue", "URNCodeValue"])
-    def test_code_field_deserialize_reads_the_value_wherever_it_is(self, keyword: str):
+    def test_code_field_deserialize_reads_the_value_wherever_it_is(
+        self, keyword: str
+    ) -> None:
         # Arrange
         dataset = Dataset()
         setattr(dataset, keyword, "urn:oid:1.2.3")
@@ -401,7 +403,7 @@ class TestDicomFields:
         # Assert
         assert deserialized == Code("urn:oid:1.2.3", "SCT", "meaning")
 
-    def test_code_content_item_round_trips_a_long_code_value(self):
+    def test_code_content_item_round_trips_a_long_code_value(self) -> None:
         # Arrange
         code = Code("999000011000000103", "SCT", "meaning")
         field = CodeItemDicomField(Code)
@@ -415,7 +417,7 @@ class TestDicomFields:
         assert serialized.ConceptCodeSequence[0].LongCodeValue == "999000011000000103"
         assert deserialized == code
 
-    def test_measurement_content_item_round_trips_a_long_unit_code_value(self):
+    def test_measurement_content_item_round_trips_a_long_unit_code_value(self) -> None:
         # Arrange
         unit = UnitCode(
             value="g/ml{SUVlbm(Janma)}",
@@ -437,7 +439,7 @@ class TestDicomFields:
         )
         assert deserialized == measurement
 
-    def test_flatten_on_dump_nested_dicom_field_load(self):
+    def test_flatten_on_dump_nested_dicom_field_load(self) -> None:
         # Arrange
         schema = ParentFlattenOnDumpSchema()
 
@@ -450,7 +452,7 @@ class TestDicomFields:
         # Assert
         assert deserialized["nested"]["value"] == "patient id"
 
-    def test_flatten_on_dump_nested_dicom_field_dump(self):
+    def test_flatten_on_dump_nested_dicom_field_dump(self) -> None:
         # Arrange
         schema = ParentFlattenOnDumpSchema()
 
@@ -462,7 +464,7 @@ class TestDicomFields:
         # Assert
         assert serialized["PatientID"].value == "patient id"
 
-    def test_field_without_default_is_left_out_when_there_is_no_value(self):
+    def test_field_without_default_is_left_out_when_there_is_no_value(self) -> None:
         # Arrange
         schema = DefaultingSchema()
         data = {"without_default": None}
@@ -473,7 +475,7 @@ class TestDicomFields:
         # Assert
         assert "PatientID" not in serialized
 
-    def test_field_with_default_writes_the_default_when_there_is_no_value(self):
+    def test_field_with_default_writes_the_default_when_there_is_no_value(self) -> None:
         # Arrange
         schema = DefaultingSchema()
         data = {"with_default": None}
@@ -484,7 +486,7 @@ class TestDicomFields:
         # Assert
         assert serialized.PatientComments == "a default"
 
-    def test_field_with_default_writes_the_value_when_there_is_one(self):
+    def test_field_with_default_writes_the_value_when_there_is_one(self) -> None:
         # Arrange
         schema = DefaultingSchema()
         data = {"with_default": "a value"}
@@ -495,7 +497,7 @@ class TestDicomFields:
         # Assert
         assert serialized.PatientComments == "a value"
 
-    def test_field_defaulting_to_empty_writes_the_attribute_empty(self):
+    def test_field_defaulting_to_empty_writes_the_attribute_empty(self) -> None:
         # Arrange
         schema = DefaultingSchema()
         data = {"written_empty": None}
@@ -507,7 +509,9 @@ class TestDicomFields:
         assert "PatientSpeciesDescription" in serialized
         assert serialized.PatientSpeciesDescription is None
 
-    def test_list_field_with_default_writes_the_default_when_there_are_no_items(self):
+    def test_list_field_with_default_writes_the_default_when_there_are_no_items(
+        self,
+    ) -> None:
         # Arrange
         schema = DefaultingSchema()
         data = {"list_with_default": []}
@@ -518,7 +522,7 @@ class TestDicomFields:
         # Assert
         assert serialized.SoftwareVersions == "a default"
 
-    def test_defaulting_field_writes_the_value_representation_it_states(self):
+    def test_defaulting_field_writes_the_value_representation_it_states(self) -> None:
         """The field that writes the attribute is the one that states how.
 
         A default gives a field a value to write, and says nothing about how
@@ -534,15 +538,15 @@ class TestDicomFields:
         # Assert
         assert serialized["PatientComments"].VR == VR.LT
 
-    def test_string_field_stating_another_value_representation_is_refused(self):
+    def test_string_field_stating_another_value_representation_is_refused(self) -> None:
         """A field states how its attribute is written, so it cannot state another."""
         # Arrange
         # Accession Number is SH.
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"written as SH, but ST was stated"):
             StringDicomField(VR.ST, data_key="AccessionNumber")
 
-    def test_pixel_spacing_writes_the_row_spacing_first(self):
+    def test_pixel_spacing_writes_the_row_spacing_first(self) -> None:
         """DICOM states the row spacing before the column spacing.
 
         The row spacing is the spacing between the centres of adjacent rows,
@@ -558,7 +562,7 @@ class TestDicomFields:
         # Assert
         assert serialized == [0.9, 0.1]
 
-    def test_pixel_spacing_reads_the_row_spacing_first(self):
+    def test_pixel_spacing_reads_the_row_spacing_first(self) -> None:
         # Arrange
         field = PixelSpacingDicomField(data_key="PixelSpacing")
 
@@ -569,16 +573,16 @@ class TestDicomFields:
         assert deserialized == SizeMm(width=0.1, height=0.9)
 
     @pytest.mark.parametrize("given", [1, 3])
-    def test_field_refuses_the_wrong_number_of_values(self, given: int):
+    def test_field_refuses_the_wrong_number_of_values(self, given: int) -> None:
         """Pixel Spacing holds two values, so one or three is not a spacing."""
         # Arrange
         field = PixelSpacingDicomField(data_key="PixelSpacing")
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"PixelSpacing holds 2 values"):
             field._validate_written_value([DSfloat(0.1, True)] * given)
 
-    def test_field_accepts_the_number_of_values_the_attribute_holds(self):
+    def test_field_accepts_the_number_of_values_the_attribute_holds(self) -> None:
         # Arrange
         field = PixelSpacingDicomField(data_key="PixelSpacing")
 
@@ -589,7 +593,9 @@ class TestDicomFields:
         # No error is the assertion: two values are what the attribute holds.
 
     @pytest.mark.parametrize("items", [1, 2, 5])
-    def test_a_sequence_is_one_value_however_many_items_it_holds(self, items: int):
+    def test_a_sequence_is_one_value_however_many_items_it_holds(
+        self, items: int
+    ) -> None:
         """How many items a sequence may hold is not its value multiplicity.
 
         The data dictionary gives every sequence attribute a multiplicity of
@@ -607,7 +613,7 @@ class TestDicomFields:
         # Assert
         # No error is the assertion.
 
-    def test_string_field_without_an_attribute_states_what_it_likes(self):
+    def test_string_field_without_an_attribute_states_what_it_likes(self) -> None:
         """A field that writes no attribute of its own has none to agree with."""
         # Arrange & Act
         field = StringDicomField(VR.ST)

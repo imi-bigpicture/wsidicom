@@ -36,7 +36,7 @@ class ExtendedDepthOfFieldJsonSchema(LoadingSchema[ExtendedDepthOfField]):
     distance_between_focal_planes = fields.Float()
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[ExtendedDepthOfField]:
         return ExtendedDepthOfField
 
 
@@ -46,7 +46,7 @@ class ImageCoordinateSystemJsonSchema(LoadingSchema[ImageCoordinateSystem]):
     z_offset = fields.Float(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[ImageCoordinateSystem]:
         return ImageCoordinateSystem
 
 
@@ -55,7 +55,7 @@ class LossyCompressionJsonSchema(LoadingSchema[LossyCompression]):
     ratio = fields.Float()
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[LossyCompression]:
         return LossyCompression
 
 
@@ -77,5 +77,5 @@ class ImageJsonSchema(LoadingSchema[Image]):
     content_datetime = fields.DateTime(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Image]:
         return Image

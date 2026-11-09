@@ -36,7 +36,7 @@ class TestWsiDicomFileTargetIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: CallableUidGenerator,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         expected_levels_count = len(wsi.pyramids[0])
@@ -67,7 +67,7 @@ class TestWsiDicomFileTargetIntegration:
         tmp_path: Path,
         include_levels: list[int],
         uid_generator: CallableUidGenerator,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
 
@@ -99,7 +99,7 @@ class TestWsiDicomFileTargetIntegration:
         settings: Settings,
         force_transcoding: bool,
         uid_generator: CallableUidGenerator,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         original_transfer_syntax = wsi.levels[
@@ -166,7 +166,7 @@ class TestWsiDicomFileTargetIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: CallableUidGenerator,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         levels_larger_than_tile_size = [
@@ -209,7 +209,7 @@ class TestWsiDicomFileTargetIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: CallableUidGenerator,
-    ):
+    ) -> None:
         # Arrange — create a pyramid missing the smallest levels so that
         # add_missing_levels generates downsampled children.
         wsi = wsi_factory(wsi_name)
