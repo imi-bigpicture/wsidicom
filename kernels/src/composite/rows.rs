@@ -369,19 +369,8 @@ impl ComposeSample for u8 {
         // SAFETY: this method's contract is the scalar kernel's.
         unsafe { scalar_bilinear_row::<u8>(row0, row1, dst, x0s, len, step, weights) };
     }
-    // No SIMD arm: AVX2 and NEON CPUs take the separable path (hconv4/vconv4).
-    unsafe fn bicubic_row(
-        rows: [&[u8]; 4],
-        dst: &mut [u8],
-        x0s: usize,
-        len: usize,
-        step: usize,
-        wx: [f32; 4],
-        wy: [f32; 4],
-    ) {
-        // SAFETY: this method's contract is the scalar kernel's.
-        unsafe { scalar_bicubic_row::<u8>(rows, dst, x0s, len, step, wx, wy) };
-    }
+    // bicubic_row stays scalar: AVX2 and NEON CPUs take the separable path
+    // (hconv4/vconv4).
     type HAcc = i16;
     unsafe fn hconv4_row(
         src: &[u8],
@@ -460,42 +449,8 @@ impl ComposeSample for u16 {
         unsafe { crate::composite::compose_bilinear_widened(canvas, tile, placement) };
         true
     }
-
-    unsafe fn bilinear_row(
-        row0: &[u16],
-        row1: &[u16],
-        dst: &mut [u16],
-        x0s: usize,
-        len: usize,
-        step: usize,
-        weights: [f32; 4],
-    ) {
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2_fma() {
-            // SAFETY: avx2+fma detected at runtime; this method's contract is the kernel's.
-            return unsafe { bilinear_row_u16_avx2(row0, row1, dst, x0s, len, step, weights) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: NEON is baseline on aarch64; this method's contract is the kernel's.
-            return unsafe { bilinear_row_u16_neon(row0, row1, dst, x0s, len, step, weights) };
-        }
-        // SAFETY: this method's contract is the scalar kernel's.
-        unsafe { scalar_bilinear_row::<u16>(row0, row1, dst, x0s, len, step, weights) };
-    }
-    // No SIMD arm — see the u8 impl.
-    unsafe fn bicubic_row(
-        rows: [&[u16]; 4],
-        dst: &mut [u16],
-        x0s: usize,
-        len: usize,
-        step: usize,
-        wx: [f32; 4],
-        wy: [f32; 4],
-    ) {
-        // SAFETY: this method's contract is the scalar kernel's.
-        unsafe { scalar_bicubic_row::<u16>(rows, dst, x0s, len, step, wx, wy) };
-    }
+    // bilinear_row stays scalar: the CPUs with SIMD compose whole tiles
+    // above. bicubic_row stays scalar too (see the u8 impl).
     type HAcc = f32;
     unsafe fn hconv4_row(
         src: &[u16],
@@ -1038,9 +993,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// The u8 horizontal pass in Q6, as the scalar mirror in `ComposeSample
-    /// for u8` computes it: each tap `mulhrs(sample << 6, q15(weight))`,
-    /// summed and wrapped to i16 like the vector kernels' i16 adds.
+    /// The u8 horizontal pass in Q6: the scalar mirror the SIMD kernels match.
     pub(crate) fn q6_hconv_reference(
         src: &[u8],
         x0s: usize,
@@ -1048,44 +1001,28 @@ pub(crate) mod tests {
         step: usize,
         wx: [f32; 4],
     ) -> Vec<i16> {
-        let qwx = wx.map(q15);
-        (0..len)
-            .map(|element| {
-                let x_left = x0s + element - step;
-                let acc: i32 = (0..4)
-                    .map(|tap| {
-                        mulhrs(
-                            i32::from(src[x_left + tap * step]) << BICUBIC_U8_FRAC_BITS,
-                            qwx[tap],
-                        )
-                    })
-                    .sum();
-                acc as i16
-            })
-            .collect()
+        let mut row = vec![0; len];
+        scalar_hconv4_row_u8_fx(src, &mut row, x0s, len, step, wx);
+        row
     }
 
-    /// The u8 vertical pass, as the scalar mirror computes it.
+    /// The u8 vertical pass: the scalar mirror.
     pub(crate) fn q6_vconv_reference(rows: [&[i16]; 4], len: usize, wy: [f32; 4]) -> Vec<u8> {
-        let qwy = wy.map(q15);
-        (0..len)
-            .map(|element| vconv4_u8_px(rows, element, qwy))
-            .collect()
+        let mut row = vec![0; len];
+        scalar_vconv4_row_u8_fx(rows, &mut row, len, wy);
+        row
     }
 
-    /// The RGB -> RGBX vertical pass, as `vconv4_rgbx`'s scalar path computes it.
+    /// The RGB -> RGBX vertical pass: the scalar mirror.
     pub(crate) fn q6_vconv_rgbx_reference(
         rows: [&[i16]; 4],
         npix: usize,
         pad: u8,
         wy: [f32; 4],
     ) -> Vec<u8> {
-        let rgb = q6_vconv_reference(rows, npix * RGB, wy);
-        rgb.as_chunks::<RGB>()
-            .0
-            .iter()
-            .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], pad])
-            .collect()
+        let mut row = vec![0; npix * RGBX];
+        scalar_vconv4_row_rgb_to_rgbx(rows, &mut row, npix, pad, wy);
+        row
     }
 
     /// Four rows for a vertical pass, each `len` elements followed by
@@ -1160,11 +1097,6 @@ pub(crate) mod tests {
                 scalar_bilinear_row::<u8>,
                 Some(BILINEAR_ROUNDING_STEPS),
             );
-            assert_bilinear_rows_match::<u16>(
-                <u16 as ComposeSample>::bilinear_row,
-                scalar_bilinear_row::<u16>,
-                Some(BILINEAR_ROUNDING_STEPS),
-            );
             assert_bilinear_rows_match::<f32>(
                 <f32 as ComposeSample>::bilinear_row,
                 scalar_bilinear_row::<f32>,
@@ -1178,16 +1110,7 @@ pub(crate) mod tests {
         // SAFETY: the dispatching kernels and the scalar reference check
         // their CPU features themselves.
         unsafe {
-            assert_bicubic_rows_match::<u8>(
-                <u8 as ComposeSample>::bicubic_row,
-                scalar_bicubic_row::<u8>,
-                Some(BICUBIC_ROUNDING_STEPS),
-            );
-            assert_bicubic_rows_match::<u16>(
-                <u16 as ComposeSample>::bicubic_row,
-                scalar_bicubic_row::<u16>,
-                Some(BICUBIC_ROUNDING_STEPS),
-            );
+            // Only float32 overrides bicubic_row.
             assert_bicubic_rows_match::<f32>(
                 <f32 as ComposeSample>::bicubic_row,
                 scalar_bicubic_row::<f32>,

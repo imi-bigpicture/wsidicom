@@ -107,19 +107,16 @@ struct Frame<T> {
 
 impl<T: Element + Copy> Frame<T> {
     /// The frame `size` asks for, or none; `fill` must be a (`channels`,)
-    /// array, given exactly when `size` is.
+    /// array, given with `size`.
     fn new(
         size: Option<(usize, usize)>,
         fill: Option<&Bound<'_, PyAny>>,
         channels: usize,
     ) -> PyResult<Option<Frame<T>>> {
-        let Some((height, width)) = size else {
-            return match fill {
-                Some(_) => Err(PyValueError::new_err("fill needs size")),
-                None => Ok(None),
-            };
+        // core.py checks that size and fill come together.
+        let (Some((height, width)), Some(fill)) = (size, fill) else {
+            return Ok(None);
         };
-        let fill = fill.ok_or_else(|| PyValueError::new_err("size needs fill"))?;
         let samples = fill
             .cast::<PyArrayDyn<T>>()
             .map_err(|_| PyValueError::new_err("fill must have the tiles' dtype"))?;
@@ -210,17 +207,6 @@ pub(crate) fn box_grid<T: BoxSample>(
         .collect::<PyResult<Vec<_>>>()?;
     let (dims, heights, widths, channels) =
         (&grid.dims, &grid.heights, &grid.widths, grid.channels);
-    let grid_rows = heights.len();
-    for (tile_index, &(tile_height, tile_width, _)) in dims.iter().enumerate() {
-        let (grid_row, col) = (tile_index / grid_width, tile_index % grid_width);
-        if (grid_row + 1 < grid_rows && tile_height % factor != 0)
-            || (col + 1 < grid_width && tile_width % factor != 0)
-        {
-            return Err(PyValueError::new_err(
-                "inner tiles must divide by the factor",
-            ));
-        }
-    }
     let out_rows: Vec<usize> = heights
         .iter()
         .map(|height| height.div_ceil(factor))

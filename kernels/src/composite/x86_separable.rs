@@ -7,8 +7,10 @@
 //! of the `ComposeSample` row method it implements, which its caller upholds.
 //! Its loads and stores are justified against those bounds where they occur.
 
-use super::rows::vconv4_u8_px;
-use crate::sample::{BICUBIC_U8_FRAC_BITS, Sample, mulhrs, q15};
+use super::rows::{
+    scalar_hconv4_row_u8_fx, scalar_vconv4_row_rgb_to_rgbx, scalar_vconv4_row_u8_fx,
+};
+use crate::sample::{Sample, q15};
 use crate::x86::*;
 
 // ---- Separable bicubic passes (AVX2) ----------------------------------------
@@ -98,20 +100,7 @@ pub(crate) unsafe fn hconv4_row_u8_fx_avx2(
     const BLOCK: usize = 16;
     let qw = wx.map(q15);
     if len < BLOCK {
-        for (element, out) in dst[..len].iter_mut().enumerate() {
-            let x_left = x0s + element - step;
-            let acc: i32 = (0..4)
-                .map(|tap| {
-                    mulhrs(
-                        i32::from(src[x_left + tap * step]) << BICUBIC_U8_FRAC_BITS,
-                        qw[tap],
-                    )
-                })
-                .sum();
-            // i16 wraparound of the sum == the vector kernel's per-term i16 adds.
-            *out = acc as i16;
-        }
-        return;
+        return scalar_hconv4_row_u8_fx(src, dst, x0s, len, step, wx);
     }
     debug_assert!(x0s >= step && x0s + len + 2 * step <= src.len() && len <= dst.len());
     let vw = qw.map(|weight| _mm256_set1_epi16(weight));
@@ -162,10 +151,7 @@ pub(crate) unsafe fn vconv4_row_u8_fx_avx2(
     const BLOCK: usize = 16;
     let qw = wy.map(q15);
     if len < BLOCK {
-        for (element, out) in dst[..len].iter_mut().enumerate() {
-            *out = vconv4_u8_px(rows, element, qw);
-        }
-        return;
+        return scalar_vconv4_row_u8_fx(rows, dst, len, wy);
     }
     debug_assert!(rows.iter().all(|row| row.len() >= len) && len <= dst.len());
     let vw = qw.map(|weight| _mm256_set1_epi16(weight));
@@ -331,18 +317,7 @@ pub(crate) unsafe fn vconv4_row_rgb_to_rgbx_avx2(
     const BLOCK_PX: usize = 8;
     let qw = wy.map(q15);
     if npix < BLOCK_PX {
-        for (px, out) in dst[..npix * 4]
-            .as_chunks_mut::<4>()
-            .0
-            .iter_mut()
-            .enumerate()
-        {
-            for (ch, sample) in out[..3].iter_mut().enumerate() {
-                *sample = vconv4_u8_px(rows, px * 3 + ch, qw);
-            }
-            out[3] = pad;
-        }
-        return;
+        return scalar_vconv4_row_rgb_to_rgbx(rows, dst, npix, pad, wy);
     }
     debug_assert!(rows.iter().all(|row| row.len() >= npix * 3) && npix * 4 <= dst.len());
     let vwy = qw.map(|weight| _mm_set1_epi16(weight));

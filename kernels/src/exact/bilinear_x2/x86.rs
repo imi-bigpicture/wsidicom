@@ -7,7 +7,8 @@
 //! justified against that length and their own buffers at their loop guards.
 
 use super::{divide_rounded, horizontal_scalar, vertical_sums_scalar, window};
-use crate::exact::x86::{keep_even_pixels, prefetch_next_rows};
+use crate::exact::x86::keep_even_pixels;
+use crate::x86::prefetch_rows_after_window;
 
 /// The AVX-512 kernel. Interior rows: the vertical sums `r0 + r3 + 3 (r1 +
 /// r2)` in u16, split as they are stored into the even pixels' and the odd
@@ -93,7 +94,7 @@ pub(crate) unsafe fn bilinear_x2_avx512(
         // Vertical, per group of `step` pixel pairs from pair k0.
         let vstep = |k0: usize| {
             let at = 2 * k0 * channels;
-            prefetch_next_rows(src, 2 * y + 3, ws, at);
+            prefetch_rows_after_window(src.as_ptr(), 2 * y + 3, ws, at);
             let low = |tap: usize| {
                 // SAFETY: k0 + step <= ow at both calls, so the loads (this
                 // one's 32 bytes and `high`'s masked rest) read samples
@@ -253,7 +254,7 @@ pub(crate) unsafe fn bilinear_x2_avx2(
         let sp = unsafe { sums.as_mut_ptr().add(channels) };
         let vblock = |x: usize| {
             if x.is_multiple_of(64) {
-                prefetch_next_rows(src, 2 * y + 3, ws, x);
+                prefetch_rows_after_window(src.as_ptr(), 2 * y + 3, ws, x);
             }
             let ld = |tap: usize| {
                 // SAFETY: x <= ws - LANES at both calls, so the load's 16 bytes

@@ -1318,40 +1318,49 @@ fn resize_transposed(src: &[u8], width: usize, channels: usize, plan: &Plan) -> 
     // SAFETY: `out` is this function's, and `batches(lo, hi)` writes only
     // rows [lo, hi) (whole rows, no slop).
     unsafe { crate::cpu::with_prefault(dp, ows * oh, ows, oh, batches) };
-    if (mid.capacity() + mid_t.capacity() + out_t.capacity()) * size_of::<i16>()
-        <= SCRATCH_KEPT_BYTES
-    {
-        SCRATCH.with_borrow_mut(|scratch| *scratch = TransposeScratch { mid, mid_t, out_t });
-    }
+    TransposeScratch { mid, mid_t, out_t }.keep_in(&SCRATCH);
     out
 }
 
-/// Scratch kept per thread up to this size, so a very wide image doesn't pin
-/// its buffers to the thread.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-const SCRATCH_KEPT_BYTES: usize = 8 << 20;
-
-/// The transposed path's buffers, kept per thread between calls: fresh, a
-/// tile's call would clear (or fault in) them every time. `TRANSPOSE_ROWS`
-/// intermediate rows, the same transposed, and the transposed Q6 output sums.
+/// The transposed paths' buffers (u8 in Q6 i16 here, float in
+/// `convolve_float`), kept per thread between calls: fresh, a tile's call
+/// would clear (or fault in) them every time. The intermediate rows, the
+/// same transposed, and the transposed output sums.
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 #[derive(Default)]
-struct TransposeScratch {
-    mid: Vec<i16>,
-    mid_t: Vec<i16>,
-    out_t: Vec<i16>,
+pub(crate) struct TransposeScratch<T> {
+    pub(crate) mid: Vec<T>,
+    pub(crate) mid_t: Vec<T>,
+    pub(crate) out_t: Vec<T>,
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+impl<T: 'static> TransposeScratch<T> {
+    /// Scratch kept per thread up to this size, so a very wide image doesn't
+    /// pin its buffers to the thread.
+    const KEPT_BYTES: usize = 8 << 20;
+
+    pub(crate) const fn new() -> Self {
+        Self {
+            mid: Vec::new(),
+            mid_t: Vec::new(),
+            out_t: Vec::new(),
+        }
+    }
+
+    /// Put the buffers back in the thread's `slot` for the next call, unless
+    /// they are over `KEPT_BYTES`.
+    pub(crate) fn keep_in(self, slot: &'static std::thread::LocalKey<RefCell<Self>>) {
+        let capacity = self.mid.capacity() + self.mid_t.capacity() + self.out_t.capacity();
+        if capacity * size_of::<T>() <= Self::KEPT_BYTES {
+            slot.with_borrow_mut(|kept| *kept = self);
+        }
+    }
 }
 
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 thread_local! {
-    static SCRATCH: RefCell<TransposeScratch> =
-        const {
-            RefCell::new(TransposeScratch {
-                mid: Vec::new(),
-                mid_t: Vec::new(),
-                out_t: Vec::new(),
-            })
-        };
+    static SCRATCH: RefCell<TransposeScratch<i16>> = const { RefCell::new(TransposeScratch::new()) };
 }
 
 /// The per-row path (AVX-512 kernels, or the scalar reference).

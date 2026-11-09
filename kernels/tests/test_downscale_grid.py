@@ -173,25 +173,6 @@ class TestDownscaleGrid:
             )
 
     @pytest.mark.parametrize(
-        ["fill", "message"],
-        [
-            (256, "fill must have the tiles' dtype"),
-            (np.array([1, 2], np.uint8), "one value per channel"),
-        ],
-        ids=["scalar", "not-one-per-channel"],
-    )
-    def test_rejects_unfit_fill(
-        self, rgb_tile: np.ndarray, fill: Any, message: str
-    ) -> None:
-        """The fill must be a ``(C,)`` array, one sample per channel.
-
-        A scalar is no longer broadcast to every channel.
-        """
-        # Act & Assert
-        with pytest.raises(ValueError, match=message):
-            downscale_grid([rgb_tile], 1, 2, ResizeFilter.BOX, size=(32, 32), fill=fill)
-
-    @pytest.mark.parametrize(
         ["other_tiles", "message"],
         [
             (

@@ -200,7 +200,6 @@ macro_rules! gen_bilinear_neon {
 }
 
 gen_bilinear_neon!(bilinear_row_u8_f32_neon, u8, load_u8x8_f32, store_u8x8_f32);
-gen_bilinear_neon!(bilinear_row_u16_neon, u16, load_u16x8_f32, store_u16x8_f32);
 gen_bilinear_neon!(bilinear_row_f32_neon, f32, load_f32x8, store_f32x8);
 
 /// Sum of the four taps times their Q15 weights (`vqrdmulh`, the `mulhrs`
@@ -262,9 +261,8 @@ pub(crate) fn widen_u16_row_neon(src: &[u16], dst: &mut [f32]) {
     }
 }
 
-/// `bilinear_row_u16_neon` on rows already widened to f32: the same taps,
-/// FMA chain and rounding, so the same results, without widening each
-/// sample once per tap. Scalar tail as the scalar reference (on the same
+/// The uint16 bilinear row on rows already widened to f32, so each sample
+/// is widened once rather than once per tap. Scalar tail as the scalar reference (on the same
 /// f32 values).
 ///
 /// # Safety
@@ -813,11 +811,6 @@ mod tests {
             assert_bilinear_rows_match::<u8>(
                 bilinear_row_u8_f32_neon,
                 scalar_bilinear_row::<u8>,
-                Some(BILINEAR_ROUNDING_STEPS),
-            );
-            assert_bilinear_rows_match::<u16>(
-                bilinear_row_u16_neon,
-                scalar_bilinear_row::<u16>,
                 Some(BILINEAR_ROUNDING_STEPS),
             );
             assert_bilinear_rows_match::<f32>(

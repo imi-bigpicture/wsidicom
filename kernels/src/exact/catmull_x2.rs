@@ -105,8 +105,8 @@ pub(crate) fn catmull_x2(src: &[u8], width: usize, height: usize, channels: usiz
     );
     #[cfg(target_arch = "x86_64")]
     {
-        if crate::cpu::has_avx512() && crate::cpu::has_avx2_fma() && channels != 3 {
-            // SAFETY: avx512f+bw+vl and fma detected; src holds width *
+        if crate::cpu::has_avx512() && channels != 3 {
+            // SAFETY: avx512f+bw+vl and fma detected (`has_avx512`); src holds width *
             // height * channels samples, width and height even (the exact
             // kernel's condition), channels 1 or 4 (the caller's shape
             // check, RGB excluded here).

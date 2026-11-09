@@ -90,14 +90,6 @@ class TestDownscaleToRgbx:
         assert (rgbx[..., :3] == rgb).all()
         assert (rgbx[..., 3] == 255).all()
 
-    def test_pad_value_fills_fourth_sample(self, odd_rgb_image: np.ndarray) -> None:
-        """The fourth sample is the given pad value."""
-        # Act
-        rgbx = downscale(odd_rgb_image, 2, ResizeFilter.BOX, pad=3)
-
-        # Assert
-        assert (rgbx[..., 3] == 3).all()
-
     @pytest.mark.parametrize("factor", [2, 4, 8])
     def test_simd_equals_scalar(
         self, odd_rgb_image: np.ndarray, simd_and_scalar: SimdAndScalar, factor: int

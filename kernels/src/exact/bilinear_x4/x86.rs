@@ -8,7 +8,8 @@
 //! loop guards.
 
 use super::{bilinear_x4_scalar, window};
-use crate::exact::x86::{cover_steps, prefetch_next_rows};
+use crate::exact::x86::cover_steps;
+use crate::x86::prefetch_rows_after_window;
 
 /// The SIMD kernels' frame, `PC` samples per pixel in the phase arrays (1,
 /// 2 or 4; RGB is read as RGBX, `PC` 4, and packed back per output row). Per
@@ -163,8 +164,8 @@ pub(crate) unsafe fn bilinear_x4_avx2<const PC: usize, const RGB: bool>(
         };
         let vstep = |k0: usize| {
             let p0 = 4 * k0;
-            prefetch_next_rows(src, 4 * y + 6, ws, p0 * channels);
-            prefetch_next_rows(src, 4 * y + 8, ws, p0 * channels);
+            prefetch_rows_after_window(src.as_ptr(), 4 * y + 6, ws, p0 * channels);
+            prefetch_rows_after_window(src.as_ptr(), 4 * y + 8, ws, p0 * channels);
             let loaded: [__m256i; 8] = std::array::from_fn(|tap| load(tap, p0));
             let sums = |lo: bool| {
                 let pair = |low_tap: usize, high_tap: usize| {
@@ -351,8 +352,8 @@ pub(crate) unsafe fn bilinear_x4_avx512<const PC: usize, const RGB: bool>(
         };
         let vstep = |k0: usize| {
             let p0 = 4 * k0;
-            prefetch_next_rows(src, 4 * y + 6, ws, p0 * channels);
-            prefetch_next_rows(src, 4 * y + 8, ws, p0 * channels);
+            prefetch_rows_after_window(src.as_ptr(), 4 * y + 6, ws, p0 * channels);
+            prefetch_rows_after_window(src.as_ptr(), 4 * y + 8, ws, p0 * channels);
             let loaded: [__m512i; 8] = std::array::from_fn(|tap| load(tap, p0));
             let sums = |lo: bool| {
                 let pair = |low_tap: usize, high_tap: usize| {
