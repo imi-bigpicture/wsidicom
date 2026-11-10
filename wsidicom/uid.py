@@ -130,11 +130,8 @@ class FileUids:
             return self.concatenation
         return self.instance
 
-    def __eq__(self, other: object) -> bool:
-        """Return true if the concatenation and base uids match.
-
-        The concatenation uid must not be none and match the other concatenation
-        uid, and the base uids must match.
+    def matches_concatenation(self, other: "FileUids") -> bool:
+        """Return true if both files are parts of the same concatenation.
 
         Parameters
         ----------
@@ -144,12 +141,11 @@ class FileUids:
         Returns
         -------
         bool
-            True if concatenation is matching.
+            True if the concatenation uid is not none, matches the other
+            concatenation uid, and the slide uids match.
         """
-        if isinstance(other, FileUids):
-            return (
-                self.concatenation is not None
-                and self.concatenation == other.concatenation
-                and self.slide == other.slide
-            )
-        return NotImplemented
+        return (
+            self.concatenation is not None
+            and self.concatenation == other.concatenation
+            and self.slide == other.slide
+        )

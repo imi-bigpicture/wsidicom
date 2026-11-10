@@ -20,9 +20,9 @@ import pytest
 from pydicom.uid import JPEGBaseline8Bit, generate_uid
 
 from wsidicom.file import (
-    CreatedAssociatedFile,
-    CreatedLevelFile,
-    CreatedThumbnailFile,
+    WsiAssociatedFile,
+    WsiLevelFile,
+    WsiThumbnailFile,
 )
 from wsidicom.geometry import Size, SizeMm
 from wsidicom.metadata import ImageType
@@ -54,7 +54,7 @@ class TestCreatedFile:
         self, shared_fields: dict[str, Any]
     ):
         # Arrange
-        level_file = CreatedLevelFile(
+        level_file = WsiLevelFile(
             image_type=ImageType.VOLUME,
             pixel_spacing=SizeMm(0.0005, 0.00025),
             pyramid_index=0,
@@ -73,7 +73,7 @@ class TestCreatedFile:
         self, shared_fields: dict[str, Any]
     ):
         # Arrange
-        associated_file = CreatedAssociatedFile(
+        associated_file = WsiAssociatedFile(
             image_type=ImageType.LABEL, pixel_spacing=None, **shared_fields
         )
 
@@ -93,7 +93,7 @@ class TestCreatedFile:
 
         # Act & Assert
         with pytest.raises(ValueError):
-            CreatedLevelFile(
+            WsiLevelFile(
                 image_type=image_type,  # pyright: ignore[reportArgumentType]
                 pixel_spacing=SizeMm(0.0005, 0.0005),
                 pyramid_index=0,
@@ -111,7 +111,7 @@ class TestCreatedFile:
 
         # Act & Assert
         with pytest.raises(ValueError):
-            CreatedThumbnailFile(
+            WsiThumbnailFile(
                 image_type=image_type,  # pyright: ignore[reportArgumentType]
                 pixel_spacing=SizeMm(0.0005, 0.0005),
                 pyramid_index=0,
@@ -126,7 +126,7 @@ class TestCreatedFile:
 
         # Act & Assert
         with pytest.raises(ValueError):
-            CreatedAssociatedFile(
+            WsiAssociatedFile(
                 image_type=image_type,  # pyright: ignore[reportArgumentType]
                 pixel_spacing=None,
                 **shared_fields,

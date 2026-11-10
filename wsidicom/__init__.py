@@ -22,11 +22,11 @@ from wsidicom.config import (
     use_settings,
 )
 from wsidicom.file import (
-    CreatedAssociatedFile,
-    CreatedFile,
-    CreatedFileBase,
-    CreatedLevelFile,
-    CreatedThumbnailFile,
+    WsiAssociatedFile,
+    WsiFile,
+    WsiFileBase,
+    WsiLevelFile,
+    WsiThumbnailFile,
 )
 from wsidicom.graphical_annotations import (
     Annotation,
@@ -60,11 +60,11 @@ __all__ = [
     "AnnotationInstance",
     "ConcatenationByBytes",
     "ConcatenationByFrames",
-    "CreatedAssociatedFile",
-    "CreatedFile",
-    "CreatedFileBase",
-    "CreatedLevelFile",
-    "CreatedThumbnailFile",
+    "WsiAssociatedFile",
+    "WsiFile",
+    "WsiFileBase",
+    "WsiLevelFile",
+    "WsiThumbnailFile",
     "ImageData",
     "InstanceSplit",
     "Labels",

@@ -24,13 +24,13 @@ from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
-from wsidicom.file.created_file import CreatedFile
 from wsidicom.file.file_writer import (
     BaseFileWriter,
     GroupFileWriter,
     PyramidFileWriter,
 )
 from wsidicom.file.io import OffsetTableType
+from wsidicom.file.wsi_file import WsiFile
 from wsidicom.group import Label, Overview, Thumbnail
 from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.uid_generator import UidGenerator
@@ -122,7 +122,7 @@ class WsiDicomFileTarget(Target):
             as_upath(output_path, file_options)
         )
         self._offset_table = offset_table
-        self._created_files: dict[UPath, CreatedFile] = {}
+        self._created_files: dict[UPath, WsiFile] = {}
         self._chunk_size = chunk_size
         self._metadata = metadata
         self._replace_metadata = replace_metadata
@@ -145,7 +145,7 @@ class WsiDicomFileTarget(Target):
         return list(self._created_files)
 
     @property
-    def created_files(self) -> dict[UPath, CreatedFile]:
+    def created_files(self) -> dict[UPath, WsiFile]:
         """Return the created files, by path, in the order they were written."""
         return dict(self._created_files)
 

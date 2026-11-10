@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Descriptions of the DICOM files written when saving a WSI."""
+"""Descriptions of the DICOM files of a WSI, as opened or as written."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -27,8 +27,8 @@ from wsidicom.uid import FileUids
 
 
 @dataclass(frozen=True)
-class CreatedFileBase:
-    """What is shared by all files written when saving a WSI.
+class WsiFileBase:
+    """What is shared by all files of a WSI.
 
     Parameters
     ----------
@@ -45,11 +45,11 @@ class CreatedFileBase:
     pixel_spacing: SizeMm | None
         Pixel spacing in mm per pixel, or None if the file has none.
     focal_planes: tuple[float, ...]
-        Focal planes in the file, in um.
+        Focal planes of the instance the file belongs to, in um.
     optical_paths: tuple[str, ...]
-        Identifiers of the optical paths in the file.
+        Identifiers of the optical paths of the instance the file belongs to.
     transfer_syntax: UID
-        Transfer syntax the pixel data is written with.
+        Transfer syntax of the pixel data.
     photometric_interpretation: str
         Photometric interpretation of the pixel data.
     lossy_compressions: tuple[LossyCompression, ...]
@@ -88,8 +88,8 @@ class CreatedFileBase:
         """Return the pixel spacing of `dataset` as plain floats, or None.
 
         The dataset holds pydicom decimal strings, which can carry more digits
-        than the at most 16 characters written to the file. The values are
-        taken from the written strings, so that they are the ones in the file.
+        than the at most 16 characters stored in the file. The values are taken
+        from the strings, so that they are the ones in the file.
         """
         pixel_spacing = dataset.pixel_spacing
         if pixel_spacing is None:
@@ -108,14 +108,14 @@ class CreatedFileBase:
 
 
 @dataclass(frozen=True)
-class CreatedLevelFile(CreatedFileBase):
-    """A written file of a pyramid level.
+class WsiLevelFile(WsiFileBase):
+    """A file of a pyramid level.
 
     Parameters
     ----------
     pyramid_index: int
         Index of the pyramid the level belongs to, among the pyramids of the
-        saved WSI.
+        WSI.
     level_index: int
         Pyramid level index of the level, where 0 is the base level and each
         step halves the resolution.
@@ -143,19 +143,19 @@ class CreatedLevelFile(CreatedFileBase):
         optical_paths: Sequence[str],
         pyramid_index: int,
         level_index: int,
-    ) -> "CreatedLevelFile":
-        """Describe a written level file from the dataset it was written with.
+    ) -> "WsiLevelFile":
+        """Describe a level file from its dataset.
 
         Parameters
         ----------
         dataset: WsiDataset
-            The dataset as written to the file.
+            The dataset of the file, as written or as read.
         transfer_syntax: UID
-            Transfer syntax the pixel data is written with.
+            Transfer syntax of the pixel data.
         focal_planes: Sequence[float]
-            Focal planes in the file, in um.
+            Focal planes of the instance the file belongs to, in um.
         optical_paths: Sequence[str]
-            Identifiers of the optical paths in the file.
+            Identifiers of the optical paths of the instance the file belongs to.
         pyramid_index: int
             Index of the pyramid the level belongs to.
         level_index: int
@@ -163,8 +163,8 @@ class CreatedLevelFile(CreatedFileBase):
 
         Returns
         -------
-        CreatedLevelFile
-            Description of the written file.
+        WsiLevelFile
+            Description of the file.
         """
         if dataset.image_type != ImageType.VOLUME:
             raise ValueError(f"Expected a VOLUME image, got {dataset.image_type}.")
@@ -185,14 +185,14 @@ class CreatedLevelFile(CreatedFileBase):
 
 
 @dataclass(frozen=True)
-class CreatedThumbnailFile(CreatedFileBase):
-    """A written thumbnail file.
+class WsiThumbnailFile(WsiFileBase):
+    """A thumbnail file.
 
     Parameters
     ----------
     pyramid_index: int
         Index of the pyramid the thumbnail belongs to, among the pyramids of
-        the saved WSI.
+        the WSI.
     """
 
     image_type: Literal[ImageType.THUMBNAIL]
@@ -215,26 +215,26 @@ class CreatedThumbnailFile(CreatedFileBase):
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
         pyramid_index: int,
-    ) -> "CreatedThumbnailFile":
-        """Describe a written thumbnail file from the dataset it was written with.
+    ) -> "WsiThumbnailFile":
+        """Describe a thumbnail file from its dataset.
 
         Parameters
         ----------
         dataset: WsiDataset
-            The dataset as written to the file.
+            The dataset of the file, as written or as read.
         transfer_syntax: UID
-            Transfer syntax the pixel data is written with.
+            Transfer syntax of the pixel data.
         focal_planes: Sequence[float]
-            Focal planes in the file, in um.
+            Focal planes of the instance the file belongs to, in um.
         optical_paths: Sequence[str]
-            Identifiers of the optical paths in the file.
+            Identifiers of the optical paths of the instance the file belongs to.
         pyramid_index: int
             Index of the pyramid the thumbnail belongs to.
 
         Returns
         -------
-        CreatedThumbnailFile
-            Description of the written file.
+        WsiThumbnailFile
+            Description of the file.
         """
         if dataset.image_type != ImageType.THUMBNAIL:
             raise ValueError(f"Expected a THUMBNAIL image, got {dataset.image_type}.")
@@ -254,8 +254,8 @@ class CreatedThumbnailFile(CreatedFileBase):
 
 
 @dataclass(frozen=True)
-class CreatedAssociatedFile(CreatedFileBase):
-    """A written label or overview file."""
+class WsiAssociatedFile(WsiFileBase):
+    """A label or overview file."""
 
     image_type: Literal[ImageType.LABEL, ImageType.OVERVIEW]
 
@@ -269,25 +269,24 @@ class CreatedAssociatedFile(CreatedFileBase):
         transfer_syntax: UID,
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
-    ) -> "CreatedAssociatedFile":
-        """Describe a written label or overview file from the dataset it was
-        written with.
+    ) -> "WsiAssociatedFile":
+        """Describe a label or overview file from its dataset.
 
         Parameters
         ----------
         dataset: WsiDataset
-            The dataset as written to the file.
+            The dataset of the file, as written or as read.
         transfer_syntax: UID
-            Transfer syntax the pixel data is written with.
+            Transfer syntax of the pixel data.
         focal_planes: Sequence[float]
-            Focal planes in the file, in um.
+            Focal planes of the instance the file belongs to, in um.
         optical_paths: Sequence[str]
-            Identifiers of the optical paths in the file.
+            Identifiers of the optical paths of the instance the file belongs to.
 
         Returns
         -------
-        CreatedAssociatedFile
-            Description of the written file.
+        WsiAssociatedFile
+            Description of the file.
         """
         image_type = dataset.image_type
         if image_type is not ImageType.LABEL and image_type is not ImageType.OVERVIEW:
@@ -306,6 +305,6 @@ class CreatedAssociatedFile(CreatedFileBase):
         )
 
 
-CreatedFile: TypeAlias = CreatedLevelFile | CreatedThumbnailFile | CreatedAssociatedFile
-"""A file written when saving a WSI. Narrow it with `match`, `isinstance`, or by
-comparing `image_type`."""
+WsiFile: TypeAlias = WsiLevelFile | WsiThumbnailFile | WsiAssociatedFile
+"""A file of a WSI. Narrow it with `match`, `isinstance`, or by comparing
+`image_type`."""

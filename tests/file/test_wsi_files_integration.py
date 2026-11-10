@@ -12,8 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Integration tests for the files described by `WsiDicom.save`."""
+"""Integration tests for the files described by `WsiDicom.save` and `WsiDicom.files`."""
 
+import dataclasses
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,10 +24,10 @@ from pydicom.multival import MultiValue
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom import (
-    CreatedAssociatedFile,
-    CreatedLevelFile,
-    CreatedThumbnailFile,
+    WsiAssociatedFile,
     WsiDicom,
+    WsiLevelFile,
+    WsiThumbnailFile,
 )
 from wsidicom.codec import JpegSettings
 from wsidicom.file import WsiDicomFileTarget
@@ -36,7 +37,7 @@ from wsidicom.series import Pyramids
 
 
 @pytest.mark.integration
-class TestCreatedFilesIntegration:
+class TestWsiFilesIntegration:
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
     def test_save_describes_every_written_file(
         self,
@@ -112,7 +113,7 @@ class TestCreatedFilesIntegration:
         level_files = [
             created_file
             for created_file in created_files.values()
-            if isinstance(created_file, CreatedLevelFile)
+            if isinstance(created_file, WsiLevelFile)
         ]
         assert len(level_files) > 0
         for level_file in level_files:
@@ -140,12 +141,12 @@ class TestCreatedFilesIntegration:
         thumbnail_files = [
             created_file
             for created_file in created_files.values()
-            if isinstance(created_file, CreatedThumbnailFile)
+            if isinstance(created_file, WsiThumbnailFile)
         ]
         associated_files = [
             created_file
             for created_file in created_files.values()
-            if isinstance(created_file, CreatedAssociatedFile)
+            if isinstance(created_file, WsiAssociatedFile)
         ]
         assert len(thumbnail_files) == expected_thumbnail_count
         assert all(
@@ -215,5 +216,84 @@ class TestCreatedFilesIntegration:
         # Assert
         assert len(created_files) > 0
         for created_file in created_files.values():
-            assert isinstance(created_file, CreatedLevelFile)
+            assert isinstance(created_file, WsiLevelFile)
             assert created_file.pyramid_index == 1
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_opened_files_match_read_datasets(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+
+        # Act
+        opened_files = wsi.files
+
+        # Assert
+        assert opened_files is not None
+        assert len(opened_files) > 0
+        for path, opened_file in opened_files.items():
+            dataset = dcmread(str(path), stop_before_pixels=True)
+            assert opened_file.uids.instance == dataset.SOPInstanceUID
+            assert opened_file.image_type.value == dataset.ImageType[2]
+            assert opened_file.image_size.width == dataset.TotalPixelMatrixColumns
+            assert opened_file.image_size.height == dataset.TotalPixelMatrixRows
+            assert opened_file.transfer_syntax == dataset.file_meta.TransferSyntaxUID
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_opened_files_match_level_indices(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+        expected_level_indices = {
+            (pyramid_index, level.level)
+            for pyramid_index, pyramid in enumerate(wsi.pyramids)
+            for level in pyramid.levels
+        }
+
+        # Act
+        opened_files = wsi.files
+
+        # Assert
+        assert opened_files is not None
+        level_indices = {
+            (opened_file.pyramid_index, opened_file.level_index)
+            for opened_file in opened_files.values()
+            if isinstance(opened_file, WsiLevelFile)
+        }
+        assert level_indices == expected_level_indices
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names())
+    def test_opened_files_match_saved_files(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+    ):
+        # Arrange
+        wsi = wsi_factory(wsi_name)
+        created_files = wsi.save(tmp_path, include_levels=[-1])
+        # Only the smallest level is saved, so it is the base level when opened.
+        expected_files = {
+            str(path): (
+                dataclasses.replace(created_file, level_index=0)
+                if isinstance(created_file, WsiLevelFile)
+                else created_file
+            )
+            for path, created_file in created_files.items()
+        }
+
+        # Act
+        with WsiDicom.open(tmp_path) as opened:
+            opened_files = opened.files
+
+        # Assert
+        assert opened_files is not None
+        assert {
+            str(path): opened_file for path, opened_file in opened_files.items()
+        } == expected_files

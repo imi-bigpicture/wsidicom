@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `CreatedFile` (`CreatedLevelFile`, `CreatedThumbnailFile` or `CreatedAssociatedFile`) describes a written file as written.
+- `WsiFile` (`WsiLevelFile`, `WsiThumbnailFile` or `WsiAssociatedFile`) describes a file of a WSI, as opened or as written.
+- `FileUids.matches_concatenation()` tells if two files are parts of the same concatenation.
 
 ### Changed
 
-- `WsiDicom.save()` returns a `dict` from path to `CreatedFile` instead of a list of paths. Indexing such as `created[0]` no longer works.
+- `WsiDicom.save()` and `WsiDicom.files` return a `dict` from path to `WsiFile` instead of a list of paths. Indexing such as `files[0]` no longer works.
+- `FileUids` compare equal when all their UIDs are equal. Previously they compared equal only when both were parts of the same concatenation, which is now `matches_concatenation()`.
 - Thumbnails without Pixel Spacing are ignored with a warning when opening, and `Thumbnail` raises `WsiDicomNoResolutionError` if created without it.
 
 ### Fixed

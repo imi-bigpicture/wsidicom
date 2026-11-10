@@ -35,14 +35,14 @@ from upath import UPath
 
 from wsidicom.codec import Encoder
 from wsidicom.downsampler import Downsampler
-from wsidicom.file.created_file import (
-    CreatedAssociatedFile,
-    CreatedFile,
-    CreatedLevelFile,
-    CreatedThumbnailFile,
-)
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE
+from wsidicom.file.wsi_file import (
+    WsiAssociatedFile,
+    WsiFile,
+    WsiLevelFile,
+    WsiThumbnailFile,
+)
 from wsidicom.geometry import Size
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
 from wsidicom.instance import (
@@ -625,7 +625,7 @@ class BaseFileWriter(metaclass=ABCMeta):
         self._instance_split = instance_split
 
     @abstractmethod
-    def write(self) -> Mapping[UPath, CreatedFile]:
+    def write(self) -> Mapping[UPath, WsiFile]:
         """Write DICOM files and return the created files, by path."""
         raise NotImplementedError()
 
@@ -904,12 +904,12 @@ class PyramidFileWriter(BaseFileWriter):
         self._source_workers = source_workers
         self._chunk_size = chunk_size
 
-    def write(self) -> dict[UPath, CreatedLevelFile]:
+    def write(self) -> dict[UPath, WsiLevelFile]:
         """Write the pyramid files.
 
         Returns
         -------
-        dict[UPath, CreatedLevelFile]
+        dict[UPath, WsiLevelFile]
             The created DICOM files, by path, described as written.
         """
         # Get source info
@@ -1008,7 +1008,7 @@ class PyramidFileWriter(BaseFileWriter):
                 raise token.exception or error from None
 
             return {
-                part.filepath: CreatedLevelFile.from_dataset(
+                part.filepath: WsiLevelFile.from_dataset(
                     part.dataset,
                     transfer_syntax,
                     level_writer.focal_planes,
@@ -1675,15 +1675,15 @@ class GroupFileWriter(BaseFileWriter):
         self._group = group
         self._pyramid_index = pyramid_index
 
-    def write(self) -> dict[UPath, CreatedThumbnailFile | CreatedAssociatedFile]:
+    def write(self) -> dict[UPath, WsiThumbnailFile | WsiAssociatedFile]:
         """Write group to DICOM files.
 
         Returns
         -------
-        dict[UPath, CreatedThumbnailFile | CreatedAssociatedFile]
+        dict[UPath, WsiThumbnailFile | WsiAssociatedFile]
             The created DICOM files, by path, described as written.
         """
-        created_files: dict[UPath, CreatedThumbnailFile | CreatedAssociatedFile] = {}
+        created_files: dict[UPath, WsiThumbnailFile | WsiAssociatedFile] = {}
         for sub_group in self._group_instances_to_file(self._group):
             source_image_data = sub_group[0].image_data
             sub_instances = Instances(sub_group)
@@ -1750,18 +1750,18 @@ class GroupFileWriter(BaseFileWriter):
         transfer_syntax: UID,
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
-    ) -> CreatedThumbnailFile | CreatedAssociatedFile:
+    ) -> WsiThumbnailFile | WsiAssociatedFile:
         """Describe a written file of the group from its dataset as written."""
         if isinstance(self._group, Thumbnail):
             assert self._pyramid_index is not None
-            return CreatedThumbnailFile.from_dataset(
+            return WsiThumbnailFile.from_dataset(
                 dataset,
                 transfer_syntax,
                 focal_planes,
                 optical_paths,
                 self._pyramid_index,
             )
-        return CreatedAssociatedFile.from_dataset(
+        return WsiAssociatedFile.from_dataset(
             dataset, transfer_syntax, focal_planes, optical_paths
         )
 
