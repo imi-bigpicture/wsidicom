@@ -140,6 +140,16 @@ class PyramidLevelWriter:
     def dataset(self) -> WsiDataset:
         return self._dataset
 
+    @property
+    def focal_planes(self) -> Sequence[float]:
+        """Focal planes of this level's instance, in um."""
+        return self._focal_planes
+
+    @property
+    def optical_paths(self) -> Sequence[str]:
+        """Optical path identifiers of this level's instance."""
+        return self._optical_paths
+
     def start(self, tile_writer: TileWriter) -> None:
         """Create the tile sequencer with the given writer and start its thread."""
         self._tile_sequencer = TileSequencer(

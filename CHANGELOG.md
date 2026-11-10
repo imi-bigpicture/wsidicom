@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `WsiFile` (`WsiLevelFile`, `WsiThumbnailFile` or `WsiAssociatedFile`) describes a file of a WSI, as opened or as written.
+- `FileUids.matches_concatenation()` tells if two files are parts of the same concatenation.
+
+### Changed
+
+- `WsiDicom.save()` and `WsiDicom.files` return a `dict` from path to `WsiFile` instead of a list of paths. Indexing such as `files[0]` no longer works.
+- `FileUids` compare equal when all their UIDs are equal. Previously they compared equal only when both were parts of the same concatenation, which is now `matches_concatenation()`.
+- Thumbnails without Pixel Spacing are ignored with a warning when opening, and `Thumbnail` raises `WsiDicomNoResolutionError` if created without it.
+
 ### Fixed
+
+- `WsiDicom.files` listed files left out for not belonging to the slide.
 
 - Code values that Code Value (SH, at most 16 characters) cannot hold, such as SNOMED CT extension concept ids or URN and URL codes, are written as Long Code Value or URN Code Value. Previously such a code made writing metadata fail, and a graphical annotation wrote it as an invalid Code Value. Codes are also read from whichever of the three attributes holds the value, so codes with only Long Code Value or URN Code Value no longer fail to read.
 

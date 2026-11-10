@@ -29,7 +29,7 @@ from upath import UPath
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
 from wsidicom.codec import Encoder
-from wsidicom.file import OffsetTableType
+from wsidicom.file import OffsetTableType, WsiFile
 from wsidicom.file.file_writer import (
     BaseFileWriter,
     PyramidFileWriter,
@@ -59,7 +59,7 @@ class SplitOnlyWriter(BaseFileWriter):
             instance_split=instance_split,
         )
 
-    def write(self) -> list[UPath]:  # pragma: no cover - not exercised
+    def write(self) -> dict[UPath, WsiFile]:  # pragma: no cover - not exercised
         raise NotImplementedError()
 
 
@@ -231,6 +231,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -262,6 +263,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -302,6 +304,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=sparse,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -336,6 +339,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -373,6 +377,7 @@ class TestPyramidFileWriterIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -432,6 +437,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -463,6 +469,7 @@ class TestPyramidFileWriterBottomUpIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -500,6 +507,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -532,6 +540,7 @@ class TestPyramidFileWriterBottomUpSequentialIntegration:
         # Act
         generator = PyramidFileWriter(
             pyramid=pyramid_base_only,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -611,6 +620,7 @@ class TestPyramidFileWriterFailFast:
 
         writer = PyramidFileWriter(
             pyramid=pyramid,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,
@@ -688,6 +698,7 @@ class TestPyramidFileWriterFailFast:
 
         writer = PyramidFileWriter(
             pyramid=pyramid,
+            pyramid_index=0,
             output_path=UPath(tmp_path),
             uid_generator=uid_generator,
             max_threads=4,

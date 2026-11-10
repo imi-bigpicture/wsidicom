@@ -21,7 +21,7 @@ from wsidicom.cache import DecodedFrameCache, EncodedFrameCache, lru_cached_meth
 from wsidicom.codec import Codec
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.file.io import WsiDicomReader
-from wsidicom.instance import WsiDicomImageData
+from wsidicom.instance import WsiDataset, WsiDicomImageData
 
 
 class WsiDicomFileImageData(WsiDicomImageData):
@@ -76,6 +76,11 @@ class WsiDicomFileImageData(WsiDicomImageData):
     @property
     def files(self) -> list[UPath]:
         return [reader.filepath for reader in self._readers]
+
+    @property
+    def datasets_by_path(self) -> dict[UPath, WsiDataset]:
+        """The dataset of each file, by path, in frame order."""
+        return {reader.filepath: reader.dataset for reader in self._readers}
 
     @property
     def transfer_syntax(self) -> UID:

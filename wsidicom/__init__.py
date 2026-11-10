@@ -21,6 +21,13 @@ from wsidicom.config import (
     set_default_settings,
     use_settings,
 )
+from wsidicom.file import (
+    WsiAssociatedFile,
+    WsiFile,
+    WsiFileBase,
+    WsiLevelFile,
+    WsiThumbnailFile,
+)
 from wsidicom.graphical_annotations import (
     Annotation,
     AnnotationGroup,
@@ -66,10 +73,15 @@ __all__ = [
     "PolylineAnnotationGroup",
     "Pyramid",
     "Settings",
+    "WsiAssociatedFile",
     "WsiDataset",
     "WsiDicom",
     "WsiDicomWebClient",
+    "WsiFile",
+    "WsiFileBase",
     "WsiInstance",
+    "WsiLevelFile",
+    "WsiThumbnailFile",
     "get_settings",
     "set_default_settings",
     "use_settings",

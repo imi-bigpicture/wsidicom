@@ -22,9 +22,20 @@ from pydicom import Dataset
 from upath import UPath
 
 from wsidicom.codec.encoder import Encoder, JpegEncoder, JpegSettings
-from wsidicom.file.file_writer import BufferedPartSink, DirectPartSink, PartFactory
+from wsidicom.file.file_writer import (
+    BufferedPartSink,
+    DirectPartSink,
+    PartFactory,
+    WrittenPart,
+)
 from wsidicom.file.io.wsidicom_writer import WsiDicomWriter
 from wsidicom.instance import WsiDataset
+
+
+@pytest.fixture
+def written_dataset() -> WsiDataset:
+    """Return the dataset the stubbed writer reports as written."""
+    return WsiDataset(Dataset())
 
 
 @pytest.fixture
@@ -57,10 +68,14 @@ class TestDirectPartSink:
         decoy: Decoy,
         concatenated: bool,
         minimal_dataset: WsiDataset,
+        written_dataset: WsiDataset,
     ) -> None:
         # Arrange
         filepath = UPath(tmp_path) / "part.dcm"
         decoy.when(part_writer.filepath).then_return(filepath)
+        decoy.when(part_writer.finalize(minimal_dataset, transcoder)).then_return(
+            written_dataset
+        )
         sink = DirectPartSink(part_writer, minimal_dataset, transcoder=transcoder)
         tiles = [b"a", b"b"]
 
@@ -69,9 +84,8 @@ class TestDirectPartSink:
         returned = sink.finalize(concatenated=concatenated)
 
         # Assert — streamed straight through to the already-open writer
-        assert returned == filepath
+        assert returned == WrittenPart(filepath, written_dataset)
         decoy.verify(part_writer.write_tiles(tiles), times=1)
-        decoy.verify(part_writer.finalize(minimal_dataset, transcoder), times=1)
 
     def test_close_closes_the_writer(
         self, part_writer: WsiDicomWriter, decoy: Decoy
@@ -97,6 +111,7 @@ class TestBufferedPartSink:
         part_factory: PartFactory,
         decoy: Decoy,
         minimal_dataset: WsiDataset,
+        written_dataset: WsiDataset,
         transcoder: Encoder,
         concatenated: bool,
     ) -> None:
@@ -110,6 +125,9 @@ class TestBufferedPartSink:
                 frame_offset, matchers.Anything(), concatenated=concatenated
             )
         ).then_return((part_writer, minimal_dataset))
+        decoy.when(part_writer.finalize(minimal_dataset, transcoder)).then_return(
+            written_dataset
+        )
         sink = BufferedPartSink(
             UPath(tmp_path), part_factory, frame_offset, transcoder=transcoder
         )
@@ -121,9 +139,8 @@ class TestBufferedPartSink:
         returned = sink.finalize(concatenated=concatenated)
 
         # Assert
-        assert returned == filepath
+        assert returned == WrittenPart(filepath, written_dataset)
         decoy.verify(part_writer.write_tiles(matchers.Anything()), times=1)
-        decoy.verify(part_writer.finalize(minimal_dataset, transcoder), times=1)
 
     def test_scratch_file_removed_after_finalize(
         self,
@@ -150,5 +167,5 @@ class TestBufferedPartSink:
         returned = sink.finalize(concatenated=concatenated)
 
         # Assert
-        assert returned == part_writer.filepath
+        assert returned.filepath == part_writer.filepath
         assert not temp_file.exists()

@@ -42,9 +42,14 @@ from wsidicom.errors import (
 )
 from wsidicom.file import (
     OffsetTableType,
+    WsiAssociatedFile,
     WsiDicomFileSource,
     WsiDicomFileTarget,
+    WsiFile,
+    WsiLevelFile,
+    WsiThumbnailFile,
 )
+from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level, Thumbnail
@@ -263,7 +268,7 @@ class WsiDicom:
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
-    ) -> list[UPath]:
+    ) -> dict[UPath, WsiFile]:
         """
         Save wsi as DICOM-files in path.
 
@@ -351,8 +356,11 @@ class WsiDicom:
 
         Returns
         -------
-        list[UPath]
-            List of paths of created files.
+        dict[UPath, WsiFile]
+            The created files, by path, in the order they were written. Each is
+            described as written: a `WsiLevelFile` for a pyramid level, a
+            `WsiThumbnailFile` for a thumbnail, and a `WsiAssociatedFile`
+            for a label or overview. Iterating gives the paths.
 
         Notes
         -----
@@ -408,7 +416,7 @@ class WsiDicom:
             ) as target,
         ):
             target.save(self.pyramids, labels, overviews, include_thumbnails)
-            return target.filepaths
+            return target.created_files
 
     @classmethod
     def is_ready_for_viewing(
@@ -542,11 +550,71 @@ class WsiDicom:
         return self._create_metadata(self._selected_pyramid)
 
     @property
-    def files(self) -> list[UPath] | None:
-        """Return opened files if source is file-based."""
-        if isinstance(self._source, WsiDicomFileSource):
-            return self._source.files
-        return None
+    def files(self) -> dict[UPath, WsiFile] | None:
+        """Return the opened files, by path, if the source is file-based.
+
+        Each file is described as read: a `WsiLevelFile` for a pyramid level, a
+        `WsiThumbnailFile` for a thumbnail, and a `WsiAssociatedFile` for a
+        label or overview. The files are given pyramid by pyramid, levels
+        before thumbnails, then overviews and labels. Iterating gives the
+        paths. None if the source is not file-based.
+        """
+        if not isinstance(self._source, WsiDicomFileSource):
+            return None
+        files: dict[UPath, WsiFile] = {}
+        for pyramid_index, pyramid in enumerate(self.pyramids):
+            files.update(
+                (
+                    path,
+                    WsiLevelFile.from_dataset(
+                        dataset,
+                        instance.image_data.transfer_syntax,
+                        instance.focal_planes,
+                        instance.optical_paths,
+                        pyramid_index,
+                        level.level,
+                    ),
+                )
+                for level in pyramid.levels
+                for instance in level.instances.values()
+                if isinstance(instance.image_data, WsiDicomFileImageData)
+                for path, dataset in instance.image_data.datasets_by_path.items()
+            )
+            if pyramid.thumbnails is not None:
+                files.update(
+                    (
+                        path,
+                        WsiThumbnailFile.from_dataset(
+                            dataset,
+                            instance.image_data.transfer_syntax,
+                            instance.focal_planes,
+                            instance.optical_paths,
+                            pyramid_index,
+                        ),
+                    )
+                    for thumbnail in pyramid.thumbnails.groups
+                    for instance in thumbnail.instances.values()
+                    if isinstance(instance.image_data, WsiDicomFileImageData)
+                    for path, dataset in instance.image_data.datasets_by_path.items()
+                )
+        files.update(
+            (
+                path,
+                WsiAssociatedFile.from_dataset(
+                    dataset,
+                    instance.image_data.transfer_syntax,
+                    instance.focal_planes,
+                    instance.optical_paths,
+                ),
+            )
+            for series in (self.overviews, self.labels)
+            if series is not None
+            for group in series.groups
+            for instance in group.instances.values()
+            if isinstance(instance.image_data, WsiDicomFileImageData)
+            for path, dataset in instance.image_data.datasets_by_path.items()
+        )
+        return files
 
     def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         string = self.__class__.__name__
