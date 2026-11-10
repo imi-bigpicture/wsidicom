@@ -85,10 +85,17 @@ class Settings:
     than its value representation allows is truncated to fit, with a warning."""
     decoded_frame_cache_size: int = 100 * 1024 * 1024
     """Size of the decoded frame cache. Default is 100 MB."""
-    encoded_frame_cache_size: int = 100 * 1024 * 1024
-    """Size of the encoded frame cache. Default is 100 MB."""
+    web_encoded_frame_cache_size: int = 100 * 1024 * 1024
+    """Size of the encoded frame cache of DICOMweb instances. Default is 100 MB. Encoded
+    frames of files are not cached. To cache the frames of a file opened through fsspec,
+    use a caching file system of fsspec."""
     level_scale_tolerance: float = 1e-2
     """Tolerance for level scale comparison. Default is 1e-2."""
+    max_file_handles_per_file: int = 8
+    """The most handles open at once to a local file for reading frames. When all are in
+    use, a read waits for a handle to be returned. Without a limit, a slide of many
+    files read by many threads would open one handle per thread to every file. Default
+    is 8."""
 
     def __post_init__(self) -> None:
         # Accept the string form of the option enums (e.g. "box") at construction
