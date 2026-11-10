@@ -35,6 +35,7 @@ from pydicom.uid import (
 from upath import UPath
 
 from wsidicom.codec import Encoder
+from wsidicom.errors import WsiDicomBotOverflow
 from wsidicom.file.io import (
     OffsetTableType,
     WsiDicomReader,
@@ -42,6 +43,7 @@ from wsidicom.file.io import (
     WsiDicomWriter,
 )
 from wsidicom.file.io.deferred_dataset_reader import FileDeferredDatasetReader
+from wsidicom.file.io.frame_index import BotWriter
 from wsidicom.file.io.frame_index.frame_index import FrameIndex
 from wsidicom.file.io.frame_index.parser import FrameIndexParser
 from wsidicom.file.io.wsidicom_io import (
@@ -289,6 +291,7 @@ class TestWsiDicomWriter:
                 0,
                 wsi_dataset,
                 writer.frame_positions,
+                writer.frame_lengths,
                 None,
             )
 
@@ -303,8 +306,13 @@ class TestWsiDicomWriter:
         frame_offsets = [
             position + TAG_BYTES + LENGTH_BYTES for position in writer.frame_positions
         ]
-        frame_lengths = [  # Lengths are divisible with 2
-            2 * math.ceil(len(frame) / 2) for frame in frames
+        # An extended table states the length of the frame itself, other tables give
+        # the length of the item, which an odd frame is padded to make even.
+        frame_lengths = [
+            len(frame)
+            if written_table_type == OffsetTableType.EXTENDED
+            else 2 * math.ceil(len(frame) / 2)
+            for frame in frames
         ]
         expected_frame_positions = [
             (offset, length)
@@ -463,6 +471,98 @@ class TestWsiDicomWriter:
                 assert 0 <= len(read_frame) - len(frame) <= 1
                 assert read_frame[: len(frame)] == frame
 
+    @pytest.mark.parametrize("transfer_syntax", [JPEGBaseline8Bit])
+    def test_write_extended_offset_table_with_odd_frames(
+        self,
+        image_data: ImageData,
+        dataset: Dataset,
+        frames: list[bytes],
+        tmp_path: Path,
+        transfer_syntax: UID,
+    ):
+        """An odd frame reads back without the byte its item is padded with.
+
+        The extended offset table lengths state the frame itself, which may be odd
+        (PS3.3 C.7.6.3, CP-2388).
+        """
+        # Arrange
+        filepath = tmp_path.joinpath("odd.dcm")
+        odd_frames = [frame if len(frame) % 2 else frame + b"" for frame in frames]
+        wsi_dataset = WsiDataset(dataset)
+
+        # Act
+        self._write_file(
+            filepath, transfer_syntax, OffsetTableType.EXTENDED, wsi_dataset, odd_frames
+        )
+
+        # Assert
+        with WsiDicomReader(
+            WsiDicomReadIO(open(filepath, "rb"), filepath=UPath(filepath))
+        ) as read_file:
+            assert read_file.offset_table_type == OffsetTableType.EXTENDED
+            read_frames = [
+                read_file.read_frame(index) for index in range(len(odd_frames))
+            ]
+        assert read_frames == odd_frames
+
+    @pytest.mark.parametrize("transfer_syntax", [JPEGBaseline8Bit])
+    def test_basic_offset_table_overflow_rewrites_with_odd_frames(
+        self,
+        image_data: ImageData,
+        dataset: Dataset,
+        frames: list[bytes],
+        tmp_path: Path,
+        transfer_syntax: UID,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """A basic table too large to hold the offsets is rewritten as an extended
+        table, whose lengths state odd frames without the byte they are padded with."""
+        # Arrange
+        filepath = tmp_path.joinpath("overflow.dcm")
+        odd_frames = [frame if len(frame) % 2 else frame + b"" for frame in frames]
+        wsi_dataset = WsiDataset(dataset)
+
+        def overflow(*args: object, **kwargs: object) -> None:
+            raise WsiDicomBotOverflow("Image data exceeds 2^32 - 1 bytes")
+
+        monkeypatch.setattr(BotWriter, "write", overflow)
+
+        # Act
+        self._write_file(
+            filepath, transfer_syntax, OffsetTableType.BASIC, wsi_dataset, odd_frames
+        )
+
+        # Assert
+        with WsiDicomReader(
+            WsiDicomReadIO(open(filepath, "rb"), filepath=UPath(filepath))
+        ) as read_file:
+            assert read_file.offset_table_type == OffsetTableType.EXTENDED
+            read_frames = [
+                read_file.read_frame(index) for index in range(len(odd_frames))
+            ]
+        assert read_frames == odd_frames
+
+    @staticmethod
+    def _write_file(
+        filepath: Path,
+        transfer_syntax: UID,
+        table_type: OffsetTableType,
+        dataset: WsiDataset,
+        frames: list[bytes],
+    ) -> None:
+        writer = WsiDicomWriter.open(UPath(filepath), transfer_syntax, table_type)
+        try:
+            dataset = dataset.replace(
+                {"SOPInstanceUID": generate_uid(), "InstanceNumber": 0}
+            )
+            writer.write_header(dataset)
+            writer.start_pixel_data(dataset)
+            writer.write_tiles(frames)
+            writer.finalize(dataset)
+        except BaseException:
+            writer.close()
+            raise
+
 
 class _FakePixelDataWriter:
     """Minimal PixelDataWriter for testing write_tiles/frame_positions."""
@@ -479,6 +579,7 @@ class _FakeWriter(WsiDicomWriter):
 
     def __init__(self, positions: list[int]) -> None:
         self._frame_positions: list[int] = []
+        self._frame_lengths: list[int] = []
         self._pixel_data_writer = _FakePixelDataWriter(positions)
 
     def close(self, force: bool = False) -> None:

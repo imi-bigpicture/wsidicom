@@ -224,6 +224,7 @@ class TestEncapsulatedPixelDataWriter:
             0,
             dataset,
             [pos],
+            [4],
             None,
         )
         delimiter_pos = stream.tell() - ITEM_HEADER_SIZE
@@ -345,7 +346,7 @@ class TestNativePixelDataWriter:
         pos_before = stream.tell()
 
         # Act
-        writer.write_pixel_data_end(None, 0, 0, 0, dataset, [0], None)
+        writer.write_pixel_data_end(None, 0, 0, 0, dataset, [0], [4], None)
 
         # Assert
         assert stream.tell() == pos_before
