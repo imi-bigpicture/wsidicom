@@ -479,7 +479,7 @@ class TestWsiDicomWriter:
         frames: list[bytes],
         tmp_path: Path,
         transfer_syntax: UID,
-    ):
+    ) -> None:
         """An odd frame reads back without the byte its item is padded with.
 
         The extended offset table lengths state the frame itself, which may be odd
@@ -514,9 +514,12 @@ class TestWsiDicomWriter:
         tmp_path: Path,
         transfer_syntax: UID,
         monkeypatch: pytest.MonkeyPatch,
-    ):
-        """A basic table too large to hold the offsets is rewritten as an extended
-        table, whose lengths state odd frames without the byte they are padded with."""
+    ) -> None:
+        """A basic table too large for the offsets is rewritten as an extended table.
+
+        The lengths of the extended table state odd frames without the byte they are
+        padded with.
+        """
         # Arrange
         filepath = tmp_path.joinpath("overflow.dcm")
         odd_frames = [frame if len(frame) % 2 else frame + b"" for frame in frames]

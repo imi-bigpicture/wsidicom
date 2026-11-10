@@ -354,8 +354,10 @@ class WsiDicomWriter:
 
     @property
     def frame_lengths(self) -> list[int]:
-        """Frame lengths collected from write_tiles() calls, without the byte an odd
-        frame is padded with."""
+        """Frame lengths collected from write_tiles() calls.
+
+        The lengths are without the byte an odd frame is padded with.
+        """
         return self._frame_lengths
 
     def write_header(self, dataset: WsiDataset) -> None:

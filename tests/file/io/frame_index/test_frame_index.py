@@ -208,7 +208,7 @@ class TestFrameIndexParser:
     @pytest.mark.parametrize("bits", [8])
     def test_basic_offset_table_with_an_offset_giving_an_odd_length(
         self, buffer: WsiDicomWriteIO, tiles: list[bytes]
-    ):
+    ) -> None:
         # Arrange - a length derived from the offsets is of a whole item, which is
         # always even, so an odd one means the offsets are wrong.
         ITEM_TAG_AND_LENGTH = 8
@@ -290,7 +290,9 @@ class TestFrameIndexParser:
         # Assert
         assert list(frame_index) == expected_frame_index
 
-    def test_extended_offset_table_with_odd_lengths(self, buffer: WsiDicomWriteIO):
+    def test_extended_offset_table_with_odd_lengths(
+        self, buffer: WsiDicomWriteIO
+    ) -> None:
         # Arrange - an odd frame is padded to make its item even, but the lengths
         # table may state the frame without the padding (PS3.3 C.7.6.3, CP-2388).
         EMPTY_BOT = 8
