@@ -27,7 +27,8 @@ class FrameReader(Protocol):
     """Reads frames stored in a file, ready to serve. Is thread safe.
 
     A reader may do more than read the stored bytes. For example, it may put the jpeg
-    tables of a tiff page in place of the header of an abbreviated jpeg frame."""
+    tables of a tiff page in place of the header of an abbreviated jpeg frame.
+    """
 
     def read(self, position: int, length: int, /) -> bytes:
         """Return the frame of `length` bytes stored at `position`.
@@ -49,8 +50,9 @@ class FrameReader(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class TileByteRanges:
-    """Where the encoded tiles of a plane (focal plane and optical path) of an image are
-    stored.
+    """Where the encoded tiles of a plane of an image are stored.
+
+    A plane is a focal plane and optical path.
 
     A tile can then be read with a single read instead of through the image data. The
     encoded tile at (x, y) is the `lengths[i]` bytes at `positions[i]` of file
@@ -139,9 +141,11 @@ class TileByteRanges:
 
     @staticmethod
     def _read_only_view(values: NDArray[np.int64]) -> memoryview:
-        """Return a read-only memoryview of the values as contiguous int64. The memory
-        is shared if the values already are contiguous int64. The given array is not
-        changed."""
+        """Return a read-only memoryview of the values as contiguous int64.
+
+        The memory is shared if the values already are contiguous int64. The given array
+        is not changed.
+        """
         view = np.ascontiguousarray(values, dtype=np.int64).view()
         view.flags.writeable = False
         return memoryview(view)

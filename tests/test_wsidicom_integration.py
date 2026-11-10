@@ -185,9 +185,11 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         crop_to_image_boundary: bool,
-    ):
-        """Reading a tile of a local file at its byte range gives the same tile as
-        reading it through the level."""
+    ) -> None:
+        """A tile read at its byte range is the tile read through the level.
+
+        The tiles are of a local file.
+        """
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
         tiles_per_level = 50
@@ -225,7 +227,7 @@ class TestWsiDicomIntegration:
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
         past: str,
-    ):
+    ) -> None:
         """A tile outside the tiled size is not read at the byte range of another tile."""
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)
@@ -247,9 +249,10 @@ class TestWsiDicomIntegration:
         wsi_name: str,
         input_type: WsiInputType,
         wsi_factory: Callable[[str, WsiInputType], WsiDicom],
-    ):
-        """The frame indices of a whole plane are those of its tiles looked up one by
-        one, for both full and sparse tiling. The tile byte ranges are made from them.
+    ) -> None:
+        """The frame indices of a whole plane are those of its tiles looked up one by one.
+
+        This holds for both full and sparse tiling. The tile byte ranges are made from them.
         """
         # Arrange
         wsi = wsi_factory(wsi_name, input_type)

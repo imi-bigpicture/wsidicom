@@ -34,10 +34,12 @@ class FileHandlePool:
 
     The handles are unbuffered because frames are read at scattered positions. A
     buffered handle would read a whole buffer for each frame and copy the frame out of
-    it. For a frame of a few kilobytes, that costs several times the read itself."""
+    it. For a frame of a few kilobytes, that costs several times the read itself.
+    """
 
     def __init__(self, path: str, max_handles: int) -> None:
-        """
+        """Create a pool of handles to read a local file with.
+
         Parameters
         ----------
         path: str
@@ -103,8 +105,10 @@ class FileHandlePool:
 
     @staticmethod
     def _read_rest(handle: BinaryIO, data: bytes, length: int) -> bytes:
-        """Keep reading after a short read, until `length` bytes are read or the file
-        ends."""
+        """Read `length` bytes, or until the file ends.
+
+        Keeps reading after a short read.
+        """
         parts = [data]
         remaining = length - len(data)
         while remaining > 0:
@@ -116,9 +120,11 @@ class FileHandlePool:
         return b"".join(parts)
 
     def _open_or_wait(self) -> BinaryIO:
-        """Open a new handle, which the pool closes when it is closed. If `max_handles`
-        are already open, wait for one of them to be returned instead. A read that is
-        waiting when the pool closes gets a closed handle and raises."""
+        """Open a new handle, which the pool closes when it is closed.
+
+        If `max_handles` are already open, wait for one of them to be returned instead.
+        A read that is waiting when the pool closes gets a closed handle and raises.
+        """
         with self._lock:
             if self._closed:
                 raise ValueError(f"{self} is closed.")

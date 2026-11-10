@@ -39,6 +39,7 @@ class PlaneTileReader:
 
     def read(self, x: int, y: int, crop_to_image_boundary: bool) -> bytes | None:
         """Return the encoded tile at (x, y), read with a single read at its byte range.
+
         Returns None if the tile is to be read through the level instead.
 
         A tile is read through the level if it is outside the image (so that the level
@@ -88,8 +89,9 @@ class PlaneTileReaders:
     other planes do not wait.
     """
 
-    def __init__(self, pyramids: Pyramids):
-        """
+    def __init__(self, pyramids: Pyramids) -> None:
+        """Create readers of the planes of pyramids.
+
         Parameters
         ----------
         pyramids: Pyramids
@@ -112,8 +114,9 @@ class PlaneTileReaders:
         path: str | None,
         crop_to_image_boundary: bool,
     ) -> bytes | None:
-        """Return the encoded tile, read with a single read at its byte range. Returns
-        None if the tile is to be read through the level instead.
+        """Return the encoded tile, read with a single read at its byte range.
+
+        Returns None if the tile is to be read through the level instead.
 
         Parameters
         ----------
@@ -149,8 +152,9 @@ class PlaneTileReaders:
             self._readers.clear()
 
     def _get_reader(self, key: PlaneKey) -> PlaneTileReader | None:
-        """Return the reader of a plane, made by this read or by another read of the
-        plane at the same time.
+        """Return the reader of a plane.
+
+        It is made by this read, or by another read of the plane at the same time.
 
         Parameters
         ----------

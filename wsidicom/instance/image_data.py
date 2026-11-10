@@ -181,8 +181,9 @@ class ImageData(metaclass=ABCMeta):
         raise NotImplementedError()
 
     def get_tile_byte_ranges(self, z: float, path: str) -> TileByteRanges | None:
-        """Return where the encoded tiles of a plane are stored. Returns None if a tile
-        cannot be read with a single read.
+        """Return where the encoded tiles of a plane are stored.
+
+        Returns None if a tile cannot be read with a single read.
 
         Override this together with `get_frame_readers()` when `get_encoded_tile()` only
         reads a tile with a frame reader, and going through it costs noticeably more
@@ -205,10 +206,11 @@ class ImageData(metaclass=ABCMeta):
         return None
 
     def get_frame_readers(self) -> Sequence[FrameReader] | None:
-        """Return one reader for each file of the image data, for reading tiles at their
-        `get_tile_byte_ranges()`. The readers return tiles ready to serve, and are in
-        the order that the file indices of the byte ranges refer to. Returns None if
-        tiles are not to be read this way.
+        """Return one reader for each file of the image data.
+
+        The readers read tiles at their `get_tile_byte_ranges()`. They return tiles
+        ready to serve, and are in the order that the file indices of the byte ranges
+        refer to. Returns None if tiles are not to be read this way.
 
         Returns
         -------

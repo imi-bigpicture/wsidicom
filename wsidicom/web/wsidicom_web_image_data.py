@@ -103,8 +103,10 @@ class WsiDicomWebImageData(WsiDicomImageData):
         )
 
     def _get_encoded_tile_frames(self, frame_indices: Sequence[int]) -> Iterator[bytes]:
-        """Return tile frames for frame indices from the encoded frame cache,
-        requesting the ones not in it in one batch."""
+        """Return tile frames for frame indices from the encoded frame cache.
+
+        The ones not in the cache are requested in one batch.
+        """
         return self._encoded_frame_cache.get_tile_frames(
             self._cache_id, frame_indices, self._get_tile_frames
         )

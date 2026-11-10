@@ -282,16 +282,20 @@ class WsiDicomReadIO(WsiDicomIO):
 
     @staticmethod
     def _create_handle_pool(filepath: UPath) -> FileHandlePool | None:
-        """Return a pool for reading the file, or None if it is not a local file. A file
-        that is not local is read through the stream that this instance holds."""
+        """Return a pool for reading the file, or None if it is not a local file.
+
+        A file that is not local is read through the stream that this instance holds.
+        """
         if not isinstance(filepath.fs, LocalFileSystem) or not filepath.is_file():
             return None
         return FileHandlePool(str(filepath), get_settings().max_file_handles_per_file)
 
     @property
     def frame_reader(self) -> FileHandlePool | None:
-        """Return a thread-safe reader of frames that does not hold the stream. Returns
-        None if the file is not local."""
+        """Return a thread-safe reader of frames that does not hold the stream.
+
+        Returns None if the file is not local.
+        """
         return self._handle_pool
 
     def read_at(self, position: int, length: int) -> bytes:

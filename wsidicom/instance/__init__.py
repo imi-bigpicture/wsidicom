@@ -23,9 +23,9 @@ from wsidicom.instance.wsidicom_image_data import WsiDicomImageData
 
 __all__ = [
     "ConcatenationPart",
+    "FrameReader",
     "ImageData",
     "NumpyImageData",
-    "FrameReader",
     "TileByteRanges",
     "TileType",
     "WsiDataset",

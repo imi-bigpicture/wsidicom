@@ -119,8 +119,10 @@ class WsiDicomFileImageData(WsiDicomImageData):
         return self._readers[index]
 
     def get_tile_byte_ranges(self, z: float, path: str) -> TileByteRanges | None:
-        """Return where the frames of the tiles of a plane are in the files, or None
-        if the plane is not in the image data."""
+        """Return where the frames of the tiles of a plane are in the files.
+
+        Returns None if the plane is not in the image data.
+        """
         if z not in self.focal_planes or path not in self.optical_paths:
             return None
         frame_count = self._reader_frame_ends[-1]
@@ -155,8 +157,11 @@ class WsiDicomFileImageData(WsiDicomImageData):
         )
 
     def get_frame_readers(self) -> Sequence[FrameReader] | None:
-        """Return the readers of the files. Returns None if a file is not local, as
-        reading one frame at a time from such a file costs more."""
+        """Return the readers of the files.
+
+        Returns None if a file is not local, as reading one frame at a time from such a
+        file costs more.
+        """
         readers = [reader.frame_reader for reader in self._readers]
         if any(reader is None for reader in readers):
             return None

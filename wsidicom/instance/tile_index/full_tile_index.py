@@ -97,8 +97,10 @@ class FullTileIndex(TileIndex):
         return plane_offset + z_offset + path_offset
 
     def get_plane_frame_indices(self, z: float, path: str) -> NDArray[np.int64]:
-        """Return the frame index of every tile of a plane. In a full tile index, they
-        are consecutive from the frame of the first tile."""
+        """Return the frame index of every tile of a plane.
+
+        In a full tile index, they are consecutive from the frame of the first tile.
+        """
         first = self.get_frame_index(Point(0, 0), z, path)
         return np.arange(first, first + self.tiled_size.area, dtype=np.int64)
 
@@ -142,9 +144,11 @@ class FullTileIndex(TileIndex):
 
     @cached_property
     def _optical_path_indices(self) -> dict[str, int]:
-        """Index of each optical path identifier in the optical path sequence. It is a
-        dict rather than a cached method because it is looked up for every tile read. A
-        dict lookup costs a fraction of a cached method call."""
+        """Index of each optical path identifier in the optical path sequence.
+
+        It is a dict rather than a cached method because it is looked up for every tile
+        read. A dict lookup costs a fraction of a cached method call.
+        """
         indices: dict[str, int] = {}
         for index, path in enumerate(self._optical_paths):
             indices.setdefault(path, index)

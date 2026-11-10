@@ -218,7 +218,7 @@ class TestSparseTileIndex:
         assert index.get_frame_index(Point(2, 0), 0, "0") == 1
         assert index.get_frame_index(Point(0, 2), 0, "0") == 2
 
-    def test_plane_frame_indices_are_frame_index_of_each_tile_row_by_row(self):
+    def test_plane_frame_indices_are_frame_index_of_each_tile_row_by_row(self) -> None:
         # Arrange - frames at three of the nine tiles of two focal planes.
         dataset = create_dataset(
             columns=[1, 21, 11, 21], rows=[1, 1, 21, 11], z_offsets=[0, 0, 0, 1]
@@ -238,7 +238,7 @@ class TestSparseTileIndex:
             ]
         assert frame_indices[0].tolist() == [0, -1, 1, -1, -1, -1, -1, 2, -1]
 
-    def test_plane_frame_indices_of_plane_without_frames_are_all_missing(self):
+    def test_plane_frame_indices_of_plane_without_frames_are_all_missing(self) -> None:
         # Arrange - focal plane 1 has frames only in path "0". Path "1" has frames only
         # at focal plane 0.
         dataset = create_dataset(

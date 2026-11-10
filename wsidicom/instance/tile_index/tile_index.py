@@ -96,8 +96,9 @@ class TileIndex(metaclass=ABCMeta):
 
     @abstractmethod
     def get_plane_frame_indices(self, z: float, path: str) -> NDArray[np.int64]:
-        """Return the frame index of every tile of a plane at once, as
-        `get_frame_index()` would for each tile.
+        """Return the frame index of every tile of a plane at once.
+
+        The indices are those `get_frame_index()` would return for each tile.
 
         Parameters
         ----------

@@ -38,7 +38,8 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
         codec: Codec,
         decoded_frame_cache: DecodedFrameCache,
     ) -> None:
-        """
+        """Create image data for the frames of DICOM datasets.
+
         Parameters
         ----------
         datasets: Sequence[WsiDataset]
@@ -279,13 +280,17 @@ class WsiDicomImageData(ImageData, metaclass=ABCMeta):
 
     def _get_encoded_tile_frame(self, frame_index: int) -> bytes:
         """Return the tile frame at the frame index, to serve as an encoded tile.
+
         Override to serve it from a cache, when reading a frame again costs more than
-        getting it from a cache."""
+        getting it from a cache.
+        """
         return self._get_tile_frame(frame_index)
 
     def _get_encoded_tile_frames(self, frame_indices: Sequence[int]) -> Iterator[bytes]:
-        """Return tile frames for frame indices to serve as encoded tiles, see
-        `_get_encoded_tile_frame()`."""
+        """Return tile frames for frame indices to serve as encoded tiles.
+
+        See `_get_encoded_tile_frame()`.
+        """
         return self._get_tile_frames(frame_indices)
 
     def _get_frame_index(self, tile: Point, z: float, path: str) -> int:

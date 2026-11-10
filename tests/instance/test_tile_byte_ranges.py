@@ -26,7 +26,7 @@ TILE_SIZE = Size(10, 10)
 
 @pytest.mark.unittest
 class TestTileByteRanges:
-    def test_from_arrays_holds_byte_ranges_of_each_tile(self):
+    def test_from_arrays_holds_byte_ranges_of_each_tile(self) -> None:
         # Arrange
 
         # Act
@@ -51,7 +51,7 @@ class TestTileByteRanges:
         ]
         assert byte_ranges.file_indices is None
 
-    def test_from_arrays_holds_file_indices_of_each_tile(self):
+    def test_from_arrays_holds_file_indices_of_each_tile(self) -> None:
         # Arrange
 
         # Act
@@ -67,9 +67,11 @@ class TestTileByteRanges:
         assert byte_ranges.file_indices is not None
         assert byte_ranges.file_indices.tolist() == [0, 1, 0, 1, 0, 1]
 
-    def test_from_arrays_shares_int64_arrays_read_only(self):
+    def test_from_arrays_shares_int64_arrays_read_only(self) -> None:
         """The byte ranges are read-only views of the arrays made by the image data.
-        They are not copies."""
+
+        They are not copies.
+        """
         # Arrange
         positions = np.arange(0, 60, 10, dtype=np.int64)
 
@@ -83,9 +85,11 @@ class TestTileByteRanges:
         assert byte_ranges.positions.readonly
         assert positions.flags.writeable
 
-    def test_item_of_byte_ranges_is_int(self):
-        """An item is a plain int. A numpy integer is slower to index with and to read
-        at."""
+    def test_item_of_byte_ranges_is_int(self) -> None:
+        """An item is a plain int.
+
+        A numpy integer is slower to index with and to read at.
+        """
         # Arrange
         byte_ranges = TileByteRanges.from_arrays(
             IMAGE_SIZE,
@@ -101,11 +105,11 @@ class TestTileByteRanges:
         assert type(position) is int
         assert position == 10
 
-    def test_create_with_positions_not_one_per_tile_raises(self):
+    def test_create_with_positions_not_one_per_tile_raises(self) -> None:
         # Arrange
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="positions and"):
             TileByteRanges.from_arrays(
                 IMAGE_SIZE,
                 TILE_SIZE,
@@ -113,11 +117,11 @@ class TestTileByteRanges:
                 np.zeros(5, dtype=np.int64),
             )
 
-    def test_create_with_file_indices_not_one_per_tile_raises(self):
+    def test_create_with_file_indices_not_one_per_tile_raises(self) -> None:
         # Arrange
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="file indices"):
             TileByteRanges.from_arrays(
                 IMAGE_SIZE,
                 TILE_SIZE,

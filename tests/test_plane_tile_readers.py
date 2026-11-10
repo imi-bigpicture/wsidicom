@@ -41,7 +41,7 @@ TILE_SIZE = Size(10, 10)
 class InMemoryFrameReader:
     """Reads frames from bytes held in memory."""
 
-    def __init__(self, data: bytes):
+    def __init__(self, data: bytes) -> None:
         self._data = data
 
     def read(self, position: int, length: int, /) -> bytes:
@@ -49,10 +49,14 @@ class InMemoryFrameReader:
 
 
 class BlockingPlaneTileReaders(PlaneTileReaders):
-    """Readers whose reader of a plane is made by waiting for the test to release it,
-    and then returning None or raising."""
+    """Readers whose reader of a plane waits for the test to release it.
 
-    def __init__(self, blocked_level: int | None, error: Exception | None = None):
+    Once released, making the reader returns None or raises.
+    """
+
+    def __init__(
+        self, blocked_level: int | None, error: Exception | None = None
+    ) -> None:
         super().__init__(Pyramids([]))
         self._blocked_level = blocked_level
         self._error = error
@@ -75,8 +79,10 @@ class BlockingPlaneTileReaders(PlaneTileReaders):
 def plane_tile_reader(
     lengths: list[int], file_indices: list[int] | None = None
 ) -> PlaneTileReader:
-    """Reader of the 3 x 2 tiles, tile i stored as the bytes from 10 * i, in one file
-    or, with file indices, in two files whose bytes differ."""
+    """Reader of the 3 x 2 tiles, tile i stored as the bytes from 10 * i.
+
+    The tiles are in one file or, with file indices, in two files whose bytes differ.
+    """
     byte_ranges = TileByteRanges.from_arrays(
         IMAGE_SIZE,
         TILE_SIZE,
@@ -93,7 +99,7 @@ def plane_tile_reader(
 
 @pytest.mark.unittest
 class TestPlaneTileReader:
-    def test_read_returns_the_bytes_at_the_byte_range_of_the_tile(self):
+    def test_read_returns_the_bytes_at_the_byte_range_of_the_tile(self) -> None:
         # Arrange
         reader = plane_tile_reader([4] * 6)
 
@@ -103,7 +109,7 @@ class TestPlaneTileReader:
         # Assert
         assert tile == bytes(range(10, 14))
 
-    def test_read_reads_from_the_file_of_the_tile(self):
+    def test_read_reads_from_the_file_of_the_tile(self) -> None:
         # Arrange
         reader = plane_tile_reader([4] * 6, file_indices=[0, 1, 0, 1, 0, 1])
 
@@ -113,7 +119,7 @@ class TestPlaneTileReader:
         # Assert
         assert tile == bytes(range(110, 114))
 
-    def test_read_returns_none_for_a_tile_to_read_through_the_image_data(self):
+    def test_read_returns_none_for_a_tile_to_read_through_the_image_data(self) -> None:
         # Arrange
         read_through = TileByteRanges.READ_THROUGH_IMAGE_DATA
         reader = plane_tile_reader([4, read_through, 4, 4, 4, 4])
@@ -130,9 +136,11 @@ class TestPlaneTileReader:
     )
     def test_read_returns_none_for_a_tile_not_to_read_at_its_byte_range(
         self, x: int, y: int, crop_to_image_boundary: bool
-    ):
-        """A tile outside the tiled size, or a cropped tile when cropping, is read
-        through the level."""
+    ) -> None:
+        """A tile not to read at its byte range is read through the level.
+
+        Such a tile is outside the tiled size, or is cropped when cropping.
+        """
         # Arrange
         reader = plane_tile_reader([4] * 6)
 
@@ -142,7 +150,7 @@ class TestPlaneTileReader:
         # Assert
         assert tile is None
 
-    def test_read_reads_a_cropped_tile_when_not_cropping(self):
+    def test_read_reads_a_cropped_tile_when_not_cropping(self) -> None:
         # Arrange
         reader = plane_tile_reader([4] * 6)
 
@@ -155,11 +163,13 @@ class TestPlaneTileReader:
 
 @pytest.mark.unittest
 class TestPlaneTileReaders:
-    """The reader of a plane is made when a tile of the plane is first read. A read of a
-    plane whose reader is being made waits for it. Reads of other planes do not wait.
+    """The reader of a plane is made when a tile of the plane is first read.
+
+    A read of a plane whose reader is being made waits for it. Reads of other planes do
+    not wait.
     """
 
-    def test_read_returns_none_for_a_plane_not_in_the_pyramids(self):
+    def test_read_returns_none_for_a_plane_not_in_the_pyramids(self) -> None:
         # Arrange
         readers = PlaneTileReaders(Pyramids([]))
 
@@ -169,7 +179,7 @@ class TestPlaneTileReaders:
         # Assert
         assert tile is None
 
-    def test_other_plane_is_made_while_a_plane_is_being_made(self):
+    def test_other_plane_is_made_while_a_plane_is_being_made(self) -> None:
         # Arrange
         readers = BlockingPlaneTileReaders(blocked_level=0)
         with ThreadPoolExecutor(1) as executor:
@@ -186,7 +196,7 @@ class TestPlaneTileReaders:
         assert not done_before_release
         assert being_made.result(WAIT_SECONDS) is None
 
-    def test_reads_of_a_plane_at_once_make_it_once(self):
+    def test_reads_of_a_plane_at_once_make_it_once(self) -> None:
         # Arrange
         readers = BlockingPlaneTileReaders(blocked_level=None)
         with ThreadPoolExecutor(2) as executor:
@@ -205,7 +215,9 @@ class TestPlaneTileReaders:
         assert second.result(WAIT_SECONDS) is None
         assert readers.made == [(0, 0, None, None)]
 
-    def test_failure_to_make_a_plane_reaches_reads_waiting_and_is_tried_again(self):
+    def test_failure_to_make_a_plane_reaches_reads_waiting_and_is_tried_again(
+        self,
+    ) -> None:
         # Arrange
         readers = BlockingPlaneTileReaders(
             blocked_level=None, error=ValueError("Failed to make the reader.")
@@ -220,7 +232,7 @@ class TestPlaneTileReaders:
             second_exception = second.exception(WAIT_SECONDS)
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Failed to make the reader"):
             readers.read(0, 0, (0, 0), None, None, True)
         assert isinstance(first_exception, ValueError)
         assert isinstance(second_exception, ValueError)

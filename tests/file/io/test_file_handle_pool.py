@@ -26,7 +26,7 @@ MAX_HANDLES = 2
 handle."""
 
 
-@pytest.fixture()
+@pytest.fixture
 def pool(tmp_path: Path) -> Iterator[FileHandlePool]:
     path = tmp_path.joinpath("file.bin")
     path.write_bytes(CONTENT)
@@ -40,7 +40,7 @@ class TestFileHandlePool:
     @pytest.mark.parametrize(["position", "length"], [(0, 10), (1000, 4096)])
     def test_read_returns_bytes_at_position(
         self, pool: FileHandlePool, position: int, length: int
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -49,7 +49,7 @@ class TestFileHandlePool:
         # Assert
         assert data == CONTENT[position : position + length]
 
-    def test_read_past_end_returns_bytes_up_to_end(self, pool: FileHandlePool):
+    def test_read_past_end_returns_bytes_up_to_end(self, pool: FileHandlePool) -> None:
         # Arrange
         position = len(CONTENT) - 10
 
@@ -61,7 +61,7 @@ class TestFileHandlePool:
 
     def test_reads_from_threads_at_once_return_bytes_at_their_positions(
         self, pool: FileHandlePool
-    ):
+    ) -> None:
         # Arrange
         positions = list(range(0, len(CONTENT) - 100, 37))
 
@@ -76,9 +76,11 @@ class TestFileHandlePool:
 
     def test_reads_from_more_threads_than_max_handles_open_max_handles(
         self, pool: FileHandlePool
-    ):
+    ) -> None:
         """When all handles are taken, a read waits for one instead of opening another.
-        Each read still gets its own bytes."""
+
+        Each read still gets its own bytes.
+        """
         # Arrange
         positions = [position for _ in range(20) for position in range(0, 16000, 97)]
 
@@ -92,7 +94,7 @@ class TestFileHandlePool:
         assert data == [CONTENT[position : position + 100] for position in positions]
         assert 1 <= pool.handle_count <= MAX_HANDLES
 
-    def test_reads_in_turn_open_one_handle(self, pool: FileHandlePool):
+    def test_reads_in_turn_open_one_handle(self, pool: FileHandlePool) -> None:
         # Arrange
 
         # Act
@@ -102,20 +104,20 @@ class TestFileHandlePool:
         # Assert
         assert pool.handle_count == 1
 
-    def test_create_with_no_handles_raises(self, tmp_path: Path):
+    def test_create_with_no_handles_raises(self, tmp_path: Path) -> None:
         # Arrange
         path = tmp_path.joinpath("file.bin")
         path.write_bytes(CONTENT)
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="at least 1"):
             FileHandlePool(str(path), 0)
 
-    def test_read_after_close_raises(self, pool: FileHandlePool):
+    def test_read_after_close_raises(self, pool: FileHandlePool) -> None:
         # Arrange
         pool.read(0, 10)
         pool.close()
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="closed"):
             pool.read(0, 10)
