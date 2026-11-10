@@ -44,7 +44,7 @@ class TestWsiFilesIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
 
@@ -60,7 +60,7 @@ class TestWsiFilesIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
 
@@ -101,7 +101,7 @@ class TestWsiFilesIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         expected_level_index = wsi.pyramids[0].levels[-1].level
@@ -126,7 +126,7 @@ class TestWsiFilesIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         thumbnails = wsi.pyramids[0].thumbnails
@@ -163,7 +163,7 @@ class TestWsiFilesIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
 
@@ -196,7 +196,7 @@ class TestWsiFilesIntegration:
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
         uid_generator: CallableUidGenerator,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         pyramid = wsi.pyramids[0]
@@ -224,7 +224,7 @@ class TestWsiFilesIntegration:
         self,
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
 
@@ -247,7 +247,7 @@ class TestWsiFilesIntegration:
         self,
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         expected_level_indices = {
@@ -274,7 +274,7 @@ class TestWsiFilesIntegration:
         wsi_name: str,
         wsi_factory: Callable[[str], WsiDicom],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         wsi = wsi_factory(wsi_name)
         created_files = wsi.save(tmp_path, include_levels=[-1])

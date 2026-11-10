@@ -259,8 +259,10 @@ class WsiDicomFileTarget(Target):
         group: Label | Overview | Thumbnail,
         pyramid_index: int | None = None,
     ) -> GroupFileWriter:
-        """Create a GroupFileWriter for a group, with the index of the pyramid it
-        belongs to if it is a thumbnail."""
+        """Create a GroupFileWriter for a group.
+
+        `pyramid_index` is the index of the pyramid a thumbnail belongs to.
+        """
         return GroupFileWriter(
             group=group,
             output_path=self._output_path,

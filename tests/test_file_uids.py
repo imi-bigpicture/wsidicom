@@ -22,7 +22,7 @@ SLIDE_UIDS = SlideUids(UID("1.2.1"), UID("1.2.2"), UID("1.2.3"))
 
 @pytest.mark.unittest
 class TestFileUids:
-    def test_equal_uids_are_equal(self):
+    def test_equal_uids_are_equal(self) -> None:
         # Arrange
         first = FileUids(UID("1.2.4"), None, SLIDE_UIDS)
         second = FileUids(UID("1.2.4"), None, SLIDE_UIDS)
@@ -34,7 +34,7 @@ class TestFileUids:
         assert equal
         assert hash(first) == hash(second)
 
-    def test_parts_of_a_concatenation_are_not_equal(self):
+    def test_parts_of_a_concatenation_are_not_equal(self) -> None:
         # Arrange
         first = FileUids(UID("1.2.4"), UID("1.2.6"), SLIDE_UIDS)
         second = FileUids(UID("1.2.5"), UID("1.2.6"), SLIDE_UIDS)
@@ -45,7 +45,7 @@ class TestFileUids:
         # Assert
         assert not equal
 
-    def test_parts_of_a_concatenation_match_concatenation(self):
+    def test_parts_of_a_concatenation_match_concatenation(self) -> None:
         # Arrange
         first = FileUids(UID("1.2.4"), UID("1.2.6"), SLIDE_UIDS)
         second = FileUids(UID("1.2.5"), UID("1.2.6"), SLIDE_UIDS)
@@ -56,7 +56,7 @@ class TestFileUids:
         # Assert
         assert matches
 
-    def test_files_without_concatenation_do_not_match_concatenation(self):
+    def test_files_without_concatenation_do_not_match_concatenation(self) -> None:
         # Arrange
         uids = FileUids(UID("1.2.4"), None, SLIDE_UIDS)
 
@@ -66,7 +66,7 @@ class TestFileUids:
         # Assert
         assert not matches
 
-    def test_different_concatenations_do_not_match_concatenation(self):
+    def test_different_concatenations_do_not_match_concatenation(self) -> None:
         # Arrange
         first = FileUids(UID("1.2.4"), UID("1.2.6"), SLIDE_UIDS)
         second = FileUids(UID("1.2.5"), UID("1.2.7"), SLIDE_UIDS)

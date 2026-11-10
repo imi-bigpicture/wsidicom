@@ -29,7 +29,7 @@ from upath import UPath
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
 from wsidicom.codec import Encoder
-from wsidicom.file import OffsetTableType
+from wsidicom.file import OffsetTableType, WsiFile
 from wsidicom.file.file_writer import (
     BaseFileWriter,
     PyramidFileWriter,
@@ -59,7 +59,7 @@ class SplitOnlyWriter(BaseFileWriter):
             instance_split=instance_split,
         )
 
-    def write(self) -> list[UPath]:  # pragma: no cover - not exercised
+    def write(self) -> dict[UPath, WsiFile]:  # pragma: no cover - not exercised
         raise NotImplementedError()
 
 

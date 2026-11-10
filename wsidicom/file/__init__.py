@@ -27,13 +27,13 @@ from wsidicom.file.wsidicom_file_target import WsiDicomFileTarget
 from wsidicom.file.wsidicom_stream_opener import WsiDicomStreamOpener
 
 __all__ = [
+    "OffsetTableType",
     "WsiAssociatedFile",
+    "WsiDicomFileSource",
+    "WsiDicomFileTarget",
+    "WsiDicomStreamOpener",
     "WsiFile",
     "WsiFileBase",
     "WsiLevelFile",
     "WsiThumbnailFile",
-    "OffsetTableType",
-    "WsiDicomFileSource",
-    "WsiDicomFileTarget",
-    "WsiDicomStreamOpener",
 ]

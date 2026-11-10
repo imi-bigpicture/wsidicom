@@ -52,7 +52,7 @@ def shared_fields() -> dict[str, Any]:
 class TestCreatedFile:
     def test_level_file_gives_mpp_from_pixel_spacing(
         self, shared_fields: dict[str, Any]
-    ):
+    ) -> None:
         # Arrange
         level_file = WsiLevelFile(
             image_type=ImageType.VOLUME,
@@ -71,7 +71,7 @@ class TestCreatedFile:
 
     def test_associated_file_without_pixel_spacing_has_no_mpp(
         self, shared_fields: dict[str, Any]
-    ):
+    ) -> None:
         # Arrange
         associated_file = WsiAssociatedFile(
             image_type=ImageType.LABEL, pixel_spacing=None, **shared_fields
@@ -88,11 +88,11 @@ class TestCreatedFile:
     )
     def test_level_file_rejects_other_image_type(
         self, shared_fields: dict[str, Any], image_type: ImageType
-    ):
+    ) -> None:
         # Arrange
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="is not allowed for"):
             WsiLevelFile(
                 image_type=image_type,  # pyright: ignore[reportArgumentType]
                 pixel_spacing=SizeMm(0.0005, 0.0005),
@@ -106,11 +106,11 @@ class TestCreatedFile:
     )
     def test_thumbnail_file_rejects_other_image_type(
         self, shared_fields: dict[str, Any], image_type: ImageType
-    ):
+    ) -> None:
         # Arrange
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="is not allowed for"):
             WsiThumbnailFile(
                 image_type=image_type,  # pyright: ignore[reportArgumentType]
                 pixel_spacing=SizeMm(0.0005, 0.0005),
@@ -121,11 +121,11 @@ class TestCreatedFile:
     @pytest.mark.parametrize("image_type", [ImageType.VOLUME, ImageType.THUMBNAIL])
     def test_associated_file_rejects_other_image_type(
         self, shared_fields: dict[str, Any], image_type: ImageType
-    ):
+    ) -> None:
         # Arrange
 
         # Act & Assert
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="is not allowed for"):
             WsiAssociatedFile(
                 image_type=image_type,  # pyright: ignore[reportArgumentType]
                 pixel_spacing=None,

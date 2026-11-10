@@ -92,7 +92,7 @@ class TestWsiDicomFileSource:
 
     def test_open_uses_thumbnail_with_pixel_spacing(
         self, tmp_path: Path, level_dataset: Dataset, level_file: Path
-    ):
+    ) -> None:
         # Arrange
         thumbnail_file = create_thumbnail_file(
             tmp_path.joinpath("thumbnail.dcm"), level_dataset, True
@@ -113,7 +113,7 @@ class TestWsiDicomFileSource:
         level_dataset: Dataset,
         level_file: Path,
         caplog: pytest.LogCaptureFixture,
-    ):
+    ) -> None:
         # Arrange
         thumbnail_file = create_thumbnail_file(
             tmp_path.joinpath("thumbnail.dcm"), level_dataset, False
@@ -134,7 +134,7 @@ class TestWsiDicomFileSource:
 
     def test_open_leaves_out_files_of_other_slide(
         self, tmp_path: Path, level_dataset: Dataset, level_file: Path
-    ):
+    ) -> None:
         # Arrange
         other_dataset = deepcopy(level_dataset)
         other_dataset.SOPInstanceUID = generate_uid()

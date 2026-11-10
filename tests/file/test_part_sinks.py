@@ -34,7 +34,7 @@ from wsidicom.instance import WsiDataset
 
 @pytest.fixture
 def written_dataset() -> WsiDataset:
-    """The dataset the stubbed writer reports as written."""
+    """Return the dataset the stubbed writer reports as written."""
     return WsiDataset(Dataset())
 
 

@@ -773,7 +773,7 @@ class Label(Instances):
 
 
 class Thumbnail(Instances):
-    def __init__(self, instances: Iterable[WsiInstance]):
+    def __init__(self, instances: Iterable[WsiInstance]) -> None:
         """Create a group of thumbnail instances.
 
         Parameters
