@@ -97,7 +97,7 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
         FrameIndex
             Position and length of every frame.
         """
-        invalid: NDArray[np.bool_] = (lengths <= 0) | (lengths % 2 != 0)
+        invalid = self._invalid_lengths(lengths)
         if invalid.any():
             frame = int(invalid.argmax())
             raise WsiDicomFileError(
@@ -105,3 +105,22 @@ class OffsetTableFrameIndexParser(EncapsulatedPixelDataFrameIndexParser):
                 f"Invalid frame length {lengths[frame]} for frame {frame}",
             )
         return FrameIndex(pixels_start + offsets + TAG_AND_LENGTH_SIZE, lengths)
+
+    def _invalid_lengths(self, lengths: NDArray[np.int64]) -> NDArray[np.bool_]:
+        """Return which frame lengths are invalid.
+
+        A frame has to hold something. Whether a length also has to be even depends on
+        the table, as a table that states lengths may leave out the byte an odd frame is
+        padded with.
+
+        Parameters
+        ----------
+        lengths: NDArray[np.int64]
+            Length of every frame.
+
+        Returns
+        -------
+        NDArray[np.bool_]
+            True for every frame whose length is invalid.
+        """
+        return lengths <= 0

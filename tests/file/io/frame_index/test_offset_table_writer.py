@@ -12,7 +12,6 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import itertools
 import struct
 from collections.abc import Iterator, Sequence
 from io import BytesIO
@@ -114,7 +113,7 @@ class TestOffsetTableWriter:
         writer.reserve(len(positions))
 
         # Act
-        writer.write(0, positions, 0)
+        writer.write(0, positions, [92] * len(positions))
 
         # Assert
         buffer.seek(0)
@@ -130,7 +129,7 @@ class TestOffsetTableWriter:
         buffer.write_UL(0)
 
         # Act
-        writer.write(0, positions, 600)
+        writer.write(0, positions, [92] * len(positions))
 
         # Assert
         buffer.seek(0)
@@ -139,22 +138,15 @@ class TestOffsetTableWriter:
     def test_write_eot_lengths_are_of_the_frames(
         self, buffer: WsiDicomWriteIO, positions: Sequence[int]
     ) -> None:
-        """The lengths state the frames, not the distance from one to the next.
+        """The lengths state the frames, without the byte an odd frame is padded with.
 
-        A frame position is where the item tag and length introducing the frame are,
-        so the distance to the next frame is those eight bytes more than the frame
-        itself. Nothing else reads these lengths back if the reader derives them
-        instead, so they are checked here.
+        A frame position is where the item that holds the frame starts, and an odd
+        frame is padded to make the item even, so the lengths can not be derived from
+        the positions. The standard allows them to be odd (PS3.3 C.7.6.3, CP-2388).
         """
         # Arrange
-        HEADER_BYTES = 8
         EOT_ITEM_BYTES = 8
-        last_frame_end = 600
-        expected = [
-            next_position - position - HEADER_BYTES
-            for position, next_position in itertools.pairwise(positions)
-        ]
-        expected.append(last_frame_end - positions[-1] - HEADER_BYTES)
+        frame_lengths = [91, 92, 91, 92, 91]
         writer = EotWriter(buffer)
         writer.reserve(len(positions))
         buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
@@ -162,7 +154,7 @@ class TestOffsetTableWriter:
         buffer.write_UL(0)
 
         # Act
-        writer.write(0, positions, last_frame_end)
+        writer.write(0, positions, frame_lengths)
 
         # Assert
         buffer.seek(0)
@@ -176,7 +168,7 @@ class TestOffsetTableWriter:
             struct.unpack("<Q", buffer.read(EOT_ITEM_BYTES))[0]
             for _ in range(len(positions))
         ]
-        assert written == expected
+        assert written == frame_lengths
 
     @staticmethod
     def assert_end_of_file(file: WsiDicomWriteIO) -> None:

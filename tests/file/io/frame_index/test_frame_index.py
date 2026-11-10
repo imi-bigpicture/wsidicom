@@ -206,6 +206,27 @@ class TestFrameIndexParser:
         assert list(frame_index) == expected_frame_index
 
     @pytest.mark.parametrize("bits", [8])
+    def test_basic_offset_table_with_an_offset_giving_an_odd_length(
+        self, buffer: WsiDicomWriteIO, tiles: list[bytes]
+    ) -> None:
+        # Arrange - a length derived from the offsets is of a whole item, which is
+        # always even, so an odd one means the offsets are wrong.
+        ITEM_TAG_AND_LENGTH = 8
+        SECOND_OFFSET = slice(ITEM_TAG_AND_LENGTH + 4, ITEM_TAG_AND_LENGTH + 8)
+        buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
+        encapsulated = bytearray(encapsulate(tiles, has_bot=True))
+        second_offset = int.from_bytes(encapsulated[SECOND_OFFSET], "little")
+        encapsulated[SECOND_OFFSET] = pack("<L", second_offset + 1)
+        buffer.write(bytes(encapsulated))
+        buffer.write_tag(SequenceDelimiterTag)
+        buffer.write_UL(0)
+        parser = BasicOffsetTableFrameIndexParser(buffer, 0, len(tiles))
+
+        # Act & Assert
+        with pytest.raises(WsiDicomFileError, match="Invalid frame length"):
+            parser.parse_frame_index()
+
+    @pytest.mark.parametrize("bits", [8])
     def test_basic_offset_table_with_non_zero_first_offset(
         self, buffer: WsiDicomWriteIO, tiles: list[bytes]
     ) -> None:
@@ -261,6 +282,42 @@ class TestFrameIndexParser:
             ((bot_start + EMPTY_BOT + index * ITEM_LENGTH), FRAME_LENGTH)
             for index in range(len(tiles))
         ]
+
+        # Act
+        parser = ExtendedOffsetFrameIndexParser(buffer, 0, len(tiles))
+        frame_index = parser.parse_frame_index()
+
+        # Assert
+        assert list(frame_index) == expected_frame_index
+
+    def test_extended_offset_table_with_odd_lengths(
+        self, buffer: WsiDicomWriteIO
+    ) -> None:
+        # Arrange - an odd frame is padded to make its item even, but the lengths
+        # table may state the frame without the padding (PS3.3 C.7.6.3, CP-2388).
+        EMPTY_BOT = 8
+        ITEM_TAG_AND_LENGTH = 8
+        tiles = [bytes([1] * 3), bytes([2] * 2), bytes([3] * 5)]
+        encapsulated, eot_positions, _ = encapsulate_extended(tiles)
+        eot_lengths = b"".join(pack("<Q", len(tile)) for tile in tiles)
+        buffer.write_tag_of_vr_and_length(
+            ExtendedOffsetTableTag, "OV", len(eot_positions)
+        )
+        buffer.write(eot_positions)
+        buffer.write_tag_of_vr_and_length(
+            ExtendedOffsetTableLengthsTag, "OV", len(eot_lengths)
+        )
+        buffer.write(eot_lengths)
+        buffer.write_tag_of_vr_and_length(PixelDataTag, "OB")
+        bot_start = buffer.tell()
+        buffer.write(encapsulated)
+        buffer.write_tag(SequenceDelimiterTag)
+        buffer.write_UL(0)
+        expected_frame_index: list[tuple[int, int]] = []
+        position = bot_start + EMPTY_BOT
+        for tile in tiles:
+            expected_frame_index.append((position + ITEM_TAG_AND_LENGTH, len(tile)))
+            position += ITEM_TAG_AND_LENGTH + len(tile) + len(tile) % 2
 
         # Act
         parser = ExtendedOffsetFrameIndexParser(buffer, 0, len(tiles))

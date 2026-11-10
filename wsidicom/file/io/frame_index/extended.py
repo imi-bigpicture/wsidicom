@@ -35,7 +35,8 @@ class ExtendedOffsetFrameIndexParser(OffsetTableFrameIndexParser):
 
     An extended table is accompanied by a second table stating the length of every
     frame, so unlike a basic table nothing has to be derived from the distance between
-    two frames.
+    two frames. A stated length may be odd, as it may leave out the byte that pads an
+    odd frame to an even item (PS3.3 C.7.6.3, CP-2388).
     """
 
     LENGTH_DTYPE: ClassVar[str] = "<u8"

@@ -79,6 +79,7 @@ class PixelDataWriter(metaclass=ABCMeta):
         dataset_end: int,
         dataset: WsiDataset,
         frame_positions: Sequence[int],
+        frame_lengths: Sequence[int],
         transcoder: Encoder | None,
     ) -> WsiDataset:
         """Finalize the pixel data section.
@@ -124,6 +125,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
         dataset_end: int,
         dataset: WsiDataset,
         frame_positions: Sequence[int],
+        frame_lengths: Sequence[int],
         transcoder: Encoder | None,
     ) -> WsiDataset:
         last_frame_end = self._file.tell()
@@ -138,6 +140,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
             last_frame_end,
             dataset_end,
             frame_positions,
+            frame_lengths,
         )
         return dataset
 
@@ -170,19 +173,21 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
         last_frame_end: int,
         dataset_end: int,
         frame_positions: Sequence[int],
+        frame_lengths: Sequence[int],
     ) -> None:
         """Write sequence delimiter and offset table."""
         self._file.write_tag(SequenceDelimiterTag)
         self._file.write_UL(0)
         if offset_writer is not None:
             try:
-                offset_writer.write(pixels_start, frame_positions, last_frame_end)
+                offset_writer.write(pixels_start, frame_positions, frame_lengths)
             except WsiDicomBotOverflow:
                 if isinstance(offset_writer, BotWriter):
                     self._rewrite_as_eot(
                         dataset_end,
                         last_frame_end,
                         frame_positions,
+                        frame_lengths,
                     )
                 else:
                     raise
@@ -192,6 +197,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
         dataset_end: int,
         pixels_end: int,
         frame_positions: Sequence[int],
+        frame_lengths: Sequence[int],
     ) -> None:
         """Rewrite pixel data section with EOT on BOT overflow."""
         file_path = self._file.filepath
@@ -234,6 +240,7 @@ class EncapsulatedPixelDataWriter(PixelDataWriter):
             last_frame_end,
             dataset_end,
             new_frame_positions,
+            frame_lengths,
         )
         temp_stream.close()
 
@@ -307,6 +314,7 @@ class NativePixelDataWriter(PixelDataWriter):
         dataset_end: int,
         dataset: WsiDataset,
         frame_positions: Sequence[int],
+        frame_lengths: Sequence[int],
         transcoder: Encoder | None,
     ) -> WsiDataset:
         return dataset  # Native format has no closing tags
@@ -328,6 +336,7 @@ class WsiDicomWriter:
         self._transfer_syntax = transfer_syntax
         self._pixel_data_writer = pixel_data_writer
         self._frame_positions: list[int] = []
+        self._frame_lengths: list[int] = []
         self._dataset_start: int | None = None
         self._dataset_end: int | None = None
         self._pixels_start: int | None = None
@@ -342,6 +351,14 @@ class WsiDicomWriter:
     def frame_positions(self) -> list[int]:
         """Frame positions collected from write_tiles() calls."""
         return self._frame_positions
+
+    @property
+    def frame_lengths(self) -> list[int]:
+        """Frame lengths collected from write_tiles() calls.
+
+        The lengths are without the byte an odd frame is padded with.
+        """
+        return self._frame_lengths
 
     def write_header(self, dataset: WsiDataset) -> None:
         """Write DICOM preamble, file meta info, and dataset."""
@@ -363,11 +380,12 @@ class WsiDicomWriter:
         )
 
     def write_tiles(self, tiles: Iterable[bytes]) -> int:
-        """Write consecutive tiles and record their frame positions."""
+        """Write consecutive tiles and record their frame positions and lengths."""
         count = 0
         for tile in tiles:
             position = self._pixel_data_writer.write_tile(tile)
             self._frame_positions.append(position)
+            self._frame_lengths.append(len(tile))
             count += 1
         return count
 
@@ -395,6 +413,7 @@ class WsiDicomWriter:
             self._dataset_end,
             dataset,
             self._frame_positions,
+            self._frame_lengths,
             transcoder,
         )
         self.close()
