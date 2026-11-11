@@ -695,7 +695,7 @@ class TestWsiDataset:
         dataset = WsiDataset(create_main_dataset())
 
         # Act
-        result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
+        result = dataset.as_tiled_full([5.0], {"0": None}, Size(2, 2), 1)
 
         # Assert
         origin = result.as_dataset().TotalPixelMatrixOriginSequence[0]
@@ -710,7 +710,7 @@ class TestWsiDataset:
         dataset = WsiDataset(source)
 
         # Act
-        result = dataset.as_tiled_full([0.0], ["0"], Size(2, 2), 1)
+        result = dataset.as_tiled_full([0.0], {"0": None}, Size(2, 2), 1)
 
         # Assert — no invalid (x/y-less) origin item is created.
         assert "TotalPixelMatrixOriginSequence" not in result.as_dataset()
@@ -722,7 +722,7 @@ class TestWsiDataset:
         dataset = WsiDataset(source)
 
         # Act
-        result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
+        result = dataset.as_tiled_full([5.0], {"0": None}, Size(2, 2), 1)
 
         # Assert — required x/y are present (defaulted) alongside z.
         origin = result.as_dataset().TotalPixelMatrixOriginSequence[0]
@@ -730,7 +730,7 @@ class TestWsiDataset:
         assert float(origin.YOffsetInSlideCoordinateSystem) == 0.0
         assert float(origin.ZOffsetInSlideCoordinateSystem) == 5.0
 
-    def test_as_tiled_full_filters_optical_path_sequence_to_written_paths(self) -> None:
+    def test_as_tiled_full_writes_only_given_optical_paths(self) -> None:
         # Arrange — add a second optical path "1" to the source.
         source = create_main_dataset()
         second_path = Dataset()
@@ -739,7 +739,7 @@ class TestWsiDataset:
         dataset = WsiDataset(source)
 
         # Act — write only optical path "1".
-        result = dataset.as_tiled_full([0.0], ["1"], Size(2, 2), 1)
+        result = dataset.as_tiled_full([0.0], {"1": None}, Size(2, 2), 1)
 
         # Assert
         identifiers = [
@@ -749,19 +749,20 @@ class TestWsiDataset:
         assert identifiers == ["1"]
         assert result.as_dataset().NumberOfOpticalPaths == 1
 
-    def test_as_tiled_full_takes_optical_paths_from_other_sources(self):
-        # Arrange — two sources that each describe one optical path, as when
-        # each optical path of a level is stored in its own instance.
-        first_source = create_main_dataset()
-        first_source.OpticalPathSequence[0].OpticalPathIdentifier = "1"
-        second_source = create_main_dataset()
-        second_source.OpticalPathSequence[0].OpticalPathIdentifier = "2"
-        dataset = WsiDataset(first_source)
+    def test_as_tiled_full_writes_optical_paths_in_given_order(self) -> None:
+        # Arrange — items for two optical paths, as when each optical path of a
+        # level is stored in its own instance and the dataset describes only one.
+        source = create_main_dataset()
+        source.OpticalPathSequence[0].OpticalPathIdentifier = "1"
+        dataset = WsiDataset(source)
+        optical_paths = {}
+        for identifier in ["2", "1"]:
+            optical_path_dataset = Dataset()
+            optical_path_dataset.OpticalPathIdentifier = identifier
+            optical_paths[identifier] = optical_path_dataset
 
         # Act — combine both optical paths into one instance.
-        result = dataset.as_tiled_full(
-            [0.0], ["2", "1"], Size(2, 2), 1, [WsiDataset(second_source)]
-        )
+        result = dataset.as_tiled_full([0.0], optical_paths, Size(2, 2), 1)
 
         # Assert — both paths are described, in the order of the frames.
         identifiers = [
@@ -770,6 +771,39 @@ class TestWsiDataset:
         ]
         assert identifiers == ["2", "1"]
         assert result.as_dataset().NumberOfOpticalPaths == 2
+
+    def test_as_tiled_full_keeps_own_optical_path_dataset(self) -> None:
+        # Arrange — the dataset describes optical path "0", as when metadata has
+        # been set on it, and another item for it is given.
+        source = create_main_dataset()
+        source.OpticalPathSequence[0].OpticalPathDescription = "own"
+        dataset = WsiDataset(source)
+        given_optical_path_dataset = Dataset()
+        given_optical_path_dataset.OpticalPathIdentifier = "0"
+        given_optical_path_dataset.OpticalPathDescription = "given"
+
+        # Act
+        result = dataset.as_tiled_full(
+            [0.0], {"0": given_optical_path_dataset}, Size(2, 2), 1
+        )
+
+        # Assert
+        (optical_path_dataset,) = result.as_dataset().OpticalPathSequence
+        assert optical_path_dataset.OpticalPathDescription == "own"
+
+    def test_as_tiled_full_counts_optical_path_without_dataset(self) -> None:
+        # Arrange — a source that describes no optical path, so its frames are of
+        # optical path "0".
+        source = create_main_dataset()
+        del source.OpticalPathSequence
+        dataset = WsiDataset(source)
+
+        # Act
+        result = dataset.as_tiled_full([0.0], {"0": None}, Size(2, 2), 1)
+
+        # Assert — the optical path is counted, and still not described.
+        assert result.as_dataset().NumberOfOpticalPaths == 1
+        assert "OpticalPathSequence" not in result.as_dataset()
 
     def test_as_tiled_full_drops_slice_spacing_for_single_focal_plane(self) -> None:
         # Arrange — a source with multi-plane slice spacing set.
@@ -780,7 +814,7 @@ class TestWsiDataset:
         dataset = WsiDataset(source)
 
         # Act — split to a single focal plane.
-        result = dataset.as_tiled_full([5.0], ["0"], Size(2, 2), 1)
+        result = dataset.as_tiled_full([5.0], {"0": None}, Size(2, 2), 1)
 
         # Assert — stale spacing is removed.
         pixel_measure = (

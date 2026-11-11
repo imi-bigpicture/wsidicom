@@ -22,6 +22,7 @@ output DICOM files are inspected to confirm the split.
 
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -46,6 +47,8 @@ from wsidicom.series import Pyramid
 
 FOCAL_PLANES = [0.0, 1.0]
 UNEQUAL_FOCAL_PLANES = [0.0, 0.5, 2.0]
+# Larger than the values a file reader leaves unread until they are asked for.
+ICC_PROFILE_BY_OPTICAL_PATH = {"0": bytes([1]) * 100_000, "1": bytes([2]) * 100_000}
 
 
 class MultiFocalPlaneImageData(ImageData):
@@ -163,9 +166,11 @@ def multi_focal_plane_pyramid(wsi: WsiDicom, focal_planes: list[float]) -> Pyram
     return Pyramid([Level([instance], level.pixel_spacing)], [])
 
 
-def optical_path_sequence(identifier: str) -> Sequence:
+def optical_path_sequence(identifier: str, icc_profile: bytes | None) -> Sequence:
     item = Dataset()
     item.OpticalPathIdentifier = identifier
+    if icc_profile is not None:
+        item.ICCProfile = icc_profile
     return Sequence([item])
 
 
@@ -173,8 +178,12 @@ def sparse_instance(
     source_instance: WsiInstance,
     optical_path: str,
     focal_planes: list[float],
+    icc_profile: bytes | None = None,
 ) -> WsiInstance:
-    """Build a TILED_FULL instance for one optical path and its focal planes."""
+    """Build a TILED_FULL instance for one optical path and its focal planes.
+
+    The optical path is given `icc_profile`, if one is given.
+    """
     image_data = MultiFocalPlaneImageData(
         source_instance.image_data, focal_planes, [optical_path]
     )
@@ -185,7 +194,7 @@ def sparse_instance(
             "TotalPixelMatrixFocalPlanes": len(focal_planes),
             "NumberOfOpticalPaths": 1,
             "NumberOfFrames": image_data.tiled_size.area * len(focal_planes),
-            "OpticalPathSequence": optical_path_sequence(optical_path),
+            "OpticalPathSequence": optical_path_sequence(optical_path, icc_profile),
         }
     )
     return WsiInstance(dataset, image_data)
@@ -208,8 +217,10 @@ def sparse_pyramid(wsi: WsiDicom) -> Pyramid:
 
 @pytest.fixture
 def instance_per_optical_path_pyramid(wsi: WsiDicom) -> Pyramid:
-    """Build a single-level pyramid where each of two optical paths, with the
-    same focal planes, is stored in its own instance."""
+    """Build a single-level pyramid with an instance per optical path.
+
+    The two optical paths have the same focal planes.
+    """
     level = wsi.pyramids[0][-1]
     source_instance = level.default_instance
     instances = [
@@ -217,6 +228,30 @@ def instance_per_optical_path_pyramid(wsi: WsiDicom) -> Pyramid:
         sparse_instance(source_instance, "1", [0.0]),
     ]
     return Pyramid([Level(instances, level.pixel_spacing)], [])
+
+
+@pytest.fixture
+def instance_per_optical_path_folder(
+    wsi: WsiDicom, write_pyramid: Callable[..., list[UPath]], tmp_path: Path
+) -> Path:
+    """Write a folder with one file per optical path and return it.
+
+    Each optical path has an ICC profile large enough to be left unread when the
+    files are opened.
+    """
+    level = wsi.pyramids[0][-1]
+    instances = [
+        sparse_instance(level.default_instance, path, [0.0], icc_profile)
+        for path, icc_profile in ICC_PROFILE_BY_OPTICAL_PATH.items()
+    ]
+    folder = tmp_path / "split"
+    folder.mkdir()
+    write_pyramid(
+        Pyramid([Level(instances, level.pixel_spacing)], []),
+        InstanceSplit.OPTICAL_PATH,
+        folder,
+    )
+    return folder
 
 
 @pytest.fixture
@@ -254,12 +289,14 @@ def write_pyramid(
     """Write a pyramid through the real `PyramidFileWriter` and return the paths."""
 
     def write(
-        pyramid: Pyramid, instance_split: InstanceSplit = InstanceSplit.NONE
+        pyramid: Pyramid,
+        instance_split: InstanceSplit = InstanceSplit.NONE,
+        output_path: Path = tmp_path,
     ) -> list[UPath]:
         writer = PyramidFileWriter(
             pyramid=pyramid,
             pyramid_index=0,
-            output_path=UPath(tmp_path),
+            output_path=UPath(output_path),
             uid_generator=uid_generator,
             max_threads=1,
             offset_table=OffsetTableType.BASIC,
@@ -384,7 +421,7 @@ class TestInstanceSplitIntegration:
         instance_per_optical_path_pyramid: Pyramid,
         write_pyramid: Callable[..., list[UPath]],
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -393,6 +430,7 @@ class TestInstanceSplitIntegration:
         # Assert — one instance that describes both optical paths, and reopens
         # with both.
         assert len(filepaths) == 1
+        assert isinstance(filepaths[0], Path)
         dataset = dcmread(filepaths[0])
         assert dataset.NumberOfOpticalPaths == 2
         assert [
@@ -401,6 +439,88 @@ class TestInstanceSplitIntegration:
         with WsiDicom.open(tmp_path) as saved_wsi:
             base_level = saved_wsi.pyramids[0].base_level
             assert sorted(base_level.optical_paths) == ["0", "1"]
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_get_optical_path_datasets_takes_item_from_instance_holding_path(
+        self, instance_per_optical_path_pyramid: Pyramid
+    ) -> None:
+        # Arrange
+        level = instance_per_optical_path_pyramid.base_level
+
+        # Act
+        optical_path_datasets = level.get_optical_path_datasets(["0", "1", "2"])
+
+        # Assert — each item is of its own optical path, and an optical path no
+        # instance holds has none.
+        first, second, missing = optical_path_datasets.values()
+        assert first is not None
+        assert first.OpticalPathIdentifier == "0"
+        assert second is not None
+        assert second.OpticalPathIdentifier == "1"
+        assert missing is None
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_instances_per_optical_path_read_from_file_keep_each_icc_profile(
+        self, instance_per_optical_path_folder: Path, tmp_path: Path
+    ) -> None:
+        # Arrange
+        output_path = tmp_path / "combined"
+        output_path.mkdir()
+
+        # Act
+        with WsiDicom.open(instance_per_optical_path_folder) as split_wsi:
+            created_files = split_wsi.save(output_path)
+
+        # Assert — the combined instance has the ICC profile of each optical path.
+        assert len(created_files) == 1
+        created_file = next(iter(created_files))
+        assert isinstance(created_file, Path)
+        dataset = dcmread(created_file)
+        assert {
+            str(item.OpticalPathIdentifier): item.ICCProfile
+            for item in dataset.OpticalPathSequence
+        } == ICC_PROFILE_BY_OPTICAL_PATH
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_instances_per_optical_path_combined_with_metadata_keep_each_path(
+        self, instance_per_optical_path_folder: Path, tmp_path: Path
+    ) -> None:
+        # Arrange — metadata that describes only the optical path of the default
+        # instance, as the metadata of a slide does.
+        output_path = tmp_path / "combined"
+        output_path.mkdir()
+
+        # Act
+        with WsiDicom.open(instance_per_optical_path_folder) as split_wsi:
+            pyramid = split_wsi.metadata.pyramid
+            assert len(pyramid.optical_paths) == 1
+            described_path = pyramid.optical_paths[0].identifier
+            assert described_path is not None
+            optical_path = replace(
+                pyramid.optical_paths[0], description="From metadata"
+            )
+            metadata = replace(
+                split_wsi.metadata,
+                pyramid=replace(
+                    pyramid, uid=generate_uid(), optical_paths=[optical_path]
+                ),
+            )
+            created_files = split_wsi.save(output_path, metadata=metadata)
+
+        # Assert — the path the metadata describes is described as in the
+        # metadata, and the other as in the instance holding it.
+        created_file = next(iter(created_files))
+        assert isinstance(created_file, Path)
+        dataset = dcmread(created_file)
+        items = {
+            str(item.OpticalPathIdentifier): item
+            for item in dataset.OpticalPathSequence
+        }
+        assert sorted(items) == ["0", "1"]
+        other_path = "1" if described_path == "0" else "0"
+        assert items[described_path].OpticalPathDescription == "From metadata"
+        assert "OpticalPathDescription" not in items[other_path]
+        assert items[other_path].ICCProfile == ICC_PROFILE_BY_OPTICAL_PATH[other_path]
 
     @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
     def test_non_uniform_pyramid_levels_keep_their_own_planes(

@@ -130,3 +130,37 @@ class TestDeferredElements:
 
         # Assert
         assert given is inner
+
+    def test_get_optical_path_dataset_reads_deferred_elements(self) -> None:
+        # Arrange
+        dataset, reader = create_dataset()
+
+        # Act
+        optical_path_dataset = dataset.get_optical_path_dataset("1")
+
+        # Assert
+        assert optical_path_dataset is not None
+        assert optical_path_dataset.ICCProfile == PROFILE
+        assert reader.reads == 1
+
+    def test_get_optical_path_dataset_gives_a_copy(self) -> None:
+        # Arrange
+        dataset, _ = create_dataset()
+
+        # Act
+        optical_path_dataset = dataset.get_optical_path_dataset("1")
+        assert optical_path_dataset is not None
+        optical_path_dataset.OpticalPathIdentifier = "2"
+
+        # Assert
+        assert dataset.as_dataset().OpticalPathSequence[0].OpticalPathIdentifier == "1"
+
+    def test_get_optical_path_dataset_not_described_is_none(self) -> None:
+        # Arrange
+        dataset, _ = create_dataset()
+
+        # Act
+        optical_path_dataset = dataset.get_optical_path_dataset("2")
+
+        # Assert
+        assert optical_path_dataset is None
