@@ -18,6 +18,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 
 import numpy as np
+from pydicom import Dataset
 from pydicom.uid import UID
 
 from wsidicom.errors import (
@@ -191,6 +192,39 @@ class Instances:
     def instance_at(self, optical_path: str, focal_plane: float) -> WsiInstance:
         """Return the instance providing the given optical path and focal plane."""
         return self._instance_map[(optical_path, focal_plane)]
+
+    def get_optical_path_datasets(
+        self, identifiers: Sequence[str]
+    ) -> dict[str, Dataset | None]:
+        """Return the item of the Optical Path Sequence of each optical path.
+
+        Each item is taken from the instance holding the optical path, as the
+        optical paths may be held by more than one instance. See
+        `WsiDataset.get_optical_path_dataset`.
+
+        Parameters
+        ----------
+        identifiers: Sequence[str]
+            Optical Path Identifiers of the optical paths.
+
+        Returns
+        -------
+        dict[str, Dataset | None]
+            Copy of the item of each optical path, by identifier and in the order
+            of `identifiers`. None for an optical path that no instance holds, or
+            that the instance holding it does not describe.
+        """
+        return {
+            identifier: next(
+                (
+                    instance.dataset.get_optical_path_dataset(identifier)
+                    for instance in self.instances.values()
+                    if identifier in instance.optical_paths
+                ),
+                None,
+            )
+            for identifier in identifiers
+        }
 
     @property
     def image_coordinate_system(self) -> ImageCoordinateSystem | None:

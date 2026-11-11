@@ -12,11 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WsiFile` (`WsiLevelFile`, `WsiThumbnailFile` or `WsiAssociatedFile`) describes a file of a WSI, as opened or as written.
 - `FileUids.matches_concatenation()` tells if two files are parts of the same concatenation.
 - `ImageData.get_tile_byte_ranges()` and `ImageData.get_frame_readers()`, for a source to tell where the encoded tiles of a plane are stored (a `TileByteRanges`) and to give a `FrameReader` for each file to read them with. Both return None by default, and the tiles are then read through the image data as before. Implemented for local DICOM files.
+- `WsiDataset.get_optical_path_dataset()` returns a copy of the Optical Path Sequence item of an optical path, and `Instances.get_optical_path_datasets()` those of several optical paths.
 - `Settings.max_file_handles_per_file` (default 8), the most handles open to a local file at once. A read beyond waits for a handle.
 
 ### Changed
 
 - `WsiDicom.save()` and `WsiDicom.files` return a `dict` from path to `WsiFile` instead of a list of paths. Indexing such as `files[0]` no longer works.
+- `WsiDataset.as_tiled_full()` takes the optical paths as a mapping from identifier to the Optical Path Sequence item to describe the optical path with where the dataset does not.
 - `FileUids` compare equal when all their UIDs are equal. Previously they compared equal only when both were parts of the same concatenation, which is now `matches_concatenation()`.
 - Thumbnails without Pixel Spacing are ignored with a warning when opening, and `Thumbnail` raises `WsiDicomNoResolutionError` if created without it.
 - `WsiDicom.read_encoded_tile()` reads a tile of a local DICOM file with a single read at its byte range, instead of through the level, instance and image data. Tiles to be cropped are read as before. Local files are read through a pool of file handles, so reads from several threads no longer wait for each other.
@@ -24,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Saving a level whose optical paths are stored in separate instances, one per optical path, wrote an instance that described only one of them, so it reopened with a single optical path.
 - `WsiDicom.files` listed files left out for not belonging to the slide.
 - Files whose Extended Offset Table Lengths state an odd frame length failed to open with "Invalid frame length" (#240).
 - Extended Offset Table Lengths are written without the byte an odd frame is padded with, as the standard specifies.

@@ -51,7 +51,7 @@ from wsidicom.instance import (
     WsiDataset,
     WsiInstance,
 )
-from wsidicom.metadata import ImageType, WsiMetadata
+from wsidicom.metadata import WsiMetadata
 from wsidicom.metadata.schema.dicom.wsi import WsiMetadataDicomSchema
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.options import (
@@ -629,15 +629,21 @@ class BaseFileWriter(metaclass=ABCMeta):
         """Write DICOM files and return the created files, by path."""
         raise NotImplementedError()
 
-    def _build_base_dataset(
+    def _build_dataset(
         self,
-        source_instance: WsiInstance,
-        image_type: ImageType,
+        instances: Instances,
+        focal_planes: Sequence[float],
+        optical_paths: Sequence[str],
+        scale: int = 1,
         pyramid_index: int | None = None,
     ) -> WsiDataset:
-        """Return the base dataset for an output instance.
+        """Return the dataset of an output instance.
 
-        When no metadata is set, the source dataset is returned unchanged.
+        The output instance holds the focal planes and optical paths given, in a
+        tiled full arrangement, and is built from the dataset of the instance
+        holding the first of them.
+
+        When no metadata is set, that dataset is used as it is.
 
         When metadata is set and `replace_metadata` is True, the dataset is
         rebuilt from that metadata combined with the technical attributes of the
@@ -652,37 +658,50 @@ class BaseFileWriter(metaclass=ABCMeta):
 
         Parameters
         ----------
-        source_instance: WsiInstance
-            Instance to take the source dataset and image data from.
-        image_type: ImageType
-            Type of instance to create.
+        instances: Instances
+            Instances holding the focal planes and optical paths.
+        focal_planes: Sequence[float]
+            Focal planes of the output instance.
+        optical_paths: Sequence[str]
+            Optical paths of the output instance, in the order of the frames.
+        scale: int = 1
+            Scale of the output instance relative to the instances.
         pyramid_index: int | None = None
             Pyramid index of the image data, required for volume images.
 
         Returns
         -------
         WsiDataset
-            Base dataset to create the output instance from.
+            Dataset of the output instance.
         """
-        if self._metadata is None:
-            return source_instance.dataset
-        image_data = source_instance.image_data
-        # ICC Profile (0028,2000) is Type 1C in the Optical Path Module, required
-        # when Photometric Interpretation is not MONOCHROME2 (DICOM PS3.3
-        # C.8.12.5). Insert a default profile where it is required but missing; a
-        # profile already present in the metadata is kept.
-        require_icc_profile = image_data.photometric_interpretation != "MONOCHROME2"
-        dumped = WsiMetadataDicomSchema().dump(
-            self._metadata, image_type, require_icc_profile
-        )
-        if self._replace_metadata:
-            return WsiDataset.create_instance_dataset(
-                dumped, image_type, image_data, pyramid_index
+        source_instance = instances.instance_at(optical_paths[0], focal_planes[0])
+        dataset = source_instance.dataset
+        if self._metadata is not None:
+            image_type = instances.image_type
+            image_data = source_instance.image_data
+            # ICC Profile (0028,2000) is Type 1C in the Optical Path Module,
+            # required when Photometric Interpretation is not MONOCHROME2 (DICOM
+            # PS3.3 C.8.12.5). Insert a default profile where it is required but
+            # missing; a profile already present in the metadata is kept.
+            require_icc_profile = image_data.photometric_interpretation != "MONOCHROME2"
+            dumped = WsiMetadataDicomSchema().dump(
+                self._metadata, image_type, require_icc_profile
             )
-        # Overlay the supplied metadata on a copy of the source dataset. The
-        # copy holds the elements of the source rather than copies of them, and
-        # the overlaid values are checked as they are set.
-        return source_instance.dataset.overlay(dumped)
+            if self._replace_metadata:
+                dataset = WsiDataset.create_instance_dataset(
+                    dumped, image_type, image_data, pyramid_index
+                )
+            else:
+                # Overlay the supplied metadata on a copy of the source dataset.
+                # The copy holds the elements of the source rather than copies of
+                # them, and the overlaid values are checked as they are set.
+                dataset = dataset.overlay(dumped)
+        return dataset.as_tiled_full(
+            focal_planes,
+            instances.get_optical_path_datasets(optical_paths),
+            instances.tiled_size,
+            scale,
+        )
 
     def _resolve_transcoding(
         self, source_image_data: ImageData
@@ -1242,15 +1261,8 @@ class PyramidFileWriter(BaseFileWriter):
                 continue
 
             tiled_size = source_group.tiled_size.ceil_div(scale)
-            base_instance = source_group.instance_at(paths[0], planes[0])
-            base_dataset = self._build_base_dataset(
-                base_instance, ImageType.VOLUME, level_index
-            )
-            dataset = base_dataset.as_tiled_full(
-                planes,
-                paths,
-                source_group.tiled_size,
-                scale,
+            dataset = self._build_dataset(
+                source_group, planes, paths, scale, level_index
             )
             transcoder = encoder if transcode else None
             if transcoder is not None:
@@ -1700,16 +1712,7 @@ class GroupFileWriter(BaseFileWriter):
             for planes, paths in self._split_planes_paths(
                 sub_instances.focal_planes_by_optical_path
             ):
-                base_instance = sub_instances.instance_at(paths[0], planes[0])
-                base_dataset = self._build_base_dataset(
-                    base_instance, base_instance.dataset.image_type
-                )
-                dataset = base_dataset.as_tiled_full(
-                    planes,
-                    paths,
-                    sub_instances.tiled_size,
-                    1,
-                )
+                dataset = self._build_dataset(sub_instances, planes, paths)
                 if transcoder is not None:
                     dataset = dataset.update_for_transcoding(transcoder, 1)
                 # The identity is set before the writer is made, so that the

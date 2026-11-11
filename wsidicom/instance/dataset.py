@@ -1201,6 +1201,38 @@ class WsiDataset:
             for item in self._optical_path_sequence
         ]
 
+    def get_optical_path_dataset(self, identifier: str) -> Dataset | None:
+        """Return the item of the Optical Path Sequence describing an optical path.
+
+        The item as the dataset states it rather than as an `OpticalPath`, so that
+        it can be written again with the attributes the model does not hold. The
+        item is a copy, and whole: values deferred when the dataset was read are
+        read from file first.
+
+        Parameters
+        ----------
+        identifier: str
+            Optical Path Identifier of the optical path.
+
+        Returns
+        -------
+        Dataset | None
+            Copy of the item, or None if the dataset does not describe the optical
+            path.
+        """
+        optical_path_sequence = self.get_sequence(
+            self._complete_dataset, OpticalPathSequenceTag
+        )
+        return next(
+            (
+                deepcopy(optical_path_dataset)
+                for optical_path_dataset in optical_path_sequence
+                if str(optical_path_dataset[OpticalPathIdentifierTag].value)
+                == identifier
+            ),
+            None,
+        )
+
     @cached_property
     def _optical_path_sequence(self) -> DicomSequence | None:
         """The optical path sequence, read from the dataset directly.
@@ -1491,7 +1523,7 @@ class WsiDataset:
     def as_tiled_full(
         self,
         focal_planes: Sequence[float],
-        optical_paths: Sequence[str],
+        optical_paths: Mapping[str, Dataset | None],
         tiled_size: Size,
         scale: int = 1,
     ) -> "WsiDataset":
@@ -1504,8 +1536,11 @@ class WsiDataset:
         ----------
         focal_planes: Sequence[float]
             Focal planes that should be encoded into dataset.
-        optical_paths: Sequence[str]
-            Optical paths that should be encoded into dataset.
+        optical_paths: Mapping[str, Dataset | None]
+            Optical paths that should be encoded into dataset, in the order of the
+            frames. Each with the item of the Optical Path Sequence to describe it
+            with if this dataset does not, as when the optical paths are held by
+            more than one instance, or None if there is none.
         tiled_size: Size
             Tiled size of image.
         scale: int = 1
@@ -1576,16 +1611,33 @@ class WsiDataset:
             * len(optical_paths)
         )
 
-        # Keep only the optical paths written to this instance, so the optical
-        # path identity is preserved when the paths have been split across
-        # instances (e.g. one instance per optical path).
-        kept_optical_paths = DicomSequence(
-            item
-            for item in self.get_sequence(self._dataset, OpticalPathSequenceTag)
-            if str(item[OpticalPathIdentifierTag].value) in optical_paths
-        )
-        if len(kept_optical_paths) != 0:
-            changes[OpticalPathSequenceTag] = kept_optical_paths
+        # Describe only the optical paths written to this instance, so the
+        # optical path identity is preserved when the paths have been split
+        # across instances (e.g. one instance per optical path). The items are
+        # ordered as the optical paths, as that is the order of the frames. An
+        # optical path this dataset describes keeps its own item, so that
+        # metadata set on the dataset is kept.
+        own_optical_path_datasets = {
+            str(optical_path_dataset[OpticalPathIdentifierTag].value): (
+                optical_path_dataset
+            )
+            for optical_path_dataset in self.get_sequence(
+                dataset, OpticalPathSequenceTag
+            )
+        }
+        optical_path_datasets = [
+            own_optical_path_datasets.get(optical_path, given_optical_path_dataset)
+            for optical_path, given_optical_path_dataset in optical_paths.items()
+        ]
+        described_optical_path_datasets = [
+            optical_path_dataset
+            for optical_path_dataset in optical_path_datasets
+            if optical_path_dataset is not None
+        ]
+        if len(described_optical_path_datasets) != 0:
+            changes[OpticalPathSequenceTag] = DicomSequence(
+                described_optical_path_datasets
+            )
 
         # Encode the focal plane origin (z) so the planes can be reconstructed
         # on read as ``z_offset + index * spacing``. This is the source z offset
