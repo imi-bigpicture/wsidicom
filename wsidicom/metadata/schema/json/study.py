@@ -31,5 +31,5 @@ class StudyJsonSchema(LoadingSchema[Study]):
     description = fields.String(allow_none=True)
 
     @property
-    def load_type(self):
+    def load_type(self) -> type[Study]:
         return Study

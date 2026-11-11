@@ -27,8 +27,7 @@ from wsidicom.thread import ReadExecutor
 
 
 class Stitcher(ABC):
-    """Abstract interface for assembling a row-major grid of tile pixels
-    into one array."""
+    """Interface for assembling a row-major grid of tile pixels into one array."""
 
     @abstractmethod
     def stitch_grid(self, tiles: Sequence[Sequence[np.ndarray]]) -> np.ndarray:
@@ -64,8 +63,9 @@ class Stitcher(ABC):
         *,
         executor: ReadExecutor,
     ) -> np.ndarray:
-        """Assemble the pixels of ``region`` from its covering tiles, with
-        internal parallelism.
+        """Assemble the pixels of ``region`` from its covering tiles.
+
+        The assembly uses internal parallelism.
 
         Each tile is clipped to ``region`` and written into a canvas sized to
         ``region``, so tile pixels falling outside it are never copied and the
@@ -105,8 +105,10 @@ class Stitcher(ABC):
 
     @staticmethod
     def _sample_shape(samples_per_pixel: int) -> tuple[int, ...]:
-        """Trailing per-pixel canvas dimensions: ``()`` for a single sample,
-        ``(samples_per_pixel,)`` for more."""
+        """Return the trailing per-pixel canvas dimensions.
+
+        That is ``()`` for a single sample, ``(samples_per_pixel,)`` for more.
+        """
         return () if samples_per_pixel == 1 else (samples_per_pixel,)
 
     @staticmethod
@@ -126,9 +128,11 @@ class Stitcher(ABC):
         cancel: Event,
         executor: ReadExecutor,
     ) -> None:
-        """Dispatch ``worker`` over the region's chunks. On the first worker
-        error, set ``cancel`` (so still-running workers can stop early) and
-        re-raise once all have finished."""
+        """Dispatch ``worker`` over the region's chunks.
+
+        On the first worker error, set ``cancel`` (so still-running workers can stop
+        early) and re-raise once all have finished.
+        """
         chunks = tile_region.chunked_iterate_all(executor.workers)
         futures = [executor.submit(worker, chunk) for chunk in chunks]
         first_error: BaseException | None = None
@@ -168,7 +172,8 @@ class NumpyStitcher(Stitcher):
         canvas_shape = (
             region.size.height,
             region.size.width,
-        ) + self._sample_shape(samples_per_pixel)
+            *self._sample_shape(samples_per_pixel),
+        )
         canvas = np.empty(canvas_shape, dtype=dtype)
         crop_y, crop_x = region.start.y, region.start.x
         cancel = Event()
@@ -230,7 +235,7 @@ class PillowStitcher(Stitcher):
         executor: ReadExecutor,
     ) -> np.ndarray:
         tile_height, tile_width = tile_size.height, tile_size.width
-        sample = np.empty((1, 1) + self._sample_shape(samples_per_pixel), dtype=dtype)
+        sample = np.empty((1, 1, *self._sample_shape(samples_per_pixel)), dtype=dtype)
         canvas = self._new_canvas(sample, region.size.width, region.size.height)
         crop_y, crop_x = region.start.y, region.start.x
         cancel = Event()

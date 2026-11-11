@@ -88,7 +88,7 @@ class TestDicomLut:
         green_lut: bytes,
         blue_lut: bytes,
         expected: Lut,
-    ):
+    ) -> None:
         # Arrange
         dataset = Dataset()
         dataset.RedPaletteColorLookupTableDescriptor = descriptor
@@ -119,7 +119,7 @@ class TestDicomLut:
     )
     def test_parse_segments(
         self, segment_data: bytes, expected_segments: Sequence[LutSegment]
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -170,7 +170,7 @@ class TestDicomLut:
         expected_red_lut: bytes,
         expected_green_lut: bytes,
         expected_blue_lut: bytes,
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -202,7 +202,7 @@ class TestDicomLut:
         given_data_type: LutDataType,
         data: bytes,
         expected_data_type: LutDataType,
-    ):
+    ) -> None:
         # Arrange
 
         # Act

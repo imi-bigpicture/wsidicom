@@ -12,8 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Instance writers: orchestrators that produce tiles for one DICOM instance
-(a pyramid level or an ancillary group) and hand them to an injected `TileWriter`.
+"""Instance writers: orchestrators that produce tiles for one DICOM instance.
+
+An instance is a pyramid level or an ancillary group, and the tiles are handed to an
+injected `TileWriter`.
 """
 
 import contextlib
@@ -55,7 +57,7 @@ class GroupInstanceWriter:
         transcode: bool,
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
-    ):
+    ) -> None:
         self._dataset = dataset
         self._instances = instances
         self._encoder = encoder
@@ -96,7 +98,7 @@ class PyramidLevelWriter:
         tiled_size: Size,
         tile_queue: ReadOnlyQueue[EncodingTaskResult | ShutdownSentinel],
         token: CancellationToken,
-    ):
+    ) -> None:
         """Create a pyramid-level orchestrator.
 
         Parameters
@@ -137,6 +139,16 @@ class PyramidLevelWriter:
     @property
     def dataset(self) -> WsiDataset:
         return self._dataset
+
+    @property
+    def focal_planes(self) -> Sequence[float]:
+        """Focal planes of this level's instance, in um."""
+        return self._focal_planes
+
+    @property
+    def optical_paths(self) -> Sequence[str]:
+        """Optical path identifiers of this level's instance."""
+        return self._optical_paths
 
     def start(self, tile_writer: TileWriter) -> None:
         """Create the tile sequencer with the given writer and start its thread."""
@@ -185,7 +197,7 @@ class SourcePyramidLevelWriter(PyramidLevelWriter):
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
         token: CancellationToken,
-    ):
+    ) -> None:
         self._owned_tile_queue: PriorityCancelableQueue[
             EncodingTaskResult | ShutdownSentinel
         ] = PriorityCancelableQueue(maxsize=queue_maxsize)
@@ -379,7 +391,7 @@ class GeneratedPyramidLevelWriter(PyramidLevelWriter):
         accumulator: WritingPyramidTileAccumulator,
         token: CancellationToken,
         intermediate_accumulators: Sequence[PyramidTileAccumulator] = (),
-    ):
+    ) -> None:
         super().__init__(
             level_index=level_index,
             dataset=dataset,

@@ -13,9 +13,11 @@
 #    limitations under the License.
 
 import builtins
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import (
     Any,
+    ClassVar,
+    cast,
 )
 
 from marshmallow import Schema, fields, pre_dump
@@ -104,7 +106,9 @@ class SamplingConstraintJsonSchema(LoadingSchema[SamplingConstraintJsonModel]):
         return SamplingConstraintJsonModel
 
     @pre_dump
-    def dump_simple(self, sampling: BaseSampling, **kwargs):
+    def dump_simple(
+        self, sampling: BaseSampling, **kwargs: Any
+    ) -> SamplingConstraintJsonModel:
         return SamplingConstraintJsonModel.to_json_model(sampling)
 
 
@@ -195,7 +199,7 @@ class PreparationStepJsonSchema(Schema):
     """Schema to use to serialize/deserialize preparation steps."""
 
     """Mapping step type to schema."""
-    _type_to_schema_mapping: dict[type[PreparationStep], type[Schema]] = {
+    _type_to_schema_mapping: ClassVar[dict[type[PreparationStep], type[Schema]]] = {
         Sampling: SamplingJsonSchema,
         UnknownSampling: SamplingJsonSchema,
         Collection: CollectionJsonSchema,
@@ -207,7 +211,7 @@ class PreparationStepJsonSchema(Schema):
     }
 
     """Mapping key in serialized step to schema."""
-    _action_to_schema_mapping: dict[PreparationAction, type[Schema]] = {
+    _action_to_schema_mapping: ClassVar[dict[PreparationAction, type[Schema]]] = {
         PreparationAction.SAMPLING: SamplingJsonSchema,
         PreparationAction.COLLECTION: CollectionJsonSchema,
         PreparationAction.PROCESSING: ProcessingJsonSchema,
@@ -220,8 +224,8 @@ class PreparationStepJsonSchema(Schema):
     def dump(
         self,
         obj: PreparationStep | Iterable[PreparationStep],
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         if isinstance(obj, PreparationStep):
             return self._subschema_dump(obj)
         return [self._subschema_dump(item) for item in obj]
@@ -229,7 +233,9 @@ class PreparationStepJsonSchema(Schema):
     def load(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         data: dict[str, Any] | Iterable[dict[str, Any]],
-        **kwargs,
+        **kwargs: Any,
+    ) -> (
+        PreparationStep | SamplingJsonModel | list[PreparationStep | SamplingJsonModel]
     ):
         if isinstance(data, dict):
             return self._subschema_load(data)  # type: ignore
@@ -248,10 +254,11 @@ class PreparationStepJsonSchema(Schema):
         assert isinstance(loaded, (PreparationStep, SamplingJsonModel))
         return loaded
 
-    def _subschema_dump(self, step: PreparationStep):
+    def _subschema_dump(self, step: PreparationStep) -> dict[str, Any]:
         """Select a schema and dump the step using the schema."""
         schema = self._type_to_schema_mapping[type(step)]
-        return schema().dump(step, many=False)
+        # A schema dumps a single object, as many=False, to a dictionary.
+        return cast(dict[str, Any], schema().dump(step, many=False))
 
 
 class SubstanceJsonField(fields.Field):
@@ -260,15 +267,25 @@ class SubstanceJsonField(fields.Field):
     )
 
     def _serialize(
-        self, value: str | Sequence[SpecimenStainsCode] | None, attr, obj, **kwargs
-    ):
+        self,
+        value: str | Sequence[SpecimenStainsCode] | None,
+        attr: str | None,
+        obj: Any,
+        **kwargs: Any,
+    ) -> str | list[Any] | None:
         if value is None:
             return None
         if isinstance(value, str):
             return value
         return self._code_list_field._serialize(list(value), attr, obj, **kwargs)
 
-    def _deserialize(self, value: str | list[dict[str, Any]], attr, data, **kwargs):
+    def _deserialize(
+        self,
+        value: str | list[dict[str, Any]],
+        attr: str | None,
+        data: Mapping[str, Any] | None,
+        **kwargs: Any,
+    ) -> str | list[Any]:
         if isinstance(value, str):
             return value
         return self._code_list_field._deserialize(value, attr, data, **kwargs)
@@ -342,14 +359,14 @@ class BaseSpecimenJsonSchema(Schema):
     """Schema to use to serialize/deserialize specimens."""
 
     """Mapping specimen type to schema."""
-    _type_to_schema_mapping: dict[type[BaseSpecimen], type[Schema]] = {
+    _type_to_schema_mapping: ClassVar[dict[type[BaseSpecimen], type[Schema]]] = {
         Specimen: SpecimenJsonSchema,
         Sample: SampleJsonSchema,
         SlideSample: SlideSampleJsonSchema,
     }
 
     """Mapping key in serialized specimen to schema."""
-    _key_to_schema_mapping: dict[str, type[Schema]] = {
+    _key_to_schema_mapping: ClassVar[dict[str, type[Schema]]] = {
         "anatomical_sites": SlideSampleJsonSchema,
         "sampled_from": SampleJsonSchema,
         "type": SpecimenJsonSchema,
@@ -358,8 +375,8 @@ class BaseSpecimenJsonSchema(Schema):
     def dump(
         self,
         obj: BaseSpecimen | Iterable[BaseSpecimen],
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
         specimens = obj
         if isinstance(specimens, BaseSpecimen):
             specimens = [specimens]
@@ -374,7 +391,7 @@ class BaseSpecimenJsonSchema(Schema):
     def load(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         data: dict[str, Any] | Iterable[dict[str, Any]],
-        **kwargs,
+        **kwargs: Any,
     ) -> list[BaseSpecimen]:
         """Load serialized specimen or list of specimen as `Specimen`."""
         if isinstance(data, dict):
@@ -388,8 +405,7 @@ class BaseSpecimenJsonSchema(Schema):
     def _get_samplings(
         cls, sample: SampledSpecimen
     ) -> dict[str | SpecimenIdentifier, BaseSpecimen]:
-        """Return a dictionary containing this specimen and all recursive sampled
-        specimens."""
+        """Return a dictionary of this specimen and all recursive sampled specimens."""
         samplings: dict[str | SpecimenIdentifier, BaseSpecimen] = {
             sample.identifier: sample
         }

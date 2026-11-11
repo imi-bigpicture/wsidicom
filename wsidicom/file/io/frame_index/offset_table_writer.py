@@ -20,7 +20,6 @@ from collections.abc import Sequence
 from pydicom.tag import ItemTag
 
 from wsidicom.errors import WsiDicomBotOverflow
-from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE
 from wsidicom.file.io.wsidicom_io import WsiDicomWriteIO
 from wsidicom.tags import ExtendedOffsetTableLengthsTag, ExtendedOffsetTableTag
 
@@ -40,7 +39,7 @@ class OffsetTableWriter(metaclass=ABCMeta):
         self._file = file
 
     @abstractmethod
-    def reserve(self, number_of_frames: int):
+    def reserve(self, number_of_frames: int) -> None:
         """Reserve space in file for offset table.
 
         Parameters
@@ -56,7 +55,7 @@ class OffsetTableWriter(metaclass=ABCMeta):
         self,
         pixel_data_start: int,
         frame_positions: Sequence[int],
-        last_frame_end: int,
+        frame_lengths: Sequence[int],
     ) -> None:
         """Write offset table to file.
 
@@ -66,15 +65,15 @@ class OffsetTableWriter(metaclass=ABCMeta):
             File position of pixel data start
         frame_positions: Sequence[int]
             List of file positions for frames, relative to file start
-        last_frame_end: int
-            Position of last frame end.
+        frame_lengths: Sequence[int]
+            Length of every frame, without the byte an odd frame is padded with.
 
         """
         raise NotImplementedError()
 
 
 class BotWriter(OffsetTableWriter):
-    def reserve(self, number_of_frames: int):
+    def reserve(self, number_of_frames: int) -> None:
         self._table_start = self._file.tell()
         BYTES_PER_ITEM = 4
         tag_lengths = BYTES_PER_ITEM * number_of_frames
@@ -87,7 +86,7 @@ class BotWriter(OffsetTableWriter):
         self,
         pixel_data_start: int,
         frame_positions: Sequence[int],
-        last_frame_end: int,
+        frame_lengths: Sequence[int],
     ) -> None:
         BYTES_PER_ITEM = 4
         # Check that last BOT entry is not over 2^32 - 1
@@ -108,7 +107,7 @@ class BotWriter(OffsetTableWriter):
 
 
 class EotWriter(OffsetTableWriter):
-    def reserve(self, number_of_frames: int):
+    def reserve(self, number_of_frames: int) -> None:
         self._table_start = self._file.tell()
         BYTES_PER_ITEM = 8
         eot_length = BYTES_PER_ITEM * number_of_frames
@@ -125,7 +124,7 @@ class EotWriter(OffsetTableWriter):
         self,
         pixel_data_start: int,
         frame_positions: Sequence[int],
-        last_frame_end: int,
+        frame_lengths: Sequence[int],
     ) -> None:
         BYTES_PER_ITEM = 8
         # Check that last EOT entry is not over 2^64 - 1
@@ -149,15 +148,7 @@ class EotWriter(OffsetTableWriter):
             True,
             True,
         )
-        # A length is of the frame itself, so the item tag and length that a frame
-        # position points at are not part of it.
-        frame_start = frame_positions[0]
-        for frame_end in frame_positions[1:]:  # Write EOT lengths
-            frame_length = frame_end - frame_start - TAG_AND_LENGTH_SIZE
+        # A length is of the frame itself, without the byte an odd frame is padded
+        # with (PS3.3 C.7.6.3, CP-2388), so it can not be derived from the positions.
+        for frame_length in frame_lengths:
             self._file.write_unsigned_long_long(frame_length)
-            frame_start = frame_end
-
-        # Last frame length, end does not include tag and length
-        last_frame_start = frame_start + TAG_AND_LENGTH_SIZE
-        last_frame_length = last_frame_end - last_frame_start
-        self._file.write_unsigned_long_long(last_frame_length)

@@ -17,9 +17,11 @@ import os
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import Executor
 from pathlib import Path
+from types import TracebackType
 from typing import (
     Any,
     Literal,
+    Self,
     Union,
     overload,
 )
@@ -40,9 +42,14 @@ from wsidicom.errors import (
 )
 from wsidicom.file import (
     OffsetTableType,
+    WsiAssociatedFile,
     WsiDicomFileSource,
     WsiDicomFileTarget,
+    WsiFile,
+    WsiLevelFile,
+    WsiThumbnailFile,
 )
+from wsidicom.file.wsidicom_file_image_data import WsiDicomFileImageData
 from wsidicom.geometry import Point, PointMm, Region, RegionMm, Size, SizeMm
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.group import Level, Thumbnail
@@ -54,6 +61,7 @@ from wsidicom.options import (
     ConcatenationByFrames,
     InstanceSplit,
 )
+from wsidicom.plane_tile_readers import PlaneTileReaders
 from wsidicom.series import Labels, Overviews, Pyramid, Pyramids
 from wsidicom.source import Source
 from wsidicom.stringprinting import list_pretty_str
@@ -74,7 +82,7 @@ class WsiDicom:
         read_executor: Executor | None = None,
         *,
         settings: Settings | None = None,
-    ):
+    ) -> None:
         """Hold WSI DICOM levels, labels and overviews.
 
         Note that WsiDicom.open() should be used for opening DICOM WSI files.
@@ -107,6 +115,7 @@ class WsiDicom:
             self._overviews = Overviews.open(source.overview_instances)
             self._annotations = list(source.annotation_instances)
             self._uids = self._validate_collection()
+        self._plane_tile_readers = PlaneTileReaders(self._pyramids)
 
     @classmethod
     def open(
@@ -261,14 +270,15 @@ class WsiDicom:
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
-    ) -> list[UPath]:
+    ) -> dict[UPath, WsiFile]:
         """
-        Save wsi as DICOM-files in path. By default instances for the same
-        pyramid level are combined when possible to one file (e.g. not split
-        for optical paths or focal planes); use `instance_split` to write a
-        separate instance per focal plane and/or optical path instead. If
-        instances are sparse tiled they will be converted to full tiled by
-        inserting blank tiles. All instance uids will be changed.
+        Save wsi as DICOM-files in path.
+
+        By default instances for the same pyramid level are combined when possible to
+        one file (e.g. not split for optical paths or focal planes); use
+        `instance_split` to write a separate instance per focal plane and/or optical
+        path instead. If instances are sparse tiled they will be converted to full tiled
+        by inserting blank tiles. All instance uids will be changed.
 
         Parameters
         ----------
@@ -348,8 +358,11 @@ class WsiDicom:
 
         Returns
         -------
-        list[UPath]
-            List of paths of created files.
+        dict[UPath, WsiFile]
+            The created files, by path, in the order they were written. Each is
+            described as written: a `WsiLevelFile` for a pyramid level, a
+            `WsiThumbnailFile` for a thumbnail, and a `WsiAssociatedFile`
+            for a label or overview. Iterating gives the paths.
 
         Notes
         -----
@@ -405,7 +418,7 @@ class WsiDicom:
             ) as target,
         ):
             target.save(self.pyramids, labels, overviews, include_thumbnails)
-            return target.filepaths
+            return target.created_files
 
     @classmethod
     def is_ready_for_viewing(
@@ -414,8 +427,9 @@ class WsiDicom:
         file_options: dict[str, Any] | None = None,
     ) -> bool | None:
         """
-        Return true if files in path are formatted for fast viewing, i.e.
-        have TILED_FULL tile arrangement and have an offset table.
+        Return true if files in path are formatted for fast viewing.
+
+        That is, the files have TILED_FULL tile arrangement and an offset table.
 
         Parameters
         ----------
@@ -427,6 +441,7 @@ class WsiDicom:
             Optional options for when opening files.
 
         Returns
+        -------
             True if files in path are formatted for fast viewing, None if no DICOM WSI
             files are in the path.
         """
@@ -439,8 +454,9 @@ class WsiDicom:
         files: str | Path | UPath | Iterable[str | Path | UPath],
         file_options: dict[str, Any] | None = None,
     ) -> bool:
-        """Return true if files in path have at least one level that can be read with
-        WsiDicom.
+        """Return true if files in path have a level that WsiDicom can read.
+
+        At least one level must be readable with WsiDicom.
 
         Parameters
         ----------
@@ -450,6 +466,7 @@ class WsiDicom:
             Optional options for when opening files.
 
         Returns
+        -------
             True if files in path have one level that can be read with WsiDicom.
         """
         source = WsiDicomFileSource.open(files, file_options)
@@ -535,11 +552,71 @@ class WsiDicom:
         return self._create_metadata(self._selected_pyramid)
 
     @property
-    def files(self) -> list[UPath] | None:
-        """Return opened files if source is file-based."""
-        if isinstance(self._source, WsiDicomFileSource):
-            return self._source.files
-        return None
+    def files(self) -> dict[UPath, WsiFile] | None:
+        """Return the opened files, by path, if the source is file-based.
+
+        Each file is described as read: a `WsiLevelFile` for a pyramid level, a
+        `WsiThumbnailFile` for a thumbnail, and a `WsiAssociatedFile` for a
+        label or overview. The files are given pyramid by pyramid, levels
+        before thumbnails, then overviews and labels. Iterating gives the
+        paths. None if the source is not file-based.
+        """
+        if not isinstance(self._source, WsiDicomFileSource):
+            return None
+        files: dict[UPath, WsiFile] = {}
+        for pyramid_index, pyramid in enumerate(self.pyramids):
+            files.update(
+                (
+                    path,
+                    WsiLevelFile.from_dataset(
+                        dataset,
+                        instance.image_data.transfer_syntax,
+                        instance.focal_planes,
+                        instance.optical_paths,
+                        pyramid_index,
+                        level.level,
+                    ),
+                )
+                for level in pyramid.levels
+                for instance in level.instances.values()
+                if isinstance(instance.image_data, WsiDicomFileImageData)
+                for path, dataset in instance.image_data.datasets_by_path.items()
+            )
+            if pyramid.thumbnails is not None:
+                files.update(
+                    (
+                        path,
+                        WsiThumbnailFile.from_dataset(
+                            dataset,
+                            instance.image_data.transfer_syntax,
+                            instance.focal_planes,
+                            instance.optical_paths,
+                            pyramid_index,
+                        ),
+                    )
+                    for thumbnail in pyramid.thumbnails.groups
+                    for instance in thumbnail.instances.values()
+                    if isinstance(instance.image_data, WsiDicomFileImageData)
+                    for path, dataset in instance.image_data.datasets_by_path.items()
+                )
+        files.update(
+            (
+                path,
+                WsiAssociatedFile.from_dataset(
+                    dataset,
+                    instance.image_data.transfer_syntax,
+                    instance.focal_planes,
+                    instance.optical_paths,
+                ),
+            )
+            for series in (self.overviews, self.labels)
+            if series is not None
+            for group in series.groups
+            for instance in group.instances.values()
+            if isinstance(instance.image_data, WsiDicomFileImageData)
+            for path, dataset in instance.image_data.datasets_by_path.items()
+        )
+        return files
 
     def pretty_str(self, indent: int = 0, depth: int | None = None) -> str:
         string = self.__class__.__name__
@@ -576,8 +653,10 @@ class WsiDicom:
     def read_label(
         self, index: int = 0, *, as_array: bool = False
     ) -> Image | np.ndarray:
-        """Read label image of the whole slide. If several label
-        images are present, index can be used to select a specific image.
+        """Read label image of the whole slide.
+
+        If several label images are present, index can be used to select a specific
+        image.
 
         Parameters
         ----------
@@ -613,8 +692,10 @@ class WsiDicom:
     def read_overview(
         self, index: int = 0, *, as_array: bool = False
     ) -> Image | np.ndarray:
-        """Read overview image of the whole slide. If several overview
-        images are present, index can be used to select a specific image.
+        """Read overview image of the whole slide.
+
+        If several overview images are present, index can be used to select a specific
+        image.
 
         Parameters
         ----------
@@ -674,8 +755,9 @@ class WsiDicom:
         *,
         as_array: bool = False,
     ) -> Image | np.ndarray:
-        """Read thumbnail image of the whole slide with dimensions no larger than given
-        size.
+        """Read thumbnail image of the whole slide.
+
+        The thumbnail has dimensions no larger than given size.
 
         Parameters
         ----------
@@ -984,7 +1066,7 @@ class WsiDicom:
             If to return the region as a numpy array instead of a Pillow image.
 
         Returns
-        --------
+        -------
         Union[Image, np.ndarray]
             Region as Pillow image, or as a numpy array if `as_array`.
         """
@@ -1102,8 +1184,10 @@ class WsiDicom:
         pyramid: int | None = None,
         crop_to_image_boundary: bool = True,
     ) -> bytes:
-        """Read tile in pyramid level as encoded bytes. For non-existing levels
-        the tile is scaled down from a lower level, using the similar encoding.
+        """Read tile in pyramid level as encoded bytes.
+
+        For non-existing levels the tile is scaled down from a lower level, using the
+        similar encoding.
 
         Parameters
         ----------
@@ -1126,10 +1210,14 @@ class WsiDicom:
         bytes
             Tile in file encoding.
         """
-        tile_point = Point.from_tuple(tile)
-        wsi_pyramid = self.pyramids.get(
-            pyramid if pyramid is not None else self._selected_pyramid
+        pyramid_index = pyramid if pyramid is not None else self._selected_pyramid
+        encoded_tile = self._plane_tile_readers.read(
+            pyramid_index, level, tile, z, path, crop_to_image_boundary
         )
+        if encoded_tile is not None:
+            return encoded_tile
+        tile_point = Point.from_tuple(tile)
+        wsi_pyramid = self.pyramids.get(pyramid_index)
         try:
             wsi_level = wsi_pyramid.get(level)
             return wsi_level.get_encoded_tile(
@@ -1181,14 +1269,15 @@ class WsiDicom:
 
     def close(self) -> None:
         """Close source if owned by this instance."""
+        self._plane_tile_readers.clear()
         if self._source_owned:
             self._source.close()
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear cache of encoded and decoded tiles."""
         self._source.clear_cache()
 
-    def resize_cache(self, size: int):
+    def resize_cache(self, size: int) -> None:
         """Resize cache of encoded and decoded tiles."""
         self._source.resize_cache(size)
 
@@ -1202,8 +1291,9 @@ class WsiDicom:
 
     def _validate_collection(self) -> SlideUids:
         """
-        Check that no files or instance in collection is duplicate, and, if
-        strict, that all series have the same base uids.
+        Check that no files or instance in collection is duplicate.
+
+        If strict, also check that all series have the same base uids.
         Raises WsiDicomMatchError otherwise. Returns base uid for collection.
 
         Returns
@@ -1237,10 +1327,15 @@ class WsiDicom:
                     logger.warning("Annotations uids does not match.")
         return slide_uids
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     def __repr__(self) -> str:

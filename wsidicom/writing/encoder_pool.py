@@ -57,7 +57,7 @@ class EncoderPool:
         input_queue_maxsize: int = 100,
         *,
         token: CancellationToken,
-    ):
+    ) -> None:
         """Create an encoder pool.
 
         Parameters

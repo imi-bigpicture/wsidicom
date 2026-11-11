@@ -57,7 +57,7 @@ class SequenceWalker:
     BLOCK_SIZE: ClassVar[int] = 8 * 1024
     """Number of bytes read at a time, to avoid a read per element header."""
 
-    def __init__(self, stream: BinaryIO, transfer_syntax: UID):
+    def __init__(self, stream: BinaryIO, transfer_syntax: UID) -> None:
         """Create a walker over `stream`.
 
         Parameters
@@ -115,8 +115,7 @@ class SequenceWalker:
         return offset
 
     def _seek_past_items(self, position: int) -> int:
-        """Return the offset past the sequence delimiter ending the items at
-        `position`.
+        """Return the offset past the sequence delimiter ending the items at `position`.
 
         Items of defined length are skipped, and those of undefined length walked
         into.
@@ -158,8 +157,7 @@ class SequenceWalker:
                 offset = self._seek_past_attributes(offset)
 
     def _seek_past_attributes(self, position: int) -> int:
-        """Return the offset past the item delimiter ending the attributes at
-        `position`.
+        """Return the offset past the item delimiter ending attributes at `position`.
 
         Values of defined length are skipped, nested sequences walked and values
         encoded in fragments walked fragment by fragment.

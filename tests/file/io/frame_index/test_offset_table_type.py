@@ -34,7 +34,7 @@ from wsidicom.file.io.frame_index.offset_table_type import OffsetTableType
     ],
 )
 class TestOffsetTableType:
-    def test_from_string(self, string: str, expected_result: OffsetTableType):
+    def test_from_string(self, string: str, expected_result: OffsetTableType) -> None:
         # Arrange
         # Act
         result = OffsetTableType.from_string(string)

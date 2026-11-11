@@ -12,9 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Unit tests for InstanceFileWriter's concatenated-flag decision and offset
-advance. Both collaborators (splitter and factory) are mocked, so the writer is
-exercised independently of any concrete splitter."""
+"""Unit tests for InstanceFileWriter's concatenated-flag decision and offset advance.
+
+Both collaborators (splitter and factory) are mocked, so the writer is
+exercised independently of any concrete splitter.
+"""
 
 from pathlib import Path
 
@@ -63,7 +65,7 @@ def part_splitter(decoy: Decoy) -> PartSplitter:
 def whole_level_splitter(
     decoy: Decoy, part_splitter: PartSplitter, level_frames: int
 ) -> PartSplitter:
-    """Keeps the whole level in a single part (never cuts)."""
+    """Keep the whole level in a single part (never cut)."""
     decoy.when(part_splitter.next_part_frame_count(matchers.Anything())).then_return(
         level_frames
     )

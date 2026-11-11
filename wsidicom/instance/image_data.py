@@ -14,7 +14,7 @@
 
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from functools import cached_property
 
 import numpy as np
@@ -22,6 +22,7 @@ from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
 from wsidicom.geometry import Point, Region, Size, SizeMm
+from wsidicom.instance.tile_byte_ranges import FrameReader, TileByteRanges
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 
 
@@ -39,7 +40,7 @@ class ImageData(metaclass=ABCMeta):
 
     _default_z: float | None = None
 
-    def __init__(self, encoder: Encoder):
+    def __init__(self, encoder: Encoder) -> None:
         self._encoder = encoder
 
     @property
@@ -110,17 +111,22 @@ class ImageData(metaclass=ABCMeta):
     @property
     @abstractmethod
     def lossy_compression(self) -> list[LossyCompression] | None:
-        """Should return None if the image has never been lossy compressed, otherwise a
+        """Return the lossy compressions of the image, or None if never lossy.
+
+        Should return None if the image has never been lossy compressed, otherwise a
         list of the lossy compression method and ratio (30.0 means 30:1 compression)
         or an empty list if compression method is not in DICOM standard or ratio is
-        unknown."""
+        unknown.
+        """
         raise NotImplementedError()
 
     @property
     @abstractmethod
     def transcoder(self) -> Encoder | None:
-        """Return transcoder used for image data if image data can't read encoded data
-        directly. Return None if no transcoder is needed."""
+        """Return transcoder used if image data can't read encoded data directly.
+
+        Return None if no transcoder is needed.
+        """
         raise NotImplementedError()
 
     @abstractmethod
@@ -173,6 +179,45 @@ class ImageData(metaclass=ABCMeta):
             Tile as bytes.
         """
         raise NotImplementedError()
+
+    def get_tile_byte_ranges(self, z: float, path: str) -> TileByteRanges | None:
+        """Return where the encoded tiles of a plane are stored.
+
+        Returns None if a tile cannot be read with a single read.
+
+        Override this together with `get_frame_readers()` when `get_encoded_tile()` only
+        reads a tile with a frame reader, and going through it costs noticeably more
+        than the read. The byte ranges are asked for when a tile of the plane is first
+        read, and are kept for later reads. Making them may take some time, but they
+        must stay valid while the image data is open.
+
+        Parameters
+        ----------
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        -------
+        TileByteRanges | None
+            Where the encoded tiles are stored, or None.
+        """
+        return None
+
+    def get_frame_readers(self) -> Sequence[FrameReader] | None:
+        """Return one reader for each file of the image data.
+
+        The readers read tiles at their `get_tile_byte_ranges()`. They return tiles
+        ready to serve, and are in the order that the file indices of the byte ranges
+        refer to. Returns None if tiles are not to be read this way.
+
+        Returns
+        -------
+        Sequence[FrameReader] | None
+            Readers for the files of the image data, or None.
+        """
+        return None
 
     def get_decoded_tiles(
         self,
@@ -324,8 +369,10 @@ class ImageData(metaclass=ABCMeta):
 
     @property
     def dtype(self) -> np.dtype:
-        """Return the numpy dtype of the image data: uint8 for up to 8 bits per
-        sample, uint16 for up to 16."""
+        """Return the numpy dtype of the image data.
+
+        uint8 for up to 8 bits per sample, uint16 for up to 16.
+        """
         if self.bits <= 8:
             return np.dtype(np.uint8)
         if self.bits <= 16:
@@ -337,7 +384,7 @@ class ImageData(metaclass=ABCMeta):
         """Return the background tile pixels."""
         shape: tuple[int, ...] = (self.tile_size.height, self.tile_size.width)
         if self.samples_per_pixel != 1:
-            shape = shape + (self.samples_per_pixel,)
+            shape = (*shape, self.samples_per_pixel)
         return np.full(shape, self.blank_color, self.dtype)
 
     @cached_property
@@ -371,8 +418,7 @@ class ImageData(metaclass=ABCMeta):
         return self.optical_paths[0]
 
     def valid_tiles(self, region: Region, z: float, path: str) -> bool:
-        """Check if tile region is inside image and z coordinate and optical path
-        exists.
+        """Check if tile region is inside image and z and optical path exists.
 
         Parameters
         ----------

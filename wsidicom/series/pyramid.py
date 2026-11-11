@@ -30,12 +30,16 @@ from wsidicom.stringprinting import list_pretty_str
 
 
 class Pyramid(Series[Level]):
-    """Represents a list of Levels of the volume (e.g. pyramidal level) wsi flavor
-    forming a WSI pyramid. All levels in the pyramid must have the same image origin
-    and extended depth of field."""
+    """Represents a list of Levels forming a WSI pyramid.
 
-    def __init__(self, levels: Iterable[Level], thumbnails: Iterable[Thumbnail]):
-        """Holds a stack of levels.
+    The levels are of the volume (e.g. pyramidal level) wsi flavor. All levels in
+    the pyramid must have the same image origin and extended depth of field.
+    """
+
+    def __init__(
+        self, levels: Iterable[Level], thumbnails: Iterable[Thumbnail]
+    ) -> None:
+        """Create a stack of levels.
 
         Parameters
         ----------
@@ -212,8 +216,9 @@ class Pyramid(Series[Level]):
         return self.base_level.image_coordinate_system
 
     def valid_level(self, level: int) -> bool:
-        """Check that given level is less or equal to the highest level
-        (1x1 pixel level).
+        """Check that given level is less or equal to the highest level.
+
+        The highest level is the 1x1 pixel level.
 
         Parameters
         ----------
@@ -228,8 +233,7 @@ class Pyramid(Series[Level]):
         return level <= self.highest_level
 
     def get_closest_by_level(self, level: int) -> Level:
-        """Search for level that is closest to and smaller than the given
-        level.
+        """Search for level that is closest to and smaller than the given level.
 
         Parameters
         ----------
@@ -256,8 +260,9 @@ class Pyramid(Series[Level]):
         return closest
 
     def get_closest_by_pixel_spacing(self, pixel_spacing: SizeMm) -> Level:
-        """Search for level that by pixel spacing is closest to and smaller
-        than the given pixel spacing. Only the spacing in x-axis is used.
+        """Search for the level closest to and smaller than the given pixel spacing.
+
+        Only the spacing in x-axis is used.
 
         Parameters
         ----------

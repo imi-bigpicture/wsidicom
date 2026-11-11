@@ -30,8 +30,9 @@ from pydicom.uid import (
     RLELossless,
 )
 
+from wsidicom.cache import EncodedFrameCache
 from wsidicom.codec import Codec
-from wsidicom.config import get_settings
+from wsidicom.config import get_settings, use_settings
 from wsidicom.errors import WsiDicomNotFoundError
 from wsidicom.graphical_annotations import AnnotationInstance
 from wsidicom.instance import WsiDataset, WsiInstance
@@ -68,7 +69,7 @@ class WsiDicomWebSource(Source):
         study_uid: UID,
         series_uids: Iterable[UID],
         requested_transfer_syntaxes: Sequence[UID] | None = None,
-    ):
+    ) -> None:
         """Create a WsiDicomWebSource.
 
         Parameters
@@ -85,6 +86,12 @@ class WsiDicomWebSource(Source):
 
         """
         super().__init__()
+        # Encoded frames are cached only for DICOMweb, where reading a frame again costs
+        # a request.
+        with use_settings() as settings:
+            self._encoded_frame_cache = EncodedFrameCache(
+                settings.web_encoded_frame_cache_size
+            )
         self._level_instances: list[WsiInstance] = []
         self._label_instances: list[WsiInstance] = []
         self._overview_instances: list[WsiInstance] = []
@@ -152,7 +159,16 @@ class WsiDicomWebSource(Source):
                 elif instance.image_type == ImageType.OVERVIEW:
                     self._overview_instances.append(instance)
                 elif instance.image_type == ImageType.THUMBNAIL:
-                    self._thumbnail_instances.append(instance)
+                    if instance.pixel_spacing is None:
+                        # Pixel Spacing is required for thumbnails (PS3.3
+                        # C.7.6.16.2.1). Without it the thumbnail cannot be
+                        # related to the pyramid, so it is not used.
+                        logger.warning(
+                            f"Ignoring thumbnail {instance.identifier} as it has "
+                            "no Pixel Spacing."
+                        )
+                    else:
+                        self._thumbnail_instances.append(instance)
             for annotation_instance in annotation_instances:
                 self._annotation_instances.append(
                     AnnotationInstance.open_dataset(annotation_instance)
@@ -212,6 +228,16 @@ class WsiDicomWebSource(Source):
 
     def close(self) -> None:
         pass
+
+    def clear_cache(self) -> None:
+        """Clear the frame caches."""
+        super().clear_cache()
+        self._encoded_frame_cache.clear()
+
+    def resize_cache(self, size: int) -> None:
+        """Resize the frame caches."""
+        super().resize_cache(size)
+        self._encoded_frame_cache.resize(size)
 
     def _determine_transfer_syntax(
         self,

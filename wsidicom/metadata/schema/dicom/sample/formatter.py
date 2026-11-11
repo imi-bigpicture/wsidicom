@@ -39,7 +39,8 @@ class SpecimenDicomFormatter:
     Converting a slide sample to a DICOM Specimen Description requires producing a
     list of all the preparation steps that were performed on the sample. As a parent
     to a sample may have been sampled from multiple specimens, we use the sampling
-    constraints to limit the sampling tree to a single branch."""
+    constraints to limit the sampling tree to a single branch.
+    """
 
     @classmethod
     def to_dicom(
@@ -87,8 +88,9 @@ class SpecimenDicomFormatter:
     def _get_steps(
         cls, slide_sample: SlideSample, stainings: Iterable[Staining] | None
     ) -> Iterator[SpecimenPreparationStepDicomModel]:
-        """Get all the steps performed on the slide sample, following the sampling
-        branch specified in the sampling constraints.
+        """Get all the steps performed on the slide sample.
+
+        The steps follow the sampling branch specified in the sampling constraints.
 
         Parameters
         ----------

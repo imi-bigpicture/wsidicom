@@ -96,7 +96,7 @@ class CallableUidGenerator(UidGenerator):
                 return uid
     """
 
-    def __init__(self, generate: Callable[[], UID] = generate_uid):
+    def __init__(self, generate: Callable[[], UID] = generate_uid) -> None:
         self._generate = generate
 
     def study_uid(self, study: Study) -> UID:

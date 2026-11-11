@@ -15,7 +15,8 @@
 """Module for reading DICOM WSI files."""
 
 import logging
-from typing import ClassVar
+from types import TracebackType
+from typing import ClassVar, Self
 
 from pydicom.dataelem import DataElement, RawDataElement
 from pydicom.dataset import Dataset
@@ -46,7 +47,7 @@ from wsidicom.file.io.frame_index.tiff import (
 )
 from wsidicom.file.io.sequence_walker import UnwalkableSequenceException
 from wsidicom.file.io.wsidicom_io import WsiDicomReadIO
-from wsidicom.instance import WsiDataset
+from wsidicom.instance import FrameReader, WsiDataset
 from wsidicom.metadata import ImageType
 from wsidicom.tags import (
     ExtendedOffsetTableTag,
@@ -60,13 +61,13 @@ logger = logging.getLogger(__name__)
 
 
 class WsiDicomReader:
-    """Reader for DICOM WSI data in stream"""
+    """Reader for DICOM WSI data in stream."""
 
     DEFERRED_VALUE_SIZE: ClassVar[int] = 64 * 1024
     """Values longer than this many bytes are read when they are used rather
     than when the dataset is read."""
 
-    def __init__(self, stream: WsiDicomReadIO):
+    def __init__(self, stream: WsiDicomReadIO) -> None:
         """
         Parse DICOM stream. If valid WSI type read required parameters.
 
@@ -222,8 +223,9 @@ class WsiDicomReader:
     def _read_optical_paths(
         self, elements: dict[BaseTag, DataElement | RawDataElement]
     ) -> tuple[int, list[NestedDeferredElement]]:
-        """Read the optical path sequence, deferring the values (e.g. ICC profile) that
-        are large.
+        """Read the optical path sequence, deferring the values (e.g.
+
+        ICC profile) that are large.
 
         Parameters
         ----------
@@ -247,10 +249,15 @@ class WsiDicomReader:
         )
         return end_of_sequence, deferred
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     @property
@@ -330,6 +337,15 @@ class WsiDicomReader:
         """Return the filepath the stream is backed by."""
         return self._stream.filepath
 
+    @property
+    def frame_reader(self) -> FrameReader | None:
+        """Return a thread-safe reader of the frames in the frame index.
+
+        The reader does not hold the stream, and serves a frame as it is stored. Returns
+        None if the file is not local.
+        """
+        return self._stream.frame_reader
+
     def read_frame(self, frame_index: int) -> bytes:
         """Return frame data from pixel data by frame index.
 
@@ -353,9 +369,7 @@ class WsiDicomReader:
                 f"{self.frame_offset + len(self.frame_index) - 1} in file",
             )
         frame_position, frame_length = self.frame_index[index_in_file]
-        with self._stream.exclusive():
-            self._stream.seek(frame_position, 0)
-            return self._stream.read(frame_length)
+        return self._stream.read_at(frame_position, frame_length)
 
     def _get_frame_index_parser(self) -> FrameIndexParser:
         """Create frame index for stream."""

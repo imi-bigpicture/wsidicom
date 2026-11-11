@@ -66,6 +66,14 @@ class BasicOffsetTableFrameIndexParser(OffsetTableFrameIndexParser):
         lengths[-1] = self._read_last_frame_length(pixels_start, int(offsets[-1]))
         return lengths
 
+    def _invalid_lengths(self, lengths: NDArray[np.int64]) -> NDArray[np.bool_]:
+        """Return which frame lengths are invalid.
+
+        A length derived from the item layout is the length of a whole item, which is
+        always even, so an odd one means the offsets are wrong.
+        """
+        return super()._invalid_lengths(lengths) | (lengths % 2 != 0)
+
     def _read_last_frame_length(self, pixels_start: int, offset: int) -> int:
         """Return the length of the last frame, which no next offset gives.
 

@@ -90,7 +90,7 @@ from wsidicom.metadata.schema.dicom.sample.schema import (
         "medium",
     ],
     [
-        [
+        (
             None,
             None,
             None,
@@ -98,8 +98,8 @@ from wsidicom.metadata.schema.dicom.sample.schema import (
             None,
             None,
             None,
-        ],
-        [
+        ),
+        (
             ContainerTypeCode("Specimen container"),
             AnatomicPathologySpecimenTypesCode("tissue specimen"),
             datetime.datetime(2021, 1, 1),
@@ -107,7 +107,7 @@ from wsidicom.metadata.schema.dicom.sample.schema import (
             SpecimenPreparationStepsCode("Specimen clearing"),
             SpecimenFixativesCode("Neutral Buffered Formalin"),
             SpecimenEmbeddingMediaCode("Paraffin wax"),
-        ],
+        ),
     ],
 )
 class TestPreparationStepDicomSchema:
@@ -115,7 +115,7 @@ class TestPreparationStepDicomSchema:
         self,
         collection_dicom: CollectionDicomModel,
         identifier: str | SpecimenIdentifier,
-    ):
+    ) -> None:
         # Arrange
         schema = CollectionDicomSchema()
 
@@ -142,7 +142,7 @@ class TestPreparationStepDicomSchema:
         self,
         collection_dicom: CollectionDicomModel,
         collection_dataset: Dataset,
-    ):
+    ) -> None:
         # Arrange
         schema = CollectionDicomSchema()
 
@@ -183,7 +183,7 @@ class TestPreparationStepDicomSchema:
         self,
         sampling_dicom: SamplingDicomModel,
         identifier: str | SpecimenIdentifier,
-    ):
+    ) -> None:
         # Arrange
         schema = SamplingDicomSchema()
 
@@ -278,7 +278,7 @@ class TestPreparationStepDicomSchema:
     )
     def test_deserialize_sampling_dicom(
         self, sampling_dicom: SamplingDicomModel, sampling_dataset: Dataset
-    ):
+    ) -> None:
         # Arrange
         schema = SamplingDicomSchema()
 
@@ -309,7 +309,7 @@ class TestPreparationStepDicomSchema:
         self,
         processing_dicom: ProcessingDicomModel,
         identifier: str | SpecimenIdentifier,
-    ):
+    ) -> None:
         # Arrange
         schema = ProcessingDicomSchema()
 
@@ -330,7 +330,7 @@ class TestPreparationStepDicomSchema:
         self,
         processing_dicom: ProcessingDicomModel,
         processing_dataset: Dataset,
-    ):
+    ) -> None:
         # Arrange
 
         schema = ProcessingDicomSchema()
@@ -358,7 +358,7 @@ class TestPreparationStepDicomSchema:
         self,
         staining_dicom: StainingDicomModel,
         identifier: str | SpecimenIdentifier,
-    ):
+    ) -> None:
         # Arrange
         schema = StainingDicomSchema()
 
@@ -389,7 +389,7 @@ class TestPreparationStepDicomSchema:
         self,
         staining_dicom: StainingDicomModel,
         staining_dataset: Dataset,
-    ):
+    ) -> None:
         # Arrange
 
         schema = StainingDicomSchema()
@@ -416,7 +416,7 @@ class TestPreparationStepDicomSchema:
         self,
         receiving_dicom: ReceivingDicomModel,
         identifier: str | SpecimenIdentifier,
-    ):
+    ) -> None:
         # Arrange
         schema = ReceivingDicomSchema()
 
@@ -437,7 +437,7 @@ class TestPreparationStepDicomSchema:
         self,
         receiving_dicom: ReceivingDicomModel,
         receiving_dataset: Dataset,
-    ):
+    ) -> None:
         # Arrange
 
         schema = ReceivingDicomSchema()
@@ -463,7 +463,7 @@ class TestPreparationStepDicomSchema:
         self,
         storage_dicom: StorageDicomModel,
         identifier: str | SpecimenIdentifier,
-    ):
+    ) -> None:
         # Arrange
         schema = StorageDicomSchema()
 
@@ -485,7 +485,7 @@ class TestPreparationStepDicomSchema:
         self,
         storage_dicom: StorageDicomModel,
         storage_dataset: Dataset,
-    ):
+    ) -> None:
         # Arrange
 
         schema = StorageDicomSchema()
@@ -516,7 +516,7 @@ class TestPreparationStepDicomSchema:
 class TestPreparationStepDicomErrorHandling:
     def test_deserialize_step_validation_error_with_ignore_setting(
         self, invalid_preparation_step_dataset: Dataset
-    ):
+    ) -> None:
         # Arrange
         field = PreparationStepDicomField(
             data_key="SpecimenPreparationStepContentItemSequence"
@@ -535,7 +535,7 @@ class TestPreparationStepDicomErrorHandling:
 
     def test_deserialize_step_validation_error_with_throw_setting(
         self, invalid_preparation_step_dataset: Dataset
-    ):
+    ) -> None:
         # Arrange
         field = PreparationStepDicomField(
             data_key="SpecimenPreparationStepContentItemSequence"
@@ -556,7 +556,7 @@ class TestPreparationStepDicomErrorHandling:
         slide_sample_id: str,
         slide_sample_uid: UID,
         staining_dataset: Dataset,
-    ):
+    ) -> None:
         # Arrange
         description = create_description_dataset(
             slide_sample_id,
@@ -595,7 +595,7 @@ class TestPreparationStepDicomErrorHandling:
         slide_sample_id: str,
         slide_sample_uid: UID,
         staining_dataset: Dataset,
-    ):
+    ) -> None:
         # Arrange
         description = create_description_dataset(
             slide_sample_id,
@@ -643,7 +643,7 @@ class TestSampleLocalizationDicomSchema:
         y: Measurement | None,
         z: Measurement | None,
         visual_marking: str | None,
-    ):
+    ) -> None:
         # Arrange
         location = SampleLocalization(
             reference=reference,
@@ -700,7 +700,7 @@ class TestSampleLocalizationDicomSchema:
         y: Measurement | None,
         z: Measurement | None,
         visual_marking: str | None,
-    ):
+    ) -> None:
         # Arrange
         sequence = []
         if reference is not None:

@@ -34,13 +34,14 @@ GroupType = TypeVar("GroupType", Label, Level, Overview, Thumbnail)
 
 
 class Series(Generic[GroupType], metaclass=ABCMeta):
-    """Represents a series of Groups with the same image flavor, e.g.
-    pyramidal levels, labels, or overviews.
+    """Represents a series of Groups with the same image flavor.
+
+    The image flavor is e.g. pyramidal levels, labels, or overviews.
     """
 
     _group_type: type[GroupType]
 
-    def __init__(self, groups: Iterable[GroupType]):
+    def __init__(self, groups: Iterable[GroupType]) -> None:
         """Create a Series from list of Groups.
 
         Parameters
@@ -87,8 +88,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
     @property
     @abstractmethod
     def image_type(self) -> ImageType:
-        """Should return the wsi type of the series ('VOLUME', 'LABEL', or
-        'OVERVIEW'"""
+        """Return the wsi type of the series ('VOLUME', 'LABEL', or 'OVERVIEW')."""
         raise NotImplementedError()
 
     @property
@@ -109,13 +109,12 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
     @property
     def datasets(self) -> list[WsiDataset]:
         """Return contained datasets."""
-
         series_datasets = [series.datasets for series in self]
         return [dataset for sublist in series_datasets for dataset in sublist]
 
     @property
     def instances(self) -> list[WsiInstance]:
-        """Return contained instances"""
+        """Return contained instances."""
         series_instances = [series.instances.values() for series in self]
         return [instance for sublist in series_instances for instance in sublist]
 
@@ -142,8 +141,7 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
         return cls(groups)
 
     def get_closest_by_size(self, size: Size) -> GroupType | None:
-        """Search for group that by size is closest to and larger than the
-        given size.
+        """Search for group that by size is closest to and larger than the given size.
 
         Parameters
         ----------
@@ -196,8 +194,9 @@ class Series(Generic[GroupType], metaclass=ABCMeta):
         )
 
     def _validate_series(self, groups: Sequence[GroupType]) -> SlideUids | None:
-        """Check that no files or instances in series is duplicate and that
-        all groups in series matches.
+        """Check that no files or instances in series is duplicate.
+
+        Also check that all groups in series matches.
         Raises WsiDicomMatchError otherwise.
         Returns the matching base uid. If list of groups is empty, return None.
 

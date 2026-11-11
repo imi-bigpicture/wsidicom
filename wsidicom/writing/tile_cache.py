@@ -76,7 +76,7 @@ class TileCache(metaclass=ABCMeta):
 class FileTileStore:
     """Disk-based cache for tiles."""
 
-    def __init__(self, cache_dir: UPath):
+    def __init__(self, cache_dir: UPath) -> None:
         """Create a file cache for tiles.
 
         The cache directory is created lazily on first save.
@@ -141,7 +141,7 @@ class ByteBudgetMemoryTileStore:
     Thread-safe: the shared budget is protected by a lock.
     """
 
-    def __init__(self, budget_bytes: int):
+    def __init__(self, budget_bytes: int) -> None:
         """Create a byte-budget memory cache.
 
         Parameters
@@ -245,7 +245,7 @@ class ByteBudgetTileCache(TileCache):
         self,
         cache_dir: UPath,
         memory_budget_bytes: int,
-    ):
+    ) -> None:
         """Create a byte-budget two-tier tile cache.
 
         Parameters

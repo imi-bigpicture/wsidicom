@@ -85,10 +85,17 @@ class Settings:
     than its value representation allows is truncated to fit, with a warning."""
     decoded_frame_cache_size: int = 100 * 1024 * 1024
     """Size of the decoded frame cache. Default is 100 MB."""
-    encoded_frame_cache_size: int = 100 * 1024 * 1024
-    """Size of the encoded frame cache. Default is 100 MB."""
+    web_encoded_frame_cache_size: int = 100 * 1024 * 1024
+    """Size of the encoded frame cache of DICOMweb instances. Default is 100 MB. Encoded
+    frames of files are not cached. To cache the frames of a file opened through fsspec,
+    use a caching file system of fsspec."""
     level_scale_tolerance: float = 1e-2
     """Tolerance for level scale comparison. Default is 1e-2."""
+    max_file_handles_per_file: int = 8
+    """The most handles open at once to a local file for reading frames. When all are in
+    use, a read waits for a handle to be returned. Without a limit, a slide of many
+    files read by many threads would open one handle per thread to every file. Default
+    is 8."""
 
     def __post_init__(self) -> None:
         # Accept the string form of the option enums (e.g. "box") at construction
@@ -123,8 +130,10 @@ _active_settings: contextvars.ContextVar[Settings | None] = contextvars.ContextV
 
 
 def get_settings() -> Settings:
-    """The settings in effect: those active in the current context (see
-    ``use_settings``), or the process-wide default when none is active.
+    """Return the settings in effect.
+
+    Those are the settings active in the current context (see ``use_settings``),
+    or the process-wide default when none is active.
 
     Use this for one-off reads (``get_settings().strict_uid_check``). To read
     several fields, ``with use_settings() as settings:`` binds them once.
@@ -177,7 +186,7 @@ def use_settings(active: Settings | None = None) -> Iterator[Settings]:
 
 
 def dicom_validation_mode() -> int:
-    """The pydicom validation mode to make an element with.
+    """Return the pydicom validation mode to make an element with.
 
     Given to `DataElement` rather than set on pydicom, so a value wsidicom sets
     is checked while the mode the rest of the process uses is left alone.

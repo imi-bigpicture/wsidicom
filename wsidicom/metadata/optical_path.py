@@ -184,9 +184,10 @@ class Lut:
         return length_by_color.pop()
 
     def array(self, mode: str) -> np.ndarray:
-        """Return flattened representation of the lookup table with order
-        suitable for use with Pillows point(). The lookup table is scaled to
-        either 8 or 16 bit depending on mode.
+        """Return flattened representation of the lookup table.
+
+        The order is suitable for use with Pillows point(). The lookup table is
+        scaled to either 8 or 16 bit depending on mode.
 
         Parameters
         ----------
@@ -194,7 +195,7 @@ class Lut:
             Image mode to produce lookup table for.
 
         Returns
-        ----------
+        -------
         np.ndarray
             Lookup table ordered by rgb, rgb ...
         """
@@ -302,6 +303,7 @@ class OpticalPath:
     https://dicom.nema.org/medical/dicom/current/output/chtml/part03/sect_C.7.html
 
     Parameters
+    ----------
     identifier : str | None = None
         Identifier of the optical path.
     description : str | None = None

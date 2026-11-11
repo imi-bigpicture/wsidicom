@@ -17,6 +17,7 @@
 import io
 from collections.abc import Sequence
 from struct import pack
+from typing import ClassVar
 
 import numpy as np
 
@@ -30,11 +31,11 @@ from wsidicom.codec.optionals import (
 class RleCodec:
     """Codec for encoding and decoding DICOM RLE data with imagecodecs PackBits."""
 
-    _bits_to_components_per_channel = {
+    _bits_to_components_per_channel: ClassVar[dict[int, int]] = {
         8: 1,
         16: 2,
     }
-    _data_type_to_components_per_channel = {
+    _data_type_to_components_per_channel: ClassVar[dict[np.dtype, int]] = {
         np.dtype(np.uint8): 1,
         np.dtype(np.uint16): 2,
     }
@@ -62,7 +63,8 @@ class RleCodec:
         Returns
         -------
         bytes
-            Encoded data. First 64 bytes is the RLE header, followed by RLE segments."""
+            Encoded data. First 64 bytes is the RLE header, followed by RLE segments.
+        """
         if not cls.is_available():
             raise RuntimeError("Image codecs not available.")
         components_per_channel = cls._data_type_to_components_per_channel[data.dtype]
@@ -130,7 +132,7 @@ class RleCodec:
         return decoded
 
     @staticmethod
-    def _create_header(segment_positions: Sequence[int]):
+    def _create_header(segment_positions: Sequence[int]) -> bytes:
         """Create RLE header from segment positions."""
         if len(segment_positions) < 1:
             raise ValueError("Too few segments.")

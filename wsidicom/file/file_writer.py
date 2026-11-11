@@ -22,8 +22,9 @@ import shutil
 import tempfile
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from threading import Thread
@@ -36,6 +37,12 @@ from wsidicom.codec import Encoder
 from wsidicom.downsampler import Downsampler
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE
+from wsidicom.file.wsi_file import (
+    WsiAssociatedFile,
+    WsiFile,
+    WsiLevelFile,
+    WsiThumbnailFile,
+)
 from wsidicom.geometry import Size
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
 from wsidicom.instance import (
@@ -135,8 +142,10 @@ class PartFactory:
 
     @cached_property
     def _source_uid(self) -> UID:
-        """The notional source SOP Instance UID shared by all parts, minted on
-        first use."""
+        """Return the notional source SOP Instance UID shared by all parts.
+
+        The UID is minted on first use.
+        """
         return self._uid_generator.concatenation_source_uid(
             self._base_dataset.as_dataset()
         )
@@ -184,8 +193,11 @@ class PartFactory:
 
 
 class PartSplitter(metaclass=ABCMeta):
-    """Decides where a level's raster-ordered tiles are split into concatenation
-    parts, and — when it can — how many frames the next part will hold."""
+    """Decides where a level's raster-ordered tiles are split into parts.
+
+    The parts are concatenation parts. When it can, the splitter also decides how
+    many frames the next part will hold.
+    """
 
     @abstractmethod
     def should_start_new_part(self, next_tile: bytes) -> bool:
@@ -196,8 +208,10 @@ class PartSplitter(metaclass=ABCMeta):
 
     @abstractmethod
     def account(self, tile: bytes) -> None:
-        """Account for `tile` now in the current part (update the running measure
-        `should_start_new_part` reads)."""
+        """Account for `tile` now in the current part.
+
+        Updates the running measure `should_start_new_part` reads.
+        """
 
     @abstractmethod
     def reset(self) -> None:
@@ -205,8 +219,11 @@ class PartSplitter(metaclass=ABCMeta):
 
     @abstractmethod
     def next_part_frame_count(self, remaining_frames: int) -> int | None:
-        """The next part's frame count if fixed in advance (so it can be streamed
-        straight to its file), else None (the part must be buffered until full)."""
+        """Return the next part's frame count if fixed in advance, else None.
+
+        A fixed count lets the part be streamed straight to its file; with None the
+        part must be buffered until full.
+        """
 
 
 class NoSplitter(PartSplitter):
@@ -253,9 +270,11 @@ class FrameCountSplitter(PartSplitter):
 
 
 class ByteSizeSplitter(PartSplitter):
-    """Splits off a new part when the next tile would push the current part's
-    encapsulated pixel data past `max_bytes` (each frame counted with its 8-byte
-    item header)."""
+    """Splits off a new part when the next tile would push it past `max_bytes`.
+
+    The measure is the current part's encapsulated pixel data, each frame counted
+    with its 8-byte item header.
+    """
 
     def __init__(self, max_bytes: int) -> None:
         """Split by encapsulated pixel-data size.
@@ -282,6 +301,14 @@ class ByteSizeSplitter(PartSplitter):
         return None
 
 
+@dataclass(frozen=True)
+class WrittenPart:
+    """A finalized instance file and the dataset as written to it."""
+
+    filepath: UPath
+    dataset: WsiDataset
+
+
 class PartSink(metaclass=ABCMeta):
     """Writes the frames of one concatenation part to its instance file."""
 
@@ -290,8 +317,8 @@ class PartSink(metaclass=ABCMeta):
         """Add a batch of raster-order tiles to the part."""
 
     @abstractmethod
-    def finalize(self, concatenated: bool) -> UPath:
-        """Complete the part's instance and return its file path."""
+    def finalize(self, concatenated: bool) -> WrittenPart:
+        """Complete the part's instance and return its file path and dataset."""
 
     @abstractmethod
     def close(self) -> None:
@@ -299,8 +326,10 @@ class PartSink(metaclass=ABCMeta):
 
 
 class DirectPartSink(PartSink):
-    """Streams a part's tiles straight to an already-open instance file, used when
-    the frame count is fixed in advance (frame-count splitting)."""
+    """Streams a part's tiles straight to an already-open instance file.
+
+    Used when the frame count is fixed in advance (frame-count splitting).
+    """
 
     def __init__(
         self, writer: WsiDicomWriter, dataset: WsiDataset, transcoder: Encoder | None
@@ -323,10 +352,10 @@ class DirectPartSink(PartSink):
     def write(self, tiles: Iterable[bytes]) -> None:
         self._writer.write_tiles(tiles)
 
-    def finalize(self, concatenated: bool) -> UPath:
+    def finalize(self, concatenated: bool) -> WrittenPart:
         filepath = self._writer.filepath
-        self._writer.finalize(self._dataset, self._transcoder)
-        return filepath
+        written = self._writer.finalize(self._dataset, self._transcoder)
+        return WrittenPart(filepath, written)
 
     def close(self) -> None:
         with contextlib.suppress(Exception):
@@ -334,8 +363,9 @@ class DirectPartSink(PartSink):
 
 
 class BufferedPartSink(PartSink):
-    """Buffers a part's raster-order tiles to one sequential scratch file and, on
-    finalize, opens the instance with the now-known frame count and writes the
+    """Buffers a part's raster-order tiles to one sequential scratch file.
+
+    On finalize, opens the instance with the now-known frame count and writes the
     tiles into it — used when the count is discovered only as tiles arrive
     (byte-size splitting).
     """
@@ -379,20 +409,20 @@ class BufferedPartSink(PartSink):
             self._file.write(tile)
             self._lengths.append(len(tile))
 
-    def finalize(self, concatenated: bool) -> UPath:
+    def finalize(self, concatenated: bool) -> WrittenPart:
         writer, dataset = self._part_factory.open(
             self._frame_offset, len(self._lengths), concatenated=concatenated
         )
         filepath = writer.filepath
         try:
             writer.write_tiles(self._read())
-            writer.finalize(dataset, self._transcoder)
+            written = writer.finalize(dataset, self._transcoder)
         except BaseException:
             writer.close()
             raise
         finally:
             self.close()
-        return filepath
+        return WrittenPart(filepath, written)
 
     def _read(self) -> Iterator[bytes]:
         """Yield the buffered tiles back in write order from the scratch file."""
@@ -414,8 +444,9 @@ class BufferedPartSink(PartSink):
 
 
 class InstanceFileWriter:
-    """Writes a level to files provided by `part_factory`, splitting into parts where
-    `splitter` says.
+    """Writes a level to files provided by `part_factory`.
+
+    The level is split into parts where `splitter` says.
     """
 
     def __init__(
@@ -450,17 +481,20 @@ class InstanceFileWriter:
         self._frame_offset = 0
         self._part_frames = 0
         self._did_split = False
-        self._filepaths: list[UPath] = []
+        self._written_parts: list[WrittenPart] = []
         self._sink: PartSink | None = None
 
     @property
-    def filepaths(self) -> list[UPath]:
+    def written_parts(self) -> list[WrittenPart]:
         """The instance file(s) finalized so far, in part order."""
-        return list(self._filepaths)
+        return list(self._written_parts)
 
     def write_tiles(self, tiles: Iterable[bytes]) -> int:
-        """Batch same-part tiles to the current sink, splitting where the splitter
-        says (a batch that crosses a part boundary is split)."""
+        """Batch same-part tiles to the current sink.
+
+        Splits where the splitter says (a batch that crosses a part boundary is
+        split).
+        """
         count = 0
         batch: list[bytes] = []
         for tile in tiles:
@@ -495,9 +529,11 @@ class InstanceFileWriter:
         self._sink.write(batch)
 
     def _open_sink(self) -> PartSink:
-        """Open the next part's sink: a streaming `DirectPartSink` when the
-        splitter fixes the frame count in advance, else a buffering
-        `BufferedPartSink`."""
+        """Open the next part's sink.
+
+        A streaming `DirectPartSink` when the splitter fixes the frame count in
+        advance, else a buffering `BufferedPartSink`.
+        """
         remaining = self._total_frames - self._frame_offset
         expected = self._splitter.next_part_frame_count(remaining)
         if expected is not None:
@@ -518,11 +554,13 @@ class InstanceFileWriter:
         )
 
     def _finalize_part(self, concatenated: bool) -> None:
-        """Finalize the current part, if one is open, and advance the frame offset
-        and per-part accounting for the next one."""
+        """Finalize the current part, if one is open.
+
+        Advances the frame offset and per-part accounting for the next one.
+        """
         if self._sink is None:
             return
-        self._filepaths.append(self._sink.finalize(concatenated))
+        self._written_parts.append(self._sink.finalize(concatenated))
         self._frame_offset += self._part_frames
         self._part_frames = 0
         self._did_split = True
@@ -543,7 +581,7 @@ class BaseFileWriter(metaclass=ABCMeta):
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
-    ):
+    ) -> None:
         """Initialize shared writer state.
 
         Parameters
@@ -587,8 +625,8 @@ class BaseFileWriter(metaclass=ABCMeta):
         self._instance_split = instance_split
 
     @abstractmethod
-    def write(self) -> list[UPath]:
-        """Write DICOM files and return paths to created files."""
+    def write(self) -> Mapping[UPath, WsiFile]:
+        """Write DICOM files and return the created files, by path."""
         raise NotImplementedError()
 
     def _build_base_dataset(
@@ -760,6 +798,7 @@ class PyramidFileWriter(BaseFileWriter):
     def __init__(
         self,
         pyramid: Pyramid,
+        pyramid_index: int,
         output_path: UPath,
         uid_generator: UidGenerator,
         max_threads: int = 16,
@@ -778,13 +817,16 @@ class PyramidFileWriter(BaseFileWriter):
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
         concatenation: ConcatenationByFrames | ConcatenationByBytes | None = None,
-    ):
+    ) -> None:
         """Create a pull-based pyramid writer.
 
         Parameters
         ----------
         pyramid: Pyramid
             Source pyramid to generate from.
+        pyramid_index: int
+            Index of the pyramid among the pyramids of the WSI, reported for
+            the written files.
         output_path: Union[str, Path, UPath]
             Directory to write output files to.
         uid_generator: UidGenerator
@@ -851,6 +893,7 @@ class PyramidFileWriter(BaseFileWriter):
             instance_split=instance_split,
         )
         self._pyramid = pyramid
+        self._pyramid_index = pyramid_index
         self._concatenation = concatenation
         self._max_threads = max_threads
         self._include_levels = include_levels
@@ -861,16 +904,16 @@ class PyramidFileWriter(BaseFileWriter):
         self._source_workers = source_workers
         self._chunk_size = chunk_size
 
-    def write(self) -> list[UPath]:
+    def write(self) -> dict[UPath, WsiLevelFile]:
         """Write the pyramid files.
 
         Returns
         -------
-        List[UPath]
-            Paths to created DICOM files, one per level.
+        dict[UPath, WsiLevelFile]
+            The created DICOM files, by path, described as written.
         """
         # Get source info
-        base_instance = list(self._pyramid.base_level.instances.values())[0]
+        base_instance = next(iter(self._pyramid.base_level.instances.values()))
         source_image_data = base_instance.image_data
 
         # Resolve encoder and whether transcoding is needed
@@ -893,6 +936,7 @@ class PyramidFileWriter(BaseFileWriter):
         try:
             level_writers: list[PyramidLevelWriter] = []
             file_writers: list[InstanceFileWriter] = []
+            transfer_syntaxes: list[UID] = []
             try:
                 level_writers = self._build_level_writers(
                     self._pyramid.pyramid_indices,
@@ -920,6 +964,7 @@ class PyramidFileWriter(BaseFileWriter):
                         temp_dir,
                     )
                     file_writers.append(file_writer)
+                    transfer_syntaxes.append(level_transfer_syntax)
                     level_writer.start(file_writer)
                 encoder_pool.start()
 
@@ -962,10 +1007,20 @@ class PyramidFileWriter(BaseFileWriter):
                 self._cleanup_writers(level_writers, file_writers, encoder_pool)
                 raise token.exception or error from None
 
-            filepaths: list[UPath] = []
-            for file_writer in file_writers:
-                filepaths.extend(file_writer.filepaths)
-            return filepaths
+            return {
+                part.filepath: WsiLevelFile.from_dataset(
+                    part.dataset,
+                    transfer_syntax,
+                    level_writer.focal_planes,
+                    level_writer.optical_paths,
+                    self._pyramid_index,
+                    level_writer.level_index,
+                )
+                for level_writer, file_writer, transfer_syntax in zip(
+                    level_writers, file_writers, transfer_syntaxes, strict=True
+                )
+                for part in file_writer.written_parts
+            }
 
         finally:
             self._cleanup_temp(temp_dir)
@@ -1562,7 +1617,7 @@ class GroupFileWriter(BaseFileWriter):
 
     def __init__(
         self,
-        group: Label | Level | Overview | Thumbnail,
+        group: Label | Overview | Thumbnail,
         output_path: UPath,
         uid_generator: UidGenerator,
         transcoder: Encoder | None,
@@ -1572,12 +1627,13 @@ class GroupFileWriter(BaseFileWriter):
         metadata: WsiMetadata | None = None,
         replace_metadata: bool = True,
         instance_split: InstanceSplit = InstanceSplit.NONE,
-    ):
+        pyramid_index: int | None = None,
+    ) -> None:
         """Create a GroupFileWriter.
 
         Parameters
         ----------
-        group: Union[Label, Level, Overview, Thumbnail]
+        group: Label | Overview | Thumbnail
             Group to write.
         output_path: Union[str, Path, UPath]
             Folder path to save files to.
@@ -1600,7 +1656,12 @@ class GroupFileWriter(BaseFileWriter):
         instance_split: InstanceSplit = InstanceSplit.NONE
             How optical paths and focal planes are split across output instances.
             See `BaseFileWriter`.
+        pyramid_index: int | None = None
+            Index of the pyramid a thumbnail belongs to, among the pyramids of
+            the WSI, reported for the written files. Required for thumbnails.
         """
+        if isinstance(group, Thumbnail) and pyramid_index is None:
+            raise ValueError("Pyramid index is required for thumbnails.")
         super().__init__(
             output_path=output_path,
             uid_generator=uid_generator,
@@ -1613,16 +1674,17 @@ class GroupFileWriter(BaseFileWriter):
             instance_split=instance_split,
         )
         self._group = group
+        self._pyramid_index = pyramid_index
 
-    def write(self) -> list[UPath]:
+    def write(self) -> dict[UPath, WsiThumbnailFile | WsiAssociatedFile]:
         """Write group to DICOM files.
 
         Returns
         -------
-        List[UPath]
-            Paths to created DICOM files.
+        dict[UPath, WsiThumbnailFile | WsiAssociatedFile]
+            The created DICOM files, by path, described as written.
         """
-        filepaths: list[UPath] = []
+        created_files: dict[UPath, WsiThumbnailFile | WsiAssociatedFile] = {}
         for sub_group in self._group_instances_to_file(self._group):
             source_image_data = sub_group[0].image_data
             sub_instances = Instances(sub_group)
@@ -1680,20 +1742,43 @@ class GroupFileWriter(BaseFileWriter):
                     dataset,
                 ) as file_writer:
                     instance_writer.write(file_writer)
-                    file_writer.finalize(dataset, transcoder)
+                    written = file_writer.finalize(dataset, transcoder)
                 self._instance_number += 1
-                filepaths.append(filepath)
-        return filepaths
+                created_files[filepath] = self._describe(
+                    written, transfer_syntax, planes, paths
+                )
+        return created_files
+
+    def _describe(
+        self,
+        dataset: WsiDataset,
+        transfer_syntax: UID,
+        focal_planes: Sequence[float],
+        optical_paths: Sequence[str],
+    ) -> WsiThumbnailFile | WsiAssociatedFile:
+        """Describe a written file of the group from its dataset as written."""
+        if isinstance(self._group, Thumbnail):
+            assert self._pyramid_index is not None
+            return WsiThumbnailFile.from_dataset(
+                dataset,
+                transfer_syntax,
+                focal_planes,
+                optical_paths,
+                self._pyramid_index,
+            )
+        return WsiAssociatedFile.from_dataset(
+            dataset, transfer_syntax, focal_planes, optical_paths
+        )
 
     @staticmethod
     def _group_instances_to_file(
-        group: Label | Level | Overview | Thumbnail,
+        group: Label | Overview | Thumbnail,
     ) -> list[list[WsiInstance]]:
         """Group instances by properties that can't differ in a DICOM-file.
 
         Parameters
         ----------
-        group: Union[Label, Level, Overview, Thumbnail]
+        group: Label | Overview | Thumbnail
             Group to partition.
 
         Returns

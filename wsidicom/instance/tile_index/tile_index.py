@@ -16,6 +16,8 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Sequence
 from typing import ClassVar
 
+import numpy as np
+from numpy.typing import NDArray
 from pydicom.dataset import Dataset
 
 from wsidicom.geometry import Point, Size
@@ -23,16 +25,19 @@ from wsidicom.instance.dataset import WsiDataset
 
 
 class TileIndex(metaclass=ABCMeta):
-    """Index for mapping tile position to frame number. Is subclassed into
-    FullTileIndex and SparseTileIndex."""
+    """Index for mapping tile position to frame number.
+
+    Is subclassed into FullTileIndex and SparseTileIndex.
+    """
 
     Z_DECIMALS: ClassVar[int] = 3
     """Decimals kept when rounding a z offset into a focal plane key. Focal planes are
     keys in a dict, so every path that produces one has to round the same way."""
 
-    def __init__(self, datasets: Sequence[WsiDataset]):
-        """Create tile index for frames in datasets. Requires equal tile
-        size for all tile planes.
+    def __init__(self, datasets: Sequence[WsiDataset]) -> None:
+        """Create tile index for frames in datasets.
+
+        Requires equal tile size for all tile planes.
 
         Parameters
         ----------
@@ -86,7 +91,28 @@ class TileIndex(metaclass=ABCMeta):
 
     @abstractmethod
     def get_frame_index(self, tile: Point, z: float, path: str) -> int:
-        """Abstract method for getting the frame index for a tile"""
+        """Abstract method for getting the frame index for a tile."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_plane_frame_indices(self, z: float, path: str) -> NDArray[np.int64]:
+        """Return the frame index of every tile of a plane at once.
+
+        The indices are those `get_frame_index()` would return for each tile.
+
+        Parameters
+        ----------
+        z: float
+            Z coordinate of the plane. Assumed to be valid.
+        path: str
+            Optical path of the plane. Assumed to be valid.
+
+        Returns
+        -------
+        NDArray[np.int64]
+            Frame index of each tile in row-major order (row by row), -1 for a tile
+            that has no frame.
+        """
         raise NotImplementedError()
 
     @staticmethod

@@ -70,7 +70,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         return Slide
 
     @pre_dump
-    def pre_dump(self, slide: Slide, **kwargs):
+    def pre_dump(self, slide: Slide, **kwargs: Any) -> dict[str, Any]:
         # Move staining onto samples so that the sample field can serialize both.
         dicom_samples = [
             SpecimenDicomFormatter.to_dicom(slide_sample, slide.stainings)
@@ -89,7 +89,7 @@ class SlideDicomSchema(ModuleDicomSchema[Slide]):
         }
 
     @post_load
-    def post_load(self, data: dict[str, Any], **kwargs):
+    def post_load(self, data: dict[str, Any], **kwargs: Any) -> Slide:
         dicom_samples = data.pop("samples", None)
         if dicom_samples is not None:
             try:

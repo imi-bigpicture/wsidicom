@@ -22,8 +22,9 @@ from wsidicom.file.io.frame_index.parser import FrameIndexParser
 
 class EncapsulatedPixelDataFrameIndexParser(FrameIndexParser):
     def _read_bot_length(self) -> int | None:
-        """Read the length of the basic table offset (BOT). Returns None if BOT
-        is empty.
+        """Read the length of the basic table offset (BOT).
+
+        Returns None if BOT is empty.
 
         Returns
         -------

@@ -30,14 +30,19 @@ from wsidicom.thread import ReadExecutor
 
 
 class Level(Instances):
-    """Represents a level in the pyramid and contains one or more instances
-    having the same pyramid level index, pixel spacing, and size but possibly
-    different focal planes and/or optical paths.
+    """Represents a level in the pyramid.
+
+    A level contains one or more instances having the same pyramid level index,
+    pixel spacing, and size but possibly different focal planes and/or optical
+    paths.
     """
 
-    def __init__(self, instances: Iterable[WsiInstance], base_pixel_spacing: SizeMm):
-        """Create a level from list of WsiInstances. Assign the pyramid level
-        index from pixel spacing of base level.
+    def __init__(
+        self, instances: Iterable[WsiInstance], base_pixel_spacing: SizeMm
+    ) -> None:
+        """Create a level from list of WsiInstances.
+
+        Assign the pyramid level index from pixel spacing of base level.
 
         Parameters
         ----------
@@ -67,7 +72,7 @@ class Level(Instances):
 
     @property
     def pyramid(self) -> str:
-        """Return string representation of the level"""
+        """Return string representation of the level."""
         return (
             f"Level [{self.level}]"
             f" tiles: {self.default_instance.tiled_size},"
@@ -80,7 +85,7 @@ class Level(Instances):
 
     @property
     def level(self) -> int:
-        """Return pyramid level"""
+        """Return pyramid level."""
         return self._level
 
     @property
@@ -96,8 +101,9 @@ class Level(Instances):
         return self._pixel_spacing
 
     def matches(self, other_group: "Instances") -> bool:
-        """Check if level matches other level. If strict common Uids should
-        match. Wsi type and tile size should always match.
+        """Check if level matches other level.
+
+        If strict common Uids should match. Wsi type and tile size should always match.
 
         Parameters
         ----------
@@ -258,8 +264,9 @@ class Level(Instances):
 
     def _assign_level(self, base_pixel_spacing: SizeMm) -> int:
         """Return (2^level scale factor) based on pixel spacing.
-        Will round to closest integer. Raises NotImplementedError if level is
-        to far from integer.
+
+        Will round to closest integer. Raises NotImplementedError if level is to far
+        from integer.
 
         Parameters
         ----------
@@ -272,7 +279,7 @@ class Level(Instances):
             The pyramid order of the level
         """
         float_level = math.log2(self.pixel_spacing.width / base_pixel_spacing.width)
-        level = int(round(float_level))
+        level = round(float_level)
         tolerance = get_settings().level_scale_tolerance
         if not math.isclose(float_level, level, abs_tol=tolerance):
             raise NotImplementedError(
@@ -285,7 +292,7 @@ class Level(Instances):
 
 
 class BaseLevel(Level):
-    def __init__(self, instances: Iterable[WsiInstance]):
+    def __init__(self, instances: Iterable[WsiInstance]) -> None:
         """Create a base level from list of WsiInstances.
 
         Parameters

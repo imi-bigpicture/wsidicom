@@ -24,33 +24,33 @@ from wsidicom.web.wsidicom_web_client import (
 STUDY_INSTANCE_UID = "0020000D"
 
 
-@pytest.fixture()
-def study_instance_uid():
-    yield generate_uid()
+@pytest.fixture
+def study_instance_uid() -> UID:
+    return generate_uid()
 
 
-@pytest.fixture()
-def series_instance_uid():
-    yield generate_uid()
+@pytest.fixture
+def series_instance_uid() -> UID:
+    return generate_uid()
 
 
-@pytest.fixture()
-def sop_instance_uid():
-    yield generate_uid()
+@pytest.fixture
+def sop_instance_uid() -> UID:
+    return generate_uid()
 
 
-@pytest.fixture()
-def available_sop_transfer_syntax_uid():
-    yield JPEGBaseline8Bit
+@pytest.fixture
+def available_sop_transfer_syntax_uid() -> UID:
+    return JPEGBaseline8Bit
 
 
-@pytest.fixture()
+@pytest.fixture
 def instance_metadata(
     study_instance_uid: UID,
     series_instance_uid: UID,
     sop_instance_uid: UID,
     available_sop_transfer_syntax_uid: UID | None,
-):
+) -> dict[str, Any]:
     wsi_instance = {
         STUDY_INSTANCE_UID: {"vr": "UI", "Value": [str(study_instance_uid)]},
         SERIES_INSTANCE_UID: {
@@ -72,7 +72,7 @@ def instance_metadata(
                 },
             }
         )
-    yield wsi_instance
+    return wsi_instance
 
 
 # @pytest.fixture()
@@ -162,7 +162,7 @@ class TestWsiDicomWebClient:
         series_instance_uid: UID,
         sop_instance_uid: UID,
         instance_metadata: dict[str, Any],
-    ):
+    ) -> None:
         # Arrange
         def create_response(code: HTTPStatus, message: str) -> Response:
             response = Response()
@@ -221,7 +221,7 @@ class TestWsiDicomWebClient:
         sop_instance_uid: UID,
         available_sop_transfer_syntax_uid: UID,
         instance_metadata: dict[str, Any],
-    ):
+    ) -> None:
         # Arrange
 
         def create_response(code: HTTPStatus, message: str) -> Response:
@@ -273,7 +273,7 @@ class TestWsiDicomWebClient:
 
     def test_get_wsi_instances_other_search_filter_not_supported_throw(
         self, decoy: Decoy, study_instance_uid: UID, series_instance_uid: UID
-    ):
+    ) -> None:
         # Arrange
 
         def create_response(code: HTTPStatus, message: str) -> Response:
@@ -321,7 +321,7 @@ class TestWsiDicomWebClient:
         study_instance_uid: UID,
         series_instance_uid: UID,
         status_code: int | None,
-    ):
+    ) -> None:
         # Arrange
         if status_code is None:
             error = HTTPError()
@@ -358,7 +358,7 @@ class TestWsiDicomWebClient:
         sop_instance_uid: UID,
         available_sop_transfer_syntax_uid: UID,
         instance_metadata: dict[str, Any],
-    ):
+    ) -> None:
 
         dicom_web_client = decoy.mock(cls=DICOMwebClient)
         decoy.when(

@@ -18,7 +18,8 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
 
 from pydicom.fileset import FileSet
 from pydicom.uid import (
@@ -80,7 +81,17 @@ class WsiDicomFileSource(Source):
                         elif reader.image_type == ImageType.OVERVIEW:
                             self._overviews.append(reader)
                         elif reader.image_type == ImageType.THUMBNAIL:
-                            self._thumbnails.append(reader)
+                            if reader.dataset.pixel_spacing is None:
+                                # Pixel Spacing is required for thumbnails (PS3.3
+                                # C.7.6.16.2.1). Without it the thumbnail cannot
+                                # be related to the pyramid, so it is not used.
+                                logger.warning(
+                                    f"Ignoring thumbnail {stream} as it has no "
+                                    "Pixel Spacing."
+                                )
+                                reader.close()
+                            else:
+                                self._thumbnails.append(reader)
                     except WsiDicomNotSupportedError:
                         logger.info(f"Non-supported file {stream}.")
                         stream.close()
@@ -98,7 +109,20 @@ class WsiDicomFileSource(Source):
             raise WsiDicomNotFoundError("Level files")
         self._base_dataset = self._get_base_dataset(self._levels)
         self._slide_uids = self._base_dataset.uids.slide
-        self._base_tile_size = self._base_dataset.tile_size
+        # Files that do not belong to the slide are closed and dropped here, so
+        # that the readers held are the ones used.
+        self._levels = self._filter_files(
+            self._levels,
+            self._slide_uids,
+            (
+                self._base_dataset.tile_size
+                if get_settings().strict_tile_size_check
+                else None
+            ),
+        )
+        self._labels = self._filter_files(self._labels, self._slide_uids)
+        self._overviews = self._filter_files(self._overviews, self._slide_uids)
+        self._thumbnails = self._filter_files(self._thumbnails, self._slide_uids)
 
     @property
     def base_dataset(self) -> WsiDataset:
@@ -108,26 +132,22 @@ class WsiDicomFileSource(Source):
     @property
     def level_instances(self) -> Iterable[WsiInstance]:
         """The level instances parsed from the source."""
-        return self._create_instances(
-            self._levels,
-            self._slide_uids,
-            self._base_tile_size if get_settings().strict_tile_size_check else None,
-        )
+        return self._create_instances(self._levels)
 
     @property
     def label_instances(self) -> Iterable[WsiInstance]:
         """The label instances parsed from the source."""
-        return self._create_instances(self._labels, self._slide_uids)
+        return self._create_instances(self._labels)
 
     @property
     def overview_instances(self) -> Iterable[WsiInstance]:
         """The overview instances parsed from the source."""
-        return self._create_instances(self._overviews, self._slide_uids)
+        return self._create_instances(self._overviews)
 
     @property
     def thumbnail_instances(self) -> Iterable[WsiInstance]:
         """The thumbnail instances parsed from the source."""
-        return self._create_instances(self._thumbnails, self._slide_uids)
+        return self._create_instances(self._thumbnails)
 
     @property
     def annotation_instances(self) -> Iterable[AnnotationInstance]:
@@ -235,10 +255,15 @@ class WsiDicomFileSource(Source):
         for annotation in self._annotations:
             annotation.close()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         self.close()
 
     @staticmethod
@@ -265,37 +290,25 @@ class WsiDicomFileSource(Source):
     def _create_instances(
         self,
         files: Iterable[WsiDicomReader],
-        series_uids: SlideUids,
-        series_tile_size: Size | None = None,
     ) -> Iterable[WsiInstance]:
         """
         Create instances from Dicom files.
-
-        Only files with matching series uid and tile size, if defined, are used. Other
-        files are closed.
 
         Parameters
         ----------
         files: Iterable[WsiDicomReader]
             Files to create instances from.
-        series_uids: SlideUids
-            Uid to match against.
-        series_tile_size: Size | None
-            Tile size to match against (for level instances).
 
         Returns
         -------
-        Iterable[WsiInstancece]
+        Iterable[WsiInstance]
             Iterable of created instances.
         """
-        filtered_files = self._filter_files(files, series_uids, series_tile_size)
-        files_grouped_by_instance = self._group_files(filtered_files)
+        files_grouped_by_instance = self._group_files(files)
         return (
             WsiInstance(
                 [file.dataset for file in instance_files],
-                WsiDicomFileImageData(
-                    instance_files, self._decoded_frame_cache, self._encoded_frame_cache
-                ),
+                WsiDicomFileImageData(instance_files, self._decoded_frame_cache),
             )
             for instance_files in files_grouped_by_instance.values()
         )
@@ -305,9 +318,11 @@ class WsiDicomFileSource(Source):
         files: Iterable[WsiDicomReader],
         series_uids: SlideUids,
         series_tile_size: Size | None = None,
-    ) -> Iterable[WsiDicomReader]:
+    ) -> list[WsiDicomReader]:
         """
         Filter list of wsi dicom files on uids and tile size if defined.
+
+        Files that do not match are closed.
 
         Parameters
         ----------
@@ -320,12 +335,13 @@ class WsiDicomFileSource(Source):
 
         Returns
         -------
-        Iterable[WsiDicomReader]
-            Iterable of matching wsi dicom files.
+        list[WsiDicomReader]
+            The matching wsi dicom files.
         """
+        matching: list[WsiDicomReader] = []
         for file in files:
             if file.dataset.matches_series(series_uids, series_tile_size):
-                yield file
+                matching.append(file)
             else:
                 logger.warning(
                     f"{file.filepath} with uids {file.uids.slide} "
@@ -333,6 +349,7 @@ class WsiDicomFileSource(Source):
                     f"and tile size {series_tile_size}"
                 )
                 file.close()
+        return matching
 
     @staticmethod
     def _group_files(

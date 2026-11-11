@@ -108,7 +108,7 @@ class TestSampleJsonSchema:
     )
     def test_sample_localization_serialize(
         self, localization: SampleLocalization, expected: dict[str, Any]
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -153,7 +153,7 @@ class TestSampleJsonSchema:
     )
     def test_sample_localization_deserialize(
         self, localization: dict[str, Any], expected: SampleLocalization
-    ):
+    ) -> None:
         # Arrange
 
         # Act
@@ -163,7 +163,7 @@ class TestSampleJsonSchema:
         assert isinstance(loaded, SampleLocalization)
         assert loaded == expected
 
-    def test_sampling_constraint_serialize(self, extracted_specimen: Specimen):
+    def test_sampling_constraint_serialize(self, extracted_specimen: Specimen) -> None:
         # Arrange
         sampling_constraint = extracted_specimen.sample(
             SpecimenSamplingProcedureCode("Dissection")
@@ -177,7 +177,7 @@ class TestSampleJsonSchema:
         assert dumped["identifier"] == sampling_constraint.specimen.identifier
         assert dumped["sampling_step_index"] == 0
 
-    def test_sampling_constraint_of_unknown_sampling_serialize(self):
+    def test_sampling_constraint_of_unknown_sampling_serialize(self) -> None:
         # Arrange
         specimen = Specimen("specimen")
         sampling_constraint = specimen.sample()
@@ -191,7 +191,7 @@ class TestSampleJsonSchema:
         assert dumped["identifier"] == specimen.identifier
         assert dumped["sampling_step_index"] == 0
 
-    def test_slide_sample_of_unknown_sampling_roundtrip(self):
+    def test_slide_sample_of_unknown_sampling_roundtrip(self) -> None:
         # Arrange
         specimen = Specimen("specimen")
         slide_sample = SlideSample("slide sample", sampled_from=specimen.sample())
@@ -203,7 +203,7 @@ class TestSampleJsonSchema:
         # Assert
         assert str(loaded[0]) == str(slide_sample)
 
-    def test_sampling_constraint_deserialize(self):
+    def test_sampling_constraint_deserialize(self) -> None:
         # Arrange
         dumped = {"identifier": "specimen", "sampling_step_index": 1}
 
@@ -215,7 +215,7 @@ class TestSampleJsonSchema:
         assert loaded.identifier == dumped["identifier"]
         assert loaded.sampling_step_index == dumped["sampling_step_index"]
 
-    def test_sampling_serialize(self):
+    def test_sampling_serialize(self) -> None:
         # Arrange
         specimen = Specimen(
             "specimen",
@@ -273,7 +273,7 @@ class TestSampleJsonSchema:
         assert dumped["location"]["z"]["value"] == sampling_2.location.z.value
         assert dumped["location"]["z"]["unit"] == sampling_2.location.z.unit.value
 
-    def test_sampling_deserialize(self):
+    def test_sampling_deserialize(self) -> None:
         # Arrange
         dumped = {
             "action": "sampling",
@@ -342,7 +342,7 @@ class TestSampleJsonSchema:
             UnitCode(dumped["location"]["z"]["unit"]),
         )
 
-    def test_unknown_sampling_serialize(self):
+    def test_unknown_sampling_serialize(self) -> None:
         # Arrange
         specimen = Specimen(
             "specimen",
@@ -375,7 +375,7 @@ class TestSampleJsonSchema:
         assert dumped["sampling_constraints"][0]["sampling_step_index"] == 0
         assert "location" not in dumped
 
-    def test_unknown_sampling_deserialize(self):
+    def test_unknown_sampling_deserialize(self) -> None:
         # Arrange
         dumped = {
             "action": "sampling",
@@ -404,7 +404,7 @@ class TestSampleJsonSchema:
         )
         assert loaded.location is None
 
-    def test_collection_serialize(self, collection: Collection):
+    def test_collection_serialize(self, collection: Collection) -> None:
         # Arrange
 
         # Act
@@ -422,7 +422,7 @@ class TestSampleJsonSchema:
         else:
             assert "description" not in dumped
 
-    def test_collection_deserialize(self, collection: Collection):
+    def test_collection_deserialize(self, collection: Collection) -> None:
         # Arrange
         dumped = {
             "action": "collection",
@@ -446,7 +446,7 @@ class TestSampleJsonSchema:
         assert loaded.date_time == collection.date_time
         assert loaded.description == collection.description
 
-    def test_processing_serialize(self, processing: Processing):
+    def test_processing_serialize(self, processing: Processing) -> None:
         # Arrange
 
         # Act
@@ -467,7 +467,7 @@ class TestSampleJsonSchema:
         else:
             assert "description" not in dumped
 
-    def test_processing_deserialize(self, processing: Processing):
+    def test_processing_deserialize(self, processing: Processing) -> None:
         # Arrange
         dumped: dict[str, Any] = {
             "action": "processing",
@@ -492,7 +492,7 @@ class TestSampleJsonSchema:
         assert loaded.date_time == processing.date_time
         assert loaded.description == processing.description
 
-    def test_embedding_serialize(self, embedding: Embedding):
+    def test_embedding_serialize(self, embedding: Embedding) -> None:
         # Arrange
 
         # Act
@@ -510,7 +510,7 @@ class TestSampleJsonSchema:
         else:
             assert "description" not in dumped
 
-    def test_embedding_deserialize(self, embedding: Embedding):
+    def test_embedding_deserialize(self, embedding: Embedding) -> None:
         # Arrange
         dumped = {
             "action": "embedding",
@@ -534,7 +534,7 @@ class TestSampleJsonSchema:
         assert loaded.date_time == embedding.date_time
         assert loaded.description == embedding.description
 
-    def test_fixation_serialize(self, fixation: Fixation):
+    def test_fixation_serialize(self, fixation: Fixation) -> None:
         # Arrange
 
         # Act
@@ -552,7 +552,7 @@ class TestSampleJsonSchema:
         else:
             assert "description" not in dumped
 
-    def test_fixation_deserialize(self, fixation: Fixation):
+    def test_fixation_deserialize(self, fixation: Fixation) -> None:
         # Arrange
         dumped = {
             "action": "fixation",
@@ -576,7 +576,7 @@ class TestSampleJsonSchema:
         assert loaded.date_time == fixation.date_time
         assert loaded.description == fixation.description
 
-    def test_receiving_serialize(self, receiving: Receiving):
+    def test_receiving_serialize(self, receiving: Receiving) -> None:
         # Arrange
 
         # Act
@@ -594,7 +594,7 @@ class TestSampleJsonSchema:
         else:
             assert "description" not in dumped
 
-    def test_receiving_deserialize(self, receiving: Receiving):
+    def test_receiving_deserialize(self, receiving: Receiving) -> None:
         # Arrange
         dumped = {"action": PreparationAction.RECEIVING.value}
         if receiving.date_time is not None:
@@ -610,7 +610,7 @@ class TestSampleJsonSchema:
         assert loaded.date_time == receiving.date_time
         assert loaded.description == receiving.description
 
-    def test_storage_serialize(self, storage: Storage):
+    def test_storage_serialize(self, storage: Storage) -> None:
         # Arrange
 
         # Act
@@ -628,7 +628,7 @@ class TestSampleJsonSchema:
         else:
             assert "description" not in dumped
 
-    def test_storage_deserialize(self, storage: Storage):
+    def test_storage_deserialize(self, storage: Storage) -> None:
         # Arrange
         dumped = {"action": PreparationAction.STORAGE.value}
         if storage.date_time is not None:
@@ -644,7 +644,7 @@ class TestSampleJsonSchema:
         assert loaded.date_time == storage.date_time
         assert loaded.description == storage.description
 
-    def test_extracted_specimen_serialize(self, extracted_specimen: Specimen):
+    def test_extracted_specimen_serialize(self, extracted_specimen: Specimen) -> None:
         # Arrange
 
         # Act
@@ -678,7 +678,7 @@ class TestSampleJsonSchema:
         else:
             assert "container" not in dumped
 
-    def test_extracted_specimen_deserialize(self):
+    def test_extracted_specimen_deserialize(self) -> None:
         # Arrange
         dumped = {
             "identifier": "specimen",
@@ -722,7 +722,7 @@ class TestSampleJsonSchema:
         assert isinstance(loaded.type, AnatomicPathologySpecimenTypesCode)
         assert_dict_equals_code(dumped["type"], loaded.type)
 
-    def test_sample_serialize(self, sample: Sample):
+    def test_sample_serialize(self, sample: Sample) -> None:
         # Arrange
         processing = sample.steps[0]
         assert isinstance(processing, Processing)
@@ -755,7 +755,7 @@ class TestSampleJsonSchema:
         else:
             assert "container" not in dumped
 
-    def test_sampled_specimen_deserialize(self):
+    def test_sampled_specimen_deserialize(self) -> None:
         # Arrange
         dumped = {
             "identifier": "sample",
@@ -801,7 +801,7 @@ class TestSampleJsonSchema:
         assert isinstance(loaded.type, AnatomicPathologySpecimenTypesCode)
         assert_dict_equals_code(dumped["type"], loaded.type)
 
-    def test_slide_sample_serialize(self, slide_sample: SlideSample):
+    def test_slide_sample_serialize(self, slide_sample: SlideSample) -> None:
         # Arrange
         assert slide_sample.sampled_from is not None
         assert slide_sample.anatomical_sites is not None
@@ -837,7 +837,7 @@ class TestSampleJsonSchema:
             == slide_sample.localization.visual_marking
         )
 
-    def test_slide_sample_deserialize(self):
+    def test_slide_sample_deserialize(self) -> None:
         # Arrange
         dumped = {
             "identifier": "sample",
@@ -864,7 +864,7 @@ class TestSampleJsonSchema:
         assert loaded.localization is not None
         assert loaded.localization.description == dumped["localization"]["description"]
 
-    def test_full_slide_sample_serialize(self, slide_sample: SlideSample):
+    def test_full_slide_sample_serialize(self, slide_sample: SlideSample) -> None:
         # Arrange
         assert slide_sample.sampled_from is not None
         sample = slide_sample.sampled_from.specimen
@@ -897,7 +897,7 @@ class TestSampleJsonSchema:
         assert isinstance(dumpled_specimen, dict)
         assert dumpled_specimen["identifier"] == specimen.identifier
 
-    def test_full_slide_sample_deserialize(self):
+    def test_full_slide_sample_deserialize(self) -> None:
         dumped = [
             {
                 "identifier": "slide sample",
@@ -993,7 +993,7 @@ class TestSampleJsonSchema:
         assert isinstance(specimen, Specimen)
         assert specimen.identifier == dumped[2]["identifier"]
 
-    def test_slide_sample_roundtrip(self, slide_sample: SlideSample):
+    def test_slide_sample_roundtrip(self, slide_sample: SlideSample) -> None:
         # Arrange
 
         # Act

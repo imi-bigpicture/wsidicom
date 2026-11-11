@@ -65,7 +65,7 @@ class TestSaveWithMetadata:
         wsi: WsiDicom,
         uid_generator: CallableUidGenerator,
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         private_tag = self._add_private_tag(wsi)
         assert str(wsi.metadata.patient.name) != ANONYMIZED_NAME
@@ -87,7 +87,7 @@ class TestSaveWithMetadata:
         wsi: WsiDicom,
         uid_generator: CallableUidGenerator,
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         private_tag = self._add_private_tag(wsi)
         metadata = self._clean_metadata(wsi)
@@ -113,7 +113,7 @@ class TestSaveWithMetadata:
         wsi: WsiDicom,
         uid_generator: CallableUidGenerator,
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange — color fixture whose optical path has no ICC profile. ICC
         # Profile is required (Type 1C) for non-MONOCHROME2 images, so save()
         # should insert a default one.
@@ -136,7 +136,7 @@ class TestSaveWithMetadata:
         wsi: WsiDicom,
         uid_generator: CallableUidGenerator,
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange — supply an ICC profile via the metadata optical paths; it
         # should be kept rather than replaced by an auto-inserted default.
         icc_profile = b"custom icc profile"
@@ -166,7 +166,7 @@ class TestSaveWithMetadata:
         wsi: WsiDicom,
         uid_generator: CallableUidGenerator,
         tmp_path: Path,
-    ):
+    ) -> None:
         # Arrange
         private_tag = self._add_private_tag(wsi)
         original_name = str(wsi.metadata.patient.name)

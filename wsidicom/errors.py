@@ -16,67 +16,67 @@
 class WsiDicomError(Exception):
     """Raised for general error."""
 
-    def __init__(self, error: str):
+    def __init__(self, error: str) -> None:
         self.error = error
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.error
 
 
 class WsiDicomFileError(Exception):
     """Raised if read file data is incorrect."""
 
-    def __init__(self, file: str, error: str):
+    def __init__(self, file: str, error: str) -> None:
         self.file = file
         self.error = error
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.file}: {self.error}"
 
 
 class WsiDicomMatchError(Exception):
     """Raised if item in group that should match does not match."""
 
-    def __init__(self, item: str, group: str):
+    def __init__(self, item: str, group: str) -> None:
         self.item = item
         self.group = group
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.item} does not match {self.group}"
 
 
 class WsiDicomUidDuplicateError(Exception):
     """Raised if unique UID is encountered twice."""
 
-    def __init__(self, item: str, group: str):
+    def __init__(self, item: str, group: str) -> None:
         self.item = item
         self.group = group
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.item} is duplicated in {self.group}"
 
 
 class WsiDicomNotFoundError(Exception):
-    """Raised if requested item is not found"""
+    """Raised if requested item is not found."""
 
-    def __init__(self, item: str, not_found_in: str | None = None):
+    def __init__(self, item: str, not_found_in: str | None = None) -> None:
         self.item = item
         self.not_found_in = not_found_in
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.not_found_in is None:
             return f"{self.item} not found"
         return f"{self.item} not found in {self.not_found_in}"
 
 
 class WsiDicomOutOfBoundsError(Exception):
-    """Raised if requested item is out of bonds"""
+    """Raised if requested item is out of bonds."""
 
-    def __init__(self, error: str, bonds: str):
+    def __init__(self, error: str, bonds: str) -> None:
         self.error = error
         self.bonds = bonds
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.error} is out of bonds of {self.bonds}"
 
 
@@ -85,8 +85,7 @@ class WsiDicomStrictRequirementError(Exception):
 
 
 class WsiDicomNoResolutionError(Exception):
-    """Raised if method is not possible as resolution is missing in image
-    data."""
+    """Raised if method is not possible as resolution is missing in image data."""
 
 
 class WsiDicomNotSupportedError(Exception):

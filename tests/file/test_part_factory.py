@@ -12,8 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Unit tests for PartFactory dataset stamping. Parts are written to a temp dir;
-each test inspects the stamped dataset the factory returns."""
+"""Unit tests for PartFactory dataset stamping.
+
+Parts are written to a temp dir; each test inspects the stamped dataset the
+factory returns.
+"""
 
 import itertools
 from pathlib import Path
@@ -31,7 +34,7 @@ from wsidicom.metadata.uid_generator import CallableUidGenerator
 
 @pytest.fixture
 def base_dataset() -> WsiDataset:
-    """A minimal WSI dataset complete enough for the writer to open an instance."""
+    """Return a minimal WSI dataset complete enough for the writer to open an instance."""
     dataset = Dataset()
     dataset.NumberOfFrames = 1
     dataset.Rows = 16

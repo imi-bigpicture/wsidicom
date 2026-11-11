@@ -41,7 +41,7 @@ class NumpyImageData(ImageData):
     read.
     """
 
-    def __init__(self, array: np.ndarray):
+    def __init__(self, array: np.ndarray) -> None:
         self._pixels = array
         encoder = Encoder.create(
             self.transfer_syntax,
