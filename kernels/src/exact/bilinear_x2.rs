@@ -1,7 +1,6 @@
-//! Exact x2 bilinear reduction of u8 images. At exactly half size the
-//! bilinear weights are 1/8 and 3/8 per axis (renormalized where the window
-//! is clipped at the image edge), so each output is an integer sum over the
-//! samples, divided once: exact, where the general kernels round per tap.
+//! Exact x2 bilinear reduction. At exactly half size the bilinear weights are
+//! 1/8 and 3/8 per axis (renormalized where the window is clipped at the image
+//! edge), so each output is an integer sum divided once.
 
 #[cfg(target_arch = "aarch64")]
 pub(crate) mod neon;
@@ -11,15 +10,16 @@ mod x86;
 /// The bilinear weights at x2 (x 8): output o reads inputs 2o - 1 ..= 2o + 2.
 const TAPS: [u32; 4] = [1, 3, 3, 1];
 
-/// The window of output `output` along an axis of `axis_len` inputs: its
-/// first input and its weights, clipped to the axis.
+/// The first input and the weights of output `output`'s window, clipped to an
+/// axis of `axis_len` inputs.
 pub(crate) fn window(output: usize, axis_len: usize) -> (usize, &'static [u32]) {
-    let lo = 2 * output as isize - 1;
-    let start = lo.max(0) as usize;
-    let end = ((lo + 4) as usize).min(axis_len);
+    let unclipped_start = 2 * output as isize - 1;
+    let start = unclipped_start.max(0) as usize;
+    let end = ((unclipped_start + 4) as usize).min(axis_len);
     (
         start,
-        &TAPS[(start as isize - lo) as usize..(end as isize - lo) as usize],
+        &TAPS[(start as isize - unclipped_start) as usize
+            ..(end as isize - unclipped_start) as usize],
     )
 }
 
@@ -36,8 +36,7 @@ fn divide_rounded(numerator: u32, denominator: u32) -> u32 {
     }
 }
 
-/// A sample type of the exact x2 bilinear reduction: its window sums (at
-/// most 64 x the largest sample) fit u32.
+/// A sample type whose window sums (at most 64 x the largest sample) fit u32.
 pub(crate) trait X2Sample: Copy + Default + Into<u32> {
     /// A rounded mean, which is within the type's range.
     fn narrow(mean: u32) -> Self;
@@ -55,34 +54,39 @@ impl X2Sample for u16 {
     }
 }
 
-/// The scalar reference for any channel count.
+/// The scalar reference, for any channel count.
 pub(crate) fn bilinear_x2_scalar<T: X2Sample>(
     src: &[T],
     width: usize,
     height: usize,
     channels: usize,
 ) -> Vec<T> {
-    let (ow, oh, ws) = (width / 2, height / 2, width * channels);
-    let mut out = vec![T::default(); ow * oh * channels];
-    let mut sums = vec![0u32; ws];
-    for y in 0..oh {
-        let (r0, wv) = window(y, height);
-        vertical_sums_scalar(&src[r0 * ws..], ws, wv, &mut sums);
-        let zv: u32 = wv.iter().sum();
+    let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
+    let mut out = vec![T::default(); out_width * out_height * channels];
+    let mut sums = vec![0u32; row_samples];
+    for y in 0..out_height {
+        let (first_row, vertical_weights) = window(y, height);
+        vertical_sums_scalar(
+            &src[first_row * row_samples..],
+            row_samples,
+            vertical_weights,
+            &mut sums,
+        );
+        let vertical_total: u32 = vertical_weights.iter().sum();
         horizontal_scalar(
             &sums,
             channels,
             width,
-            zv,
-            0..ow,
-            &mut out[y * ow * channels..(y + 1) * ow * channels],
+            vertical_total,
+            0..out_width,
+            &mut out[y * out_width * channels..(y + 1) * out_width * channels],
         );
     }
     out
 }
 
-/// `sums[x] = sum_tap weights[tap] * rows[tap * stride + x]`, a row at a
-/// time (so the loop vectorizes).
+/// The weighted sums of the window's rows, a row at a time so the loop
+/// vectorizes.
 fn vertical_sums_scalar<T: X2Sample>(rows: &[T], stride: usize, weights: &[u32], sums: &mut [u32]) {
     sums.fill(0);
     for (tap, &weight) in weights.iter().enumerate() {
@@ -93,25 +97,27 @@ fn vertical_sums_scalar<T: X2Sample>(rows: &[T], stride: usize, weights: &[u32],
     }
 }
 
-/// Outputs `outputs` of a row of vertical sums (weight total `zv`).
-pub(crate) fn horizontal_scalar<T: X2Sample>(
-    sums: &[u32],
+/// Outputs `outputs` of a row of vertical sums.
+pub(crate) fn horizontal_scalar<S: Copy + Into<u32>, T: X2Sample>(
+    sums: &[S],
     channels: usize,
     width: usize,
-    zv: u32,
+    vertical_total: u32,
     outputs: std::ops::Range<usize>,
     dst: &mut [T],
 ) {
     for output in outputs {
-        let (x0, wh) = window(output, width);
-        let denominator = zv * wh.iter().sum::<u32>();
-        for ch in 0..channels {
-            let numerator: u32 = wh
+        let (first_column, horizontal_weights) = window(output, width);
+        let denominator = vertical_total * horizontal_weights.iter().sum::<u32>();
+        for channel in 0..channels {
+            let numerator: u32 = horizontal_weights
                 .iter()
                 .enumerate()
-                .map(|(tap, &weight)| weight * sums[(x0 + tap) * channels + ch])
+                .map(|(tap, &weight)| {
+                    weight * sums[(first_column + tap) * channels + channel].into()
+                })
                 .sum();
-            dst[output * channels + ch] = T::narrow(divide_rounded(numerator, denominator));
+            dst[output * channels + channel] = T::narrow(divide_rounded(numerator, denominator));
         }
     }
 }
@@ -133,8 +139,7 @@ pub(crate) fn bilinear_x2(src: &[u8], width: usize, height: usize, channels: usi
     }
     #[cfg(target_arch = "aarch64")]
     if crate::cpu::use_neon() {
-        // SAFETY: NEON is baseline on aarch64; src holds width * height *
-        // channels samples.
+        // SAFETY: src holds width * height * channels samples.
         return unsafe { neon::bilinear_x2_neon(src, width, height, channels) };
     }
     bilinear_x2_scalar(src, width, height, channels)
@@ -146,9 +151,9 @@ mod tests {
     use crate::exact::tests::{assert_equals_reference, size_grid};
     use crate::testing::CHANNELS;
 
-    /// Even widths around the AVX2 steps (16 samples) and twice that
-    /// and the scalar fallbacks of narrow rows, and even heights from one
-    /// output row (both edges clipped) up.
+    /// Even widths around the SIMD steps (16 samples and twice that) and the
+    /// scalar fallbacks of narrow rows; even heights from one output row
+    /// (both edges clipped) up.
     pub(super) const WIDTHS: [usize; 20] = [
         2, 4, 6, 8, 10, 12, 16, 22, 30, 32, 34, 36, 62, 64, 66, 70, 126, 130, 134, 262,
     ];

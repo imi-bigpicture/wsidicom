@@ -1,8 +1,8 @@
 //! The NEON kernel of the exact x2 bilinear reduction.
 //!
 //! # Safety
-//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
-//! Every `unsafe fn` here requires the bounds its doc states.
+//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch;
+//! every `unsafe fn` here requires the bounds its doc states.
 
 use std::arch::aarch64::{
     uint8x8_t, uint8x8x3_t, uint8x16_t, uint16x4_t, uint16x4x3_t, uint16x8_t, uint32x4_t,
@@ -18,17 +18,15 @@ use crate::exact::neon::{keep_even_pixels, keep_even_pixels_u16};
 use crate::sample::RGB;
 use crate::simd::cover_row;
 
-/// Samples per vertical and horizontal step (two registers of u16 sums).
+/// Samples per vertical and horizontal step: two registers of u16 sums.
 const BLOCK: usize = 16;
 
-/// The NEON kernel. Rows with a full window (all but the clipped first and
-/// last) of at least 32 pixels in one pass (`fused_row`); narrower ones: the
-/// vertical sums `r0 + r3 + 3 (r1 + r2)` in u16, the 4-tap horizontal sum
-/// at every sample by loads offset by `channels` (`s[x - c] + s[x + 2c] + 3
-/// (s[x] + s[x + c])`, at most 64 x 255), rounded once by `vrshrn` (`(sum +
-/// 32) >> 6`), then the even pixels kept. The clipped edge columns from the
-/// same sums, and the clipped edge rows (and rows too short for a block),
-/// by the scalar reference's arithmetic.
+/// Rows with a full window of at least two fused blocks in one pass
+/// (`fused_row`); narrower ones as the vertical sums `row0 + row3 + 3 (row1 +
+/// row2)` in u16, then the rounded 4-tap sum at every sample (at most 64 x
+/// 255, `vrshrn` by 6), of which the even pixels are kept. Clipped columns
+/// from the same sums, and clipped or too short rows, by the scalar
+/// reference's arithmetic.
 ///
 /// # Safety
 /// `src` holds `width * height * channels` samples, `channels` 1 or 3.
@@ -39,33 +37,49 @@ pub(crate) unsafe fn bilinear_x2_neon(
     height: usize,
     channels: usize,
 ) -> Vec<u8> {
-    let (ow, oh, ws) = (width / 2, height / 2, width * channels);
+    let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
     debug_assert!(src.len() >= width * height * channels);
-    let mut out_buf = crate::cpu::unwritten_output::<u8>(ow * oh * channels);
+    let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
     // SAFETY: u8 has no invalid values; every sample is written below before
     // the vector is returned.
     let out = unsafe {
-        std::slice::from_raw_parts_mut(out_buf.as_mut_ptr().cast::<u8>(), ow * oh * channels)
+        std::slice::from_raw_parts_mut(
+            out_buf.as_mut_ptr().cast::<u8>(),
+            out_width * out_height * channels,
+        )
     };
-    let mut sums32 = vec![0u32; ws];
-    // The vertical sums after `channels` zero samples, with room for the
-    // offset loads past the row (lanes that feed only the edge pixels).
-    let mut sums = vec![0u16; channels + ws + 2 * channels];
-    // The rounded 4-tap results at every sample.
-    let mut full = vec![0u8; ws];
-    for y in 0..oh {
-        let (r0, wv) = window(y, height);
-        let zv: u32 = wv.iter().sum();
-        let dst = &mut out[y * ow * channels..(y + 1) * ow * channels];
-        if zv != 8 || ws < BLOCK || ow < 3 {
-            vertical_sums_scalar(&src[r0 * ws..], ws, wv, &mut sums32);
-            horizontal_scalar(&sums32, channels, width, zv, 0..ow, dst);
+    let mut scalar_sums = vec![0u32; row_samples];
+    // A zero pixel before the row and room after it for the offset loads
+    // (those lanes only feed the edge pixels, done apart).
+    let mut sums = vec![0u16; channels + row_samples + 2 * channels];
+    // The rounded 4-tap sums at every sample.
+    let mut full = vec![0u8; row_samples];
+    for y in 0..out_height {
+        let (first_row, vertical_weights) = window(y, height);
+        let vertical_total: u32 = vertical_weights.iter().sum();
+        let dst = &mut out[y * out_width * channels..(y + 1) * out_width * channels];
+        if vertical_total != 8 || row_samples < BLOCK || out_width < 3 {
+            vertical_sums_scalar(
+                &src[first_row * row_samples..],
+                row_samples,
+                vertical_weights,
+                &mut scalar_sums,
+            );
+            horizontal_scalar(
+                &scalar_sums,
+                channels,
+                width,
+                vertical_total,
+                0..out_width,
+                dst,
+            );
             continue;
         }
-        let rows: [&[u8]; 4] = std::array::from_fn(|tap| &src[(r0 + tap) * ws..][..ws]);
-        if width >= 2 * FUSED_BLOCK_PX {
+        let rows: [&[u8]; 4] =
+            std::array::from_fn(|tap| &src[(first_row + tap) * row_samples..][..row_samples]);
+        if width >= 2 * FUSED_BLOCK_PIXELS {
             // SAFETY: the rows hold `width` pixels of `channels` (1 or 3)
-            // samples, at least two blocks; dst holds `ow` outputs.
+            // samples, at least two blocks; dst holds `out_width` outputs.
             unsafe {
                 match channels {
                     1 => fused_row::<1, GrayPlanes>(rows, width, dst),
@@ -75,8 +89,9 @@ pub(crate) unsafe fn bilinear_x2_neon(
             continue;
         }
         let sums_ptr = sums[channels..].as_mut_ptr();
-        cover_row(ws, BLOCK, |x| {
-            // SAFETY: x + 16 <= ws: 16 samples of each row and of the sums.
+        cover_row(row_samples, BLOCK, |x| {
+            // SAFETY: x + 16 <= row_samples: 16 samples of each row and of the
+            // sums.
             unsafe {
                 let [top, upper, lower, bottom] = rows.map(|row| vld1q_u8(row.as_ptr().add(x)));
                 let low = vmlaq_n_u16(
@@ -91,54 +106,52 @@ pub(crate) unsafe fn bilinear_x2_neon(
         });
         let sums_ptr = sums[channels..].as_ptr();
         let full_ptr = full.as_mut_ptr();
-        cover_row(ws, BLOCK, |x| {
-            // The 4-tap sums of the 8 samples at x + `half`.
-            let taps = |half: usize| {
-                // SAFETY: x + half + 8 <= ws; the offsets reach `channels`
-                // samples before the row (the zero lead) and 2 `channels`
-                // past it (the room after).
+        cover_row(row_samples, BLOCK, |x| {
+            let tap_sums_at = |half: usize| {
+                // SAFETY: x + half + 8 <= row_samples; the offsets reach
+                // `channels` samples before the row (the zero lead) and 2
+                // `channels` past it (the room after).
                 let load = |offset: isize| unsafe {
                     vld1q_u16(sums_ptr.offset((x + half) as isize + offset))
                 };
-                let (step, two) = (channels as isize, 2 * channels as isize);
+                let (pixel, two_pixels) = (channels as isize, 2 * channels as isize);
                 vmlaq_n_u16(
-                    vaddq_u16(load(-step), load(two)),
-                    vaddq_u16(load(0), load(step)),
+                    vaddq_u16(load(-pixel), load(two_pixels)),
+                    vaddq_u16(load(0), load(pixel)),
                     3,
                 )
             };
-            let rounded = vcombine_u8(vrshrn_n_u16::<6>(taps(0)), vrshrn_n_u16::<6>(taps(8)));
-            // SAFETY: x + 16 <= ws, the length of `full`.
+            let rounded = vcombine_u8(
+                vrshrn_n_u16::<6>(tap_sums_at(0)),
+                vrshrn_n_u16::<6>(tap_sums_at(8)),
+            );
+            // SAFETY: x + 16 <= row_samples, the length of `full`.
             unsafe { vst1q_u8(full_ptr.add(x), rounded) };
         });
-        // SAFETY: full holds 2 * ow pixels of `channels` samples, dst ow.
-        unsafe { keep_even_pixels(&full, channels, ow, dst) };
-        // The two clipped edge columns.
-        for output in [0, ow - 1] {
-            let (x0, wh) = window(output, width);
-            let denominator = zv * wh.iter().sum::<u32>();
-            for ch in 0..channels {
-                let numerator: u32 = wh
-                    .iter()
-                    .enumerate()
-                    .map(|(tap, &weight)| {
-                        weight * u32::from(sums[channels + (x0 + tap) * channels + ch])
-                    })
-                    .sum();
-                dst[output * channels + ch] = divide_rounded(numerator, denominator) as u8;
-            }
+        // SAFETY: full holds 2 * out_width pixels of `channels` samples, dst
+        // out_width.
+        unsafe { keep_even_pixels(&full, channels, out_width, dst) };
+        for clipped_output in [0, out_width - 1] {
+            let clipped = clipped_output..clipped_output + 1;
+            horizontal_scalar(
+                &sums[channels..],
+                channels,
+                width,
+                vertical_total,
+                clipped,
+                dst,
+            );
         }
     }
     // SAFETY: every row wrote all of its samples.
     unsafe { crate::cpu::written_output(out_buf) }
 }
 
-/// Samples per uint16 step (two registers of u32 sums).
+/// Samples per uint16 step: two registers of u32 sums.
 const BLOCK_U16: usize = 8;
 
-/// The uint16 kernel: `bilinear_x2_neon`'s steps in u32 lanes (vertical sums
-/// reach 8 x 65535, the 4-tap sums 64 x 65535), rounded once by `vrshrn`
-/// (`(sum + 32) >> 6`).
+/// `bilinear_x2_neon` for uint16, in u32 lanes (the 4-tap sums reach
+/// 64 x 65535).
 ///
 /// # Safety
 /// `src` holds `width * height * channels` samples, `channels` 1 or 3.
@@ -149,33 +162,40 @@ pub(crate) unsafe fn bilinear_x2_u16_neon(
     height: usize,
     channels: usize,
 ) -> Vec<u16> {
-    let (ow, oh, ws) = (width / 2, height / 2, width * channels);
+    let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
     debug_assert!(src.len() >= width * height * channels);
-    let mut out_buf = crate::cpu::unwritten_output::<u16>(ow * oh * channels);
+    let mut out_buf = crate::cpu::unwritten_output::<u16>(out_width * out_height * channels);
     // SAFETY: u16 has no invalid values; every sample is written below before
     // the vector is returned.
     let out = unsafe {
-        std::slice::from_raw_parts_mut(out_buf.as_mut_ptr().cast::<u16>(), ow * oh * channels)
+        std::slice::from_raw_parts_mut(
+            out_buf.as_mut_ptr().cast::<u16>(),
+            out_width * out_height * channels,
+        )
     };
-    // The vertical sums after `channels` zero samples, with room for the
-    // offset loads past the row (lanes that feed only the edge pixels).
-    let mut sums = vec![0u32; channels + ws + 2 * channels];
-    // The rounded 4-tap results at every sample.
-    let mut full = vec![0u16; ws];
-    for y in 0..oh {
-        let (r0, wv) = window(y, height);
-        let zv: u32 = wv.iter().sum();
-        let dst = &mut out[y * ow * channels..(y + 1) * ow * channels];
-        if zv != 8 || ws < BLOCK_U16 || ow < 3 {
-            let row_sums = &mut sums[channels..channels + ws];
-            vertical_sums_scalar(&src[r0 * ws..], ws, wv, row_sums);
-            horizontal_scalar(row_sums, channels, width, zv, 0..ow, dst);
+    // As in `bilinear_x2_neon`.
+    let mut sums = vec![0u32; channels + row_samples + 2 * channels];
+    let mut full = vec![0u16; row_samples];
+    for y in 0..out_height {
+        let (first_row, vertical_weights) = window(y, height);
+        let vertical_total: u32 = vertical_weights.iter().sum();
+        let dst = &mut out[y * out_width * channels..(y + 1) * out_width * channels];
+        if vertical_total != 8 || row_samples < BLOCK_U16 || out_width < 3 {
+            let row_sums = &mut sums[channels..channels + row_samples];
+            vertical_sums_scalar(
+                &src[first_row * row_samples..],
+                row_samples,
+                vertical_weights,
+                row_sums,
+            );
+            horizontal_scalar(row_sums, channels, width, vertical_total, 0..out_width, dst);
             continue;
         }
-        let rows: [&[u16]; 4] = std::array::from_fn(|tap| &src[(r0 + tap) * ws..][..ws]);
-        if width >= 2 * FUSED_BLOCK_PX_U16 {
+        let rows: [&[u16]; 4] =
+            std::array::from_fn(|tap| &src[(first_row + tap) * row_samples..][..row_samples]);
+        if width >= 2 * FUSED_BLOCK_PIXELS_U16 {
             // SAFETY: the rows hold `width` pixels of `channels` (1 or 3)
-            // samples, at least two blocks; dst holds `ow` outputs.
+            // samples, at least two blocks; dst holds `out_width` outputs.
             unsafe {
                 match channels {
                     1 => fused_row_u16::<1, GrayPlanes>(rows, width, dst),
@@ -185,8 +205,9 @@ pub(crate) unsafe fn bilinear_x2_u16_neon(
             continue;
         }
         let sums_ptr = sums[channels..].as_mut_ptr();
-        cover_row(ws, BLOCK_U16, |x| {
-            // SAFETY: x + 8 <= ws: 8 samples of each row and of the sums.
+        cover_row(row_samples, BLOCK_U16, |x| {
+            // SAFETY: x + 8 <= row_samples: 8 samples of each row and of the
+            // sums.
             unsafe {
                 let [top, upper, lower, bottom] = rows.map(|row| vld1q_u16(row.as_ptr().add(x)));
                 let low = vmlaq_n_u32(
@@ -202,60 +223,58 @@ pub(crate) unsafe fn bilinear_x2_u16_neon(
         });
         let sums_ptr = sums[channels..].as_ptr();
         let full_ptr = full.as_mut_ptr();
-        cover_row(ws, BLOCK_U16, |x| {
-            // The 4-tap sums of the 4 samples at x + `half`.
-            let taps = |half: usize| {
-                // SAFETY: x + half + 4 <= ws; the offsets reach `channels`
-                // samples before the row (the zero lead) and 2 `channels`
-                // past it (the room after).
+        cover_row(row_samples, BLOCK_U16, |x| {
+            let tap_sums_at = |half: usize| {
+                // SAFETY: x + half + 4 <= row_samples; the offsets reach
+                // `channels` samples before the row (the zero lead) and 2
+                // `channels` past it (the room after).
                 let load = |offset: isize| unsafe {
                     vld1q_u32(sums_ptr.offset((x + half) as isize + offset))
                 };
-                let (step, two) = (channels as isize, 2 * channels as isize);
+                let (pixel, two_pixels) = (channels as isize, 2 * channels as isize);
                 vmlaq_n_u32(
-                    vaddq_u32(load(-step), load(two)),
-                    vaddq_u32(load(0), load(step)),
+                    vaddq_u32(load(-pixel), load(two_pixels)),
+                    vaddq_u32(load(0), load(pixel)),
                     3,
                 )
             };
-            let rounded = vcombine_u16(vrshrn_n_u32::<6>(taps(0)), vrshrn_n_u32::<6>(taps(4)));
-            // SAFETY: x + 8 <= ws, the length of `full`.
+            let rounded = vcombine_u16(
+                vrshrn_n_u32::<6>(tap_sums_at(0)),
+                vrshrn_n_u32::<6>(tap_sums_at(4)),
+            );
+            // SAFETY: x + 8 <= row_samples, the length of `full`.
             unsafe { vst1q_u16(full_ptr.add(x), rounded) };
         });
-        // SAFETY: full holds 2 * ow pixels of `channels` samples, dst ow.
-        unsafe { keep_even_pixels_u16(&full, channels, ow, dst) };
-        // The two clipped edge columns.
-        for output in [0, ow - 1] {
-            let (x0, wh) = window(output, width);
-            let denominator = zv * wh.iter().sum::<u32>();
-            for ch in 0..channels {
-                let numerator: u32 = wh
-                    .iter()
-                    .enumerate()
-                    .map(|(tap, &weight)| weight * sums[channels + (x0 + tap) * channels + ch])
-                    .sum();
-                dst[output * channels + ch] = divide_rounded(numerator, denominator) as u16;
-            }
+        // SAFETY: full holds 2 * out_width pixels of `channels` samples, dst
+        // out_width.
+        unsafe { keep_even_pixels_u16(&full, channels, out_width, dst) };
+        for clipped_output in [0, out_width - 1] {
+            let clipped = clipped_output..clipped_output + 1;
+            horizontal_scalar(
+                &sums[channels..],
+                channels,
+                width,
+                vertical_total,
+                clipped,
+                dst,
+            );
         }
     }
     // SAFETY: every row wrote all of its samples.
     unsafe { crate::cpu::written_output(out_buf) }
 }
 
-/// Input pixels per block of `fused_row` (8 outputs).
-const FUSED_BLOCK_PX: usize = 16;
+const FUSED_BLOCK_PIXELS: usize = 16;
 
 /// One output row with a full vertical window, in one pass over its four
-/// rows: per block of 16 input pixels and channel plane, the vertical sums
-/// `r0 + r3 + 3 (r1 + r2)` in u16, split by `uzp` into even and odd pixels
-/// `E`, `O`; output o is `O[o - 1] + 3 (E[o] + O[o]) + E[o + 1]` (at most
-/// 64 x 255), its neighbours taken by `vext` from the previous and next
-/// blocks, rounded once by `vrshrn` by 6; the last block overlaps its
-/// predecessor. The clipped outputs 0 and ow - 1 go through
-/// `output_from_rows`.
+/// rows: per block and channel plane, the vertical sums split by `uzp` into
+/// even and odd pixels `E`, `O`; output o is `O[o - 1] + 3 (E[o] + O[o]) +
+/// E[o + 1]`, the neighbours taken by `vext` from the previous and next
+/// blocks, rounded by `vrshrn` by 6. The last block overlaps its
+/// predecessor.
 ///
 /// # Safety
-/// Each row holds `width >= 2 * FUSED_BLOCK_PX` pixels of `CHANNELS`
+/// Each row holds `width >= 2 * FUSED_BLOCK_PIXELS` pixels of `CHANNELS`
 /// samples, `dst` `width / 2` outputs.
 #[target_feature(enable = "neon")]
 #[inline]
@@ -264,11 +283,10 @@ unsafe fn fused_row<const CHANNELS: usize, Planes: BlockPlanes<CHANNELS>>(
     width: usize,
     dst: &mut [u8],
 ) {
-    let ow = width / 2;
-    let blocks = width / FUSED_BLOCK_PX;
+    let out_width = width / 2;
+    let blocks = width / FUSED_BLOCK_PIXELS;
     let row_ptrs = rows.map(<[u8]>::as_ptr);
-    // The even and odd pixels' vertical sums of the 16 pixels from `pixel`,
-    // per plane.
+    // Per plane: (even, odd) pixels.
     let block_sums = |pixel: usize| -> [(uint16x8_t, uint16x8_t); CHANNELS] {
         // SAFETY: pixel + 16 <= width (every caller): the block lies in
         // every row.
@@ -290,9 +308,6 @@ unsafe fn fused_row<const CHANNELS: usize, Planes: BlockPlanes<CHANNELS>>(
         })
     };
     let dst_ptr = dst.as_mut_ptr();
-    // The 8 outputs from input pixel `pixel`, whose block's sums are
-    // `current`, the previous block's odd pixels `previous_odd` and the next
-    // block's even ones `next_even`.
     let outputs = |pixel: usize,
                    previous_odd: [uint16x8_t; CHANNELS],
                    current: [(uint16x8_t, uint16x8_t); CHANNELS],
@@ -311,15 +326,14 @@ unsafe fn fused_row<const CHANNELS: usize, Planes: BlockPlanes<CHANNELS>>(
     };
     let odd_of = |sums: [(uint16x8_t, uint16x8_t); CHANNELS]| sums.map(|(_, odd)| odd);
     let even_of = |sums: [(uint16x8_t, uint16x8_t); CHANNELS]| sums.map(|(even, _)| even);
-    // The first block's previous and the last block's next pixels feed
-    // only the clipped outputs 0 and ow - 1, rewritten below; a block's own
-    // sums stand in for them.
+    // The first block's previous and the last block's next pixels feed only
+    // the clipped outputs, rewritten below; a block's own sums stand in.
     let mut current = block_sums(0);
     let mut previous_odd = odd_of(current);
     for block in 0..blocks {
-        let pixel = block * FUSED_BLOCK_PX;
+        let pixel = block * FUSED_BLOCK_PIXELS;
         let next = if block + 1 < blocks {
-            block_sums(pixel + FUSED_BLOCK_PX)
+            block_sums(pixel + FUSED_BLOCK_PIXELS)
         } else {
             current
         };
@@ -327,25 +341,23 @@ unsafe fn fused_row<const CHANNELS: usize, Planes: BlockPlanes<CHANNELS>>(
         previous_odd = odd_of(current);
         current = next;
     }
-    // A last block overlapping its predecessor, for a width that is not a
-    // multiple of 16 pixels.
-    if !width.is_multiple_of(FUSED_BLOCK_PX) {
-        let pixel = width - FUSED_BLOCK_PX;
+    if !width.is_multiple_of(FUSED_BLOCK_PIXELS) {
+        let pixel = width - FUSED_BLOCK_PIXELS;
         let last = block_sums(pixel);
         outputs(
             pixel,
-            odd_of(block_sums(pixel - FUSED_BLOCK_PX)),
+            odd_of(block_sums(pixel - FUSED_BLOCK_PIXELS)),
             last,
             even_of(last),
         );
     }
-    for output in [0, ow - 1] {
+    for output in [0, out_width - 1] {
         output_from_rows(rows, (width, CHANNELS), output, dst);
     }
 }
 
-/// Output `output` of a row with a full vertical window, from its rows, by
-/// the scalar reference's arithmetic.
+/// Output `output` of a row with a full vertical window, by the scalar
+/// reference's arithmetic.
 fn output_from_rows<T: X2Sample>(
     rows: [&[T]; 4],
     (width, channels): (usize, usize),
@@ -353,14 +365,14 @@ fn output_from_rows<T: X2Sample>(
     dst: &mut [T],
 ) {
     const FULL_VERTICAL_TOTAL: u32 = 8;
-    let (x0, wh) = window(output, width);
-    let denominator = FULL_VERTICAL_TOTAL * wh.iter().sum::<u32>();
+    let (first_column, horizontal_weights) = window(output, width);
+    let denominator = FULL_VERTICAL_TOTAL * horizontal_weights.iter().sum::<u32>();
     for channel in 0..channels {
-        let numerator: u32 = wh
+        let numerator: u32 = horizontal_weights
             .iter()
             .enumerate()
             .map(|(tap, &weight)| {
-                let at = (x0 + tap) * channels + channel;
+                let at = (first_column + tap) * channels + channel;
                 let vertical = rows[0][at].into()
                     + 3 * (rows[1][at].into() + rows[2][at].into())
                     + rows[3][at].into();
@@ -371,25 +383,19 @@ fn output_from_rows<T: X2Sample>(
     }
 }
 
-/// A pixel layout's channel planes: a block of 16 pixels split into them,
-/// and 8 output pixels interleaved back from them.
+/// A pixel layout's channel planes: 16 pixels split into them, 8 output
+/// pixels interleaved back.
 trait BlockPlanes<const CHANNELS: usize> {
-    /// The planes of the 16 pixels at `src`.
-    ///
     /// # Safety
     /// `src..src + 16 * CHANNELS` must be readable.
     unsafe fn load(src: *const u8) -> [uint8x16_t; CHANNELS];
 
-    /// 8 output pixels from their planes, at `dst`.
-    ///
     /// # Safety
     /// `dst..dst + 8 * CHANNELS` must be writable.
     unsafe fn store(dst: *mut u8, planes: [uint8x8_t; CHANNELS]);
 }
 
-/// Gray: one plane.
 struct GrayPlanes;
-/// RGB: three planes by `vld3`/`vst3`.
 struct RgbPlanes;
 
 impl BlockPlanes<1> for GrayPlanes {
@@ -425,15 +431,12 @@ impl BlockPlanes<RGB> for RgbPlanes {
     }
 }
 
-/// Input pixels per block of `fused_row_u16` (4 outputs).
-const FUSED_BLOCK_PX_U16: usize = 8;
+const FUSED_BLOCK_PIXELS_U16: usize = 8;
 
-/// `fused_row` for uint16: blocks of 8 pixels, the vertical sums (at most
-/// 8 x 65535) and outputs (at most 64 x 65535) in u32 lanes, rounded once by
-/// `vrshrn` by 6.
+/// `fused_row` for uint16, in u32 lanes.
 ///
 /// # Safety
-/// Each row holds `width >= 2 * FUSED_BLOCK_PX_U16` pixels of `CHANNELS`
+/// Each row holds `width >= 2 * FUSED_BLOCK_PIXELS_U16` pixels of `CHANNELS`
 /// samples, `dst` `width / 2` outputs.
 #[target_feature(enable = "neon")]
 #[inline]
@@ -442,11 +445,9 @@ unsafe fn fused_row_u16<const CHANNELS: usize, Planes: BlockPlanesU16<CHANNELS>>
     width: usize,
     dst: &mut [u16],
 ) {
-    let ow = width / 2;
-    let blocks = width / FUSED_BLOCK_PX_U16;
+    let out_width = width / 2;
+    let blocks = width / FUSED_BLOCK_PIXELS_U16;
     let row_ptrs = rows.map(<[u16]>::as_ptr);
-    // The even and odd pixels' vertical sums of the 8 pixels from `pixel`,
-    // per plane.
     let block_sums = |pixel: usize| -> [(uint32x4_t, uint32x4_t); CHANNELS] {
         // SAFETY: pixel + 8 <= width (every caller): the block lies in every
         // row.
@@ -468,7 +469,6 @@ unsafe fn fused_row_u16<const CHANNELS: usize, Planes: BlockPlanesU16<CHANNELS>>
         })
     };
     let dst_ptr = dst.as_mut_ptr();
-    // The 4 outputs from input pixel `pixel` (as `fused_row`'s 8).
     let outputs = |pixel: usize,
                    previous_odd: [uint32x4_t; CHANNELS],
                    current: [(uint32x4_t, uint32x4_t); CHANNELS],
@@ -491,9 +491,9 @@ unsafe fn fused_row_u16<const CHANNELS: usize, Planes: BlockPlanesU16<CHANNELS>>
     let mut current = block_sums(0);
     let mut previous_odd = odd_of(current);
     for block in 0..blocks {
-        let pixel = block * FUSED_BLOCK_PX_U16;
+        let pixel = block * FUSED_BLOCK_PIXELS_U16;
         let next = if block + 1 < blocks {
-            block_sums(pixel + FUSED_BLOCK_PX_U16)
+            block_sums(pixel + FUSED_BLOCK_PIXELS_U16)
         } else {
             current
         };
@@ -501,32 +501,27 @@ unsafe fn fused_row_u16<const CHANNELS: usize, Planes: BlockPlanesU16<CHANNELS>>
         previous_odd = odd_of(current);
         current = next;
     }
-    if !width.is_multiple_of(FUSED_BLOCK_PX_U16) {
-        let pixel = width - FUSED_BLOCK_PX_U16;
+    if !width.is_multiple_of(FUSED_BLOCK_PIXELS_U16) {
+        let pixel = width - FUSED_BLOCK_PIXELS_U16;
         let last = block_sums(pixel);
         outputs(
             pixel,
-            odd_of(block_sums(pixel - FUSED_BLOCK_PX_U16)),
+            odd_of(block_sums(pixel - FUSED_BLOCK_PIXELS_U16)),
             last,
             even_of(last),
         );
     }
-    for output in [0, ow - 1] {
+    for output in [0, out_width - 1] {
         output_from_rows(rows, (width, CHANNELS), output, dst);
     }
 }
 
-/// `BlockPlanes` for uint16: a block of 8 pixels split into channel planes,
-/// and 4 output pixels interleaved back.
+/// `BlockPlanes` for uint16: 8 pixels split, 4 output pixels interleaved back.
 trait BlockPlanesU16<const CHANNELS: usize> {
-    /// The planes of the 8 pixels at `src`.
-    ///
     /// # Safety
     /// `src..src + 8 * CHANNELS` must be readable.
     unsafe fn load(src: *const u16) -> [uint16x8_t; CHANNELS];
 
-    /// 4 output pixels from their planes, at `dst`.
-    ///
     /// # Safety
     /// `dst..dst + 4 * CHANNELS` must be writable.
     unsafe fn store(dst: *mut u16, planes: [uint16x4_t; CHANNELS]);
