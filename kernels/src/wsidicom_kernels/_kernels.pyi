@@ -12,10 +12,12 @@ def compose(
 ) -> None:
     """Low-level binding; see :func:`wsidicom_kernels.compose`."""
 
-def downscale(image: NDArray[Any], factor: int, filter: str) -> NDArray[Any]:
+def downscale(image: NDArray[Any], factor: int, resample: str) -> NDArray[Any]:
     """Low-level binding; see :func:`wsidicom_kernels.downscale`."""
 
-def resize(image: NDArray[Any], out_h: int, out_w: int, filter: str) -> NDArray[Any]:
+def resize(
+    image: NDArray[Any], height: int, width: int, resample: str
+) -> NDArray[Any]:
     """Low-level binding; see :func:`wsidicom_kernels.resize`."""
 
 def downscale_grid_box(

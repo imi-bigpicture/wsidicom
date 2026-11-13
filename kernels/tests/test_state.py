@@ -67,20 +67,20 @@ def resize_sizes(height: int, width: int) -> list[tuple[int, int]]:
     ]
 
 
-def resizing(filter: ResizeFilter) -> list[Operation]:
+def resizing(resample: ResizeFilter) -> list[Operation]:
     """Return resizes by ``filter`` to each of an image's ``resize_sizes``."""
 
     def to(index: int) -> Operation:
         def run(image: np.ndarray) -> np.ndarray:
             output_height, output_width = resize_sizes(*image.shape[:2])[index]
-            return resize(image, output_height, output_width, filter)
+            return resize(image, output_height, output_width, resample)
 
         return run
 
     return [to(index) for index in range(len(resize_sizes(1, 1)))]
 
 
-def grid_halving(filter: ResizeFilter) -> Operation:
+def grid_halving(resample: ResizeFilter) -> Operation:
     """Return a halving of the image split into a grid, in a filled frame.
 
     The inner tiles have even sizes, so ``BOX`` reduces each tile on its own
@@ -104,14 +104,14 @@ def grid_halving(filter: ResizeFilter) -> Operation:
         fill = np.arange(1, channels + 1).astype(image.dtype)
         size = (-(-height // 2) + 1, -(-width // 2) + 2)
         return downscale_grid(
-            tiles, 2 if column_split else 1, 2, filter, size=size, fill=fill
+            tiles, 2 if column_split else 1, 2, resample, size=size, fill=fill
         )
 
     return run
 
 
 OPERATIONS: dict[str, list[Operation]] = {
-    **{f"resize_{filter}": resizing(filter) for filter in CONVOLUTION_FILTERS},
+    **{f"resize_{resample}": resizing(resample) for resample in CONVOLUTION_FILTERS},
     "resize_nearest": resizing(ResizeFilter.NEAREST),
     "downscale_box": [lambda image: downscale(image, 2, ResizeFilter.BOX)],
     "grid_box": [grid_halving(ResizeFilter.BOX)],

@@ -58,17 +58,17 @@ unsafe extern "C" {
 /// numpy's borrow tracking is process-wide, so this also catches a compose
 /// on another thread.
 fn held_by_concurrent_compose() -> PyErr {
-    PyValueError::new_err("array is being written by a concurrent compose — pass a copy")
+    PyValueError::new_err("Array is being written by a concurrent compose — pass a copy.")
 }
 
 fn not_c_contiguous(what: &str) -> PyErr {
-    PyValueError::new_err(format!("{what} must be C-contiguous"))
+    PyValueError::new_err(format!("{what} must be C-contiguous."))
 }
 
 /// A view at an odd byte offset can't be read as a slice of samples.
 fn misaligned(what: &str) -> PyErr {
     PyValueError::new_err(format!(
-        "{what} must be aligned to the sample size — pass a copy"
+        "{what} must be aligned to the sample size — pass a copy."
     ))
 }
 
@@ -108,7 +108,7 @@ pub(crate) fn output_samples(
 ) -> PyResult<usize> {
     let too_large = || {
         PyValueError::new_err(format!(
-            "an output of {height} x {width} x {channels} samples is too large"
+            "An output of {height} x {width} x {channels} samples is too large."
         ))
     };
     let samples = height
@@ -121,7 +121,7 @@ pub(crate) fn output_samples(
         .ok_or_else(too_large)?;
     if bytes >= CHECKED_ALLOCATION_BYTES {
         Vec::<u8>::new().try_reserve_exact(bytes).map_err(|_| {
-            PyMemoryError::new_err(format!("cannot allocate an output of {bytes} bytes"))
+            PyMemoryError::new_err(format!("Cannot allocate an output of {bytes} bytes."))
         })?;
     }
     Ok(samples)
@@ -153,9 +153,11 @@ fn hwc_dims(shape: &[usize]) -> PyResult<(usize, usize, usize)> {
         [height, width, channels] if GRAY_OR_RGB.contains(&channels) => {
             Ok((height, width, channels))
         }
-        [_, _, _] => Err(PyValueError::new_err("3D arrays must have 1 or 3 channels")),
+        [_, _, _] => Err(PyValueError::new_err(
+            "3D arrays must have 1 or 3 channels.",
+        )),
         _ => Err(PyValueError::new_err(
-            "arrays must be 2D (planar) or 3D (H, W, C)",
+            "Arrays must be 2D (planar) or 3D (H, W, C).",
         )),
     }
 }
@@ -165,11 +167,11 @@ fn image_dims(image: &Bound<'_, PyAny>) -> PyResult<(usize, usize, usize)> {
     let shape: Vec<usize> = image
         .getattr("shape")?
         .extract()
-        .map_err(|_| PyValueError::new_err("image must be a 2D or 3D array"))?;
+        .map_err(|_| PyValueError::new_err("Image must be a 2D or 3D array."))?;
     let dims @ (height, width, channels) = hwc_dims(&shape)?;
     if height == 0 || width == 0 || channels == 0 {
         return Err(PyValueError::new_err(
-            "image must have at least one pixel and one channel",
+            "Image must have at least one pixel and one channel.",
         ));
     }
     Ok(dims)
@@ -232,7 +234,7 @@ macro_rules! with_dtype {
         } else {
             Err(PyValueError::new_err(concat!(
                 $what,
-                " must be a 2D/3D uint8 or uint16 array in native byte order"
+                " must be a 2D/3D uint8 or uint16 array in native byte order."
             )))
         }
     };
@@ -249,10 +251,10 @@ fn tile_samples<'a, T: Element>(
 ) -> PyResult<(&'a [T], usize)> {
     let row_samples = width * channels;
     if array.is_c_contiguous() {
-        return Ok((c_samples(array, "tiles")?, row_samples));
+        return Ok((c_samples(array, "Tiles")?, row_samples));
     }
     if !array.is_aligned() {
-        return Err(misaligned("tiles"));
+        return Err(misaligned("Tiles"));
     }
     let sample_bytes = std::mem::size_of::<T>() as isize;
     let strides = array.strides();
@@ -268,8 +270,8 @@ fn tile_samples<'a, T: Element>(
     };
     let (true, true, Some(row_stride)) = (pixels_contiguous, row_contiguous, row_stride) else {
         return Err(PyValueError::new_err(
-            "each tile row must be contiguous: a C-contiguous array, or a slice of rows \
-             and columns of one",
+            "Each tile row must be contiguous: a C-contiguous array, or a slice of rows \
+             and columns of one.",
         ));
     };
     let len = if height == 0 || width == 0 {
@@ -298,10 +300,10 @@ fn crop_tiles<'a, T: Copy>(
             let field = |at: usize| usize::try_from(crop[at]).ok();
             let piece = (field(0), field(1), field(2), field(3), field(4));
             let (Some(index), Some(x), Some(y), Some(width), Some(height)) = piece else {
-                return Err(PyValueError::new_err("crops must not be negative"));
+                return Err(PyValueError::new_err("Crops must not be negative."));
             };
             let tile = tiles.get(index).ok_or_else(|| {
-                PyValueError::new_err("crops must name a tile by its index in tiles")
+                PyValueError::new_err("Crops must name a tile by its index in tiles.")
             })?;
             let inside = width > 0
                 && height > 0
@@ -309,7 +311,7 @@ fn crop_tiles<'a, T: Copy>(
                 && y.checked_add(height).is_some_and(|end| end <= tile.height);
             if !inside {
                 return Err(PyValueError::new_err(
-                    "crops must be nonempty and inside their tile",
+                    "Crops must be nonempty and inside their tile.",
                 ));
             }
             Ok(tile.crop((x, y), (width, height)))
@@ -332,13 +334,13 @@ fn compose_all<T: Element + Copy + Send + Sync>(
             .getattr("writeable")?
             .extract::<bool>()?;
         return Err(PyValueError::new_err(if writable {
-            "canvas is already borrowed (in use by another compose?)"
+            "Canvas is already borrowed (in use by another compose?)."
         } else {
-            "canvas must be writable"
+            "Canvas must be writable."
         }));
     };
     let mut canvas = Canvas {
-        samples: c_samples_mut(&mut canvas_borrow, "canvas")?,
+        samples: c_samples_mut(&mut canvas_borrow, "Canvas")?,
         width,
         height,
         channels,
@@ -349,15 +351,15 @@ fn compose_all<T: Element + Copy + Send + Sync>(
     for tile_object in tile_arrays {
         let tile_array = tile_object
             .cast::<PyArrayDyn<T>>()
-            .map_err(|_| PyValueError::new_err("every tile must match the canvas dtype"))?;
+            .map_err(|_| PyValueError::new_err("Every tile must match the canvas dtype."))?;
         let tile_dims @ (_, _, tile_channels) = hwc_dims(tile_array.shape())?;
         if tile_channels != channels {
             return Err(PyValueError::new_err(
-                "every tile must have the same channels as the canvas",
+                "Every tile must have the same channels as the canvas.",
             ));
         }
         let tile_borrow = tile_array.try_readonly().map_err(|_| {
-            PyValueError::new_err("a tile shares memory with the canvas — pass a copy")
+            PyValueError::new_err("A tile shares memory with the canvas — pass a copy.")
         })?;
         tile_borrows.push((tile_borrow, tile_dims));
     }
@@ -405,16 +407,16 @@ fn compose(
     let positions_borrow = positions
         .cast::<PyArray2<i64>>()
         .map_err(|_| {
-            PyValueError::new_err("positions must be an (N, 2) int64 array of integer positions")
+            PyValueError::new_err("Positions must be an (N, 2) int64 array of integer positions.")
         })?
         .try_readonly()
         .map_err(|_| held_by_concurrent_compose())?;
     if !positions_borrow.is_c_contiguous() {
-        return Err(PyValueError::new_err("positions must be C-contiguous"));
+        return Err(PyValueError::new_err("Positions must be C-contiguous."));
     }
     let positions = positions_borrow.as_array();
     if positions.shape()[1] != 2 {
-        return Err(PyValueError::new_err("positions must have shape (N, 2)"));
+        return Err(PyValueError::new_err("Positions must have shape (N, 2)."));
     }
     let crops = crops
         .map(|crops| {
@@ -422,7 +424,7 @@ fn compose(
                 .cast::<PyArray2<i64>>()
                 .ok()
                 .filter(|crops| crops.shape()[1] == 5)
-                .ok_or_else(|| PyValueError::new_err("crops must be an (N, 5) int64 array"))?
+                .ok_or_else(|| PyValueError::new_err("Crops must be an (N, 5) int64 array."))?
                 .try_readonly()
                 .map_err(|_| held_by_concurrent_compose())
         })
@@ -434,7 +436,7 @@ fn compose(
     };
     if positions.shape()[0] != pieces {
         return Err(PyValueError::new_err(format!(
-            "number of positions must equal number of {what}"
+            "Number of positions must equal number of {what}."
         )));
     }
     if !positions
@@ -442,11 +444,11 @@ fn compose(
         .all(|position| position.unsigned_abs() <= MAX_POSITION_MAGNITUDE)
     {
         return Err(PyValueError::new_err(
-            "positions must be at most 2^52 in magnitude",
+            "Positions must be at most 2^52 in magnitude.",
         ));
     }
 
-    with_dtype!(canvas, "canvas", |array: T| compose_all::<T>(
+    with_dtype!(canvas, "Canvas", |array: T| compose_all::<T>(
         array,
         &tiles,
         (&positions, crops.as_ref())
@@ -462,7 +464,7 @@ fn box_downscale_array<T: BoxSample>(
     halvings: u32,
 ) -> PyResult<Py<PyAny>> {
     let borrow = read_only(array)?;
-    let src = c_samples(&borrow, "image")?;
+    let src = c_samples(&borrow, "Image")?;
     let (out, width, height) =
         py.detach(|| box_reduce::pyramid::box_downscale(src, dims, halvings));
     to_numpy(py, out, height, width, channels)
@@ -478,8 +480,8 @@ fn stitch_grid(
 ) -> PyResult<Py<PyAny>> {
     let first = tiles
         .first()
-        .ok_or_else(|| PyValueError::new_err("Cannot stitch an empty tile grid"))?;
-    let out = with_dtype!(first, "tile", |_tile: T| grid::stitch_grid::<T>(
+        .ok_or_else(|| PyValueError::new_err("Cannot stitch an empty tile grid."))?;
+    let out = with_dtype!(first, "Tile", |_tile: T| grid::stitch_grid::<T>(
         py, &tiles, grid_width
     ))?;
     shaped_like(py, first, out)
@@ -501,11 +503,11 @@ fn downscale_grid_box(
     fill: Option<Bound<'_, PyAny>>,
 ) -> PyResult<Py<PyAny>> {
     let halvings = box_reduce::pyramid::box_halvings("box", factor)
-        .ok_or_else(|| PyValueError::new_err("factor must be a power of 2"))?;
+        .ok_or_else(|| PyValueError::new_err("Factor must be a power of 2."))?;
     let first = tiles
         .first()
-        .ok_or_else(|| PyValueError::new_err("Cannot downscale an empty tile grid"))?;
-    let out = with_dtype!(first, "tile", |_tile: T| grid::box_grid::<T>(
+        .ok_or_else(|| PyValueError::new_err("Cannot downscale an empty tile grid."))?;
+    let out = with_dtype!(first, "Tile", |_tile: T| grid::box_grid::<T>(
         py,
         &tiles,
         grid_width,
@@ -524,7 +526,7 @@ fn framed(
     size: (usize, usize),
     fill: Bound<'_, PyAny>,
 ) -> PyResult<Py<PyAny>> {
-    let out = with_dtype!(image, "image", |_image: T| grid::framed::<T>(
+    let out = with_dtype!(image, "Image", |_image: T| grid::framed::<T>(
         py,
         &image,
         (Some(size), Some(&fill))
@@ -539,29 +541,29 @@ fn resize_image(
     image: &Bound<'_, PyAny>,
     geometry: Geometry,
     channels: usize,
-    filter: &str,
+    resample: &str,
 ) -> PyResult<Py<PyAny>> {
-    if filter == "nearest" {
-        return with_dtype!(image, "image", |array: T| resize_nearest_array::<T>(
+    if resample == "nearest" {
+        return with_dtype!(image, "Image", |array: T| resize_nearest_array::<T>(
             py, array, geometry, channels
         ));
     }
-    if convolve::Kernel::parse(filter).is_none() {
-        return Err(unknown_filter(filter));
+    if convolve::Kernel::parse(resample).is_none() {
+        return Err(unknown_filter(resample));
     }
-    if let Some(result) = resize_native_u8(py, image, geometry, channels, filter) {
+    if let Some(result) = resize_native_u8(py, image, geometry, channels, resample) {
         return result;
     }
-    if let Some(result) = resize_native_u16(py, image, geometry, channels, filter) {
+    if let Some(result) = resize_native_u16(py, image, geometry, channels, resample) {
         return result;
     }
     Err(PyValueError::new_err(
-        "image must be a 2D/3D uint8 or uint16 array in native byte order",
+        "Image must be a 2D/3D uint8 or uint16 array in native byte order.",
     ))
 }
 
-fn unknown_filter(filter: &str) -> PyErr {
-    PyValueError::new_err(format!("unknown filter: {filter}"))
+fn unknown_filter(resample: &str) -> PyErr {
+    PyValueError::new_err(format!("Unknown filter: {resample}."))
 }
 
 /// The native uint16 convolution resize, or None for other dtypes and
@@ -571,9 +573,9 @@ fn resize_native_u16(
     image: &Bound<'_, PyAny>,
     geometry: Geometry,
     channels: usize,
-    filter: &str,
+    resample: &str,
 ) -> Option<PyResult<Py<PyAny>>> {
-    let kernel = convolve::Kernel::parse(filter)?;
+    let kernel = convolve::Kernel::parse(resample)?;
     let array = image.cast::<PyArrayDyn<u16>>().ok()?;
     if let Some(exact_kernel) = geometry
         .fits_image()
@@ -595,7 +597,7 @@ fn exact_resize<T: Element>(
 ) -> PyResult<Py<PyAny>> {
     let ((width, height), (out_width, out_height)) = (geometry.src, geometry.dst);
     let borrow = read_only(array)?;
-    let src = c_samples(&borrow, "image")?;
+    let src = c_samples(&borrow, "Image")?;
     let out = py.detach(|| exact_kernel(src, width, height, channels));
     to_numpy(py, out, out_height, out_width, channels)
 }
@@ -607,7 +609,7 @@ fn resize_nearest_array<T: Element + bytemuck::Pod>(
     channels: usize,
 ) -> PyResult<Py<PyAny>> {
     let borrow = read_only(array)?;
-    let src = c_samples(&borrow, "image")?;
+    let src = c_samples(&borrow, "Image")?;
     let out = py.detach(|| nearest::resize_nearest_over(src, geometry, channels));
     let (out_width, out_height) = geometry.dst;
     to_numpy(py, out, out_height, out_width, channels)
@@ -619,9 +621,9 @@ fn resize_native_u8(
     image: &Bound<'_, PyAny>,
     geometry: Geometry,
     channels: usize,
-    filter: &str,
+    resample: &str,
 ) -> Option<PyResult<Py<PyAny>>> {
-    let kernel = convolve::Kernel::parse(filter)?;
+    let kernel = convolve::Kernel::parse(resample)?;
     let array = image.cast::<PyArrayDyn<u8>>().ok()?;
     if geometry.reduces_past(FIXED_POINT_MAX_REDUCTION) {
         return Some(resize_float_engine(py, array, geometry, channels, kernel));
@@ -637,7 +639,7 @@ fn resize_native_u8(
     let plan = py.detach(|| convolve::Plan::cached(geometry, kernel, channels));
     let resized = || {
         let borrow = read_only(array)?;
-        let src = c_samples(&borrow, "image")?;
+        let src = c_samples(&borrow, "Image")?;
         let out = py.detach(|| convolve::resize_u8(src, (width, height), &plan));
         to_numpy(py, out, out_height, out_width, channels)
     };
@@ -659,7 +661,7 @@ fn resize_float_engine<T: convolve_float::FloatResample + Element>(
     kernel: convolve::Kernel,
 ) -> PyResult<Py<PyAny>> {
     let borrow = read_only(array)?;
-    let src = c_samples(&borrow, "image")?;
+    let src = c_samples(&borrow, "Image")?;
     let (out_width, out_height) = geometry.dst;
     let out = py.detach(|| {
         let plan = convolve_float::FloatPlan::cached(geometry, kernel, channels);
@@ -670,18 +672,18 @@ fn resize_float_engine<T: convolve_float::FloatResample + Element>(
 
 /// Reduce `image` by integer `factor` per spatial axis. `image` is a planar
 /// (H, W) or interleaved (H, W, C) array; call planar per component for
-/// subsampled chroma. `filter`: "box" (native SIMD box kernels at a
+/// subsampled chroma. `resample`: "box" (native SIMD box kernels at a
 /// power-of-2 factor), "bilinear", "catmullrom", "lanczos3" or "nearest".
 #[pyfunction]
-#[pyo3(signature = (image, factor, filter="box"))]
+#[pyo3(signature = (image, factor, resample))]
 fn downscale(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
     factor: i64,
-    filter: &str,
+    resample: &str,
 ) -> PyResult<Py<PyAny>> {
-    let factor = at_least_one(factor, "factor must be >= 1")?;
-    let out = downscale_image(py, image, factor, filter)?;
+    let factor = at_least_one(factor, "Factor must be >= 1.")?;
+    let out = downscale_image(py, image, factor, resample)?;
     shaped_like(py, image, out)
 }
 
@@ -689,39 +691,42 @@ fn downscale_image(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
     factor: usize,
-    filter: &str,
+    resample: &str,
 ) -> PyResult<Py<PyAny>> {
     let (height, width, channels) = image_dims(image)?;
     let geometry = Geometry::downscale((width, height), factor);
-    if let Some(halvings) = box_reduce::pyramid::box_halvings(filter, factor) {
-        return with_dtype!(image, "image", |array: T| box_downscale_array::<T>(
+    if let Some(halvings) = box_reduce::pyramid::box_halvings(resample, factor) {
+        return with_dtype!(image, "Image", |array: T| box_downscale_array::<T>(
             py,
             array,
             (width, height, channels),
             halvings
         ));
     }
-    resize_image(py, image, geometry, channels, filter)
+    resize_image(py, image, geometry, channels, resample)
 }
 
-/// Resample `image` to exactly `out_h` x `out_w` pixels, at any ratio,
+/// Resample `image` to exactly `height` x `width` pixels, at any ratio,
 /// including fractional reductions and enlargements. `image` is a planar
-/// (H, W) or interleaved (H, W, C) array. `filter`: "box", "bilinear",
+/// (H, W) or interleaved (H, W, C) array. `resample`: "box", "bilinear",
 /// "catmullrom", "lanczos3" or "nearest"; the kernel scales with the
 /// reduction, so every filter but "nearest" antialiases. A power-of-2 "box"
 /// reduction takes the same native kernels as `downscale`.
 #[pyfunction]
-#[pyo3(signature = (image, out_h, out_w, filter="box"))]
+#[pyo3(signature = (image, height, width, resample))]
 fn resize(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
-    out_h: i64,
-    out_w: i64,
-    filter: &str,
+    height: i64,
+    width: i64,
+    resample: &str,
 ) -> PyResult<Py<PyAny>> {
-    let message = "out_h and out_w must be >= 1";
-    let size = (at_least_one(out_h, message)?, at_least_one(out_w, message)?);
-    let out = resize_to(py, image, size, filter)?;
+    let message = "Height and width must be >= 1.";
+    let size = (
+        at_least_one(height, message)?,
+        at_least_one(width, message)?,
+    );
+    let out = resize_to(py, image, size, resample)?;
     shaped_like(py, image, out)
 }
 
@@ -729,7 +734,7 @@ fn resize_to(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
     (out_height, out_width): (usize, usize),
-    filter: &str,
+    resample: &str,
 ) -> PyResult<Py<PyAny>> {
     let (height, width, channels) = image_dims(image)?;
     output_samples(
@@ -742,16 +747,16 @@ fn resize_to(
         && width / out_width == height / out_height)
         .then_some(width / out_width);
     if let Some(halvings) =
-        same_integer_factor.and_then(|factor| box_reduce::pyramid::box_halvings(filter, factor))
+        same_integer_factor.and_then(|factor| box_reduce::pyramid::box_halvings(resample, factor))
     {
-        return with_dtype!(image, "image", |array: T| box_downscale_array::<T>(
+        return with_dtype!(image, "Image", |array: T| box_downscale_array::<T>(
             py,
             array,
             (width, height, channels),
             halvings
         ));
     }
-    resize_image(py, image, geometry, channels, filter)
+    resize_image(py, image, geometry, channels, resample)
 }
 
 /// Test and benchmark hook: `False` forces the scalar kernels, `True` (the

@@ -82,11 +82,11 @@ def convolution_cases(
     under test) are left out.
     """
     return [
-        (shape, output_size, filter)
+        (shape, output_size, resample)
         for shape, output_size in cases
-        for filter in CONVOLUTION_FILTERS
+        for resample in CONVOLUTION_FILTERS
         if not (
-            filter == ResizeFilter.BOX
+            resample == ResizeFilter.BOX
             and takes_power_of_two_box((shape[0], shape[1]), output_size)
         )
     ]
@@ -104,7 +104,7 @@ class TestResizeChannels:
         ["dtype", "level"],
         [(np.uint8, 200), (np.uint16, 50000)],
     )
-    @pytest.mark.parametrize("filter", ALL_FILTERS)
+    @pytest.mark.parametrize("resample", ALL_FILTERS)
     @pytest.mark.parametrize(
         "operation",
         [
@@ -117,7 +117,7 @@ class TestResizeChannels:
         self,
         dtype: type[np.generic],
         level: int,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
         operation: Callable[[np.ndarray, ResizeFilter], np.ndarray],
     ) -> None:
         """Each channel of an interleaved image is filtered on its own.
@@ -130,7 +130,7 @@ class TestResizeChannels:
         image[..., 0] = level
 
         # Act
-        result = operation(image, filter)
+        result = operation(image, resample)
 
         # Assert
         assert (result[..., 0] == level).all()
@@ -140,7 +140,7 @@ class TestResizeChannels:
 @pytest.mark.unittest
 class TestResizeAccuracy:
     @pytest.mark.parametrize(["size", "output_size"], NATIVE_CASES)
-    @pytest.mark.parametrize("filter", CONVOLUTION_FILTERS)
+    @pytest.mark.parametrize("resample", CONVOLUTION_FILTERS)
     def test_native_resize_within_one_lsb_of_exact(
         self,
         random_image: RandomImage,
@@ -148,7 +148,7 @@ class TestResizeAccuracy:
         exact_resize_u8: ExactResize,
         size: ImageSize,
         output_size: ImageSize,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """Planar uint8 convolution resizes are native, within 1 LSB of exact.
 
@@ -158,17 +158,17 @@ class TestResizeAccuracy:
         """
         # Arrange
         image = random_image(size, np.uint8)
-        expected = exact_resize_u8(image, *output_size, filter)
+        expected = exact_resize_u8(image, *output_size, resample)
 
         # Act
-        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, filter))
+        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, resample))
 
         # Assert
         assert np.abs(simd.astype(float) - expected).max() <= 1
         assert np.abs(scalar.astype(float) - expected).max() <= 1
 
     @pytest.mark.parametrize(
-        ["shape", "output_size", "filter"],
+        ["shape", "output_size", "resample"],
         convolution_cases(
             [
                 ((37, 53), (19, 71)),
@@ -185,7 +185,7 @@ class TestResizeAccuracy:
         exact_resize_float: ExactResize,
         shape: tuple[int, ...],
         output_size: ImageSize,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """uint16 resizes natively in f32 (FMA chains in tap order).
 
@@ -195,11 +195,11 @@ class TestResizeAccuracy:
         # Arrange
         image = random_image(shape, np.uint16)
         expected = np.clip(
-            np.rint(exact_resize_float(image, *output_size, filter)), 0, 65535
+            np.rint(exact_resize_float(image, *output_size, resample)), 0, 65535
         )
 
         # Act
-        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, filter))
+        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, resample))
 
         # Assert
         assert np.array_equal(simd, scalar)
@@ -207,14 +207,14 @@ class TestResizeAccuracy:
 
     @pytest.mark.parametrize("channels", [1, 3])
     @pytest.mark.parametrize("dtype", DTYPES)
-    @pytest.mark.parametrize("filter", CONVOLUTION_FILTERS)
+    @pytest.mark.parametrize("resample", CONVOLUTION_FILTERS)
     def test_native_large_reductions_within_one_lsb(
         self,
         random_image: RandomImage,
         exact_resize_float: ExactResize,
         channels: int,
         dtype: type[np.generic],
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """Large reductions stay native for every layout: within 1 LSB of exact.
 
@@ -223,11 +223,11 @@ class TestResizeAccuracy:
         # Arrange
         shape = (96, 160, channels) if channels > 1 else (96, 160)
         image = random_image(shape, dtype)
-        exact = exact_resize_float(image, 12, 13, filter)
+        exact = exact_resize_float(image, 12, 13, resample)
         expected = np.clip(np.rint(exact), 0, np.iinfo(np.dtype(dtype).name).max)
 
         # Act
-        result = resize(image, 12, 13, filter)
+        result = resize(image, 12, 13, resample)
 
         # Assert
         assert np.abs(result.astype(float) - expected).max() <= 1
@@ -235,13 +235,13 @@ class TestResizeAccuracy:
     @pytest.mark.parametrize(
         ["size", "output_size"], [((256, 8), (2, 8)), ((8, 256), (8, 2))]
     )
-    @pytest.mark.parametrize("filter", CONVOLUTION_FILTERS)
+    @pytest.mark.parametrize("resample", CONVOLUTION_FILTERS)
     def test_uint8_reduction_to_1_128_within_one_lsb_on_flat_images(
         self,
         simd_and_scalar: SimdAndScalar,
         size: ImageSize,
         output_size: ImageSize,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """The uint8 fixed-point limit: each tap rounds to the nearest 1/64 LSB.
 
@@ -256,7 +256,7 @@ class TestResizeAccuracy:
         results = [
             simd_and_scalar(
                 lambda value=value: resize(
-                    np.full(size, value, np.uint8), *output_size, filter
+                    np.full(size, value, np.uint8), *output_size, resample
                 )
             )
             for value in values
@@ -277,7 +277,7 @@ class TestResizeAccuracy:
         ],
     )
     @pytest.mark.parametrize("dtype", DTYPES)
-    @pytest.mark.parametrize("filter", CONVOLUTION_FILTERS)
+    @pytest.mark.parametrize("resample", CONVOLUTION_FILTERS)
     def test_extreme_reductions_within_one_lsb_on_every_tier(
         self,
         random_image: RandomImage,
@@ -286,7 +286,7 @@ class TestResizeAccuracy:
         shape: tuple[int, ...],
         output_size: ImageSize,
         dtype: type[np.generic],
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """Reductions by hundreds to tens of thousands stay within 1 LSB.
 
@@ -296,23 +296,23 @@ class TestResizeAccuracy:
         """
         # Arrange
         image = random_image(shape, dtype)
-        exact = exact_resize_float(image, *output_size, filter)
+        exact = exact_resize_float(image, *output_size, resample)
         expected = np.clip(np.rint(exact), 0, np.iinfo(np.dtype(dtype).name).max)
 
         # Act
-        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, filter))
+        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, resample))
 
         # Assert
         assert np.array_equal(simd, scalar)
         assert np.abs(simd.astype(float) - expected).max() <= 1
 
     @pytest.mark.parametrize(["dtype", "value"], [(np.uint8, 255), (np.uint16, 40000)])
-    @pytest.mark.parametrize("filter", CONVOLUTION_FILTERS)
+    @pytest.mark.parametrize("resample", CONVOLUTION_FILTERS)
     def test_flat_image_keeps_its_value_at_any_reduction(
         self,
         dtype: type[np.generic],
         value: int,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """A flat image reduced by 40000 to one pixel keeps its value.
 
@@ -322,7 +322,7 @@ class TestResizeAccuracy:
         image = np.full((2, 40000), value, dtype)
 
         # Act
-        result = resize(image, 1, 1, filter)
+        result = resize(image, 1, 1, resample)
 
         # Assert
         assert (result == value).all()
@@ -331,7 +331,7 @@ class TestResizeAccuracy:
 @pytest.mark.unittest
 class TestResizeSimdParity:
     @pytest.mark.parametrize(
-        ["size", "output_size", "filter"],
+        ["size", "output_size", "resample"],
         convolution_cases(
             [
                 *NATIVE_CASES,
@@ -350,7 +350,7 @@ class TestResizeSimdParity:
         simd_and_scalar: SimdAndScalar,
         size: ImageSize,
         output_size: ImageSize,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """Identical results on every CPU: SIMD matches the scalar reference.
 
@@ -360,7 +360,7 @@ class TestResizeSimdParity:
         image = random_image(size, np.uint8)
 
         # Act
-        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, filter))
+        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, resample))
 
         # Assert
         assert np.array_equal(simd, scalar)
@@ -406,7 +406,7 @@ class TestResizeSimdParity:
 @pytest.mark.unittest
 class TestResizeLayouts:
     @pytest.mark.parametrize(
-        ["size", "output_size", "filter"],
+        ["size", "output_size", "resample"],
         convolution_cases(
             [
                 *NATIVE_CASES,
@@ -429,7 +429,7 @@ class TestResizeLayouts:
         simd_and_scalar: SimdAndScalar,
         size: ImageSize,
         output_size: ImageSize,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """Interleaved uint8 images resize natively with the planar arithmetic.
 
@@ -440,11 +440,11 @@ class TestResizeLayouts:
         image = random_image((*size, 3), np.uint8)
         planes = [np.ascontiguousarray(image[..., c]) for c in range(3)]
         expected = np.stack(
-            [resize(plane, *output_size, filter) for plane in planes], axis=-1
+            [resize(plane, *output_size, resample) for plane in planes], axis=-1
         )
 
         # Act
-        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, filter))
+        simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, resample))
 
         # Assert
         assert np.array_equal(simd, expected)
@@ -517,7 +517,7 @@ def integer_convolution(
 @pytest.mark.unittest
 class TestResizeExactRatios:
     @pytest.mark.parametrize(
-        ["filter", "factor", "taps", "dtype"],
+        ["resample", "factor", "taps", "dtype"],
         [
             (ResizeFilter.BILINEAR, 2, (1, 3, 3, 1), np.uint8),
             (ResizeFilter.CATMULLROM, 2, (-3, -9, 29, 111, 111, 29, -9, -3), np.uint8),
@@ -535,7 +535,7 @@ class TestResizeExactRatios:
         simd_and_scalar: SimdAndScalar,
         reduction_weights: Weights,
         reduction_image: np.ndarray,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
         factor: int,
         dtype: type[np.integer],
     ) -> None:
@@ -559,7 +559,7 @@ class TestResizeExactRatios:
 
         # Act
         simd, scalar = simd_and_scalar(
-            lambda: resize(reduction_image, height // factor, width // factor, filter)
+            lambda: resize(reduction_image, height // factor, width // factor, resample)
         )
 
         # Assert
@@ -718,15 +718,15 @@ class TestResizePlanCache:
         """
         # Arrange
         calls = [
-            (random_image((30 + i, 50), np.uint8), 20 + i, filter)
+            (random_image((30 + i, 50), np.uint8), 20 + i, resample)
             for i in range(10)
-            for filter in (ResizeFilter.BILINEAR, ResizeFilter.LANCZOS3)
+            for resample in (ResizeFilter.BILINEAR, ResizeFilter.LANCZOS3)
         ]
 
         def resize_all() -> list[np.ndarray]:
             return [
-                resize(image, output_height, 40, filter)
-                for image, output_height, filter in calls
+                resize(image, output_height, 40, resample)
+                for image, output_height, resample in calls
             ]
 
         first = resize_all()

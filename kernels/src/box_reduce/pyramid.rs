@@ -115,8 +115,8 @@ fn write_partial_blocks<T: BoxSample>(
 }
 
 /// Halvings that make `factor` a power-of-2 box reduction, if it is one.
-pub(crate) fn box_halvings(filter: &str, factor: usize) -> Option<u32> {
-    (filter == "box" && factor.is_power_of_two()).then(|| factor.trailing_zeros())
+pub(crate) fn box_halvings(resample: &str, factor: usize) -> Option<u32> {
+    (resample == "box" && factor.is_power_of_two()).then(|| factor.trailing_zeros())
 }
 
 /// `times` successive 2x box halvings of a (width, height, channels) image ->

@@ -95,7 +95,7 @@ class TestDownscaleGrid:
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("channels", CHANNELS)
     @pytest.mark.parametrize(
-        ["factor", "filter"],
+        ["factor", "resample"],
         [
             (2, ResizeFilter.BOX),
             (2, ResizeFilter.BILINEAR),
@@ -109,7 +109,7 @@ class TestDownscaleGrid:
         stitched: np.ndarray,
         grid_width: int,
         factor: int,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """A grid of tiles reduced to one image equals reducing the stitched grid.
 
@@ -117,10 +117,10 @@ class TestDownscaleGrid:
         path and the stitching fallback alike.
         """
         # Act
-        reduced = downscale_grid(tiles, grid_width, factor, filter)
+        reduced = downscale_grid(tiles, grid_width, factor, resample)
 
         # Assert
-        assert np.array_equal(reduced, downscale(stitched, factor, filter))
+        assert np.array_equal(reduced, downscale(stitched, factor, resample))
 
     @pytest.mark.parametrize(
         ["grid_width", "grid_height"], [(1, 1), (2, 1), (1, 2), (2, 2)]
@@ -128,14 +128,14 @@ class TestDownscaleGrid:
     @pytest.mark.parametrize(["tile_size", "edge_size"], [((32, 32), (32, 32))])
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("channels", CHANNELS)
-    @pytest.mark.parametrize("filter", [ResizeFilter.BOX, ResizeFilter.BILINEAR])
+    @pytest.mark.parametrize("resample", [ResizeFilter.BOX, ResizeFilter.BILINEAR])
     def test_in_a_filled_frame(
         self,
         tiles: list[np.ndarray],
         grid_width: int,
         dtype: type[np.generic],
         fill: np.ndarray,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
     ) -> None:
         """size= places the reduced grid at the top left of a frame, fill= around it.
 
@@ -143,13 +143,15 @@ class TestDownscaleGrid:
         tile size. Both the per-tile box path and the stitching fallback.
         """
         # Arrange
-        block = downscale_grid(tiles, grid_width, 2, filter)
+        block = downscale_grid(tiles, grid_width, 2, resample)
         expected = np.empty((32, 32, *tiles[0].shape[2:]), dtype)
         expected[...] = fill
         expected[: block.shape[0], : block.shape[1]] = block
 
         # Act
-        framed = downscale_grid(tiles, grid_width, 2, filter, size=(32, 32), fill=fill)
+        framed = downscale_grid(
+            tiles, grid_width, 2, resample, size=(32, 32), fill=fill
+        )
 
         # Assert
         assert framed.dtype == dtype
@@ -161,7 +163,7 @@ class TestDownscaleGrid:
         """The frame must hold the reduced grid."""
         # Act & Assert
         with pytest.raises(
-            ValueError, match="size must be at least the reduced grid's"
+            ValueError, match="Size must be at least the reduced grid's"
         ):
             downscale_grid(
                 [rgb_tile],
@@ -177,15 +179,15 @@ class TestDownscaleGrid:
         [
             (
                 [np.zeros((32, 32, 3), np.uint8)] * 2,
-                "tiles must fill whole grid rows of grid_width tiles",
+                "Tiles must fill whole grid rows of grid_width tiles",
             ),
             (
                 [np.zeros((32, 32, 3), np.uint16)],
-                "every tile must have the first tile's dtype",
+                "Every tile must have the first tile's dtype",
             ),
             (
                 [np.zeros((16, 32, 3), np.uint8)],
-                "every tile must share its grid row's height",
+                "Every tile must share its grid row's height",
             ),
         ],
         ids=["partial-row", "mixed-dtypes", "uneven-row-heights"],
@@ -202,6 +204,6 @@ class TestDownscaleGrid:
         """No tiles at all."""
         # Act & Assert
         with pytest.raises(
-            ValueError, match="tiles must fill whole grid rows of grid_width tiles"
+            ValueError, match="Tiles must fill whole grid rows of grid_width tiles"
         ):
             downscale_grid([], 2, 2, ResizeFilter.BOX)
