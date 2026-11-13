@@ -35,8 +35,6 @@ use x86_planar::*;
 /// `top_left + below + right` must be readable.
 #[inline(always)]
 pub(crate) unsafe fn box2_mean<T: Sample>(top_left: *const T, right: usize, below: usize) -> T {
-    // The SIMD kernels' order (column sums, then the pair), so float32 tails
-    // match their bodies bit for bit.
     // SAFETY: the four samples are readable (the caller's contract).
     let (left_col, right_col) = unsafe {
         (
@@ -48,16 +46,15 @@ pub(crate) unsafe fn box2_mean<T: Sample>(top_left: *const T, right: usize, belo
 }
 
 /// How a box pass sums samples: widened to an accumulator that holds the
-/// sums exactly (u32 for uint16) or in the planar kernels' order (f32), and
-/// the sum of a 2x2 or 4x4 block finished to a sample.
+/// sums exactly (u16 for uint8, u32 for uint16, or f32), and the sum of a
+/// 2x2 or 4x4 block finished to a sample.
 pub(crate) struct BoxSums<T, Acc> {
     pub(crate) widen: fn(T) -> Acc,
     pub(crate) mean4: fn(Acc) -> T,
     pub(crate) mean16: fn(Acc) -> T,
 }
 
-/// Sums in f32, in the planar kernels' order (float32, and the interleaved
-/// 2x of any dtype).
+/// Sums in f32 (exact for integer samples): the scalar interleaved 2x.
 fn f32_box_sums<T: Sample>() -> BoxSums<T, f32> {
     BoxSums {
         widen: T::to_f32,
@@ -173,8 +170,7 @@ pub(crate) trait BoxSample: Sample + pyramid::BlockMean {
     /// The accumulator the fused passes sum in.
     type BoxAcc: Copy + Default + std::ops::Add<Output = Self::BoxAcc>;
 
-    /// How the fused passes sum and round: exactly for the integer types (a
-    /// pass rounds once), in the planar SIMD kernels' order for float32.
+    /// How the fused passes sum and round: exactly (a pass rounds once).
     fn box_sums() -> BoxSums<Self, Self::BoxAcc>
     where
         Self: Sized;
@@ -583,109 +579,6 @@ impl BoxSample for u16 {
     }
 }
 
-impl BoxSample for f32 {
-    #[cfg(target_arch = "aarch64")]
-    unsafe fn box2x_into(
-        src: &[f32],
-        (height, width, channels): (usize, usize, usize),
-        dst_ptr: *mut f32,
-        dst_stride: usize,
-    ) -> bool {
-        assert_image(src, width, height, channels);
-        if !use_neon() {
-            return false;
-        }
-        // SAFETY: `src` matches its dimensions (checked); `dst_ptr` holds the
-        // output rows (the caller's contract).
-        unsafe {
-            if channels == 1 {
-                box2x_f32_into_neon(src, width, height, dst_ptr, dst_stride);
-            } else {
-                assert_interleaved(channels);
-                box2x_f32_hwc_into_neon(src, width, height, dst_ptr, dst_stride);
-            }
-        }
-        true
-    }
-    #[cfg(target_arch = "x86_64")]
-    unsafe fn box2x_into(
-        src: &[f32],
-        (height, width, channels): (usize, usize, usize),
-        dst_ptr: *mut f32,
-        dst_stride: usize,
-    ) -> bool {
-        assert_image(src, width, height, channels);
-        if !has_avx2() {
-            return false;
-        }
-        // SAFETY: `dst_ptr` holds the output rows (the caller's contract).
-        let output =
-            unsafe { BoxRows::in_place(dst_ptr, dst_stride, height / 2, width / 2 * channels) };
-        // SAFETY: avx2 detected at runtime; `src` matches its dimensions
-        // (checked) and `output` holds its rows. The kernels are box2x's and
-        // box2x_hwc's.
-        unsafe {
-            match channels {
-                1 => box2x_f32_avx2_to(src, width, height, output),
-                _ => box2x_f32_hwc3_avx2_to(src, width, height, output),
-            };
-        }
-        true
-    }
-    type BoxAcc = f32;
-    fn box_sums() -> BoxSums<f32, f32> {
-        f32_box_sums()
-    }
-    fn box2x(src: &[f32], width: usize, height: usize) -> (Vec<f32>, usize, usize) {
-        assert_image(src, width, height, 1);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_f32_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_f32_neon(src, width, height) };
-        }
-        box2x_scalar::<f32>(src, width, height)
-    }
-    fn box4x(src: &[f32], width: usize, height: usize) -> (Vec<f32>, usize, usize) {
-        assert_image(src, width, height, 1);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box4x_f32_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box4x_f32_neon(src, width, height) };
-        }
-        box4x_scalar(src, width, height)
-    }
-    fn box2x_hwc(
-        src: &[f32],
-        width: usize,
-        height: usize,
-        channels: usize,
-    ) -> (Vec<f32>, usize, usize) {
-        assert_image(src, width, height, channels);
-        assert_interleaved(channels);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_f32_hwc3_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_f32_hwc_neon(src, width, height) };
-        }
-        box2x_interleaved::<f32>(src, width, height, channels)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -697,9 +590,8 @@ mod tests {
         const MAX: Self;
         const ZERO: Self;
 
-        /// The fused 4x4 mean of `block` (4 rows of 4 columns): integers
-        /// rounded once, `(sum + 8) >> 4`; float32 in the planar kernels'
-        /// order, columns down the rows, then `(c0 + c1) + (c2 + c3)`.
+        /// The fused 4x4 mean of `block` (4 rows of 4 columns), rounded
+        /// once: `(sum + 8) >> 4`.
         fn mean16(block: [[Self; 4]; 4]) -> Self;
     }
 
@@ -721,16 +613,6 @@ mod tests {
         const ZERO: Self = 0;
         fn mean16(block: [[Self; 4]; 4]) -> Self {
             u16::try_from(integer_mean16(block)).expect("a mean of u16 fits u16")
-        }
-    }
-
-    impl BoxTestSample for f32 {
-        const MAX: Self = 1.0;
-        const ZERO: Self = 0.0;
-        fn mean16(block: [[Self; 4]; 4]) -> Self {
-            let column =
-                |col: usize| ((block[0][col] + block[1][col]) + block[2][col]) + block[3][col];
-            ((column(0) + column(1)) + (column(2) + column(3))) * (1.0 / 16.0)
         }
     }
 
@@ -932,7 +814,6 @@ mod tests {
     fn box2x_interleaved_equals_each_channel_halved_as_planar() {
         assert_interleaved_scalar_equals_planar::<u8>();
         assert_interleaved_scalar_equals_planar::<u16>();
-        assert_interleaved_scalar_equals_planar::<f32>();
     }
 
     /// Every `BoxSample` method of `T` through its runtime dispatch (the
@@ -978,7 +859,6 @@ mod tests {
     fn dispatched_box_kernels_match_the_scalar_references() {
         assert_dispatch_matches_references::<u8>();
         assert_dispatch_matches_references::<u16>();
-        assert_dispatch_matches_references::<f32>();
     }
 
     #[test]
@@ -1009,24 +889,6 @@ mod tests {
     }
 
     #[test]
-    fn fused_and_chained_float32_agree_where_the_sums_are_exact() {
-        // Small integer samples keep every float32 sum and quarter exact, so
-        // both orders give the true means.
-        let mut rng = Rng::new(14);
-        for (width, height) in sizes_from(4) {
-            let src: Vec<f32> = random_samples::<u8>(&mut rng, width * height)
-                .into_iter()
-                .map(f32::from)
-                .collect();
-            assert_same_image(
-                &f32::box4x(&src, width, height),
-                &box4x_chained_reference(&src, width, height),
-                &format!("{width} x {height}"),
-            );
-        }
-    }
-
-    #[test]
     #[should_panic(expected = "fewer than width * height * channels")]
     fn box2x_hwc_rejects_a_short_image() {
         let src = vec![0u8; 4 * 4 * RGB - 1];
@@ -1043,7 +905,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "fewer than width * height * channels")]
     fn box4x_rejects_overflowing_dimensions() {
-        let _ = f32::box4x(&[0.0; 16], usize::MAX, 2);
+        let _ = u16::box4x(&[0; 16], usize::MAX, 2);
     }
 
     #[test]
@@ -1111,6 +973,5 @@ mod tests {
     fn in_place_kernels_equal_the_allocated_images() {
         assert_into_matches_allocated::<u8>(0xA5);
         assert_into_matches_allocated::<u16>(0xA5A5);
-        assert_into_matches_allocated::<f32>(-1.5);
     }
 }

@@ -241,13 +241,10 @@ macro_rules! with_dtype {
         } else if let Ok($binding) = $array.cast::<PyArrayDyn<u16>>() {
             type $t = u16;
             $body
-        } else if let Ok($binding) = $array.cast::<PyArrayDyn<f32>>() {
-            type $t = f32;
-            $body
         } else {
             Err(PyValueError::new_err(concat!(
                 $what,
-                " must be a 2D/3D uint8, uint16, or float32 array in native byte order"
+                " must be a 2D/3D uint8 or uint16 array in native byte order"
             )))
         }
     };
@@ -547,7 +544,7 @@ fn framed(
 }
 
 /// Resize: nearest-neighbour (`nearest`) or by convolution (`convolve` for
-/// uint8, `convolve_float` for uint16 and float32).
+/// uint8, `convolve_float` for uint16).
 fn resize_image(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
@@ -566,11 +563,11 @@ fn resize_image(
     if let Some(result) = resize_native_u8(py, image, geometry, channels, filter) {
         return result;
     }
-    if let Some(result) = resize_native_float(py, image, geometry, channels, filter) {
+    if let Some(result) = resize_native_u16(py, image, geometry, channels, filter) {
         return result;
     }
     Err(PyValueError::new_err(
-        "image must be a 2D/3D uint8, uint16, or float32 array in native byte order",
+        "image must be a 2D/3D uint8 or uint16 array in native byte order",
     ))
 }
 
@@ -578,43 +575,31 @@ fn unknown_filter(filter: &str) -> PyErr {
     value_error(format!("unknown filter: {filter}"))
 }
 
-/// The native uint16/float32 convolution resize, or None
-/// where it doesn't apply.
-fn resize_native_float(
+/// The native uint16 convolution resize, or None for other dtypes and
+/// filters.
+fn resize_native_u16(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
     geometry: Geometry,
     channels: usize,
     filter: &str,
 ) -> Option<PyResult<Py<PyAny>>> {
-    fn run<T: convolve_float::FloatResample + Element>(
-        py: Python<'_>,
-        array: &Bound<'_, PyArrayDyn<T>>,
-        geometry: Geometry,
-        channels: usize,
-        kernel: convolve::Kernel,
-    ) -> PyResult<Py<PyAny>> {
+    let kernel = convolve::Kernel::parse(filter)?;
+    let array = image.cast::<PyArrayDyn<u16>>().ok()?;
+    let ((width, height), (ow, oh)) = (geometry.src, geometry.dst);
+    if kernel == convolve::Kernel::Bilinear && width == 2 * ow && height == 2 * oh {
+        return Some(exact_half_u16(py, array, (height, width, channels)));
+    }
+    let resized = || {
         let ro = read_only(array)?;
         let src = c_samples(&ro, "image")?;
         let out = py.detach(|| {
             let plan = convolve_float::FloatPlan::cached(geometry, kernel, channels);
             convolve_float::resize_float(src, geometry.src, &plan)
         });
-        let (ow, oh) = geometry.dst;
         to_numpy(py, out, oh, ow, channels)
-    }
-    let kernel = convolve::Kernel::parse(filter)?;
-    if let Ok(array) = image.cast::<PyArrayDyn<f32>>() {
-        return Some(run(py, array, geometry, channels, kernel));
-    }
-    if let Ok(array) = image.cast::<PyArrayDyn<u16>>() {
-        let ((width, height), (ow, oh)) = (geometry.src, geometry.dst);
-        if kernel == convolve::Kernel::Bilinear && width == 2 * ow && height == 2 * oh {
-            return Some(exact_half_u16(py, array, (height, width, channels)));
-        }
-        return Some(run(py, array, geometry, channels, kernel));
-    }
-    None
+    };
+    Some(resized())
 }
 
 /// The exact x2 bilinear reduction of a uint16 image.

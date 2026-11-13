@@ -440,6 +440,35 @@ class TestValidation:
         with pytest.raises(ValueError, match="native byte order"):
             resize(image, 4, 4, ResizeFilter.BOX)
 
+    @pytest.mark.parametrize("dtype", [np.float32, np.int16])
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            pytest.param(
+                lambda image: downscale(image, 2, ResizeFilter.BOX), id="downscale"
+            ),
+            pytest.param(
+                lambda image: resize(image, 4, 4, ResizeFilter.BILINEAR), id="resize"
+            ),
+            pytest.param(
+                lambda image: compose(
+                    image.copy(), [image], np.zeros((1, 2), np.int64)
+                ),
+                id="compose",
+            ),
+        ],
+    )
+    def test_rejects_dtypes_other_than_uint8_uint16(
+        self, dtype: type, operation: Callable[[np.ndarray], Any]
+    ) -> None:
+        """Only uint8 and uint16 images are supported, by every operation."""
+        # Arrange
+        image = np.zeros((8, 8), dtype)
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="uint8 or uint16"):
+            operation(image)
+
     @pytest.mark.parametrize(
         ["operation", "match"],
         [
@@ -549,11 +578,11 @@ class TestShapes:
 class TestTallReductions:
     @pytest.mark.parametrize(
         ["dtype", "rows", "value"],
-        [(np.float32, 200_000, 1.0), (np.uint16, 300_000, 1000)],
+        [(np.uint8, 600_000, 100), (np.uint16, 300_000, 1000)],
     )
     @pytest.mark.parametrize("filter", [ResizeFilter.BILINEAR, ResizeFilter.LANCZOS3])
     def test_heavy_vertical_reduction_of_tall_image(
-        self, dtype: type, rows: int, value: float, filter: ResizeFilter
+        self, dtype: type, rows: int, value: int, filter: ResizeFilter
     ) -> None:
         """A batch of rows larger than the strip budget still resizes.
 

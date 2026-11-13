@@ -47,7 +47,7 @@ def compose(
     Parameters
     ----------
     canvas: numpy.ndarray
-        The destination, dtype uint8 / uint16 / float32, C-contiguous. Planar
+        The destination, dtype uint8 / uint16, C-contiguous. Planar
         ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3. Mutated in
         place.
     tiles: Sequence[numpy.ndarray]
@@ -96,15 +96,14 @@ def downscale(
     ``INTER_LINEAR``/``CUBIC``/``LANCZOS4`` are fixed-kernel interpolators
     that alias when minifying. A power-of-2 ``factor`` with ``BOX`` uses
     native SIMD box kernels (2x, fused 4x and 8x, chained beyond); other
-    filters and factors resample natively for uint8, uint16 and float32
-    (integers within 1 LSB of the exact convolution at any factor; identical
-    on every CPU; uint8 ``BILINEAR`` and ``CATMULLROM`` at
-    ``factor`` 2 and ``BILINEAR`` at ``factor`` 4 exact where the factor
-    divides the size). ``NEAREST`` is native too. ``BOX`` is fastest and
-    mipmap-standard; ``LANCZOS3`` is sharpest, and the windowed filters
-    (``CATMULLROM``/``LANCZOS3``) also suppress the low-frequency beat that
-    pure area averaging leaves on strongly periodic content (gratings,
-    halftones).
+    filters and factors resample natively for uint8 and uint16 (within
+    1 LSB of the exact convolution at any factor; identical on every CPU;
+    uint8 ``BILINEAR`` and ``CATMULLROM`` at ``factor`` 2 and ``BILINEAR`` at
+    ``factor`` 4 exact where the factor divides the size). ``NEAREST`` is
+    native too. ``BOX`` is fastest and mipmap-standard; ``LANCZOS3`` is
+    sharpest, and the windowed filters (``CATMULLROM``/``LANCZOS3``) also
+    suppress the low-frequency beat that pure area averaging leaves on
+    strongly periodic content (gratings, halftones).
 
     The scale is exactly ``factor``, and output dimensions are
     ``ceil(dim / factor)``, as Pillow's ``reduce`` and libvips' ``shrink``:
@@ -119,7 +118,7 @@ def downscale(
     Parameters
     ----------
     image: numpy.ndarray
-        The source, C-contiguous, dtype uint8 / uint16 / float32. Planar
+        The source, C-contiguous, dtype uint8 / uint16. Planar
         ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
     factor: int
         Integer reduction factor applied to both spatial axes.
@@ -221,8 +220,8 @@ def resize(
 
     An exact power-of-2 reduction with ``BOX`` (same factor on both axes) takes
     the same native SIMD kernels as :func:`downscale`; other resizes resample
-    natively for uint8, uint16 and float32 (integers within 1 LSB of the
-    exact convolution at any ratio; identical on every CPU;
+    natively for uint8 and uint16 (within 1 LSB of the exact convolution at
+    any ratio; identical on every CPU;
     uint8 ``BILINEAR`` and ``CATMULLROM`` to exactly half the size and
     ``BILINEAR`` to exactly a quarter or twice the size exact). ``NEAREST``
     is native too.
@@ -238,7 +237,7 @@ def resize(
     Parameters
     ----------
     image: numpy.ndarray
-        The source, C-contiguous, dtype uint8 / uint16 / float32. Planar
+        The source, C-contiguous, dtype uint8 / uint16. Planar
         ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
     out_h: int
         Target height in pixels.

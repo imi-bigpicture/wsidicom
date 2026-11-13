@@ -28,7 +28,7 @@ import pytest
 from wsidicom_kernels import compose
 
 TILE_WIDTH, TILE_HEIGHT, CANVAS_WIDTH, CANVAS_HEIGHT = 9, 7, 14, 13
-DTYPES = [np.uint8, np.uint16, np.float32]
+DTYPES = [np.uint8, np.uint16]
 # Image shape suffixes: planar, then interleaved with 1 and 3 samples.
 LAYOUTS = [(), (1,), (3,)]
 LAYOUT_IDS = ["planar", "1-sample", "rgb"]

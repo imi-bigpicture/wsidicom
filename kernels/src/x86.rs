@@ -102,24 +102,6 @@ pub(crate) unsafe fn store_128i(
     }
 }
 
-/// `store_128i` for eight f32 (streams only when `dst` is 32-aligned).
-///
-/// # Safety
-/// The CPU supports AVX, and the 8 floats at `dst` must be valid for writes.
-#[target_feature(enable = "avx")]
-#[inline]
-pub(crate) unsafe fn store_256_ps(dst: *mut f32, value: std::arch::x86_64::__m256, nt: bool) {
-    use std::arch::x86_64::*;
-    if nt && (dst as usize).trailing_zeros() >= 5 {
-        // SAFETY: `dst` is writable (the caller's contract) and 32-aligned
-        // (checked).
-        unsafe { _mm256_stream_ps(dst, value) };
-    } else {
-        // SAFETY: `dst` is writable (the caller's contract).
-        unsafe { _mm256_storeu_ps(dst, value) };
-    }
-}
-
 /// Orders a kernel's streaming stores before its buffer is handed out.
 #[inline(always)]
 pub(crate) fn sfence_if_streamed(nt: bool) {
@@ -197,10 +179,6 @@ mod tests {
     #[repr(align(32))]
     struct AlignedBytes([u8; 64]);
 
-    /// 24 floats aligned to 32, as `AlignedBytes`.
-    #[repr(align(32))]
-    struct AlignedFloats([f32; 24]);
-
     #[test]
     fn stores_write_their_values_streamed_or_not() {
         let value: [u8; 16] = std::array::from_fn(|index| index as u8 + 1);
@@ -224,33 +202,6 @@ mod tests {
                 );
                 assert!(buffer.0[..offset].iter().all(|&byte| byte == 0));
                 assert!(buffer.0[offset + 16..].iter().all(|&byte| byte == 0));
-            }
-        }
-        if !std::is_x86_feature_detected!("avx") {
-            return;
-        }
-        let floats: [f32; 8] = std::array::from_fn(|index| index as f32 + 0.5);
-        for nt in [false, true] {
-            for offset in 0..=8 {
-                let mut buffer = AlignedFloats([0.0; 24]);
-                // SAFETY: AVX is available; offset + 8 <= 24 floats: inside
-                // the buffer; `floats` is 8 floats.
-                unsafe {
-                    store_256_ps(
-                        buffer.0.as_mut_ptr().add(offset),
-                        _mm256_loadu_ps(floats.as_ptr()),
-                        nt,
-                    );
-                }
-                sfence_if_streamed(nt);
-                let written = &buffer.0;
-                assert_eq!(
-                    written[offset..offset + 8],
-                    floats,
-                    "offset {offset}, nt {nt}"
-                );
-                assert!(written[..offset].iter().all(|&sample| sample == 0.0));
-                assert!(written[offset + 8..].iter().all(|&sample| sample == 0.0));
             }
         }
     }

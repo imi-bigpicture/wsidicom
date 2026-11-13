@@ -1,4 +1,4 @@
-//! AVX2 kernels of the uint16/float32 convolution resize (see
+//! AVX2 kernels of the float32 convolution engine for uint8 and uint16 (see
 //! `crate::convolve_float`): FMA chains in tap order, horizontal pass on
 //! transposed batches of 8 rows.
 //!
@@ -52,9 +52,7 @@ unsafe fn vertical_with_load_avx2<T: FloatSample>(
     // Accumulates taps `taps` into `registers` registers at x; a later tap
     // group resumes from the sums stored in mid.
     let block = |x: usize, registers: usize, taps: Range<usize>| {
-        // The next window's rows ahead of the pass, for uint16 only:
-        // float32 blocks span twice the lines, and with few taps
-        // their prefetches outweigh the misses they hide.
+        // The next window's rows ahead of the pass, for uint16 rows only.
         if taps.start == 0 && std::mem::size_of::<T>() == 2 {
             let (sample, block_bytes) = (
                 std::mem::size_of::<T>(),
@@ -118,24 +116,6 @@ unsafe fn vertical_with_load_avx2<T: FloatSample>(
     if x < width {
         block(width - LANES, 1, all);
     }
-}
-
-/// The vertical pass of float32 rows.
-///
-/// # Safety
-/// `weights` is not empty and `rows.len() >= (weights.len() - 1) *
-/// stride + mid.len()`.
-#[target_feature(enable = "avx2,fma")]
-pub(crate) unsafe fn vertical_f32_avx2(
-    rows: &[f32],
-    stride: usize,
-    weights: &[f32],
-    mid: &mut [f32],
-) {
-    use std::arch::x86_64::*;
-    // SAFETY: the bounds are the caller's (contract); the load is
-    // only given the start of a register within `rows`.
-    unsafe { vertical_with_load_avx2(rows, stride, weights, mid, |ptr| _mm256_loadu_ps(ptr)) };
 }
 
 /// A batch of rows of `mid` (stride `stride`, a multiple of the
@@ -290,43 +270,11 @@ fn transpose_8x8_f32(rows: &mut [std::arch::x86_64::__m256; 8]) {
     }
 }
 
-/// Untranspose a batch to float32 rows.
+/// Untranspose a batch to uint16 rows.
 ///
 /// # Safety
 /// `rows <= 8`, `out_t` holds `ows.next_multiple_of(8) * 8` samples, and
 /// `dst` is valid for writes of `rows` rows of `ows` samples, `stride` apart.
-#[target_feature(enable = "avx2,fma")]
-pub(crate) unsafe fn untranspose_store_f32_avx2(
-    out_t: &[f32],
-    ows: usize,
-    dst: *mut f32,
-    stride: usize,
-    rows: usize,
-) {
-    use std::arch::x86_64::*;
-    let store = |row: usize, output: usize, register: __m256, count: usize| {
-        // SAFETY: row < rows, and the `count` samples from `output` lie
-        // in the row (contract); `staged` is the 8 samples stored.
-        unsafe {
-            let at = dst.add(row * stride + output);
-            if count == 8 {
-                _mm256_storeu_ps(at, register);
-            } else {
-                let mut staged = [0f32; 8];
-                _mm256_storeu_ps(staged.as_mut_ptr(), register);
-                store_prefix(&staged, at, count);
-            }
-        }
-    };
-    // SAFETY: out_t's size is the caller's (contract), and `store` writes
-    // only within the rows of `dst` (contract).
-    unsafe { untranspose_avx2(out_t, ows, rows, store) };
-}
-
-/// Untranspose a batch to uint16 rows.
-///
-/// # Safety
-/// `untranspose_store_f32_avx2`'s bounds.
 #[target_feature(enable = "avx2,fma")]
 pub(crate) unsafe fn untranspose_store_u16_avx2(
     out_t: &[f32],
@@ -388,7 +336,7 @@ pub(crate) unsafe fn vertical_u16_avx2(
 /// Untranspose a batch to uint8 rows.
 ///
 /// # Safety
-/// `untranspose_store_f32_avx2`'s bounds.
+/// `untranspose_store_u16_avx2`'s bounds.
 #[target_feature(enable = "avx2,fma")]
 pub(crate) unsafe fn untranspose_store_u8_avx2(
     out_t: &[f32],

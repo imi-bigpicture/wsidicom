@@ -4,8 +4,7 @@
 //!
 //! Integer kernels sum with `vpaddl`/`vpadal` (widening pairwise adds) and
 //! round with `vrshrn` (rounding shift and narrow): `(sum + 2) >> 2` and
-//! `(sum + 8) >> 4`, the scalar reference's exact single rounding. Float32
-//! kernels add the rows first, then the column pairs: the scalar order.
+//! `(sum + 8) >> 4`, the scalar reference's exact single rounding.
 //!
 //! # Safety
 //! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
@@ -13,12 +12,10 @@
 //! Loads and stores are justified against that at their loop guards.
 
 use std::arch::aarch64::{
-    float32x2_t, float32x2x3_t, float32x4_t, uint8x8_t, uint8x8x3_t, uint8x16_t, uint8x16x3_t,
-    uint16x4_t, uint16x4x3_t, uint16x8_t, uint32x4_t, vaddq_f32, vaddq_u32, vcombine_f32,
-    vcombine_u8, vcombine_u16, vget_high_f32, vget_low_f32, vld1q_f32, vld1q_u8, vld1q_u16,
-    vld3q_f32, vld3q_u8, vld3q_u16, vmul_n_f32, vmulq_n_f32, vpadalq_u8, vpadalq_u16, vpadd_f32,
-    vpaddlq_u8, vpaddlq_u16, vpaddq_f32, vpaddq_u16, vpaddq_u32, vrshrn_n_u16, vrshrn_n_u32,
-    vst1_u8, vst1q_f32, vst1q_u8, vst1q_u16, vst3_f32, vst3_u8, vst3_u16, vst3q_u8,
+    uint8x8_t, uint8x8x3_t, uint8x16_t, uint8x16x3_t, uint16x4_t, uint16x4x3_t, uint16x8_t,
+    uint32x4_t, vaddq_u32, vcombine_u8, vcombine_u16, vld1q_u8, vld1q_u16, vld3q_u8, vld3q_u16,
+    vpadalq_u8, vpadalq_u16, vpaddlq_u8, vpaddlq_u16, vpaddq_u16, vpaddq_u32, vrshrn_n_u16,
+    vrshrn_n_u32, vst1_u8, vst1q_u8, vst1q_u16, vst3_u8, vst3_u16, vst3q_u8,
 };
 
 use super::{BoxSample, box2_mean};
@@ -48,17 +45,6 @@ fn mean2x2_u8x32(upper: [uint8x16_t; 2], lower: [uint8x16_t; 2]) -> uint8x16_t {
 #[inline]
 fn mean2x2_u16(upper: uint16x8_t, lower: uint16x8_t) -> uint16x4_t {
     vrshrn_n_u32::<2>(vaddq_u32(vpaddlq_u16(upper), vpaddlq_u16(lower)))
-}
-
-/// 2x2 means of 4 f32 columns of two rows: 2 outputs.
-#[target_feature(enable = "neon")]
-#[inline]
-fn mean2x2_f32(upper: float32x4_t, lower: float32x4_t) -> float32x2_t {
-    let column_sums = vaddq_f32(upper, lower);
-    vmul_n_f32(
-        vpadd_f32(vget_low_f32(column_sums), vget_high_f32(column_sums)),
-        0.25,
-    )
 }
 
 /// Output rows of a 2x box: `(width / 2, height / 2)`.
@@ -148,45 +134,6 @@ pub(crate) unsafe fn box2x_u16_into_neon(
     }
 }
 
-/// NEON float32 2x2 box: 4 outputs per step; scalar tail.
-///
-/// # Safety
-/// `src` holds `width * height` samples and `dst_ptr` the `height / 2` output
-/// rows of `width / 2` samples, `dst_stride` samples apart.
-#[target_feature(enable = "neon")]
-pub(crate) unsafe fn box2x_f32_into_neon(
-    src: &[f32],
-    width: usize,
-    height: usize,
-    dst_ptr: *mut f32,
-    dst_stride: usize,
-) {
-    let (ow, oh) = halved(width, height);
-    let src_ptr = src.as_ptr();
-    for oy in 0..oh {
-        let (top, bottom, out_row) = (2 * oy * width, (2 * oy + 1) * width, oy * dst_stride);
-        let mut ox = 0usize;
-        while ox + 4 <= ow {
-            let x = 2 * ox;
-            // SAFETY: x + 8 <= 2 ow <= width: 8 samples of both rows; the
-            // store writes outputs ox..ox + 4 of the row.
-            unsafe {
-                let load = |offset: usize| vld1q_f32(src_ptr.add(offset));
-                let means = vcombine_f32(
-                    mean2x2_f32(load(top + x), load(bottom + x)),
-                    mean2x2_f32(load(top + x + 4), load(bottom + x + 4)),
-                );
-                vst1q_f32(dst_ptr.add(out_row + ox), means);
-            }
-            ox += 4;
-        }
-        for ox in ox..ow {
-            // SAFETY: ox < width / 2, oy < height / 2: the 2x2 block is in src.
-            unsafe { *dst_ptr.add(out_row + ox) = box2_mean(src_ptr.add(top + 2 * ox), 1, width) };
-        }
-    }
-}
-
 /// A 2x box kernel writing output row `oy` at `dst_ptr + oy * dst_stride`.
 type Box2xInto<T> = unsafe fn(&[T], usize, usize, *mut T, usize);
 
@@ -236,20 +183,6 @@ pub(crate) unsafe fn box2x_u16_neon(
 ) -> (Vec<u16>, usize, usize) {
     // SAFETY: the caller's bound.
     unsafe { box2x_allocated(box2x_u16_into_neon, src, (width, height, 1)) }
-}
-
-/// NEON float32 2x2 box into a new image.
-///
-/// # Safety
-/// `src` holds `width * height` samples.
-#[target_feature(enable = "neon")]
-pub(crate) unsafe fn box2x_f32_neon(
-    src: &[f32],
-    width: usize,
-    height: usize,
-) -> (Vec<f32>, usize, usize) {
-    // SAFETY: the caller's bound.
-    unsafe { box2x_allocated(box2x_f32_into_neon, src, (width, height, 1)) }
 }
 
 // Interleaved 2x2 box for one channel count: `$load` (vld3/vld4) splits
@@ -401,19 +334,6 @@ gen_box2x_hwc_neon!(
     1,
     2
 );
-gen_box2x_hwc_neon!(
-    box2x_f32_hwc_into_neon,
-    f32,
-    RGB,
-    2,
-    vld3q_f32,
-    vst3_f32,
-    float32x2x3_t,
-    mean2x2_f32,
-    0,
-    1,
-    2
-);
 // The RGB 2x box of one sample type into a new image.
 macro_rules! gen_box2x_rgb_neon {
     ($name:ident, $t:ty, $into:ident) => {
@@ -433,7 +353,6 @@ macro_rules! gen_box2x_rgb_neon {
 
 gen_box2x_rgb_neon!(box2x_u8_hwc_neon, u8, box2x_u8_hwc_into_neon);
 gen_box2x_rgb_neon!(box2x_u16_hwc_neon, u16, box2x_u16_hwc_into_neon);
-gen_box2x_rgb_neon!(box2x_f32_hwc_neon, f32, box2x_f32_hwc_into_neon);
 
 /// Output size of a 4x box: `(width / 4, height / 4)`.
 fn quartered(width: usize, height: usize) -> (usize, usize) {
@@ -542,58 +461,6 @@ pub(crate) unsafe fn box4x_u16_neon(
                     vcombine_u16(means4(x), means4(x + 16)),
                 );
             };
-            ox += 8;
-        }
-        for ox in ox..ow {
-            // SAFETY: ox < width / 4, oy < height / 4: the 4x4 block is in src.
-            unsafe { *dst_ptr.add(out_row + ox) = box4_mean(src_ptr, rows, 4 * ox) };
-        }
-    }
-    // SAFETY: every output row was written in full.
-    (unsafe { written_output(out) }, ow, oh)
-}
-
-/// NEON float32 fused 4x4 box: column sums down the 4 rows, then two
-/// `vpaddq` levels — `(c0 + c1) + (c2 + c3)`, the scalar order — times 1/16.
-/// 8 outputs per step; scalar tail.
-///
-/// # Safety
-/// `src` holds `width * height` samples.
-#[target_feature(enable = "neon")]
-pub(crate) unsafe fn box4x_f32_neon(
-    src: &[f32],
-    width: usize,
-    height: usize,
-) -> (Vec<f32>, usize, usize) {
-    let (ow, oh) = quartered(width, height);
-    let mut out = unwritten_output::<f32>(ow * oh);
-    let (src_ptr, dst_ptr) = (src.as_ptr(), out.as_mut_ptr().cast::<f32>());
-    for oy in 0..oh {
-        let rows = rows4(oy, width);
-        let out_row = oy * ow;
-        // Sums down the 4 rows of the 4 columns at x.
-        let column_sums = |x: usize| {
-            // SAFETY: callers keep x + 4 <= 4 ow <= width.
-            let load = |row: usize| unsafe { vld1q_f32(src_ptr.add(row + x)) };
-            let mut sums = load(rows[0]);
-            for &row in &rows[1..] {
-                sums = vaddq_f32(sums, load(row));
-            }
-            sums
-        };
-        // 4 means of the 16 columns at x.
-        let means4 = |x: usize| {
-            let pairs = |at: usize| vpaddq_f32(column_sums(at), column_sums(at + 4));
-            vmulq_n_f32(vpaddq_f32(pairs(x), pairs(x + 8)), 1.0 / 16.0)
-        };
-        let mut ox = 0usize;
-        while ox + 8 <= ow {
-            let x = 4 * ox;
-            // SAFETY: x + 32 <= 4 ow <= width; outputs ox..ox + 8 of the row.
-            unsafe {
-                vst1q_f32(dst_ptr.add(out_row + ox), means4(x));
-                vst1q_f32(dst_ptr.add(out_row + ox + 4), means4(x + 16));
-            }
             ox += 8;
         }
         for ox in ox..ow {
@@ -842,14 +709,12 @@ mod tests {
     fn planar_neon_kernels_equal_scalar() {
         assert_planar_matches_reference::<u8>(box2x_u8_neon, box2x_scalar);
         assert_planar_matches_reference::<u16>(box2x_u16_neon, box2x_scalar);
-        assert_planar_matches_reference::<f32>(box2x_f32_neon, box2x_scalar);
     }
 
     #[test]
     fn interleaved_neon_kernels_equal_scalar() {
         assert_interleaved_halves_as_scalar::<u8>(box2x_u8_hwc_neon);
         assert_interleaved_halves_as_scalar::<u16>(box2x_u16_hwc_neon);
-        assert_interleaved_halves_as_scalar::<f32>(box2x_f32_hwc_neon);
     }
 
     /// A fused interleaved NEON kernel: (src, (width, height), levels).
@@ -859,7 +724,6 @@ mod tests {
     fn fused_box4x_neon_kernels_equal_the_fused_reference() {
         assert_planar_matches_reference::<u8>(box4x_u8_neon, box4x_fused_reference);
         assert_planar_matches_reference::<u16>(box4x_u16_neon, box4x_fused_reference);
-        assert_planar_matches_reference::<f32>(box4x_f32_neon, box4x_fused_reference);
     }
 
     fn assert_levels_match_the_pyramid<T: BoxTestSample>(kernel: LevelsKernel<T>) {

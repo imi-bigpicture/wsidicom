@@ -1,5 +1,4 @@
-//! The sample types the kernels take (uint8, uint16, float32), the RGB
-//! pixel size, and the Q15 fixed-point weights of the uint8 kernels.
+//! The sample types the kernels take (uint8, uint16), the RGB pixel size, and the Q15 fixed-point weights of the uint8 kernels.
 
 /// Samples per pixel of an RGB image.
 pub(crate) const RGB: usize = 3;
@@ -73,15 +72,6 @@ impl Sample for u16 {
     }
     fn from_f32(value: f32) -> Self {
         (value + 0.5) as u16
-    }
-}
-
-impl Sample for f32 {
-    fn to_f32(self) -> f32 {
-        self
-    }
-    fn from_f32(value: f32) -> Self {
-        value
     }
 }
 
@@ -178,7 +168,6 @@ mod tests {
         assert_eq!(u16::from_f32(65534.5), u16::MAX);
         assert_eq!(u16::from_f32(1e9), u16::MAX);
         assert_eq!(u16::from_f32(-0.6), 0);
-        assert_eq!(f32::from_f32(-0.25), -0.25);
         assert_eq!(u16::MAX.to_f32(), 65535.0);
     }
 
@@ -187,7 +176,7 @@ mod tests {
         assert_image::<u8>(&[], 0, 5, 1);
         assert_image(&[0u8; 12], 2, 2, RGB);
         assert_image(&[0u16; 13], 2, 2, RGB);
-        assert_image(&[0f32; 6], 3, 2, 1);
+        assert_image(&[0u16; 6], 3, 2, 1);
     }
 
     #[test]

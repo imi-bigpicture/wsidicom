@@ -7,8 +7,8 @@ use std::mem::MaybeUninit;
 use super::BoxSample;
 use crate::cpu::{unwritten_output, written_output};
 
-/// A sample type's mean of a block from the block's exact sum: integers
-/// rounded half up (as the box kernels round), float32 the quotient.
+/// A sample type's mean of a block from the block's exact sum, rounded half
+/// up (as the box kernels round).
 pub(crate) trait BlockMean: Sized {
     fn block_mean(sum: f64, count: usize) -> Self;
 }
@@ -28,12 +28,6 @@ impl BlockMean for u8 {
 impl BlockMean for u16 {
     fn block_mean(sum: f64, count: usize) -> u16 {
         rounded_mean(sum, count) as u16
-    }
-}
-
-impl BlockMean for f32 {
-    fn block_mean(sum: f64, count: usize) -> f32 {
-        (sum / count as f64) as f32
     }
 }
 
@@ -317,7 +311,6 @@ mod tests {
     fn box_pyramid_equals_the_planar_pyramid_of_every_channel() {
         assert_small_pyramids_match::<u8>();
         assert_small_pyramids_match::<u16>();
-        assert_small_pyramids_match::<f32>();
     }
 
     /// An image of `channels`-sample pixels whose `times`-level pyramid
@@ -348,8 +341,6 @@ mod tests {
         assert_banded_pyramid_matches::<u8>(67, RGB, 5);
         assert_banded_pyramid_matches::<u16>(70, RGB, 4);
         assert_banded_pyramid_matches::<u16>(130, RGB, 6);
-        assert_banded_pyramid_matches::<f32>(40, RGB, 5);
-        assert_banded_pyramid_matches::<f32>(31, RGB, 4);
     }
 
     #[test]

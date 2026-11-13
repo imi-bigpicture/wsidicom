@@ -48,18 +48,10 @@ def add(name, fn, nbytes):
 
 POSITION = np.array([[1, 1]], np.int64)
 g = {}
-for dt, tag in ((np.uint8, "u8"), (np.uint16, "u16"), (np.float32, "f32")):
-    hi = None if dt == np.float32 else np.iinfo(dt).max + 1
-    p = (
-        rng.integers(0, hi, (8192, 8192)).astype(dt)
-        if hi
-        else rng.random((8192, 8192), np.float32)
-    )
-    c3 = (
-        rng.integers(0, hi, (8192, 8192, 3)).astype(dt)
-        if hi
-        else rng.random((8192, 8192, 3), np.float32)
-    )
+for dt, tag in ((np.uint8, "u8"), (np.uint16, "u16")):
+    hi = np.iinfo(dt).max + 1
+    p = rng.integers(0, hi, (8192, 8192)).astype(dt)
+    c3 = rng.integers(0, hi, (8192, 8192, 3)).astype(dt)
     e = dt(0).nbytes
     add(
         f"box2 planar {tag}",

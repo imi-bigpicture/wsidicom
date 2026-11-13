@@ -48,10 +48,7 @@ def ab(name, fn):
 
 def box_case(dt, shape, hi, factor=2):
     rng = np.random.default_rng(1)
-    if hi:
-        img = rng.integers(0, hi, shape).astype(dt)
-    else:
-        img = rng.random(shape, np.float32)
+    img = rng.integers(0, hi, shape).astype(dt)
     return lambda: downscale(img, factor, ResizeFilter.BOX)
 
 
@@ -60,10 +57,7 @@ def compose_case(dt, hi, c, n=5120):
     rng = np.random.default_rng(2)
     tshape = (n, n) if c == 1 else (n, n, c)
     cshape = (n + 2, n + 2) if c == 1 else (n + 2, n + 2, c)
-    if hi:
-        tile = rng.integers(0, hi, tshape).astype(dt)
-    else:
-        tile = rng.random(tshape, np.float32)
+    tile = rng.integers(0, hi, tshape).astype(dt)
     canvas = np.zeros(cshape, dt)
     position = np.array([[1, 1]], np.int64)
     return lambda: compose(canvas, [tile], position)
@@ -73,7 +67,6 @@ CASES = []
 for dt, tag, hi in (
     (np.uint8, "u8", 256),
     (np.uint16, "u16", 65536),
-    (np.float32, "f32", None),
 ):
     CASES.append(
         (f"box planar {tag} 8192", lambda dt=dt, hi=hi: box_case(dt, (8192, 8192), hi))
