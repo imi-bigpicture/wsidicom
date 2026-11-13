@@ -46,19 +46,19 @@ def compose(
 
     Parameters
     ----------
-    canvas: numpy.ndarray
+    canvas: np.ndarray
         The destination, dtype uint8 / uint16, C-contiguous. Planar
         ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3. Mutated in
         place.
-    tiles: Sequence[numpy.ndarray]
+    tiles: Sequence[np.ndarray]
         The source tiles, same dtype and channel count as ``canvas``
         (individual sizes may differ). Each row must be contiguous: a
         C-contiguous array, or a slice of rows and columns of one
         (``tile[y0:y1, x0:x1]``), read without a copy.
-    positions: numpy.ndarray
+    positions: np.ndarray
         C-contiguous ``(N, 2)`` int64 top-left ``(x, y)`` = ``(column, row)``
         positions in canvas pixels, one per tile (per crop, with ``crops``).
-    crops: numpy.ndarray | None = None
+    crops: np.ndarray | None = None
         ``(N, 5)`` int64 ``(tile, x, y, width, height)`` rows: the pieces to
         place, each a nonempty rectangle of ``tiles[tile]`` with its
         top-left at ``(x, y)`` in that tile. ``None`` places each tile whole.
@@ -66,7 +66,7 @@ def compose(
 
     Returns
     -------
-    numpy.ndarray
+    np.ndarray
         ``canvas``, mutated in place and returned for convenience.
 
     Notes
@@ -117,7 +117,7 @@ def downscale(
 
     Parameters
     ----------
-    image: numpy.ndarray
+    image: np.ndarray
         The source, C-contiguous, dtype uint8 / uint16. Planar
         ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
     factor: int
@@ -127,7 +127,7 @@ def downscale(
 
     Returns
     -------
-    numpy.ndarray
+    np.ndarray
         A new, reduced array with the same dtype and channel count as ``image``.
     """
     return lib.downscale(image, factor, filter)
@@ -155,7 +155,7 @@ def downscale_grid(
 
     Parameters
     ----------
-    tiles: Sequence[numpy.ndarray]
+    tiles: Sequence[np.ndarray]
         Row-major C-contiguous tiles, ``grid_width`` per grid row, all of one
         dtype and channel count; the tiles of a grid row share their height
         and those of a grid column their width (so edge tiles may be smaller).
@@ -170,13 +170,13 @@ def downscale_grid(
         grid's: the reduced grid at its top left, ``fill`` around it. A parent
         tile from a partial block at the image's edge then keeps the full tile
         size.
-    fill: numpy.ndarray | None = None
+    fill: np.ndarray | None = None
         The pixel around the reduced grid, required with ``size``: a ``(C,)``
         array in the tiles' dtype, one sample per channel.
 
     Returns
     -------
-    numpy.ndarray
+    np.ndarray
         The reduced grid, ``ceil(sum of tile heights / factor)`` by
         ``ceil(sum of tile widths / factor)`` (or ``size``), with the tiles'
         dtype and channels.
@@ -238,7 +238,7 @@ def resize(
 
     Parameters
     ----------
-    image: numpy.ndarray
+    image: np.ndarray
         The source, C-contiguous, dtype uint8 / uint16. Planar
         ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
     out_h: int
@@ -250,7 +250,7 @@ def resize(
 
     Returns
     -------
-    numpy.ndarray
+    np.ndarray
         A new ``(out_h, out_w)`` (or ``(out_h, out_w, C)``) array, same dtype
         and channel count as ``image``.
     """

@@ -37,6 +37,9 @@ bench = [
 [project.urls]
 Repository = "https://github.com/imi-bigpicture/wsidicom"
 
+[tool.pytest.ini_options]
+markers = ["unittest: add a test as a unittest"]
+
 [tool.maturin]
 python-source = "src"
 module-name = "wsidicom_kernels._kernels"
