@@ -95,11 +95,11 @@ def downscale(
     ``cv2.resize``, where only ``INTER_AREA`` antialiases and
     ``INTER_LINEAR``/``CUBIC``/``LANCZOS4`` are fixed-kernel interpolators
     that alias when minifying. A power-of-2 ``factor`` with ``BOX`` uses
-    native SIMD box kernels (2x, fused 4x and 8x, chained beyond); other
-    filters and factors resample natively for uint8 and uint16 (within
-    1 LSB of the exact convolution at any factor; identical on every CPU;
-    uint8 ``BILINEAR`` and ``CATMULLROM`` at ``factor`` 2 and ``BILINEAR`` at
-    ``factor`` 4 exact where the factor divides the size). ``NEAREST`` is
+    native SIMD box kernels; other filters and factors resample natively for
+    uint8 and uint16 (within 1 LSB of the exact convolution at any factor;
+    identical on every CPU; uint8 ``BILINEAR`` and ``CATMULLROM`` at
+    ``factor`` 2 and ``BILINEAR`` at ``factor`` 4 exact where the factor
+    divides the size). ``NEAREST`` is
     native too. ``BOX`` is fastest and mipmap-standard; ``LANCZOS3`` is
     sharpest, and the windowed filters (``CATMULLROM``/``LANCZOS3``) also
     suppress the low-frequency beat that pure area averaging leaves on
@@ -157,8 +157,8 @@ def downscale_grid(
     ----------
     tiles: Sequence[numpy.ndarray]
         Row-major C-contiguous tiles, ``grid_width`` per grid row, all of one
-        dtype and channel count; the tiles of a grid row share their height and those of
-        a grid column their width (so edge tiles may be smaller).
+        dtype and channel count; the tiles of a grid row share their height
+        and those of a grid column their width (so edge tiles may be smaller).
     grid_width: int
         Tiles per grid row; ``len(tiles)`` must be a multiple of it.
     factor: int
@@ -190,9 +190,11 @@ def downscale_grid(
         raise ValueError("factor must be >= 1")
     last_col = grid_width - 1
     inner_rows = tile_list[: len(tile_list) - grid_width]
-    inner_cols = [t for i, t in enumerate(tile_list) if i % grid_width != last_col]
-    seams_divide = all(t.shape[0] % factor == 0 for t in inner_rows) and all(
-        t.shape[1] % factor == 0 for t in inner_cols
+    inner_cols = [
+        tile for index, tile in enumerate(tile_list) if index % grid_width != last_col
+    ]
+    seams_divide = all(tile.shape[0] % factor == 0 for tile in inner_rows) and all(
+        tile.shape[1] % factor == 0 for tile in inner_cols
     )
     power_of_two = factor > 0 and factor & (factor - 1) == 0
     if filter == ResizeFilter.BOX and power_of_two and seams_divide:

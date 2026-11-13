@@ -1,20 +1,21 @@
-//! What the CPU offers and how outputs are written: runtime SIMD detection
-//! (with the scalar kill switch), the environment
-//! switches, output buffers allocated without clearing, the page-prefault
-//! helper for large outputs, and the write prefetch.
+//! Runtime SIMD detection (with the scalar switch), environment switches,
+//! output buffers allocated without clearing, and the page prefault of large
+//! outputs.
 
-// Global SIMD kill switch (default on). `set_simd(False)` from Python forces
-// the scalar paths so tests and benchmarks can compare SIMD and scalar
-// in-process.
+/// Off forces the scalar kernels, so tests and benchmarks can compare them
+/// with SIMD in one process.
 static SIMD_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 #[inline]
 pub(crate) fn simd_enabled() -> bool {
     SIMD_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-// Runtime CPU feature detection (cached by std after first call). The crate is
-// built at baseline x86-64, so these gate every call into an AVX2 kernel; when
-// they return false (non-AVX2 x86) the scalar path runs instead.
+pub(crate) fn set_simd(enabled: bool) {
+    SIMD_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
+// The crate builds for baseline x86-64, so every call into an AVX2 kernel is
+// gated on these (std caches the detection).
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub(crate) fn has_avx2() -> bool {
@@ -32,85 +33,87 @@ pub(crate) fn has_avx2_fma() -> bool {
 pub(crate) const LARGE_OUTPUT_BYTES: usize = 4 << 20;
 
 /// Outputs from which `with_prefault` touches pages in a helper thread.
-/// Smaller outputs (tiles) mostly reuse pages the allocator recycled from
-/// earlier outputs, which have no faults to hide; larger ones are mostly
-/// fresh memory.
+/// Smaller outputs (tiles) mostly reuse pages the allocator recycled, which
+/// have no faults to hide.
 pub(crate) const PREFAULT_OUTPUT_BYTES: usize = 8 << 20;
 
-/// An environment switch: on unless set to "0" (unset: `default`).
-#[cfg(target_arch = "x86_64")]
+/// On unless set to "0"; `default` when unset.
 fn env_flag(name: &str, default: bool) -> bool {
     std::env::var(name).map_or(default, |value| value != "0")
 }
 
-/// Run a row-range kernel body over `oh` output rows. For a large output, a
-/// scoped helper thread touches its pages in order while `rows` follows
-/// behind, called on bands of rows only once their pages are committed: the
-/// kernel never takes a page fault itself, so the faults (serialized within
-/// a process) overlap the compute instead of adding to it — splitting the
-/// output instead, the kernel faulting one half while the helper faults the
-/// other, would serialize the two. A transient page-toucher, not compute
-/// parallelism — the caller still owns threading.
+/// `WSIDICOM_KERNELS_PREFAULT=0` disables `with_prefault`'s helper thread.
+/// x86-64 only: on aarch64 (macOS) large outputs come back as recycled
+/// pages, so the helper only costs.
+#[inline]
+fn prefault_enabled() -> bool {
+    static ENABLED: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| env_flag("WSIDICOM_KERNELS_PREFAULT", true));
+    cfg!(target_arch = "x86_64") && *ENABLED
+}
+
+/// Bytes an overlapping store may write past the last row of a
+/// `with_prefault` band.
+const MAX_STORE_SLOP: usize = 64;
+
+/// Run a row-range kernel body over `out_height` output rows. For a large
+/// output, a scoped helper thread touches its pages in order while `rows`
+/// follows behind, called on bands of rows only once their pages are
+/// committed: the page faults (serialized within a process) then overlap the
+/// compute instead of adding to it. Splitting the output between kernel and
+/// helper instead would serialize their faults. Not compute parallelism — the
+/// caller still owns threading.
 ///
 /// # Safety
-/// `dp..dp+total_bytes` must be a live, exclusively-owned output buffer and
-/// `rows(lo, hi)` must only write rows in `[lo, hi)` (row = `row_bytes`), plus
-/// at most a few bytes of overlapping-store slop into row `hi`.
+/// `dst_ptr..dst_ptr+total_bytes` must be a live, exclusively-owned output
+/// buffer and `rows(start, end)` must only write rows in `[start, end)` (row =
+/// `row_bytes`), plus at most `MAX_STORE_SLOP` bytes into row `end`.
 pub(crate) unsafe fn with_prefault(
-    dp: *mut u8,
+    dst_ptr: *mut u8,
     total_bytes: usize,
     row_bytes: usize,
-    oh: usize,
+    out_height: usize,
     mut rows: impl FnMut(usize, usize),
 ) {
     use std::sync::atomic::{AtomicUsize, Ordering};
-    const PAGE: usize = 4096;
-    // The helper publishes its progress every this many bytes.
-    const COMMIT_STEP: usize = 16 * PAGE;
-    // The kernel runs in bands of about this many bytes, in whole batches of
-    // `BATCH_ROWS` (the transposed kernels' batch).
+    const PAGE_BYTES: usize = 4096;
+    const PROGRESS_STEP_BYTES: usize = 16 * PAGE_BYTES;
     const BAND_TARGET_BYTES: usize = 64 << 10;
+    /// Bands are whole batches of the transposed kernels' rows.
     const BATCH_ROWS: usize = 16;
-    // Bytes an overlapping store may write past a band's last row.
-    const MAX_STORE_SLOP: usize = 64;
-    // Polls of `committed` before the waiting kernel yields its core.
     const SPINS_BEFORE_YIELD: u32 = 256;
-    // x86-64 only: on aarch64 macOS the helper was measured without gain
-    // (large outputs come back from recycled pages) and slowed the fastest
-    // kernels.
-    if !(cfg!(target_arch = "x86_64") && total_bytes >= PREFAULT_OUTPUT_BYTES && oh >= 2) {
-        return rows(0, oh);
+    if !(prefault_enabled() && total_bytes >= PREFAULT_OUTPUT_BYTES && out_height >= 2) {
+        return rows(0, out_height);
     }
-    // Bytes from dp below which the helper has touched every page (and past
-    // which it writes nothing the kernel has written).
-    let committed = AtomicUsize::new(0);
-    let (addr, committed) = (dp as usize, &committed);
+    // The helper has touched every page below this offset and writes nothing
+    // past it that `rows` has written.
+    let committed_bytes = AtomicUsize::new(0);
+    let (dst_addr, committed_bytes) = (dst_ptr as usize, &committed_bytes);
     std::thread::scope(|scope| {
         scope.spawn(move || {
-            let base = addr as *mut u8;
+            let dst = dst_addr as *mut u8;
             let mut offset = 0usize;
             while offset < total_bytes {
                 // Volatile so the page-committing write isn't elided.
-                // SAFETY: base+offset is inside the caller's buffer, at or past
-                // `committed`, which `rows` has not been let past.
-                unsafe { std::ptr::write_volatile(base.add(offset), 0) };
-                offset += PAGE;
-                if offset.is_multiple_of(COMMIT_STEP) {
-                    committed.store(offset, Ordering::Release);
+                // SAFETY: dst+offset is inside the caller's buffer, at or past
+                // `committed_bytes`, which `rows` has not been let past.
+                unsafe { std::ptr::write_volatile(dst.add(offset), 0) };
+                offset += PAGE_BYTES;
+                if offset.is_multiple_of(PROGRESS_STEP_BYTES) {
+                    committed_bytes.store(offset, Ordering::Release);
                 }
             }
-            committed.store(usize::MAX, Ordering::Release);
+            committed_bytes.store(usize::MAX, Ordering::Release);
         });
-        // Each band runs once its rows and their store slop are committed.
-        let band = (BAND_TARGET_BYTES / row_bytes.max(1))
+        let band_rows = (BAND_TARGET_BYTES / row_bytes.max(1))
             .next_multiple_of(BATCH_ROWS)
             .max(BATCH_ROWS);
-        for lo in (0..oh).step_by(band) {
-            let hi = (lo + band).min(oh);
-            let need = (hi * row_bytes + MAX_STORE_SLOP).min(total_bytes);
+        for band_start in (0..out_height).step_by(band_rows) {
+            let band_end = (band_start + band_rows).min(out_height);
+            let band_end_bytes = (band_end * row_bytes + MAX_STORE_SLOP).min(total_bytes);
             let mut spins = 0u32;
-            while committed.load(Ordering::Acquire) < need {
-                // Briefly spin, then yield: under a caller's full thread pool
+            while committed_bytes.load(Ordering::Acquire) < band_end_bytes {
+                // Yield after a brief spin: under a caller's full thread pool
                 // the helper needs the core.
                 if spins < SPINS_BEFORE_YIELD {
                     spins += 1;
@@ -119,50 +122,49 @@ pub(crate) unsafe fn with_prefault(
                     std::thread::yield_now();
                 }
             }
-            rows(lo, hi);
+            rows(band_start, band_end);
         }
     });
 }
 
-/// `rows` typed as `with_prefault`'s row-band closure. A closure bound
+/// `rows` typed as `with_prefault`'s row-band closure, so a closure bound
 /// before an `unsafe { with_prefault(..) }` call (keeping its body out of the
-/// unsafe block) takes its signature from this bound, as an inline argument
-/// does, and so compiles to the same code.
+/// unsafe block) compiles as an inline argument would.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub(crate) fn row_bands<RowsFn: FnMut(usize, usize)>(rows: RowsFn) -> RowsFn {
     rows
 }
 
-// NEON is baseline on aarch64 — no CPU detection, only the kill switch.
+/// NEON is baseline on aarch64: only the SIMD switch applies.
 #[cfg(target_arch = "aarch64")]
 #[inline]
 pub(crate) fn use_neon() -> bool {
     simd_enabled()
 }
 
-/// The ARMv8.1 rounding multiply-accumulate (`vqrdmlah`), on Apple silicon
-/// and most cores since; detected once.
+/// The ARMv8.1 rounding multiply-accumulate (`vqrdmlah`).
 #[cfg(target_arch = "aarch64")]
 #[inline]
 pub(crate) fn has_rdm() -> bool {
-    static ON: std::sync::LazyLock<bool> =
+    static DETECTED: std::sync::LazyLock<bool> =
         std::sync::LazyLock::new(|| std::arch::is_aarch64_feature_detected!("rdm"));
-    *ON
+    *DETECTED
 }
 
-/// Whether a box kernel should stream an `out_bytes` output past the cache
-/// (`WSIDICOM_KERNELS_NT=0` disables). Pays under multi-worker bandwidth contention.
+/// Whether a box kernel streams an `out_bytes` output past the cache
+/// (`WSIDICOM_KERNELS_NT=0` disables); pays under multi-worker bandwidth
+/// contention.
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub(crate) fn nt_stores_for(out_bytes: usize) -> bool {
-    static NT: std::sync::LazyLock<bool> =
+    static ENABLED: std::sync::LazyLock<bool> =
         std::sync::LazyLock::new(|| env_flag("WSIDICOM_KERNELS_NT", true));
-    *NT && out_bytes >= LARGE_OUTPUT_BYTES
+    *ENABLED && out_bytes >= LARGE_OUTPUT_BYTES
 }
 
-/// An output a kernel writes completely before anything reads it, allocated
-/// without clearing: a recycled allocation would be cleared for nothing.
+/// An output the kernel writes completely before anything reads it,
+/// allocated without clearing.
 pub(crate) fn unwritten_output<T>(len: usize) -> Vec<std::mem::MaybeUninit<T>> {
     let mut out = Vec::with_capacity(len);
     // SAFETY: MaybeUninit elements need no initialization.
@@ -179,10 +181,6 @@ pub(crate) unsafe fn written_output<T>(out: Vec<std::mem::MaybeUninit<T>>) -> Ve
     // SAFETY: MaybeUninit<T> has T's layout, and every element is initialized
     // (the caller's contract); the allocation moves over unchanged.
     unsafe { Vec::from_raw_parts(out.as_mut_ptr().cast::<T>(), out.len(), out.capacity()) }
-}
-
-pub(crate) fn set_simd(enabled: bool) {
-    SIMD_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[cfg(test)]
@@ -203,29 +201,35 @@ mod tests {
                 .enumerate()
                 .all(|(index, &sample)| sample == index as u16 * 3)
         );
-        assert!(unwritten_output::<f32>(0).is_empty());
+        assert!(unwritten_output::<u8>(0).is_empty());
     }
 
-    /// Runs `with_prefault` over an `oh`-row output of `row_bytes` rows,
-    /// each band filling its rows with their row numbers, and checks the
-    /// bands cover the rows in order, once, and the output is theirs.
-    fn assert_bands_cover_the_rows(row_bytes: usize, oh: usize) -> Vec<(usize, usize)> {
-        let mut out = vec![0xFFu8; row_bytes * oh];
-        let dp = out.as_mut_ptr();
+    /// Runs `with_prefault` over an `out_height`-row output, each band
+    /// filling its rows with their row numbers; checks the bands cover the
+    /// rows once and in order, and returns them.
+    fn assert_bands_cover_the_rows(row_bytes: usize, out_height: usize) -> Vec<(usize, usize)> {
+        let mut out = vec![0xFFu8; row_bytes * out_height];
+        let dst_ptr = out.as_mut_ptr();
         let mut bands = Vec::new();
         // SAFETY: `out` is this function's; each band writes only its rows.
         unsafe {
-            with_prefault(dp, row_bytes * oh, row_bytes, oh, |lo, hi| {
-                bands.push((lo, hi));
-                for row in lo..hi {
-                    std::ptr::write_bytes(dp.add(row * row_bytes), row as u8, row_bytes);
-                }
-            });
+            with_prefault(
+                dst_ptr,
+                row_bytes * out_height,
+                row_bytes,
+                out_height,
+                |start, end| {
+                    bands.push((start, end));
+                    for row in start..end {
+                        std::ptr::write_bytes(dst_ptr.add(row * row_bytes), row as u8, row_bytes);
+                    }
+                },
+            );
         }
         assert_eq!(bands.first().map(|band| band.0), Some(0));
-        assert_eq!(bands.last().map(|band| band.1), Some(oh));
+        assert_eq!(bands.last().map(|band| band.1), Some(out_height));
         assert!(bands.windows(2).all(|pair| pair[0].1 == pair[1].0));
-        assert!(bands.iter().all(|&(lo, hi)| lo < hi));
+        assert!(bands.iter().all(|&(start, end)| start < end));
         for (row, samples) in out.chunks_exact(row_bytes).enumerate() {
             assert!(
                 samples.iter().all(|&sample| sample == row as u8),
@@ -243,9 +247,9 @@ mod tests {
     #[test]
     fn large_outputs_run_in_bands_behind_the_prefault() {
         let row_bytes = 4096 + 12;
-        let oh = PREFAULT_OUTPUT_BYTES.div_ceil(row_bytes) + 7;
-        let bands = assert_bands_cover_the_rows(row_bytes, oh);
-        if cfg!(target_arch = "x86_64") {
+        let out_height = PREFAULT_OUTPUT_BYTES.div_ceil(row_bytes) + 7;
+        let bands = assert_bands_cover_the_rows(row_bytes, out_height);
+        if prefault_enabled() {
             assert!(bands.len() > 1);
         }
         // A single row, however large, is one band.

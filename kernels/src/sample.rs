@@ -1,25 +1,29 @@
-//! The sample types the kernels take (uint8, uint16), the RGB pixel size, and the Q15 fixed-point weights of the uint8 kernels.
+//! The sample types the kernels take (uint8, uint16), the RGB pixel size,
+//! and the Q15 fixed-point weights of the uint8 kernels.
 
 /// Samples per pixel of an RGB image.
 pub(crate) const RGB: usize = 3;
 
+/// 1.0 in Q15.
+const Q15_ONE: f32 = 32768.0;
+
 /// A resample weight in Q15, the fixed-point format `mulhrs` multiplies by.
 /// Clamped: a weight of exactly 1.0 would round to one past `i16::MAX`.
-/// Always inlined: inside the SIMD kernels `round()` then compiles to
+/// Always inlined so that inside the SIMD kernels `round()` compiles to
 /// SSE4.1 instructions instead of a libm call.
 #[inline(always)]
 pub(crate) fn q15(weight: f32) -> i16 {
-    ((weight * 32768.0).round() as i32).clamp(-32768, 32767) as i16
+    ((weight * Q15_ONE).round() as i32).clamp(i16::MIN.into(), i16::MAX.into()) as i16
 }
 
-/// Scalar `mulhrs`: `(value * weight) >> 15` rounded to nearest — the multiply the
-/// fixed-point u8 resample kernels are built on.
+/// Scalar `pmulhrsw`: `(value * weight) >> 15` rounded to nearest, the
+/// multiply the fixed-point uint8 kernels are built on.
 #[inline]
 pub(crate) fn mulhrs(value: i32, weight: i16) -> i32 {
     (value * i32::from(weight) + (1 << 14)) >> 15
 }
 
-/// Fraction bits u8 pixels carry through the convolution's i16 rows:
+/// Fraction bits uint8 pixels carry through the convolution's i16 rows:
 /// Q6 leaves headroom for Catmull-Rom's ~1.14x overshoot, which would push
 /// Q7 (255 << 7 = 32640) past i16.
 pub(crate) const CONVOLVE_U8_FRAC_BITS: u32 = 6;
@@ -52,8 +56,8 @@ impl Sample for u8 {
         f32::from(self)
     }
     fn from_f32(value: f32) -> Self {
-        // Branchless round+clamp: Rust's float->int cast saturates to [0,255],
-        // so (value + 0.5) as u8 vectorizes (no round()/clamp() calls to block SIMD).
+        // The float-to-int cast saturates (NaN to 0), so this rounds and
+        // clamps without calls that would block vectorization.
         (value + 0.5) as u8
     }
 }

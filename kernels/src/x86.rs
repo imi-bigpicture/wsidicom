@@ -6,8 +6,7 @@ use std::ops::Range;
 use crate::sample::CONVOLVE_U8_FRAC_BITS;
 pub(crate) use crate::simd::cover_row;
 
-/// `CONVOLVE_U8_FRAC_BITS` (Q6: the convolution's intermediate rows) as an
-/// i32 shift immediate.
+/// `CONVOLVE_U8_FRAC_BITS` as an i32 shift immediate.
 pub(crate) const CONVOLVE_FRAC_BITS: i32 = CONVOLVE_U8_FRAC_BITS as i32;
 
 /// Whether a vertical pass over `taps` rows `row_bytes` apart goes through
@@ -64,11 +63,11 @@ pub(crate) fn grouped_taps(
     mut block: impl FnMut(usize, Range<usize>),
 ) {
     let strip = (GROUP_STRIP_BYTES / sample_bytes).next_multiple_of(len);
-    for lo in range.clone().step_by(strip) {
-        let hi = (lo + strip).min(range.end);
-        for t0 in (0..taps).step_by(TAP_GROUP) {
-            let group = t0..(t0 + TAP_GROUP).min(taps);
-            for x in (lo..hi).step_by(len) {
+    for strip_start in range.clone().step_by(strip) {
+        let strip_end = (strip_start + strip).min(range.end);
+        for group_start in (0..taps).step_by(TAP_GROUP) {
+            let group = group_start..(group_start + TAP_GROUP).min(taps);
+            for x in (strip_start..strip_end).step_by(len) {
                 block(x, group.clone());
             }
         }
@@ -174,9 +173,9 @@ mod tests {
         assert_eq!(half_ulp(CONVOLVE_FRAC_BITS), 32);
     }
 
-    /// 64 bytes aligned to 32, so stores at every offset meet the streaming
-    /// stores' alignment or miss it.
-    #[repr(align(32))]
+    /// 16-aligned, so offsets 0 and 16 meet the streaming store's alignment
+    /// and the others miss it.
+    #[repr(align(16))]
     struct AlignedBytes([u8; 64]);
 
     #[test]
