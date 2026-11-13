@@ -40,26 +40,26 @@ fn round_q6_avx2(acc: __m256i) -> __m256i {
 }
 
 /// The `STEP` outputs (indices into `outputs`, which is not empty) a run
-/// kernel computes from `i0`, and whether they are `i0..i0 + STEP`
+/// kernel computes from `first`, and whether they are `first..first + STEP`
 /// themselves. A run that is short (the row's end) or broken (a scalar
-/// column) repeats `i0`, and the kernel then stores only `i0` and moves on
+/// column) repeats `first`; the kernel then stores only `first` and moves on
 /// by one.
-fn run_step<const STEP: usize>(outputs: &[usize], i0: usize) -> ([usize; STEP], bool) {
-    let len = outputs.len();
-    let idx = std::array::from_fn(|offset| {
-        let index = (i0 + offset).min(len - 1);
-        if outputs[index] - outputs[i0] == offset {
+fn run_step<const STEP: usize>(outputs: &[usize], first: usize) -> ([usize; STEP], bool) {
+    let output_count = outputs.len();
+    let step_outputs = std::array::from_fn(|offset| {
+        let index = (first + offset).min(output_count - 1);
+        if outputs[index] - outputs[first] == offset {
             index
         } else {
-            i0
+            first
         }
     });
-    let consecutive = (1..STEP).all(|offset| idx[offset] == i0 + offset);
-    (idx, consecutive)
+    let consecutive = (1..STEP).all(|offset| step_outputs[offset] == first + offset);
+    (step_outputs, consecutive)
 }
 
-/// Stores a run step's four RGBX-layout pixels `px` (a dword each, see `run_step`):
-/// at once where the outputs are consecutive, else one by one.
+/// Stores a run step's four RGBX-layout `pixels` (a dword each): at once
+/// where the outputs are consecutive, else one by one.
 ///
 /// # Safety
 /// `outputs[index]` is a pixel of `dst` (`(outputs[index] + 1) * RGBX <=
@@ -70,7 +70,7 @@ unsafe fn store_step_pixels(
     outputs: &[usize],
     step_outputs: [usize; 4],
     consecutive: bool,
-    px: std::arch::x86_64::__m128i,
+    pixels: std::arch::x86_64::__m128i,
 ) {
     use std::arch::x86_64::*;
     if consecutive {
@@ -79,13 +79,13 @@ unsafe fn store_step_pixels(
         unsafe {
             _mm_storeu_si128(
                 dst.as_mut_ptr().add(outputs[step_outputs[0]] * RGBX) as *mut __m128i,
-                px,
+                pixels,
             );
         }
     } else {
         let mut four = [0u32; 4];
         // SAFETY: `four` is the 16 bytes stored.
-        unsafe { _mm_storeu_si128(four.as_mut_ptr() as *mut __m128i, px) };
+        unsafe { _mm_storeu_si128(four.as_mut_ptr() as *mut __m128i, pixels) };
         for (slot, &index) in step_outputs.iter().enumerate() {
             // SAFETY: `outputs[index]` is a pixel of `dst` (contract).
             unsafe {
@@ -102,7 +102,7 @@ unsafe fn store_step_pixels(
 const fn pack_tables() -> ([i8; YMM_BYTES], [i32; 8]) {
     let channels = RGB;
     let mut lane_bytes = [-1i8; YMM_BYTES];
-    let mut dword_idx = [0i32; 8];
+    let mut dword_indices = [0i32; 8];
     let mut lane = 0;
     while lane < 2 {
         let mut byte = 0;
@@ -112,12 +112,12 @@ const fn pack_tables() -> ([i8; YMM_BYTES], [i32; 8]) {
         }
         let mut dword = 0;
         while dword < channels {
-            dword_idx[channels * lane + dword] = (4 * lane + dword) as i32;
+            dword_indices[channels * lane + dword] = (4 * lane + dword) as i32;
             dword += 1;
         }
         lane += 1;
     }
-    (lane_bytes, dword_idx)
+    (lane_bytes, dword_indices)
 }
 
 /// `pack_tables`, built at compile time: the pack runs once per output row.
@@ -145,14 +145,11 @@ const fn widen_shuffle_ymm() -> [i8; 32] {
 }
 const WIDEN_SHUFFLE_YMM: [i8; 32] = widen_shuffle_ymm();
 
-// ---- AVX2 tier ----------------------------------------------------------------
-
 /// The horizontal pass by tap runs (`TapRuns`), two rows and four outputs
 /// per step: each 8-pixel weight group as two registers of 4 pixels, one
 /// unit-stride load per row times the output's weights (loaded once for both
 /// rows); per output a register of 4 pixel lanes, summed to one pixel for
-/// four outputs at once (i16 wraparound sums: the same result as the per-tap
-/// order).
+/// four outputs at once (i16 wraparound sums equal the per-tap order's).
 ///
 /// # Safety
 /// Both mids hold `runs.starts[i] + runs.groups * PIXEL_OUTPUTS` pixels for
@@ -161,7 +158,6 @@ const WIDEN_SHUFFLE_YMM: [i8; 32] = widen_shuffle_ymm();
 #[target_feature(enable = "avx2")]
 pub(crate) unsafe fn horizontal_taps_x2_avx2(mids: [&[i16]; 2], dsts: [&mut [u8]; 2], runs: &Runs) {
     use std::arch::x86_64::*;
-    // A group's pixels as two registers of 4.
     const HALF_GROUP_PIXELS: usize = PIXEL_OUTPUTS / 2;
     let output_count = runs.outputs.len();
     if output_count == 0 {
@@ -179,9 +175,9 @@ pub(crate) unsafe fn horizontal_taps_x2_avx2(mids: [&[i16]; 2], dsts: [&mut [u8]
             _mm256_permute2x128_si256::<HIGH_LANES>(ab, cd),
         )
     };
-    let mut i0 = 0;
-    while i0 < output_count {
-        let (step_outputs, consecutive) = run_step::<4>(&runs.outputs, i0);
+    let mut first = 0;
+    while first < output_count {
+        let (step_outputs, consecutive) = run_step::<4>(&runs.outputs, first);
         let mut acc = [[_mm256_setzero_si256(); 4]; 2];
         for group in 0..runs.groups {
             for (slot, &index) in step_outputs.iter().enumerate() {
@@ -189,7 +185,7 @@ pub(crate) unsafe fn horizontal_taps_x2_avx2(mids: [&[i16]; 2], dsts: [&mut [u8]
                 for half in 0..2 {
                     // SAFETY: half < 2: the half's 16 lanes lie in the 32-lane
                     // weight row.
-                    let wv = unsafe {
+                    let weights = unsafe {
                         _mm256_loadu_si256(
                             weights_ptr.add(half * HALF_GROUP_PIXELS * RGBX) as *const __m256i
                         )
@@ -203,7 +199,7 @@ pub(crate) unsafe fn horizontal_taps_x2_avx2(mids: [&[i16]; 2], dsts: [&mut [u8]
                         let samples =
                             unsafe { _mm256_loadu_si256(mid.as_ptr().add(at) as *const __m256i) };
                         acc[row][slot] =
-                            _mm256_add_epi16(acc[row][slot], _mm256_mulhrs_epi16(samples, wv));
+                            _mm256_add_epi16(acc[row][slot], _mm256_mulhrs_epi16(samples, weights));
                     }
                 }
             }
@@ -226,12 +222,12 @@ pub(crate) unsafe fn horizontal_taps_x2_avx2(mids: [&[i16]; 2], dsts: [&mut [u8]
                 );
             }
         }
-        i0 += if consecutive { 4 } else { 1 };
+        first += if consecutive { 4 } else { 1 };
     }
 }
 
 /// `rgbx[4p + c] = src[3p + c]` for c < 3, X 0: 4 pixels per register, 2
-/// per 128-bit lane by an in-lane byte shuffle. `src` is read up to 8 samples past.
+/// per 128-bit lane by an in-lane byte shuffle.
 ///
 /// # Safety
 /// With `groups = pixels.next_multiple_of(4)`: `src` holds `RGB * groups + 8`
@@ -273,12 +269,12 @@ pub(crate) unsafe fn pack_from_rgbx_avx2(rgbx: &[u8], out: &mut [u8]) {
     let channels = RGB;
     let pixels = out.len() / channels;
     debug_assert!(rgbx.len() >= RGBX * pixels);
-    let (lane_bytes, dword_idx) = &PACK_TABLES;
+    let (lane_bytes, dword_indices) = &PACK_TABLES;
     // SAFETY: the tables hold the 32 bytes loaded each.
     let (shuffle, dwords) = unsafe {
         (
             _mm256_loadu_si256(lane_bytes.as_ptr() as *const __m256i),
-            _mm256_loadu_si256(dword_idx.as_ptr() as *const __m256i),
+            _mm256_loadu_si256(dword_indices.as_ptr() as *const __m256i),
         )
     };
     let whole = pixels / 8 * 8;
@@ -306,8 +302,8 @@ pub(crate) unsafe fn pack_from_rgbx_avx2(rgbx: &[u8], out: &mut [u8]) {
 }
 
 /// Vertical pass: `mid[x] = sum_t weights[t] * rows[t][x]`, Q6 (u8 << 6) x
-/// Q15 via mulhrs, i16 sums, 16 samples per register, a whole cache line per tap where the row allows, the taps in
-/// groups where the stride aliases (`groups_taps`).
+/// Q15 via mulhrs, i16 sums; a whole cache line per tap where the row
+/// allows, the taps in groups where the stride aliases (`groups_taps`).
 ///
 /// # Safety
 /// `rows` holds `weights.len()` rows of `width` samples, `width >= 16`, and
@@ -315,30 +311,29 @@ pub(crate) unsafe fn pack_from_rgbx_avx2(rgbx: &[u8], out: &mut [u8]) {
 #[target_feature(enable = "avx2")]
 pub(crate) unsafe fn vertical_q6_avx2(rows: &[u8], width: usize, weights: &[i16], mid: &mut [i16]) {
     use std::arch::x86_64::*;
-    const BLOCK: usize = 16;
-    // A line: a whole cache line of samples, four registers.
-    const LINE: usize = 4 * BLOCK;
-    debug_assert!(rows.len() >= weights.len() * width && mid.len() >= width && width >= BLOCK);
-    let vq: Vec<__m256i> = weights
+    const LANES: usize = 16;
+    const CACHE_LINE: usize = 4 * LANES;
+    debug_assert!(rows.len() >= weights.len() * width && mid.len() >= width && width >= LANES);
+    let weight_vectors: Vec<__m256i> = weights
         .iter()
         .map(|&weight| _mm256_set1_epi16(weight))
         .collect();
     let (src_ptr, mid_ptr) = (rows.as_ptr(), mid.as_mut_ptr());
     let widen = |sample_ptr: *const u8| {
-        // SAFETY: every caller passes the start of `BLOCK` samples of one row
+        // SAFETY: every caller passes the start of `LANES` samples of one row
         // in `rows` (bounded at its guard below).
         let bytes = unsafe { _mm_loadu_si128(sample_ptr as *const __m128i) };
         _mm256_slli_epi16::<{ CONVOLVE_FRAC_BITS }>(_mm256_cvtepu8_epi16(bytes))
     };
     let block = |x: usize| {
         let mut acc = _mm256_setzero_si256();
-        for (tap, vq) in vq.iter().enumerate() {
-            // SAFETY: tap < weights.len() and `cover_row` keeps x + BLOCK <=
+        for (tap, weight) in weight_vectors.iter().enumerate() {
+            // SAFETY: tap < weights.len() and `cover_row` keeps x + LANES <=
             // width: the block lies in the tap's row of `rows` (contract).
             let tap_ptr = unsafe { src_ptr.add(tap * width + x) };
-            acc = _mm256_add_epi16(acc, _mm256_mulhrs_epi16(widen(tap_ptr), *vq));
+            acc = _mm256_add_epi16(acc, _mm256_mulhrs_epi16(widen(tap_ptr), *weight));
         }
-        // SAFETY: x + BLOCK <= width <= mid.len() (contract).
+        // SAFETY: x + LANES <= width <= mid.len() (contract).
         unsafe { _mm256_storeu_si256(mid_ptr.add(x) as *mut __m256i, acc) };
     };
     // Taps `taps` of the line at x, added to the line's sums so far.
@@ -346,41 +341,44 @@ pub(crate) unsafe fn vertical_q6_avx2(rows: &[u8], width: usize, weights: &[i16]
         if taps.start == 0 {
             prefetch_rows_after_window(src_ptr, weights.len(), width, x);
         }
-        let mut acc = [_mm256_setzero_si256(); LINE / BLOCK];
+        let mut acc = [_mm256_setzero_si256(); CACHE_LINE / LANES];
         if taps.start > 0 {
             for (register, acc) in acc.iter_mut().enumerate() {
-                // SAFETY: every line ends by `width` (x + LINE <= width <=
+                // SAFETY: every line ends by `width` (x + CACHE_LINE <= width <=
                 // mid.len(), contract).
                 *acc = unsafe {
-                    _mm256_loadu_si256(mid_ptr.add(x + register * BLOCK) as *const __m256i)
+                    _mm256_loadu_si256(mid_ptr.add(x + register * LANES) as *const __m256i)
                 };
             }
         }
         for tap in taps {
             for (register, acc) in acc.iter_mut().enumerate() {
-                // SAFETY: tap < weights.len() and x + LINE <= width: the
+                // SAFETY: tap < weights.len() and x + CACHE_LINE <= width: the
                 // register's samples lie in the tap's row of `rows`
                 // (contract).
-                let register_ptr = unsafe { src_ptr.add(tap * width + x + register * BLOCK) };
-                *acc = _mm256_add_epi16(*acc, _mm256_mulhrs_epi16(widen(register_ptr), vq[tap]));
+                let register_ptr = unsafe { src_ptr.add(tap * width + x + register * LANES) };
+                *acc = _mm256_add_epi16(
+                    *acc,
+                    _mm256_mulhrs_epi16(widen(register_ptr), weight_vectors[tap]),
+                );
             }
         }
         for (register, acc) in acc.iter().enumerate() {
-            // SAFETY: x + LINE <= width <= mid.len() (contract).
-            unsafe { _mm256_storeu_si256(mid_ptr.add(x + register * BLOCK) as *mut __m256i, *acc) };
+            // SAFETY: x + CACHE_LINE <= width <= mid.len() (contract).
+            unsafe { _mm256_storeu_si256(mid_ptr.add(x + register * LANES) as *mut __m256i, *acc) };
         }
     };
-    if width < LINE {
-        return cover_row(width, BLOCK, block);
+    if width < CACHE_LINE {
+        return cover_row(width, LANES, block);
     }
     if groups_taps(width, weights.len()) {
-        let lines = 0..width / LINE * LINE;
-        grouped_taps(lines.clone(), LINE, 2, weights.len(), &line);
+        let lines = 0..width / CACHE_LINE * CACHE_LINE;
+        grouped_taps(lines.clone(), CACHE_LINE, 2, weights.len(), &line);
         if lines.end < width {
-            line(width - LINE, 0..weights.len());
+            line(width - CACHE_LINE, 0..weights.len());
         }
     } else {
-        cover_row(width, LINE, |x| line(x, 0..weights.len()));
+        cover_row(width, CACHE_LINE, |x| line(x, 0..weights.len()));
     }
 }
 
@@ -391,11 +389,13 @@ pub(crate) unsafe fn vertical_q6_avx2(rows: &[u8], width: usize, weights: &[i16]
 #[inline]
 fn transpose_16x16_i16(rows: &mut [__m256i; 16]) {
     use std::arch::x86_64::*;
-    let lo = transpose_8x8_i16_lanes(&rows[..8]);
-    let hi = transpose_8x8_i16_lanes(&rows[8..]);
+    let top_rows = transpose_8x8_i16_lanes(&rows[..8]);
+    let bottom_rows = transpose_8x8_i16_lanes(&rows[8..]);
     for column in 0..8 {
-        rows[column] = _mm256_permute2x128_si256::<LOW_LANES>(lo[column], hi[column]);
-        rows[column + 8] = _mm256_permute2x128_si256::<HIGH_LANES>(lo[column], hi[column]);
+        rows[column] =
+            _mm256_permute2x128_si256::<LOW_LANES>(top_rows[column], bottom_rows[column]);
+        rows[column + 8] =
+            _mm256_permute2x128_si256::<HIGH_LANES>(top_rows[column], bottom_rows[column]);
     }
 }
 
@@ -427,32 +427,35 @@ fn transpose_8x8_i16_lanes(rows: &[__m256i]) -> [__m256i; 8] {
     columns
 }
 
-/// `TRANSPOSE_ROWS` (= 16) rows of `mid` (stride `wp`, a multiple of 16)
-/// into column-major `mid_t[x * 16 + r]`.
+/// `TRANSPOSE_ROWS` (= 16) rows of `mid`, `stride` apart, into column-major
+/// `mid_t[x * 16 + row]`.
 ///
 /// # Safety
-/// `wp` is a multiple of `TRANSPOSE_ROWS`, and `mid` and `mid_t` hold
-/// `TRANSPOSE_ROWS * wp` samples each.
+/// `stride` is a multiple of `TRANSPOSE_ROWS`, and `mid` and `mid_t` hold
+/// `TRANSPOSE_ROWS * stride` samples each.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn transpose_rows_i16_avx2(mid: &[i16], wp: usize, mid_t: &mut [i16]) {
+pub(crate) unsafe fn transpose_rows_i16_avx2(mid: &[i16], stride: usize, mid_t: &mut [i16]) {
     use std::arch::x86_64::*;
     const ROWS: usize = TRANSPOSE_ROWS;
-    debug_assert!(wp.is_multiple_of(ROWS) && mid.len() >= ROWS * wp && mid_t.len() >= ROWS * wp);
-    for x0 in (0..wp).step_by(ROWS) {
+    debug_assert!(
+        stride.is_multiple_of(ROWS) && mid.len() >= ROWS * stride && mid_t.len() >= ROWS * stride
+    );
+    for tile_x in (0..stride).step_by(ROWS) {
         let mut tile = [_mm256_setzero_si256(); ROWS];
         for (row, register) in tile.iter_mut().enumerate() {
-            // SAFETY: row < ROWS and x0 + ROWS <= wp (wp a multiple of ROWS):
-            // within the ROWS * wp samples of `mid` (contract).
-            *register =
-                unsafe { _mm256_loadu_si256(mid.as_ptr().add(row * wp + x0) as *const __m256i) };
+            // SAFETY: row < ROWS and tile_x + ROWS <= stride (a multiple of
+            // ROWS): within the ROWS * stride samples of `mid` (contract).
+            *register = unsafe {
+                _mm256_loadu_si256(mid.as_ptr().add(row * stride + tile_x) as *const __m256i)
+            };
         }
         transpose_16x16_i16(&mut tile);
         for (column, register) in tile.iter().enumerate() {
-            // SAFETY: x0 + column < wp: within the wp * ROWS samples of
-            // `mid_t` (contract).
+            // SAFETY: tile_x + column < stride: within the stride * ROWS
+            // samples of `mid_t` (contract).
             unsafe {
                 _mm256_storeu_si256(
-                    mid_t.as_mut_ptr().add((x0 + column) * ROWS) as *mut __m256i,
+                    mid_t.as_mut_ptr().add((tile_x + column) * ROWS) as *mut __m256i,
                     *register,
                 );
             }
@@ -581,35 +584,43 @@ unsafe fn horizontal_padded_taps_avx2<const TAPS: usize>(
     }
 }
 
-/// Q6 sums `out_t[o * 16 + r]` back to row-major u8 `out[r * ow + o]` for the
-/// first `rows` rows: 16x16 transposes, then rounded, clamped narrow.
+/// Q6 sums `out_t[sample * 16 + row]` back to row-major u8
+/// `out[row * out_row_samples + sample]` for the first `rows` rows: 16x16
+/// transposes, then rounded, clamped narrow.
 ///
 /// # Safety
-/// `rows <= TRANSPOSE_ROWS`, `out_t` holds `ow.next_multiple_of(16) * 16`
-/// samples, and `out` holds `rows * ow` bytes.
+/// `rows <= TRANSPOSE_ROWS`, `out_t` holds
+/// `out_row_samples.next_multiple_of(16) * 16` samples, and `out` holds
+/// `rows * out_row_samples` bytes.
 #[target_feature(enable = "avx2")]
 pub(crate) unsafe fn untranspose_narrow_avx2(
     out_t: &[i16],
-    ow: usize,
+    out_row_samples: usize,
     out: &mut [u8],
     rows: usize,
 ) {
     use std::arch::x86_64::*;
-    // Whole cache lines per output row: 16-byte pieces of 16 rows at once
-    // would, at power-of-2 row strides (which share L1 sets), evict each
+    // Staged a whole cache line per output row: 16-byte pieces of 16 rows at
+    // once would, at power-of-2 row strides (which share L1 sets), evict each
     // line before it is complete.
-    const LINE: usize = 64;
+
+    const CACHE_LINE_BYTES: usize = 64;
     const ROWS: usize = TRANSPOSE_ROWS;
-    let mut staged = [[0u8; LINE]; ROWS];
-    for l0 in (0..ow).step_by(LINE) {
-        for o0 in (l0..(l0 + LINE).min(ow)).step_by(ROWS) {
-            debug_assert!((o0 + ROWS) * ROWS <= out_t.len());
+    let mut staged = [[0u8; CACHE_LINE_BYTES]; ROWS];
+    for line_start in (0..out_row_samples).step_by(CACHE_LINE_BYTES) {
+        for tile_start in
+            (line_start..(line_start + CACHE_LINE_BYTES).min(out_row_samples)).step_by(ROWS)
+        {
+            debug_assert!((tile_start + ROWS) * ROWS <= out_t.len());
             let mut tile = [_mm256_setzero_si256(); ROWS];
             for (output, register) in tile.iter_mut().enumerate() {
-                // SAFETY: o0 < ow, a multiple of ROWS: outputs o0..o0 + ROWS
-                // lie in `out_t` (contract).
+                // SAFETY: tile_start < out_row_samples and a multiple of ROWS:
+                // outputs tile_start..tile_start + ROWS lie in `out_t`
+                // (contract).
                 *register = unsafe {
-                    _mm256_loadu_si256(out_t.as_ptr().add((o0 + output) * ROWS) as *const __m256i)
+                    _mm256_loadu_si256(
+                        out_t.as_ptr().add((tile_start + output) * ROWS) as *const __m256i
+                    )
                 };
             }
             transpose_16x16_i16(&mut tile);
@@ -619,28 +630,33 @@ pub(crate) unsafe fn untranspose_narrow_avx2(
                     _mm256_castsi256_si128(rounded),
                     _mm256_extracti128_si256::<1>(rounded),
                 );
-                // SAFETY: o0 - l0 <= LINE - ROWS: the 16 bytes lie in the
-                // staged line.
+                // SAFETY: tile_start - line_start <= CACHE_LINE_BYTES - ROWS:
+                // the 16 bytes lie in the staged line.
                 unsafe {
-                    _mm_storeu_si128(staged[row].as_mut_ptr().add(o0 - l0) as *mut __m128i, bytes);
+                    _mm_storeu_si128(
+                        staged[row].as_mut_ptr().add(tile_start - line_start) as *mut __m128i,
+                        bytes,
+                    );
                 }
             }
         }
-        let len = LINE.min(ow - l0);
+        let len = CACHE_LINE_BYTES.min(out_row_samples - line_start);
         for (row, line) in staged.iter().enumerate().take(rows) {
-            // SAFETY: row < rows and l0 + len <= ow: bytes l0..l0 + len of
-            // the row lie in `out` (contract); the staged line holds LINE.
+            // SAFETY: row < rows and line_start + len <= out_row_samples:
+            // bytes line_start..line_start + len of the row lie in `out`
+            // (contract); the staged line holds CACHE_LINE_BYTES.
+
             unsafe {
-                let dst = out.as_mut_ptr().add(row * ow + l0);
-                if len == LINE {
-                    let (lo, hi) = line.split_at(LINE / 2);
+                let dst = out.as_mut_ptr().add(row * out_row_samples + line_start);
+                if len == CACHE_LINE_BYTES {
+                    let (low_half, high_half) = line.split_at(CACHE_LINE_BYTES / 2);
                     _mm256_storeu_si256(
                         dst as *mut __m256i,
-                        _mm256_loadu_si256(lo.as_ptr() as *const __m256i),
+                        _mm256_loadu_si256(low_half.as_ptr() as *const __m256i),
                     );
                     _mm256_storeu_si256(
-                        dst.add(LINE / 2) as *mut __m256i,
-                        _mm256_loadu_si256(hi.as_ptr() as *const __m256i),
+                        dst.add(CACHE_LINE_BYTES / 2) as *mut __m256i,
+                        _mm256_loadu_si256(high_half.as_ptr() as *const __m256i),
                     );
                 } else {
                     std::ptr::copy_nonoverlapping(line.as_ptr(), dst, len);
