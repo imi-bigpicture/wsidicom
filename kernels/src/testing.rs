@@ -12,16 +12,21 @@ pub(crate) type UnsafeImageKernel<T> = unsafe fn(&[T], usize, usize) -> (Vec<T>,
 /// A xorshift64* generator: reproducible test data without a dependency.
 pub(crate) struct Rng(u64);
 
+/// 2^64 / the golden ratio: spreads small seeds over the state (which must
+/// not be zero, hence the `| 1`).
+const SEED_SPREAD: u64 = 0x9E37_79B9_7F4A_7C15;
+const XORSHIFT64_STAR_MULTIPLIER: u64 = 0x2545_F491_4F6C_DD1D;
+
 impl Rng {
     pub(crate) fn new(seed: u64) -> Self {
-        Self(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1)
+        Self(seed.wrapping_mul(SEED_SPREAD) | 1)
     }
 
     pub(crate) fn next_u64(&mut self) -> u64 {
         self.0 ^= self.0 >> 12;
         self.0 ^= self.0 << 25;
         self.0 ^= self.0 >> 27;
-        self.0.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        self.0.wrapping_mul(XORSHIFT64_STAR_MULTIPLIER)
     }
 }
 
