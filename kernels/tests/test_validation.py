@@ -30,7 +30,6 @@ from wsidicom_kernels import (
     downscale,
     downscale_grid,
     resize,
-    stitch,
 )
 
 
@@ -402,23 +401,6 @@ class TestValidation:
         # Act & Assert
         with pytest.raises(ValueError, match="factor must be >= 1"):
             downscale_grid([image] * 4, 2, 0, ResizeFilter.BOX)
-
-    @pytest.mark.parametrize(
-        ["tiles", "grid_width", "match"],
-        [
-            ([np.zeros((4, 4), np.uint8)], 0, "grid_width"),
-            ([np.zeros((4, 4, 3), np.uint8)], 1, "planar 2D"),
-            ([np.zeros((4, 4), np.uint8), np.zeros((4, 5), np.uint8)], 2, "one size"),
-        ],
-        ids=["zero-grid-width", "interleaved", "unequal"],
-    )
-    def test_stitch_rejects_unfit_grids(
-        self, tiles: list[np.ndarray], grid_width: int, match: str
-    ) -> None:
-        """Stitching takes planar tiles of one size and a positive grid width."""
-        # Act & Assert
-        with pytest.raises(ValueError, match=match):
-            stitch(tiles, grid_width)
 
     def test_misaligned_image_is_reported_as_such(self) -> None:
         """A C-contiguous view at an odd byte offset is rejected as misaligned."""

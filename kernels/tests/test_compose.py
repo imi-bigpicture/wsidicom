@@ -12,7 +12,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Tests for compose and stitch.
+"""Tests for compose.
 
 compose copies tiles onto the canvas at integer positions, planar or
 interleaved, later tiles over earlier ones.
@@ -30,7 +30,6 @@ from wsidicom_kernels import (
     compose,
     downscale,
     resize,
-    stitch,
 )
 
 DTYPES = [np.uint8, np.uint16]
@@ -44,43 +43,6 @@ def random_tile(
 ) -> np.ndarray:
     """Make a random tile from an indirect ``(tile_shape, dtype)`` param."""
     return random_image(tile_shape, dtype)
-
-
-@pytest.mark.unittest
-class TestStitch:
-    def test_places_tiles_on_integer_grid(self) -> None:
-        """Tiles are laid out row by row, ``grid_width`` tiles per row."""
-        # Arrange
-        tiles = [np.full((4, 4), index, np.uint8) for index in range(6)]
-
-        # Act
-        stitched = stitch(tiles, grid_width=3)
-
-        # Assert
-        assert stitched.shape == (8, 12)
-        assert (stitched[0:4, 0:4] == 0).all()
-        assert (stitched[0:4, 4:8] == 1).all()
-        assert (stitched[4:8, 8:12] == 5).all()
-
-    @pytest.mark.parametrize(
-        ["tile_size", "value", "expected_shape"],
-        [
-            (16, 200, (32, 32)),  # Y at full resolution
-            (8, 128, (16, 16)),  # Cb/Cr at half resolution
-        ],
-    )
-    def test_subsampled_chroma_shapes(
-        self, tile_size: int, value: int, expected_shape: tuple[int, int]
-    ) -> None:
-        """Subsampled chroma planes stitch independently, with no special case."""
-        # Arrange
-        tiles = [np.full((tile_size, tile_size), value, np.uint8)] * 4
-
-        # Act
-        stitched = stitch(tiles, grid_width=2)
-
-        # Assert
-        assert stitched.shape == expected_shape
 
 
 @pytest.mark.unittest

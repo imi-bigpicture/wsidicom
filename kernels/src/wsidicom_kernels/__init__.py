@@ -30,7 +30,6 @@ from wsidicom_kernels.core import (
     downscale,
     downscale_grid,
     resize,
-    stitch,
 )
 from wsidicom_kernels.models import ResizeFilter
 
@@ -42,5 +41,4 @@ __all__ = [
     "downscale",
     "downscale_grid",
     "resize",
-    "stitch",
 ]

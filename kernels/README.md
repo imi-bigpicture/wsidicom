@@ -6,8 +6,6 @@ thumbnails:
 
 - **`compose`** — paste tiles onto a canvas at integer positions, row by row
   (`memcpy`).
-- **`stitch`** — lay equally sized tiles out on a grid into a new canvas (a
-  convenience over `compose`).
 - **`downscale`** — reduce by an integer factor: power-of-2 box (native SIMD,
   ~2× faster than Pillow `reduce`) and `bilinear` / `catmullrom` / `lanczos3`
   (Lanczos ~8× faster than Pillow LANCZOS). The scale is exactly the factor
@@ -38,7 +36,6 @@ from wsidicom_kernels import (
     compose,
     downscale,
     resize,
-    stitch,
 )
 
 # 16 RGB tiles of 256 x 256 pixels.
@@ -52,10 +49,6 @@ tiles = [rng.integers(0, 256, (256, 256, 3), np.uint8) for _ in range(16)]
 canvas = np.zeros((1024, 1024, 3), np.uint8)
 positions = np.array([[(i % 4) * 255, (i // 4) * 255] for i in range(16)], np.int64)
 compose(canvas, tiles, positions)
-
-# stitch: equally sized planar tiles on a grid -> a new canvas array.
-gray_tiles = [np.ascontiguousarray(t[..., 0]) for t in tiles]  # (256, 256) each
-mosaic = stitch(gray_tiles, grid_width=4)  # (1024, 1024)
 
 # downscale: reduce by an integer factor; image array in, new array out.
 # Output size is ceil(size / factor): 1023 pixels by 2 gives 512.
@@ -89,7 +82,7 @@ filters and windows.
 
 | Operation | Computed by |
 | --- | --- |
-| `compose`, `stitch` | wsidicom-kernels |
+| `compose` | wsidicom-kernels |
 | `downscale` / `resize` with `"box"` at an exact power-of-2 factor | wsidicom-kernels |
 | `downscale` / `resize` of **uint8**, with `box` / `bilinear` / `catmullrom` / `lanczos3` — any ratio up or down | wsidicom-kernels |
 | `nearest`, every dtype (fast_image_resize's sample positions) | wsidicom-kernels |
