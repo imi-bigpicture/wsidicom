@@ -1,9 +1,8 @@
-//! NEON kernels of the float32 convolution engine for uint8 and uint16
-//! (aarch64): 8 rows
-//! per transposed batch, two f32x4 registers per column. Every sum is the
-//! scalar reference's FMA chain (`vfmaq` from zero, in tap order) and the
-//! integers round to nearest even and saturate (`vcvtnq_u32` + `vqmovn`), so the
-//! results equal the scalar reference's bit for bit.
+//! NEON kernels of the float32 convolution engine for uint8 and uint16: 8
+//! rows per transposed batch, two f32x4 registers per column. Every sum is
+//! the scalar reference's FMA chain (`vfmaq` from zero, in tap order) and
+//! stores round to nearest even and saturate (`vcvtnq_u32` + `vqmovn`), so
+//! the results equal the scalar reference's bit for bit.
 //!
 //! # Safety
 //! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
@@ -43,7 +42,7 @@ fn transpose_4x4_f32(rows: [float32x4_t; 4]) -> [float32x4_t; 4] {
     ]
 }
 
-/// Four u16 at `src` as f32.
+/// 4 uint16 samples as f32.
 ///
 /// # Safety
 /// `src..src + 4` must be readable.
@@ -68,21 +67,20 @@ unsafe fn load_u8x4_f32(src: *const u8) -> float32x4_t {
 }
 
 /// Bytes per cache line (Apple silicon's).
-const LINE: usize = 128;
-/// Taps from which a vertical block is a whole line.
+const CACHE_LINE_BYTES: usize = 128;
+/// Taps from which a vertical block is a whole cache line.
 const LONG_WINDOW_TAPS: usize = 16;
 
 // The vertical pass for one sample type: `$load` widens 4 samples to f32.
 macro_rules! gen_vertical_neon {
     ($name:ident, $blocks:ident, $t:ty, $load:ident) => {
         /// `mid[x] = sum_t weights[t] * rows[t * stride + x]`, an FMA chain
-        /// in tap order, in blocks of several registers per tap (independent
-        /// chains), the last block overlapping its predecessor: a whole
-        /// 128-byte cache line of each row for long windows, whose rows
-        /// otherwise evict each other's lines from shared L1 sets before the
-        /// next block uses them, half a line for shorter ones; narrower rows
-        /// in 8-sample blocks, and rows shorter than that by the scalar
-        /// reference.
+        /// in tap order, in blocks of several registers (independent chains),
+        /// the last block overlapping its predecessor. Long windows take a
+        /// whole cache line of each row per block, as their rows otherwise
+        /// evict each other's lines from shared L1 sets before the next block
+        /// uses them; shorter ones half a line, narrower rows 8 samples, and
+        /// rows narrower than that the scalar reference.
         ///
         /// # Safety
         /// `rows` holds `weights.len()` rows `stride` apart of `mid.len()`
@@ -91,20 +89,20 @@ macro_rules! gen_vertical_neon {
         pub(crate) unsafe fn $name(rows: &[$t], stride: usize, weights: &[f32], mid: &mut [f32]) {
             // uint8 blocks as uint16's: a line of uint8 would take more
             // registers than there are.
-            const SAMPLE: usize = if size_of::<$t>() < 2 {
+            const BLOCK_SAMPLE_BYTES: usize = if size_of::<$t>() < 2 {
                 2
             } else {
                 size_of::<$t>()
             };
-            const LINE_REGISTERS: usize = LINE / (LANES * SAMPLE);
-            let len = mid.len();
+            const LINE_REGISTERS: usize = CACHE_LINE_BYTES / (LANES * BLOCK_SAMPLE_BYTES);
+            let width = mid.len();
             // SAFETY: the contract, passed on; each arm's rows hold a block.
             unsafe {
-                if weights.len() >= LONG_WINDOW_TAPS && len >= LINE_REGISTERS * LANES {
+                if weights.len() >= LONG_WINDOW_TAPS && width >= LINE_REGISTERS * LANES {
                     $blocks::<LINE_REGISTERS>(rows, stride, weights, mid);
-                } else if len >= LINE_REGISTERS / 2 * LANES {
+                } else if width >= LINE_REGISTERS / 2 * LANES {
                     $blocks::<{ LINE_REGISTERS / 2 }>(rows, stride, weights, mid);
-                } else if len >= 2 * LANES {
+                } else if width >= 2 * LANES {
                     $blocks::<2>(rows, stride, weights, mid);
                 } else {
                     super::vertical(rows, stride, weights, mid);
@@ -158,15 +156,16 @@ pub(crate) unsafe fn transpose_f32_rows_neon(mid: &[f32], stride: usize, mid_t: 
     debug_assert!(stride.is_multiple_of(LANES) && mid.len() >= ROWS * stride);
     debug_assert!(mid_t.len() >= ROWS * stride);
     let (mid_ptr, mid_t_ptr) = (mid.as_ptr(), mid_t.as_mut_ptr());
-    for x0 in (0..stride).step_by(LANES) {
+    for tile_x in (0..stride).step_by(LANES) {
         for half in 0..ROWS / LANES {
-            // SAFETY: x0 + 4 <= stride: 4 samples of each row.
+            // SAFETY: tile_x + 4 <= stride: 4 samples of each row.
             let rows = std::array::from_fn(|row| unsafe {
-                vld1q_f32(mid_ptr.add((half * LANES + row) * stride + x0))
+                vld1q_f32(mid_ptr.add((half * LANES + row) * stride + tile_x))
             });
             for (column, samples) in transpose_4x4_f32(rows).into_iter().enumerate() {
-                // SAFETY: (x0 + column) * 8 + 8 <= stride * 8.
-                unsafe { vst1q_f32(mid_t_ptr.add((x0 + column) * ROWS + half * LANES), samples) };
+                let at = (tile_x + column) * ROWS + half * LANES;
+                // SAFETY: (tile_x + column) * 8 + 8 <= stride * 8.
+                unsafe { vst1q_f32(mid_t_ptr.add(at), samples) };
             }
         }
     }
@@ -212,8 +211,8 @@ pub(crate) unsafe fn horizontal_f32_transposed_neon(
 }
 
 /// One output of `horizontal_f32_transposed_neon` with a window of `TAPS`
-/// taps: the tap loop unrolled (per-output loop setup outweighs short
-/// windows' taps).
+/// taps, the tap loop unrolled: for short windows the per-output loop setup
+/// outweighs the taps.
 ///
 /// # Safety
 /// As `horizontal_f32_transposed_neon`, for `output`, whose window `col`
@@ -271,32 +270,34 @@ unsafe fn output_taps(
     }
 }
 
-/// `out_t[o * 8 + r]` back to rows `dst[r * stride + o]` (o < `ows`, r <
-/// `rows`), 4x4 transposes, each row's 4 samples through `store(row, o,
-/// samples, count)` (`count` < 4 at the row end).
+/// `out_t[o * 8 + r]` back to rows `dst[r * stride + o]` (o <
+/// `out_row_samples`, r < `rows`) by 4x4 transposes, each row's 4 samples
+/// through `store(row, o, samples, count)` (`count` < 4 at the row end).
 ///
 /// # Safety
-/// `out_t` holds `ows.next_multiple_of(8) * 8` sums; `rows <= 8`.
+/// `out_t` holds `out_row_samples.next_multiple_of(8) * 8` sums; `rows <= 8`.
 #[target_feature(enable = "neon")]
 #[inline]
 unsafe fn untranspose(
     out_t: &[f32],
-    ows: usize,
+    out_row_samples: usize,
     rows: usize,
     mut store: impl FnMut(usize, usize, float32x4_t, usize),
 ) {
-    debug_assert!(out_t.len() >= ows.next_multiple_of(ROWS) * ROWS && rows <= ROWS);
+    debug_assert!(out_t.len() >= out_row_samples.next_multiple_of(ROWS) * ROWS && rows <= ROWS);
     let out_t_ptr = out_t.as_ptr();
-    for o0 in (0..ows).step_by(LANES) {
+    for tile_output in (0..out_row_samples).step_by(LANES) {
+        let count = LANES.min(out_row_samples - tile_output);
         for half in 0..ROWS / LANES {
-            // SAFETY: o0 < ows, a multiple of 4, so o0 + 4 <=
-            // ows.next_multiple_of(8): 4 outputs' sums of 4 rows.
+            // SAFETY: tile_output < out_row_samples, a multiple of 4, so
+            // tile_output + 4 <= out_row_samples.next_multiple_of(8): 4
+            // outputs' sums of 4 rows.
             let sums = std::array::from_fn(|output| unsafe {
-                vld1q_f32(out_t_ptr.add((o0 + output) * ROWS + half * LANES))
+                vld1q_f32(out_t_ptr.add((tile_output + output) * ROWS + half * LANES))
             });
             let by_row = transpose_4x4_f32(sums);
             for row in (half * LANES..(half + 1) * LANES).take_while(|&row| row < rows) {
-                store(row, o0, by_row[row - half * LANES], LANES.min(ows - o0));
+                store(row, tile_output, by_row[row - half * LANES], count);
             }
         }
     }
@@ -305,12 +306,12 @@ unsafe fn untranspose(
 /// Untranspose a batch to uint16 rows: rounded to nearest even, saturated.
 ///
 /// # Safety
-/// As `untranspose`, and `dst` holds `rows` rows `stride` apart of `ows`
-/// samples.
+/// As `untranspose`, and `dst` holds `rows` rows `stride` apart of
+/// `out_row_samples` samples.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn untranspose_store_u16_neon(
     out_t: &[f32],
-    ows: usize,
+    out_row_samples: usize,
     dst: *mut u16,
     stride: usize,
     rows: usize,
@@ -319,16 +320,21 @@ pub(crate) unsafe fn untranspose_store_u16_neon(
     // SAFETY: the caller's contract; each store writes `count` samples of
     // row `row` from output `output`.
     unsafe {
-        untranspose(out_t, ows, rows, |row, output, samples, count| {
-            let at = dst.add(row * stride + output);
-            if count == LANES {
-                vst1_u16(at, narrow(samples));
-            } else {
-                let mut staged = [0u16; LANES];
-                vst1_u16(staged.as_mut_ptr(), narrow(samples));
-                std::ptr::copy_nonoverlapping(staged.as_ptr(), at, count);
-            }
-        });
+        untranspose(
+            out_t,
+            out_row_samples,
+            rows,
+            |row, output, samples, count| {
+                let at = dst.add(row * stride + output);
+                if count == LANES {
+                    vst1_u16(at, narrow(samples));
+                } else {
+                    let mut staged = [0u16; LANES];
+                    vst1_u16(staged.as_mut_ptr(), narrow(samples));
+                    std::ptr::copy_nonoverlapping(staged.as_ptr(), at, count);
+                }
+            },
+        );
     }
 }
 
@@ -339,7 +345,7 @@ pub(crate) unsafe fn untranspose_store_u16_neon(
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn untranspose_store_u8_neon(
     out_t: &[f32],
-    ows: usize,
+    out_row_samples: usize,
     dst: *mut u8,
     stride: usize,
     rows: usize,
@@ -351,10 +357,19 @@ pub(crate) unsafe fn untranspose_store_u8_neon(
     // SAFETY: the caller's contract; each store writes `count` samples of
     // row `row` from output `output`.
     unsafe {
-        untranspose(out_t, ows, rows, |row, output, samples, count| {
-            let mut staged = [0u8; 8];
-            vst1_u8(staged.as_mut_ptr(), narrow(samples));
-            std::ptr::copy_nonoverlapping(staged.as_ptr(), dst.add(row * stride + output), count);
-        });
+        untranspose(
+            out_t,
+            out_row_samples,
+            rows,
+            |row, output, samples, count| {
+                let mut staged = [0u8; 8];
+                vst1_u8(staged.as_mut_ptr(), narrow(samples));
+                std::ptr::copy_nonoverlapping(
+                    staged.as_ptr(),
+                    dst.add(row * stride + output),
+                    count,
+                );
+            },
+        );
     }
 }

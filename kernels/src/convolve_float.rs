@@ -1,19 +1,15 @@
-//! Native convolution resize in float32 of uint16 images, and of uint8
-//! images reduced past the fixed-point engine's range (planar or RGB), with
-//! `fast_image_resize`'s filters and windows.
+//! Convolution resize computed in f32: uint16 images, and uint8 images
+//! reduced past the fixed-point engine's range, with `fast_image_resize`'s
+//! filters and windows.
 //!
-//! Computed in f32: every output sample is a chain of fused multiply-adds
-//! over its taps in tap order, vertical pass first (per row, into an f32
-//! intermediate row), then the horizontal pass. The SIMD tiers run the
-//! horizontal pass on transposed batches of rows — one register holds a
-//! sample of every row of the batch, so each tap is a unit-stride load times
-//! a broadcast weight, full lanes at any ratio and channel count — and keep
-//! the per-lane tap order, so results are identical to the scalar reference
-//! on every CPU. uint8 and uint16 convert exactly on load and round to
-//! nearest (ties to even), clamped, on store. Windows longer than
-//! `CHUNK_TAPS` (large reductions) sum in chunks of that many taps, the
-//! chunks' sums added in f64: one chain of thousands of taps loses accuracy
-//! (every term rounds the same way on flat input).
+//! Every output sample is an FMA chain over its taps in tap order: the
+//! vertical pass into an f32 intermediate row (`mid`), then the horizontal
+//! pass. The SIMD tiers run the horizontal pass on transposed batches of rows
+//! (a register holds one sample of every row in the batch) and keep each
+//! lane's tap order, so every CPU matches the scalar reference bit for bit.
+//! Windows longer than `CHUNK_TAPS` sum in chunks whose sums add in f64: one
+//! chain of thousands of taps drifts, as every term rounds the same way on
+//! flat input.
 
 #[cfg(target_arch = "aarch64")]
 mod neon;
@@ -30,7 +26,7 @@ use crate::convolve::{Geometry, Kernel, PlanCache, Windows};
 /// Source bytes a batch's column strip may span (within L2).
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const BATCH_SOURCE_BYTES: usize = 512 << 10;
-/// Window bytes (taps x row) from which the vertical pass goes in strips:
+/// Window bytes (taps x row) from which the vertical pass goes in strips, as
 /// one output row's window alone overflows L2.
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const STRIPED_WINDOW_BYTES: usize = 768 << 10;
@@ -41,7 +37,8 @@ const STRIP_ALIGN_SAMPLES: usize = 64;
 /// Taps per FMA chain: longer windows sum in chunks of this many taps.
 pub(crate) const CHUNK_TAPS: usize = 256;
 
-/// A sample type computed in f32.
+/// A sample type computed in f32: exact on load, rounded to nearest (ties to
+/// even) and saturated on store.
 pub(crate) trait FloatSample: Copy + Default + Send + Sync {
     fn to_f32(self) -> f32;
     fn from_f32(value: f32) -> Self;
@@ -73,8 +70,9 @@ impl FloatSample for u16 {
 pub(crate) struct FloatPlan {
     pub(crate) rows: Windows,
     pub(crate) cols: Windows,
-    /// `cols` in chunks of `CHUNK_TAPS` taps where a window is longer.
-    pub(crate) col_chunks: Option<Vec<Windows>>,
+    /// `cols` split into windows of at most `CHUNK_TAPS` taps, where any is
+    /// longer.
+    pub(crate) chunked_cols: Option<Vec<Windows>>,
     pub(crate) channels: usize,
 }
 
@@ -86,7 +84,7 @@ impl FloatPlan {
     pub(crate) fn new(rows: Windows, cols: Windows, channels: usize) -> FloatPlan {
         FloatPlan {
             rows,
-            col_chunks: cols.chunks(CHUNK_TAPS),
+            chunked_cols: cols.chunks(CHUNK_TAPS),
             cols,
             channels,
         }
@@ -97,15 +95,23 @@ impl FloatPlan {
             let Geometry {
                 src: (width, height),
                 extent: (extent_width, extent_height),
-                dst: (ow, oh),
+                dst: (out_width, out_height),
             } = geometry;
             FloatPlan::new(
-                Windows::over(height, extent_height, oh, kernel),
-                Windows::over(width, extent_width, ow, kernel),
+                Windows::over(height, extent_height, out_height, kernel),
+                Windows::over(width, extent_width, out_width, kernel),
                 channels,
             )
         };
         PLANS.with_borrow_mut(|plans| plans.get_or_build((geometry, kernel, channels), build))
+    }
+
+    /// The column windows as the horizontal pass sums them, one set per
+    /// chunk of `CHUNK_TAPS` taps.
+    fn col_chunks(&self) -> &[Windows] {
+        self.chunked_cols
+            .as_deref()
+            .unwrap_or(std::slice::from_ref(&self.cols))
     }
 }
 
@@ -134,24 +140,21 @@ pub(crate) fn resize_rows<T: FloatSample>(src: &[T], width: usize, plan: &FloatP
     let mut out = vec![T::default(); out_row_samples * plan.rows.len()];
     let mut mid = vec![0f32; row_samples];
     let mut chunk_sums = ChunkSums::default();
-    let cols: &[Windows] = plan
-        .col_chunks
-        .as_deref()
-        .unwrap_or(std::slice::from_ref(&plan.cols));
-    for (win, dst) in plan.rows.iter().zip(out.chunks_exact_mut(out_row_samples)) {
+    let col_chunks = plan.col_chunks();
+    for (row_window, dst) in plan.rows.iter().zip(out.chunks_exact_mut(out_row_samples)) {
         vertical_in_chunks(
             vertical,
-            &src[win.start * row_samples..win.end() * row_samples],
+            &src[row_window.start * row_samples..row_window.end() * row_samples],
             row_samples,
-            win.f32,
+            row_window.f32,
             &mut mid,
             &mut chunk_sums,
         );
         for (output, sample) in dst.iter_mut().enumerate() {
-            let (col, ch) = (output / channels, output % channels);
-            let sum = cols.iter().fold(0f64, |sum, chunk| {
+            let (col, channel) = (output / channels, output % channels);
+            let sum = col_chunks.iter().fold(0f64, |sum, chunk| {
                 let window = chunk.get(col);
-                let taps = (window.start..window.end()).map(|x| mid[x * channels + ch]);
+                let taps = (window.start..window.end()).map(|x| mid[x * channels + channel]);
                 sum + f64::from(fma_chain(taps, window.f32))
             });
             *sample = T::from_f32(sum as f32);
@@ -160,33 +163,33 @@ pub(crate) fn resize_rows<T: FloatSample>(src: &[T], width: usize, plan: &FloatP
     out
 }
 
-/// Scratch of the chunked sums: one chunk's f32 sums and the f64 total.
+/// Scratch of the chunked sums: one chunk's f32 sums and their f64 total.
 #[derive(Default)]
 pub(crate) struct ChunkSums {
-    part: Vec<f32>,
+    chunk: Vec<f32>,
     total: Vec<f64>,
 }
 
 impl ChunkSums {
-    /// The sums of `chunks` chunks (`chunk(index, part)` writes chunk
-    /// `index`'s `out.len()` sums to `part`) added in f64, rounded to f32 into
-    /// `out`. A single chunk writes straight to `out`.
+    /// Adds in f64 the `out.len()` sums `sum_chunk(index, sums)` writes for
+    /// each chunk index below `chunk_count`, rounded to f32 into `out`. A
+    /// single chunk sums straight into `out`.
     fn sum_into(
         &mut self,
-        chunks: usize,
+        chunk_count: usize,
         out: &mut [f32],
-        mut chunk: impl FnMut(usize, &mut [f32]),
+        mut sum_chunk: impl FnMut(usize, &mut [f32]),
     ) {
-        if chunks == 1 {
-            return chunk(0, out);
+        if chunk_count == 1 {
+            return sum_chunk(0, out);
         }
-        self.part.resize(out.len(), 0.0);
+        self.chunk.resize(out.len(), 0.0);
         self.total.clear();
         self.total.resize(out.len(), 0.0);
-        for index in 0..chunks {
-            chunk(index, &mut self.part[..out.len()]);
-            for (total, &part) in self.total.iter_mut().zip(&self.part) {
-                *total += f64::from(part);
+        for index in 0..chunk_count {
+            sum_chunk(index, &mut self.chunk[..out.len()]);
+            for (total, &chunk_sum) in self.total.iter_mut().zip(&self.chunk) {
+                *total += f64::from(chunk_sum);
             }
         }
         for (out, &total) in out.iter_mut().zip(&self.total) {
@@ -196,7 +199,7 @@ impl ChunkSums {
 }
 
 /// `vertical` (any tier's pass) over `weights` in chunks of `CHUNK_TAPS`
-/// taps, summed by `ChunkSums::sum_into`.
+/// taps.
 pub(crate) fn vertical_in_chunks<T>(
     vertical: impl Fn(&[T], usize, &[f32], &mut [f32]),
     rows: &[T],
@@ -226,8 +229,7 @@ pub(crate) fn vertical<T: FloatSample>(
     }
 }
 
-/// `sum_t weights[t] * samples[t]` as `acc = sample * weight + acc` from 0,
-/// in tap order.
+/// `sum_t weights[t] * samples[t]` as `acc = sample * weight + acc` from 0.
 #[inline]
 pub(crate) fn fma_chain(samples: impl Iterator<Item = f32>, weights: &[f32]) -> f32 {
     samples
@@ -235,7 +237,7 @@ pub(crate) fn fma_chain(samples: impl Iterator<Item = f32>, weights: &[f32]) -> 
         .fold(0.0, |acc, (sample, &weight)| sample.mul_add(weight, acc))
 }
 
-/// A sample type `resize_float` takes: with its SIMD path where one exists.
+/// A sample type `resize_float` takes, with its SIMD path.
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub(crate) trait FloatResample: TransposedTier {}
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
@@ -246,7 +248,7 @@ pub(crate) trait FloatResample: FloatSample {}
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 impl<T: FloatSample> FloatResample for T {}
 
-/// The SIMD path per sample type (the kernels load and store per dtype).
+/// The SIMD path of a sample type (its kernels load and store that dtype).
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub(crate) trait TransposedTier: FloatSample {
     fn resize_transposed(src: &[Self], width: usize, plan: &FloatPlan) -> Vec<Self>;
@@ -300,7 +302,6 @@ transposed_tier!(u8, vertical_u8_avx2, untranspose_store_u8_avx2);
 #[cfg(target_arch = "x86_64")]
 transposed_tier!(u16, vertical_u16_avx2, untranspose_store_u16_avx2);
 
-// NEON: 8 rows per batch.
 #[cfg(target_arch = "aarch64")]
 macro_rules! neon_transposed_tier {
     ($t:ty, $vertical:ident, $store:ident) => {
@@ -328,9 +329,9 @@ neon_transposed_tier!(u16, vertical_u16_neon, untranspose_store_u16_neon);
 #[cfg(target_arch = "aarch64")]
 neon_transposed_tier!(u8, vertical_u8_neon, untranspose_store_u8_neon);
 
-/// The SIMD driver for `ROWS` rows per batch: each batch's vertical passes, a
-/// transpose (sample x of row r at `mid_t[x * ROWS + r]`), the horizontal pass
-/// over all `ROWS` rows at once, and the transpose back with the dtype's store.
+/// The SIMD driver for batches of `ROWS` rows: per batch the vertical passes,
+/// a transpose (sample x of row r to `mid_t[x * ROWS + r]`), the horizontal
+/// pass over all rows at once, and the transpose back with the dtype's store.
 ///
 /// # Safety
 /// `transpose`, `horizontal` and `store` are the `ROWS`-row kernels of
@@ -348,28 +349,23 @@ unsafe fn transposed<T: FloatSample, const ROWS: usize>(
     store: unsafe fn(&[f32], usize, *mut T, usize, usize),
 ) -> Vec<T> {
     let channels = plan.channels;
-    let (ow, oh) = (plan.cols.len(), plan.rows.len());
-    let (row_samples, out_row_samples) = (width * channels, ow * channels);
+    let (out_width, out_height) = (plan.cols.len(), plan.rows.len());
+    let (row_samples, out_row_samples) = (width * channels, out_width * channels);
     let sample_bytes = std::mem::size_of::<T>();
-    // mid's row stride: whole ROWS-sample tiles for the transposes, plus one
-    // more, so a power-of-2 row width doesn't put the rows a power of 2
-    // apart (they would share L1 sets).
+    // Whole ROWS-sample tiles for the transposes, plus one more tile: rows a
+    // power of 2 apart would share L1 sets.
     let mid_stride = row_samples.next_multiple_of(ROWS) + ROWS;
     let out_t_samples = out_row_samples.next_multiple_of(ROWS);
-    let mut out_buf = crate::cpu::unwritten_output::<T>(out_row_samples * oh);
-    // Scratch kept per thread between calls, so repeated small resizes skip
-    // the buffers' first-touch page faults. A call writes everything it
-    // uses (the row padding passes through the transposes unused).
+    let mut out_buf = crate::cpu::unwritten_output::<T>(out_row_samples * out_height);
+    // Kept per thread so repeated small resizes skip first-touch page faults;
+    // a call writes everything it reads (row padding passes through unused).
     let TransposeScratch {
         mut mid,
         mut mid_t,
         mut out_t,
     } = SCRATCH.with_borrow_mut(std::mem::take);
     let (mut vertical_sums, mut horizontal_sums) = (ChunkSums::default(), ChunkSums::default());
-    let cols: &[Windows] = plan
-        .col_chunks
-        .as_deref()
-        .unwrap_or(std::slice::from_ref(&plan.cols));
+    let col_chunks = plan.col_chunks();
     mid.resize(ROWS * mid_stride, 0.0);
     mid_t.resize(mid_stride * ROWS, 0.0);
     out_t.resize(out_t_samples * ROWS, 0.0);
@@ -377,29 +373,22 @@ unsafe fn transposed<T: FloatSample, const ROWS: usize>(
     let batches = |lo: usize, hi: usize| {
         for batch in (lo..hi).step_by(ROWS) {
             let rows = ROWS.min(hi - batch);
-            // Short batch: repeat its last row (those outputs are dropped).
-            let win = |row: usize| plan.rows.get((batch + row).min(hi - 1));
-            // Column strips narrow enough that the batch's source rows stay in
-            // L2 while all ROWS rows read them — only where one output row's
-            // window alone overflows L2, since elsewhere the strips' overhead
-            // outweighs the reuse. At least one aligned strip: a batch whose
-            // rows alone pass the budget still takes a strip of samples.
-            let batch_rows = win(ROWS - 1).end() - win(0).start;
-            let strip = if win(0).f32.len() * row_samples * sample_bytes >= STRIPED_WINDOW_BYTES {
-                (BATCH_SOURCE_BYTES / (batch_rows * sample_bytes))
-                    .max(1)
-                    .next_multiple_of(STRIP_ALIGN_SAMPLES)
-                    .min(row_samples)
-            } else {
-                row_samples
-            };
-            for x0 in (0..row_samples).step_by(strip) {
-                let strip_width = strip.min(row_samples - x0);
+            // A short batch repeats its last row; those outputs are dropped.
+            let window_of = |row: usize| plan.rows.get((batch + row).min(hi - 1));
+            let batch_source_rows = window_of(ROWS - 1).end() - window_of(0).start;
+            let strip = vertical_strip_samples(
+                window_of(0).f32.len(),
+                batch_source_rows,
+                row_samples,
+                sample_bytes,
+            );
+            for strip_start in (0..row_samples).step_by(strip) {
+                let strip_width = strip.min(row_samples - strip_start);
                 for row in 0..ROWS {
-                    let window = win(row);
-                    let src_rows = &src[window.start * row_samples + x0
-                        ..(window.end() - 1) * row_samples + x0 + strip_width];
-                    let mid_row = row * mid_stride + x0;
+                    let window = window_of(row);
+                    let src_rows = &src[window.start * row_samples + strip_start
+                        ..(window.end() - 1) * row_samples + strip_start + strip_width];
+                    let mid_row = row * mid_stride + strip_start;
                     vertical_in_chunks(
                         &vertical,
                         src_rows,
@@ -413,11 +402,11 @@ unsafe fn transposed<T: FloatSample, const ROWS: usize>(
             // SAFETY: the kernels' features are available (contract); mid and
             // mid_t hold ROWS rows of mid_stride, a multiple of ROWS.
             unsafe { transpose(&mid, mid_stride, &mut mid_t) };
-            horizontal_sums.sum_into(cols.len(), &mut out_t, |chunk, part| {
+            horizontal_sums.sum_into(col_chunks.len(), &mut out_t, |chunk, sums| {
                 // SAFETY: as above; every window (and chunk of one) ends by
-                // the row's width < mid_stride, and `part` holds ROWS x
+                // the row's width < mid_stride, and `sums` holds ROWS x
                 // out_t_samples, whole tiles of the output row.
-                unsafe { horizontal(&mid_t, &cols[chunk], channels, part) };
+                unsafe { horizontal(&mid_t, &col_chunks[chunk], channels, sums) };
             });
             // SAFETY: as above; rows [batch, batch + rows) of the output,
             // which only this closure call writes (with_prefault's contract).
@@ -440,7 +429,7 @@ unsafe fn transposed<T: FloatSample, const ROWS: usize>(
             out_ptr as *mut u8,
             out_bytes,
             out_row_samples * sample_bytes,
-            oh,
+            out_height,
             batches,
         );
     }
@@ -450,7 +439,37 @@ unsafe fn transposed<T: FloatSample, const ROWS: usize>(
     out
 }
 
-// The transposed driver's buffers (see `TransposeScratch`).
+/// Samples per column strip of a batch's vertical pass: strips narrow enough
+/// that the batch's `batch_source_rows` stay in L2 while all its rows read
+/// them, where one output row's window alone overflows L2 (elsewhere the
+/// strips cost more than the reuse saves); else the whole row.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[inline]
+fn vertical_strip_samples(
+    window_taps: usize,
+    batch_source_rows: usize,
+    row_samples: usize,
+    sample_bytes: usize,
+) -> usize {
+    if window_taps * row_samples * sample_bytes < STRIPED_WINDOW_BYTES {
+        return row_samples;
+    }
+    (BATCH_SOURCE_BYTES / (batch_source_rows * sample_bytes))
+        .max(1)
+        .next_multiple_of(STRIP_ALIGN_SAMPLES)
+        .min(row_samples)
+}
+
+/// The transposed driver's buffers: `ROWS` intermediate rows, the same
+/// transposed, and the transposed output sums.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[derive(Default)]
+struct TransposeScratch {
+    mid: Vec<f32>,
+    mid_t: Vec<f32>,
+    out_t: Vec<f32>,
+}
+
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 thread_local! {
     static SCRATCH: RefCell<TransposeScratch<f32>> = const { RefCell::new(TransposeScratch::new()) };
@@ -469,9 +488,8 @@ mod tests {
         Kernel::Lanczos3,
     ];
 
-    /// Column ratios (input width, output width): the smallest images,
-    /// ratios around the batch and register widths, upscales, and large
-    /// reductions.
+    /// `(width, out_width)`: the smallest images, ratios around the batch and
+    /// register widths, upscales, and large reductions.
     const COLUMN_CASES: [(usize, usize); 14] = [
         (1, 1),
         (1, 3),
@@ -489,9 +507,8 @@ mod tests {
         (640, 10),
     ];
 
-    /// Row ratios: batches of 1 to 16 rows (one or two full AVX2 batches,
-    /// short last batches), upscales, and windows long enough for the
-    /// grouped vertical taps.
+    /// `(height, out_height)`: batches of 1 to 16 rows, short last batches,
+    /// upscales, and windows long enough for the grouped vertical taps.
     const ROW_CASES: [(usize, usize); 7] = [
         (1, 1),
         (3, 7),
@@ -608,16 +625,16 @@ mod tests {
         let mut rng = Rng::new(seed);
         for kernel in KERNELS {
             for channels in CHANNELS {
-                for (width, ow) in COLUMN_CASES {
-                    for (height, oh) in ROW_CASES {
+                for (width, out_width) in COLUMN_CASES {
+                    for (height, out_height) in ROW_CASES {
                         let src: Vec<T> = random_samples(&mut rng, width * height * channels);
                         let plan = FloatPlan::new(
-                            Windows::new(height, oh, kernel),
-                            Windows::new(width, ow, kernel),
+                            Windows::new(height, out_height, kernel),
+                            Windows::new(width, out_width, kernel),
                             channels,
                         );
                         let context = format!(
-                            "{} {channels} channels {width} x {height} -> {ow} x {oh}",
+                            "{} {channels} channels {width} x {height} -> {out_width} x {out_height}",
                             kernel_name(kernel)
                         );
                         assert_tiers_match_reference(&src, (width, height), &plan, &context);
@@ -653,15 +670,15 @@ mod tests {
         ];
         for kernel in [Kernel::Box, Kernel::Lanczos3] {
             for channels in CHANNELS {
-                for ((width, ow), (height, oh)) in cases {
+                for ((width, out_width), (height, out_height)) in cases {
                     let src: Vec<T> = random_samples(&mut rng, width * height * channels);
                     let plan = FloatPlan::new(
-                        Windows::new(height, oh, kernel),
-                        Windows::new(width, ow, kernel),
+                        Windows::new(height, out_height, kernel),
+                        Windows::new(width, out_width, kernel),
                         channels,
                     );
                     let context = format!(
-                        "chunked {} {channels} channels {width} x {height} -> {ow} x {oh}",
+                        "chunked {} {channels} channels {width} x {height} -> {out_width} x {out_height}",
                         kernel_name(kernel)
                     );
                     assert_tiers_match_reference(&src, (width, height), &plan, &context);
@@ -699,10 +716,10 @@ mod tests {
     /// A window whose rows overflow L2 runs the vertical pass in column
     /// strips.
     fn assert_striped_matches_reference<T: TestFloat>(width: usize, channels: usize) {
-        let (height, oh, ow) = (1024, 4, width / 2 + 1);
+        let (height, out_height, out_width) = (1024, 4, width / 2 + 1);
         let plan = FloatPlan::new(
-            Windows::new(height, oh, Kernel::Lanczos3),
-            Windows::new(width, ow, Kernel::Lanczos3),
+            Windows::new(height, out_height, Kernel::Lanczos3),
+            Windows::new(width, out_width, Kernel::Lanczos3),
             channels,
         );
         let window_bytes = plan.rows.get(0).f32.len() * width * channels * size_of::<T>();
@@ -727,10 +744,10 @@ mod tests {
         &'static str,
     );
 
-    /// The vertical kernels of every tier: rows narrower than a register
-    /// (the scalar fallback), widths around the registers and blocks, strides
-    /// past the row (column strips), and the strides and window lengths where
-    /// the taps run in groups (4 KB aliasing, 2 KB on AVX2, 40+ taps).
+    /// The vertical kernels of every tier: rows narrower than a register,
+    /// widths around the registers and blocks, strides past the row (column
+    /// strips), and the strides and window lengths where the taps run in
+    /// groups.
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     fn assert_vertical_matches_reference<T: FloatSample + RandomSample>(
         rng: &mut Rng,
@@ -761,9 +778,8 @@ mod tests {
                 for &(available, kernel, name) in tiers {
                     if available {
                         let mut mid = vec![f32::NAN; width];
-                        // SAFETY: the kernel's features detected; weights is
-                        // not empty and rows holds taps rows of width, stride
-                        // apart.
+                        // SAFETY: the kernel's features detected; rows holds
+                        // taps (> 0) rows of width, stride apart.
                         unsafe { kernel(&rows, stride, &weights, &mut mid) };
                         let (actual, wanted): (Vec<u32>, Vec<u32>) = (
                             mid.iter().map(|sum| sum.to_bits()).collect(),

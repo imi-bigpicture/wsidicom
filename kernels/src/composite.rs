@@ -1,11 +1,11 @@
 //! Tile compositing: paste each tile onto the canvas at an integer position,
-//! later tiles overwriting earlier ones, planar/HWC.
+//! later tiles overwriting earlier ones.
 
-/// A read-only `width x height` pixel grid, `channels` interleaved samples per
-/// pixel (channels = 1: planar). Each row is contiguous, and row `y` starts
-/// at sample `y * stride`: a crop of a larger grid shares its rows.
+/// A read-only `width x height` pixel grid of `channels` interleaved samples
+/// per pixel. Row `y` starts at sample `y * stride`, so a crop of a larger
+/// grid shares its rows.
 pub(crate) struct Tile<'a, T> {
-    pub(crate) px: &'a [T],
+    pub(crate) samples: &'a [T],
     pub(crate) width: usize,
     pub(crate) height: usize,
     pub(crate) channels: usize,
@@ -13,10 +13,10 @@ pub(crate) struct Tile<'a, T> {
 }
 
 impl<'a, T: Copy> Tile<'a, T> {
-    /// The grid in `px`, rows back to back.
-    pub(crate) fn new(px: &'a [T], width: usize, height: usize, channels: usize) -> Self {
+    /// The grid in `samples`, rows back to back.
+    pub(crate) fn new(samples: &'a [T], width: usize, height: usize, channels: usize) -> Self {
         Tile {
-            px,
+            samples,
             width,
             height,
             channels,
@@ -33,7 +33,7 @@ impl<'a, T: Copy> Tile<'a, T> {
             (height - 1) * self.stride + width * self.channels
         };
         Tile {
-            px: &self.px[start..start + len],
+            samples: &self.samples[start..start + len],
             width,
             height,
             ..*self
@@ -42,23 +42,23 @@ impl<'a, T: Copy> Tile<'a, T> {
 
     fn row(&self, y: usize) -> &'a [T] {
         let start = y * self.stride;
-        &self.px[start..start + self.width * self.channels]
+        &self.samples[start..start + self.width * self.channels]
     }
 }
 
 /// The mutable destination grid, rows back to back.
 pub(crate) struct Canvas<'a, T> {
-    pub(crate) px: &'a mut [T],
+    pub(crate) samples: &'a mut [T],
     pub(crate) width: usize,
     pub(crate) height: usize,
     pub(crate) channels: usize,
 }
 
 impl<T> Canvas<'_, T> {
-    /// The `pixel_count` pixels starting at (x, y), all samples.
+    /// The samples of the `pixel_count` pixels from (x, y).
     fn run(&mut self, x: isize, y: isize, pixel_count: usize) -> &mut [T] {
         let start = (y as usize * self.width + x as usize) * self.channels;
-        &mut self.px[start..start + pixel_count * self.channels]
+        &mut self.samples[start..start + pixel_count * self.channels]
     }
 }
 
@@ -74,25 +74,29 @@ pub(crate) fn compose_tiles<T: Copy>(
     }
 }
 
-/// Paste `tile` with its top-left at canvas position (ox, oy): each visible
-/// tile-row segment copied onto the canvas segment it lands on.
-fn paste<T: Copy>(canvas: &mut Canvas<T>, tile: &Tile<T>, (ox, oy): (isize, isize)) {
-    let x0 = ox.max(0);
-    let x1 = ox
+/// Paste the part of `tile` on the canvas, its top-left at canvas position
+/// (left, top).
+fn paste<T: Copy>(canvas: &mut Canvas<T>, tile: &Tile<T>, (left, top): (isize, isize)) {
+    let visible_left = left.max(0);
+    let visible_right = left
         .saturating_add_unsigned(tile.width)
         .min(canvas.width as isize);
-    if x1 <= x0 {
+    if visible_right <= visible_left {
         return;
     }
-    let (skip, count) = ((x0 - ox) as usize, (x1 - x0) as usize);
-    let y1 = oy
+    let hidden_left = (visible_left - left) as usize;
+    let visible_width = (visible_right - visible_left) as usize;
+    let visible_bottom = top
         .saturating_add_unsigned(tile.height)
         .min(canvas.height as isize);
-    for cy in oy.max(0)..y1 {
-        let row = tile.row((cy - oy) as usize);
+    let channels = tile.channels;
+    for canvas_y in top.max(0)..visible_bottom {
+        let row = tile.row((canvas_y - top) as usize);
         canvas
-            .run(x0, cy, count)
-            .copy_from_slice(&row[skip * tile.channels..(skip + count) * tile.channels]);
+            .run(visible_left, canvas_y, visible_width)
+            .copy_from_slice(
+                &row[hidden_left * channels..(hidden_left + visible_width) * channels],
+            );
     }
 }
 
@@ -110,16 +114,16 @@ mod tests {
         positions: &[(isize, isize)],
     ) -> Vec<u16> {
         let mut out = canvas.to_vec();
-        for (tile, &(ox, oy)) in tiles.iter().zip(positions) {
-            for ty in 0..tile.height {
-                for tx in 0..tile.width {
-                    let (cx, cy) = (ox + tx as isize, oy + ty as isize);
-                    if cx < 0 || cy < 0 || cx >= width as isize || cy >= height as isize {
+        for (tile, &(left, top)) in tiles.iter().zip(positions) {
+            for tile_y in 0..tile.height {
+                for tile_x in 0..tile.width {
+                    let (x, y) = (left + tile_x as isize, top + tile_y as isize);
+                    if x < 0 || y < 0 || x >= width as isize || y >= height as isize {
                         continue;
                     }
-                    let at = (cy as usize * width + cx as usize) * channels;
-                    let from = ty * tile.stride + tx * channels;
-                    out[at..at + channels].copy_from_slice(&tile.px[from..from + channels]);
+                    let at = (y as usize * width + x as usize) * channels;
+                    let from = tile_y * tile.stride + tile_x * channels;
+                    out[at..at + channels].copy_from_slice(&tile.samples[from..from + channels]);
                 }
             }
         }
@@ -143,8 +147,8 @@ mod tests {
             let tiles: Vec<Tile<u16>> = images
                 .iter()
                 .zip(sizes)
-                .map(|(px, (tile_width, tile_height))| {
-                    Tile::new(px, tile_width, tile_height, channels)
+                .map(|(samples, (tile_width, tile_height))| {
+                    Tile::new(samples, tile_width, tile_height, channels)
                 })
                 .collect();
             for positions in [
@@ -156,27 +160,30 @@ mod tests {
                     .map(|sample| sample as u16)
                     .collect();
                 let expected = reference(&start, (width, height, channels), &tiles, &positions);
-                let mut px = start.clone();
+                let mut samples = start.clone();
                 let mut canvas = Canvas {
-                    px: &mut px,
+                    samples: &mut samples,
                     width,
                     height,
                     channels,
                 };
                 compose_tiles(&mut canvas, &tiles, &positions);
-                assert_eq!(px, expected, "channels {channels}, positions {positions:?}");
+                assert_eq!(
+                    samples, expected,
+                    "channels {channels}, positions {positions:?}"
+                );
             }
         }
     }
 
     #[test]
     fn crops_paste_their_pixels() {
-        let px: Vec<u16> = (0..6 * 5).collect();
-        let tile = Tile::new(&px, 6, 5, 1);
+        let samples: Vec<u16> = (0..6 * 5).collect();
+        let tile = Tile::new(&samples, 6, 5, 1);
         let piece = tile.crop((2, 1), (3, 2));
         let mut out = vec![0u16; 4 * 3];
         let mut canvas = Canvas {
-            px: &mut out,
+            samples: &mut out,
             width: 4,
             height: 3,
             channels: 1,
