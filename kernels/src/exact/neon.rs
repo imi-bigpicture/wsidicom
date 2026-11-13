@@ -9,6 +9,7 @@ use std::arch::aarch64::{
     vst1q_u8, vst1q_u16, vst3q_u8, vst3q_u16, vuzp1q_u8, vuzp1q_u16,
 };
 
+use crate::exact::bilinear_x2::{X2Sample, divide_rounded, window};
 use crate::sample::RGB;
 
 /// `dst` = the even pixels of `full`: `vld2`/`vld3` split the channel planes
@@ -98,6 +99,39 @@ pub(crate) unsafe fn keep_even_pixels_u16(
     for output in output..out_width {
         let at = 2 * output * channels;
         dst[output * channels..(output + 1) * channels].copy_from_slice(&full[at..at + channels]);
+    }
+}
+
+/// The channel planes of gray pixels (`BlockPlanes` of the x2 bilinear
+/// kernels).
+pub(crate) struct GrayPlanes;
+/// The channel planes of RGB pixels.
+pub(crate) struct RgbPlanes;
+
+/// Output `output` of a row with a full vertical window, by the scalar
+/// reference's arithmetic.
+pub(crate) fn output_from_rows<T: X2Sample>(
+    rows: [&[T]; 4],
+    (width, channels): (usize, usize),
+    output: usize,
+    dst: &mut [T],
+) {
+    const FULL_VERTICAL_TOTAL: u32 = 8;
+    let (first_column, horizontal_weights) = window(output, width);
+    let denominator = FULL_VERTICAL_TOTAL * horizontal_weights.iter().sum::<u32>();
+    for channel in 0..channels {
+        let numerator: u32 = horizontal_weights
+            .iter()
+            .enumerate()
+            .map(|(tap, &weight)| {
+                let at = (first_column + tap) * channels + channel;
+                let vertical = rows[0][at].into()
+                    + 3 * (rows[1][at].into() + rows[2][at].into())
+                    + rows[3][at].into();
+                weight * vertical
+            })
+            .sum();
+        dst[output * channels + channel] = T::narrow(divide_rounded(numerator, denominator));
     }
 }
 

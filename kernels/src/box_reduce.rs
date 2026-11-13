@@ -196,7 +196,7 @@ pub(crate) trait BoxSample: Sample + pyramid::BlockMean {
     /// `dst_stride` samples apart.
     unsafe fn box2x_into(
         _src: &[Self],
-        (_height, _width, _channels): (usize, usize, usize),
+        (_width, _height, _channels): (usize, usize, usize),
         _dst_ptr: *mut Self,
         _dst_stride: usize,
     ) -> bool
@@ -320,7 +320,7 @@ impl BoxSample for u8 {
     #[cfg(target_arch = "aarch64")]
     unsafe fn box2x_into(
         src: &[u8],
-        (height, width, channels): (usize, usize, usize),
+        (width, height, channels): (usize, usize, usize),
         dst_ptr: *mut u8,
         dst_stride: usize,
     ) -> bool {
@@ -342,7 +342,7 @@ impl BoxSample for u8 {
     #[cfg(target_arch = "x86_64")]
     unsafe fn box2x_into(
         src: &[u8],
-        (height, width, channels): (usize, usize, usize),
+        (width, height, channels): (usize, usize, usize),
         dst_ptr: *mut u8,
         dst_stride: usize,
     ) -> bool {
@@ -439,7 +439,7 @@ impl BoxSample for u16 {
     #[cfg(target_arch = "aarch64")]
     unsafe fn box2x_into(
         src: &[u16],
-        (height, width, channels): (usize, usize, usize),
+        (width, height, channels): (usize, usize, usize),
         dst_ptr: *mut u16,
         dst_stride: usize,
     ) -> bool {
@@ -461,7 +461,7 @@ impl BoxSample for u16 {
     #[cfg(target_arch = "x86_64")]
     unsafe fn box2x_into(
         src: &[u16],
-        (height, width, channels): (usize, usize, usize),
+        (width, height, channels): (usize, usize, usize),
         dst_ptr: *mut u16,
         dst_stride: usize,
     ) -> bool {
@@ -909,7 +909,7 @@ mod tests {
                 let in_place = unsafe {
                     T::box2x_into(
                         &src,
-                        (height, width, channels),
+                        (width, height, channels),
                         dst.as_mut_ptr(),
                         dst_stride,
                     )

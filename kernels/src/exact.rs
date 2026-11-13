@@ -4,7 +4,7 @@
 
 mod bilinear_up2;
 mod bilinear_x2;
-pub(crate) mod bilinear_x2_u16;
+mod bilinear_x2_u16;
 mod bilinear_x4;
 mod catmull_x2;
 #[cfg(target_arch = "aarch64")]
@@ -16,13 +16,15 @@ use crate::convolve::Kernel;
 
 /// Takes the source (`width * height * channels` samples), `width`, `height`
 /// and `channels`.
-pub(crate) type ExactKernel = fn(&[u8], usize, usize, usize) -> Vec<u8>;
+pub(crate) type ExactKernel<T> = fn(&[T], usize, usize, usize) -> Vec<T>;
 
+/// The uint8 exact kernel of `kernel` resizing `width x height` to
+/// `out_width x out_height`, if there is one.
 pub(crate) fn exact_kernel(
     kernel: Kernel,
     (width, height): (usize, usize),
     (out_width, out_height): (usize, usize),
-) -> Option<ExactKernel> {
+) -> Option<ExactKernel<u8>> {
     let half = width == 2 * out_width && height == 2 * out_height;
     let quarter = width == 4 * out_width && height == 4 * out_height;
     let double = out_width == 2 * width && out_height == 2 * height;
@@ -31,6 +33,19 @@ pub(crate) fn exact_kernel(
         Kernel::CatmullRom if half => Some(catmull_x2::catmull_x2),
         Kernel::Bilinear if quarter => Some(bilinear_x4::bilinear_x4),
         Kernel::Bilinear if double => Some(bilinear_up2::bilinear_up2),
+        _ => None,
+    }
+}
+
+/// `exact_kernel` for uint16.
+pub(crate) fn exact_kernel_u16(
+    kernel: Kernel,
+    (width, height): (usize, usize),
+    (out_width, out_height): (usize, usize),
+) -> Option<ExactKernel<u16>> {
+    let half = width == 2 * out_width && height == 2 * out_height;
+    match kernel {
+        Kernel::Bilinear if half => Some(bilinear_x2_u16::bilinear_x2_u16),
         _ => None,
     }
 }

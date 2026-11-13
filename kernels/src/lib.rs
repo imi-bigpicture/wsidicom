@@ -575,22 +575,29 @@ fn resize_native_u16(
 ) -> Option<PyResult<Py<PyAny>>> {
     let kernel = convolve::Kernel::parse(filter)?;
     let array = image.cast::<PyArrayDyn<u16>>().ok()?;
-    let ((width, height), (out_width, out_height)) = (geometry.src, geometry.dst);
-    if kernel == convolve::Kernel::Bilinear && width == 2 * out_width && height == 2 * out_height {
-        return Some(exact_half_u16(py, array, (height, width, channels)));
+    if let Some(exact_kernel) = geometry
+        .fits_image()
+        .then(|| exact::exact_kernel_u16(kernel, geometry.src, geometry.dst))
+        .flatten()
+    {
+        return Some(exact_resize(py, array, exact_kernel, geometry, channels));
     }
     Some(resize_float_engine(py, array, geometry, channels, kernel))
 }
 
-fn exact_half_u16(
+/// A resize by an exact kernel, which `geometry` fits.
+fn exact_resize<T: Element>(
     py: Python<'_>,
-    array: &Bound<'_, PyArrayDyn<u16>>,
-    (height, width, channels): (usize, usize, usize),
+    array: &Bound<'_, PyArrayDyn<T>>,
+    exact_kernel: exact::ExactKernel<T>,
+    geometry: Geometry,
+    channels: usize,
 ) -> PyResult<Py<PyAny>> {
+    let ((width, height), (out_width, out_height)) = (geometry.src, geometry.dst);
     let borrow = read_only(array)?;
     let src = c_samples(&borrow, "image")?;
-    let out = py.detach(|| exact::bilinear_x2_u16::bilinear_x2_u16(src, width, height, channels));
-    to_numpy(py, out, height / 2, width / 2, channels)
+    let out = py.detach(|| exact_kernel(src, width, height, channels));
+    to_numpy(py, out, out_height, out_width, channels)
 }
 
 fn resize_nearest_array<T: Element + bytemuck::Pod>(
@@ -619,20 +626,14 @@ fn resize_native_u8(
     if geometry.reduces_past(FIXED_POINT_MAX_REDUCTION) {
         return Some(resize_float_engine(py, array, geometry, channels, kernel));
     }
-    let ((width, height), (out_width, out_height)) = (geometry.src, geometry.dst);
     if let Some(exact_kernel) = geometry
         .fits_image()
-        .then(|| exact::exact_kernel(kernel, (width, height), (out_width, out_height)))
+        .then(|| exact::exact_kernel(kernel, geometry.src, geometry.dst))
         .flatten()
     {
-        let exact = || {
-            let borrow = read_only(array)?;
-            let src = c_samples(&borrow, "image")?;
-            let out = py.detach(|| exact_kernel(src, width, height, channels));
-            to_numpy(py, out, out_height, out_width, channels)
-        };
-        return Some(exact());
+        return Some(exact_resize(py, array, exact_kernel, geometry, channels));
     }
+    let ((width, height), (out_width, out_height)) = (geometry.src, geometry.dst);
     let plan = py.detach(|| convolve::Plan::cached(geometry, kernel, channels));
     let resized = || {
         let borrow = read_only(array)?;
@@ -690,11 +691,14 @@ fn downscale_image(
     factor: usize,
     filter: &str,
 ) -> PyResult<Py<PyAny>> {
-    let dims @ (height, width, channels) = image_dims(image)?;
+    let (height, width, channels) = image_dims(image)?;
     let geometry = Geometry::downscale((width, height), factor);
     if let Some(halvings) = box_reduce::pyramid::box_halvings(filter, factor) {
         return with_dtype!(image, "image", |array: T| box_downscale_array::<T>(
-            py, array, dims, halvings
+            py,
+            array,
+            (width, height, channels),
+            halvings
         ));
     }
     resize_image(py, image, geometry, channels, filter)
@@ -727,7 +731,7 @@ fn resize_to(
     (out_height, out_width): (usize, usize),
     filter: &str,
 ) -> PyResult<Py<PyAny>> {
-    let dims @ (height, width, channels) = image_dims(image)?;
+    let (height, width, channels) = image_dims(image)?;
     output_samples(
         (out_height, out_width, channels),
         image.cast::<PyUntypedArray>()?.dtype().itemsize(),
@@ -741,7 +745,10 @@ fn resize_to(
         same_integer_factor.and_then(|factor| box_reduce::pyramid::box_halvings(filter, factor))
     {
         return with_dtype!(image, "image", |array: T| box_downscale_array::<T>(
-            py, array, dims, halvings
+            py,
+            array,
+            (width, height, channels),
+            halvings
         ));
     }
     resize_image(py, image, geometry, channels, filter)

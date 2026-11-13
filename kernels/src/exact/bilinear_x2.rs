@@ -3,7 +3,7 @@
 //! edge), so each output is an integer sum divided once.
 
 #[cfg(target_arch = "aarch64")]
-pub(crate) mod neon;
+mod neon;
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
@@ -26,7 +26,7 @@ pub(crate) fn window(output: usize, axis_len: usize) -> (usize, &'static [u32]) 
 /// `numerator / denominator` rounded half up (both non-negative). The
 /// denominators are products of window totals 7 and 8; as constants the
 /// divisions compile to multiplies.
-fn divide_rounded(numerator: u32, denominator: u32) -> u32 {
+pub(crate) fn divide_rounded(numerator: u32, denominator: u32) -> u32 {
     let rounded = |divisor: u32| (2 * numerator + divisor) / (2 * divisor);
     match denominator {
         64 => rounded(64),
@@ -87,7 +87,12 @@ pub(crate) fn bilinear_x2_scalar<T: X2Sample>(
 
 /// The weighted sums of the window's rows, a row at a time so the loop
 /// vectorizes.
-fn vertical_sums_scalar<T: X2Sample>(rows: &[T], stride: usize, weights: &[u32], sums: &mut [u32]) {
+pub(crate) fn vertical_sums_scalar<T: X2Sample>(
+    rows: &[T],
+    stride: usize,
+    weights: &[u32],
+    sums: &mut [u32],
+) {
     sums.fill(0);
     for (tap, &weight) in weights.iter().enumerate() {
         let row = &rows[tap * stride..][..sums.len()];

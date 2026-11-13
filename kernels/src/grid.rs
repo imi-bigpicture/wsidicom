@@ -250,6 +250,7 @@ pub(crate) fn box_grid<T: BoxSample>(
                 let tile_index = grid_row * grid_width + grid_col;
                 let tile_at = tile_y * row_stride + tile_x * channels;
                 let (tile_height, tile_width, _) = tile_dims[tile_index];
+                let box_dims = (tile_width, tile_height, channels);
                 let whole_blocks = tile_height % factor == 0 && tile_width % factor == 0;
                 // SAFETY: rows tile_y..tile_y + tile_rows, samples tile_x *
                 // channels.. of `out` are this tile's alone and inside it.
@@ -257,18 +258,15 @@ pub(crate) fn box_grid<T: BoxSample>(
                     && unsafe {
                         box_reduce::pyramid::box_pyramid_into(
                             srcs[tile_index],
-                            tile_dims[tile_index],
+                            box_dims,
                             times,
                             out.as_mut_ptr().add(tile_at).cast::<T>(),
                             row_stride,
                         )
                     };
                 if !in_place {
-                    let (tile, reduced_width, reduced_height) = box_reduce::pyramid::box_downscale(
-                        srcs[tile_index],
-                        tile_dims[tile_index],
-                        times,
-                    );
+                    let (tile, reduced_width, reduced_height) =
+                        box_reduce::pyramid::box_downscale(srcs[tile_index], box_dims, times);
                     debug_assert!((reduced_width, reduced_height) == (tile_cols, tile_rows));
                     let row_samples = reduced_width * channels;
                     // SAFETY: as above.
