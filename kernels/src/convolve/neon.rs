@@ -448,7 +448,7 @@ pub(crate) unsafe fn untranspose_narrow_neon(
 mod tests {
     use super::*;
     use crate::convolve::{Kernel, PADDED_READS_PAST_ROW};
-    use crate::testing::{Rng, random_samples};
+    use crate::testing::{CHANNELS, Rng, random_samples};
 
     type VerticalBlocks = unsafe fn(&[u8], usize, &[i16], &mut [i16]);
     type PaddedPass = unsafe fn(&[i16], &[usize], &[i16], usize, &mut [i16]);
@@ -477,7 +477,7 @@ mod tests {
         }
         let mut rng = Rng::new(32);
         for kernel in [Kernel::Bilinear, Kernel::CatmullRom, Kernel::Lanczos3] {
-            for channels in [1, 3, 4] {
+            for channels in CHANNELS {
                 for (width, out_width) in [
                     (17, 33),
                     (64, 32),

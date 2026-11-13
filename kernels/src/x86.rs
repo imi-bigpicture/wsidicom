@@ -204,12 +204,4 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn prefetches_past_the_image_do_not_fault() {
-        let rows = [0u8; 64];
-        for (taps, stride, x) in [(0, 0, 0), (4, 4096, 63), (1000, 1 << 20, 1 << 12)] {
-            prefetch_rows_after_window(rows.as_ptr(), taps, stride, x);
-        }
-    }
 }

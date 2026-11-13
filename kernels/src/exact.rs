@@ -97,4 +97,33 @@ pub(crate) mod tests {
             }
         }
     }
+
+    /// Bad arguments to a kernel: the source's sample count, `width`,
+    /// `height`, `channels`, and a fragment of the panic message expected.
+    pub(crate) type Rejection = (usize, usize, usize, usize, &'static str);
+
+    /// Each rejection panics with its expected message.
+    pub(crate) fn assert_rejects<T: Copy + Default>(
+        kernel: ChannelKernel<'_, T>,
+        rejections: &[Rejection],
+    ) {
+        for &(samples, width, height, channels, expected) in rejections {
+            let src = vec![T::default(); samples];
+            let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                drop(kernel(&src, width, height, channels));
+            }))
+            .expect_err(&format!(
+                "{samples} samples {width} x {height} x {channels} did not panic"
+            ));
+            let message = panic
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| panic.downcast_ref::<&str>().copied())
+                .unwrap_or_default();
+            assert!(
+                message.contains(expected),
+                "{width} x {height} x {channels}: {message:?} lacks {expected:?}"
+            );
+        }
+    }
 }

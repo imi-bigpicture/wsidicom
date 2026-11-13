@@ -44,7 +44,7 @@ pub(crate) fn bilinear_x2_u16(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, size_grid};
+    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
     use crate::testing::CHANNELS;
 
     /// Even widths around the gray kernel's 8-pixel step, the RGB kernel's
@@ -65,26 +65,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "channels")]
-    fn dispatch_rejects_two_channels() {
-        bilinear_x2_u16(&[0; 8 * 8 * 2], 8, 8, 2);
-    }
-
-    #[test]
-    #[should_panic(expected = "even sizes")]
-    fn dispatch_rejects_odd_width() {
-        bilinear_x2_u16(&[0; 9 * 8], 9, 8, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "even sizes")]
-    fn dispatch_rejects_odd_height() {
-        bilinear_x2_u16(&[0; 8 * 9], 8, 9, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "fewer than")]
-    fn dispatch_rejects_short_source() {
-        bilinear_x2_u16(&[0; 8 * 8 * 3 - 1], 8, 8, 3);
+    fn dispatch_rejects_bad_arguments() {
+        assert_rejects(
+            &bilinear_x2_u16,
+            &[
+                (8 * 8 * 2, 8, 8, 2, "channels"),
+                (9 * 8, 9, 8, 1, "even sizes"),
+                (8 * 9, 8, 9, 1, "even sizes"),
+                (8 * 8 * 3 - 1, 8, 8, 3, "fewer than"),
+            ],
+        );
     }
 }

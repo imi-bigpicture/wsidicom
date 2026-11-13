@@ -89,7 +89,7 @@ pub(crate) fn bilinear_up2(src: &[u8], width: usize, height: usize, channels: us
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, size_grid};
+    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
     use crate::testing::CHANNELS;
 
     /// Widths around 32 samples per row (the SIMD kernels' scalar fallback
@@ -112,14 +112,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "channels")]
-    fn dispatch_rejects_two_channels() {
-        bilinear_up2(&[0; 8 * 8 * 2], 8, 8, 2);
-    }
-
-    #[test]
-    #[should_panic(expected = "fewer than")]
-    fn dispatch_rejects_short_source() {
-        bilinear_up2(&[0; 40 * 3 * 3 - 1], 40, 3, 3);
+    fn dispatch_rejects_bad_arguments() {
+        assert_rejects(
+            &bilinear_up2,
+            &[
+                (8 * 8 * 2, 8, 8, 2, "channels"),
+                (40 * 3 * 3 - 1, 40, 3, 3, "fewer than"),
+            ],
+        );
     }
 }

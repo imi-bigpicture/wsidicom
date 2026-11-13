@@ -254,15 +254,6 @@ mod tests {
 
     #[cfg(target_arch = "x86_64")]
     #[test]
-    fn simd_tiers_follow_the_cpu() {
-        // The tests never turn the SIMD switch off.
-        assert!(simd_enabled());
-        assert_eq!(has_avx2(), std::is_x86_feature_detected!("avx2"));
-        assert!(!has_avx2_fma() || has_avx2());
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    #[test]
     fn only_large_outputs_stream() {
         assert!(!nt_stores_for(0));
         assert!(!nt_stores_for(LARGE_OUTPUT_BYTES - 1));

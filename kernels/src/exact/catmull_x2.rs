@@ -136,7 +136,7 @@ pub(crate) fn catmull_x2(src: &[u8], width: usize, height: usize, channels: usiz
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, size_grid};
+    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
     use crate::testing::CHANNELS;
 
     /// Even widths around the SIMD steps and the scalar fallback, the clipped
@@ -159,26 +159,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "channels")]
-    fn dispatch_rejects_two_channels() {
-        catmull_x2(&[0; 8 * 8 * 2], 8, 8, 2);
-    }
-
-    #[test]
-    #[should_panic(expected = "even sizes")]
-    fn dispatch_rejects_odd_width() {
-        catmull_x2(&[0; 7 * 8], 7, 8, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "even sizes")]
-    fn dispatch_rejects_odd_height() {
-        catmull_x2(&[0; 8 * 7], 8, 7, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "fewer than")]
-    fn dispatch_rejects_short_source() {
-        catmull_x2(&[0; 64 * 8 - 1], 64, 8, 1);
+    fn dispatch_rejects_bad_arguments() {
+        assert_rejects(
+            &catmull_x2,
+            &[
+                (8 * 8 * 2, 8, 8, 2, "channels"),
+                (7 * 8, 7, 8, 1, "even sizes"),
+                (8 * 7, 8, 7, 1, "even sizes"),
+                (64 * 8 - 1, 64, 8, 1, "fewer than"),
+            ],
+        );
     }
 }
