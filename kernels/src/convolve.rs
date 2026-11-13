@@ -1041,7 +1041,10 @@ fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
         .tap_runs
         .as_ref()
         .map_or(0, |tap_runs| tap_runs.runs.overreach);
-    let rgbx_mid_samples = (width + tap_run_overreach) * RGBX;
+    let rgbx_mid_pixels = width
+        .next_multiple_of(WIDEN_GROUP_PIXELS)
+        .max(width + tap_run_overreach);
+    let rgbx_mid_samples = rgbx_mid_pixels * RGBX;
     let mut mids = [vec![0i16; rgbx_mid_samples], vec![0i16; rgbx_mid_samples]];
     let narrow_mid_samples = channels * width.next_multiple_of(WIDEN_GROUP_PIXELS) + AVX2_I16_LANES;
     let mut narrow_mid = vec![0i16; narrow_mid_samples];
@@ -1128,12 +1131,24 @@ fn horizontal_pixels_simd<'row>(
     false
 }
 
+/// Pixels per group the AVX2 widening writes, and samples it reads past the
+/// last group.
+#[cfg(target_arch = "x86_64")]
+const AVX2_WIDEN_GROUP_PIXELS: usize = 4;
+#[cfg(target_arch = "x86_64")]
+const AVX2_WIDEN_OVERREAD: usize = 8;
+
 /// Intermediate RGB samples to RGBX-layout pixels (X 0) for the pixel
 /// kernels: `rgbx[4p + c] = src[3p + c]`.
 fn widen_to_rgbx(src: &[i16], pixels: usize, rgbx: &mut [i16]) {
     #[cfg(target_arch = "x86_64")]
     if crate::cpu::has_avx2() {
-        // SAFETY: avx2 detected; src padded past whole groups of 8 pixels.
+        let groups = pixels.next_multiple_of(AVX2_WIDEN_GROUP_PIXELS);
+        assert!(
+            src.len() >= RGB * groups + AVX2_WIDEN_OVERREAD && rgbx.len() >= RGBX * groups,
+            "the AVX2 widening reads and writes whole groups of pixels"
+        );
+        // SAFETY: avx2 detected; both buffers hold the whole groups (checked).
         return unsafe { crate::convolve::x86::widen_to_rgbx_avx2(src, pixels, rgbx) };
     }
     let (rgb_pixels, _) = src[..RGB * pixels].as_chunks::<RGB>();
@@ -1466,6 +1481,26 @@ mod tests {
     #[test]
     fn rgb_resize_equals_reference() {
         assert_resize_matches_reference(RGB);
+    }
+
+    /// RGB rows of every narrow width through the per-row path, whose widened
+    /// rows must hold the widening's whole groups of pixels.
+    #[test]
+    fn narrow_rgb_rows_equal_reference() {
+        let mut rng = Rng::new(11);
+        for kernel in KERNELS {
+            for width in 1..=12 {
+                for out_width in 1..=3 * width {
+                    let plan = Plan::new((width, 6), (out_width, 6), kernel, RGB);
+                    let src = random_samples(&mut rng, width * 6 * RGB);
+                    assert_same(
+                        &resize_pixel_rows(&src, width, &plan),
+                        &reference_resize(&src, width, &plan),
+                        &format!("{} {width} -> {out_width}", kernel_name(kernel)),
+                    );
+                }
+            }
+        }
     }
 
     /// The partial-sum check takes only windows of tens of thousands of taps
