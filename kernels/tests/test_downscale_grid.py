@@ -27,7 +27,7 @@ from wsidicom_kernels import ResizeFilter, downscale, downscale_grid
 RandomImage = Callable[[tuple[int, ...], Any], np.ndarray]
 
 DTYPES = [np.uint8, np.uint16, np.float32]
-CHANNELS = [1, 3, 4]
+CHANNELS = [1, 3]
 
 
 @pytest.fixture

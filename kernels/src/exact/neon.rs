@@ -5,18 +5,17 @@
 //! its doc states.
 
 use std::arch::aarch64::{
-    uint8x16_t, uint8x16x3_t, uint8x16x4_t, uint16x8_t, uint16x8x3_t, uint16x8x4_t, vld2q_u8,
-    vld2q_u16, vld3q_u8, vld3q_u16, vld4q_u8, vld4q_u16, vst1q_u8, vst1q_u16, vst3q_u8, vst3q_u16,
-    vst4q_u8, vst4q_u16, vuzp1q_u8, vuzp1q_u16,
+    uint8x16_t, uint8x16x3_t, uint16x8_t, uint16x8x3_t, vld2q_u8, vld2q_u16, vld3q_u8, vld3q_u16,
+    vst1q_u8, vst1q_u16, vst3q_u8, vst3q_u16, vuzp1q_u8, vuzp1q_u16,
 };
 
-use crate::sample::{RGB, RGBX};
+use crate::sample::RGB;
 
 /// `dst[o]` = pixel `2 o` of `full`, for the `ow` output pixels: 16 per
-/// step by `vld2`/`vld3`/`vld4` and `vuzp1` (the even lanes); scalar tail.
+/// step by `vld2`/`vld3` and `vuzp1` (the even lanes); scalar tail.
 ///
 /// # Safety
-/// `full` holds `2 * ow` pixels of `channels` (1, 3 or 4) samples and `dst`
+/// `full` holds `2 * ow` pixels of `channels` (1 or 3) samples and `dst`
 /// `ow`.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn keep_even_pixels(full: &[u8], channels: usize, ow: usize, dst: &mut [u8]) {
@@ -30,29 +29,16 @@ pub(crate) unsafe fn keep_even_pixels(full: &[u8], channels: usize, ow: usize, d
         // 2 output + 32 of full, the store output pixels output .. + 16.
         unsafe {
             let even = |plane: PlanePair| vuzp1q_u8(plane.0, plane.1);
-            match channels {
-                1 => vst1q_u8(dst_ptr.add(output), vld2q_u8(full_ptr.add(at)).0),
-                RGB => {
-                    let (left, right) =
-                        (vld3q_u8(full_ptr.add(at)), vld3q_u8(full_ptr.add(at + 48)));
-                    let planes = uint8x16x3_t(
-                        even((left.0, right.0)),
-                        even((left.1, right.1)),
-                        even((left.2, right.2)),
-                    );
-                    vst3q_u8(dst_ptr.add(output * RGB), planes);
-                }
-                _ => {
-                    let (left, right) =
-                        (vld4q_u8(full_ptr.add(at)), vld4q_u8(full_ptr.add(at + 64)));
-                    let planes = uint8x16x4_t(
-                        even((left.0, right.0)),
-                        even((left.1, right.1)),
-                        even((left.2, right.2)),
-                        even((left.3, right.3)),
-                    );
-                    vst4q_u8(dst_ptr.add(output * RGBX), planes);
-                }
+            if channels == 1 {
+                vst1q_u8(dst_ptr.add(output), vld2q_u8(full_ptr.add(at)).0);
+            } else {
+                let (left, right) = (vld3q_u8(full_ptr.add(at)), vld3q_u8(full_ptr.add(at + 48)));
+                let planes = uint8x16x3_t(
+                    even((left.0, right.0)),
+                    even((left.1, right.1)),
+                    even((left.2, right.2)),
+                );
+                vst3q_u8(dst_ptr.add(output * RGB), planes);
             }
         }
         output += STEP_PX;
@@ -87,33 +73,19 @@ pub(crate) unsafe fn keep_even_pixels_u16(
         // SAFETY: output + 8 <= ow: the loads read pixels 2 output ..
         // 2 output + 16 of full, the store output pixels output .. + 8.
         unsafe {
-            match channels {
-                1 => vst1q_u16(dst_ptr.add(output), vld2q_u16(full_ptr.add(at)).0),
-                RGB => {
-                    let (left, right) = (
-                        vld3q_u16(full_ptr.add(at)),
-                        vld3q_u16(full_ptr.add(at + 24)),
-                    );
-                    let planes = uint16x8x3_t(
-                        even(left.0, right.0),
-                        even(left.1, right.1),
-                        even(left.2, right.2),
-                    );
-                    vst3q_u16(dst_ptr.add(output * RGB), planes);
-                }
-                _ => {
-                    let (left, right) = (
-                        vld4q_u16(full_ptr.add(at)),
-                        vld4q_u16(full_ptr.add(at + 32)),
-                    );
-                    let planes = uint16x8x4_t(
-                        even(left.0, right.0),
-                        even(left.1, right.1),
-                        even(left.2, right.2),
-                        even(left.3, right.3),
-                    );
-                    vst4q_u16(dst_ptr.add(output * RGBX), planes);
-                }
+            if channels == 1 {
+                vst1q_u16(dst_ptr.add(output), vld2q_u16(full_ptr.add(at)).0);
+            } else {
+                let (left, right) = (
+                    vld3q_u16(full_ptr.add(at)),
+                    vld3q_u16(full_ptr.add(at + 24)),
+                );
+                let planes = uint16x8x3_t(
+                    even(left.0, right.0),
+                    even(left.1, right.1),
+                    even(left.2, right.2),
+                );
+                vst3q_u16(dst_ptr.add(output * RGB), planes);
             }
         }
         output += STEP_PX;

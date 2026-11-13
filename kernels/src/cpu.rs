@@ -25,13 +25,6 @@ pub(crate) fn has_avx2() -> bool {
 pub(crate) fn has_avx2_fma() -> bool {
     has_avx2() && std::is_x86_feature_detected!("fma")
 }
-/// No x86 tier off x86-64: tier-dependent planning then picks the scalar
-/// (or NEON) paths.
-#[cfg(not(target_arch = "x86_64"))]
-#[inline]
-pub(crate) fn has_avx2() -> bool {
-    false
-}
 
 /// Outputs at least this big are not re-read from cache before they leave,
 /// so non-temporal stores pay.

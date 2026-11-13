@@ -35,7 +35,7 @@ ParityCheck = Callable[[Callable[[], np.ndarray], float], np.ndarray]
 
 INTEGER_MAX = [(np.uint8, 255), (np.uint16, 65535)]
 FLOAT_SPECIALS = [np.inf, -np.inf, np.nan, 3.0e38, -3.0e38, 1e-40, -0.0, 0.0]
-BOX_SHAPES = [(33, 35), (33, 35, 3), (33, 35, 4)]
+BOX_SHAPES = [(33, 35), (33, 35, 3)]
 
 
 @pytest.fixture

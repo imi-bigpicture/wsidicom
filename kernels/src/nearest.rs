@@ -312,7 +312,7 @@ impl RowGather {
         unsafe { self.row_by_pixel(row, dst) }
     }
 
-    /// The row a pixel at a time: one fixed-size move per pixel (1, 3 or 4
+    /// The row a pixel at a time: one fixed-size move per pixel (1 or 3
     /// samples of 1, 2 or 4 bytes).
     ///
     /// # Safety
@@ -327,9 +327,7 @@ impl RowGather {
                 3 => self.copy_pixels::<3>(row, dst),
                 4 => self.copy_pixels::<4>(row, dst),
                 6 => self.copy_pixels::<6>(row, dst),
-                8 => self.copy_pixels::<8>(row, dst),
                 12 => self.copy_pixels::<12>(row, dst),
-                16 => self.copy_pixels::<16>(row, dst),
                 pixel_bytes => unreachable!("{pixel_bytes}-byte pixels"),
             }
         }
@@ -518,12 +516,11 @@ impl RowGather {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sample::RGBX;
+    use crate::sample::RGB;
     use crate::testing::{CHANNELS, RandomSample, Rng, random_samples};
 
-    /// Every pixel size the kernels take: 1, 3 or 4 samples of 1, 2 or 4
-    /// bytes.
-    const PIXEL_BYTES: [usize; 8] = [1, 2, 3, 4, 6, 8, 12, 16];
+    /// Every pixel size the kernels take: 1 or 3 samples of 1, 2 or 4 bytes.
+    const PIXEL_BYTES: [usize; 6] = [1, 2, 3, 4, 6, 12];
 
     /// The source column of every output pixel, as `resize_nearest` places
     /// them.
@@ -710,12 +707,12 @@ mod tests {
         // An output past the prefault threshold, upscaled vertically so rows
         // repeat (copied from the row above) and within bands.
         let (width, height) = (1000, 300);
-        let (ow, oh) = (1500, 1500);
-        assert!(ow * oh * RGBX >= crate::cpu::PREFAULT_OUTPUT_BYTES);
-        let src: Vec<u8> = random_samples(&mut Rng::new(53), width * height * RGBX);
+        let (ow, oh) = (1700, 1700);
+        assert!(ow * oh * RGB >= crate::cpu::PREFAULT_OUTPUT_BYTES);
+        let src: Vec<u8> = random_samples(&mut Rng::new(53), width * height * RGB);
         assert_eq!(
-            resize_nearest(&src, (width, height), (ow, oh), RGBX),
-            resize_reference(&src, (width, height), (ow, oh), RGBX)
+            resize_nearest(&src, (width, height), (ow, oh), RGB),
+            resize_reference(&src, (width, height), (ow, oh), RGB)
         );
     }
 }

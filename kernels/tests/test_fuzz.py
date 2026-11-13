@@ -59,7 +59,7 @@ fuzz = settings(
     suppress_health_check=[HealthCheck.function_scoped_fixture],
 )
 dtypes = st.sampled_from(DTYPES)
-channel_counts = st.sampled_from([1, 3, 4])
+channel_counts = st.sampled_from([1, 3])
 seeds = st.integers(0, 2**32 - 1)
 
 

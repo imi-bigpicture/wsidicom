@@ -61,8 +61,8 @@ pub(crate) fn random_samples<T: RandomSample>(rng: &mut Rng, len: usize) -> Vec<
 /// and the smallest sizes, so bodies, tails and edges all run.
 pub(crate) const SIZES: [usize; 14] = [1, 2, 3, 4, 7, 8, 15, 16, 17, 31, 33, 64, 67, 130];
 
-/// The pixel layouts the kernels take: gray, RGB and 4-sample pixels.
-pub(crate) const CHANNELS: [usize; 3] = [1, 3, 4];
+/// The pixel layouts the kernels take: gray and RGB.
+pub(crate) const CHANNELS: [usize; 2] = [1, 3];
 
 /// Every (width, height) pair of `SIZES` with both at least `minimum`.
 pub(crate) fn sizes_from(minimum: usize) -> impl Iterator<Item = (usize, usize)> {

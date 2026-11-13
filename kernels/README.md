@@ -21,7 +21,7 @@ thumbnails:
   the exact convolution at any ratio, float32 computed in f32 (see
   [What runs where](#what-runs-where)).
 
-Works on **planar `(H, W)`** or **interleaved HWC `(H, W, C)`** arrays, dtype
+Works on **planar `(H, W)`** or **interleaved RGB `(H, W, 3)`** arrays, dtype
 `uint8` / `uint16` / `float32`. Planar is the universal core — the only layout
 that expresses subsampled chroma (YCbCr 4:2:0), so compose those per plane.
 Overlaps resolve **last-write-wins** (no blending).
@@ -29,7 +29,7 @@ Overlaps resolve **last-write-wins** (no blending).
 ## Usage
 
 Every image — tile, canvas or input — is a **numpy array**: planar `(H, W)` or
-interleaved `(H, W, C)`, dtype `uint8`, `uint16` or `float32`.
+interleaved RGB `(H, W, 3)`, dtype `uint8`, `uint16` or `float32`.
 
 ```python
 import numpy as np
@@ -119,11 +119,9 @@ images, 2x up to 1/8, all four filters; median and slowest case):
 | --- | --- |
 | uint8 planar | 2.3x (1.1x) |
 | uint8 RGB | 1.3x (0.9x) |
-| uint8 RGBA | 1.0x (0.88x) |
 | uint16 / float32, every layout | 1.6-2.8x (1.0x) |
 
-Every channel is filtered on its own (a 4th channel is not treated as
-alpha).
+Every channel is filtered on its own.
 
 ## SIMD
 

@@ -101,12 +101,11 @@ pub(crate) fn bilinear_x4(src: &[u8], width: usize, height: usize, channels: usi
         if crate::cpu::has_avx2() {
             // SAFETY: avx2 detected; src holds width * height * channels
             // samples, width and height multiples of 4 (the exact kernel's
-            // condition), channels 1, 3 or 4 (the caller's shape check).
+            // condition), channels 1 or 3 (checked).
             return unsafe {
                 match channels {
                     1 => x86::bilinear_x4_avx2::<1, false>(src, width, height),
-                    3 => x86::bilinear_x4_avx2::<4, true>(src, width, height),
-                    _ => x86::bilinear_x4_avx2::<4, false>(src, width, height),
+                    _ => x86::bilinear_x4_avx2::<4, true>(src, width, height),
                 }
             };
         }

@@ -1,5 +1,5 @@
-//! Native convolution resize of uint16 and float32 images (planar, RGB or
-//! 4-sample pixels), with `fast_image_resize`'s filters and windows.
+//! Native convolution resize of uint16 and float32 images (planar or RGB),
+//! with `fast_image_resize`'s filters and windows.
 //!
 //! Computed in f32: every output sample is a chain of fused multiply-adds
 //! over its taps in tap order, vertical pass first (per row, into an f32

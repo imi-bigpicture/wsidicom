@@ -100,15 +100,12 @@ class TestDownscaleBox:
         assert np.abs(reduced.astype(int) - mean).max() <= 1
 
     @pytest.mark.parametrize("dtype", [np.uint16, np.float32])
-    @pytest.mark.parametrize("channels", [3, 4])
     def test_interleaved_matches_mean(
-        self, random_image: RandomImage, dtype: type[np.generic], channels: int
+        self, random_image: RandomImage, dtype: type[np.generic]
     ) -> None:
-        """uint16 and float32 average within each channel.
-
-        At every interleaved channel count.
-        """
+        """uint16 and float32 average within each channel."""
         # Arrange
+        channels = 3
         image = random_image((48, 48, channels), dtype)
         mean = image.reshape(24, 2, 24, 2, channels).mean(axis=(1, 3))
         tolerance = 1.0 if is_integer(dtype) else 1e-4
@@ -152,7 +149,7 @@ class TestDownscaleBox:
         [
             (dtype, channels, height, width, factor)
             for dtype in DTYPES
-            for channels in [1, 3, 4]
+            for channels in [1, 3]
             for height, width in BOX_PYRAMID_SIZES
             for factor in [4, 8, 16]
         ],
@@ -192,7 +189,7 @@ class TestDownscaleBox:
         [
             (dtype, channels, height, width, factor)
             for dtype in DTYPES
-            for channels in [1, 3, 4]
+            for channels in [1, 3]
             for height, width in [(9, 13), (64, 64), (67, 133), (129, 517)]
             for factor in [2, 4, 8, 16]
             if height >= factor and width >= factor
@@ -227,11 +224,10 @@ class TestDownscaleBox:
         assert not reduced.any()
 
     @pytest.mark.parametrize(
-        ["dtype", "channels", "height", "width", "factor"],
+        ["dtype", "height", "width", "factor"],
         [
-            (dtype, channels, height, width, factor)
+            (dtype, height, width, factor)
             for dtype in DTYPES
-            for channels in [3, 4]
             for height, width in BOX_PYRAMID_SIZES
             for factor in BOX_PYRAMID_FACTORS
             if height >= factor and width >= factor
@@ -243,7 +239,6 @@ class TestDownscaleBox:
         random_image: RandomImage,
         kernels: ScalarKernels,
         dtype: type[np.generic],
-        channels: int,
         height: int,
         width: int,
         factor: int,
@@ -254,6 +249,7 @@ class TestDownscaleBox:
         last one 8x for an odd level count) on every tier.
         """
         # Arrange
+        channels = 3
         image = random_image((height, width, channels), dtype)
 
         # Act
@@ -270,7 +266,7 @@ class TestDownscaleBox:
         assert np.array_equal(reduced, np.stack(planar, -1))
 
     @pytest.mark.parametrize("dtype", DTYPES)
-    @pytest.mark.parametrize("shape", [(129, 131), (65, 67, 3), (65, 67, 4)])
+    @pytest.mark.parametrize("shape", [(129, 131), (65, 67, 3)])
     def test_simd_equals_scalar(
         self,
         random_image: RandomImage,
@@ -301,10 +297,10 @@ class TestDownscaleBox:
 class TestDownscaleFilters:
     """The resampling filters keep shape and dtype, and low-pass before decimating."""
 
-    @pytest.mark.parametrize("channels", [3, 4])
-    def test_interleaved_lanczos_keeps_channels(self, channels: int) -> None:
-        """Interleaved RGB and RGBA reduce with lanczos3."""
+    def test_interleaved_lanczos_keeps_channels(self) -> None:
+        """Interleaved RGB reduces with lanczos3."""
         # Arrange
+        channels = 3
         image = np.ones((32, 32, channels), np.uint8)
 
         # Act
@@ -437,7 +433,7 @@ class TestDownscalePartialBlocks:
 
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("factor", [2, 4])
-    @pytest.mark.parametrize("shape", [(7, 9), (13, 6, 3), (5, 11, 4)])
+    @pytest.mark.parametrize("shape", [(7, 9), (13, 6, 3)])
     def test_box_partial_blocks_are_the_mean_of_what_they_cover(
         self,
         random_image: RandomImage,

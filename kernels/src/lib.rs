@@ -29,7 +29,7 @@ mod x86;
 use box_reduce::BoxSample;
 use composite::{Canvas, Tile, compose_tiles};
 use convolve::Geometry;
-use sample::{RGB, RGBX};
+use sample::RGB;
 
 /// Freed outputs go back to mimalloc's caches, so the next call's output
 /// (a tile stream's every call) reuses committed pages instead of faulting
@@ -156,18 +156,15 @@ fn at_least_one(value: i64, message: &str) -> PyResult<usize> {
         .ok_or_else(|| PyValueError::new_err(message.to_owned()))
 }
 
-/// Channel counts an interleaved (H, W, C) array may have: gray, RGB, and
-/// 4-sample pixels (RGBA, RGBX).
-const CHANNELS: [usize; 3] = [1, RGB, RGBX];
+/// Channel counts an interleaved (H, W, C) array may have: gray and RGB.
+const CHANNELS: [usize; 2] = [1, RGB];
 
 /// Extract (height, width, channels) from a 2D (channels=1) or 3D (HWC) shape.
 fn hwc_dims(shape: &[usize]) -> PyResult<(usize, usize, usize)> {
     match *shape {
         [height, width] => Ok((height, width, 1)),
         [height, width, channels] if CHANNELS.contains(&channels) => Ok((height, width, channels)),
-        [_, _, _] => Err(PyValueError::new_err(
-            "3D arrays must have 1, 3 or 4 channels",
-        )),
+        [_, _, _] => Err(PyValueError::new_err("3D arrays must have 1 or 3 channels")),
         _ => Err(PyValueError::new_err(
             "arrays must be 2D (planar) or 3D (H, W, C)",
         )),

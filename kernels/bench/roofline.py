@@ -92,13 +92,6 @@ for dt, tag in ((np.uint8, "u8"), (np.uint16, "u16"), (np.float32, "f32")):
         6 * n,
     )
 
-u16c4 = rng.integers(0, 65536, (8192, 8192, 4)).astype(np.uint16)
-add(
-    "box2 hwc c4 u16",
-    lambda: downscale(u16c4, 2, ResizeFilter.BOX),
-    8192 * 8192 * 4 * 2 * 1.25,
-)
-
 print(f"\n{'kernel':<24}{'GB/s':>7}{'ms':>9}{'% of alloc-ceiling':>20}")
 for name, gbs, ms in sorted(rows, key=lambda r: r[1]):
     print(f"{name:<24}{gbs:>7.1f}{ms:>9.1f}{gbs / ceil_alloc:>19.0%}")

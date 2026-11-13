@@ -24,13 +24,11 @@ pub(crate) fn bilinear_x2_u16(
     {
         if crate::cpu::has_avx2() {
             // SAFETY: avx2 detected; src holds width * height * channels
-            // samples, width and height even, channels 1, 3 or 4 (the
-            // caller's shape and exact-half checks).
+            // samples, width and height even, channels 1 or 3 (checked).
             return unsafe {
                 match channels {
                     1 => x86::bilinear_x2_u16_gray_avx2(src, width, height),
-                    3 => x86::bilinear_x2_u16_hwc_avx2::<3>(src, width, height),
-                    _ => x86::bilinear_x2_u16_hwc_avx2::<4>(src, width, height),
+                    _ => x86::bilinear_x2_u16_rgb_avx2(src, width, height),
                 }
             };
         }
@@ -90,6 +88,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "fewer than")]
     fn dispatch_rejects_short_source() {
-        bilinear_x2_u16(&[0; 8 * 8 * 4 - 1], 8, 8, 4);
+        bilinear_x2_u16(&[0; 8 * 8 * 3 - 1], 8, 8, 3);
     }
 }

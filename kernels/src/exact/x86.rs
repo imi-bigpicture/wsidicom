@@ -100,26 +100,6 @@ pub(crate) unsafe fn keep_even_pixels(full: &[u8], channels: usize, dst: &mut [u
                 output += 6;
             }
         }
-        4 => {
-            // Per 8 input pixels, 4 output pixels: the even dwords.
-            let even = _mm256_setr_epi32(0, 2, 4, 6, 0, 0, 0, 0);
-            while output + 4 <= ow {
-                // SAFETY: output + 4 <= ow (the loop guard): the load reads
-                // full[8 output..8 output + 32], within 8 ow = 2 dst.len()
-                // samples (the caller's contract).
-                let input = unsafe { _mm256_loadu_si256(fp.add(2 * output * 4) as *const __m256i) };
-                let kept = _mm256_permutevar8x32_epi32(input, even);
-                // SAFETY: the store writes dst[4 output..4 output + 16], within
-                // 4 ow by the loop guard.
-                unsafe {
-                    _mm_storeu_si128(
-                        dp.add(output * 4) as *mut __m128i,
-                        _mm256_castsi256_si128(kept),
-                    );
-                }
-                output += 4;
-            }
-        }
         _ => unreachable!("{channels} channels"),
     }
     for output in output..ow {
@@ -131,7 +111,7 @@ pub(crate) unsafe fn keep_even_pixels(full: &[u8], channels: usize, dst: &mut [u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{Rng, random_samples};
+    use crate::testing::{CHANNELS, Rng, random_samples};
 
     #[test]
     fn cover_steps_covers_every_output_within_bounds() {
@@ -155,7 +135,7 @@ mod tests {
             return;
         }
         let mut rng = Rng::new(3);
-        for channels in [1, 3, 4] {
+        for channels in CHANNELS {
             for kept_pixels in 0..80 {
                 let full: Vec<u8> = random_samples(&mut rng, 2 * kept_pixels * channels);
                 let mut dst = vec![0; kept_pixels * channels];

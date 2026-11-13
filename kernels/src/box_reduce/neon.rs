@@ -1,6 +1,6 @@
 //! NEON box reduction kernels (aarch64): the 2x2 box, planar and interleaved
-//! (RGB and 4-sample pixels, split into channel planes by `vldN`), and the
-//! fused 4x4 box.
+//! (RGB pixels, split into channel planes by `vld3`), and the fused 4x4
+//! box.
 //!
 //! Integer kernels sum with `vpaddl`/`vpadal` (widening pairwise adds) and
 //! round with `vrshrn` (rounding shift and narrow): `(sum + 2) >> 2` and
@@ -13,23 +13,17 @@
 //! Loads and stores are justified against that at their loop guards.
 
 use std::arch::aarch64::{
-    float32x2_t, float32x2x3_t, float32x2x4_t, float32x4_t, uint8x8_t, uint8x8x3_t, uint8x8x4_t,
-    uint8x16_t, uint8x16x3_t, uint16x4_t, uint16x4x3_t, uint16x4x4_t, uint16x8_t, vaddq_f32,
-    vaddq_u32, vcombine_f32, vcombine_u8, vcombine_u16, vget_high_f32, vget_low_f32, vld1q_f32,
-    vld1q_u8, vld1q_u16, vld3q_f32, vld3q_u8, vld3q_u16, vld4q_f32, vld4q_u8, vld4q_u16,
-    vmul_n_f32, vmulq_n_f32, vpadalq_u8, vpadalq_u16, vpadd_f32, vpaddlq_u8, vpaddlq_u16,
-    vpaddq_f32, vpaddq_u16, vpaddq_u32, vrshrn_n_u16, vrshrn_n_u32, vst1_u8, vst1q_f32, vst1q_u8,
-    vst1q_u16, vst3_f32, vst3_u8, vst3_u16, vst3q_u8, vst4_f32, vst4_u8, vst4_u16,
-};
-
-use std::arch::aarch64::{
-    uint32x4_t, vaddl_high_u8, vaddl_u8, vaddq_u16, vget_low_u8, vreinterpretq_u16_u64,
-    vreinterpretq_u64_u16, vuzp1q_u64, vuzp2q_u64,
+    float32x2_t, float32x2x3_t, float32x4_t, uint8x8_t, uint8x8x3_t, uint8x16_t, uint8x16x3_t,
+    uint16x4_t, uint16x4x3_t, uint16x8_t, uint32x4_t, vaddq_f32, vaddq_u32, vcombine_f32,
+    vcombine_u8, vcombine_u16, vget_high_f32, vget_low_f32, vld1q_f32, vld1q_u8, vld1q_u16,
+    vld3q_f32, vld3q_u8, vld3q_u16, vmul_n_f32, vmulq_n_f32, vpadalq_u8, vpadalq_u16, vpadd_f32,
+    vpaddlq_u8, vpaddlq_u16, vpaddq_f32, vpaddq_u16, vpaddq_u32, vrshrn_n_u16, vrshrn_n_u32,
+    vst1_u8, vst1q_f32, vst1q_u8, vst1q_u16, vst3_f32, vst3_u8, vst3_u16, vst3q_u8,
 };
 
 use super::{BoxSample, box2_mean};
 use crate::cpu::{unwritten_output, written_output};
-use crate::sample::{RGB, RGBX};
+use crate::sample::RGB;
 
 /// Rounded 2x2 means of 16 u8 columns of two rows: 8 outputs.
 #[target_feature(enable = "neon")]
@@ -271,7 +265,7 @@ macro_rules! gen_box2x_hwc_neon {
         /// `src` holds `width * height` pixels and `dst_ptr` the `height / 2`
         /// output rows of `width / 2` pixels, `dst_stride` samples apart.
         #[target_feature(enable = "neon")]
-        unsafe fn $name(
+        pub(crate) unsafe fn $name(
             src: &[$t],
             width: usize,
             height: usize,
@@ -323,7 +317,7 @@ macro_rules! gen_box2x_hwc_u8_neon {
         /// `src` holds `width * height` pixels and `dst_ptr` the `height / 2`
         /// output rows of `width / 2` pixels, `dst_stride` samples apart.
         #[target_feature(enable = "neon")]
-        unsafe fn $name(
+        pub(crate) unsafe fn $name(
             src: &[u8],
             width: usize,
             height: usize,
@@ -385,7 +379,7 @@ macro_rules! gen_box2x_hwc_u8_neon {
 }
 
 gen_box2x_hwc_u8_neon!(
-    box2x_u8_hwc3_neon,
+    box2x_u8_hwc_into_neon,
     RGB,
     vld3q_u8,
     vst3q_u8,
@@ -394,73 +388,8 @@ gen_box2x_hwc_u8_neon!(
     1,
     2
 );
-/// Rounded 2x2 means of 4 RGBX pixels of two rows: 2 output pixels. A
-/// pixel's 4 widened sums are one 64-bit lane, so `uzp1`/`uzp2` on 64-bit
-/// lanes split the even and odd pixels of the pairs.
-#[target_feature(enable = "neon")]
-#[inline]
-fn mean2x2_rgbx(upper: uint8x16_t, lower: uint8x16_t) -> uint8x8_t {
-    let front = vreinterpretq_u64_u16(vaddl_u8(vget_low_u8(upper), vget_low_u8(lower)));
-    let back = vreinterpretq_u64_u16(vaddl_high_u8(upper, lower));
-    let even = vreinterpretq_u16_u64(vuzp1q_u64(front, back));
-    let odd = vreinterpretq_u16_u64(vuzp2q_u64(front, back));
-    vrshrn_n_u16::<2>(vaddq_u16(even, odd))
-}
-
-/// NEON uint8 RGBX 2x2 box without splitting channels: 8 output pixels per
-/// step; scalar tail.
-///
-/// # Safety
-/// `src` holds `width * height` pixels and `dst_ptr` the `height / 2` output
-/// rows of `width / 2` pixels, `dst_stride` samples apart.
-#[target_feature(enable = "neon")]
-unsafe fn box2x_u8_hwc4_neon(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    dst_ptr: *mut u8,
-    dst_stride: usize,
-) {
-    const STEP_PX: usize = 8;
-    let (ow, oh) = halved(width, height);
-    let stride = width * RGBX;
-    let src_ptr = src.as_ptr();
-    for oy in 0..oh {
-        let (top, bottom) = (2 * oy * stride, (2 * oy + 1) * stride);
-        let out_row = oy * dst_stride;
-        let mut ox = 0usize;
-        while ox + STEP_PX <= ow {
-            let offset = 2 * ox * RGBX;
-            // SAFETY: ox + 8 <= ow <= width / 2: the loads read 16 pixels of
-            // both rows, the stores write output pixels ox..ox + 8.
-            unsafe {
-                let load =
-                    |row: usize, block: usize| vld1q_u8(src_ptr.add(row + offset + 16 * block));
-                let means = |first: usize| {
-                    vcombine_u8(
-                        mean2x2_rgbx(load(top, first), load(bottom, first)),
-                        mean2x2_rgbx(load(top, first + 1), load(bottom, first + 1)),
-                    )
-                };
-                vst1q_u8(dst_ptr.add(out_row + ox * RGBX), means(0));
-                vst1q_u8(dst_ptr.add(out_row + ox * RGBX + 16), means(2));
-            }
-            ox += STEP_PX;
-        }
-        for ox in ox..ow {
-            let top_left = top + 2 * ox * RGBX;
-            for channel in 0..RGBX {
-                // SAFETY: ox < width / 2, oy < height / 2: the block is in src.
-                unsafe {
-                    *dst_ptr.add(out_row + ox * RGBX + channel) =
-                        box2_mean(src_ptr.add(top_left + channel), RGBX, stride);
-                }
-            }
-        }
-    }
-}
 gen_box2x_hwc_neon!(
-    box2x_u16_hwc3_neon,
+    box2x_u16_hwc_into_neon,
     u16,
     RGB,
     4,
@@ -473,21 +402,7 @@ gen_box2x_hwc_neon!(
     2
 );
 gen_box2x_hwc_neon!(
-    box2x_u16_hwc4_neon,
-    u16,
-    RGBX,
-    4,
-    vld4q_u16,
-    vst4_u16,
-    uint16x4x4_t,
-    mean2x2_u16,
-    0,
-    1,
-    2,
-    3
-);
-gen_box2x_hwc_neon!(
-    box2x_f32_hwc3_neon,
+    box2x_f32_hwc_into_neon,
     f32,
     RGB,
     2,
@@ -499,83 +414,26 @@ gen_box2x_hwc_neon!(
     1,
     2
 );
-gen_box2x_hwc_neon!(
-    box2x_f32_hwc4_neon,
-    f32,
-    RGBX,
-    2,
-    vld4q_f32,
-    vst4_f32,
-    float32x2x4_t,
-    mean2x2_f32,
-    0,
-    1,
-    2,
-    3
-);
-
-// The interleaved 2x box of one sample type: 3 or 4 channels, into a new
-// image (`$name`) or rows `dst_stride` apart (`$into`).
-macro_rules! gen_box2x_hwc_dispatch {
-    ($name:ident, $into:ident, $t:ty, $hwc3:ident, $hwc4:ident) => {
+// The RGB 2x box of one sample type into a new image.
+macro_rules! gen_box2x_rgb_neon {
+    ($name:ident, $t:ty, $into:ident) => {
         /// # Safety
-        /// `src` holds `width * height * channels` samples, `channels` 3 or 4.
+        /// `src` holds `width * height * 3` samples.
         #[target_feature(enable = "neon")]
         pub(crate) unsafe fn $name(
             src: &[$t],
             width: usize,
             height: usize,
-            channels: usize,
         ) -> (Vec<$t>, usize, usize) {
-            let kernel: Box2xInto<$t> = if channels == RGB { $hwc3 } else { $hwc4 };
-            // SAFETY: the caller's bounds, for the channel count's kernel.
-            unsafe { box2x_allocated(kernel, src, (width, height, channels)) }
-        }
-
-        /// # Safety
-        /// `src` holds `width * height * channels` samples, `channels` 3 or
-        /// 4, and `dst_ptr` the `height / 2` output rows of `width / 2`
-        /// pixels, `dst_stride` samples apart.
-        #[target_feature(enable = "neon")]
-        pub(crate) unsafe fn $into(
-            src: &[$t],
-            (width, height, channels): (usize, usize, usize),
-            dst_ptr: *mut $t,
-            dst_stride: usize,
-        ) {
-            // SAFETY: the caller's bounds, for the channel count's kernel.
-            unsafe {
-                if channels == RGB {
-                    $hwc3(src, width, height, dst_ptr, dst_stride);
-                } else {
-                    $hwc4(src, width, height, dst_ptr, dst_stride);
-                }
-            }
+            // SAFETY: the caller's bounds.
+            unsafe { box2x_allocated($into, src, (width, height, RGB)) }
         }
     };
 }
 
-gen_box2x_hwc_dispatch!(
-    box2x_u8_hwc_neon,
-    box2x_u8_hwc_into_neon,
-    u8,
-    box2x_u8_hwc3_neon,
-    box2x_u8_hwc4_neon
-);
-gen_box2x_hwc_dispatch!(
-    box2x_u16_hwc_neon,
-    box2x_u16_hwc_into_neon,
-    u16,
-    box2x_u16_hwc3_neon,
-    box2x_u16_hwc4_neon
-);
-gen_box2x_hwc_dispatch!(
-    box2x_f32_hwc_neon,
-    box2x_f32_hwc_into_neon,
-    f32,
-    box2x_f32_hwc3_neon,
-    box2x_f32_hwc4_neon
-);
+gen_box2x_rgb_neon!(box2x_u8_hwc_neon, u8, box2x_u8_hwc_into_neon);
+gen_box2x_rgb_neon!(box2x_u16_hwc_neon, u16, box2x_u16_hwc_into_neon);
+gen_box2x_rgb_neon!(box2x_f32_hwc_neon, f32, box2x_f32_hwc_into_neon);
 
 /// Output size of a 4x box: `(width / 4, height / 4)`.
 fn quartered(width: usize, height: usize) -> (usize, usize) {
@@ -801,8 +659,8 @@ fn rounded_mean16_u32(sums: uint32x4_t) -> uint16x4_t {
     vrshrn_n_u32::<4>(sums)
 }
 
-// The fused interleaved 4x/8x box for one sample type. `$load3`/`$load4`
-// split `$lanes` pixels into channel planes; per plane, `$pairs`/`$pairs_acc`
+// The fused RGB 4x/8x box for one sample type. `$load3` splits `$lanes`
+// pixels into channel planes; per plane, `$pairs`/`$pairs_acc`
 // sum column pairs down 4 rows, `$quads` pairs those into 4x4 sums and
 // `$mean16` rounds them once: `$lanes / 2` outputs from 2 `$lanes` pixels.
 // 8x takes two such 4x bands and their rounded 2x2 mean (`$mean4`), the
@@ -810,46 +668,37 @@ fn rounded_mean16_u32(sums: uint32x4_t) -> uint16x4_t {
 macro_rules! gen_box_levels_hwc_neon {
     (
         $name:ident, $t:ty, $lanes:expr, $plane:ty, $means:ty,
-        $load3:ident, $load4:ident, $pairs:ident, $pairs_acc:ident, $quads:ident,
-        $mean16:ident, $combine:ident, $mean4:ident,
-        $store3:ident, $store4:ident, $planes3:ident, $planes4:ident
+        $load3:ident, $pairs:ident, $pairs_acc:ident, $quads:ident,
+        $mean16:ident, $combine:ident, $mean4:ident, $store3:ident, $planes3:ident
     ) => {
-        /// The interleaved box reduced by 4 (`levels` 2) or 8 (`levels` 3),
-        /// with each channel equal to the planar pyramid's.
+        /// The RGB box reduced by 4 (`levels` 2) or 8 (`levels` 3), with
+        /// each channel equal to the planar pyramid's.
         ///
         /// # Safety
-        /// `src` holds `width * height * CHANNELS` samples, `CHANNELS` 3 or 4,
-        /// and `levels` is 2 or 3.
+        /// `src` holds `width * height * 3` samples, and `levels` is 2 or 3.
         #[target_feature(enable = "neon")]
-        pub(crate) unsafe fn $name<const CHANNELS: usize>(
+        pub(crate) unsafe fn $name(
             src: &[$t],
             (width, height): (usize, usize),
             levels: u32,
         ) -> (Vec<$t>, usize, usize) {
             const LANES: usize = $lanes;
+            const CHANNELS: usize = RGB;
             debug_assert!((2..=3).contains(&levels));
             let block = 1usize << levels;
             let (ow, oh) = (width / block, height / block);
             let (stride, out_stride) = (width * CHANNELS, ow * CHANNELS);
             let mut out = unwritten_output::<$t>(oh * out_stride);
             let (src_ptr, dst_ptr) = (src.as_ptr(), out.as_mut_ptr().cast::<$t>());
-            // The channel planes of the LANES pixels at sample `at` (an RGB
-            // image repeats its last plane).
-            let planes = |at: usize| -> [$plane; 4] {
+            // The channel planes of the LANES pixels at sample `at`.
+            let planes = |at: usize| -> [$plane; CHANNELS] {
                 // SAFETY: callers keep the LANES pixels at `at` in src.
-                unsafe {
-                    if CHANNELS == RGB {
-                        let split = $load3(src_ptr.add(at));
-                        [split.0, split.1, split.2, split.2]
-                    } else {
-                        let split = $load4(src_ptr.add(at));
-                        [split.0, split.1, split.2, split.3]
-                    }
-                }
+                let split = unsafe { $load3(src_ptr.add(at)) };
+                [split.0, split.1, split.2]
             };
             // Rounded 4x4 means of the 2 LANES pixels from `px` in the 4 rows
             // from `top_row`: LANES / 2 per plane.
-            let means4 = |top_row: usize, px: usize| -> [$means; 4] {
+            let means4 = |top_row: usize, px: usize| -> [$means; CHANNELS] {
                 let pair_sums = |px: usize| {
                     let at = |row: usize| (top_row + row) * stride + px * CHANNELS;
                     let mut sums = planes(at(0)).map(|plane| $pairs(plane));
@@ -862,7 +711,7 @@ macro_rules! gen_box_levels_hwc_neon {
                     sums
                 };
                 let (left, right) = (pair_sums(px), pair_sums(px + LANES));
-                [0, 1, 2, 3].map(|plane| $mean16($quads(left[plane], right[plane])))
+                [0, 1, 2].map(|plane| $mean16($quads(left[plane], right[plane])))
             };
             for oy in 0..oh {
                 let out_row = oy * out_stride;
@@ -877,19 +726,15 @@ macro_rules! gen_box_levels_hwc_neon {
                         let band = |top_row: usize| {
                             let (left, right) =
                                 (means4(top_row, px), means4(top_row, px + 2 * LANES));
-                            [0, 1, 2, 3].map(|plane| $combine(left[plane], right[plane]))
+                            [0, 1, 2].map(|plane| $combine(left[plane], right[plane]))
                         };
                         let (upper, lower) = (band(8 * oy), band(8 * oy + 4));
-                        [0, 1, 2, 3].map(|plane| $mean4(upper[plane], lower[plane]))
+                        [0, 1, 2].map(|plane| $mean4(upper[plane], lower[plane]))
                     };
                     // SAFETY: ox + LANES / 2 <= ow: output pixels of this row.
                     unsafe {
                         let dst = dst_ptr.add(out_row + ox * CHANNELS);
-                        if CHANNELS == RGB {
-                            $store3(dst, $planes3(means[0], means[1], means[2]));
-                        } else {
-                            $store4(dst, $planes4(means[0], means[1], means[2], means[3]));
-                        }
+                        $store3(dst, $planes3(means[0], means[1], means[2]));
                     }
                     ox += LANES / 2;
                 }
@@ -922,7 +767,6 @@ gen_box_levels_hwc_neon!(
     uint8x16_t,
     uint8x8_t,
     vld3q_u8,
-    vld4q_u8,
     vpaddlq_u8,
     vpadalq_u8,
     vpaddq_u16,
@@ -930,9 +774,7 @@ gen_box_levels_hwc_neon!(
     vcombine_u8,
     mean2x2_u8,
     vst3_u8,
-    vst4_u8,
-    uint8x8x3_t,
-    uint8x8x4_t
+    uint8x8x3_t
 );
 gen_box_levels_hwc_neon!(
     box_levels_u16_hwc_neon,
@@ -941,7 +783,6 @@ gen_box_levels_hwc_neon!(
     uint16x8_t,
     uint16x4_t,
     vld3q_u16,
-    vld4q_u16,
     vpaddlq_u16,
     vpadalq_u16,
     vpaddq_u32,
@@ -949,9 +790,7 @@ gen_box_levels_hwc_neon!(
     vcombine_u16,
     mean2x2_u16,
     vst3_u16,
-    vst4_u16,
-    uint16x4x3_t,
-    uint16x4x4_t
+    uint16x4x3_t
 );
 
 #[cfg(test)]
@@ -963,9 +802,6 @@ mod tests {
     };
     use crate::box_reduce::{box2x_interleaved, box2x_scalar};
     use crate::testing::{ImageKernel, Rng, UnsafeImageKernel};
-
-    /// An interleaved NEON kernel taking its channel count.
-    type InterleavedKernel<T> = unsafe fn(&[T], usize, usize, usize) -> (Vec<T>, usize, usize);
 
     fn assert_planar_matches_reference<T: BoxTestSample>(
         kernel: UnsafeImageKernel<T>,
@@ -986,20 +822,18 @@ mod tests {
         }
     }
 
-    fn assert_interleaved_halves_as_scalar<T: BoxTestSample>(kernel: InterleavedKernel<T>) {
+    fn assert_interleaved_halves_as_scalar<T: BoxTestSample>(kernel: UnsafeImageKernel<T>) {
         let mut rng = Rng::new(41);
-        for channels in [RGB, RGBX] {
-            for (width, height) in box_sizes(1) {
-                for src in test_images::<T>(&mut rng, width * height * channels) {
-                    // SAFETY: NEON is baseline on aarch64; src holds width *
-                    // height pixels of `channels` (3 or 4) samples.
-                    let simd = unsafe { kernel(&src, width, height, channels) };
-                    assert_same_image(
-                        &simd,
-                        &box2x_interleaved(&src, width, height, channels),
-                        &format!("{width} x {height} x {channels}"),
-                    );
-                }
+        for (width, height) in box_sizes(1) {
+            for src in test_images::<T>(&mut rng, width * height * RGB) {
+                // SAFETY: NEON is baseline on aarch64; src holds width *
+                // height RGB pixels.
+                let simd = unsafe { kernel(&src, width, height) };
+                assert_same_image(
+                    &simd,
+                    &box2x_interleaved(&src, width, height, RGB),
+                    &format!("{width} x {height}"),
+                );
             }
         }
     }
@@ -1028,24 +862,19 @@ mod tests {
         assert_planar_matches_reference::<f32>(box4x_f32_neon, box4x_fused_reference);
     }
 
-    fn assert_levels_match_the_pyramid<T: BoxTestSample>(
-        rgb: LevelsKernel<T>,
-        rgbx: LevelsKernel<T>,
-    ) {
+    fn assert_levels_match_the_pyramid<T: BoxTestSample>(kernel: LevelsKernel<T>) {
         let mut rng = Rng::new(42);
-        for (channels, kernel) in [(RGB, rgb), (RGBX, rgbx)] {
-            for levels in [2, 3] {
-                for (width, height) in box_sizes(1) {
-                    for src in test_images::<T>(&mut rng, width * height * channels) {
-                        // SAFETY: NEON is baseline on aarch64; src holds
-                        // width * height pixels of `channels` samples.
-                        let simd = unsafe { kernel(&src, (width, height), levels) };
-                        assert_same_image(
-                            &simd,
-                            &interleaved_pyramid_reference(&src, (width, height, channels), levels),
-                            &format!("{levels} levels, {width} x {height} x {channels}"),
-                        );
-                    }
+        for levels in [2, 3] {
+            for (width, height) in box_sizes(1) {
+                for src in test_images::<T>(&mut rng, width * height * RGB) {
+                    // SAFETY: NEON is baseline on aarch64; src holds width *
+                    // height RGB pixels.
+                    let simd = unsafe { kernel(&src, (width, height), levels) };
+                    assert_same_image(
+                        &simd,
+                        &interleaved_pyramid_reference(&src, (width, height, RGB), levels),
+                        &format!("{levels} levels, {width} x {height}"),
+                    );
                 }
             }
         }
@@ -1053,13 +882,7 @@ mod tests {
 
     #[test]
     fn fused_interleaved_neon_kernels_equal_the_pyramid() {
-        assert_levels_match_the_pyramid::<u8>(
-            box_levels_u8_hwc_neon::<RGB>,
-            box_levels_u8_hwc_neon::<RGBX>,
-        );
-        assert_levels_match_the_pyramid::<u16>(
-            box_levels_u16_hwc_neon::<RGB>,
-            box_levels_u16_hwc_neon::<RGBX>,
-        );
+        assert_levels_match_the_pyramid::<u8>(box_levels_u8_hwc_neon);
+        assert_levels_match_the_pyramid::<u16>(box_levels_u16_hwc_neon);
     }
 }

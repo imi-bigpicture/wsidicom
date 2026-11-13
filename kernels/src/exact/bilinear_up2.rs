@@ -118,6 +118,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "fewer than")]
     fn dispatch_rejects_short_source() {
-        bilinear_up2(&[0; 40 * 3 * 4 - 1], 40, 3, 4);
+        bilinear_up2(&[0; 40 * 3 * 3 - 1], 40, 3, 3);
     }
 }

@@ -7,16 +7,15 @@
 use std::arch::aarch64::{
     uint8x8_t, uint8x8x3_t, uint8x16_t, uint16x4_t, uint16x4x3_t, uint16x8_t, uint32x4_t,
     vaddl_high_u8, vaddl_high_u16, vaddl_u8, vaddl_u16, vaddq_u16, vaddq_u32, vcombine_u8,
-    vcombine_u16, vextq_u16, vextq_u32, vget_low_u8, vget_low_u16, vld1_u16, vld1q_u8, vld1q_u16,
-    vld1q_u32, vld3q_u8, vld3q_u16, vmlaq_n_u16, vmlaq_n_u32, vreinterpretq_u16_u64,
-    vreinterpretq_u64_u16, vrshrn_n_u16, vrshrn_n_u32, vst1_u8, vst1_u16, vst1q_u8, vst1q_u16,
-    vst1q_u32, vst3_u8, vst3_u16, vuzp1q_u16, vuzp1q_u32, vuzp1q_u64, vuzp2q_u16, vuzp2q_u32,
-    vuzp2q_u64,
+    vcombine_u16, vextq_u16, vextq_u32, vget_low_u8, vget_low_u16, vld1q_u8, vld1q_u16, vld1q_u32,
+    vld3q_u8, vld3q_u16, vmlaq_n_u16, vmlaq_n_u32, vrshrn_n_u16, vrshrn_n_u32, vst1_u8, vst1_u16,
+    vst1q_u8, vst1q_u16, vst1q_u32, vst3_u8, vst3_u16, vuzp1q_u16, vuzp1q_u32, vuzp2q_u16,
+    vuzp2q_u32,
 };
 
 use super::{X2Sample, divide_rounded, horizontal_scalar, vertical_sums_scalar, window};
 use crate::exact::neon::{keep_even_pixels, keep_even_pixels_u16};
-use crate::sample::{RGB, RGBX};
+use crate::sample::RGB;
 use crate::simd::cover_row;
 
 /// Samples per vertical and horizontal step (two registers of u16 sums).
@@ -32,7 +31,7 @@ const BLOCK: usize = 16;
 /// by the scalar reference's arithmetic.
 ///
 /// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1, 3 or 4.
+/// `src` holds `width * height * channels` samples, `channels` 1 or 3.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn bilinear_x2_neon(
     src: &[u8],
@@ -65,13 +64,12 @@ pub(crate) unsafe fn bilinear_x2_neon(
         }
         let rows: [&[u8]; 4] = std::array::from_fn(|tap| &src[(r0 + tap) * ws..][..ws]);
         if width >= 2 * FUSED_BLOCK_PX {
-            // SAFETY: the rows hold `width` pixels of `channels` (1, 3 or 4)
+            // SAFETY: the rows hold `width` pixels of `channels` (1 or 3)
             // samples, at least two blocks; dst holds `ow` outputs.
             unsafe {
                 match channels {
                     1 => fused_row::<1, GrayPlanes>(rows, width, dst),
-                    RGB => fused_row::<RGB, RgbPlanes>(rows, width, dst),
-                    _ => fused_row_rgbx(rows, width, dst),
+                    _ => fused_row::<RGB, RgbPlanes>(rows, width, dst),
                 }
             }
             continue;
@@ -143,7 +141,7 @@ const BLOCK_U16: usize = 8;
 /// (`(sum + 32) >> 6`).
 ///
 /// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1, 3 or 4.
+/// `src` holds `width * height * channels` samples, `channels` 1 or 3.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn bilinear_x2_u16_neon(
     src: &[u16],
@@ -176,13 +174,12 @@ pub(crate) unsafe fn bilinear_x2_u16_neon(
         }
         let rows: [&[u16]; 4] = std::array::from_fn(|tap| &src[(r0 + tap) * ws..][..ws]);
         if width >= 2 * FUSED_BLOCK_PX_U16 {
-            // SAFETY: the rows hold `width` pixels of `channels` (1, 3 or 4)
+            // SAFETY: the rows hold `width` pixels of `channels` (1 or 3)
             // samples, at least two blocks; dst holds `ow` outputs.
             unsafe {
                 match channels {
                     1 => fused_row_u16::<1, GrayPlanes>(rows, width, dst),
-                    RGB => fused_row_u16::<RGB, RgbPlanes>(rows, width, dst),
-                    _ => fused_row_u16_rgbx(rows, width, dst),
+                    _ => fused_row_u16::<RGB, RgbPlanes>(rows, width, dst),
                 }
             }
             continue;
@@ -344,95 +341,6 @@ unsafe fn fused_row<const CHANNELS: usize, Planes: BlockPlanes<CHANNELS>>(
     }
     for output in [0, ow - 1] {
         output_from_rows(rows, (width, CHANNELS), output, dst);
-    }
-}
-
-/// `fused_row` for RGBX without splitting channels: a pixel's four widened
-/// sums are one 64-bit lane, so per block of 16 pixels the vertical sums of
-/// each register of 2 pixels pair up by `uzp1`/`uzp2` on 64-bit lanes into
-/// even and odd pixels, 2 of each per pair; output o's neighbours `O[o - 1]`
-/// and `E[o + 1]` come by `vext` of one pixel (4 lanes) from the adjacent
-/// pairs. Rounded once by `vrshrn` by 6, 8 output bytes (2 pixels) per pair.
-///
-/// # Safety
-/// Each row holds `width >= 2 * FUSED_BLOCK_PX` RGBX pixels, `dst`
-/// `width / 2`.
-#[target_feature(enable = "neon")]
-unsafe fn fused_row_rgbx(rows: [&[u8]; 4], width: usize, dst: &mut [u8]) {
-    // Pairs of output pixels per block.
-    const PAIRS: usize = FUSED_BLOCK_PX / 4;
-    let ow = width / 2;
-    let blocks = width / FUSED_BLOCK_PX;
-    let row_ptrs = rows.map(<[u8]>::as_ptr);
-    // The even and odd pixels' vertical sums of the 16 pixels from `pixel`:
-    // per pair `(E, O)`, 2 pixels of 4 lanes each.
-    let block_sums = |pixel: usize| -> [(uint16x8_t, uint16x8_t); PAIRS] {
-        std::array::from_fn(|pair| {
-            // SAFETY: pixel + 16 <= width (every caller): 4 pixels of each
-            // row from pixel + 4 pair.
-            let [top, upper, lower, bottom] =
-                row_ptrs.map(|row| unsafe { vld1q_u8(row.add((pixel + 4 * pair) * RGBX)) });
-            let front = vmlaq_n_u16(
-                vaddl_u8(vget_low_u8(top), vget_low_u8(bottom)),
-                vaddl_u8(vget_low_u8(upper), vget_low_u8(lower)),
-                3,
-            );
-            let back = vmlaq_n_u16(vaddl_high_u8(top, bottom), vaddl_high_u8(upper, lower), 3);
-            let (front, back) = (vreinterpretq_u64_u16(front), vreinterpretq_u64_u16(back));
-            (
-                vreinterpretq_u16_u64(vuzp1q_u64(front, back)),
-                vreinterpretq_u16_u64(vuzp2q_u64(front, back)),
-            )
-        })
-    };
-    let dst_ptr = dst.as_mut_ptr();
-    // The 8 outputs from input pixel `pixel`, from the previous, current and
-    // next blocks' sums.
-    let outputs =
-        |pixel: usize, [previous, current, next]: [[(uint16x8_t, uint16x8_t); PAIRS]; 3]| {
-            for pair in 0..PAIRS {
-                let (even, odd) = current[pair];
-                let previous_odd = if pair == 0 {
-                    previous[PAIRS - 1].1
-                } else {
-                    current[pair - 1].1
-                };
-                let next_even = if pair + 1 == PAIRS {
-                    next[0].0
-                } else {
-                    current[pair + 1].0
-                };
-                let outer = vaddq_u16(
-                    vextq_u16::<4>(previous_odd, odd),
-                    vextq_u16::<4>(even, next_even),
-                );
-                let rounded = vrshrn_n_u16::<6>(vmlaq_n_u16(outer, vaddq_u16(even, odd), 3));
-                // SAFETY: pixel + 16 <= width: output pixels pixel / 2 + 2 pair
-                // .. + 2 of the row.
-                unsafe { vst1_u8(dst_ptr.add((pixel / 2 + 2 * pair) * RGBX), rounded) };
-            }
-        };
-    // As in `fused_row`: stand-ins at the ends feed only the clipped outputs.
-    let mut current = block_sums(0);
-    let mut previous = current;
-    for block in 0..blocks {
-        let pixel = block * FUSED_BLOCK_PX;
-        let next = if block + 1 < blocks {
-            block_sums(pixel + FUSED_BLOCK_PX)
-        } else {
-            current
-        };
-        outputs(pixel, [previous, current, next]);
-        previous = current;
-        current = next;
-    }
-    if !width.is_multiple_of(FUSED_BLOCK_PX) {
-        let pixel = width - FUSED_BLOCK_PX;
-        let last = block_sums(pixel);
-        outputs(pixel, [block_sums(pixel - FUSED_BLOCK_PX), last, last]);
-    }
-    for output in [0, ow - 1] {
-        output_from_rows(rows, (width, RGBX), output, dst);
     }
 }
 
@@ -605,41 +513,6 @@ unsafe fn fused_row_u16<const CHANNELS: usize, Planes: BlockPlanesU16<CHANNELS>>
     }
     for output in [0, ow - 1] {
         output_from_rows(rows, (width, CHANNELS), output, dst);
-    }
-}
-
-/// `fused_row_u16` for RGBX without splitting channels: a pixel's four
-/// widened sums fill one u32 register, so output o is
-/// `O[o - 1] + 3 (E[o] + O[o]) + E[o + 1]` over whole registers, pixel by
-/// pixel, rounded once by `vrshrn` by 6.
-///
-/// # Safety
-/// Each row holds `width >= 2 * FUSED_BLOCK_PX_U16` RGBX pixels, `dst`
-/// `width / 2`.
-#[target_feature(enable = "neon")]
-unsafe fn fused_row_u16_rgbx(rows: [&[u16]; 4], width: usize, dst: &mut [u16]) {
-    let ow = width / 2;
-    let row_ptrs = rows.map(<[u16]>::as_ptr);
-    // The vertical sums of pixel `pixel`.
-    let pixel_sums = |pixel: usize| {
-        // SAFETY: pixel < width (every caller): the pixel lies in every row.
-        let [top, upper, lower, bottom] =
-            row_ptrs.map(|row| unsafe { vld1_u16(row.add(pixel * RGBX)) });
-        vmlaq_n_u32(vaddl_u16(top, bottom), vaddl_u16(upper, lower), 3)
-    };
-    let dst_ptr = dst.as_mut_ptr();
-    // Outputs 1 .. ow - 1 (the clipped ends below), each from pixels
-    // 2o - 1 ..= 2o + 2, the last two reused as the next output's first.
-    let (mut before, mut even) = (pixel_sums(1), pixel_sums(2));
-    for output in 1..ow - 1 {
-        let (odd, after) = (pixel_sums(2 * output + 1), pixel_sums(2 * output + 2));
-        let sums = vmlaq_n_u32(vaddq_u32(before, after), vaddq_u32(even, odd), 3);
-        // SAFETY: output < ow: one output pixel of the row.
-        unsafe { vst1_u16(dst_ptr.add(output * RGBX), vrshrn_n_u32::<6>(sums)) };
-        (before, even) = (odd, after);
-    }
-    for output in [0, ow - 1] {
-        output_from_rows(rows, (width, RGBX), output, dst);
     }
 }
 

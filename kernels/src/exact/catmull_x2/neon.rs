@@ -49,7 +49,7 @@ const LEAD: usize = 3;
 /// reference's arithmetic.
 ///
 /// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1, 3 or 4,
+/// `src` holds `width * height * channels` samples, `channels` 1 or 3,
 /// `width` and `height` even (the exact kernel's condition; with an odd
 /// width the gray horizontal pass would leave output `ow - 2` unwritten).
 #[target_feature(enable = "neon")]

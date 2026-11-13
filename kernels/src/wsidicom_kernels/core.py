@@ -40,7 +40,7 @@ def compose(
     a tile that packs several pieces is passed once, decoded, and never
     copied apart.
 
-    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1, 3 or 4
+    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1 or 3
     channels. Subsampled chroma (differently sized planes) cannot be
     interleaved, so compose those per plane.
 
@@ -48,7 +48,7 @@ def compose(
     ----------
     canvas: numpy.ndarray
         The destination, dtype uint8 / uint16 / float32, C-contiguous. Planar
-        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1, 3 or 4. Mutated in
+        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3. Mutated in
         place.
     tiles: Sequence[numpy.ndarray]
         The source tiles, same dtype and channel count as ``canvas``
@@ -112,7 +112,7 @@ def downscale(
     what remains of the image (with ``BOX``, the mean of the pixels there),
     rather than the image being stretched to whole blocks or cropped.
 
-    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1, 3 or 4
+    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1 or 3
     channels, each filtered independently. For subsampled chroma, downscale
     each plane separately.
 
@@ -120,7 +120,7 @@ def downscale(
     ----------
     image: numpy.ndarray
         The source, C-contiguous, dtype uint8 / uint16 / float32. Planar
-        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1, 3 or 4.
+        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
     factor: int
         Integer reduction factor applied to both spatial axes.
     filter: ResizeFilter
@@ -231,7 +231,7 @@ def resize(
     downscaling; for *upscaling* it degenerates to blocky nearest-like output, so
     pass ``BILINEAR`` / ``CATMULLROM`` / ``LANCZOS3`` when enlarging.
 
-    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1, 3 or 4
+    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1 or 3
     channels, each filtered independently. For subsampled chroma, resize
     each plane separately.
 
@@ -239,7 +239,7 @@ def resize(
     ----------
     image: numpy.ndarray
         The source, C-contiguous, dtype uint8 / uint16 / float32. Planar
-        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1, 3 or 4.
+        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
     out_h: int
         Target height in pixels.
     out_w: int
