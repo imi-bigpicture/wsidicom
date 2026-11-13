@@ -12,33 +12,13 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Public enums accepted by wsidicom_kernels.
+"""The public enum accepted by wsidicom_kernels.
 
-Both enums are ``StrEnum``s, so a member is itself the wire value the Rust
-extension expects; the public functions also accept the raw strings.
+``ResizeFilter`` is a ``StrEnum``, so a member is itself the wire value the
+Rust extension expects; the public functions also accept the raw strings.
 """
 
 from enum import StrEnum
-
-
-class Interpolation(StrEnum):
-    """How a tile placed at a fractional position is sampled.
-
-    :func:`~wsidicom_kernels.compose` and :func:`~wsidicom_kernels.stitch` give
-    each canvas pixel the tile's value at that point, interpolated from the tile
-    pixels around it, at the tile's own scale.
-    """
-
-    NEAREST = "nearest"
-    """The nearest tile pixel's value; only existing values, so exact for label
-    and mask images."""
-    BILINEAR = "bilinear"
-    """Linear interpolation between the 2x2 nearest tile pixels; stays within
-    their range."""
-    BICUBIC = "bicubic"
-    """Catmull-Rom interpolation over the 4x4 nearest tile pixels; sharper than
-    BILINEAR, with overshoot at high-contrast edges (clamped for integer
-    dtypes)."""
 
 
 class ResizeFilter(StrEnum):

@@ -28,9 +28,7 @@ mod testing;
 mod x86;
 
 use box_reduce::BoxSample;
-use composite::geometry::{Canvas, Tile};
-use composite::rows::ComposeSample;
-use composite::{Interpolation, compose_tiles, compose_tiles_rgbx};
+use composite::{Canvas, Tile, compose_tiles, compose_tiles_rgbx};
 use convolve::Geometry;
 use sample::{RGB, RGBX};
 
@@ -139,9 +137,8 @@ pub(crate) fn output_samples(
     Ok(samples)
 }
 
-/// Positions' largest magnitude: f64 holds every integer up to it, and
-/// pixel arithmetic on it cannot overflow.
-const MAX_POSITION: f64 = 4_503_599_627_370_496.0; // 2^52
+/// Positions' largest magnitude: pixel arithmetic on it cannot overflow.
+const MAX_POSITION: u64 = 1 << 52;
 
 /// `c_samples` of an array borrowed for writing.
 fn c_samples_mut<'a, T: Element, D: Dimension>(
@@ -158,15 +155,6 @@ fn at_least_one(value: i64, message: &str) -> PyResult<usize> {
         .ok()
         .filter(|&value| value >= 1)
         .ok_or_else(|| PyValueError::new_err(message.to_owned()))
-}
-
-fn parse_interpolation(name: &str) -> PyResult<Interpolation> {
-    match name {
-        "nearest" => Ok(Interpolation::Nearest),
-        "bilinear" => Ok(Interpolation::Bilinear),
-        "bicubic" => Ok(Interpolation::Bicubic),
-        other => Err(PyValueError::new_err(format!("unknown filter: {other}"))),
-    }
 }
 
 /// Channel counts an interleaved (H, W, C) array may have: gray, RGB, and
@@ -352,12 +340,12 @@ fn crop_tiles<'a, T: Copy>(
 /// kernels are pure Rust on raw slices). Borrows are fallible so aliasing — a
 /// tile sharing the canvas's buffer, or another thread composing onto it — is
 /// a `ValueError` rather than a panic.
-fn compose_all<T: ComposeSample>(
+fn compose_all<T: Element + Copy + Send + Sync>(
     canvas_array: &Bound<'_, PyArrayDyn<T>>,
     tile_arrays: &[Bound<'_, PyAny>],
-    (pos, crops): (&ArrayView2<f64>, Option<&ArrayView2<i64>>),
+    (pos, crops): (&ArrayView2<i64>, Option<&ArrayView2<i64>>),
     tile_c: Option<usize>,
-    compose: impl FnOnce(&mut Canvas<T>, &[Tile<T>], &[(f64, f64)]) + Send,
+    compose: impl FnOnce(&mut Canvas<T>, &[Tile<T>], &[(isize, isize)]) + Send,
 ) -> PyResult<()> {
     let (height, width, channels) = hwc_dims(canvas_array.shape())?;
     let tile_c = tile_c.unwrap_or(channels);
@@ -413,34 +401,41 @@ fn compose_all<T: ComposeSample>(
         tiles = crop_tiles(&tiles, crops)?;
     }
 
-    let positions: Vec<(f64, f64)> = pos.rows().into_iter().map(|row| (row[0], row[1])).collect();
+    let positions: Vec<(isize, isize)> = pos
+        .rows()
+        .into_iter()
+        .map(|row| (row[0] as isize, row[1] as isize))
+        .collect();
     canvas_array
         .py()
         .detach(|| compose(&mut canvas, &tiles, &positions));
     Ok(())
 }
 
-/// compose(canvas, tiles, positions, filter="bilinear", pad=255, crops=None)
+/// compose(canvas, tiles, positions, pad=255, crops=None)
 ///
-/// Paste `tiles` onto `canvas` (mutated in place) at `positions` (N x 2 float64,
+/// Paste `tiles` onto `canvas` (mutated in place) at `positions` (N x 2 int64,
 /// each (x, y) = (column, row)); with `crops` (N x 5 int64, each (tile index,
-/// x, y, width, height)), paste those pieces of `tiles` instead. Overlaps: last wins; the pixels tiles at
-/// fractional positions cover only partly are blended by coverage (see
-/// `composite::edges`). Canvas and tiles are all
-/// either planar 2D (H, W) or interleaved HWC (H, W, C) with matching channels,
-/// except that a uint8 RGBX (H, W, 4) canvas takes RGB (H, W, 3) tiles, `pad`
-/// filling the fourth sample (see `compose_tile_rgbx`).
+/// x, y, width, height)), paste those pieces of `tiles` instead. Overlaps:
+/// last wins. Canvas and tiles are all either planar 2D (H, W) or interleaved
+/// HWC (H, W, C) with matching channels, except that a uint8 RGBX (H, W, 4)
+/// canvas takes RGB (H, W, 3) tiles, `pad` filling the fourth sample.
 #[pyfunction]
-#[pyo3(signature = (canvas, tiles, positions, filter="bilinear", pad=255, crops=None))]
+#[pyo3(signature = (canvas, tiles, positions, pad=255, crops=None))]
 fn compose(
     canvas: &Bound<'_, PyAny>,
     tiles: Vec<Bound<'_, PyAny>>,
-    positions: PyReadonlyArray2<f64>,
-    filter: &str,
+    positions: &Bound<'_, PyAny>,
     pad: u8,
     crops: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<()> {
-    let filter = parse_interpolation(filter)?;
+    let positions = positions
+        .cast::<PyArray2<i64>>()
+        .map_err(|_| {
+            PyValueError::new_err("positions must be an (N, 2) int64 array of integer positions")
+        })?
+        .try_readonly()
+        .map_err(|_| in_use())?;
     if !positions.is_c_contiguous() {
         return Err(PyValueError::new_err("positions must be C-contiguous"));
     }
@@ -471,10 +466,10 @@ fn compose(
     }
     if !pos
         .iter()
-        .all(|position| position.is_finite() && position.abs() <= MAX_POSITION)
+        .all(|position| position.unsigned_abs() <= MAX_POSITION)
     {
         return Err(PyValueError::new_err(
-            "positions must be finite and at most 2^52 in magnitude",
+            "positions must be at most 2^52 in magnitude",
         ));
     }
 
@@ -492,7 +487,7 @@ fn compose(
                 placements,
                 Some(RGB),
                 |canvas, tiles, positions| {
-                    compose_tiles_rgbx(canvas, tiles, positions, filter, pad);
+                    compose_tiles_rgbx(canvas, tiles, positions, pad);
                 },
             );
         }
@@ -502,7 +497,7 @@ fn compose(
         &tiles,
         (&pos, crops.as_ref()),
         None,
-        |canvas, tiles, positions| compose_tiles(canvas, tiles, positions, filter)
+        compose_tiles
     ))
 }
 

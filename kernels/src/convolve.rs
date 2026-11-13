@@ -40,27 +40,23 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::sync::Arc;
 
-use crate::sample::{BICUBIC_U8_FRAC_BITS, mulhrs, q15};
+use crate::sample::{CONVOLVE_U8_FRAC_BITS, mulhrs, q15};
 
 /// Fraction bits of the intermediate row (u8 << 6 leaves i16 headroom for
 /// the filters' overshoot).
-const MID_FRAC_BITS: u32 = BICUBIC_U8_FRAC_BITS;
+const MID_FRAC_BITS: u32 = CONVOLVE_U8_FRAC_BITS;
 /// The weights' fixed point: Q15, as `mulhrs` multiplies by.
 const Q15_BITS: u32 = 15;
 const Q15_ONE: f64 = (1 << Q15_BITS) as f64;
 /// Unnormalized weights this small are zeros that rounding left behind.
 const ZERO_WEIGHT_EPS: f64 = 1e-9;
-/// i16 lanes per register: the narrowest rows the vertical kernels take.
-const AVX512_I16_LANES: usize = 32;
-#[cfg(target_arch = "x86_64")]
+/// i16 lanes per AVX2 register: the narrowest rows its vertical kernels
+/// take.
 const AVX2_I16_LANES: usize = 16;
 /// Output rows batched per transposed horizontal pass (one AVX2 register of
 /// i16 lanes, two NEON ones).
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub(crate) const TRANSPOSE_ROWS: usize = 16;
-/// Pixels per block of the RGB-to-RGBX vertical kernel.
-#[cfg(target_arch = "x86_64")]
-const FUSED_RGBX_BLOCK_PIXELS: usize = 32;
 /// Integer factors split into phase arrays (others use blocks or sample runs).
 const MAX_PHASES: usize = 4;
 /// Samples one block's taps may span: the two registers of one permute.
@@ -743,69 +739,6 @@ impl TapRuns {
     }
 }
 
-/// The RGBA horizontal pass of an integer-factor upscale (ow = P * width, P =
-/// 2 or 4) on AVX-512. Output pixel P*m + j has its window at m + `rel_j` with
-/// phase j's weights for every interior m, so each phase is a plain
-/// convolution over the intermediate row — unit-stride loads and broadcast
-/// weights, no gathers — and the P results interleave into consecutive
-/// pixels. Outputs outside the interior take the scalar reference.
-#[cfg_attr(
-    not(target_arch = "x86_64"),
-    expect(
-        dead_code,
-        reason = "read by the x86 kernels; the scalar path has no use"
-    )
-)]
-pub(crate) struct IntegerUpscale {
-    pub(crate) factor: usize,
-    /// Per phase, per tap: (pixel offset from m, weight).
-    pub(crate) taps: Vec<Vec<(isize, i16)>>,
-    /// The m where every phase's window is its unclipped interior one.
-    pub(crate) interior: Range<usize>,
-}
-
-impl IntegerUpscale {
-    fn new(cols: &Windows, width: usize) -> Option<IntegerUpscale> {
-        let factor = cols.len() / width;
-        if !matches!(factor, 2 | 4) || cols.len() != factor * width {
-            return None;
-        }
-        let m_ref = width / 2;
-        let (mut taps, mut interior) = (Vec::new(), 0..width);
-        for phase in 0..factor {
-            let reference = cols.get(factor * m_ref + phase);
-            let rel = reference.start as isize - m_ref as isize;
-            let is_interior = |pixel: usize| {
-                let window = cols.get(factor * pixel + phase);
-                window.fits_q15()
-                    && window.start as isize - pixel as isize == rel
-                    && window.q15 == reference.q15
-            };
-            let run = interior_run(width, is_interior)?;
-            interior = interior.start.max(run.start)..interior.end.min(run.end);
-            taps.push(
-                reference
-                    .q15
-                    .iter()
-                    .enumerate()
-                    .map(|(tap, &weight)| (rel + tap as isize, weight))
-                    .collect(),
-            );
-        }
-        (interior.len() >= PIXEL_OUTPUTS).then_some(IntegerUpscale {
-            factor,
-            taps,
-            interior,
-        })
-    }
-
-    /// Outputs the interior does not cover.
-    #[cfg(target_arch = "x86_64")]
-    fn edges(&self, ow: usize) -> impl Iterator<Item = usize> + use<> {
-        (0..self.factor * self.interior.start).chain(self.factor * self.interior.end..ow)
-    }
-}
-
 /// Everything precomputed for one resize.
 #[cfg_attr(
     not(target_arch = "x86_64"),
@@ -826,8 +759,6 @@ pub(crate) struct Plan {
     pixels: Option<PixelBlocks>,
     /// RGBA on the AVX2 tier: the 4-output blocks of its pixel kernel.
     pixels_avx2: Option<PixelBlocks>,
-    /// Some for an RGB/RGBA integer-factor upscale.
-    upscale: Option<IntegerUpscale>,
     /// Some for RGB/RGBA reductions where it beats `pixels`.
     tap_runs: Option<TapRuns>,
     /// Outputs whose weights exceed Q15, done by the scalar path.
@@ -930,16 +861,11 @@ impl Plan {
             .unwrap_or_else(|| Horizontal::SampleRuns(Runs::new(&cols, width, BLOCK_OUTPUTS)));
         let interleaved = channels > 1;
         let pixels = interleaved.then(|| PixelBlocks::new(&cols));
-        let upscale = if interleaved {
-            IntegerUpscale::new(&cols, width)
-        } else {
-            None
-        };
         let tap_runs = pixels
             .as_ref()
             .filter(|pixel_blocks| TapRuns::pay_off(&cols, pixel_blocks))
             .map(|pixel_blocks| TapRuns::new(&cols, width, pixel_blocks));
-        let avx2_tier = crate::cpu::has_avx2() && !crate::cpu::has_avx512();
+        let avx2_tier = crate::cpu::has_avx2();
         // Only where the 4-output blocks fill; sparser blocks lose to the
         // transposed path.
         let pixels_avx2 = (channels == RGBA && avx2_tier && tap_runs.is_none())
@@ -963,7 +889,6 @@ impl Plan {
             channels,
             pixels,
             pixels_avx2,
-            upscale,
             tap_runs,
             scalar_cols,
             widest_col,
@@ -1220,16 +1145,15 @@ fn runs_transposed(plan: &Plan, rgbx_pad: Option<u8>) -> bool {
     // RGB with wide windows unless written as RGBX: widening to RGBX costs
     // the pixel kernels more than the transposes.
     let unwidened = rgbx_pad.is_none() && channels == RGB && plan.widest_col >= RGB_TRANSPOSED_TAPS;
-    // AVX2, which lacks the AVX-512 gathers, transposes unless it has a
-    // per-row kernel: RGBA pixel blocks, or tap runs (RGB only for sparse
-    // blocks, where they pay for the widening and packing).
+    // Transposed unless the tier has a per-row kernel: RGBA pixel blocks, or
+    // tap runs (RGB only for sparse blocks, where they pay for the widening
+    // and packing).
     let avx2_per_row = plan.pixels_avx2.is_some()
         || plan
             .tap_runs
             .as_ref()
             .is_some_and(|tap_runs| channels == RGBA || (channels > 1 && tap_runs.sparse_blocks));
-    let avx2_transposed = !crate::cpu::has_avx512() && !avx2_per_row;
-    large_reduction || unwidened || avx2_transposed
+    large_reduction || unwidened || !avx2_per_row
 }
 
 /// The transposed path (AVX2 instructions, run on either tier). Without a
@@ -1363,7 +1287,7 @@ thread_local! {
     static SCRATCH: RefCell<TransposeScratch<i16>> = const { RefCell::new(TransposeScratch::new()) };
 }
 
-/// The per-row path (AVX-512 kernels, or the scalar reference).
+/// The per-row planar path (the scalar reference).
 fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     let ow = plan.cols.len();
     let mut out = vec![0u8; ow * plan.rows.len()];
@@ -1396,18 +1320,6 @@ fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
             // call writes (with_prefault's contract).
             let dst = |y: usize| unsafe { std::slice::from_raw_parts_mut(dp.add(y * ow), ow) };
             match &plan.horizontal {
-                #[cfg(target_arch = "x86_64")]
-                Horizontal::Blocks(blocks) if pair_len == 2 && rows_in_pairs() => {
-                    let [mid0, mid1] = &mids;
-                    // SAFETY: avx512 detected; mids padded by BLOCK_SPAN.
-                    unsafe {
-                        crate::convolve::x86::horizontal_blocks_x2_avx512(
-                            [mid0, mid1],
-                            [dst(y), dst(y + 1)],
-                            blocks,
-                        );
-                    };
-                }
                 Horizontal::Blocks(blocks) => {
                     for (y, mid) in (y..y + pair_len).zip(&mids) {
                         horizontal_blocks(mid, dst(y), blocks);
@@ -1424,18 +1336,6 @@ fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
                         horizontal_phased(&phases, dst(y), interior.clone(), taps);
                         horizontal_blocks(mid, dst(y), edges);
                     }
-                }
-                #[cfg(target_arch = "x86_64")]
-                Horizontal::SampleRuns(runs) if pair_len == 2 && rows_in_pairs() => {
-                    let [mid0, mid1] = &mids;
-                    // SAFETY: avx512 detected; mids padded by the runs' overreach.
-                    unsafe {
-                        crate::convolve::x86::horizontal_samples_x2_avx512(
-                            [mid0, mid1],
-                            [dst(y), dst(y + 1)],
-                            runs,
-                        );
-                    };
                 }
                 Horizontal::SampleRuns(runs) => {
                     for (y, mid) in (y..y + pair_len).zip(&mids) {
@@ -1456,7 +1356,7 @@ fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     out
 }
 
-/// The per-row interleaved path (the AVX-512 pixel gather, or the scalar
+/// The per-row interleaved path (the AVX2 pixel kernels, or the scalar
 /// reference). 2- and 3-channel rows are widened to the RGBX layout between
 /// the passes and the output rows packed back — or, with `rgbx_pad`, kept as
 /// RGBX output with that 4th sample.
@@ -1502,7 +1402,7 @@ fn resize_pixel_rows(
     // unless the output is RGBX.
     let widened = channels < RGBA;
     let pack = widened && rgbx_pad.is_none();
-    let narrow_pad = channels * width.next_multiple_of(WIDEN_GROUP_PIXELS) + AVX512_I16_LANES;
+    let narrow_pad = channels * width.next_multiple_of(WIDEN_GROUP_PIXELS) + AVX2_I16_LANES;
     let mut narrow_mid = vec![0i16; if widened { narrow_pad } else { 0 }];
     let mut rgbx_rows = [(); 2].map(|()| vec![0u8; if pack { ow * RGBA } else { 0 }]);
     let dp = out.as_mut_ptr();
@@ -1512,15 +1412,6 @@ fn resize_pixel_rows(
             for (y, mid) in (y..y + pair_len).zip(mids.iter_mut()) {
                 let win = plan.rows.get(y);
                 let rows = &src[win.start * ws..win.end() * ws];
-                #[cfg(target_arch = "x86_64")]
-                if channels == RGB && fused_rgbx(win, width) {
-                    // SAFETY: avx512 detected (fused_rgbx); rows holds the window's
-                    // rows of 3 * width samples, mid at least width pixels.
-                    unsafe {
-                        crate::convolve::x86::vertical_rgbx_avx512(rows, ws, win.q15, width, mid);
-                    }
-                    continue;
-                }
                 if widened {
                     vertical(rows, ws, win, &mut narrow_mid[..ws]);
                     widen_to_rgbx(&narrow_mid, width, mid);
@@ -1542,8 +1433,7 @@ fn resize_pixel_rows(
                 std::slice::from_raw_parts_mut(row, ow * RGBA)
             };
             #[cfg(target_arch = "x86_64")]
-            let simd =
-                horizontal_pixels_simd(plan, pixels, &mids, y, pair_len, dst, &mut spare_row);
+            let simd = horizontal_pixels_simd(plan, &mids, y, pair_len, dst, &mut spare_row);
             #[cfg(not(target_arch = "x86_64"))]
             let simd = false;
             if !simd {
@@ -1581,40 +1471,12 @@ fn resize_pixel_rows(
 #[cfg(target_arch = "x86_64")]
 fn horizontal_pixels_simd<'row>(
     plan: &Plan,
-    pixels: &PixelBlocks,
     mids: &[Vec<i16>; 2],
     y: usize,
     pair_len: usize,
     dst: impl Fn(usize) -> &'row mut [u8],
     spare_row: &mut [u8],
 ) -> bool {
-    let pairs = rows_in_pairs();
-    if let (Some(up), true) = (&plan.upscale, pairs) {
-        for (y, mid) in (y..y + pair_len).zip(mids) {
-            let dst = dst(y);
-            // SAFETY: avx512 detected; every interior window lies in the row.
-            unsafe { crate::convolve::x86::horizontal_upscale_avx512(mid, dst, up) };
-            for output in up
-                .edges(plan.cols.len())
-                .filter(|&output| plan.cols.get(output).fits_q15())
-            {
-                pixel_scalar(mid, dst, plan.cols.get(output), output);
-            }
-        }
-        return true;
-    }
-    if let (Some(runs), true, 2) = (&plan.tap_runs, pairs, pair_len) {
-        let [mid0, mid1] = mids;
-        // SAFETY: avx512 detected; mids padded by the runs' overreach.
-        unsafe {
-            crate::convolve::x86::horizontal_taps_x2_avx512(
-                [mid0, mid1],
-                [dst(y), dst(y + 1)],
-                &runs.runs,
-            );
-        };
-        return true;
-    }
     if let (Some(runs), true, 2) = (&plan.tap_runs, crate::cpu::has_avx2(), pair_len) {
         let [mid0, mid1] = mids;
         // SAFETY: avx2 detected; mids padded by the runs' overreach.
@@ -1623,18 +1485,6 @@ fn horizontal_pixels_simd<'row>(
                 [mid0, mid1],
                 [dst(y), dst(y + 1)],
                 &runs.runs,
-            );
-        };
-        return true;
-    }
-    if pair_len == 2 && pairs {
-        let [mid0, mid1] = mids;
-        // SAFETY: avx512 detected; mids padded by `overreach` pixels.
-        unsafe {
-            crate::convolve::x86::horizontal_pixels_x2_avx512(
-                [mid0, mid1],
-                [dst(y), dst(y + 1)],
-                pixels,
             );
         };
         return true;
@@ -1657,21 +1507,9 @@ fn horizontal_pixels_simd<'row>(
 
 // ---- Pass kernels: dispatch + scalar reference -------------------------------
 
-/// Whether an RGB row's vertical pass can write RGBX directly (AVX-512, the
-/// SIMD weights, rows of at least one block).
-#[cfg(target_arch = "x86_64")]
-fn fused_rgbx(win: Window<'_>, width: usize) -> bool {
-    crate::cpu::has_avx512() && win.fits_q15() && width >= FUSED_RGBX_BLOCK_PIXELS
-}
-
 /// Intermediate RGB samples to RGBX-layout pixels (X 0) for the pixel
 /// kernels: `rgbx[4p + c] = src[3p + c]`.
 fn widen_to_rgbx(src: &[i16], pixels: usize, rgbx: &mut [i16]) {
-    #[cfg(target_arch = "x86_64")]
-    if crate::cpu::has_avx512() {
-        // SAFETY: avx512bw detected; src padded past whole groups of 8 pixels.
-        return unsafe { crate::convolve::x86::widen_to_rgbx_avx512(src, pixels, rgbx) };
-    }
     #[cfg(target_arch = "x86_64")]
     if crate::cpu::has_avx2() {
         // SAFETY: avx2 detected; src padded past whole groups of 8 pixels.
@@ -1687,11 +1525,6 @@ fn widen_to_rgbx(src: &[i16], pixels: usize, rgbx: &mut [i16]) {
 /// RGBX-layout output pixels to RGB: `out[3p + c] = rgbx[4p + c]`.
 fn pack_from_rgbx(rgbx: &[u8], out: &mut [u8]) {
     #[cfg(target_arch = "x86_64")]
-    if crate::cpu::has_avx512() {
-        // SAFETY: avx512bw detected; rgbx holds out.len() / 3 pixels.
-        return unsafe { crate::convolve::x86::pack_from_rgbx_avx512(rgbx, out) };
-    }
-    #[cfg(target_arch = "x86_64")]
     if crate::cpu::has_avx2() {
         // SAFETY: avx2 detected; rgbx holds out.len() / 3 pixels.
         return unsafe { crate::convolve::x86::pack_from_rgbx_avx2(rgbx, out) };
@@ -1701,13 +1534,6 @@ fn pack_from_rgbx(rgbx: &[u8], out: &mut [u8]) {
     for (px, out) in rgbx_pixels.iter().zip(rgb_pixels) {
         *out = [px[0], px[1], px[2]];
     }
-}
-
-/// Whether the per-row paths run the horizontal pass on two rows at once
-/// (the AVX-512 kernels; the scalar reference goes row by row).
-#[cfg(target_arch = "x86_64")]
-fn rows_in_pairs() -> bool {
-    crate::cpu::has_avx512()
 }
 
 /// Q6 sum back to u8: rounded, clamped (filters overshoot both ways).
@@ -1730,11 +1556,6 @@ fn narrow_scalar_cols(plan: &Plan, mid: &[i16], dst: &mut [u8], channels: usize)
 /// `mid[x] = sum_t q15[t] * rows[t][x]` in Q6, `rows` = the window's source
 /// rows.
 fn vertical(rows: &[u8], width: usize, win: Window<'_>, mid: &mut [i16]) {
-    #[cfg(target_arch = "x86_64")]
-    if crate::cpu::has_avx512() && win.fits_q15() && width >= AVX512_I16_LANES {
-        // SAFETY: avx512f+bw detected; rows holds q15.len() rows of width, mid width.
-        return unsafe { crate::convolve::x86::vertical_q6_avx512(rows, width, win.q15, mid) };
-    }
     #[cfg(target_arch = "x86_64")]
     if crate::cpu::has_avx2() && win.fits_q15() && width >= AVX2_I16_LANES {
         // SAFETY: avx2 detected; rows holds q15.len() rows of width, mid width.
@@ -1761,11 +1582,6 @@ fn vertical(rows: &[u8], width: usize, win: Window<'_>, mid: &mut [i16]) {
 
 /// `phases[p][m] = mid[factor*m + p]`.
 fn split_phases(mid: &[i16], factor: usize, phases: &mut [Vec<i16>]) {
-    #[cfg(target_arch = "x86_64")]
-    if crate::cpu::has_avx512() {
-        // SAFETY: avx512f+bw detected; each phase holds len/factor + 32.
-        return unsafe { crate::convolve::x86::split_phases_avx512(mid, factor, phases) };
-    }
     for (index, group) in mid.chunks(factor).enumerate() {
         for (phase, &sample) in group.iter().enumerate() {
             phases[phase][index] = sample;
@@ -1780,14 +1596,6 @@ fn horizontal_phased(
     interior: Range<usize>,
     taps: &[PhaseTap],
 ) {
-    #[cfg(target_arch = "x86_64")]
-    if crate::cpu::has_avx512() && interior.len() >= BLOCK_OUTPUTS {
-        // SAFETY: avx512f+bw detected; every tap index of `interior` lies in
-        // its phase array (Plan: interior windows are full), dst covers it.
-        return unsafe {
-            crate::convolve::x86::horizontal_phased_avx512(phases, dst, interior, taps);
-        };
-    }
     for output in interior {
         let acc: i32 = taps
             .iter()
@@ -1804,12 +1612,6 @@ fn horizontal_phased(
 
 /// One RGBA-layout row by pixel blocks.
 fn horizontal_pixels(mid: &[i16], dst: &mut [u8], pixels: &PixelBlocks) {
-    #[cfg(target_arch = "x86_64")]
-    if crate::cpu::has_avx512() {
-        // SAFETY: avx512f+bw+vl detected; mid is padded by `overreach`
-        // pixels, dst covers every block.
-        return unsafe { crate::convolve::x86::horizontal_pixels_avx512(mid, dst, pixels) };
-    }
     for block in &pixels.blocks {
         for (slot, ch) in (0..block.count).flat_map(|slot| (0..RGBA).map(move |ch| (slot, ch))) {
             let lane = slot * RGBA + ch;
@@ -1827,22 +1629,8 @@ fn horizontal_pixels(mid: &[i16], dst: &mut [u8], pixels: &PixelBlocks) {
     }
 }
 
-/// Output pixel `output` of an RGBA row by the scalar reference (Q15 weights).
-#[cfg(target_arch = "x86_64")]
-fn pixel_scalar(mid: &[i16], dst: &mut [u8], win: Window<'_>, output: usize) {
-    for ch in 0..RGBA {
-        dst[output * RGBA + ch] = narrow(win.mulhrs_dot_at(mid, RGBA, ch));
-    }
-}
-
 /// One planar row's block outputs.
 fn horizontal_blocks(mid: &[i16], dst: &mut [u8], blocks: &[Block]) {
-    #[cfg(target_arch = "x86_64")]
-    if crate::cpu::has_avx512() {
-        // SAFETY: avx512f+bw+vl detected; mid is padded by BLOCK_SPAN past
-        // every block base, dst covers every block.
-        return unsafe { crate::convolve::x86::horizontal_blocks_avx512(mid, dst, blocks) };
-    }
     for block in blocks {
         for slot in 0..block.count {
             let taps = block.idx.iter().zip(&block.weights);
@@ -1963,14 +1751,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     fn has_avx2() -> bool {
         std::is_x86_feature_detected!("avx2")
-    }
-
-    /// The features of every AVX-512 kernel here.
-    #[cfg(target_arch = "x86_64")]
-    fn has_avx512() -> bool {
-        std::is_x86_feature_detected!("avx512f")
-            && std::is_x86_feature_detected!("avx512bw")
-            && std::is_x86_feature_detected!("avx512vl")
     }
 
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
@@ -2214,9 +1994,6 @@ mod tests {
                         Horizontal::Blocks(_) => "blocks",
                         Horizontal::SampleRuns(_) => "sample runs",
                     });
-                    if plan.upscale.is_some() {
-                        reached.insert("integer upscale");
-                    }
                     if plan.tap_runs.is_some() {
                         reached.insert("tap runs");
                     }
@@ -2249,7 +2026,6 @@ mod tests {
             "phased, a register or more",
             "blocks",
             "sample runs",
-            "integer upscale",
             "tap runs",
             "scalar columns",
             "per-row planar",
@@ -2306,122 +2082,15 @@ mod tests {
         }
     }
 
-    #[cfg(target_arch = "x86_64")]
-    fn block_outputs(blocks: &[Block]) -> impl Iterator<Item = usize> + '_ {
-        blocks
-            .iter()
-            .flat_map(|block| block.o0..block.o0 + block.count)
-    }
-
-    /// The planar horizontal kernels (blocks, phased with its phase split,
-    /// sample runs) on rows padded as `resize_rows` pads them.
-    #[cfg(target_arch = "x86_64")]
-    #[test]
-    fn planar_horizontal_avx512_equals_reference() {
-        if !has_avx512() {
-            return;
-        }
-        let mut rng = Rng::new(5);
-        for kernel in KERNELS {
-            for (width, ow) in COLUMN_CASES {
-                let plan = Plan::new((width, 1), (ow, 1), kernel, 1);
-                let context = format!("{} {width} -> {ow}", kernel_name(kernel));
-                let row_pad = match &plan.horizontal {
-                    Horizontal::SampleRuns(runs) => runs.overreach.max(BLOCK_SPAN),
-                    _ => BLOCK_SPAN,
-                };
-                let mids = [
-                    random_mid(&mut rng, width + row_pad),
-                    random_mid(&mut rng, width + row_pad),
-                ];
-                let mut dsts = [vec![SENTINEL; ow], vec![SENTINEL; ow]];
-                let [dst0, dst1] = &mut dsts;
-                let covered = match &plan.horizontal {
-                    Horizontal::Blocks(blocks) => {
-                        let mut single = vec![SENTINEL; ow];
-                        // SAFETY: AVX-512 F/BW/VL detected; the mids are padded
-                        // by BLOCK_SPAN past every block base, the dsts hold
-                        // every output.
-                        unsafe {
-                            x86::horizontal_blocks_avx512(&mids[0], &mut single, blocks);
-                            x86::horizontal_blocks_x2_avx512(
-                                [&mids[0], &mids[1]],
-                                [dst0, dst1],
-                                blocks,
-                            );
-                        }
-                        let covered = covered_by(ow, block_outputs(blocks));
-                        assert_row(&single, &mids[0], &plan.cols, 1, &covered, &context);
-                        covered
-                    }
-                    Horizontal::Phased {
-                        factor,
-                        interior,
-                        taps,
-                        edges,
-                    } => {
-                        let phase_len = width.div_ceil(*factor) + BLOCK_OUTPUTS;
-                        for (mid, dst) in mids.iter().zip([dst0, dst1]) {
-                            let mut phases = vec![vec![0i16; phase_len]; *factor];
-                            // SAFETY: AVX-512 F/BW/VL detected; each phase holds
-                            // width / factor + BLOCK_OUTPUTS samples.
-                            unsafe {
-                                x86::split_phases_avx512(&mid[..width], *factor, &mut phases);
-                            };
-                            for (index, &sample) in mid[..width].iter().enumerate() {
-                                assert_eq!(
-                                    phases[index % factor][index / factor],
-                                    sample,
-                                    "{context}"
-                                );
-                            }
-                            if interior.len() >= BLOCK_OUTPUTS {
-                                // SAFETY: AVX-512 F/BW detected; interior windows
-                                // are full (Plan) and the phases padded by a
-                                // register, dst holds every output.
-                                unsafe {
-                                    x86::horizontal_phased_avx512(
-                                        &phases,
-                                        dst,
-                                        interior.clone(),
-                                        taps,
-                                    );
-                                }
-                            } else {
-                                horizontal_phased(&phases, dst, interior.clone(), taps);
-                            }
-                            // SAFETY: as for the blocks plan.
-                            unsafe { x86::horizontal_blocks_avx512(mid, dst, edges) };
-                        }
-                        covered_by(ow, interior.clone().chain(block_outputs(edges)))
-                    }
-                    Horizontal::SampleRuns(runs) => {
-                        // SAFETY: AVX-512 F/BW/VL detected; the mids are padded
-                        // by the runs' overreach, the dsts hold every output.
-                        unsafe {
-                            x86::horizontal_samples_x2_avx512(
-                                [&mids[0], &mids[1]],
-                                [dst0, dst1],
-                                runs,
-                            );
-                        }
-                        covered_by(ow, runs.outputs.iter().copied())
-                    }
-                };
-                for (mid, dst) in mids.iter().zip(&dsts) {
-                    assert_row(dst, mid, &plan.cols, 1, &covered, &context);
-                }
-            }
-        }
-    }
-
-    /// The RGBA-layout horizontal kernels of both tiers (pixel blocks, tap
-    /// runs, integer upscale) on rows padded as `resize_pixel_rows` pads
-    /// them, for every case, whichever the plan would choose.
+    /// The AVX2 RGBA-layout horizontal kernels (pixel blocks, tap runs) on
+    /// rows padded as `resize_pixel_rows` pads them, for every case,
+    /// whichever the plan would choose.
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn rgba_horizontal_kernels_equal_reference() {
-        let (avx2, avx512) = (has_avx2(), has_avx512());
+        if !has_avx2() {
+            return;
+        }
         let mut rng = Rng::new(6);
         for kernel in KERNELS {
             for (width, ow) in COLUMN_CASES {
@@ -2452,102 +2121,37 @@ mod tests {
                             );
                         }
                     };
-                let block_covered = covered_by(
+                let run_covered = covered_by(ow, runs.outputs.iter().copied());
+                let mut pair = fresh();
+                let mut taps = fresh();
+                // SAFETY: AVX2 detected; blocks of at most
+                // AVX2_PIXEL_OUTPUTS, the mids padded as above (the 8-pixel
+                // blocks' overreach covers the 4-pixel ones').
+                unsafe {
+                    let [dst0, dst1] = &mut pair;
+                    x86::horizontal_pixels4_x2_avx2(
+                        [&block_mids[0], &block_mids[1]],
+                        [dst0, dst1],
+                        &pixels4,
+                    );
+                    let [dst0, dst1] = &mut taps;
+                    x86::horizontal_taps_x2_avx2([&run_mids[0], &run_mids[1]], [dst0, dst1], &runs);
+                }
+                let covered4 = covered_by(
                     ow,
-                    pixels
+                    pixels4
                         .blocks
                         .iter()
                         .flat_map(|block| block.o0..block.o0 + block.count),
                 );
-                let run_covered = covered_by(ow, runs.outputs.iter().copied());
-                if avx512 {
-                    let mut single = fresh();
-                    let mut pair = fresh();
-                    let mut taps = fresh();
-                    // SAFETY: AVX-512 F/BW/VL detected; the mids are padded by
-                    // the blocks' and the runs' overreach, the dsts hold every
-                    // output pixel.
-                    unsafe {
-                        x86::horizontal_pixels_avx512(&block_mids[0], &mut single[0], &pixels);
-                        let [dst0, dst1] = &mut pair;
-                        x86::horizontal_pixels_x2_avx512(
-                            [&block_mids[0], &block_mids[1]],
-                            [dst0, dst1],
-                            &pixels,
-                        );
-                        let [dst0, dst1] = &mut taps;
-                        x86::horizontal_taps_x2_avx512(
-                            [&run_mids[0], &run_mids[1]],
-                            [dst0, dst1],
-                            &runs,
-                        );
-                    }
-                    assert_row(
-                        &single[0],
-                        &block_mids[0],
-                        &cols,
-                        RGBA,
-                        &block_covered,
-                        &format!("{context}, pixels"),
-                    );
-                    assert_rows(&block_mids, &pair, &block_covered, "pixels x2");
-                    assert_rows(&run_mids, &taps, &run_covered, "taps x2");
-                    if let Some(up) = IntegerUpscale::new(&cols, width) {
-                        let mut upscaled = fresh();
-                        // SAFETY: AVX-512 F/BW/VL detected; every interior
-                        // window lies in the row (IntegerUpscale), dst holds
-                        // every output pixel.
-                        unsafe {
-                            x86::horizontal_upscale_avx512(&block_mids[0], &mut upscaled[0], &up);
-                        };
-                        let interior = up.factor * up.interior.start..up.factor * up.interior.end;
-                        assert_row(
-                            &upscaled[0],
-                            &block_mids[0],
-                            &cols,
-                            RGBA,
-                            &covered_by(ow, interior),
-                            &format!("{context}, upscale"),
-                        );
-                    }
-                }
-                if avx2 {
-                    let mut pair = fresh();
-                    let mut taps = fresh();
-                    // SAFETY: AVX2 detected; blocks of at most
-                    // AVX2_PIXEL_OUTPUTS, the mids padded as above (the 8-pixel
-                    // blocks' overreach covers the 4-pixel ones').
-                    unsafe {
-                        let [dst0, dst1] = &mut pair;
-                        x86::horizontal_pixels4_x2_avx2(
-                            [&block_mids[0], &block_mids[1]],
-                            [dst0, dst1],
-                            &pixels4,
-                        );
-                        let [dst0, dst1] = &mut taps;
-                        x86::horizontal_taps_x2_avx2(
-                            [&run_mids[0], &run_mids[1]],
-                            [dst0, dst1],
-                            &runs,
-                        );
-                    }
-                    let covered4 = covered_by(
-                        ow,
-                        pixels4
-                            .blocks
-                            .iter()
-                            .flat_map(|block| block.o0..block.o0 + block.count),
-                    );
-                    assert_rows(&block_mids, &pair, &covered4, "pixels4 x2 avx2");
-                    assert_rows(&run_mids, &taps, &run_covered, "taps x2 avx2");
-                }
+                assert_rows(&block_mids, &pair, &covered4, "pixels4 x2 avx2");
+                assert_rows(&run_mids, &taps, &run_covered, "taps x2 avx2");
             }
         }
     }
 
-    /// The vertical kernels of every tier: widths around their registers and
-    /// lines, rows starting off the 32-byte boundary the AVX-512 kernel
-    /// aligns its lines to, and the strides and window lengths where the
+    /// The vertical kernels: widths around their registers and lines, rows
+    /// starting off a 32-byte boundary, and the strides and window lengths where the
     /// taps run in groups (4 KB aliasing, 2 KB on AVX2, 40+ taps).
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     #[test]
@@ -2555,8 +2159,6 @@ mod tests {
         if !has_simd_rows() {
             return;
         }
-        #[cfg(target_arch = "x86_64")]
-        let avx512 = has_avx512();
         let mut rng = Rng::new(7);
         let widths = [16, 17, 31, 32, 33, 63, 64, 65, 100, 130, 257];
         let cases = widths
@@ -2575,53 +2177,6 @@ mod tests {
                 // 16 samples, mid holds width.
                 unsafe { vertical_q6(rows, width, &weights, &mut mid) };
                 assert_same(&mid, &expected, &format!("{context}, first tier"));
-                #[cfg(target_arch = "x86_64")]
-                if avx512 && width >= BLOCK_OUTPUTS {
-                    let mut mid = vec![SENTINEL_I16; width];
-                    // SAFETY: AVX-512 F/BW detected; rows holds taps rows of
-                    // width >= 32 samples, mid holds width.
-                    unsafe { x86::vertical_q6_avx512(rows, width, &weights, &mut mid) };
-                    assert_same(&mid, &expected, &format!("{context}, avx512"));
-                }
-            }
-        }
-    }
-
-    /// The RGB vertical pass written as RGBX, on rows of exactly the length
-    /// its contract requires.
-    #[cfg(target_arch = "x86_64")]
-    #[test]
-    fn vertical_rgbx_avx512_equals_reference() {
-        if !has_avx512() {
-            return;
-        }
-        let mut rng = Rng::new(8);
-        for pixels in [32, 33, 47, 64, 67, 100, 130] {
-            for taps in [1, 2, 5, 17] {
-                for stride_pad in [0, 5] {
-                    let stride = RGB * pixels + stride_pad;
-                    let weights = random_weights(&mut rng, taps);
-                    let rows: Vec<u8> =
-                        random_samples(&mut rng, (taps - 1) * stride + RGB * pixels);
-                    let expected: Vec<i16> =
-                        reference_vertical_q15(&rows, stride, &weights, RGB * pixels)
-                            .as_chunks::<RGB>()
-                            .0
-                            .iter()
-                            .flat_map(|px| [px[0], px[1], px[2], 0])
-                            .collect();
-                    let mut rgbx = vec![SENTINEL_I16; pixels * RGBA];
-                    // SAFETY: AVX-512 F/BW detected; taps >= 1, pixels >= 32,
-                    // rows and rgbx sized as the contract requires.
-                    unsafe {
-                        x86::vertical_rgbx_avx512(&rows, stride, &weights, pixels, &mut rgbx);
-                    };
-                    assert_same(
-                        &rgbx,
-                        &expected,
-                        &format!("{pixels} pixels, {taps} taps, stride {stride}"),
-                    );
-                }
             }
         }
     }
@@ -2629,11 +2184,11 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn widen_to_rgbx_kernels_equal_reference() {
-        let (avx2, avx512) = (has_avx2(), has_avx512());
+        let avx2 = has_avx2();
         let mut rng = Rng::new(9);
         for pixels in 1..=70 {
-            // Each tier's minimum padding: whole groups of 8 (AVX-512) or 4
-            // pixels, and a register's read past them.
+            // The kernel's minimum padding: whole groups of 4 pixels, and half
+            // a register's read past them.
             let mut check = |groups: usize,
                              overread: usize,
                              kernel: unsafe fn(&[i16], usize, &mut [i16]),
@@ -2655,15 +2210,6 @@ mod tests {
                     &format!("{pixels} pixels, {name}"),
                 );
             };
-            if avx512 {
-                let group = AVX512_I16_LANES / RGBA;
-                check(
-                    pixels.next_multiple_of(group),
-                    AVX512_I16_LANES,
-                    x86::widen_to_rgbx_avx512,
-                    "avx512",
-                );
-            }
             if avx2 {
                 let (group, overread) = (AVX2_I16_LANES / RGBA, AVX2_I16_LANES / 2);
                 check(
@@ -2679,7 +2225,7 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn pack_from_rgbx_kernels_equal_reference() {
-        let (avx2, avx512) = (has_avx2(), has_avx512());
+        let avx2 = has_avx2();
         let mut rng = Rng::new(10);
         for pixels in 1..=70 {
             let rgbx: Vec<u8> = random_samples(&mut rng, RGBA * pixels);
@@ -2689,10 +2235,7 @@ mod tests {
                 .iter()
                 .flat_map(|px| [px[0], px[1], px[2]])
                 .collect();
-            let tiers: [(bool, PackKernel, &str); 2] = [
-                (avx512, x86::pack_from_rgbx_avx512, "avx512"),
-                (avx2, x86::pack_from_rgbx_avx2, "avx2"),
-            ];
+            let tiers: [(bool, PackKernel, &str); 1] = [(avx2, x86::pack_from_rgbx_avx2, "avx2")];
             for (available, kernel, name) in tiers {
                 if available {
                     let mut out = vec![SENTINEL; RGB * pixels];

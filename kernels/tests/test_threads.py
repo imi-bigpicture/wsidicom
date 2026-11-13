@@ -21,16 +21,16 @@ from typing import Any
 
 import numpy as np
 import pytest
-from wsidicom_kernels import Interpolation, ResizeFilter, compose, downscale
+from wsidicom_kernels import ResizeFilter, compose, downscale
 
 THREADS = 8
 ROUNDS = 30
-POSITION = np.array([[3.3, 2.6]])
+POSITION = np.array([[3, 2]], np.int64)
 
 
 @pytest.fixture
 def tile(random_image: Callable[[tuple[int, ...], Any], np.ndarray]) -> np.ndarray:
-    """Make an odd-sized random tile that resamples across vector body and tail."""
+    """Make an odd-sized random tile, so rows end in a partial vector."""
     return random_image((257, 263), np.uint8)
 
 
@@ -40,13 +40,13 @@ class TestThreads:
         """Concurrent composes onto separate canvases equal a single-threaded one."""
         # Arrange
         reference = np.zeros((300, 300), np.uint8)
-        compose(reference, [tile], POSITION, Interpolation.BICUBIC)
+        compose(reference, [tile], POSITION)
 
         def compose_rounds(_: int) -> list[np.ndarray]:
             canvases = []
             for _ in range(ROUNDS):
                 canvas = np.zeros((300, 300), np.uint8)
-                compose(canvas, [tile], POSITION, Interpolation.BICUBIC)
+                compose(canvas, [tile], POSITION)
                 canvases.append(canvas)
             return canvases
 
@@ -93,7 +93,7 @@ class TestThreads:
             succeeded = 0
             for _ in range(ROUNDS):
                 with contextlib.suppress(ValueError):
-                    compose(canvas, [tile], POSITION, Interpolation.BILINEAR)
+                    compose(canvas, [tile], POSITION)
                     succeeded += 1
             return succeeded
 

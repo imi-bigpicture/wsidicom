@@ -7,7 +7,6 @@ import time
 
 import numpy as np
 from wsidicom_kernels import (
-    Interpolation,
     ResizeFilter,
     compose,
     downscale,
@@ -48,7 +47,7 @@ def add(name, fn, nbytes):
     rows.append((name, nbytes / t / 1e9, t * 1e3))
 
 
-POSITION = np.array([[0.3, 0.7]])
+POSITION = np.array([[1, 1]], np.int64)
 g = {}
 for dt, tag in ((np.uint8, "u8"), (np.uint16, "u16"), (np.float32, "f32")):
     hi = None if dt == np.float32 else np.iinfo(dt).max + 1
@@ -82,29 +81,15 @@ for dt, tag in ((np.uint8, "u8"), (np.uint16, "u16"), (np.float32, "f32")):
     n = 5120 * 5120 * e
     cv = np.zeros((5122, 5122), dt)
     add(
-        f"bilinear planar {tag}",
-        lambda cv=cv, tile=tile: compose(cv, [tile], POSITION, Interpolation.BILINEAR),
-        2 * n,
-    )
-    add(
-        f"bicubic planar {tag}",
-        lambda cv=cv, tile=tile: compose(cv, [tile], POSITION, Interpolation.BICUBIC),
+        f"compose planar {tag}",
+        lambda cv=cv, tile=tile: compose(cv, [tile], POSITION),
         2 * n,
     )
     tile3 = c3[:5120, :5120].copy()
     cv3 = np.zeros((5122, 5122, 3), dt)
     add(
-        f"bilinear hwc c3 {tag}",
-        lambda cv3=cv3, tile3=tile3: compose(
-            cv3, [tile3], POSITION, Interpolation.BILINEAR
-        ),
-        6 * n,
-    )
-    add(
-        f"bicubic hwc c3 {tag}",
-        lambda cv3=cv3, tile3=tile3: compose(
-            cv3, [tile3], POSITION, Interpolation.BICUBIC
-        ),
+        f"compose hwc c3 {tag}",
+        lambda cv3=cv3, tile3=tile3: compose(cv3, [tile3], POSITION),
         6 * n,
     )
 

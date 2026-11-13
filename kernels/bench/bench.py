@@ -13,7 +13,6 @@ import time
 
 import numpy as np
 from wsidicom_kernels import (
-    Interpolation,
     ResizeFilter,
     compose,
     downscale,
@@ -57,18 +56,19 @@ def box_case(dt, shape, hi, factor=2):
     return lambda: downscale(img, factor, ResizeFilter.BOX)
 
 
-def compose_case(dt, hi, c, filt, n=5120):
+def compose_case(dt, hi, c, canvas_c=None, n=5120):
+    """Paste one n x n tile at (1, 1); ``canvas_c`` 4 with c 3 expands to RGBX."""
     rng = np.random.default_rng(2)
+    canvas_c = canvas_c or c
     tshape = (n, n) if c == 1 else (n, n, c)
-    cshape = (n + 2, n + 2) if c == 1 else (n + 2, n + 2, c)
+    cshape = (n + 2, n + 2) if canvas_c == 1 else (n + 2, n + 2, canvas_c)
     if hi:
         tile = rng.integers(0, hi, tshape).astype(dt)
     else:
         tile = rng.random(tshape, np.float32)
     canvas = np.zeros(cshape, dt)
-    position = np.array([[0.3, 0.7]])
-    interpolation = Interpolation(filt)
-    return lambda: compose(canvas, [tile], position, interpolation)
+    position = np.array([[1, 1]], np.int64)
+    return lambda: compose(canvas, [tile], position)
 
 
 CASES = []
@@ -93,19 +93,18 @@ for dt, tag, hi in (
                 lambda dt=dt, hi=hi, c=c: box_case(dt, (8192, 8192, c), hi),
             )
         )
-    for filt in ("bilinear", "bicubic"):
-        CASES.append(
-            (
-                f"{filt} planar {tag} 5120",
-                lambda dt=dt, hi=hi, f=filt: compose_case(dt, hi, 1, f),
-            )
+    CASES.append(
+        (
+            f"compose planar {tag} 5120",
+            lambda dt=dt, hi=hi: compose_case(dt, hi, 1),
         )
-        CASES.append(
-            (
-                f"{filt} hwc {tag} c3 5120",
-                lambda dt=dt, hi=hi, f=filt: compose_case(dt, hi, 3, f),
-            )
+    )
+    CASES.append(
+        (
+            f"compose hwc {tag} c3 5120",
+            lambda dt=dt, hi=hi: compose_case(dt, hi, 3),
         )
+    )
 
 
 def rgbx_case():
@@ -114,6 +113,9 @@ def rgbx_case():
 
 
 CASES.append(("rgb_to_rgbx u8 8192", lambda: rgbx_case()))
+CASES.append(
+    ("compose rgb->rgbx u8 5120", lambda: compose_case(np.uint8, 256, 3, canvas_c=4))
+)
 
 if __name__ == "__main__":
     filters = [a.lower() for a in sys.argv[1:]]

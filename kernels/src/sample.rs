@@ -21,14 +21,10 @@ pub(crate) fn mulhrs(value: i32, weight: i16) -> i32 {
     (value * i32::from(weight) + (1 << 14)) >> 15
 }
 
-/// Fraction bits of a u8 pixel widened for the fixed-point bilinear (Q7:
-/// 255 << 7 fits i16 with room for the four-tap sum).
-pub(crate) const BILINEAR_U8_FRAC_BITS: u32 = 7;
-
-/// Fraction bits u8 pixels carry through the separable bicubic's i16 rows:
+/// Fraction bits u8 pixels carry through the convolution's i16 rows:
 /// Q6 leaves headroom for Catmull-Rom's ~1.14x overshoot, which would push
 /// Q7 (255 << 7 = 32640) past i16.
-pub(crate) const BICUBIC_U8_FRAC_BITS: u32 = 6;
+pub(crate) const CONVOLVE_U8_FRAC_BITS: u32 = 6;
 
 /// Panics unless `src` holds a `width` x `height` image of `channels` (1, 3 or
 /// 4) samples per pixel: the layout the kernels' unchecked loads rely on.

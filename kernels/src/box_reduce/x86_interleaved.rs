@@ -1002,268 +1002,6 @@ pub(crate) unsafe fn box_reduce_u8_hwc_avx2(
     (unsafe { written_output(out) }, ow, oh)
 }
 
-// ---- AVX-512: RGB and RGBA ---------------------------------------------------
-
-/// Exact sums of horizontally adjacent pixel pairs, per channel, as u16:
-/// `pair_bytes` (an in-lane byte shuffle) puts each channel of a pair side
-/// by side, and maddubs by 1 adds them.
-#[target_feature(enable = "avx512f,avx512bw")]
-#[inline]
-fn pair_sums_u8_avx512(
-    pixels: std::arch::x86_64::__m512i,
-    pair_bytes: std::arch::x86_64::__m512i,
-) -> std::arch::x86_64::__m512i {
-    use std::arch::x86_64::*;
-    _mm512_maddubs_epi16(_mm512_shuffle_epi8(pixels, pair_bytes), _mm512_set1_epi8(1))
-}
-
-/// `(sum + 2) >> 2` of 2x2 sums: the scalar path's (and Pillow's) rounding.
-#[target_feature(enable = "avx512f,avx512bw")]
-#[inline]
-fn round_quarter_u16_avx512(sums: std::arch::x86_64::__m512i) -> std::arch::x86_64::__m512i {
-    use std::arch::x86_64::*;
-    _mm512_srli_epi16::<2>(_mm512_add_epi16(sums, _mm512_set1_epi16(2)))
-}
-
-/// AVX-512 uint8 RGBA 2x2 box: per 128-bit lane of 4 pixels, the two
-/// horizontal pairs' sums per channel by one shuffle and maddubs
-/// (`pair_sums_u8_avx512`), the rows' sums added and rounded exactly as the
-/// scalar path. 16 output pixels per iteration.
-///
-/// # Safety
-/// As `box2x_u8_hwc4_avx512_to`.
-pub(crate) unsafe fn box2x_u8_hwc4_avx512(
-    src: &[u8],
-    width: usize,
-    height: usize,
-) -> (Vec<u8>, usize, usize) {
-    // SAFETY: the caller's contract.
-    unsafe { new_image(box2x_u8_hwc4_avx512_to, src, (width, height, RGBX)) }
-}
-
-/// `box2x_u8_hwc4_avx512` into `output`.
-///
-/// # Safety
-/// The CPU supports AVX-512 F and BW, `src.len() >= width * height * 4`, and
-/// `output` holds `height / 2` rows of `width / 2` pixels.
-#[target_feature(enable = "avx512f,avx512bw")]
-pub(crate) unsafe fn box2x_u8_hwc4_avx512_to(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    output: BoxRows<u8>,
-) -> Vec<u8> {
-    use std::arch::x86_64::*;
-    const CHANNELS: usize = 4;
-    // From 32 input pixels of each row: two registers of 16.
-    const OUT_PIXELS: usize = 16;
-    let ow = width / 2;
-    debug_assert_eq!(output.rows(), height / 2);
-    let stride = width * CHANNELS;
-    let (sp, dp, layout) = (src.as_ptr(), output.dst(), output.layout());
-    // Per lane: each channel of pixels 0 and 1, then of pixels 2 and 3.
-    let pair_bytes = _mm512_broadcast_i32x4(_mm_setr_epi8(
-        0, 4, 1, 5, 2, 6, 3, 7, 8, 12, 9, 13, 10, 14, 11, 15,
-    ));
-    // packus leaves lane L = [first register's output pixels 2L, 2L + 1 |
-    // second's 8 + 2L, 9 + 2L]; the qwords back in pixel order.
-    let order = _mm512_setr_epi64(0, 2, 4, 6, 1, 3, 5, 7);
-    let rows = crate::cpu::row_bands(|oy_lo, oy_hi| {
-        for oy in oy_lo..oy_hi {
-            let (r0, r1) = (2 * oy * stride, (2 * oy + 1) * stride);
-            let orow = layout.row_start(oy);
-            let mut ox = 0usize;
-            // ox + 16 <= ow keeps both the 128 input bytes and the 64-byte store
-            // inside their rows. No software prefetch: with two line-aligned
-            // loads per row the hardware prefetchers keep up (prefetching the
-            // next row pair, as the RGB kernels do, didn't help here).
-            while ox + OUT_PIXELS <= ow {
-                let src_offset = 2 * ox * CHANNELS;
-                let quarter = |offset: usize| {
-                    let row = |row_start: usize| {
-                        // SAFETY: offset <= 64, so the 64 bytes end by
-                        // src_offset + 128 <= stride (ox + 16 <= ow) in source
-                        // rows 2oy, 2oy + 1 < height, inside `src`.
-                        let pixels = unsafe {
-                            _mm512_loadu_si512(
-                                sp.add(row_start + src_offset + offset) as *const __m512i
-                            )
-                        };
-                        pair_sums_u8_avx512(pixels, pair_bytes)
-                    };
-                    round_quarter_u16_avx512(_mm512_add_epi16(row(r0), row(r1)))
-                };
-                let packed = _mm512_packus_epi16(quarter(0), quarter(64));
-                // SAFETY: ox + 16 <= ow: the 64 bytes are inside output row oy.
-                unsafe {
-                    _mm512_storeu_si512(
-                        dp.add(orow + ox * CHANNELS) as *mut __m512i,
-                        _mm512_permutexvar_epi64(order, packed),
-                    );
-                }
-                ox += OUT_PIXELS;
-            }
-            while ox < ow {
-                let top_left = r0 + 2 * ox * CHANNELS;
-                for ch in 0..CHANNELS {
-                    // SAFETY: ox < ow: the output sample is in row oy, and its
-                    // 2x2 block (pixels 2ox, 2ox + 1 < width of rows 2oy,
-                    // 2oy + 1 < height) in `src`.
-                    unsafe {
-                        *dp.add(orow + ox * CHANNELS + ch) =
-                            box2_mean(sp.add(top_left + ch), CHANNELS, stride);
-                    }
-                }
-                ox += 1;
-            }
-        }
-    });
-    // SAFETY: `rows(oy_lo, oy_hi)` writes all of output rows [oy_lo, oy_hi)
-    // (each row's body and tail) and nothing else.
-    unsafe { output.write(false, rows) }
-}
-
-/// AVX-512 uint8 RGB 2x2 box, 32 output pixels per iteration: per row
-/// three line-aligned loads of 64 pixels, cut by two-register dword permutes
-/// into four groups of 16 with 4 whole pixels (12 bytes) per 128-bit lane;
-/// then as the RGBA kernel, and each group's 6 sums per lane gathered by a
-/// word permute and narrowed to 24 bytes. (A 64-byte load per 16 pixels
-/// would split cache lines three times in four, which costs when the rows
-/// come from memory.)
-///
-/// # Safety
-/// As `box2x_u8_hwc3_avx512_to`.
-pub(crate) unsafe fn box2x_u8_hwc3_avx512(
-    src: &[u8],
-    width: usize,
-    height: usize,
-) -> (Vec<u8>, usize, usize) {
-    // SAFETY: the caller's contract.
-    unsafe { new_image(box2x_u8_hwc3_avx512_to, src, (width, height, RGB)) }
-}
-
-/// `box2x_u8_hwc3_avx512` into `output`.
-///
-/// # Safety
-/// The CPU supports AVX-512 F, BW and VL, `src.len() >= width * height * 3`,
-/// and `output` holds `height / 2` rows of `width / 2` pixels.
-#[target_feature(enable = "avx512f,avx512bw,avx512vl")]
-pub(crate) unsafe fn box2x_u8_hwc3_avx512_to(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    output: BoxRows<u8>,
-) -> Vec<u8> {
-    use std::arch::x86_64::*;
-    const CHANNELS: usize = 3;
-    // Per iteration and row: 64 pixels = 48 dwords = 3 registers, cut into
-    // 4 groups of 16 pixels (12 dwords).
-    const LOADS: usize = 3;
-    const GROUPS: usize = 4;
-    const GROUP_DWORDS: usize = 12;
-    const GROUP_OUT_BYTES: usize = 8 * CHANNELS;
-    const OUT_PIXELS: usize = 32;
-    let ow = width / 2;
-    debug_assert_eq!(output.rows(), height / 2);
-    let stride = width * CHANNELS;
-    let (sp, dp, layout) = (src.as_ptr(), output.dst(), output.layout());
-    // Group k: dwords 12k.. of the loads, from load `12k / 16` and the next;
-    // lane L gets pixels 4L..4L + 4 (dwords 3L..3L + 3, its 4th unused).
-    let groups: [(usize, __m512i); GROUPS] = std::array::from_fn(|group| {
-        let first = GROUP_DWORDS * group / 16;
-        let idx: [i32; 16] = std::array::from_fn(|dword| {
-            (GROUP_DWORDS * group + 3 * (dword / 4) + (dword % 4).min(2) - 16 * first) as i32
-        });
-        // SAFETY: `idx` is 64 bytes.
-        (first, unsafe {
-            _mm512_loadu_si512(idx.as_ptr() as *const __m512i)
-        })
-    });
-    // Per lane: each channel of pixels 0 and 1, then of pixels 2 and 3; the
-    // last 4 bytes zero.
-    let pair_bytes = _mm512_broadcast_i32x4(_mm_setr_epi8(
-        0, 3, 1, 4, 2, 5, 6, 9, 7, 10, 8, 11, -1, -1, -1, -1,
-    ));
-    // The 6 sums of each lane's 8 words, in pixel order.
-    let mut compact = [0i16; 32];
-    for (word_index, word) in compact.iter_mut().enumerate().take(GROUP_OUT_BYTES) {
-        *word = (8 * (word_index / 6) + word_index % 6) as i16;
-    }
-    // SAFETY: `compact` is 64 bytes.
-    let compact = unsafe { _mm512_loadu_si512(compact.as_ptr() as *const __m512i) };
-    let store_mask = u32::MAX >> (32 - GROUP_OUT_BYTES);
-    let rows = crate::cpu::row_bands(|oy_lo, oy_hi| {
-        for oy in oy_lo..oy_hi {
-            let (r0, r1) = (2 * oy * stride, (2 * oy + 1) * stride);
-            let (orow, store_end) = (layout.row_start(oy), layout.store_end(oy));
-            let mut ox = 0usize;
-            // ox + 32 <= ow keeps the 192 input bytes inside the row.
-            while ox + OUT_PIXELS <= ow {
-                let src_offset = 2 * ox * CHANNELS;
-                for line in 0..LOADS {
-                    prefetch_next_row_pair(sp, r0 + src_offset + 64 * line, stride);
-                }
-                let load_row = |row_start: usize| -> [__m512i; LOADS] {
-                    std::array::from_fn(|load| {
-                        // SAFETY: load < 3, so the 64 bytes end by src_offset
-                        // + 192 <= stride (ox + 32 <= ow) in source rows 2oy,
-                        // 2oy + 1 < height, inside `src`.
-                        unsafe {
-                            _mm512_loadu_si512(
-                                sp.add(row_start + src_offset + 64 * load) as *const __m512i
-                            )
-                        }
-                    })
-                };
-                let (top, bottom) = (load_row(r0), load_row(r1));
-                for (group, &(first, idx)) in groups.iter().enumerate() {
-                    let second = (first + 1).min(LOADS - 1);
-                    let sums = |row_loads: &[__m512i; LOADS]| {
-                        pair_sums_u8_avx512(
-                            _mm512_permutex2var_epi32(row_loads[first], idx, row_loads[second]),
-                            pair_bytes,
-                        )
-                    };
-                    let rounded =
-                        round_quarter_u16_avx512(_mm512_add_epi16(sums(&top), sums(&bottom)));
-                    let bytes = _mm512_cvtepi16_epi8(_mm512_permutexvar_epi16(compact, rounded));
-                    let at = orow + ox * CHANNELS + GROUP_OUT_BYTES * group;
-                    if at + 32 <= store_end {
-                        // 8 bytes of slop, which the next store (or the tail, or
-                        // a new image's next row) overwrites.
-                        // SAFETY: at + 32 <= the row's store end (checked).
-                        unsafe { _mm256_storeu_si256(dp.add(at) as *mut __m256i, bytes) };
-                    } else {
-                        // SAFETY: the mask writes bytes at..at + 24 <= orow +
-                        // 3(ox + 32) <= orow + 3ow (ox + 32 <= ow), inside output
-                        // row oy; masked-off bytes are not accessed.
-                        unsafe {
-                            _mm256_mask_storeu_epi8(dp.add(at) as *mut i8, store_mask, bytes);
-                        }
-                    }
-                }
-                ox += OUT_PIXELS;
-            }
-            while ox < ow {
-                let top_left = r0 + 2 * ox * CHANNELS;
-                for ch in 0..CHANNELS {
-                    // SAFETY: ox < ow: the output sample is in row oy, and its
-                    // 2x2 block (pixels 2ox, 2ox + 1 < width of rows 2oy,
-                    // 2oy + 1 < height) in `src`.
-                    unsafe {
-                        *dp.add(orow + ox * CHANNELS + ch) =
-                            box2_mean(sp.add(top_left + ch), CHANNELS, stride);
-                    }
-                }
-                ox += 1;
-            }
-        }
-    });
-    // SAFETY: `rows(oy_lo, oy_hi)` writes all of output rows [oy_lo, oy_hi)
-    // (each row's body and tail), its stores below each row's store end.
-    unsafe { output.write(false, rows) }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1277,12 +1015,6 @@ mod tests {
 
     fn avx2_detected() -> bool {
         std::is_x86_feature_detected!("avx2")
-    }
-
-    fn avx512_detected() -> bool {
-        std::is_x86_feature_detected!("avx512f")
-            && std::is_x86_feature_detected!("avx512bw")
-            && std::is_x86_feature_detected!("avx512vl")
     }
 
     /// Runs the 2x `kernel` of `channels`-sample pixels on random and extreme
@@ -1318,18 +1050,6 @@ mod tests {
         unsafe {
             assert_halves_as_scalar::<u8>(RGB, box2x_u8_hwc3_avx2);
             assert_halves_as_scalar::<u8>(RGBX, box2x_u8_hwc4_avx2);
-        }
-    }
-
-    #[test]
-    fn box2x_u8_avx512_equals_scalar() {
-        if !avx512_detected() {
-            return;
-        }
-        // SAFETY: AVX-512 F, BW and VL are available.
-        unsafe {
-            assert_halves_as_scalar::<u8>(RGB, box2x_u8_hwc3_avx512);
-            assert_halves_as_scalar::<u8>(RGBX, box2x_u8_hwc4_avx512);
         }
     }
 
@@ -1485,13 +1205,10 @@ mod tests {
         }
         // SAFETY: AVX2 is available.
         unsafe {
+            assert_large_halves_as_scalar::<u8>(RGB, box2x_u8_hwc3_avx2);
             assert_large_halves_as_scalar::<u8>(RGBX, box2x_u8_hwc4_avx2);
             assert_large_halves_as_scalar::<u16>(RGBX, box2x_u16_hwc4_avx2);
             assert_large_halves_as_scalar::<u16>(RGB, box2x_u16_hwc3_avx2);
-        }
-        if avx512_detected() {
-            // SAFETY: AVX-512 F, BW and VL are available.
-            unsafe { assert_large_halves_as_scalar::<u8>(RGB, box2x_u8_hwc3_avx512) };
         }
     }
 }

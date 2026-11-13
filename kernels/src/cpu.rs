@@ -1,5 +1,5 @@
 //! What the CPU offers and how outputs are written: runtime SIMD detection
-//! (with the scalar kill switch and the AVX-512 opt-out), the environment
+//! (with the scalar kill switch), the environment
 //! switches, output buffers allocated without clearing, the page-prefault
 //! helper for large outputs, and the write prefetch.
 
@@ -25,31 +25,11 @@ pub(crate) fn has_avx2() -> bool {
 pub(crate) fn has_avx2_fma() -> bool {
     has_avx2() && std::is_x86_feature_detected!("fma")
 }
-// AVX-512 tier: F+BW+VL is the working set for the 512-bit integer
-// kernels. WSIDICOM_KERNELS_AVX512=0 drops to the AVX2 tier (per-tier testing; an
-// escape hatch for hosts where 512-bit execution downclocks).
-#[cfg(target_arch = "x86_64")]
-#[inline]
-pub(crate) fn has_avx512() -> bool {
-    static ON: std::sync::LazyLock<bool> =
-        std::sync::LazyLock::new(|| env_flag("WSIDICOM_KERNELS_AVX512", true));
-    *ON && simd_enabled()
-        && std::is_x86_feature_detected!("avx512f")
-        && std::is_x86_feature_detected!("avx512bw")
-        && std::is_x86_feature_detected!("avx512vl")
-        && std::is_x86_feature_detected!("fma")
-}
-
 /// No x86 tier off x86-64: tier-dependent planning then picks the scalar
 /// (or NEON) paths.
 #[cfg(not(target_arch = "x86_64"))]
 #[inline]
 pub(crate) fn has_avx2() -> bool {
-    false
-}
-#[cfg(not(target_arch = "x86_64"))]
-#[inline]
-pub(crate) fn has_avx512() -> bool {
     false
 }
 
@@ -208,79 +188,6 @@ pub(crate) unsafe fn written_output<T>(out: Vec<std::mem::MaybeUninit<T>>) -> Ve
     unsafe { Vec::from_raw_parts(out.as_mut_ptr().cast::<T>(), out.len(), out.capacity()) }
 }
 
-/// The most bytes of a destination run worth prefetching: past the first few
-/// cache lines the hardware prefetcher has picked up the row's stream.
-#[cfg(target_arch = "x86_64")]
-const PREFETCH_MAX_BYTES: usize = 512;
-
-/// Hint that the `bytes` at `dst` are about to be written, so their cache lines
-/// are fetched (for ownership, where the CPU supports it) ahead of the stores.
-/// Prefetches never fault, so `dst` need not be dereferenceable.
-#[cfg(target_arch = "x86_64")]
-#[inline]
-pub(crate) fn prefetch_for_write(dst: *const u8, bytes: usize) {
-    let lines = (0..bytes.min(PREFETCH_MAX_BYTES))
-        .step_by(64)
-        .map(|off| dst.wrapping_add(off));
-    if has_prefetchw() {
-        for line in lines {
-            // SAFETY: the CPU implements PREFETCHW (checked); a prefetch
-            // reads no memory architecturally and cannot fault.
-            unsafe {
-                std::arch::asm!(
-                    "prefetchw byte ptr [{0}]",
-                    in(reg) line,
-                    options(nostack, preserves_flags, readonly)
-                );
-            };
-        }
-    } else {
-        for line in lines {
-            // SAFETY: SSE is baseline on x86-64; a prefetch cannot fault.
-            unsafe {
-                std::arch::x86_64::_mm_prefetch::<{ std::arch::x86_64::_MM_HINT_T0 }>(
-                    line as *const i8,
-                );
-            };
-        }
-    }
-}
-
-/// No-op off x86-64. On aarch64 an `prfm pstl1keep` twin was measured on
-/// Apple silicon: no gain for integer canvases, a small one only for large
-/// float32 tiles.
-#[cfg(not(target_arch = "x86_64"))]
-#[inline]
-pub(crate) fn prefetch_for_write(_dst: *const u8, _bytes: usize) {}
-
-/// Hint that the cache line at `src` is about to be read. Prefetches never
-/// fault, so `src` need not be dereferenceable.
-#[cfg(target_arch = "x86_64")]
-#[inline]
-pub(crate) fn prefetch_for_read(src: *const u8) {
-    // SAFETY: SSE is baseline on x86-64; a prefetch cannot fault.
-    unsafe {
-        std::arch::x86_64::_mm_prefetch::<{ std::arch::x86_64::_MM_HINT_T0 }>(src as *const i8);
-    }
-}
-
-/// No-op off x86-64.
-#[cfg(not(target_arch = "x86_64"))]
-#[inline]
-pub(crate) fn prefetch_for_read(_src: *const u8) {}
-
-/// PREFETCHW support (CPUID `0x8000_0001` ECX bit 8). `is_x86_feature_detected`
-/// can't name it on stable Rust.
-#[cfg(target_arch = "x86_64")]
-fn has_prefetchw() -> bool {
-    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-        use std::arch::x86_64::__cpuid;
-        // Leaf 0x8000_0001 is only read after 0x8000_0000 reports it exists.
-        __cpuid(0x8000_0000).eax >= 0x8000_0001 && __cpuid(0x8000_0001).ecx & (1 << 8) != 0
-    });
-    *ON
-}
-
 pub(crate) fn set_simd(enabled: bool) {
     SIMD_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
 }
@@ -362,7 +269,6 @@ mod tests {
         assert!(simd_enabled());
         assert_eq!(has_avx2(), std::is_x86_feature_detected!("avx2"));
         assert!(!has_avx2_fma() || has_avx2());
-        assert!(!has_avx512() || has_avx2_fma());
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -382,15 +288,5 @@ mod tests {
         let name = "WSIDICOM_KERNELS_TEST_FLAG_NEVER_SET";
         assert!(env_flag(name, true));
         assert!(!env_flag(name, false));
-    }
-
-    #[test]
-    fn write_prefetches_do_not_fault() {
-        let out = [0u8; 100];
-        prefetch_for_write(out.as_ptr(), 0);
-        prefetch_for_write(out.as_ptr(), 100);
-        // Past the buffer, and nowhere at all: prefetches never fault.
-        prefetch_for_write(out.as_ptr(), 1 << 20);
-        prefetch_for_write(std::ptr::dangling(), 4096);
     }
 }

@@ -10,10 +10,10 @@ mod x86_output;
 #[cfg(target_arch = "x86_64")]
 mod x86_planar;
 
+#[cfg(target_arch = "x86_64")]
+use crate::cpu::has_avx2;
 #[cfg(target_arch = "aarch64")]
 use crate::cpu::use_neon;
-#[cfg(target_arch = "x86_64")]
-use crate::cpu::{has_avx2, has_avx512};
 use crate::rgbx::expand_image;
 use crate::sample::{RGB, RGBX, Sample, assert_image, assert_interleaved};
 #[cfg(target_arch = "aarch64")]
@@ -165,7 +165,7 @@ fn box_levels_fused<T: Copy, Acc: Copy + Default + std::ops::Add<Output = Acc>>(
 }
 
 /// Box reduction per sample type: the scalar reference, overridden with
-/// AVX2/AVX-512/NEON kernels where they exist.
+/// AVX2/NEON kernels where they exist.
 ///
 /// Every method takes `src` holding the `width * height` (times `channels`)
 /// samples its dimensions describe — an array's shape at the API — which the
@@ -370,8 +370,6 @@ impl BoxSample for u8 {
         unsafe {
             match channels {
                 1 if has_avx2() => box2x_u8_avx2_to(src, width, height, output),
-                RGB if has_avx512() => box2x_u8_hwc3_avx512_to(src, width, height, output),
-                RGBX if has_avx512() => box2x_u8_hwc4_avx512_to(src, width, height, output),
                 RGB if has_avx2() => box2x_u8_hwc3_avx2_to(src, width, height, output),
                 RGBX if has_avx2() => box2x_u8_hwc4_avx2_to(src, width, height, output),
                 _ => return false,
@@ -424,17 +422,6 @@ impl BoxSample for u8 {
     ) -> (Vec<u8>, usize, usize) {
         assert_image(src, width, height, channels);
         assert_interleaved(channels);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx512() && (channels == RGB || channels == RGBX) {
-            // SAFETY: avx512f+bw+vl detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe {
-                if channels == RGB {
-                    box2x_u8_hwc3_avx512(src, width, height)
-                } else {
-                    box2x_u8_hwc4_avx512(src, width, height)
-                }
-            };
-        }
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
             // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).

@@ -98,19 +98,6 @@ pub(crate) fn bilinear_x4(src: &[u8], width: usize, height: usize, channels: usi
     );
     #[cfg(target_arch = "x86_64")]
     {
-        if crate::cpu::has_avx512() {
-            // SAFETY: avx512f+bw+vl detected; src holds width * height *
-            // channels samples, width and height multiples of 4 (the exact
-            // kernel's condition), channels 1, 3 or 4 (the caller's shape
-            // check).
-            return unsafe {
-                match channels {
-                    1 => x86::bilinear_x4_avx512::<1, false>(src, width, height),
-                    3 => x86::bilinear_x4_avx512::<4, true>(src, width, height),
-                    _ => x86::bilinear_x4_avx512::<4, false>(src, width, height),
-                }
-            };
-        }
         if crate::cpu::has_avx2() {
             // SAFETY: avx2 detected; src holds width * height * channels
             // samples, width and height multiples of 4 (the exact kernel's
@@ -139,9 +126,9 @@ mod tests {
     use crate::exact::tests::{assert_equals_reference, size_grid};
     use crate::testing::CHANNELS;
 
-    /// Widths (multiples of 4) around the AVX2 and AVX-512 steps (16 and 32
-    /// samples per horizontal step, so 64 and 128 gray input pixels) and
-    /// their scalar and AVX2 fallbacks; heights from one output row (the
+    /// Widths (multiples of 4) around the AVX2 step (16 samples per
+    /// horizontal step, so 64 gray input pixels) and twice that, and its
+    /// scalar fallback; heights from one output row (the
     /// window clipped at both edges) up.
     pub(super) const WIDTHS: [usize; 18] = [
         4, 8, 12, 16, 20, 28, 32, 36, 44, 60, 64, 68, 124, 128, 132, 136, 260, 516,

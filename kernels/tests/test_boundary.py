@@ -26,7 +26,6 @@ from typing import Any
 import numpy as np
 import pytest
 from wsidicom_kernels import (
-    Interpolation,
     ResizeFilter,
     compose,
     downscale,
@@ -107,45 +106,6 @@ class TestIntegerSaturation:
         # Act & Assert
         assert_parity(lambda: downscale(checkerboard, 2, ResizeFilter.BOX), 1)
 
-    @pytest.mark.parametrize(
-        "interpolation", [Interpolation.BILINEAR, Interpolation.BICUBIC]
-    )
-    @pytest.mark.parametrize(
-        ["dtype", "top", "tile_shape", "canvas_shape"],
-        [
-            (np.uint8, 255, (9, 11), (16, 16)),
-            (np.uint8, 255, (9, 11, 3), (16, 16, 3)),
-            (np.uint8, 255, (9, 11, 3), (16, 16, 4)),
-            (np.uint16, 65535, (9, 11), (16, 16)),
-            (np.uint16, 65535, (9, 11, 3), (16, 16, 3)),
-        ],
-    )
-    def test_compose_all_max_stays_max(
-        self,
-        dtype: type[np.unsignedinteger],
-        top: int,
-        tile_shape: tuple[int, ...],
-        canvas_shape: tuple[int, ...],
-        interpolation: Interpolation,
-    ) -> None:
-        """An all-max tile composes within one of max where it covers fully.
-
-        Onto a zero canvas, at (2.5, 1.25): rows 1 to 10 and columns 2 to 13
-        reach the tile, rows 3 to 8 and columns 4 to 11 lie two pixels clear of
-        its edges. The RGBX canvas's pad channel is not a written sample.
-        """
-        # Arrange
-        tile = np.full(tile_shape, top, dtype)
-        canvas = np.zeros(canvas_shape, dtype)
-
-        # Act
-        compose(canvas, [tile], np.array([[2.5, 1.25]]), interpolation)
-
-        # Assert
-        samples = canvas[:, :, :3] if canvas_shape[-1] == 4 else canvas
-        covered = samples[3:9, 4:12].astype(np.int64)
-        assert (np.abs(covered - top) <= 1).all()
-
     def test_rgb_to_rgbx_all_max(self) -> None:
         """Packing an all-max RGB image with an all-max pad is all-max."""
         # Act
@@ -185,28 +145,29 @@ class TestFloatSpecials:
         # Act & Assert
         assert_parity(lambda: downscale(image, factor, ResizeFilter.BOX), 1e-3)
 
-    @pytest.mark.parametrize(
-        "interpolation", [Interpolation.BILINEAR, Interpolation.BICUBIC]
-    )
-    def test_compose_keeps_parity(
+    def test_compose_copies_special_bit_exactly(
         self,
-        assert_parity: ParityCheck,
         random_image: Callable[[tuple[int, ...], Any], np.ndarray],
+        simd_and_scalar: Callable[[Callable[[], Any]], tuple[Any, Any]],
         special: float,
-        interpolation: Interpolation,
     ) -> None:
-        """Composing a tile with a special sample matches the scalar reference."""
+        """Composing a tile with a special sample copies its bits unchanged."""
         # Arrange
         tile = random_image((9, 11), np.float32)
         tile[3, 4] = special
 
         def composed() -> np.ndarray:
             canvas = np.zeros((16, 16), np.float32)
-            compose(canvas, [tile], np.array([[2.5, 1.25]]), interpolation)
+            compose(canvas, [tile], np.array([[2, 1]], np.int64))
             return canvas
 
-        # Act & Assert
-        assert_parity(composed, 1e-2)
+        # Act
+        simd, scalar = simd_and_scalar(composed)
+
+        # Assert
+        for canvas in (simd, scalar):
+            pasted = canvas[1:10, 2:13]
+            np.testing.assert_array_equal(pasted.view(np.uint32), tile.view(np.uint32))
 
 
 @pytest.mark.unittest

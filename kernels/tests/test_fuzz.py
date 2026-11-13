@@ -39,7 +39,6 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from wsidicom_kernels import (
-    Interpolation,
     ResizeFilter,
     compose,
     downscale,
@@ -97,16 +96,6 @@ def assert_parity(
 
 
 @st.composite
-def positions(draw: st.DrawFn) -> float:
-    """Draw a position component: integer, fractional, half, far or negative."""
-    whole = draw(st.integers(-6, 12))
-    fraction = draw(
-        st.one_of(st.just(0.0), st.just(0.5), st.floats(0, 1, exclude_max=True))
-    )
-    return float(whole) + fraction
-
-
-@st.composite
 def resizes(draw: st.DrawFn) -> tuple[Size, Size]:
     """Draw an input size (h, w) and an output size (oh, ow).
 
@@ -127,7 +116,7 @@ def resizes(draw: st.DrawFn) -> tuple[Size, Size]:
 
 @pytest.mark.unittest
 class TestCompose:
-    """compose over generated tiles, canvases, positions and filters."""
+    """compose over generated tiles, canvases and positions."""
 
     @fuzz
     @given(
@@ -135,8 +124,7 @@ class TestCompose:
         layout=st.sampled_from([(1, 1), (3, 3), (4, 4), (3, 4)]),
         tile_size=st.tuples(st.integers(1, 160), st.integers(1, 160)),
         canvas_size=st.tuples(st.integers(1, 168), st.integers(1, 168)),
-        position=st.tuples(positions(), positions()),
-        interpolation=st.sampled_from(list(Interpolation)),
+        position=st.tuples(st.integers(-170, 178), st.integers(-170, 178)),
         seed=seeds,
     )
     def test_simd_matches_scalar(
@@ -146,33 +134,31 @@ class TestCompose:
         layout: tuple[int, int],
         tile_size: Size,
         canvas_size: Size,
-        position: tuple[float, float],
-        interpolation: Interpolation,
+        position: tuple[int, int],
         seed: int,
     ) -> None:
-        """Composing stays in bounds and matches the scalar reference.
+        """Composing stays in bounds and matches the scalar reference exactly.
 
-        The SIMD kernels match the scalar reference within one level.
+        Positions reach past every edge of the canvas, so tiles hang off any
+        side or miss it entirely.
         """
         # Arrange
         tile_channels, canvas_channels = layout
-        if canvas_channels != tile_channels:  # RGB onto RGBX: uint8, resampled
+        if canvas_channels != tile_channels:  # RGB onto RGBX: uint8 only
             dtype = np.uint8
-            if interpolation == Interpolation.NEAREST:
-                interpolation = Interpolation.BILINEAR
         tile = page_end(image_shape(tile_size, tile_channels), dtype, seed)
 
         def composed() -> np.ndarray:
             canvas_shape = image_shape(canvas_size, canvas_channels)
             canvas = page_end(canvas_shape, dtype, seed + 1)
-            compose(canvas, [tile], np.array([position], np.float64), interpolation)
+            compose(canvas, [tile], np.array([position], np.int64))
             return canvas
 
         # Act
         simd, scalar = simd_and_scalar(composed)
 
         # Assert
-        assert_parity(simd, scalar, integer_tolerance=1)
+        np.testing.assert_array_equal(simd, scalar)
 
 
 @pytest.mark.unittest

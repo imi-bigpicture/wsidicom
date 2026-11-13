@@ -105,19 +105,6 @@ pub(crate) fn catmull_x2(src: &[u8], width: usize, height: usize, channels: usiz
     );
     #[cfg(target_arch = "x86_64")]
     {
-        if crate::cpu::has_avx512() && channels != 3 {
-            // SAFETY: avx512f+bw+vl and fma detected (`has_avx512`); src holds width *
-            // height * channels samples, width and height even (the exact
-            // kernel's condition), channels 1 or 4 (the caller's shape
-            // check, RGB excluded here).
-            return unsafe { x86::catmull_x2_avx512_split(src, width, height, channels) };
-        }
-        if crate::cpu::has_avx512() {
-            // SAFETY: avx512f+bw+vl detected; src holds width * height *
-            // channels samples, width and height even (the exact kernel's
-            // condition).
-            return unsafe { x86::catmull_x2_avx512(src, width, height, channels) };
-        }
         if crate::cpu::has_avx2_fma() {
             // SAFETY: avx2 and fma detected; src holds width * height *
             // channels samples, width and height even (the exact kernel's
@@ -140,8 +127,7 @@ mod tests {
     use crate::exact::tests::{assert_equals_reference, size_grid};
     use crate::testing::CHANNELS;
 
-    /// Even widths around each kernel's step and its scalar fallback (the
-    /// AVX-512 split kernel takes 64 gray pixels, the others fewer), the
+    /// Even widths around the kernel's step and its scalar fallback, the
     /// clipped edge windows (3 input pixels each side) and the vector tails;
     /// even heights from one output row (both edges clipped) up.
     pub(super) const WIDTHS: [usize; 22] = [
