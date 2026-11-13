@@ -28,7 +28,6 @@ def compose(
     canvas: NDArray[Any],
     tiles: Sequence[NDArray[Any]],
     positions: NDArray[np.int64],
-    pad: int = 255,
     crops: NDArray[np.int64] | None = None,
 ) -> NDArray[Any]:
     """Paste ``tiles`` onto ``canvas`` in place; overlaps resolve last-write-wins.
@@ -59,9 +58,6 @@ def compose(
     positions: numpy.ndarray
         C-contiguous ``(N, 2)`` int64 top-left ``(x, y)`` = ``(column, row)``
         positions in canvas pixels, one per tile (per crop, with ``crops``).
-    pad: int = 255
-        Value of the fourth sample when expanding RGB tiles onto an RGBX canvas
-        (see below); ignored otherwise.
     crops: numpy.ndarray | None = None
         ``(N, 5)`` int64 ``(tile, x, y, width, height)`` rows: the pieces to
         place, each a nonempty rectangle of ``tiles[tile]`` with its
@@ -75,16 +71,6 @@ def compose(
 
     Notes
     -----
-    A uint8 ``(H, W, 4)`` RGBX canvas accepts ``(H, W, 3)`` RGB tiles and expands
-    them as it writes. Pillow stores RGB as 4-byte RGBX, so such a canvas maps
-    into a Pillow image without a copy — composing straight into it replaces a
-    separate full-canvas expand, which is the most expensive step at the
-    numpy-to-Pillow boundary. Tiles stay compact 3-sample, so nothing upstream
-    (decode, cache) has to carry the padding::
-
-        canvas = np.empty((h, w, 4), np.uint8)
-        compose(canvas, rgb_tiles, positions)
-
     Performance: each call carries a few microseconds of fixed cost (borrow
     setup). For tile loops, pass all tiles in ONE call; batching amortizes the
     fixed cost to nothing.
@@ -92,7 +78,7 @@ def compose(
     freshly allocated array page-fault, which can cost more than the
     compose itself (see the README's performance notes).
     """
-    lib.compose(canvas, list(tiles), positions, pad, crops)
+    lib.compose(canvas, list(tiles), positions, crops)
     return canvas
 
 
@@ -100,7 +86,6 @@ def downscale(
     image: NDArray[Any],
     factor: int,
     filter: ResizeFilter,
-    pad: int | None = None,
 ) -> NDArray[Any]:
     """Reduce ``image`` by integer ``factor`` per spatial axis, antialiased.
 
@@ -140,26 +125,13 @@ def downscale(
         Integer reduction factor applied to both spatial axes.
     filter: ResizeFilter
         Antialiasing filter.
-    pad: int | None = None
-        If set, take a ``(H, W, 3)`` uint8 RGB image and return ``(H, W, 4)``
-        RGBX, this value filling the fourth sample. See Notes.
 
     Returns
     -------
     numpy.ndarray
-        A new, reduced array with the same dtype as ``image``; the same channel
-        count, or 4 if ``pad`` was given.
-
-    Notes
-    -----
-    ``pad`` expands RGB to RGBX *while reducing*, so the result maps into a
-    Pillow image with no copy (Pillow stores RGB as 4-byte RGBX). With ``BOX``
-    and a power-of-2 factor a fused kernel does it in the pass that was already
-    writing every output pixel, so the expand is free; intermediate levels stay
-    3-sample. Other filters resize to RGB and expand after, which is still cheap
-    because it lands on the *reduced* output.
+        A new, reduced array with the same dtype and channel count as ``image``.
     """
-    return lib.downscale(image, factor, filter, pad)
+    return lib.downscale(image, factor, filter)
 
 
 def downscale_grid(
@@ -238,7 +210,6 @@ def resize(
     out_h: int,
     out_w: int,
     filter: ResizeFilter,
-    pad: int | None = None,
 ) -> NDArray[Any]:
     """Resample ``image`` to an exact ``(out_h, out_w)`` — any ratio, antialiased.
 
@@ -275,46 +246,14 @@ def resize(
         Target width in pixels.
     filter: ResizeFilter
         Resampling filter.
-    pad: int | None = None
-        If set, take a ``(H, W, 3)`` uint8 RGB image and return
-        ``(out_h, out_w, 4)`` RGBX, this value filling the fourth sample — so the
-        result maps into a Pillow image with no copy. See :func:`downscale`.
 
     Returns
     -------
     numpy.ndarray
-        A new ``(out_h, out_w)`` (or ``(out_h, out_w, C)``) array, same dtype as
-        ``image``; the same channel count, or 4 if ``pad`` was given.
+        A new ``(out_h, out_w)`` (or ``(out_h, out_w, C)``) array, same dtype
+        and channel count as ``image``.
     """
-    return lib.resize(image, out_h, out_w, filter, pad)
-
-
-def rgb_to_rgbx(rgb: NDArray[Any], pad: int = 0) -> NDArray[np.uint8]:
-    """Expand an ``(H, W, 3)`` uint8 RGB array to ``(H, W, 4)`` RGBX.
-
-    The 4th byte of each pixel is set to ``pad``. This matches PIL's internal
-    RGB storage (which is 4-byte RGBX), so the result hands off to PIL with no
-    repack, via a zero-copy ``frombuffer``::
-
-        from PIL import Image
-        img = Image.frombuffer("RGB", (w, h), rgb_to_rgbx(a), "raw", "RGBX", 0, 1)
-
-    ~2x faster than ``Image.fromarray`` (which does the same expand in scalar C),
-    and the ``frombuffer`` wrap is essentially free.
-
-    Parameters
-    ----------
-    rgb: numpy.ndarray
-        A C-contiguous ``(H, W, 3)`` uint8 array.
-    pad: int = 0
-        Value for the padding (4th) channel.
-
-    Returns
-    -------
-    numpy.ndarray
-        A new ``(H, W, 4)`` uint8 array.
-    """
-    return lib.rgb_to_rgbx(rgb, pad)
+    return lib.resize(image, out_h, out_w, filter)
 
 
 def stitch(

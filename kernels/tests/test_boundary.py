@@ -29,7 +29,6 @@ from wsidicom_kernels import (
     ResizeFilter,
     compose,
     downscale,
-    rgb_to_rgbx,
 )
 
 ParityCheck = Callable[[Callable[[], np.ndarray], float], np.ndarray]
@@ -105,14 +104,6 @@ class TestIntegerSaturation:
 
         # Act & Assert
         assert_parity(lambda: downscale(checkerboard, 2, ResizeFilter.BOX), 1)
-
-    def test_rgb_to_rgbx_all_max(self) -> None:
-        """Packing an all-max RGB image with an all-max pad is all-max."""
-        # Act
-        result = rgb_to_rgbx(np.full((7, 9, 3), 255, np.uint8), 255)
-
-        # Assert
-        assert (result == 255).all()
 
 
 @pytest.mark.unittest

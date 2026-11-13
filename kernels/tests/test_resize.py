@@ -15,7 +15,7 @@
 """Tests for resize: accuracy, parity, layouts, exact ratios, nearest and caching.
 
 Accuracy against the exact convolution, SIMD/scalar parity, layouts (planar,
-interleaved, RGBX output), exact integer ratios, nearest sample positions and
+interleaved), exact integer ratios, nearest sample positions and
 the per-thread plan cache.
 """
 
@@ -25,7 +25,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from wsidicom_kernels import ResizeFilter, downscale, resize, rgb_to_rgbx
+from wsidicom_kernels import ResizeFilter, downscale, resize
 
 ImageSize = tuple[int, int]
 RandomImage = Callable[[tuple[int, ...], Any], np.ndarray]
@@ -469,39 +469,6 @@ class TestResizeLayouts:
         # Assert
         assert np.array_equal(simd, expected)
         assert np.array_equal(scalar, expected)
-
-    @pytest.mark.parametrize(
-        ["size", "output_size"],
-        [((90, 120), (61, 77)), ((40, 60), (80, 120)), ((64, 96), (32, 48))],
-    )
-    @pytest.mark.parametrize("filter", list(ResizeFilter))
-    def test_resize_pad_equals_resize_then_rgbx(
-        self,
-        random_image: RandomImage,
-        simd_and_scalar: SimdAndScalar,
-        size: ImageSize,
-        output_size: ImageSize,
-        filter: ResizeFilter,
-    ) -> None:
-        """pad= (RGB in, RGBX out) is the RGB resize with the 4th sample set.
-
-        On every path and filter: written as RGBX directly, transposed,
-        scalar, and nearest expanded.
-        """
-        # Arrange
-        image = random_image((*size, 3), np.uint8)
-
-        # Act
-        simd, scalar = simd_and_scalar(
-            lambda: (
-                rgb_to_rgbx(resize(image, *output_size, filter), pad=7),
-                resize(image, *output_size, filter, pad=7),
-            )
-        )
-
-        # Assert
-        for expected, padded in (simd, scalar):
-            assert np.array_equal(padded, expected)
 
 
 @pytest.fixture

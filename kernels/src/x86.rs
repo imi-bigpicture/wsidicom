@@ -1,5 +1,5 @@
 //! Helpers shared by the `x86_64` kernels: tap grouping for the vertical
-//! passes, streaming stores, and the RGB -> RGBX shuffles.
+//! passes and streaming stores.
 
 use std::ops::Range;
 
@@ -130,90 +130,10 @@ pub(crate) fn sfence_if_streamed(nt: bool) {
     }
 }
 
-/// pshufb mask: per 128-bit lane, 4 RGB pixels (bytes 0..12) -> 4 RGBX slots
-/// with the X byte zeroed (index high bit set), for `rgbx_pad_lanes` to fill.
-#[target_feature(enable = "avx2")]
-#[inline]
-pub(crate) fn rgb_to_rgbx_shuffle() -> std::arch::x86_64::__m256i {
-    use std::arch::x86_64::*;
-    _mm256_setr_epi8(
-        0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1, //
-        0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1,
-    )
-}
-
-/// `pad` in every X byte (each 4th) and zero elsewhere, to OR into a shuffled
-/// RGBX register whose X bytes are zero.
-#[target_feature(enable = "avx2")]
-#[inline]
-pub(crate) fn rgbx_pad_lanes(pad: u8) -> std::arch::x86_64::__m256i {
-    use std::arch::x86_64::*;
-    let x_bytes = _mm256_setr_epi8(
-        0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, //
-        0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1,
-    );
-    _mm256_and_si256(_mm256_set1_epi8(pad as i8), x_bytes)
-}
-
-/// AVX2 uint8 RGB->RGBX expand: `pshufb` splices a `pad` byte after each pixel,
-/// 8 px/iter — two 12-byte-offset 128-bit loads give each lane its 4 pixels,
-/// one in-lane shuffle expands both. `src` is 3 * `pixels` RGB bytes, `dst`
-/// 4 * `pixels` RGBX bytes.
-///
-/// # Safety
-/// The CPU supports AVX2, `src.len() >= 3 * pixels` and
-/// `dst.len() >= 4 * pixels` (neither is checked).
-#[target_feature(enable = "avx2")]
-pub(crate) unsafe fn expand_rgb_rgbx_avx2(src: &[u8], dst: &mut [u8], pixels: usize, pad: u8) {
-    use std::arch::x86_64::*;
-    let mask = rgb_to_rgbx_shuffle();
-    let padv = rgbx_pad_lanes(pad);
-    let (sp, dp) = (src.as_ptr(), dst.as_mut_ptr());
-    let mut pixel = 0usize;
-    // The lane-1 load reads src[3 * pixel + 12 .. 3 * pixel + 28]; the guard keeps
-    // it in bounds.
-    while pixel + 8 <= pixels && 3 * pixel + 28 <= src.len() {
-        // SAFETY: src[3 * pixel .. 3 * pixel + 28] is in bounds (the guard).
-        let rgb = unsafe {
-            _mm256_inserti128_si256(
-                _mm256_castsi128_si256(_mm_loadu_si128(sp.add(3 * pixel) as *const __m128i)),
-                _mm_loadu_si128(sp.add(3 * pixel + 12) as *const __m128i),
-                1,
-            )
-        };
-        let rgbx = _mm256_or_si256(_mm256_shuffle_epi8(rgb, mask), padv);
-        // SAFETY: pixel + 8 <= pixels, so dst[4 * pixel .. 4 * pixel + 32] is
-        // inside the 4 * pixels bytes the caller guarantees.
-        unsafe { _mm256_storeu_si256(dp.add(4 * pixel) as *mut __m256i, rgbx) };
-        pixel += 8;
-    }
-    while pixel < pixels {
-        // SAFETY: pixel < pixels: inside the 3 * pixels source and 4 * pixels
-        // destination bytes the caller guarantees.
-        unsafe {
-            *dp.add(4 * pixel) = *sp.add(3 * pixel);
-            *dp.add(4 * pixel + 1) = *sp.add(3 * pixel + 1);
-            *dp.add(4 * pixel + 2) = *sp.add(3 * pixel + 2);
-            *dp.add(4 * pixel + 3) = pad;
-        }
-        pixel += 1;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{Rng, random_samples};
     use std::arch::x86_64::*;
-
-    /// RGB pixels widened to RGBX with `pad` in X.
-    fn rgb_to_rgbx(rgb: &[u8], pad: u8) -> Vec<u8> {
-        rgb.as_chunks::<3>()
-            .0
-            .iter()
-            .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], pad])
-            .collect()
-    }
 
     #[test]
     fn cover_row_covers_every_output_with_whole_blocks() {
@@ -331,28 +251,6 @@ mod tests {
                 );
                 assert!(written[..offset].iter().all(|&sample| sample == 0.0));
                 assert!(written[offset + 8..].iter().all(|&sample| sample == 0.0));
-            }
-        }
-    }
-
-    #[test]
-    fn expand_rgb_rgbx_avx2_equals_scalar() {
-        if !std::is_x86_feature_detected!("avx2") {
-            return;
-        }
-        let mut rng = Rng::new(60);
-        for pixels in 0..=80 {
-            // Exactly the pixels, then with source to spare (more vector
-            // steps pass the source guard).
-            for spare in [0, 32] {
-                let src: Vec<u8> = random_samples(&mut rng, 3 * pixels + spare);
-                for pad in [0, 0x6B, u8::MAX] {
-                    let mut dst = vec![0x11; 4 * pixels];
-                    // SAFETY: AVX2 is available; src holds `pixels` RGB pixels,
-                    // dst as many RGBX ones.
-                    unsafe { expand_rgb_rgbx_avx2(&src, &mut dst, pixels, pad) };
-                    assert_eq!(dst, rgb_to_rgbx(&src[..3 * pixels], pad), "{pixels} pixels");
-                }
             }
         }
     }

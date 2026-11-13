@@ -14,7 +14,7 @@ mod x86_planar;
 use crate::cpu::has_avx2;
 #[cfg(target_arch = "aarch64")]
 use crate::cpu::use_neon;
-use crate::rgbx::expand_image;
+
 use crate::sample::{RGB, RGBX, Sample, assert_image, assert_interleaved};
 #[cfg(target_arch = "aarch64")]
 use neon::*;
@@ -453,16 +453,16 @@ impl BoxSample for u8 {
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
             // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample); channels is 3 or 4.
-            return unsafe { box_reduce_u8_hwc_avx2(src, (width, height), channels, levels, None) };
+            return unsafe { box_reduce_u8_hwc_avx2(src, (width, height), channels, levels) };
         }
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
             // SAFETY: `src` matches its dimensions (BoxSample); channels is 3 or 4.
             return unsafe {
                 if channels == RGB {
-                    box_levels_u8_hwc_neon::<RGB>(src, (width, height), levels, None)
+                    box_levels_u8_hwc_neon::<RGB>(src, (width, height), levels)
                 } else {
-                    box_levels_u8_hwc_neon::<RGBX>(src, (width, height), levels, None)
+                    box_levels_u8_hwc_neon::<RGBX>(src, (width, height), levels)
                 }
             };
         }
@@ -571,9 +571,9 @@ impl BoxSample for u16 {
             // SAFETY: `src` matches its dimensions (BoxSample); channels is 3 or 4.
             return unsafe {
                 if channels == RGB {
-                    box_levels_u16_hwc_neon::<RGB>(src, (width, height), levels, None)
+                    box_levels_u16_hwc_neon::<RGB>(src, (width, height), levels)
                 } else {
-                    box_levels_u16_hwc_neon::<RGBX>(src, (width, height), levels, None)
+                    box_levels_u16_hwc_neon::<RGBX>(src, (width, height), levels)
                 }
             };
         }
@@ -717,65 +717,6 @@ impl BoxSample for f32 {
     }
 }
 
-/// `box_levels_hwc` of an RGB image with RGBX output (`pad` in X): fused into
-/// the SIMD kernels, else the RGB result expanded.
-pub(crate) fn box_levels_rgb_to_rgbx(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    levels: u32,
-    pad: u8,
-) -> (Vec<u8>, usize, usize) {
-    assert_image(src, width, height, RGB);
-    assert!((2..=3).contains(&levels));
-    #[cfg(target_arch = "x86_64")]
-    if has_avx2() {
-        // SAFETY: avx2 detected at runtime; `src` holds the image.
-        return unsafe { box_reduce_u8_hwc_avx2(src, (width, height), RGB, levels, Some(pad)) };
-    }
-    #[cfg(target_arch = "aarch64")]
-    if use_neon() {
-        // SAFETY: `src` holds the image.
-        return unsafe { box_levels_u8_hwc_neon::<RGB>(src, (width, height), levels, Some(pad)) };
-    }
-    let (rgb, ow, oh) = u8::box_levels_hwc(src, width, height, RGB, levels);
-    (expand_image(&rgb, oh, ow, pad), ow, oh)
-}
-
-/// Dispatching 2x2 box halving, RGB in -> RGBX out (`pad` fills the 4th sample).
-/// `src` holds `width * height` RGB pixels (unchecked).
-pub(crate) fn box2x_rgb_to_rgbx(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    pad: u8,
-) -> (Vec<u8>, usize, usize) {
-    assert_image(src, width, height, RGB);
-    #[cfg(target_arch = "x86_64")]
-    if has_avx2() {
-        // SAFETY: avx2 detected at runtime; `src` holds the image.
-        return unsafe { box2x_u8_hwc3to4_avx2(src, width, height, pad) };
-    }
-    #[cfg(target_arch = "aarch64")]
-    if use_neon() {
-        // SAFETY: `src` holds the image.
-        return unsafe { box2x_u8_hwc3to4_neon(src, width, height, pad) };
-    }
-    let (ow, oh) = (width / 2, height / 2);
-    let mut out = vec![pad; ow * oh * RGBX];
-    for oy in 0..oh {
-        for ox in 0..ow {
-            for ch in 0..RGB {
-                let top_left = (2 * oy * width + 2 * ox) * RGB + ch;
-                // SAFETY: ox < width/2 and oy < height/2 keep the whole 2x2 block inside src.
-                out[(oy * ow + ox) * RGBX + ch] =
-                    unsafe { box2_mean(src.as_ptr().add(top_left), RGB, width * RGB) };
-            }
-        }
-    }
-    (out, ow, oh)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -907,15 +848,6 @@ mod tests {
         per_channel(src, dims, |plane, width, height| {
             planar_pyramid_reference(plane, width, height, times)
         })
-    }
-
-    /// RGB pixels widened to RGBX with `pad` in X.
-    pub(crate) fn rgb_to_rgbx(rgb: &[u8], pad: u8) -> Vec<u8> {
-        rgb.as_chunks::<RGB>()
-            .0
-            .iter()
-            .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], pad])
-            .collect()
     }
 
     /// The images every box kernel is checked on: uniform random samples,
@@ -1126,39 +1058,6 @@ mod tests {
                 &box4x_chained_reference(&src, width, height),
                 &format!("{width} x {height}"),
             );
-        }
-    }
-
-    #[test]
-    fn box2x_rgb_to_rgbx_equals_the_rgb_halving_padded() {
-        let mut rng = Rng::new(15);
-        for (width, height) in box_sizes(1) {
-            for src in test_images::<u8>(&mut rng, width * height * RGB) {
-                let (rgb, ow, oh) = box2x_interleaved(&src, width, height, RGB);
-                assert_same_image(
-                    &box2x_rgb_to_rgbx(&src, width, height, 0xA5),
-                    &(rgb_to_rgbx(&rgb, 0xA5), ow, oh),
-                    &format!("{width} x {height}"),
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn box_levels_rgb_to_rgbx_equals_the_planar_pyramid_padded() {
-        let mut rng = Rng::new(16);
-        for levels in [2, 3] {
-            for (width, height) in box_sizes(1) {
-                for src in test_images::<u8>(&mut rng, width * height * RGB) {
-                    let (rgb, ow, oh) =
-                        interleaved_pyramid_reference(&src, (width, height, RGB), levels);
-                    assert_same_image(
-                        &box_levels_rgb_to_rgbx(&src, width, height, levels, 7),
-                        &(rgb_to_rgbx(&rgb, 7), ow, oh),
-                        &format!("{levels} levels, {width} x {height}"),
-                    );
-                }
-            }
         }
     }
 

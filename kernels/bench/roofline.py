@@ -10,7 +10,6 @@ from wsidicom_kernels import (
     ResizeFilter,
     compose,
     downscale,
-    rgb_to_rgbx,
 )
 from wsidicom_kernels._kernels import set_simd
 
@@ -99,8 +98,6 @@ add(
     lambda: downscale(u16c4, 2, ResizeFilter.BOX),
     8192 * 8192 * 4 * 2 * 1.25,
 )
-rgb = rng.integers(0, 256, (8192, 8192, 3), np.uint8)
-add("rgb_to_rgbx", lambda: rgb_to_rgbx(rgb), 8192 * 8192 * 7)
 
 print(f"\n{'kernel':<24}{'GB/s':>7}{'ms':>9}{'% of alloc-ceiling':>20}")
 for name, gbs, ms in sorted(rows, key=lambda r: r[1]):

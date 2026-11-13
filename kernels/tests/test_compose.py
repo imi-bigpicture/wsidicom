@@ -15,8 +15,7 @@
 """Tests for compose and stitch.
 
 compose copies tiles onto the canvas at integer positions, planar or
-interleaved, later tiles over earlier ones, and a 4-sample canvas takes
-3-sample tiles by expanding them as it writes.
+interleaved, later tiles over earlier ones.
 """
 
 import contextlib
@@ -31,7 +30,6 @@ from wsidicom_kernels import (
     compose,
     downscale,
     resize,
-    rgb_to_rgbx,
     stitch,
 )
 
@@ -196,76 +194,6 @@ class TestComposeAtIntegerPositions:
 
 
 @pytest.mark.unittest
-class TestComposeOntoRgbxCanvas:
-    """A 4-sample canvas takes 3-sample tiles and expands them as it writes."""
-
-    POSITIONS = np.array([[0, 0], [29, 0], [-5, 23], [50, 47]], np.int64)
-
-    @pytest.fixture
-    def rgb_tiles(
-        self, random_image: Callable[[tuple[int, ...], Any], np.ndarray]
-    ) -> list[np.ndarray]:
-        """Odd-sized RGB tiles, so both the vector body and the tail run."""
-        return [random_image((23, 29, 3), np.uint8) for _ in range(4)]
-
-    @pytest.fixture
-    def compose_rgb_tiles(
-        self, rgb_tiles: list[np.ndarray]
-    ) -> Callable[..., np.ndarray]:
-        """Return a compose of the tiles onto a new canvas of the given shape.
-
-        The canvas starts as all 7, so samples no tile writes stay 7. The last
-        two tiles hang off the canvas's left and bottom-right edges.
-        """
-
-        def run(canvas_shape: tuple[int, ...], pad: int = 255) -> np.ndarray:
-            canvas = np.full(canvas_shape, 7, np.uint8)
-            return compose(canvas, rgb_tiles, self.POSITIONS, pad=pad)
-
-        return run
-
-    def test_rgb_equals_rgb_canvas_compose(
-        self, compose_rgb_tiles: Callable[..., np.ndarray]
-    ) -> None:
-        """The first three samples equal a compose onto an RGB canvas."""
-        # Act
-        rgb = compose_rgb_tiles((64, 64, 3))
-        rgbx = compose_rgb_tiles((64, 64, 4))
-
-        # Assert
-        np.testing.assert_array_equal(rgbx[..., :3], rgb)
-
-    @pytest.mark.parametrize("pad", [0, 9, 255])
-    def test_fourth_sample_is_pad_where_tiles_were_written(
-        self, compose_rgb_tiles: Callable[..., np.ndarray], pad: int
-    ) -> None:
-        """The fourth sample is ``pad`` wherever tiles were written, else kept."""
-        # Arrange
-        written = np.zeros((64, 64), bool)
-        for x, y in self.POSITIONS:
-            written[max(y, 0) : y + 23, max(x, 0) : x + 29] = True
-
-        # Act
-        rgbx = compose_rgb_tiles((64, 64, 4), pad=pad)
-
-        # Assert
-        assert (rgbx[..., 3][written] == pad).all()
-        assert (rgbx[..., 3][~written] == 7).all()
-
-    def test_simd_matches_scalar(
-        self,
-        compose_rgb_tiles: Callable[..., np.ndarray],
-        simd_and_scalar: Callable[[Callable[[], Any]], tuple[Any, Any]],
-    ) -> None:
-        """The SIMD expand-copy equals the scalar fallback."""
-        # Act
-        simd, scalar = simd_and_scalar(lambda: compose_rgb_tiles((64, 64, 4), pad=3))
-
-        # Assert
-        np.testing.assert_array_equal(simd, scalar)
-
-
-@pytest.mark.unittest
 class TestComposePiecesOfTiles:
     """Crops and row slices of tiles compose as copies of those pieces would.
 
@@ -351,32 +279,6 @@ class TestComposePiecesOfTiles:
         # Assert
         np.testing.assert_array_equal(composed, expected)
 
-    @pytest.mark.parametrize("dtype", [np.uint8])
-    @pytest.mark.parametrize("channels", [3])
-    def test_crops_onto_rgbx_canvas_equal_copied_pieces(
-        self, tiles: list[np.ndarray]
-    ) -> None:
-        """An RGBX canvas takes crops of RGB tiles as it takes their copies."""
-        # Arrange
-        expected = compose(
-            np.zeros((24, 28, 4), np.uint8),
-            self.copied_pieces(tiles),
-            self.POSITIONS,
-            pad=7,
-        )
-
-        # Act
-        composed = compose(
-            np.zeros((24, 28, 4), np.uint8),
-            tiles,
-            self.POSITIONS,
-            pad=7,
-            crops=self.CROPS,
-        )
-
-        # Assert
-        np.testing.assert_array_equal(composed, expected)
-
 
 @pytest.mark.unittest
 class TestComposeBorrowing:
@@ -447,10 +349,8 @@ class TestComposeBorrowing:
         [
             lambda canvas: downscale(canvas, 2, ResizeFilter.BOX),
             lambda canvas: resize(canvas, 64, 64, ResizeFilter.BILINEAR),
-            lambda canvas: downscale(canvas, 2, ResizeFilter.BOX, pad=0),
-            lambda canvas: rgb_to_rgbx(canvas),
         ],
-        ids=["downscale", "resize", "downscale_pad", "rgb_to_rgbx"],
+        ids=["downscale", "resize"],
     )
     def test_read_during_concurrent_compose_raises_value_error_at_worst(
         self,

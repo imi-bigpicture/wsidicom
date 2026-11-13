@@ -15,7 +15,7 @@
 """Tests that compose keeps no state between or within calls.
 
 - compose(canvas, [t1..tn], [p1..pn]) equals the single-tile calls in turn,
-  bit for bit, overlaps included, on every path including the RGBX canvas;
+  bit for bit, overlaps included, on every path;
 - other calls in between change nothing;
 - toggling the SIMD kernels leaves no residue.
 
@@ -31,7 +31,7 @@ from wsidicom_kernels import (
     ResizeFilter,
     compose,
     downscale,
-    rgb_to_rgbx,
+    resize,
 )
 from wsidicom_kernels._kernels import set_simd
 
@@ -81,8 +81,8 @@ def random_tiles_and_positions(
 @pytest.mark.unittest
 @pytest.mark.parametrize(
     ["tile_samples", "canvas_samples"],
-    [(1, 1), (3, 3), (3, 4), (4, 4)],
-    ids=["planar", "rgb", "rgb_onto_rgbx", "rgba"],
+    [(1, 1), (3, 3), (4, 4)],
+    ids=["planar", "rgb", "rgba"],
 )
 class TestComposeIsStateless:
     @pytest.mark.usefixtures("simd_enabled")
@@ -114,7 +114,7 @@ class TestComposeIsStateless:
         canvas_shape: tuple[int, ...],
         random_tiles_and_positions: Callable[[], TilesAndPositions],
     ) -> None:
-        """Downscale and rgb_to_rgbx calls between composes leave no trace."""
+        """Downscale and resize calls between composes leave no trace."""
         for _ in range(TRIALS):
             # Arrange
             tiles, positions = random_tiles_and_positions()
@@ -128,7 +128,12 @@ class TestComposeIsStateless:
                 downscale(
                     rng.integers(0, 256, (17, 19)).astype(np.uint8), 2, ResizeFilter.BOX
                 )
-                rgb_to_rgbx(rng.integers(0, 256, (5, 7, 3)).astype(np.uint8))
+                resize(
+                    rng.integers(0, 256, (5, 7, 3)).astype(np.uint8),
+                    3,
+                    4,
+                    ResizeFilter.BILINEAR,
+                )
                 compose(interleaved, [tile], position[np.newaxis])
 
             # Assert

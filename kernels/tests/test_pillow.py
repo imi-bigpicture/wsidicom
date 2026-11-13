@@ -12,11 +12,11 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Tests of box downscale and rgb_to_rgbx against Pillow.
+"""Tests of box downscale against Pillow.
 
 Box reduce(2) is bit for bit Pillow's (uint8 gray and RGB; uint16 through mode
 "I"), reduce(4) within 1, both with Pillow's partial edge boxes where the
-factor doesn't divide the size, and rgb_to_rgbx is Pillow's own RGBX packing.
+factor doesn't divide the size.
 """
 
 import contextlib

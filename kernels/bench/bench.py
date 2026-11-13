@@ -16,7 +16,6 @@ from wsidicom_kernels import (
     ResizeFilter,
     compose,
     downscale,
-    rgb_to_rgbx,
 )
 from wsidicom_kernels._kernels import set_simd
 
@@ -56,12 +55,11 @@ def box_case(dt, shape, hi, factor=2):
     return lambda: downscale(img, factor, ResizeFilter.BOX)
 
 
-def compose_case(dt, hi, c, canvas_c=None, n=5120):
-    """Paste one n x n tile at (1, 1); ``canvas_c`` 4 with c 3 expands to RGBX."""
+def compose_case(dt, hi, c, n=5120):
+    """Paste one n x n tile of ``c`` samples per pixel at (1, 1)."""
     rng = np.random.default_rng(2)
-    canvas_c = canvas_c or c
     tshape = (n, n) if c == 1 else (n, n, c)
-    cshape = (n + 2, n + 2) if canvas_c == 1 else (n + 2, n + 2, canvas_c)
+    cshape = (n + 2, n + 2) if c == 1 else (n + 2, n + 2, c)
     if hi:
         tile = rng.integers(0, hi, tshape).astype(dt)
     else:
@@ -106,16 +104,6 @@ for dt, tag, hi in (
         )
     )
 
-
-def rgbx_case():
-    img = np.random.default_rng(4).integers(0, 256, (8192, 8192, 3), np.uint8)
-    return lambda: rgb_to_rgbx(img)
-
-
-CASES.append(("rgb_to_rgbx u8 8192", lambda: rgbx_case()))
-CASES.append(
-    ("compose rgb->rgbx u8 5120", lambda: compose_case(np.uint8, 256, 3, canvas_c=4))
-)
 
 if __name__ == "__main__":
     filters = [a.lower() for a in sys.argv[1:]]

@@ -8,22 +8,15 @@ def compose(
     canvas: NDArray[Any],
     tiles: Sequence[NDArray[Any]],
     positions: NDArray[np.int64],
-    pad: int = 255,
     crops: NDArray[np.int64] | None = None,
 ) -> None:
     """Low-level binding; see :func:`wsidicom_kernels.compose`."""
 
-def downscale(
-    image: NDArray[Any], factor: int, filter: str = "box", pad: int | None = None
-) -> NDArray[Any]:
+def downscale(image: NDArray[Any], factor: int, filter: str = "box") -> NDArray[Any]:
     """Low-level binding; see :func:`wsidicom_kernels.downscale`."""
 
 def resize(
-    image: NDArray[Any],
-    out_h: int,
-    out_w: int,
-    filter: str = "box",
-    pad: int | None = None,
+    image: NDArray[Any], out_h: int, out_w: int, filter: str = "box"
 ) -> NDArray[Any]:
     """Low-level binding; see :func:`wsidicom_kernels.resize`."""
 
@@ -43,9 +36,6 @@ def framed(
 
 def stitch_grid(tiles: Sequence[NDArray[Any]], grid_width: int) -> NDArray[Any]:
     """Low-level binding; see :func:`wsidicom_kernels.downscale_grid`."""
-
-def rgb_to_rgbx(rgb: NDArray[Any], pad: int = 0) -> NDArray[np.uint8]:
-    """Low-level binding; see :func:`wsidicom_kernels.rgb_to_rgbx`."""
 
 def set_simd(enabled: bool) -> None:
     """Test/benchmark hook: force scalar kernels (False) or restore SIMD (True)."""

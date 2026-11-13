@@ -55,21 +55,14 @@ def edge_positions(tile_length: int, canvas_length: int) -> list[int]:
 
 
 def paste(canvas: np.ndarray, tile: np.ndarray, x: int, y: int) -> None:
-    """Paste ``tile`` with its top-left at ``(x, y)``, skipping what is off ``canvas``.
-
-    An RGB tile onto an RGBX canvas fills only the first three samples.
-    """
+    """Paste ``tile`` with its top-left at ``(x, y)``, clipped to ``canvas``."""
     height, width = tile.shape[:2]
     canvas_height, canvas_width = canvas.shape[:2]
     top, bottom = max(y, 0), min(y + height, canvas_height)
     left, right = max(x, 0), min(x + width, canvas_width)
     if top >= bottom or left >= right:
         return
-    samples = tile.shape[2] if tile.ndim == 3 else None
-    target = canvas[top:bottom, left:right]
-    if samples is not None and samples < canvas.shape[2]:
-        target = target[..., :samples]
-    target[...] = tile[top - y : bottom - y, left - x : right - x]
+    canvas[top:bottom, left:right] = tile[top - y : bottom - y, left - x : right - x]
 
 
 @pytest.fixture
@@ -108,30 +101,6 @@ class TestComposeOracle:
 
         # Act
         compose(canvas, [tile], np.array([[x, y]], np.int64))
-
-        # Assert
-        np.testing.assert_array_equal(canvas, expected)
-
-    @pytest.mark.parametrize("x", edge_positions(TILE_WIDTH, CANVAS_WIDTH))
-    @pytest.mark.parametrize("y", edge_positions(TILE_HEIGHT, CANVAS_HEIGHT))
-    @pytest.mark.parametrize("pad", [0, 200])
-    def test_rgb_tile_onto_rgbx_canvas_equals_numpy_paste(
-        self,
-        random_image: Callable[[tuple[int, ...], Any], np.ndarray],
-        x: int,
-        y: int,
-        pad: int,
-    ) -> None:
-        """An RGB tile onto an RGBX canvas pastes RGB and ``pad`` where it lands."""
-        # Arrange
-        tile = random_image((TILE_HEIGHT, TILE_WIDTH, 3), np.uint8)
-        canvas = random_image((CANVAS_HEIGHT, CANVAS_WIDTH, 4), np.uint8)
-        padded_tile = np.dstack([tile, np.full(tile.shape[:2], pad, np.uint8)])
-        expected = canvas.copy()
-        paste(expected, padded_tile, x, y)
-
-        # Act
-        compose(canvas, [tile], np.array([[x, y]], np.int64), pad=pad)
 
         # Assert
         np.testing.assert_array_equal(canvas, expected)
