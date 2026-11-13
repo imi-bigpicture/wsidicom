@@ -19,16 +19,16 @@ DTYPES = {"u8": (np.uint8, 256), "u16": (np.uint16, 65536), "f32": (np.float32, 
 
 
 def worker(barrier, q, tag, factor):
-    from wsidicom_kernels import Interpolation, ResizeFilter, compose, downscale
+    from wsidicom_kernels import ResizeFilter, compose, downscale
 
     rng = np.random.default_rng(os.getpid())
     if tag == "compose":
         tile = rng.integers(0, 256, (4096, 4096, 3), np.uint8)
         cv = np.zeros((4098, 4098, 3), np.uint8)
-        position = np.array([[0.3, 0.7]])
+        position = np.array([[1, 1]], np.int64)
 
         def op():
-            compose(cv, [tile], position, Interpolation.BILINEAR)
+            compose(cv, [tile], position)
     else:
         dt, hi = DTYPES[tag]
         img = (

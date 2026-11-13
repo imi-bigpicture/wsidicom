@@ -8,7 +8,7 @@ import threading
 import time
 
 import numpy as np
-from wsidicom_kernels import Interpolation, ResizeFilter, compose, downscale
+from wsidicom_kernels import ResizeFilter, compose, downscale
 
 N = 6
 OPS = 10
@@ -46,11 +46,11 @@ if __name__ == "__main__":
     # compose path too
     tile = rng.integers(0, 256, (5120, 5120), np.uint8)
     canvases = [np.zeros((5122, 5122), np.uint8) for _ in range(N)]
-    position = np.array([[0.3, 0.7]])
+    position = np.array([[1, 1]], np.int64)
 
     def work_c(cv):
         for _ in range(OPS):
-            compose(cv, [tile], position, Interpolation.BILINEAR)
+            compose(cv, [tile], position)
 
     t0 = time.perf_counter()
     for cv in canvases:
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     for t in ts:
         t.join()
     par = time.perf_counter() - t0
-    print(f"bilinear compose u8 5120², {N} workers x {OPS} ops:")
+    print(f"compose u8 5120², {N} workers x {OPS} ops:")
     print(
         f"  sequential {seq:5.2f} s   threaded {par:5.2f} s   scaling x{seq / par:.2f}"
     )

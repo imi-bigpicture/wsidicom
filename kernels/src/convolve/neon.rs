@@ -22,10 +22,10 @@ use std::arch::aarch64::{
 
 use super::{MAX_PADDED_TAPS, PaddedWindows, TRANSPOSE_ROWS, Windows};
 use crate::cpu::has_rdm;
-use crate::sample::BICUBIC_U8_FRAC_BITS;
+use crate::sample::CONVOLVE_U8_FRAC_BITS;
 use crate::simd::cover_row;
 
-const Q6: i32 = BICUBIC_U8_FRAC_BITS as i32;
+const Q6: i32 = CONVOLVE_U8_FRAC_BITS as i32;
 /// i16 lanes per register.
 const LANES: usize = 8;
 

@@ -14,8 +14,8 @@
 
 """Tests for compose and stitch.
 
-Integer positions copy tiles onto the canvas; fractional positions resample
-them (bilinear or bicubic), planar or interleaved, and a 4-sample canvas takes
+compose copies tiles onto the canvas at integer positions, planar or
+interleaved, later tiles over earlier ones, and a 4-sample canvas takes
 3-sample tiles by expanding them as it writes.
 """
 
@@ -27,7 +27,6 @@ from typing import Any
 import numpy as np
 import pytest
 from wsidicom_kernels import (
-    Interpolation,
     ResizeFilter,
     compose,
     downscale,
@@ -37,27 +36,6 @@ from wsidicom_kernels import (
 )
 
 DTYPES = [np.uint8, np.uint16, np.float32]
-# An integer position on ONE axis (fractional on the other) still resamples, with
-# the integer axis's second tap carrying weight exactly 0. That tap must be
-# clamped (x: step=0, y: row clamp) or it reads past the tile.
-MIXED_INTEGER_FRACTIONAL_POSITIONS = [[2.0, 1.5], [1.5, 2.0], [0.0, 0.5], [0.5, 0.0]]
-
-
-def fully_covered(
-    position: list[float], tile_shape: tuple[int, ...]
-) -> tuple[slice, slice]:
-    """Rows and columns a tile at ``position`` covers fully with any filter.
-
-    A whole axis at an integer position; else two pixels in from each end,
-    clear of bicubic's partly covered edge pixels.
-    """
-
-    def axis(start: float, length: int) -> slice:
-        if start == int(start):
-            return slice(int(start), int(start) + length)
-        return slice(int(np.floor(start)) + 2, int(np.floor(start)) + length - 1)
-
-    return axis(position[1], tile_shape[0]), axis(position[0], tile_shape[1])
 
 
 @pytest.fixture
@@ -109,17 +87,22 @@ class TestStitch:
 
 @pytest.mark.unittest
 class TestComposeAtIntegerPositions:
-    def test_bilinear_is_identity(self) -> None:
-        """An integer position copies the tile even with a resampling filter."""
+    @pytest.mark.parametrize("dtype", DTYPES)
+    @pytest.mark.parametrize("tile_shape", [(4, 5), (4, 5, 3)])
+    def test_tile_is_copied_unchanged(
+        self, random_tile: np.ndarray, dtype: type[np.generic]
+    ) -> None:
+        """A tile inside the canvas is copied there unchanged, and only there."""
         # Arrange
-        tile = np.arange(16, dtype=np.float32).reshape(4, 4)
-        canvas = np.zeros((4, 4), np.float32)
+        canvas = np.zeros((9, 11, *random_tile.shape[2:]), dtype)
 
         # Act
-        compose(canvas, [tile], np.array([[0, 0]], np.float64), Interpolation.BILINEAR)
+        compose(canvas, [random_tile], np.array([[3, 2]], np.int64))
 
         # Assert
-        assert np.allclose(canvas, tile)
+        np.testing.assert_array_equal(canvas[2:6, 3:8], random_tile)
+        canvas[2:6, 3:8] = 0
+        assert not canvas.any()
 
     def test_interleaved_tiles_on_grid(self) -> None:
         """Interleaved RGB tiles are placed on an integer grid."""
@@ -130,11 +113,11 @@ class TestComposeAtIntegerPositions:
         ]
         canvas = np.zeros((8, 12, 3), np.uint8)
         positions = np.array(
-            [[(index % 3) * 4, (index // 3) * 4] for index in range(6)], np.float64
+            [[(index % 3) * 4, (index // 3) * 4] for index in range(6)], np.int64
         )
 
         # Act
-        compose(canvas, tiles, positions, Interpolation.NEAREST)
+        compose(canvas, tiles, positions)
 
         # Assert
         assert (canvas[0:4, 0:4] == (0, 1, 2)).all()
@@ -145,288 +128,56 @@ class TestComposeAtIntegerPositions:
         # Arrange
         first = np.full((4, 4), 1, np.uint8)
         second = np.full((4, 4), 2, np.uint8)
+        canvas = np.zeros((6, 6), np.uint8)
+
+        # Act
+        compose(canvas, [first, second], np.array([[0, 0], [2, 2]], np.int64))
+
+        # Assert
+        assert (canvas[0:2, 0:4] == 1).all()
+        assert (canvas[2:4, 0:2] == 1).all()
+        assert (canvas[2:6, 2:6] == 2).all()
+
+    def test_returns_the_canvas(self) -> None:
+        """The canvas is mutated in place and returned as that same array."""
+        # Arrange
         canvas = np.zeros((4, 4), np.uint8)
+        tile = np.ones((2, 2), np.uint8)
 
         # Act
-        compose(canvas, [first, second], np.zeros((2, 2)), Interpolation.NEAREST)
+        composed = compose(canvas, [tile], np.zeros((1, 2), np.int64))
 
         # Assert
-        assert (canvas == 2).all()
+        assert composed is canvas
 
-
-@pytest.mark.unittest
-class TestComposeAtFractionalPositions:
-    def test_bilinear_constant_shift(self) -> None:
-        """A constant field stays constant under sub-pixel translation."""
+    def test_no_tiles_leave_the_canvas_unchanged(self) -> None:
+        """An empty tile list with (0, 2) positions writes nothing."""
         # Arrange
-        tile = np.full((5, 5), 100.0, np.float32)
-        canvas = np.zeros((6, 6), np.float32)
+        canvas = np.full((4, 4), 7, np.uint8)
 
         # Act
-        compose(canvas, [tile], np.array([[0.5, 0.5]]), Interpolation.BILINEAR)
+        compose(canvas, [], np.zeros((0, 2), np.int64))
 
         # Assert
-        assert np.allclose(canvas[1:5, 1:5], 100.0)
+        assert (canvas == 7).all()
 
-    def test_bicubic_runs_and_stays_in_range(self, rng: np.random.Generator) -> None:
-        """Bicubic resampling of a 16-bit tile stays within the dtype's range."""
-        # Arrange
-        tile = rng.integers(0, 256, (8, 8)).astype(np.uint16)
-        canvas = np.zeros((8, 8), np.uint16)
-
-        # Act
-        compose(canvas, [tile], np.array([[1.3, 2.7]]), Interpolation.BICUBIC)
-
-        # Assert
-        assert canvas.max() <= 65535
-
-    def test_bilinear_no_channel_bleed(self) -> None:
-        """Interleaved resampling must not mix channels.
-
-        A per-channel constant RGB tile stays constant per channel under a
-        sub-pixel shift.
-        """
-        # Arrange
-        channel_values = (10.0, 20.0, 30.0)
-        tile = np.empty((5, 5, 3), np.float32)
-        tile[...] = channel_values
-        canvas = np.zeros((6, 6, 3), np.float32)
-
-        # Act
-        compose(canvas, [tile], np.array([[0.5, 0.5]]), Interpolation.BILINEAR)
-
-        # Assert
-        for channel, value in enumerate(channel_values):
-            assert np.allclose(canvas[1:5, 1:5, channel], value)
-
-    def test_bilinear_matches_reference(
-        self, random_image: Callable[[tuple[int, ...], Any], np.ndarray]
-    ) -> None:
-        """Every pixel equals the plain four-weight formula.
-
-        A tap outside the tile reads the canvas (zero here), so the pixels the
-        tile covers only partly blend it into the canvas by coverage.
-        """
-        # Arrange
-        tile = random_image((7, 9), np.float32)
-        tile_height, tile_width = tile.shape
-        px, py = 3.25, 2.7
-        canvas = np.zeros((20, 20), np.float32)
-        fx, fy = np.ceil(px) - px, np.ceil(py) - py
-        x_start, y_start = int(np.ceil(px)), int(np.ceil(py))
-
-        def sample(y: int, x: int) -> float:
-            inside = 0 <= y < tile_height and 0 <= x < tile_width
-            return float(tile[y, x]) if inside else 0.0
-
-        expected = np.zeros_like(canvas)
-        for cy in range(canvas.shape[0]):
-            y0 = cy - y_start
-            for cx in range(canvas.shape[1]):
-                x0 = cx - x_start
-                expected[cy, cx] = (
-                    (1 - fx) * (1 - fy) * sample(y0, x0)
-                    + fx * (1 - fy) * sample(y0, x0 + 1)
-                    + (1 - fx) * fy * sample(y0 + 1, x0)
-                    + fx * fy * sample(y0 + 1, x0 + 1)
-                )
-
-        # Act
-        compose(canvas, [tile], np.array([[px, py]]), Interpolation.BILINEAR)
-
-        # Assert
-        assert np.allclose(canvas, expected, atol=1e-5)
-
-    @pytest.mark.parametrize(
-        "interpolation", [Interpolation.BILINEAR, Interpolation.BICUBIC]
-    )
-    @pytest.mark.parametrize("tile_width", [1, 2, 5])
-    @pytest.mark.parametrize("axis", [0, 1])
-    @pytest.mark.parametrize(
-        ["tile_samples", "canvas_samples"], [(1, 1), (3, 3), (3, 4)]
-    )
-    def test_just_below_an_integer_composes_as_the_integer(
-        self,
-        interpolation: Interpolation,
-        tile_width: int,
-        axis: int,
-        tile_samples: int,
-        canvas_samples: int,
-    ) -> None:
-        """A position one ulp below an integer composes as that integer.
-
-        The tile covers exactly its width from there, though
-        ``position + width`` rounds up to the next integer, and no tap reads
-        past it.
-        """
-        # Arrange
-        size = [4, 4]
-        size[1 - axis] = tile_width
-        tile_shape = (*size, tile_samples) if tile_samples > 1 else tuple(size)
-        tile = np.full(tile_shape, 200, np.uint8)
-        canvas_shape = (12, 12, canvas_samples) if canvas_samples > 1 else (12, 12)
-        canvas = np.zeros(canvas_shape, np.uint8)
-        just_below = float(np.nextafter(3.0, 0.0))
-        position = [3.0, 3.0]
-        position[axis] = just_below
-
-        # Act
-        compose(canvas, [tile], np.array([position]), interpolation)
-
-        # Assert — along the fractional axis, tile_width pixels from 3
-        first = canvas.reshape(12, 12, -1)[..., 0]
-        extent = (first != 0).any(axis=axis).nonzero()[0]
-        assert extent.tolist() == list(range(3, 3 + tile_width))
-        assert (np.abs(first[first != 0].astype(int) - 200) <= 1).all()
-
-    @pytest.mark.parametrize("position", [[7.5, 0.0], [0.0, 7.5], [7.5, 3.25]])
-    @pytest.mark.parametrize(
-        ["canvas_shape", "pad_argument"],
-        [((64, 64, 3), {}), ((64, 64, 4), {"pad": 255})],
-    )
-    def test_bicubic_mixed_integer_fractional_axis(
-        self,
-        random_image: Callable[[tuple[int, ...], Any], np.ndarray],
-        position: list[float],
-        canvas_shape: tuple[int, ...],
-        pad_argument: dict[str, int],
-    ) -> None:
-        """A position integer on one axis resamples with ``x_start == px``.
-
-        Not ``floor(px) + 1``, on that axis; the bicubic 4x4 neighbourhood must
-        still stay inside the tile.
-        """
-        # Arrange
-        tile = random_image((32, 40, 3), np.uint8)
-        canvas = np.zeros(canvas_shape, np.uint8)
-
-        # Act
-        composed = compose(
-            canvas,
-            [tile],
-            np.array([position]),
-            Interpolation.BICUBIC,
-            pad=pad_argument.get("pad", 255),
-        )
-
-        # Assert — the shape is kept and something was actually written
-        assert composed.shape == canvas_shape
-        assert composed[..., :3].any()
-
-    @pytest.mark.parametrize(
-        "interpolation", [Interpolation.BILINEAR, Interpolation.BICUBIC]
-    )
-    @pytest.mark.parametrize("position", MIXED_INTEGER_FRACTIONAL_POSITIONS)
-    @pytest.mark.parametrize("dtype", DTYPES)
-    def test_mixed_integer_fractional_axes_planar(
-        self,
-        interpolation: Interpolation,
-        position: list[float],
-        dtype: type[np.generic],
-    ) -> None:
-        """A planar constant field comes through unchanged where the tile covers.
-
-        At a mixed integer/fractional position; the pixels it covers only
-        partly blend it into the zero canvas, never past the field.
-        """
-        # Arrange
-        tile = np.full((7, 9), 100, dtype)
-        canvas = np.zeros((14, 14), dtype)
-
-        # Act
-        compose(canvas, [tile], np.array([position]), interpolation)
-
-        # Assert
-        covered = canvas[fully_covered(position, tile.shape)]
-        assert covered.size
-        assert (np.abs(covered.astype(float) - 100) <= 1).all()
-        assert (canvas.astype(float) <= 101).all()
-
-    @pytest.mark.parametrize(
-        "interpolation", [Interpolation.BILINEAR, Interpolation.BICUBIC]
-    )
-    @pytest.mark.parametrize("position", MIXED_INTEGER_FRACTIONAL_POSITIONS)
-    @pytest.mark.parametrize("canvas_samples", [3, 4])
-    def test_mixed_integer_fractional_axes_interleaved(
-        self, interpolation: Interpolation, position: list[float], canvas_samples: int
-    ) -> None:
-        """An interleaved RGB constant field survives a fractional position.
-
-        A mixed integer/fractional position, onto an RGB canvas and onto an RGBX
-        canvas (the fused expand path): unchanged where the tile covers, never
-        past it where the tile blends into the zero canvas.
-        """
-        # Arrange
-        color = (40, 80, 120)
-        tile = np.empty((7, 9, 3), np.uint8)
-        tile[...] = color
-        canvas = np.zeros((14, 14, canvas_samples), np.uint8)
-
-        # Act
-        compose(canvas, [tile], np.array([position]), interpolation)
-
-        # Assert
-        rgb = canvas[..., :3].astype(int)
-        covered = rgb[fully_covered(position, tile.shape)]
-        assert covered.size
-        assert (np.abs(covered - color) <= 1).all()
-        assert (rgb <= np.array(color) + 1).all()
-
-    @pytest.mark.parametrize(
-        "interpolation", [Interpolation.BILINEAR, Interpolation.BICUBIC]
-    )
-    @pytest.mark.parametrize("dtype", DTYPES)
-    @pytest.mark.parametrize("tile_shape", [(23, 29, 3)])
-    def test_interleaved_matches_per_channel_planar(
-        self,
-        interpolation: Interpolation,
-        dtype: type[np.generic],
-        random_tile: np.ndarray,
-    ) -> None:
-        """Composing an interleaved tile equals composing each channel as planar.
-
-        The interleaved kernels are the planar kernels with tap offset c.
-        """
-        # Arrange
-        position = np.array([[2.4, 1.8]])
-        canvas = np.zeros((30, 34, 3), dtype)
-
-        # Act
-        compose(canvas, [random_tile], position, interpolation)
-
-        # Assert — not bit-exact: the SIMD body uses FMA and the scalar tail does
-        # not, and the body/tail boundary falls on different elements for
-        # interleaved (n*c) and planar (n). Same <=1 LSB latitude as the parity
-        # test.
-        for channel in range(3):
-            planar = np.zeros((30, 34), dtype)
-            planar_tile = np.ascontiguousarray(random_tile[:, :, channel])
-            compose(planar, [planar_tile], position, interpolation)
-            if np.issubdtype(dtype, np.integer):
-                difference = np.abs(
-                    canvas[:, :, channel].astype(int) - planar.astype(int)
-                )
-                assert difference.max() <= 1
-            else:
-                assert np.allclose(canvas[:, :, channel], planar, atol=1e-5)
-
-    @pytest.mark.parametrize(
-        "interpolation", [Interpolation.BILINEAR, Interpolation.BICUBIC]
-    )
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize(
         ["tile_shape", "canvas_shape"],
-        [((37, 41), (50, 50)), ((37, 41, 3), (50, 50, 3))],
+        [
+            ((37, 41), (50, 50)),
+            ((37, 41, 3), (50, 50, 3)),
+            ((37, 41, 4), (50, 50, 4)),
+        ],
     )
     def test_simd_matches_scalar(
         self,
         simd_and_scalar: Callable[[Callable[[], Any]], tuple[Any, Any]],
-        interpolation: Interpolation,
         dtype: type[np.generic],
         canvas_shape: tuple[int, ...],
         random_tile: np.ndarray,
     ) -> None:
-        """The SIMD kernels agree with the scalar reference, planar and interleaved.
+        """The SIMD kernels equal the scalar reference, planar and interleaved.
 
         Odd sizes exercise both the vector body and the tail.
         """
@@ -434,22 +185,21 @@ class TestComposeAtFractionalPositions:
         # Arrange
         def compose_onto_empty_canvas() -> np.ndarray:
             canvas = np.zeros(canvas_shape, dtype)
-            compose(canvas, [random_tile], np.array([[3.3, 2.6]]), interpolation)
+            compose(canvas, [random_tile], np.array([[3, 2]], np.int64))
             return canvas
 
         # Act
         simd, scalar = simd_and_scalar(compose_onto_empty_canvas)
 
-        # Assert — 1 LSB latitude for FMA and association order
-        if np.issubdtype(dtype, np.integer):
-            assert np.abs(simd.astype(int) - scalar.astype(int)).max() <= 1
-        else:
-            assert np.allclose(simd, scalar, atol=1e-4)
+        # Assert
+        np.testing.assert_array_equal(simd, scalar)
 
 
 @pytest.mark.unittest
 class TestComposeOntoRgbxCanvas:
     """A 4-sample canvas takes 3-sample tiles and expands them as it writes."""
+
+    POSITIONS = np.array([[0, 0], [29, 0], [-5, 23], [50, 47]], np.int64)
 
     @pytest.fixture
     def rgb_tiles(
@@ -459,84 +209,67 @@ class TestComposeOntoRgbxCanvas:
         return [random_image((23, 29, 3), np.uint8) for _ in range(4)]
 
     @pytest.fixture
-    def compose_fractional(
+    def compose_rgb_tiles(
         self, rgb_tiles: list[np.ndarray]
     ) -> Callable[..., np.ndarray]:
-        """Return a bilinear compose of the tiles at fractional offsets.
+        """Return a compose of the tiles onto a new canvas of the given shape.
 
-        It composes onto a new empty canvas of the given shape.
+        The canvas starts as all 7, so samples no tile writes stay 7. The last
+        two tiles hang off the canvas's left and bottom-right edges.
         """
-        positions = np.array([[0.0, 0.0], [27.5, 0.0], [0.0, 21.5], [27.5, 21.5]])
 
         def run(canvas_shape: tuple[int, ...], pad: int = 255) -> np.ndarray:
-            canvas = np.zeros(canvas_shape, np.uint8)
-            return compose(
-                canvas, rgb_tiles, positions, Interpolation.BILINEAR, pad=pad
-            )
+            canvas = np.full(canvas_shape, 7, np.uint8)
+            return compose(canvas, rgb_tiles, self.POSITIONS, pad=pad)
 
         return run
 
     def test_rgb_equals_rgb_canvas_compose(
-        self, compose_fractional: Callable[..., np.ndarray]
+        self, compose_rgb_tiles: Callable[..., np.ndarray]
     ) -> None:
-        """The RGB samples equal an RGB compose exactly where tiles were written."""
+        """The first three samples equal a compose onto an RGB canvas."""
         # Act
-        rgb = compose_fractional((64, 64, 3))
-        rgbx = compose_fractional((64, 64, 4), pad=255)
+        rgb = compose_rgb_tiles((64, 64, 3))
+        rgbx = compose_rgb_tiles((64, 64, 4))
 
         # Assert
-        covered = rgbx[..., 3] == 255
-        assert covered.any()
-        assert (rgbx[..., :3][covered] == rgb[covered]).all()
+        np.testing.assert_array_equal(rgbx[..., :3], rgb)
 
-    def test_fourth_sample_is_pad(
-        self, compose_fractional: Callable[..., np.ndarray]
+    @pytest.mark.parametrize("pad", [0, 9, 255])
+    def test_fourth_sample_is_pad_where_tiles_were_written(
+        self, compose_rgb_tiles: Callable[..., np.ndarray], pad: int
     ) -> None:
-        """The fourth sample is ``pad`` wherever tiles were written."""
+        """The fourth sample is ``pad`` wherever tiles were written, else kept."""
         # Arrange
-        covered = compose_fractional((64, 64, 4), pad=255)[..., 3] == 255
+        written = np.zeros((64, 64), bool)
+        for x, y in self.POSITIONS:
+            written[max(y, 0) : y + 23, max(x, 0) : x + 29] = True
 
         # Act
-        rgbx = compose_fractional((64, 64, 4), pad=9)
+        rgbx = compose_rgb_tiles((64, 64, 4), pad=pad)
 
         # Assert
-        assert covered.any()
-        assert (rgbx[..., 3][covered] == 9).all()
+        assert (rgbx[..., 3][written] == pad).all()
+        assert (rgbx[..., 3][~written] == 7).all()
 
     def test_simd_matches_scalar(
         self,
-        compose_fractional: Callable[..., np.ndarray],
+        compose_rgb_tiles: Callable[..., np.ndarray],
         simd_and_scalar: Callable[[Callable[[], Any]], tuple[Any, Any]],
     ) -> None:
-        """The fused SIMD kernel agrees with the scalar fallback within 1 LSB."""
+        """The SIMD expand-copy equals the scalar fallback."""
         # Act
-        simd, scalar = simd_and_scalar(lambda: compose_fractional((64, 64, 4), pad=255))
+        simd, scalar = simd_and_scalar(lambda: compose_rgb_tiles((64, 64, 4), pad=3))
 
         # Assert
-        assert np.abs(simd.astype(int) - scalar.astype(int)).max() <= 1
-
-    def test_integer_positions_expand_copy(self, rgb_tiles: list[np.ndarray]) -> None:
-        """Integer positions take the expand-copy path."""
-        # Arrange
-        positions = np.array([[0.0, 0.0], [29.0, 0.0], [0.0, 23.0], [29.0, 23.0]])
-        rgb_canvas = np.zeros((64, 64, 3), np.uint8)
-        rgbx_canvas = np.zeros((64, 64, 4), np.uint8)
-
-        # Act
-        rgb = compose(rgb_canvas, rgb_tiles, positions, Interpolation.NEAREST)
-        rgbx = compose(rgbx_canvas, rgb_tiles, positions, Interpolation.NEAREST, pad=1)
-
-        # Assert
-        assert (rgbx[..., :3] == rgb).all()
-        assert (rgbx[:23, :29, 3] == 1).all()
+        np.testing.assert_array_equal(simd, scalar)
 
 
 @pytest.mark.unittest
 class TestComposePiecesOfTiles:
     """Crops and row slices of tiles compose as copies of those pieces would.
 
-    Pieces butt and overlap at fractional positions, so their edges blend
-    with each other.
+    Pieces butt, overlap each other and hang off the canvas's edges.
     """
 
     CROPS = np.array(
@@ -551,14 +284,7 @@ class TestComposePiecesOfTiles:
         np.int64,
     )
     POSITIONS = np.array(
-        [
-            [1.25, 2.5],
-            [8.25, 2.75],
-            [3.5, 11.25],
-            [1.0, 11.5],
-            [14.75, 6.0],
-            [20.0, 1.0],
-        ]
+        [[1, 2], [8, 2], [3, 11], [-4, 21], [14, 6], [27, -1]], np.int64
     )
 
     @pytest.fixture
@@ -582,10 +308,7 @@ class TestComposePiecesOfTiles:
 
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("channels", [1, 3, 4])
-    @pytest.mark.parametrize("interpolation", list(Interpolation))
-    def test_crops_equal_copied_pieces(
-        self, tiles: list[np.ndarray], interpolation: Interpolation
-    ) -> None:
+    def test_crops_equal_copied_pieces(self, tiles: list[np.ndarray]) -> None:
         """Placing crops of tiles equals placing copies of the pieces."""
         # Arrange
         shape = (24, 28, *tiles[0].shape[2:])
@@ -593,7 +316,6 @@ class TestComposePiecesOfTiles:
             np.zeros(shape, tiles[0].dtype),
             self.copied_pieces(tiles),
             self.POSITIONS,
-            interpolation,
         )
 
         # Act
@@ -601,7 +323,6 @@ class TestComposePiecesOfTiles:
             np.zeros(shape, tiles[0].dtype),
             tiles,
             self.POSITIONS,
-            interpolation,
             crops=self.CROPS,
         )
 
@@ -610,10 +331,7 @@ class TestComposePiecesOfTiles:
 
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("channels", [1, 3, 4])
-    @pytest.mark.parametrize("interpolation", list(Interpolation))
-    def test_slices_equal_copied_pieces(
-        self, tiles: list[np.ndarray], interpolation: Interpolation
-    ) -> None:
+    def test_slices_equal_copied_pieces(self, tiles: list[np.ndarray]) -> None:
         """Row slices of tiles, passed as tiles, compose as their copies."""
         # Arrange
         shape = (24, 28, *tiles[0].shape[2:])
@@ -625,22 +343,18 @@ class TestComposePiecesOfTiles:
             np.zeros(shape, tiles[0].dtype),
             self.copied_pieces(tiles),
             self.POSITIONS,
-            interpolation,
         )
 
         # Act
-        composed = compose(
-            np.zeros(shape, tiles[0].dtype), slices, self.POSITIONS, interpolation
-        )
+        composed = compose(np.zeros(shape, tiles[0].dtype), slices, self.POSITIONS)
 
         # Assert
         np.testing.assert_array_equal(composed, expected)
 
     @pytest.mark.parametrize("dtype", [np.uint8])
     @pytest.mark.parametrize("channels", [3])
-    @pytest.mark.parametrize("interpolation", list(Interpolation))
     def test_crops_onto_rgbx_canvas_equal_copied_pieces(
-        self, tiles: list[np.ndarray], interpolation: Interpolation
+        self, tiles: list[np.ndarray]
     ) -> None:
         """An RGBX canvas takes crops of RGB tiles as it takes their copies."""
         # Arrange
@@ -648,7 +362,6 @@ class TestComposePiecesOfTiles:
             np.zeros((24, 28, 4), np.uint8),
             self.copied_pieces(tiles),
             self.POSITIONS,
-            interpolation,
             pad=7,
         )
 
@@ -657,7 +370,6 @@ class TestComposePiecesOfTiles:
             np.zeros((24, 28, 4), np.uint8),
             tiles,
             self.POSITIONS,
-            interpolation,
             pad=7,
             crops=self.CROPS,
         )
@@ -690,7 +402,7 @@ class TestComposeBorrowing:
 
         def compose_until_stopped() -> None:
             while not stop.is_set():
-                compose(canvas, [tile], np.array([[0.3, 0.7]]), Interpolation.BICUBIC)
+                compose(canvas, [tile], np.array([[1, 1]], np.int64))
 
         thread = threading.Thread(target=compose_until_stopped)
         thread.start()
@@ -703,8 +415,8 @@ class TestComposeBorrowing:
     @pytest.mark.parametrize(
         ["alias", "position"],
         [
-            (lambda canvas: canvas, np.array([[2.5, 2.5]])),
-            (lambda canvas: canvas[2:6], np.array([[5.5, 5.5]])),
+            (lambda canvas: canvas, np.array([[2, 2]], np.int64)),
+            (lambda canvas: canvas[2:6], np.array([[5, 5]], np.int64)),
         ],
         ids=["canvas_itself", "contiguous_view"],
     )
@@ -717,7 +429,7 @@ class TestComposeBorrowing:
         """A tile sharing the canvas's buffer raises ValueError."""
         # Act & Assert
         with pytest.raises(ValueError, match="a tile shares memory with the canvas"):
-            compose(canvas, [alias(canvas)], position, Interpolation.BILINEAR)
+            compose(canvas, [alias(canvas)], position)
 
     def test_non_contiguous_view_of_canvas_raises_value_error(
         self, canvas: np.ndarray
@@ -728,12 +440,7 @@ class TestComposeBorrowing:
         """
         # Act & Assert
         with pytest.raises(ValueError, match="a tile shares memory with the canvas"):
-            compose(
-                canvas,
-                [canvas[0:4, 0:4]],
-                np.array([[5.5, 5.5]]),
-                Interpolation.BILINEAR,
-            )
+            compose(canvas, [canvas[0:4, 0:4]], np.array([[5, 5]], np.int64))
 
     @pytest.mark.parametrize(
         "read",

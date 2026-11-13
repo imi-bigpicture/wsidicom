@@ -3,39 +3,28 @@
 
 use std::ops::Range;
 
-use crate::sample::{BICUBIC_U8_FRAC_BITS, BILINEAR_U8_FRAC_BITS};
+use crate::sample::CONVOLVE_U8_FRAC_BITS;
 pub(crate) use crate::simd::cover_row;
 
-/// `BILINEAR_U8_FRAC_BITS` as the i32 the shift intrinsics' immediates take.
-pub(crate) const BILINEAR_FRAC_BITS: i32 = BILINEAR_U8_FRAC_BITS as i32;
-/// `BICUBIC_U8_FRAC_BITS` (Q6: the bicubic's and the convolution's
-/// intermediate rows) as an i32 shift immediate.
-pub(crate) const BICUBIC_FRAC_BITS: i32 = BICUBIC_U8_FRAC_BITS as i32;
+/// `CONVOLVE_U8_FRAC_BITS` (Q6: the convolution's intermediate rows) as an
+/// i32 shift immediate.
+pub(crate) const CONVOLVE_FRAC_BITS: i32 = CONVOLVE_U8_FRAC_BITS as i32;
 
 /// Whether a vertical pass over `taps` rows `row_bytes` apart goes through
-/// `grouped_taps`, for a kernel of the AVX-512 tier or not. At row strides
-/// that are a multiple of 4 KB every window row maps to the same L1 sets, so
-/// the rows' streams (and their prefetches) evict each other; accumulating
-/// 8 rows at a time in the output row avoids that. It pays there from 16
-/// taps on AVX-512 and from 12 on AVX2, and on AVX2 also at half-aliased
-/// strides (a multiple of 2 KB) from 16. At other strides it pays only for
-/// long windows.
+/// `grouped_taps`. At row strides that are a multiple of 4 KB every window
+/// row maps to the same L1 sets, so the rows' streams (and their prefetches)
+/// evict each other; accumulating 8 rows at a time in the output row avoids
+/// that. It pays there from 12 taps, and at half-aliased strides (a multiple
+/// of 2 KB) from 16. At other strides it pays only for long windows.
 #[inline]
-pub(crate) fn groups_taps(row_bytes: usize, taps: usize, avx512: bool) -> bool {
+pub(crate) fn groups_taps(row_bytes: usize, taps: usize) -> bool {
     const ALIASED_STRIDE: usize = 4096;
     const HALF_ALIASED_STRIDE: usize = 2048;
-    const ALIASED_TAPS_AVX512: usize = 16;
-    const ALIASED_TAPS_AVX2: usize = 12;
-    const HALF_ALIASED_TAPS_AVX2: usize = 16;
+    const ALIASED_TAPS: usize = 12;
+    const HALF_ALIASED_TAPS: usize = 16;
     const LONG_WINDOW_TAPS: usize = 40;
-    let aliased_from = if avx512 {
-        ALIASED_TAPS_AVX512
-    } else {
-        ALIASED_TAPS_AVX2
-    };
-    let aliased = row_bytes.is_multiple_of(ALIASED_STRIDE) && taps >= aliased_from;
-    let half_aliased =
-        !avx512 && row_bytes.is_multiple_of(HALF_ALIASED_STRIDE) && taps >= HALF_ALIASED_TAPS_AVX2;
+    let aliased = row_bytes.is_multiple_of(ALIASED_STRIDE) && taps >= ALIASED_TAPS;
+    let half_aliased = row_bytes.is_multiple_of(HALF_ALIASED_STRIDE) && taps >= HALF_ALIASED_TAPS;
     taps >= LONG_WINDOW_TAPS || aliased || half_aliased
 }
 
@@ -166,46 +155,6 @@ pub(crate) fn rgbx_pad_lanes(pad: u8) -> std::arch::x86_64::__m256i {
     _mm256_and_si256(_mm256_set1_epi8(pad as i8), x_bytes)
 }
 
-/// Store 32 RGBX pixels at `dp` from 96 RGB bytes held as three 32-byte
-/// registers (`rgb[k]` = bytes 32k .. 32k+32), `pad` in every X byte. Each
-/// 12-byte group of 4 pixels starts on a dword boundary, so one vpermd per 16
-/// pixels routes the four groups into the four 128-bit lanes, where the
-/// in-lane RGB->RGBX pshufb of the AVX2 kernels expands them (the 4th dword
-/// of each lane is ignored by the shuffle).
-///
-/// # Safety
-/// The CPU supports AVX-512 F and BW, and the 128 bytes at `dp` must be valid
-/// for writes.
-#[target_feature(enable = "avx512f,avx512bw")]
-#[inline]
-pub(crate) unsafe fn store_rgbx_32px_avx512(
-    dp: *mut u8,
-    rgb: [std::arch::x86_64::__m256i; 3],
-    pad: u8,
-) {
-    use std::arch::x86_64::*;
-    let shuffle = _mm512_broadcast_i32x4(_mm256_castsi256_si128(rgb_to_rgbx_shuffle()));
-    let padv = _mm512_broadcast_i32x4(_mm256_castsi256_si128(rgbx_pad_lanes(pad)));
-    let bytes_0_64 = _mm512_inserti64x4::<1>(_mm512_castsi256_si512(rgb[0]), rgb[1]);
-    let bytes_32_96 = _mm512_inserti64x4::<1>(_mm512_castsi256_si512(rgb[1]), rgb[2]);
-    // Pixels 0..16 = bytes 0..48 (dwords 0..12); pixels 16..32 = bytes 48..96
-    // = dwords 4..16 of the second register (lane 3's ignored dword clamped).
-    let groups_0_16 = _mm512_setr_epi32(0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 9, 9, 10, 11, 12);
-    let groups_16_32 = _mm512_setr_epi32(4, 5, 6, 7, 7, 8, 9, 10, 10, 11, 12, 13, 13, 14, 15, 15);
-    for (half, grouped) in [
-        _mm512_permutexvar_epi32(groups_0_16, bytes_0_64),
-        _mm512_permutexvar_epi32(groups_16_32, bytes_32_96),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let rgbx = _mm512_or_si512(_mm512_shuffle_epi8(grouped, shuffle), padv);
-        // SAFETY: bytes 64 * half .. 64 * half + 64 of the 128 the caller
-        // guarantees writable at `dp`.
-        unsafe { _mm512_storeu_si512(dp.add(64 * half) as *mut __m512i, rgbx) };
-    }
-}
-
 /// AVX2 uint8 RGB->RGBX expand: `pshufb` splices a `pad` byte after each pixel,
 /// 8 px/iter — two 12-byte-offset 128-bit loads give each lane its 4 pixels,
 /// one in-lane shuffle expands both. `src` is 3 * `pixels` RGB bytes, `dst`
@@ -309,22 +258,18 @@ mod tests {
 
     #[test]
     fn taps_group_at_aliased_strides_and_long_windows() {
-        assert!(groups_taps(3 * 4096, 16, true));
-        assert!(!groups_taps(4096, 15, true));
-        assert!(groups_taps(4096, 12, false));
-        assert!(!groups_taps(4096, 11, false));
-        assert!(groups_taps(2048, 16, false));
-        assert!(!groups_taps(2048, 16, true));
-        assert!(!groups_taps(2048, 15, false));
-        assert!(groups_taps(1000, 40, true));
-        assert!(!groups_taps(1000, 39, false));
+        assert!(groups_taps(3 * 4096, 12));
+        assert!(!groups_taps(4096, 11));
+        assert!(groups_taps(2048, 16));
+        assert!(!groups_taps(2048, 15));
+        assert!(groups_taps(1000, 40));
+        assert!(!groups_taps(1000, 39));
     }
 
     #[test]
     fn half_ulp_is_half_of_one_output_step() {
         assert_eq!(half_ulp(1), 1);
-        assert_eq!(half_ulp(BICUBIC_FRAC_BITS), 32);
-        assert_eq!(half_ulp(BILINEAR_FRAC_BITS), 64);
+        assert_eq!(half_ulp(CONVOLVE_FRAC_BITS), 32);
     }
 
     /// 64 bytes aligned to 32, so stores at every offset meet the streaming
@@ -409,27 +354,6 @@ mod tests {
                     assert_eq!(dst, rgb_to_rgbx(&src[..3 * pixels], pad), "{pixels} pixels");
                 }
             }
-        }
-    }
-
-    #[test]
-    fn store_rgbx_32px_avx512_expands_96_rgb_bytes() {
-        if !(std::is_x86_feature_detected!("avx512f") && std::is_x86_feature_detected!("avx512bw"))
-        {
-            return;
-        }
-        let mut rng = Rng::new(61);
-        for pad in [0, 0xC4, u8::MAX] {
-            let src: Vec<u8> = random_samples(&mut rng, 96);
-            let mut dst = vec![0u8; 128];
-            // SAFETY: AVX-512 F and BW are available (so AVX2 is); the loads
-            // read src's 96 bytes; dst holds the 128 bytes stored.
-            unsafe {
-                let rgb = [0, 32, 64]
-                    .map(|offset| _mm256_loadu_si256(src.as_ptr().add(offset) as *const __m256i));
-                store_rgbx_32px_avx512(dst.as_mut_ptr(), rgb, pad);
-            }
-            assert_eq!(dst, rgb_to_rgbx(&src, pad), "pad {pad}");
         }
     }
 

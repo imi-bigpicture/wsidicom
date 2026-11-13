@@ -16,9 +16,7 @@ import numpy as np
 import pyvips
 from PIL import Image
 from wsidicom_kernels import (
-    Interpolation,
     ResizeFilter,
-    compose,
     downscale,
     resize,
     rgb_to_rgbx,
@@ -112,31 +110,6 @@ row(
 )
 
 
-TRANSLATE_POSITION = np.array([[0.3, 0.7]])
-
-
-def kernels_translate():
-    canvas = np.zeros((4098, 4098), np.uint8)
-    compose(canvas, [gray], TRANSLATE_POSITION, Interpolation.BILINEAR)
-
-
-TRANSLATE_MATRIX = np.float32([[1, 0, 0.3], [0, 1, 0.7]])
-row(
-    "subpx translate bilinear",
-    kernels_translate,
-    lambda: pillow_gray.transform(
-        (4098, 4098),
-        Image.Transform.AFFINE,
-        (1, 0, -0.3, 0, 1, -0.7),
-        Image.Resampling.BILINEAR,
-    ),
-    lambda: cv2.warpAffine(
-        gray, TRANSLATE_MATRIX, (4098, 4098), flags=cv2.INTER_LINEAR
-    ),
-    lambda: vips_gray.affine(
-        [1, 0, 0, 1], odx=0.3, ody=0.7, interpolate=pyvips.Interpolate.new("bilinear")
-    ).numpy(),
-)
 row(
     "rgb->rgbx (Pillow handoff)",
     lambda: rgb_to_rgbx(rgb),

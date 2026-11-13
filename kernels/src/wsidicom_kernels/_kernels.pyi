@@ -7,8 +7,7 @@ from numpy.typing import NDArray
 def compose(
     canvas: NDArray[Any],
     tiles: Sequence[NDArray[Any]],
-    positions: NDArray[np.float64],
-    filter: str = "bilinear",
+    positions: NDArray[np.int64],
     pad: int = 255,
     crops: NDArray[np.int64] | None = None,
 ) -> None:

@@ -280,44 +280,13 @@ pub(crate) trait TransposedTier: FloatSample {
 macro_rules! transposed_tier {
     (
         $t:ty,
-        $vertical_avx512:ident,
-        $store_avx512:ident,
         $vertical_avx2:ident,
         $store_avx2:ident
     ) => {
         impl TransposedTier for $t {
             fn resize_transposed(src: &[$t], width: usize, plan: &FloatPlan) -> Vec<$t> {
-                if crate::cpu::has_avx512() {
-                    // SAFETY: avx512f+bw+vl detected.
-                    unsafe { Self::resize_avx512(src, width, plan) }
-                } else {
-                    // SAFETY: avx2+fma detected (the caller's tier check).
-                    unsafe { Self::resize_avx2(src, width, plan) }
-                }
-            }
-
-            unsafe fn resize_avx512(src: &[$t], width: usize, plan: &FloatPlan) -> Vec<$t> {
                 use crate::convolve_float::x86;
-                // SAFETY: AVX-512 is the caller's; the driver sizes every buffer.
-                unsafe {
-                    transposed::<$t, 16>(
-                        src,
-                        width,
-                        plan,
-                        |rows, stride, weights, mid| {
-                            x86::$vertical_avx512(rows, stride, weights, mid)
-                        },
-                        x86::transpose_f32_rows_avx512,
-                        x86::horizontal_f32_transposed_avx512,
-                        x86::$store_avx512,
-                    )
-                }
-            }
-
-            unsafe fn resize_avx2(src: &[$t], width: usize, plan: &FloatPlan) -> Vec<$t> {
-                use crate::convolve_float::x86;
-                // SAFETY: AVX2 and FMA are the caller's; the driver sizes
-                // every buffer.
+                // SAFETY: avx2+fma detected; the driver sizes every buffer.
                 unsafe {
                     transposed::<$t, 8>(
                         src,
@@ -337,29 +306,11 @@ macro_rules! transposed_tier {
 }
 
 #[cfg(target_arch = "x86_64")]
-transposed_tier!(
-    f32,
-    vertical_f32_avx512,
-    untranspose_store_f32_avx512,
-    vertical_f32_avx2,
-    untranspose_store_f32_avx2
-);
+transposed_tier!(f32, vertical_f32_avx2, untranspose_store_f32_avx2);
 #[cfg(target_arch = "x86_64")]
-transposed_tier!(
-    u8,
-    vertical_u8_avx512,
-    untranspose_store_u8_avx512,
-    vertical_u8_avx2,
-    untranspose_store_u8_avx2
-);
+transposed_tier!(u8, vertical_u8_avx2, untranspose_store_u8_avx2);
 #[cfg(target_arch = "x86_64")]
-transposed_tier!(
-    u16,
-    vertical_u16_avx512,
-    untranspose_store_u16_avx512,
-    vertical_u16_avx2,
-    untranspose_store_u16_avx2
-);
+transposed_tier!(u16, vertical_u16_avx2, untranspose_store_u16_avx2);
 
 // NEON: 8 rows per batch.
 #[cfg(target_arch = "aarch64")]
@@ -552,8 +503,8 @@ mod tests {
         (640, 10),
     ];
 
-    /// Row ratios: batches of 1 to 16 rows (a full AVX-512 batch, two AVX2
-    /// ones, short last batches), upscales, and windows long enough for the
+    /// Row ratios: batches of 1 to 16 rows (one or two full AVX2 batches,
+    /// short last batches), upscales, and windows long enough for the
     /// grouped vertical taps.
     const ROW_CASES: [(usize, usize); 7] = [
         (1, 1),
@@ -579,39 +530,49 @@ mod tests {
         std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma")
     }
 
-    #[cfg(target_arch = "x86_64")]
-    fn has_avx512() -> bool {
-        std::is_x86_feature_detected!("avx512f")
-            && std::is_x86_feature_detected!("avx512bw")
-            && std::is_x86_feature_detected!("avx512vl")
-    }
-
-    /// A sample type's vertical kernels of both x86 tiers.
+    /// A sample type's dtype-specific AVX2 kernels.
     #[cfg(target_arch = "x86_64")]
     trait TierKernels: TransposedTier + RandomSample {
-        const VERTICAL_AVX512: unsafe fn(&[Self], usize, &[f32], &mut [f32]);
         const VERTICAL_AVX2: unsafe fn(&[Self], usize, &[f32], &mut [f32]);
     }
 
     #[cfg(target_arch = "x86_64")]
     impl TierKernels for f32 {
-        const VERTICAL_AVX512: unsafe fn(&[f32], usize, &[f32], &mut [f32]) =
-            x86::vertical_f32_avx512;
         const VERTICAL_AVX2: unsafe fn(&[f32], usize, &[f32], &mut [f32]) = x86::vertical_f32_avx2;
     }
 
     #[cfg(target_arch = "x86_64")]
     impl TierKernels for u8 {
-        const VERTICAL_AVX512: unsafe fn(&[u8], usize, &[f32], &mut [f32]) =
-            x86::vertical_u8_avx512;
         const VERTICAL_AVX2: unsafe fn(&[u8], usize, &[f32], &mut [f32]) = x86::vertical_u8_avx2;
     }
 
     #[cfg(target_arch = "x86_64")]
     impl TierKernels for u16 {
-        const VERTICAL_AVX512: unsafe fn(&[u16], usize, &[f32], &mut [f32]) =
-            x86::vertical_u16_avx512;
         const VERTICAL_AVX2: unsafe fn(&[u16], usize, &[f32], &mut [f32]) = x86::vertical_u16_avx2;
+        const STORE_AVX2: unsafe fn(&[f32], usize, *mut u16, usize, usize) =
+            x86::untranspose_store_u16_avx2;
+    }
+
+    /// The transposed driver on the AVX2 tier (8-row batches).
+    #[cfg(target_arch = "x86_64")]
+    fn resize_avx2<T: TierKernels>(src: &[T], width: usize, plan: &FloatPlan) -> Vec<T> {
+        let vertical = |rows: &[T], stride: usize, weights: &[f32], mid: &mut [f32]| {
+            // SAFETY: the caller detected AVX2 and FMA; the driver passes each
+            // window's rows of the strip.
+            unsafe { (T::VERTICAL_AVX2)(rows, stride, weights, mid) }
+        };
+        // SAFETY: the caller detected AVX2 and FMA; these are the 8-row kernels.
+        unsafe {
+            transposed::<T, 8>(
+                src,
+                width,
+                plan,
+                vertical,
+                x86::transpose_f32_rows_avx2,
+                x86::horizontal_f32_transposed_avx2,
+                T::STORE_AVX2,
+            )
+        }
     }
 
     /// A sample type the tests resize: with its x86 tiers' kernels there.
@@ -651,14 +612,6 @@ mod tests {
         );
         #[cfg(target_arch = "x86_64")]
         {
-            if has_avx512() {
-                assert_same(
-                    // SAFETY: AVX-512 F, BW and VL detected.
-                    &unsafe { T::resize_avx512(src, width, plan) },
-                    &expected,
-                    &format!("{context}, avx512"),
-                );
-            }
             if has_avx2_fma() {
                 assert_same(
                     // SAFETY: AVX2 and FMA detected.
@@ -848,11 +801,8 @@ mod tests {
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn x86_vertical_tiers<T: TierKernels>() -> [VerticalTier<T>; 2] {
-        [
-            (has_avx512(), T::VERTICAL_AVX512, "avx512"),
-            (has_avx2_fma(), T::VERTICAL_AVX2, "avx2"),
-        ]
+    fn x86_vertical_tiers<T: TierKernels>() -> [VerticalTier<T>; 1] {
+        [(has_avx2_fma(), T::VERTICAL_AVX2, "avx2")]
     }
 
     #[cfg(target_arch = "x86_64")]

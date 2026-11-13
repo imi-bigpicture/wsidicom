@@ -372,7 +372,7 @@ class TestResizeSimdParity:
     ) -> None:
         """Identical results on every CPU: SIMD matches the scalar reference.
 
-        The SIMD path (AVX-512 or AVX2) matches it bit for bit.
+        The SIMD path matches it bit for bit, whichever tier the CPU has.
         """
         # Arrange
         image = random_image(size, np.uint8)
@@ -403,9 +403,9 @@ class TestResizeSimdParity:
     ) -> None:
         """Row strides a multiple of 4 KB group the taps, identical to scalar.
 
-        With enough taps (16+ on AVX-512, 12+ on AVX2) the vertical pass runs
-        with the taps in groups: the same sums in the same order, so identical
-        to the scalar reference.
+        With enough taps (12+ on AVX2) the vertical pass runs with the taps in
+        groups: the same sums in the same order, so identical to the scalar
+        reference.
         """
         # Arrange
         image = random_image(shape, dtype)

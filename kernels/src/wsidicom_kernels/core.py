@@ -21,47 +21,29 @@ import numpy as np
 from numpy.typing import NDArray
 
 import wsidicom_kernels._kernels as lib
-from wsidicom_kernels.models import Interpolation, ResizeFilter
+from wsidicom_kernels.models import ResizeFilter
 
 
 def compose(
     canvas: NDArray[Any],
     tiles: Sequence[NDArray[Any]],
-    positions: NDArray[np.float64],
-    interpolation: Interpolation,
+    positions: NDArray[np.int64],
     pad: int = 255,
     crops: NDArray[np.int64] | None = None,
 ) -> NDArray[Any]:
     """Paste ``tiles`` onto ``canvas`` in place; overlaps resolve last-write-wins.
 
-    Each tile is copied (integer position) or resampled (fractional position)
-    into ``canvas`` at its top-left ``(x, y)``. Integer positions take a per-row
-    ``memcpy`` fast path; fractional positions are resampled with
-    ``interpolation`` as a pure sub-pixel translation (e.g. de-overlapping tiles
-    placed at fractional stage coordinates).
-
-    A tile at a fractional position covers the pixels along its edges only
-    partly (some of their filter taps fall outside it: one pixel wide for
-    bilinear, three for bicubic). Those pixels are blended by coverage: each
-    takes the taps of every tile that reaches it, so tiles that butt meet
-    without a seam, as if they were one image. Where tiles leave a gap
-    narrower than their taps, the tiles fill it; where they overlap by less
-    than a pixel, the pixel is their weighted mean. On the mosaic's outer
-    edge, the canvas keeps the weight no tile covers, so the edge blends into
-    what was there. Every pixel a tile covers fully is that tile's, the later
-    tile winning an overlap.
-
-    Tiles blend with each other only within one call: tiles that meet must be
-    composed together.
+    Each tile is copied into ``canvas`` with its top-left at its integer
+    ``(x, y)`` position, row by row. Tiles may hang off the canvas on any side;
+    only the pixels inside it are written.
 
     With ``crops``, each placed piece is a rectangle of one of ``tiles``, so
     a tile that packs several pieces is passed once, decoded, and never
     copied apart.
 
     Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1, 3 or 4
-    channels, each resampled independently (never mixed). Subsampled
-    chroma (differently sized planes) cannot be interleaved, so compose those per
-    plane.
+    channels. Subsampled chroma (differently sized planes) cannot be
+    interleaved, so compose those per plane.
 
     Parameters
     ----------
@@ -75,11 +57,8 @@ def compose(
         C-contiguous array, or a slice of rows and columns of one
         (``tile[y0:y1, x0:x1]``), read without a copy.
     positions: numpy.ndarray
-        C-contiguous ``(N, 2)`` float64 top-left ``(x, y)`` = ``(column, row)``
+        C-contiguous ``(N, 2)`` int64 top-left ``(x, y)`` = ``(column, row)``
         positions in canvas pixels, one per tile (per crop, with ``crops``).
-        Integer values use the memcpy path; fractional values are resampled.
-    interpolation: Interpolation
-        Interpolation at fractional positions; ignored for integer positions.
     pad: int = 255
         Value of the fourth sample when expanding RGB tiles onto an RGBX canvas
         (see below); ignored otherwise.
@@ -87,7 +66,7 @@ def compose(
         ``(N, 5)`` int64 ``(tile, x, y, width, height)`` rows: the pieces to
         place, each a nonempty rectangle of ``tiles[tile]`` with its
         top-left at ``(x, y)`` in that tile. ``None`` places each tile whole.
-        Pieces overlap and blend in their order, as tiles do.
+        Pieces overlap in their order, as tiles do.
 
     Returns
     -------
@@ -101,10 +80,10 @@ def compose(
     into a Pillow image without a copy — composing straight into it replaces a
     separate full-canvas expand, which is the most expensive step at the
     numpy-to-Pillow boundary. Tiles stay compact 3-sample, so nothing upstream
-    (decode, cache) has to carry the padding. All filters supported::
+    (decode, cache) has to carry the padding::
 
         canvas = np.empty((h, w, 4), np.uint8)
-        compose(canvas, rgb_tiles, positions, Interpolation.BILINEAR)
+        compose(canvas, rgb_tiles, positions)
 
     Performance: each call carries a few microseconds of fixed cost (borrow
     setup). For tile loops, pass all tiles in ONE call; batching amortizes the
@@ -113,7 +92,7 @@ def compose(
     freshly allocated array page-fault, which can cost more than the
     compose itself (see the README's performance notes).
     """
-    lib.compose(canvas, list(tiles), positions, interpolation, pad, crops)
+    lib.compose(canvas, list(tiles), positions, pad, crops)
     return canvas
 
 
@@ -385,6 +364,6 @@ def stitch(
             [(index % grid_width) * tile_width, (index // grid_width) * tile_height]
             for index in range(count)
         ],
-        dtype=np.float64,
+        dtype=np.int64,
     )
-    return compose(canvas, tile_list, positions, Interpolation.NEAREST)
+    return compose(canvas, tile_list, positions)

@@ -69,11 +69,6 @@ pub(crate) fn bilinear_up2(src: &[u8], width: usize, height: usize, channels: us
     crate::sample::assert_image(src, width, height, channels);
     #[cfg(target_arch = "x86_64")]
     {
-        if crate::cpu::has_avx512() {
-            // SAFETY: avx512f+bw+vl detected; src holds width * height *
-            // channels samples.
-            return unsafe { x86::bilinear_up2_avx512(src, width, height, channels) };
-        }
         if crate::cpu::has_avx2() {
             // SAFETY: avx2 detected; src holds width * height * channels
             // samples.
@@ -96,7 +91,7 @@ mod tests {
     use crate::testing::CHANNELS;
 
     /// Widths around 32 samples per row (below it the SIMD kernels fall back
-    /// to scalar), the AVX2 and AVX-512 steps and a last step shifted back;
+    /// to scalar), the AVX2 steps and a last step shifted back;
     /// heights from a single row (both neighbors the edge) up.
     pub(super) const WIDTHS: [usize; 20] = [
         1, 2, 3, 5, 7, 8, 10, 11, 15, 16, 17, 22, 31, 32, 33, 63, 64, 65, 129, 131,

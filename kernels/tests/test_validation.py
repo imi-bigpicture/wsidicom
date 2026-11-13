@@ -15,8 +15,8 @@
 """Tests for input validation across the API.
 
 Images the kernels cannot process raise a ValueError, not a panic or an empty
-result; filter strings, non-contiguous arrays, list or float32 positions and
-unfit fills are rejected, not converted.
+result; filter strings, non-contiguous arrays, positions other than an int64 array
+and unfit fills are rejected, not converted.
 """
 
 from collections.abc import Callable
@@ -25,7 +25,6 @@ from typing import Any
 import numpy as np
 import pytest
 from wsidicom_kernels import (
-    Interpolation,
     ResizeFilter,
     compose,
     downscale,
@@ -39,6 +38,12 @@ from wsidicom_kernels import (
 @pytest.fixture
 def image() -> np.ndarray:
     return np.zeros((8, 8, 3), np.uint8)
+
+
+@pytest.fixture
+def origin() -> np.ndarray:
+    """One int64 position at the canvas's top-left corner."""
+    return np.zeros((1, 2), np.int64)
 
 
 @pytest.fixture
@@ -90,7 +95,7 @@ class TestValidation:
             ),
             pytest.param(
                 lambda image: compose(
-                    image.copy(), [image], np.zeros((1, 2)), Interpolation.BILINEAR
+                    image.copy(), [image], np.zeros((1, 2), np.int64)
                 ),
                 id="compose",
             ),
@@ -122,19 +127,13 @@ class TestValidation:
             ),
             pytest.param(
                 lambda image: compose(
-                    np.zeros((8, 8, 3), np.uint8),
-                    [image],
-                    np.zeros((1, 2)),
-                    Interpolation.NEAREST,
+                    np.zeros((8, 8, 3), np.uint8), [image], np.zeros((1, 2), np.int64)
                 ),
                 id="compose-tile",
             ),
             pytest.param(
                 lambda image: compose(
-                    image,
-                    [np.zeros((4, 4, 3), np.uint8)],
-                    np.zeros((1, 2)),
-                    Interpolation.NEAREST,
+                    image, [np.zeros((4, 4, 3), np.uint8)], np.zeros((1, 2), np.int64)
                 ),
                 id="compose-canvas",
             ),
@@ -150,28 +149,50 @@ class TestValidation:
 
     @pytest.mark.parametrize(
         "positions",
-        [[[0.0, 0.0]], np.zeros((1, 2), np.float32)],
-        ids=["list", "float32"],
+        [
+            [[0, 0]],
+            np.zeros((1, 2), np.float64),
+            np.zeros((1, 2), np.float32),
+            np.zeros((1, 2), np.int32),
+        ],
+        ids=["list", "float64", "float32", "int32"],
     )
-    def test_compose_rejects_positions_other_than_float64_array(
+    def test_compose_rejects_positions_other_than_int64_array(
         self, image: np.ndarray, positions: Any
     ) -> None:
-        """Positions must be an (N, 2) float64 array.
+        """Positions must be an (N, 2) int64 array.
 
-        A list or another dtype is not converted.
+        A list or another dtype, even one holding whole numbers, is not
+        converted.
         """
         # Act & Assert
-        with pytest.raises(TypeError):
-            compose(image.copy(), [image], positions, Interpolation.NEAREST)
+        with pytest.raises((TypeError, ValueError)):
+            compose(image.copy(), [image], positions)
 
     def test_compose_rejects_strided_positions(self, image: np.ndarray) -> None:
-        """A non-contiguous view of float64 positions is rejected, not copied."""
+        """A non-contiguous view of int64 positions is rejected, not copied."""
         # Arrange
-        strided = np.zeros((1, 4), np.float64)[:, ::2]
+        strided = np.zeros((1, 4), np.int64)[:, ::2]
 
         # Act & Assert
         with pytest.raises(ValueError, match="positions must be C-contiguous"):
-            compose(image.copy(), [image], strided, Interpolation.NEAREST)
+            compose(image.copy(), [image], strided)
+
+    @pytest.mark.parametrize(
+        ["positions", "match"],
+        [
+            (np.zeros((1, 3), np.int64), r"shape \(N, 2\)"),
+            (np.zeros((2, 2), np.int64), "number of positions"),
+        ],
+        ids=["three-columns", "count"],
+    )
+    def test_compose_rejects_positions_unfit_for_tiles(
+        self, image: np.ndarray, positions: np.ndarray, match: str
+    ) -> None:
+        """Positions are (N, 2), one per tile."""
+        # Act & Assert
+        with pytest.raises(ValueError, match=match):
+            compose(image.copy(), [image], positions)
 
     @pytest.mark.parametrize(
         "fill",
@@ -238,19 +259,13 @@ class TestValidation:
             pytest.param(lambda image: rgb_to_rgbx(image), id="rgb_to_rgbx"),
             pytest.param(
                 lambda image: compose(
-                    np.zeros((8, 8, 3), np.uint8),
-                    [image],
-                    np.zeros((1, 2)),
-                    Interpolation.NEAREST,
+                    np.zeros((8, 8, 3), np.uint8), [image], np.zeros((1, 2), np.int64)
                 ),
                 id="compose-tile",
             ),
             pytest.param(
                 lambda image: compose(
-                    image,
-                    [np.zeros((4, 4, 3), np.uint8)],
-                    np.zeros((1, 2)),
-                    Interpolation.NEAREST,
+                    image, [np.zeros((4, 4, 3), np.uint8)], np.zeros((1, 2), np.int64)
                 ),
                 id="compose-canvas",
             ),
@@ -304,7 +319,7 @@ class TestValidation:
         # Arrange
         canvas = np.zeros((8, 8), np.uint8)
         tile = np.zeros((8, 8), np.uint8)
-        positions = np.zeros((2, 2))
+        positions = np.zeros((2, 2), np.int64)
 
         # Act & Assert
         with pytest.raises(ValueError, match=match):
@@ -312,11 +327,10 @@ class TestValidation:
                 canvas,
                 [tile],
                 positions,
-                Interpolation.BILINEAR,
                 crops=np.asarray(crops, np.int64) if isinstance(crops, list) else crops,
             )
 
-    def test_compose_rejects_negative_row_stride(self) -> None:
+    def test_compose_rejects_negative_row_stride(self, origin: np.ndarray) -> None:
         """Rows in reverse order are rejected, not read past the array."""
         # Arrange
         canvas = np.zeros((8, 8), np.uint8)
@@ -324,31 +338,29 @@ class TestValidation:
 
         # Act & Assert
         with pytest.raises(ValueError, match="each tile row must be contiguous"):
-            compose(canvas, [tile], np.zeros((1, 2)), Interpolation.BILINEAR)
+            compose(canvas, [tile], origin)
 
     @pytest.mark.parametrize(
         "position",
-        [np.inf, -np.inf, np.nan, 2.0**53],
-        ids=["inf", "-inf", "nan", "2^53"],
+        [2**52 + 1, -(2**52) - 1, 2**63 - 1, -(2**63)],
+        ids=["2^52+1", "-2^52-1", "int64-max", "int64-min"],
     )
-    @pytest.mark.parametrize("interpolation", list(Interpolation))
-    def test_compose_rejects_non_finite_or_huge_positions(
-        self, position: float, interpolation: Interpolation
-    ) -> None:
-        """A position must be finite and at most 2^52 in magnitude.
-
-        An infinite position with a one-pixel tile once read out of bounds.
-        """
+    @pytest.mark.parametrize("axis", [0, 1], ids=["x", "y"])
+    def test_compose_rejects_huge_positions(self, position: int, axis: int) -> None:
+        """A position beyond 2^52 in magnitude is a ValueError, not an overflow."""
         # Arrange
         canvas = np.full((4, 64), 7, np.uint8)
         tile = np.arange(3, dtype=np.uint8).reshape(3, 1)
-        positions = np.array([[position, 0.5]])
+        positions = np.zeros((1, 2), np.int64)
+        positions[0, axis] = position
 
         # Act & Assert
-        with pytest.raises(ValueError, match="positions must be finite"):
-            compose(canvas, [tile], positions, interpolation)
+        with pytest.raises(ValueError, match="positions"):
+            compose(canvas, [tile], positions)
 
-    def test_compose_rejects_read_only_canvas(self, image: np.ndarray) -> None:
+    def test_compose_rejects_read_only_canvas(
+        self, image: np.ndarray, origin: np.ndarray
+    ) -> None:
         """A read-only canvas is reported as such."""
         # Arrange
         canvas = np.zeros((8, 8, 3), np.uint8)
@@ -356,7 +368,7 @@ class TestValidation:
 
         # Act & Assert
         with pytest.raises(ValueError, match="canvas must be writable"):
-            compose(canvas, [image], np.zeros((1, 2)), Interpolation.NEAREST)
+            compose(canvas, [image], origin)
 
     @pytest.mark.parametrize(
         "size", [(2**33, 2**31), (2**62, 1)], ids=["wraps-to-zero", "wraps-small"]
@@ -466,14 +478,8 @@ class TestValidation:
         [
             (lambda image, name: resize(image, 4, 4, name), "lanczos"),
             (lambda image, name: resize(image, 4, 4, name), "bicubic"),
-            (
-                lambda image, name: compose(
-                    image, [image.copy()], np.zeros((1, 2)), name
-                ),
-                "cubic",
-            ),
         ],
-        ids=["lanczos", "bicubic", "cubic"],
+        ids=["lanczos", "bicubic"],
     )
     def test_filter_names_are_only_the_enum_values(
         self,
@@ -481,7 +487,7 @@ class TestValidation:
         operation: Callable[[np.ndarray, Any], Any],
         name: str,
     ) -> None:
-        """Names other than the enums' values are unknown, not silent aliases."""
+        """Names other than the enum's values are unknown, not silent aliases."""
         # Act & Assert
         with pytest.raises(ValueError, match="unknown filter"):
             operation(image, name)

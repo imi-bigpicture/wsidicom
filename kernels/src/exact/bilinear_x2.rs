@@ -125,11 +125,6 @@ pub(crate) fn bilinear_x2(src: &[u8], width: usize, height: usize, channels: usi
     );
     #[cfg(target_arch = "x86_64")]
     {
-        if crate::cpu::has_avx512() {
-            // SAFETY: avx512f+bw+vl detected; src holds width * height *
-            // channels samples.
-            return unsafe { x86::bilinear_x2_avx512(src, width, height, channels) };
-        }
         if crate::cpu::has_avx2() {
             // SAFETY: avx2 detected; src holds width * height * channels
             // samples.
@@ -151,7 +146,7 @@ mod tests {
     use crate::exact::tests::{assert_equals_reference, size_grid};
     use crate::testing::CHANNELS;
 
-    /// Even widths around the AVX2 (16 samples) and AVX-512 (32 samples) steps
+    /// Even widths around the AVX2 steps (16 samples) and twice that
     /// and the scalar fallbacks of narrow rows, and even heights from one
     /// output row (both edges clipped) up.
     pub(super) const WIDTHS: [usize; 20] = [

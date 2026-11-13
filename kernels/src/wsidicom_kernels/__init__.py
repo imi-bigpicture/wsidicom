@@ -33,12 +33,11 @@ from wsidicom_kernels.core import (
     rgb_to_rgbx,
     stitch,
 )
-from wsidicom_kernels.models import Interpolation, ResizeFilter
+from wsidicom_kernels.models import ResizeFilter
 
 __version__ = version("wsidicom-kernels")
 
 __all__ = [
-    "Interpolation",
     "ResizeFilter",
     "compose",
     "downscale",
