@@ -1,6 +1,8 @@
 //! Exact x2 bilinear reduction of uint16 images: `bilinear_x2`'s arithmetic
 //! in 32-bit lanes (the window's sum reaches 64 x 65535).
 
+#[cfg(target_arch = "aarch64")]
+mod neon;
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
@@ -34,9 +36,7 @@ pub(crate) fn bilinear_x2_u16(
     #[cfg(target_arch = "aarch64")]
     if crate::cpu::use_neon() {
         // SAFETY: src holds width * height * channels samples.
-        return unsafe {
-            super::bilinear_x2::neon::bilinear_x2_u16_neon(src, width, height, channels)
-        };
+        return unsafe { neon::bilinear_x2_u16_neon(src, width, height, channels) };
     }
     bilinear_x2_scalar(src, width, height, channels)
 }

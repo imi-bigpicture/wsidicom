@@ -37,7 +37,7 @@ impl BlockMean for u16 {
 /// row of partial blocks, each the mean of the pixels it covers.
 pub(crate) fn box_downscale<T: BoxSample>(
     src: &[T],
-    dims @ (height, width, channels): (usize, usize, usize),
+    dims @ (width, height, channels): (usize, usize, usize),
     times: u32,
 ) -> (Vec<T>, usize, usize) {
     let block = 1usize << times;
@@ -62,7 +62,7 @@ pub(crate) fn box_downscale<T: BoxSample>(
     (unsafe { written_output(out) }, out_width, out_height)
 }
 
-fn has_whole_blocks((height, width, _): (usize, usize, usize), times: u32) -> bool {
+fn has_whole_blocks((width, height, _): (usize, usize, usize), times: u32) -> bool {
     (height >> times) > 0 && (width >> times) > 0
 }
 
@@ -80,7 +80,7 @@ fn place_rows<T: Copy>(rows: &[T], row_len: usize, out: &mut [MaybeUninit<T>], s
 /// `out`: the blocks of the last column and row that the image ends inside.
 fn write_partial_blocks<T: BoxSample>(
     src: &[T],
-    dims @ (height, width, channels): (usize, usize, usize),
+    dims @ (width, height, channels): (usize, usize, usize),
     times: u32,
     out: &mut [MaybeUninit<T>],
 ) {
@@ -119,24 +119,24 @@ pub(crate) fn box_halvings(filter: &str, factor: usize) -> Option<u32> {
     (filter == "box" && factor.is_power_of_two()).then(|| factor.trailing_zeros())
 }
 
-/// `times` successive 2x box halvings of a (height, width, channels) image ->
+/// `times` successive 2x box halvings of a (width, height, channels) image ->
 /// (pixels, width, height), two levels per fused 4x pass while at least two
 /// remain, so an interleaved image equals its channels reduced as planar
 /// ones. Interleaved images of more than one pass go band by band.
 pub(crate) fn box_pyramid<T: BoxSample>(
     src: &[T],
-    (height, width, channels): (usize, usize, usize),
+    (width, height, channels): (usize, usize, usize),
     times: u32,
 ) -> (Vec<T>, usize, usize) {
     if channels > 1 && interleaved_pass_count(times) >= 2 {
         return box_pyramid_banded(
             src,
-            (height, width, channels),
+            (width, height, channels),
             times,
-            |band, width, height| box_levels(band, (height, width, channels), times),
+            |band, width, height| box_levels(band, (width, height, channels), times),
         );
     }
-    box_levels(src, (height, width, channels), times)
+    box_levels(src, (width, height, channels), times)
 }
 
 /// `box_pyramid` written to `dst_ptr`, the output rows `dst_stride` samples
@@ -175,7 +175,7 @@ fn next_pass_levels(left: u32) -> u32 {
 /// The pyramid's levels over a whole image (or band).
 fn box_levels<T: BoxSample>(
     src: &[T],
-    (height, width, channels): (usize, usize, usize),
+    (width, height, channels): (usize, usize, usize),
     times: u32,
 ) -> (Vec<T>, usize, usize) {
     assert_image(src, width, height, channels);
@@ -213,7 +213,7 @@ const BAND_BYTES: usize = 256 << 10;
 /// back.
 fn box_pyramid_banded<T: Copy, LevelsFn>(
     src: &[T],
-    (height, width, channels): (usize, usize, usize),
+    (width, height, channels): (usize, usize, usize),
     times: u32,
     levels: LevelsFn,
 ) -> (Vec<T>, usize, usize)
@@ -254,7 +254,7 @@ mod tests {
     /// of every channel.
     fn pyramid_reference<T: BoxTestSample>(
         src: &[T],
-        (height, width, channels): (usize, usize, usize),
+        (width, height, channels): (usize, usize, usize),
         times: u32,
     ) -> (Vec<T>, usize, usize) {
         if channels == 1 {
@@ -267,7 +267,7 @@ mod tests {
     /// `times` scalar 2x halvings of every channel, each rounded.
     fn chained_halvings<T: BoxTestSample>(
         src: &[T],
-        (height, width, channels): (usize, usize, usize),
+        (width, height, channels): (usize, usize, usize),
         times: u32,
     ) -> (Vec<T>, usize, usize) {
         per_channel(src, (width, height, channels), |plane, width, height| {
@@ -284,7 +284,7 @@ mod tests {
         for channels in CHANNELS {
             for times in 0..=4 {
                 for (width, height) in sizes_from(1) {
-                    let dims = (height, width, channels);
+                    let dims = (width, height, channels);
                     for src in test_images::<T>(&mut rng, width * height * channels) {
                         assert_same_image(
                             &box_pyramid(&src, dims, times),
@@ -315,7 +315,7 @@ mod tests {
             "the image is too wide for bands of whole output rows"
         );
         let height = (2 * band_rows + band_rows / 2 + 1) * block + block - 1;
-        let dims = (height, width, channels);
+        let dims = (width, height, channels);
         assert!(interleaved_pass_count(times) >= 2);
         let mut rng = Rng::new(31);
         let src: Vec<T> = random_samples(&mut rng, width * height * channels);
@@ -338,7 +338,7 @@ mod tests {
         let mut rng = Rng::new(32);
         for channels in CHANNELS {
             for (width, height) in sizes_from(2) {
-                let dims = (height, width, channels);
+                let dims = (width, height, channels);
                 let src: Vec<u8> = random_samples(&mut rng, width * height * channels);
                 assert_same_image(
                     &box_pyramid(&src, dims, 1),
@@ -356,7 +356,7 @@ mod tests {
         let mut rng = Rng::new(33);
         for channels in CHANNELS {
             let (width, height) = (64, 64);
-            let dims = (height, width, channels);
+            let dims = (width, height, channels);
             let src: Vec<u8> = random_samples(&mut rng, width * height * channels);
             let (largest, count) = integer_differences(
                 &box_pyramid(&src, dims, 2).0,
