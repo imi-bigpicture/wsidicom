@@ -148,7 +148,7 @@ pub(crate) fn bilinear_x2(src: &[u8], width: usize, height: usize, channels: usi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, size_grid};
+    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
     use crate::testing::CHANNELS;
 
     /// Even widths around the SIMD steps (16 samples and twice that) and the
@@ -171,26 +171,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "channels")]
-    fn dispatch_rejects_two_channels() {
-        bilinear_x2(&[0; 8 * 8 * 2], 8, 8, 2);
-    }
-
-    #[test]
-    #[should_panic(expected = "even sizes")]
-    fn dispatch_rejects_odd_width() {
-        bilinear_x2(&[0; 7 * 8], 7, 8, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "even sizes")]
-    fn dispatch_rejects_odd_height() {
-        bilinear_x2(&[0; 8 * 7], 8, 7, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "fewer than")]
-    fn dispatch_rejects_short_source() {
-        bilinear_x2(&[0; 8 * 8 * 3 - 1], 8, 8, 3);
+    fn dispatch_rejects_bad_arguments() {
+        assert_rejects(
+            &bilinear_x2,
+            &[
+                (8 * 8 * 2, 8, 8, 2, "channels"),
+                (7 * 8, 7, 8, 1, "even sizes"),
+                (8 * 7, 8, 7, 1, "even sizes"),
+                (8 * 8 * 3 - 1, 8, 8, 3, "fewer than"),
+            ],
+        );
     }
 }

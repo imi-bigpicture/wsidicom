@@ -167,9 +167,9 @@ One test file per operation (`test_compose`, `test_resize`, `test_downscale`,
 
 | file | checks |
 | --- | --- |
-| `test_compose_oracle.py` | compose against an independent numpy reference (bugs shared by SIMD and scalar) |
-| `test_fuzz.py` | Hypothesis-generated shapes, positions, factors and filters: SIMD/scalar parity, inputs flush against an unmapped page so any out-of-bounds access crashes |
-| `test_purity.py` | batched compose == single-tile calls; no state leaks between calls |
+| `test_compose_oracle.py` | compose against independent numpy pastes, at every edge of the canvas |
+| `test_fuzz.py` | Hypothesis-generated shapes, positions, factors and filters: compose against a numpy paste, resize and downscale SIMD/scalar parity, inputs flush against an unmapped page so any out-of-bounds access crashes |
+| `test_state.py` | resize, downscale and downscale_grid keep no state: recycled outputs full of junk, plans cached across SIMD toggles, other calls in between |
 | `test_boundary.py` | saturation, checkerboards |
 | `test_threads.py` | GIL-released concurrency: identical results, clean errors on contention |
 | `test_pillow.py` | bit-identity with Pillow `reduce(2)`, partial edge boxes included |

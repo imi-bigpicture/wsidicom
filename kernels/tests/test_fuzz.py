@@ -19,12 +19,12 @@ region, so a kernel that reads or writes one element past its buffer hits
 unmapped memory and crashes, instead of quietly touching heap slack that no
 value-based test sees.
 
-Each case checks that nothing crashes and that the SIMD kernels match the
-forced-scalar reference.
+Each case checks that nothing crashes, and that compose equals a numpy paste
+and the resampling SIMD kernels match the forced-scalar reference.
 
 Hypothesis runs many examples inside one pytest test, so a function-scoped
 fixture is not reset between them and Hypothesis refuses one by default. The
-tests here only take the conftest ``simd_and_scalar`` factory, which holds no
+tests here take at most the conftest ``simd_and_scalar`` factory, which holds no
 state between calls (it restores the SIMD kernels after each), so sharing it
 across examples is safe and that health check is suppressed. Generated images
 come from the plain ``page_end`` helper, drawn per example from a seed.
@@ -118,9 +118,8 @@ class TestCompose:
         position=st.tuples(st.integers(-170, 178), st.integers(-170, 178)),
         seed=seeds,
     )
-    def test_simd_matches_scalar(
+    def test_stays_in_bounds_and_equals_numpy_paste(
         self,
-        simd_and_scalar: SimdAndScalar,
         dtype: Any,
         channels: int,
         tile_size: Size,
@@ -128,25 +127,28 @@ class TestCompose:
         position: tuple[int, int],
         seed: int,
     ) -> None:
-        """Composing stays in bounds and matches the scalar reference exactly.
+        """Composing stays in bounds and equals the clipped numpy paste.
 
         Positions reach past every edge of the canvas, so tiles hang off any
         side or miss it entirely.
         """
         # Arrange
         tile = page_end(image_shape(tile_size, channels), dtype, seed)
-
-        def composed() -> np.ndarray:
-            canvas_shape = image_shape(canvas_size, channels)
-            canvas = page_end(canvas_shape, dtype, seed + 1)
-            compose(canvas, [tile], np.array([position], np.int64))
-            return canvas
+        canvas = page_end(image_shape(canvas_size, channels), dtype, seed + 1)
+        expected = canvas.copy()
+        x, y = position
+        top, bottom = max(y, 0), min(y + tile_size[0], canvas_size[0])
+        left, right = max(x, 0), min(x + tile_size[1], canvas_size[1])
+        if top < bottom and left < right:
+            expected[top:bottom, left:right] = tile[
+                top - y : bottom - y, left - x : right - x
+            ]
 
         # Act
-        simd, scalar = simd_and_scalar(composed)
+        compose(canvas, [tile], np.array([position], np.int64))
 
         # Assert
-        np.testing.assert_array_equal(simd, scalar)
+        np.testing.assert_array_equal(canvas, expected)
 
 
 @pytest.mark.unittest

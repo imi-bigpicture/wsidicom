@@ -123,7 +123,7 @@ pub(crate) fn bilinear_x4(src: &[u8], width: usize, height: usize, channels: usi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, size_grid};
+    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
     use crate::testing::CHANNELS;
 
     /// Widths (multiples of 4) around the SIMD steps (64 gray input pixels
@@ -146,26 +146,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "channels")]
-    fn dispatch_rejects_two_channels() {
-        bilinear_x4(&[0; 8 * 8 * 2], 8, 8, 2);
-    }
-
-    #[test]
-    #[should_panic(expected = "multiples of 4")]
-    fn dispatch_rejects_width_not_multiple_of_four() {
-        bilinear_x4(&[0; 6 * 8], 6, 8, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "multiples of 4")]
-    fn dispatch_rejects_height_not_multiple_of_four() {
-        bilinear_x4(&[0; 8 * 10], 8, 10, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "fewer than")]
-    fn dispatch_rejects_short_source() {
-        bilinear_x4(&[0; 8 * 8 - 1], 8, 8, 1);
+    fn dispatch_rejects_bad_arguments() {
+        assert_rejects(
+            &bilinear_x4,
+            &[
+                (8 * 8 * 2, 8, 8, 2, "channels"),
+                (6 * 8, 6, 8, 1, "multiples of 4"),
+                (8 * 10, 8, 10, 1, "multiples of 4"),
+                (8 * 8 - 1, 8, 8, 1, "fewer than"),
+            ],
+        );
     }
 }

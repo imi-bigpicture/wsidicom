@@ -35,68 +35,13 @@ from wsidicom_kernels import (
 DTYPES = [np.uint8, np.uint16]
 
 
-@pytest.fixture
-def random_tile(
-    random_image: Callable[[tuple[int, ...], Any], np.ndarray],
-    tile_shape: tuple[int, ...],
-    dtype: type[np.generic],
-) -> np.ndarray:
-    """Make a random tile from an indirect ``(tile_shape, dtype)`` param."""
-    return random_image(tile_shape, dtype)
-
-
 @pytest.mark.unittest
-class TestComposeAtIntegerPositions:
-    @pytest.mark.parametrize("dtype", DTYPES)
-    @pytest.mark.parametrize("tile_shape", [(4, 5), (4, 5, 3)])
-    def test_tile_is_copied_unchanged(
-        self, random_tile: np.ndarray, dtype: type[np.generic]
-    ) -> None:
-        """A tile inside the canvas is copied there unchanged, and only there."""
-        # Arrange
-        canvas = np.zeros((9, 11, *random_tile.shape[2:]), dtype)
+class TestComposeCanvas:
+    """What the oracle tests leave out: the call's return value and no tiles.
 
-        # Act
-        compose(canvas, [random_tile], np.array([[3, 2]], np.int64))
-
-        # Assert
-        np.testing.assert_array_equal(canvas[2:6, 3:8], random_tile)
-        canvas[2:6, 3:8] = 0
-        assert not canvas.any()
-
-    def test_interleaved_tiles_on_grid(self) -> None:
-        """Interleaved RGB tiles are placed on an integer grid."""
-        # Arrange
-        tiles = [
-            np.full((4, 4, 3), (index, index + 1, index + 2), np.uint8)
-            for index in range(6)
-        ]
-        canvas = np.zeros((8, 12, 3), np.uint8)
-        positions = np.array(
-            [[(index % 3) * 4, (index // 3) * 4] for index in range(6)], np.int64
-        )
-
-        # Act
-        compose(canvas, tiles, positions)
-
-        # Assert
-        assert (canvas[0:4, 0:4] == (0, 1, 2)).all()
-        assert (canvas[4:8, 8:12] == (5, 6, 7)).all()
-
-    def test_later_tiles_overwrite_earlier(self) -> None:
-        """Where tiles overlap, the last one wins."""
-        # Arrange
-        first = np.full((4, 4), 1, np.uint8)
-        second = np.full((4, 4), 2, np.uint8)
-        canvas = np.zeros((6, 6), np.uint8)
-
-        # Act
-        compose(canvas, [first, second], np.array([[0, 0], [2, 2]], np.int64))
-
-        # Assert
-        assert (canvas[0:2, 0:4] == 1).all()
-        assert (canvas[2:4, 0:2] == 1).all()
-        assert (canvas[2:6, 2:6] == 2).all()
+    Copies, overlaps and clipping are checked against numpy pastes in
+    ``test_compose_oracle.py``.
+    """
 
     def test_returns_the_canvas(self) -> None:
         """The canvas is mutated in place and returned as that same array."""
@@ -120,38 +65,6 @@ class TestComposeAtIntegerPositions:
 
         # Assert
         assert (canvas == 7).all()
-
-    @pytest.mark.parametrize("dtype", DTYPES)
-    @pytest.mark.parametrize(
-        ["tile_shape", "canvas_shape"],
-        [
-            ((37, 41), (50, 50)),
-            ((37, 41, 3), (50, 50, 3)),
-        ],
-    )
-    def test_simd_matches_scalar(
-        self,
-        simd_and_scalar: Callable[[Callable[[], Any]], tuple[Any, Any]],
-        dtype: type[np.generic],
-        canvas_shape: tuple[int, ...],
-        random_tile: np.ndarray,
-    ) -> None:
-        """The SIMD kernels equal the scalar reference, planar and interleaved.
-
-        Odd sizes exercise both the vector body and the tail.
-        """
-
-        # Arrange
-        def compose_onto_empty_canvas() -> np.ndarray:
-            canvas = np.zeros(canvas_shape, dtype)
-            compose(canvas, [random_tile], np.array([[3, 2]], np.int64))
-            return canvas
-
-        # Act
-        simd, scalar = simd_and_scalar(compose_onto_empty_canvas)
-
-        # Assert
-        np.testing.assert_array_equal(simd, scalar)
 
 
 @pytest.mark.unittest
