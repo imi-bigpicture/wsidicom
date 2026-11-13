@@ -3,7 +3,7 @@ simultaneously (barrier-synced), simulating a many-worker server where
 per-core DRAM bandwidth is the bottleneck. Rounds alternate WSIDICOM_KERNELS_NT=1/0
 (inherited at spawn). Reports per-op medians.
 
-Usage: python bench/bench_contended.py [u8|u16|f32] [factor]
+Usage: python bench/bench_contended.py [u8|u16] [factor]
 """
 
 import multiprocessing as mp
@@ -15,7 +15,7 @@ import numpy as np
 
 N_PROCS = 6
 OPS = 20
-DTYPES = {"u8": (np.uint8, 256), "u16": (np.uint16, 65536), "f32": (np.float32, None)}
+DTYPES = {"u8": (np.uint8, 256), "u16": (np.uint16, 65536)}
 
 
 def worker(barrier, q, tag, factor):
@@ -31,11 +31,7 @@ def worker(barrier, q, tag, factor):
             compose(cv, [tile], position)
     else:
         dt, hi = DTYPES[tag]
-        img = (
-            rng.integers(0, hi, (8192, 8192)).astype(dt)
-            if hi
-            else rng.random((8192, 8192), np.float32)
-        )
+        img = rng.integers(0, hi, (8192, 8192)).astype(dt)
 
         def op():
             downscale(img, factor, ResizeFilter.BOX)

@@ -51,7 +51,7 @@ Size = tuple[int, int]
 # The real page size (16 KiB on Apple silicon): a smaller guess would leave
 # readable slack past the array, hiding overreads.
 PAGE = mmap.PAGESIZE
-DTYPES = [np.uint8, np.uint16, np.float32]
+DTYPES = [np.uint8, np.uint16]
 
 fuzz = settings(
     max_examples=200,
@@ -71,10 +71,7 @@ def page_end(shape: tuple[int, ...], dtype: Any, seed: int) -> np.ndarray:
     array = np.frombuffer(mmap.mmap(-1, size), np.uint8, nbytes, size - nbytes)
     array = array.view(dtype).reshape(shape)
     rng = np.random.default_rng(seed)
-    if dtype.kind == "u":
-        array[...] = rng.integers(0, np.iinfo(dtype).max, shape, endpoint=True)
-    else:
-        array[...] = rng.random(shape)
+    array[...] = rng.integers(0, np.iinfo(dtype).max, shape, endpoint=True)
     return array
 
 
@@ -83,15 +80,10 @@ def image_shape(size: Size, channels: int) -> tuple[int, ...]:
     return size if channels == 1 else (*size, channels)
 
 
-def assert_parity(
-    simd: np.ndarray, scalar: np.ndarray, integer_tolerance: int = 0
-) -> None:
-    """float32 results agree to rounding, integer ones within the tolerance."""
-    if simd.dtype == np.float32:
-        assert np.allclose(simd, scalar, atol=1e-4, rtol=1e-5)
-    else:
-        difference = np.abs(simd.astype(np.int64) - scalar.astype(np.int64))
-        assert difference.max(initial=0) <= integer_tolerance
+def assert_parity(simd: np.ndarray, scalar: np.ndarray, tolerance: int = 0) -> None:
+    """Assert the results agree within the tolerance."""
+    difference = np.abs(simd.astype(np.int64) - scalar.astype(np.int64))
+    assert difference.max(initial=0) <= tolerance
 
 
 @st.composite
@@ -195,7 +187,7 @@ class TestBoxDownscale:
         # Assert — fused and chained passes may round differently: one step per
         # level.
         levels = factor.bit_length() - 1
-        assert_parity(simd, scalar, integer_tolerance=levels + 1)
+        assert_parity(simd, scalar, tolerance=levels + 1)
 
 
 @pytest.mark.unittest
@@ -244,4 +236,4 @@ class TestResize:
             and width % output_width == 0
             and height // output_height == width // output_width
         )
-        assert_parity(simd, scalar, integer_tolerance=1 if is_power_of_2_box else 0)
+        assert_parity(simd, scalar, tolerance=1 if is_power_of_2_box else 0)

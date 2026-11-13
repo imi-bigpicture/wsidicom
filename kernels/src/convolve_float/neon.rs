@@ -1,7 +1,8 @@
-//! NEON kernels of the uint16/float32 convolution resize (aarch64): 8 rows
+//! NEON kernels of the float32 convolution engine for uint8 and uint16
+//! (aarch64): 8 rows
 //! per transposed batch, two f32x4 registers per column. Every sum is the
-//! scalar reference's FMA chain (`vfmaq` from zero, in tap order) and uint16
-//! rounds to nearest even and saturates (`vcvtnq_u32` + `vqmovn`), so the
+//! scalar reference's FMA chain (`vfmaq` from zero, in tap order) and the
+//! integers round to nearest even and saturate (`vcvtnq_u32` + `vqmovn`), so the
 //! results equal the scalar reference's bit for bit.
 //!
 //! # Safety
@@ -40,17 +41,6 @@ fn transpose_4x4_f32(rows: [float32x4_t; 4]) -> [float32x4_t; 4] {
         vreinterpretq_f32_f64(vtrn2q_f64(pairs[0], pairs[2])),
         vreinterpretq_f32_f64(vtrn2q_f64(pairs[1], pairs[3])),
     ]
-}
-
-/// Four f32 at `src`.
-///
-/// # Safety
-/// `src..src + 4` must be readable.
-#[target_feature(enable = "neon")]
-#[inline]
-unsafe fn load_f32x4(src: *const f32) -> float32x4_t {
-    // SAFETY: the caller's contract.
-    unsafe { vld1q_f32(src) }
 }
 
 /// Four u16 at `src` as f32.
@@ -155,7 +145,6 @@ macro_rules! gen_vertical_neon {
     };
 }
 
-gen_vertical_neon!(vertical_f32_neon, vertical_f32_blocks, f32, load_f32x4);
 gen_vertical_neon!(vertical_u16_neon, vertical_u16_blocks, u16, load_u16x4_f32);
 gen_vertical_neon!(vertical_u8_neon, vertical_u8_blocks, u8, load_u8x4_f32);
 
@@ -313,39 +302,11 @@ unsafe fn untranspose(
     }
 }
 
-/// Untranspose a batch to float32 rows.
+/// Untranspose a batch to uint16 rows: rounded to nearest even, saturated.
 ///
 /// # Safety
 /// As `untranspose`, and `dst` holds `rows` rows `stride` apart of `ows`
 /// samples.
-#[target_feature(enable = "neon")]
-pub(crate) unsafe fn untranspose_store_f32_neon(
-    out_t: &[f32],
-    ows: usize,
-    dst: *mut f32,
-    stride: usize,
-    rows: usize,
-) {
-    // SAFETY: the caller's contract; each store writes `count` samples of
-    // row `row` from output `output`.
-    unsafe {
-        untranspose(out_t, ows, rows, |row, output, samples, count| {
-            let at = dst.add(row * stride + output);
-            if count == LANES {
-                vst1q_f32(at, samples);
-            } else {
-                let mut staged = [0f32; LANES];
-                vst1q_f32(staged.as_mut_ptr(), samples);
-                std::ptr::copy_nonoverlapping(staged.as_ptr(), at, count);
-            }
-        });
-    }
-}
-
-/// Untranspose a batch to uint16 rows: rounded to nearest even, saturated.
-///
-/// # Safety
-/// As `untranspose_store_f32_neon`.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn untranspose_store_u16_neon(
     out_t: &[f32],
@@ -374,7 +335,7 @@ pub(crate) unsafe fn untranspose_store_u16_neon(
 /// Untranspose a batch to uint8 rows: rounded to nearest even, saturated.
 ///
 /// # Safety
-/// As `untranspose_store_f32_neon`.
+/// As `untranspose_store_u16_neon`.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn untranspose_store_u8_neon(
     out_t: &[f32],

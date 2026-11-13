@@ -1,5 +1,6 @@
-//! Native convolution resize of uint16 and float32 images (planar or RGB),
-//! with `fast_image_resize`'s filters and windows.
+//! Native convolution resize in float32 of uint16 images, and of uint8
+//! images reduced past the fixed-point engine's range (planar or RGB), with
+//! `fast_image_resize`'s filters and windows.
 //!
 //! Computed in f32: every output sample is a chain of fused multiply-adds
 //! over its taps in tap order, vertical pass first (per row, into an f32
@@ -44,17 +45,6 @@ pub(crate) const CHUNK_TAPS: usize = 256;
 pub(crate) trait FloatSample: Copy + Default + Send + Sync {
     fn to_f32(self) -> f32;
     fn from_f32(value: f32) -> Self;
-}
-
-impl FloatSample for f32 {
-    #[inline]
-    fn to_f32(self) -> f32 {
-        self
-    }
-    #[inline]
-    fn from_f32(value: f32) -> f32 {
-        value
-    }
 }
 
 impl FloatSample for u8 {
@@ -306,8 +296,6 @@ macro_rules! transposed_tier {
 }
 
 #[cfg(target_arch = "x86_64")]
-transposed_tier!(f32, vertical_f32_avx2, untranspose_store_f32_avx2);
-#[cfg(target_arch = "x86_64")]
 transposed_tier!(u8, vertical_u8_avx2, untranspose_store_u8_avx2);
 #[cfg(target_arch = "x86_64")]
 transposed_tier!(u16, vertical_u16_avx2, untranspose_store_u16_avx2);
@@ -335,8 +323,6 @@ macro_rules! neon_transposed_tier {
         }
     };
 }
-#[cfg(target_arch = "aarch64")]
-neon_transposed_tier!(f32, vertical_f32_neon, untranspose_store_f32_neon);
 #[cfg(target_arch = "aarch64")]
 neon_transposed_tier!(u16, vertical_u16_neon, untranspose_store_u16_neon);
 #[cfg(target_arch = "aarch64")]
@@ -537,11 +523,6 @@ mod tests {
     }
 
     #[cfg(target_arch = "x86_64")]
-    impl TierKernels for f32 {
-        const VERTICAL_AVX2: unsafe fn(&[f32], usize, &[f32], &mut [f32]) = x86::vertical_f32_avx2;
-    }
-
-    #[cfg(target_arch = "x86_64")]
     impl TierKernels for u8 {
         const VERTICAL_AVX2: unsafe fn(&[u8], usize, &[f32], &mut [f32]) = x86::vertical_u8_avx2;
     }
@@ -646,11 +627,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn float32_resize_equals_reference() {
-        assert_resize_matches_reference::<f32>(1);
-    }
-
     /// Random uint16 samples over the whole range, so the filters' overshoot
     /// clamps at both ends.
     #[test]
@@ -698,7 +674,6 @@ mod tests {
     fn chunked_resize_equals_reference() {
         assert_chunked_matches_reference::<u8>(5);
         assert_chunked_matches_reference::<u16>(6);
-        assert_chunked_matches_reference::<f32>(7);
     }
 
     /// A flat image reduced to one pixel through tens of thousands of taps
@@ -740,7 +715,7 @@ mod tests {
 
     #[test]
     fn striped_vertical_pass_equals_reference() {
-        assert_striped_matches_reference::<f32>(64, 4);
+        assert_striped_matches_reference::<u8>(1026, 1);
         assert_striped_matches_reference::<u16>(171, RGB);
     }
 
@@ -773,9 +748,10 @@ mod tests {
             .flat_map(|width| [1, 2, 5, 16, 41].map(|taps| (width, taps)))
             .chain(aliased);
         for (width, taps) in cases {
-            let weights: Vec<f32> = random_samples::<f32>(rng, taps)
+            // Weights in [-0.5, 1.5), exactly representable.
+            let weights: Vec<f32> = random_samples::<u16>(rng, taps)
                 .into_iter()
-                .map(|weight| 2.0 * weight - 0.5)
+                .map(|weight| 2.0 * f32::from(weight) / 65536.0 - 0.5)
                 .collect();
             for stride in [width, width + 13] {
                 let rows: Vec<T> = random_samples(rng, (taps - 1) * stride + width);
@@ -809,7 +785,7 @@ mod tests {
     #[test]
     fn vertical_kernels_equal_reference() {
         let mut rng = Rng::new(4);
-        assert_vertical_matches_reference::<f32>(&mut rng, &x86_vertical_tiers());
+        assert_vertical_matches_reference::<u8>(&mut rng, &x86_vertical_tiers());
         assert_vertical_matches_reference::<u16>(&mut rng, &x86_vertical_tiers());
     }
 
@@ -818,9 +794,9 @@ mod tests {
     fn vertical_kernels_equal_reference() {
         let mut rng = Rng::new(4);
         let neon = crate::cpu::use_neon();
-        assert_vertical_matches_reference::<f32>(
+        assert_vertical_matches_reference::<u8>(
             &mut rng,
-            &[(neon, neon::vertical_f32_neon, "neon")],
+            &[(neon, neon::vertical_u8_neon, "neon")],
         );
         assert_vertical_matches_reference::<u16>(
             &mut rng,

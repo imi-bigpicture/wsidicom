@@ -14,10 +14,8 @@
 
 """Tests for boundary values.
 
-- Integer saturation: all-max images come out all-max (no wraparound in any
-  sum or rounding), and max/min checkerboards keep SIMD/scalar parity.
-- Float32 specials (inf, NaN, denormal, near overflow) neither crash nor break
-  parity.
+Integer saturation: all-max images come out all-max (no wraparound in any sum
+or rounding), and max/min checkerboards keep SIMD/scalar parity.
 """
 
 from collections.abc import Callable
@@ -25,16 +23,11 @@ from typing import Any
 
 import numpy as np
 import pytest
-from wsidicom_kernels import (
-    ResizeFilter,
-    compose,
-    downscale,
-)
+from wsidicom_kernels import ResizeFilter, downscale
 
-ParityCheck = Callable[[Callable[[], np.ndarray], float], np.ndarray]
+ParityCheck = Callable[[Callable[[], np.ndarray], int], np.ndarray]
 
 INTEGER_MAX = [(np.uint8, 255), (np.uint16, 65535)]
-FLOAT_SPECIALS = [np.inf, -np.inf, np.nan, 3.0e38, -3.0e38, 1e-40, -0.0, 0.0]
 BOX_SHAPES = [(33, 35), (33, 35, 3)]
 
 
@@ -44,18 +37,13 @@ def assert_parity(
 ) -> ParityCheck:
     """Assert a call agrees between the SIMD kernels and the scalar reference.
 
-    Returns the SIMD result.
-    The same samples must be non-finite, and finite ones agree within the given
-    tolerance plus 1e-6 relative (one FMA ulp near 3e38 is ~2e31 absolute).
+    Returns the SIMD result. The samples agree within the given tolerance.
     """
 
-    def check(call: Callable[[], np.ndarray], tolerance: float) -> np.ndarray:
-        simd, scalar = (result.astype(np.float64) for result in simd_and_scalar(call))
-        assert (np.isfinite(simd) == np.isfinite(scalar)).all()
-        finite = np.isfinite(simd)
-        difference = np.abs(simd[finite] - scalar[finite])
-        scale = np.maximum(np.abs(simd[finite]), np.abs(scalar[finite]))
-        assert (difference <= tolerance + 1e-6 * scale).all()
+    def check(call: Callable[[], np.ndarray], tolerance: int) -> np.ndarray:
+        simd, scalar = simd_and_scalar(call)
+        difference = np.abs(simd.astype(np.int64) - scalar.astype(np.int64))
+        assert (difference <= tolerance).all()
         return simd
 
     return check
@@ -104,71 +92,3 @@ class TestIntegerSaturation:
 
         # Act & Assert
         assert_parity(lambda: downscale(checkerboard, 2, ResizeFilter.BOX), 1)
-
-
-@pytest.mark.unittest
-@pytest.mark.parametrize("special", FLOAT_SPECIALS)
-class TestFloatSpecials:
-    """A float32 special value in the image keeps SIMD/scalar parity."""
-
-    @pytest.mark.parametrize(
-        ["shape", "special_index", "factor"],
-        [
-            ((33, 35), (5, 7), 2),
-            ((33, 35), (5, 7), 4),
-            ((33, 35, 3), (5, 7, 1), 2),
-        ],
-    )
-    def test_box_keeps_parity(
-        self,
-        assert_parity: ParityCheck,
-        random_image: Callable[[tuple[int, ...], Any], np.ndarray],
-        special: float,
-        shape: tuple[int, ...],
-        special_index: tuple[int, ...],
-        factor: int,
-    ) -> None:
-        """A box downscale with a special sample matches the scalar reference."""
-        # Arrange
-        image = random_image(shape, np.float32)
-        image[special_index] = special
-
-        # Act & Assert
-        assert_parity(lambda: downscale(image, factor, ResizeFilter.BOX), 1e-3)
-
-    def test_compose_copies_special_bit_exactly(
-        self,
-        random_image: Callable[[tuple[int, ...], Any], np.ndarray],
-        simd_and_scalar: Callable[[Callable[[], Any]], tuple[Any, Any]],
-        special: float,
-    ) -> None:
-        """Composing a tile with a special sample copies its bits unchanged."""
-        # Arrange
-        tile = random_image((9, 11), np.float32)
-        tile[3, 4] = special
-
-        def composed() -> np.ndarray:
-            canvas = np.zeros((16, 16), np.float32)
-            compose(canvas, [tile], np.array([[2, 1]], np.int64))
-            return canvas
-
-        # Act
-        simd, scalar = simd_and_scalar(composed)
-
-        # Assert
-        for canvas in (simd, scalar):
-            pasted = canvas[1:10, 2:13]
-            np.testing.assert_array_equal(pasted.view(np.uint32), tile.view(np.uint32))
-
-
-@pytest.mark.unittest
-class TestDenormals:
-    """Denormal float32 images are handled exactly."""
-
-    def test_all_denormal_box_is_exact(self, assert_parity: ParityCheck) -> None:
-        """A box downscale of an all-denormal image equals the scalar reference."""
-        # Arrange
-        denormal = np.full((33, 35), 1e-40, np.float32)
-
-        # Act & Assert
-        assert_parity(lambda: downscale(denormal, 2, ResizeFilter.BOX), 0.0)

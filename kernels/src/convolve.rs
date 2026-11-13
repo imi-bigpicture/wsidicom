@@ -172,9 +172,9 @@ fn sinc(x: f64) -> f64 {
 
 /// One output's taps: first input index and normalized weights, as Q15 for
 /// the SIMD kernels, as unclamped Q15-in-i32 for the scalar path, and as
-/// f32 for the uint16/float32 resize. Renormalizing a clipped edge window
-/// can push a weight past 1.0 (1.13 for lanczos3 when upscaling), which i16
-/// Q15 cannot hold.
+/// f32 for the float32 engine (`convolve_float`). Renormalizing a clipped
+/// edge window can push a weight past 1.0 (1.13 for lanczos3 when
+/// upscaling), which i16 Q15 cannot hold.
 #[derive(Clone, Copy)]
 pub(crate) struct Window<'a> {
     pub(crate) start: usize,

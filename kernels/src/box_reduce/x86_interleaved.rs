@@ -336,91 +336,6 @@ pub(crate) unsafe fn box2x_u16_hwc3_avx2_to(
     unsafe { output.write(false, rows) }
 }
 
-/// AVX2 float32 HWC 2x2 box, 3 channels: the horizontal pair-add is two loads offset
-/// by 3 elements (no gather), and the 4-float store overlaps into the next
-/// pixel's slot — which the next iteration overwrites. The vector loop stops
-/// one pixel early per row so the overlap never leaves the row; the scalar
-/// tail finishes the row.
-///
-/// # Safety
-/// As `box2x_f32_hwc3_avx2_to`.
-pub(crate) unsafe fn box2x_f32_hwc3_avx2(
-    src: &[f32],
-    width: usize,
-    height: usize,
-) -> (Vec<f32>, usize, usize) {
-    // SAFETY: the caller's contract.
-    unsafe { new_image(box2x_f32_hwc3_avx2_to, src, (width, height, RGB)) }
-}
-
-/// `box2x_f32_hwc3_avx2` into `output`.
-///
-/// # Safety
-/// The CPU supports AVX2, `src.len() >= width * height * 3`, and `output`
-/// holds `height / 2` rows of `width / 2` pixels.
-#[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_f32_hwc3_avx2_to(
-    src: &[f32],
-    width: usize,
-    height: usize,
-    output: BoxRows<f32>,
-) -> Vec<f32> {
-    use std::arch::x86_64::*;
-    const CHANNELS: usize = 3;
-    let ow = width / 2;
-    debug_assert_eq!(output.rows(), height / 2);
-    let stride = width * CHANNELS;
-    let quarter = _mm_set1_ps(0.25);
-    let (sp, dp, layout) = (src.as_ptr(), output.dst(), output.layout());
-    let rows = crate::cpu::row_bands(|oy_lo, oy_hi| {
-        for oy in oy_lo..oy_hi {
-            let (r0, r1) = (2 * oy * stride, (2 * oy + 1) * stride);
-            let orow = layout.row_start(oy);
-            let mut ox = 0usize;
-            // 1 output px per iter; ox+2<=ow keeps the read (src_offset+3+4 floats) and the
-            // overlapping 4-float store inside the row+1 window on every row.
-            while ox + 2 <= ow {
-                let src_offset = 2 * ox * CHANNELS;
-                prefetch_next_row_pair(sp, r0 + src_offset, stride);
-                // SAFETY: the reads end by src_offset + 7 < 6(ox + 2) <= 6ow <=
-                // stride in source rows 2oy, 2oy + 1 < height, inside `src`.
-                let (s0, s1) = unsafe {
-                    (
-                        _mm_add_ps(
-                            _mm_loadu_ps(sp.add(r0 + src_offset)),
-                            _mm_loadu_ps(sp.add(r1 + src_offset)),
-                        ),
-                        _mm_add_ps(
-                            _mm_loadu_ps(sp.add(r0 + src_offset + CHANNELS)),
-                            _mm_loadu_ps(sp.add(r1 + src_offset + CHANNELS)),
-                        ),
-                    )
-                };
-                let means = _mm_mul_ps(_mm_add_ps(s0, s1), quarter);
-                // SAFETY: ox + 2 <= ow: the 4 floats end inside output row oy.
-                unsafe { _mm_storeu_ps(dp.add(orow + ox * CHANNELS), means) }; // 4th float = next px, overwritten
-                ox += 1;
-            }
-            while ox < ow {
-                let top_left = r0 + 2 * ox * CHANNELS;
-                for ch in 0..CHANNELS {
-                    // SAFETY: ox < ow: the output sample is in row oy, and its
-                    // 2x2 block (pixels 2ox, 2ox + 1 < width of rows 2oy,
-                    // 2oy + 1 < height) in `src`.
-                    unsafe {
-                        *dp.add(orow + ox * CHANNELS + ch) =
-                            box2_mean(sp.add(top_left + ch), CHANNELS, stride);
-                    }
-                }
-                ox += 1;
-            }
-        }
-    });
-    // SAFETY: `rows(oy_lo, oy_hi)` writes all of output rows [oy_lo, oy_hi)
-    // (each row's body and tail) and nothing else.
-    unsafe { output.write(false, rows) }
-}
-
 /// pshufb mask that groups, per 128-bit lane, each channel's 4 consecutive
 /// columns of a 4-pixel RGB block, so `maddubs` then `madd` sum them: the
 /// lane ends as one pixel of 4x4 sums and a zero.
@@ -647,7 +562,6 @@ mod tests {
         unsafe {
             assert_halves_as_scalar::<u8>(box2x_u8_hwc3_avx2);
             assert_halves_as_scalar::<u16>(box2x_u16_hwc3_avx2);
-            assert_halves_as_scalar::<f32>(box2x_f32_hwc3_avx2);
         }
     }
 

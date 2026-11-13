@@ -33,7 +33,7 @@ from wsidicom_kernels import (
     stitch,
 )
 
-DTYPES = [np.uint8, np.uint16, np.float32]
+DTYPES = [np.uint8, np.uint16]
 
 
 @pytest.fixture

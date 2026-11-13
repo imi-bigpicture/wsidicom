@@ -313,7 +313,7 @@ impl RowGather {
     }
 
     /// The row a pixel at a time: one fixed-size move per pixel (1 or 3
-    /// samples of 1, 2 or 4 bytes).
+    /// samples of 1 or 2 bytes).
     ///
     /// # Safety
     /// As `row`.
@@ -325,9 +325,7 @@ impl RowGather {
                 1 => self.copy_pixels::<1>(row, dst),
                 2 => self.copy_pixels::<2>(row, dst),
                 3 => self.copy_pixels::<3>(row, dst),
-                4 => self.copy_pixels::<4>(row, dst),
                 6 => self.copy_pixels::<6>(row, dst),
-                12 => self.copy_pixels::<12>(row, dst),
                 pixel_bytes => unreachable!("{pixel_bytes}-byte pixels"),
             }
         }
@@ -519,8 +517,8 @@ mod tests {
     use crate::sample::RGB;
     use crate::testing::{CHANNELS, RandomSample, Rng, random_samples};
 
-    /// Every pixel size the kernels take: 1 or 3 samples of 1, 2 or 4 bytes.
-    const PIXEL_BYTES: [usize; 6] = [1, 2, 3, 4, 6, 12];
+    /// Every pixel size the kernels take: 1 or 3 samples of 1 or 2 bytes.
+    const PIXEL_BYTES: [usize; 4] = [1, 2, 3, 6];
 
     /// The source column of every output pixel, as `resize_nearest` places
     /// them.
@@ -699,7 +697,6 @@ mod tests {
     fn resize_nearest_equals_its_definition() {
         assert_resizes_match::<u8>();
         assert_resizes_match::<u16>();
-        assert_resizes_match::<f32>();
     }
 
     #[test]

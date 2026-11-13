@@ -30,7 +30,7 @@ RandomImage = Callable[[tuple[int, ...], Any], np.ndarray]
 ScalarKernels = Callable[[], contextlib.AbstractContextManager[None]]
 SimdAndScalar = Callable[[Callable[[], Any]], tuple[Any, Any]]
 
-DTYPES = [np.uint8, np.uint16, np.float32]
+DTYPES = [np.uint8, np.uint16]
 CONVOLUTION_FILTERS = [
     ResizeFilter.BOX,
     ResizeFilter.BILINEAR,
@@ -39,10 +39,6 @@ CONVOLUTION_FILTERS = [
 ]
 BOX_PYRAMID_SIZES = [(64, 64), (67, 133), (129, 517), (96, 1032)]
 BOX_PYRAMID_FACTORS = [2, 4, 8, 16, 32]
-
-
-def is_integer(dtype: type[np.generic]) -> bool:
-    return np.issubdtype(dtype, np.integer)
 
 
 @pytest.fixture
@@ -75,7 +71,6 @@ class TestDownscaleBox:
         # Arrange
         image = random_image((64, 64), dtype)
         mean = image.reshape(32, 2, 32, 2).mean(axis=(1, 3))
-        tolerance = 0.5 if is_integer(dtype) else 1e-5  # integers: rounded once
 
         # Act
         reduced = downscale(image, 2, ResizeFilter.BOX)
@@ -83,7 +78,7 @@ class TestDownscaleBox:
         # Assert
         assert reduced.shape == (32, 32)
         assert reduced.dtype == dtype
-        assert np.abs(reduced.astype(float) - mean).max() <= tolerance
+        assert np.abs(reduced.astype(float) - mean).max() <= 0.5  # rounded once
 
     def test_interleaved_rgb_matches_mean(self, random_image: RandomImage) -> None:
         """Interleaved uint8 RGB averages within each channel."""
@@ -99,24 +94,20 @@ class TestDownscaleBox:
         assert reduced.dtype == np.uint8
         assert np.abs(reduced.astype(int) - mean).max() <= 1
 
-    @pytest.mark.parametrize("dtype", [np.uint16, np.float32])
-    def test_interleaved_matches_mean(
-        self, random_image: RandomImage, dtype: type[np.generic]
-    ) -> None:
-        """uint16 and float32 average within each channel."""
+    def test_interleaved_uint16_matches_mean(self, random_image: RandomImage) -> None:
+        """uint16 averages within each channel."""
         # Arrange
         channels = 3
-        image = random_image((48, 48, channels), dtype)
+        image = random_image((48, 48, channels), np.uint16)
         mean = image.reshape(24, 2, 24, 2, channels).mean(axis=(1, 3))
-        tolerance = 1.0 if is_integer(dtype) else 1e-4
 
         # Act
         reduced = downscale(image, 2, ResizeFilter.BOX)
 
         # Assert
         assert reduced.shape == (24, 24, channels)
-        assert reduced.dtype == dtype
-        assert np.abs(reduced.astype(float) - mean).max() <= tolerance
+        assert reduced.dtype == np.uint16
+        assert np.abs(reduced.astype(float) - mean).max() <= 1
 
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("simd", [True, False])
@@ -125,8 +116,7 @@ class TestDownscaleBox:
     ) -> None:
         """Factor 4 is the 4x4 mean rounded once, on every tier.
 
-        Integer results are exactly (sum + 8) >> 4; float32 is the mean to
-        rounding.
+        The results are exactly (sum + 8) >> 4.
         """
         # Arrange
         image = random_image((64, 64), dtype)
@@ -139,10 +129,7 @@ class TestDownscaleBox:
         # Assert
         assert reduced.shape == (16, 16)
         assert reduced.dtype == dtype
-        if is_integer(dtype):
-            assert np.array_equal(reduced, (sums.astype(np.int64) + 8) >> 4)
-        else:
-            assert np.allclose(reduced, sums / 16, rtol=1e-6)
+        assert np.array_equal(reduced, (sums.astype(np.int64) + 8) >> 4)
 
     @pytest.mark.parametrize(
         ["dtype", "channels", "height", "width", "factor"],
@@ -178,11 +165,8 @@ class TestDownscaleBox:
             lambda: downscale(image, factor, ResizeFilter.BOX)
         )
 
-        # Assert — float32 within rounding: summation order may differ in tails
-        if is_integer(dtype):
-            assert np.array_equal(simd, scalar)
-        else:
-            assert np.allclose(simd, scalar, rtol=1e-6)
+        # Assert
+        assert np.array_equal(simd, scalar)
 
     @pytest.mark.parametrize(
         ["dtype", "channels", "height", "width", "factor"],
@@ -213,7 +197,7 @@ class TestDownscaleBox:
         """
         # Arrange
         shape = (height, width) if channels == 1 else (height, width, channels)
-        full_scale = np.iinfo(np.dtype(dtype).name).max if is_integer(dtype) else 1.0
+        full_scale = np.iinfo(np.dtype(dtype).name).max
 
         # Act
         with kernels():
@@ -287,10 +271,7 @@ class TestDownscaleBox:
         simd, scalar = simd_and_scalar(lambda: downscale(image, 2, ResizeFilter.BOX))
 
         # Assert
-        if is_integer(dtype):
-            assert (simd == scalar).all()
-        else:
-            assert np.allclose(simd, scalar, rtol=1e-6)
+        assert (simd == scalar).all()
 
 
 @pytest.mark.unittest
@@ -388,7 +369,7 @@ class TestDownscaleFilters:
 def box_block_means(image: np.ndarray, factor: int) -> np.ndarray:
     """Return each block's mean: the blocks at the image's end are partial.
 
-    Integers rounded half up.
+    Rounded half up.
     """
     height, width = image.shape[:2]
     out = np.empty(
@@ -400,9 +381,7 @@ def box_block_means(image: np.ndarray, factor: int) -> np.ndarray:
                 y * factor : (y + 1) * factor, x * factor : (x + 1) * factor
             ].astype(np.float64)
             out[y, x] = block.mean(axis=(0, 1))
-    if is_integer(image.dtype.type):
-        return np.floor(out + 0.5).astype(image.dtype)
-    return out.astype(image.dtype)
+    return np.floor(out + 0.5).astype(image.dtype)
 
 
 @pytest.mark.unittest
@@ -449,11 +428,7 @@ class TestDownscalePartialBlocks:
         reduced = downscale(image, factor, ResizeFilter.BOX)
 
         # Assert
-        expected = box_block_means(image, factor)
-        if is_integer(dtype):
-            assert np.array_equal(reduced, expected)
-        else:
-            assert np.allclose(reduced, expected, atol=1e-6)
+        assert np.array_equal(reduced, box_block_means(image, factor))
 
     @pytest.mark.parametrize("filter", list(ResizeFilter))
     def test_factor_beyond_the_image_gives_one_pixel(

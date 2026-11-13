@@ -18,18 +18,18 @@ thumbnails:
 - **`resize`** — any exact target size (fractional ratios, upscaling),
   antialiased at every ratio.
 - All resampling is native, on every CPU: uint8 and uint16 within 1 LSB of
-  the exact convolution at any ratio, float32 computed in f32 (see
+  the exact convolution at any ratio (see
   [What runs where](#what-runs-where)).
 
 Works on **planar `(H, W)`** or **interleaved RGB `(H, W, 3)`** arrays, dtype
-`uint8` / `uint16` / `float32`. Planar is the universal core — the only layout
+`uint8` / `uint16`. Planar is the universal core — the only layout
 that expresses subsampled chroma (YCbCr 4:2:0), so compose those per plane.
 Overlaps resolve **last-write-wins** (no blending).
 
 ## Usage
 
 Every image — tile, canvas or input — is a **numpy array**: planar `(H, W)` or
-interleaved RGB `(H, W, 3)`, dtype `uint8`, `uint16` or `float32`.
+interleaved RGB `(H, W, 3)`, dtype `uint8` or `uint16`.
 
 ```python
 import numpy as np
@@ -93,13 +93,13 @@ filters and windows.
 | `downscale` / `resize` with `"box"` at an exact power-of-2 factor | wsidicom-kernels |
 | `downscale` / `resize` of **uint8**, with `box` / `bilinear` / `catmullrom` / `lanczos3` — any ratio up or down | wsidicom-kernels |
 | `nearest`, every dtype (fast_image_resize's sample positions) | wsidicom-kernels |
-| `downscale` / `resize` of **uint16 / float32**, with `box` / `bilinear` / `catmullrom` / `lanczos3` — any ratio (computed in f32; uint16 within 1 LSB of exact) | wsidicom-kernels |
+| `downscale` / `resize` of **uint16**, with `box` / `bilinear` / `catmullrom` / `lanczos3` — any ratio (computed in f32; within 1 LSB of exact) | wsidicom-kernels |
 
 The native path computes the same convolution as fast_image_resize (same
 filters, windows and edge handling) but within 1 LSB of the exact result at
 any ratio. uint8 runs in 16-bit fixed point down to 1/128 per axis, where
 each filter tap rounds to the nearest 1/64 LSB; larger uint8 reductions take
-the f32 engine of uint16 and float32 (2–3x slower than fixed point would be,
+the f32 engine of uint16 (2–3x slower than fixed point would be,
 but fixed point's roundings would add up over the long windows). That engine
 sums windows of more than 256 taps in chunks added in f64, so even a flat
 image reduced by tens of thousands keeps its value. `downscale` with `box`
@@ -119,7 +119,7 @@ images, 2x up to 1/8, all four filters; median and slowest case):
 | --- | --- |
 | uint8 planar | 2.3x (1.1x) |
 | uint8 RGB | 1.3x (0.9x) |
-| uint16 / float32, every layout | 1.6-2.8x (1.0x) |
+| uint16, every layout | 1.6-2.8x (1.0x) |
 
 Every channel is filtered on its own.
 
@@ -178,7 +178,7 @@ One test file per operation (`test_compose`, `test_resize`, `test_downscale`,
 | `test_compose_oracle.py` | compose against an independent numpy reference (bugs shared by SIMD and scalar) |
 | `test_fuzz.py` | Hypothesis-generated shapes, positions, factors and filters: SIMD/scalar parity, inputs flush against an unmapped page so any out-of-bounds access crashes |
 | `test_purity.py` | batched compose == single-tile calls; no state leaks between calls |
-| `test_boundary.py` | saturation, checkerboards, float32 inf/NaN/denormals |
+| `test_boundary.py` | saturation, checkerboards |
 | `test_threads.py` | GIL-released concurrency: identical results, clean errors on contention |
 | `test_pillow.py` | bit-identity with Pillow `reduce(2)`, partial edge boxes included |
 

@@ -33,7 +33,7 @@ SimdAndScalar = Callable[[Callable[[], Any]], tuple[Any, Any]]
 ExactResize = Callable[[np.ndarray, int, int, ResizeFilter], np.ndarray]
 Weights = Callable[[int], np.ndarray]
 
-DTYPES = [np.uint8, np.uint16, np.float32]
+DTYPES = [np.uint8, np.uint16]
 
 CONVOLUTION_FILTERS = [
     ResizeFilter.BOX,
@@ -102,7 +102,7 @@ def image_shape(height: int, width: int, channels: int) -> tuple[int, ...]:
 class TestResizeChannels:
     @pytest.mark.parametrize(
         ["dtype", "level"],
-        [(np.uint8, 200), (np.uint16, 50000), (np.float32, 0.75)],
+        [(np.uint8, 200), (np.uint16, 50000)],
     )
     @pytest.mark.parametrize("filter", ALL_FILTERS)
     @pytest.mark.parametrize(
@@ -116,7 +116,7 @@ class TestResizeChannels:
     def test_resize_filters_channels_independently(
         self,
         dtype: type[np.generic],
-        level: float,
+        level: int,
         filter: ResizeFilter,
         operation: Callable[[np.ndarray, ResizeFilter], np.ndarray],
     ) -> None:
@@ -133,7 +133,7 @@ class TestResizeChannels:
         result = operation(image, filter)
 
         # Assert
-        assert np.allclose(result[..., 0], level, rtol=1e-6)
+        assert (result[..., 0] == level).all()
         assert (result[..., -1] == 0).all()
 
 
@@ -168,49 +168,42 @@ class TestResizeAccuracy:
         assert np.abs(scalar.astype(float) - expected).max() <= 1
 
     @pytest.mark.parametrize(
-        ["dtype", "shape", "output_size", "filter"],
-        [
-            (dtype, *case)
-            for dtype in (np.uint16, np.float32)
-            for case in convolution_cases(
-                [
-                    ((37, 53), (19, 71)),
-                    ((64, 80, 3), (32, 40)),
-                    ((50, 61, 3), (150, 90)),
-                    ((90, 70, 3), (11, 23)),
-                ]
-            )
-        ],
+        ["shape", "output_size", "filter"],
+        convolution_cases(
+            [
+                ((37, 53), (19, 71)),
+                ((64, 80, 3), (32, 40)),
+                ((50, 61, 3), (150, 90)),
+                ((90, 70, 3), (11, 23)),
+            ]
+        ),
     )
-    def test_native_float_resize_exact_and_identical_on_every_tier(
+    def test_native_uint16_resize_exact_and_identical_on_every_tier(
         self,
         random_image: RandomImage,
         simd_and_scalar: SimdAndScalar,
         exact_resize_float: ExactResize,
-        dtype: type[np.generic],
         shape: tuple[int, ...],
         output_size: ImageSize,
         filter: ResizeFilter,
     ) -> None:
-        """uint16 and float32 resize natively in f32 (FMA chains in tap order).
+        """uint16 resizes natively in f32 (FMA chains in tap order).
 
-        The SIMD tiers equal the scalar reference bit for bit; uint16 within
-        1 LSB and float32 within 1e-5 of the exact convolution.
+        The SIMD tiers equal the scalar reference bit for bit, within 1 LSB of
+        the exact convolution.
         """
         # Arrange
-        image = random_image(shape, dtype)
-        exact = exact_resize_float(image, *output_size, filter)
+        image = random_image(shape, np.uint16)
+        expected = np.clip(
+            np.rint(exact_resize_float(image, *output_size, filter)), 0, 65535
+        )
 
         # Act
         simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, filter))
 
         # Assert
         assert np.array_equal(simd, scalar)
-        if dtype == np.uint16:
-            expected = np.clip(np.rint(exact), 0, 65535)
-            assert np.abs(simd.astype(float) - expected).max() <= 1
-        else:
-            assert np.abs(simd.astype(float) - exact).max() <= 1e-5
+        assert np.abs(simd.astype(float) - expected).max() <= 1
 
     @pytest.mark.parametrize("channels", [1, 3])
     @pytest.mark.parametrize("dtype", DTYPES)
@@ -231,17 +224,13 @@ class TestResizeAccuracy:
         shape = (96, 160, channels) if channels > 1 else (96, 160)
         image = random_image(shape, dtype)
         exact = exact_resize_float(image, 12, 13, filter)
-        if dtype == np.float32:
-            expected, tolerance = exact, 1e-5
-        else:
-            expected = np.clip(np.rint(exact), 0, np.iinfo(np.dtype(dtype).name).max)
-            tolerance = 1
+        expected = np.clip(np.rint(exact), 0, np.iinfo(np.dtype(dtype).name).max)
 
         # Act
         result = resize(image, 12, 13, filter)
 
         # Assert
-        assert np.abs(result.astype(float) - expected).max() <= tolerance
+        assert np.abs(result.astype(float) - expected).max() <= 1
 
     @pytest.mark.parametrize(
         ["size", "output_size"], [((256, 8), (2, 8)), ((8, 256), (8, 2))]
@@ -308,27 +297,21 @@ class TestResizeAccuracy:
         # Arrange
         image = random_image(shape, dtype)
         exact = exact_resize_float(image, *output_size, filter)
-        if dtype == np.float32:
-            expected, tolerance = exact, 1e-5
-        else:
-            expected = np.clip(np.rint(exact), 0, np.iinfo(np.dtype(dtype).name).max)
-            tolerance = 1
+        expected = np.clip(np.rint(exact), 0, np.iinfo(np.dtype(dtype).name).max)
 
         # Act
         simd, scalar = simd_and_scalar(lambda: resize(image, *output_size, filter))
 
         # Assert
         assert np.array_equal(simd, scalar)
-        assert np.abs(simd.astype(float) - expected).max() <= tolerance
+        assert np.abs(simd.astype(float) - expected).max() <= 1
 
-    @pytest.mark.parametrize(
-        ["dtype", "value"], [(np.uint8, 255), (np.uint16, 40000), (np.float32, 0.61)]
-    )
+    @pytest.mark.parametrize(["dtype", "value"], [(np.uint8, 255), (np.uint16, 40000)])
     @pytest.mark.parametrize("filter", CONVOLUTION_FILTERS)
     def test_flat_image_keeps_its_value_at_any_reduction(
         self,
         dtype: type[np.generic],
-        value: float,
+        value: int,
         filter: ResizeFilter,
     ) -> None:
         """A flat image reduced by 40000 to one pixel keeps its value.
@@ -342,7 +325,7 @@ class TestResizeAccuracy:
         result = resize(image, 1, 1, filter)
 
         # Assert
-        assert np.allclose(result.astype(float), value, rtol=1e-6, atol=0)
+        assert (result == value).all()
 
 
 @pytest.mark.unittest
@@ -388,7 +371,7 @@ class TestResizeSimdParity:
             (np.uint8, (120, 1024, 3)),
             (np.uint8, (100, 4096)),
             (np.uint16, (100, 512, 3)),
-            (np.float32, (100, 1024)),
+            (np.uint16, (100, 2048)),
         ],
     )
     @pytest.mark.parametrize("reduction", [4, 6, 8])
@@ -644,7 +627,6 @@ class TestResizeExactRatios:
         # Arrange
         image = random_image((100, 140, 3), np.uint8)
         uint16_image = random_image((64, 64), np.uint16)
-        float_image = random_image((64, 64), np.float32)
         flat = np.full((100, 140, 3), 200, np.uint8)
 
         # Act
@@ -654,7 +636,6 @@ class TestResizeExactRatios:
         )
         enlarged = resize(image, 200, 280, ResizeFilter.CATMULLROM)
         uint16_reduced = resize(uint16_image, 25, 25, ResizeFilter.BILINEAR)
-        float_reduced = resize(float_image, 25, 25, ResizeFilter.BOX)
         flat_reduced = resize(flat, 41, 57, ResizeFilter.BOX)
 
         # Assert
@@ -663,7 +644,6 @@ class TestResizeExactRatios:
         assert planar.shape == (33, 33)
         assert enlarged.shape == (200, 280, 3)
         assert uint16_reduced.dtype == np.uint16
-        assert float_reduced.dtype == np.float32
         # Antialiasing: a flat field survives a fractional reduction unchanged.
         assert np.abs(flat_reduced.astype(int) - 200).max() <= 1
 

@@ -47,14 +47,9 @@ def rng(request: pytest.FixtureRequest) -> np.random.Generator:
 def random_image(
     rng: np.random.Generator,
 ) -> Callable[[tuple[int, ...], Any], np.ndarray]:
-    """Return a factory of random images.
-
-    Uniform over an integer dtype's range, or [0, 1) for float32.
-    """
+    """Return a factory of random images, uniform over the dtype's range."""
 
     def create(shape: tuple[int, ...], dtype: Any) -> np.ndarray:
-        if np.dtype(dtype) == np.float32:
-            return rng.random(shape, np.float32)
         return rng.integers(0, np.iinfo(dtype).max, shape, endpoint=True).astype(dtype)
 
     return create

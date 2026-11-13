@@ -25,8 +25,7 @@ impl Rng {
     }
 }
 
-/// A sample type the tests can draw uniformly over its range (float32 over
-/// [0, 1)).
+/// A sample type the tests can draw uniformly over its range.
 pub(crate) trait RandomSample: Sample + PartialEq + std::fmt::Debug {
     fn random(rng: &mut Rng) -> Self;
 }
@@ -41,14 +40,6 @@ impl RandomSample for u16 {
     fn random(rng: &mut Rng) -> Self {
         let [low, high, ..] = rng.next_u64().to_le_bytes();
         Self::from_le_bytes([low, high])
-    }
-}
-
-impl RandomSample for f32 {
-    fn random(rng: &mut Rng) -> Self {
-        // The top 24 bits as a fraction: every value exactly representable.
-        let fraction_bits = u32::try_from(rng.next_u64() >> 40).unwrap_or(0);
-        fraction_bits as f32 / (1 << 24) as f32
     }
 }
 

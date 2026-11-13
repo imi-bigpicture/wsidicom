@@ -1,4 +1,4 @@
-//! Planar 2x2 and fused 4x4 box kernels (u8 / u16 / f32).
+//! Planar 2x2 and fused 4x4 box kernels (u8 / u16).
 //!
 //! # Safety
 //! Every kernel requires the CPU features in its `#[target_feature]` (its
@@ -308,69 +308,6 @@ pub(crate) unsafe fn box4x_u16_avx2(
     unsafe { planar_box::<u16>(width, height, 4, row) }
 }
 
-/// AVX2 float32 fused 4x4 box average: each row's 32 columns added down the
-/// 4 rows as four registers c0..c3 (columns 8k..8k + 8, 4 per 128-bit lane);
-/// two levels of `hadd_ps` reduce them to the 4-column quads, lane-scrambled to
-/// [q0,q2,q4,q6|q1,q3,q5,q7] (lane L of ck holds quad 2k + L), one vpermps
-/// restores order; * 1/16. 8 output px/iter.
-///
-/// # Safety
-/// The CPU supports AVX2, and `src.len() >= width * height`.
-#[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box4x_f32_avx2(
-    src: &[f32],
-    width: usize,
-    height: usize,
-) -> (Vec<f32>, usize, usize) {
-    use std::arch::x86_64::*;
-    let ow = width / 4;
-    let sixteenth = _mm256_set1_ps(1.0 / 16.0);
-    let perm = _mm256_setr_epi32(0, 4, 1, 5, 2, 6, 3, 7);
-    let sp = src.as_ptr();
-    let row = planar_row::<f32, _>(|oy, out_row, nt| {
-        let rows = source_rows::<4>(oy, width);
-        let mut ox = 0usize;
-        while ox + 8 <= ow && 4 * ox + 32 <= width {
-            let x = 4 * ox;
-            let mut col_sums = [_mm256_setzero_ps(); 4];
-            for row in rows {
-                for (block, block_sums) in col_sums.iter_mut().enumerate() {
-                    // SAFETY: columns x..x + 32 <= width (the guard) of a
-                    // source row < height, inside `src`.
-                    let columns = unsafe { _mm256_loadu_ps(sp.add(row + x + 8 * block)) };
-                    *block_sums = _mm256_add_ps(*block_sums, columns);
-                }
-            }
-            let quads = _mm256_hadd_ps(
-                _mm256_hadd_ps(col_sums[0], col_sums[1]),
-                _mm256_hadd_ps(col_sums[2], col_sums[3]),
-            );
-            let quads = _mm256_permutevar8x32_ps(quads, perm);
-            // SAFETY: ox + 8 <= ow (the guard): inside the output row.
-            unsafe { store_256_ps(out_row.add(ox), _mm256_mul_ps(quads, sixteenth), nt) };
-            ox += 8;
-        }
-        while ox < ow {
-            // The body's order: columns down the rows, then the column pairs.
-            let x = 4 * ox;
-            // SAFETY: ox < ow: column x + column < 4ow <= width of rows
-            // 4oy..4oy + 4 <= height, inside `src`.
-            let col = |column: usize| unsafe {
-                ((*sp.add(rows[0] + x + column) + *sp.add(rows[1] + x + column))
-                    + *sp.add(rows[2] + x + column))
-                    + *sp.add(rows[3] + x + column)
-            };
-            let mean = ((col(0) + col(1)) + (col(2) + col(3))) * (1.0 / 16.0);
-            // SAFETY: ox < ow: inside the output row.
-            unsafe { *out_row.add(ox) = mean };
-            ox += 1;
-        }
-    });
-    // SAFETY: `row` writes outputs 0..ow of its row (the vector body, then
-    // the scalar tail up to ow) and nothing else.
-    unsafe { planar_box::<f32>(width, height, 4, row) }
-}
-
 /// AVX2 uint16 2x2 box average. No maddubs for u16 (values >= 32768 would go
 /// negative as i16), but `(v & 0xFFFF) + (v >> 16)` sums adjacent u16 pairs
 /// into u32 — in order, no widen/extract/permute needed. Exact sums, so
@@ -449,77 +386,6 @@ pub(crate) unsafe fn box2x_u16_avx2(
     (image, ow, oh)
 }
 
-/// `box2x_f32_avx2_to` into a new image.
-///
-/// # Safety
-/// As `box2x_f32_avx2_to`.
-pub(crate) unsafe fn box2x_f32_avx2(
-    src: &[f32],
-    width: usize,
-    height: usize,
-) -> (Vec<f32>, usize, usize) {
-    let (ow, oh) = (width / 2, height / 2);
-    // SAFETY: the caller's contract.
-    let image = unsafe { box2x_f32_avx2_to(src, width, height, BoxRows::new_image(oh, ow)) };
-    (image, ow, oh)
-}
-
-/// AVX2 float32 2x2 box average into `output`: sum the two rows, `hadd_ps`
-/// the column pairs, fix lane order, * 0.25. 8 output px/iter. No
-/// rounding/clamp needed.
-///
-/// # Safety
-/// The CPU supports AVX2, `src.len() >= width * height`, and `output` holds
-/// `height / 2` rows of `width / 2` samples.
-#[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_f32_avx2_to(
-    src: &[f32],
-    width: usize,
-    height: usize,
-    output: BoxRows<f32>,
-) -> Vec<f32> {
-    use std::arch::x86_64::*;
-    let ow = width / 2;
-    debug_assert_eq!(output.rows(), height / 2);
-    let quarter = _mm256_set1_ps(0.25);
-    let perm = _mm256_setr_epi32(0, 1, 4, 5, 2, 3, 6, 7);
-    let sp = src.as_ptr();
-    let row = planar_row::<f32, _>(|oy, out_row, nt| {
-        let [r0, r1] = source_rows(oy, width);
-        let mut ox = 0usize;
-        while ox + 8 <= ow && 2 * ox + 16 <= width {
-            let x = 2 * ox;
-            // SAFETY: x + 16 <= width (the guard) in source rows 2oy, 2oy + 1
-            // < height, inside `src`.
-            let (row_lo, row_hi) = unsafe {
-                (
-                    _mm256_add_ps(
-                        _mm256_loadu_ps(sp.add(r0 + x)),
-                        _mm256_loadu_ps(sp.add(r1 + x)),
-                    ),
-                    _mm256_add_ps(
-                        _mm256_loadu_ps(sp.add(r0 + x + 8)),
-                        _mm256_loadu_ps(sp.add(r1 + x + 8)),
-                    ),
-                )
-            };
-            let hs = _mm256_permutevar8x32_ps(_mm256_hadd_ps(row_lo, row_hi), perm);
-            // SAFETY: ox + 8 <= ow (the guard): inside the output row.
-            unsafe { store_256_ps(out_row.add(ox), _mm256_mul_ps(hs, quarter), nt) };
-            ox += 8;
-        }
-        while ox < ow {
-            // SAFETY: ox < ow: the output is in the row, and its 2x2 block
-            // (columns 2ox, 2ox + 1 < width of rows 2oy, 2oy + 1) in `src`.
-            unsafe { *out_row.add(ox) = box2_mean(sp.add(r0 + 2 * ox), 1, width) };
-            ox += 1;
-        }
-    });
-    // SAFETY: `row` writes outputs 0..ow of its row (the vector body, then
-    // the scalar tail up to ow) and nothing else.
-    unsafe { planar_box_to::<f32>(output, row) }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -560,14 +426,12 @@ mod tests {
     fn box2x_avx2_equals_scalar() {
         assert_matches_reference::<u8>(1, box2x_u8_avx2, box2x_scalar);
         assert_matches_reference::<u16>(1, box2x_u16_avx2, box2x_scalar);
-        assert_matches_reference::<f32>(1, box2x_f32_avx2, box2x_scalar);
     }
 
     #[test]
     fn box4x_avx2_equals_the_fused_reference() {
         assert_matches_reference::<u8>(1, box4x_u8_avx2, box4x_fused_reference);
         assert_matches_reference::<u16>(1, box4x_u16_avx2, box4x_fused_reference);
-        assert_matches_reference::<f32>(1, box4x_f32_avx2, box4x_fused_reference);
     }
 
     #[test]
@@ -622,7 +486,5 @@ mod tests {
         let out_width = 2052;
         let out_height = out_bytes.div_ceil(size_of::<u16>() * out_width);
         assert_large_matches::<u16>((out_width, out_height), box2x_u16_avx2, box2x_scalar);
-        let out_height = out_bytes.div_ceil(size_of::<f32>() * out_width);
-        assert_large_matches::<f32>((out_width, out_height), box2x_f32_avx2, box2x_scalar);
     }
 }
