@@ -9,12 +9,13 @@ use crate::box_reduce::{self, BoxSample};
 use crate::sample::Sample;
 use crate::{c_samples, image_dims, output_samples, read_only, to_numpy};
 
-/// A row-major grid of tiles: `grid_width` per grid row, a grid row sharing
-/// its height and a grid column its width.
+/// A row-major grid of tiles, each sharing its grid row's height and its grid
+/// column's width.
 struct TileGrid {
-    dims: Vec<(usize, usize, usize)>,
-    heights: Vec<usize>,
-    widths: Vec<usize>,
+    /// (height, width, channels) per tile.
+    tile_dims: Vec<(usize, usize, usize)>,
+    row_heights: Vec<usize>,
+    col_widths: Vec<usize>,
     channels: usize,
 }
 
@@ -25,15 +26,18 @@ impl TileGrid {
                 "tiles must fill whole grid rows of grid_width tiles",
             ));
         }
-        let dims = tiles.iter().map(image_dims).collect::<PyResult<Vec<_>>>()?;
-        let channels = dims[0].2;
-        let heights: Vec<usize> = (0..tiles.len() / grid_width)
-            .map(|grid_row| dims[grid_row * grid_width].0)
+        let tile_dims = tiles.iter().map(image_dims).collect::<PyResult<Vec<_>>>()?;
+        let channels = tile_dims[0].2;
+        let row_heights: Vec<usize> = (0..tiles.len() / grid_width)
+            .map(|grid_row| tile_dims[grid_row * grid_width].0)
             .collect();
-        let widths: Vec<usize> = (0..grid_width).map(|col| dims[col].1).collect();
-        for (tile_index, &(tile_height, tile_width, tile_channels)) in dims.iter().enumerate() {
-            if tile_height != heights[tile_index / grid_width]
-                || tile_width != widths[tile_index % grid_width]
+        let col_widths: Vec<usize> = (0..grid_width)
+            .map(|grid_col| tile_dims[grid_col].1)
+            .collect();
+        for (tile_index, &(tile_height, tile_width, tile_channels)) in tile_dims.iter().enumerate()
+        {
+            if tile_height != row_heights[tile_index / grid_width]
+                || tile_width != col_widths[tile_index % grid_width]
                 || tile_channels != channels
             {
                 return Err(PyValueError::new_err(
@@ -43,15 +47,15 @@ impl TileGrid {
             }
         }
         Ok(TileGrid {
-            dims,
-            heights,
-            widths,
+            tile_dims,
+            row_heights,
+            col_widths,
             channels,
         })
     }
 
     fn grid_width(&self) -> usize {
-        self.widths.len()
+        self.col_widths.len()
     }
 }
 
@@ -70,27 +74,29 @@ fn tile_samples<'py, T: Element>(
         .collect()
 }
 
-/// Copies `rows` rows of `row_len` samples from `src` (contiguous) into `out`
-/// from sample `at`, `stride` samples apart.
+/// Copies the rows of `row_samples` samples in `src` (back to back) into
+/// `out` from sample `at`, `stride` samples apart.
 ///
 /// # Safety
 /// The destination rows are inside `out`: for each of the
-/// `src.len() / row_len` rows, `at + y * stride + row_len <= out.len()`.
+/// `src.len() / row_samples` rows, `at + y * stride + row_samples <=
+/// out.len()`.
 unsafe fn place_rows<T: Copy>(
     src: &[T],
-    row_len: usize,
+    row_samples: usize,
     out: &mut [std::mem::MaybeUninit<T>],
     at: usize,
     stride: usize,
 ) {
-    for (y, row) in src.chunks_exact(row_len).enumerate() {
-        // SAFETY: row y's destination `at + y * stride .. + row_len` is inside
-        // `out` (the caller's contract); `src` and `out` are distinct borrows.
+    for (y, row) in src.chunks_exact(row_samples).enumerate() {
+        // SAFETY: row y's destination `at + y * stride .. + row_samples` is
+        // inside `out` (the caller's contract); `src` and `out` are distinct
+        // borrows.
         unsafe {
             std::ptr::copy_nonoverlapping(
                 row.as_ptr(),
                 out.as_mut_ptr().add(at + y * stride).cast::<T>(),
-                row_len,
+                row_samples,
             );
         };
     }
@@ -148,9 +154,8 @@ impl<T: Element + Copy> Frame<T> {
         Ok((self.height, self.width))
     }
 
-    /// Fills `out` (the frame's rows, `channels` samples per pixel) outside
-    /// its top-left `(block_height, block_width)` pixels: whole fill rows copied from one built
-    /// row.
+    /// Fills `out`, the frame's rows, outside its top-left `(block_height,
+    /// block_width)` pixels.
     ///
     /// # Safety
     /// `out` holds the frame (`height * width * channels` samples) and the
@@ -163,14 +168,14 @@ impl<T: Element + Copy> Frame<T> {
         let channels = self.fill.len();
         let row_stride = self.width * channels;
         let fill_row: Vec<T> = self.fill.iter().copied().cycle().take(row_stride).collect();
-        let right = (self.width - block_width) * channels;
-        if right > 0 {
+        let right_margin = (self.width - block_width) * channels;
+        if right_margin > 0 {
             for y in 0..block_height {
                 // SAFETY: row y's samples past the block are inside `out`.
                 unsafe {
                     place_rows(
-                        &fill_row[..right],
-                        right,
+                        &fill_row[..right_margin],
+                        right_margin,
                         out,
                         y * row_stride + block_width * channels,
                         row_stride,
@@ -185,12 +190,10 @@ impl<T: Element + Copy> Frame<T> {
     }
 }
 
-/// `downscale_grid`'s box path: the tiles of the grid, each reduced by
-/// `2^times` on its own and its rows written straight into place in the one
-/// output (in `frame`, if given). Equal to reducing the stitched image when
-/// every tile but the last row's and column's divides by the factor, which
-/// the caller checks: no box window then crosses a seam, and only the last
-/// row's and column's tiles end in partial blocks.
+/// `downscale_grid`'s box path: each tile reduced by `2^times` on its own,
+/// its rows written straight into place in the one output (in `frame`, if
+/// given). Equal to reducing the stitched image as every inner tile divides
+/// by the factor (checked): no box window then crosses a seam.
 pub(crate) fn box_grid<T: BoxSample>(
     py: Python<'_>,
     tiles: &[Bound<'_, PyAny>],
@@ -205,72 +208,86 @@ pub(crate) fn box_grid<T: BoxSample>(
         .iter()
         .map(|read| c_samples(read, "tile"))
         .collect::<PyResult<Vec<_>>>()?;
-    let (dims, heights, widths, channels) =
-        (&grid.dims, &grid.heights, &grid.widths, grid.channels);
-    let out_rows: Vec<usize> = heights
-        .iter()
-        .map(|height| height.div_ceil(factor))
-        .collect();
-    let out_cols: Vec<usize> = widths.iter().map(|width| width.div_ceil(factor)).collect();
-    let (oh, ow): (usize, usize) = (out_rows.iter().sum(), out_cols.iter().sum());
-    let frame = Frame::<T>::new(size, fill, channels)?;
-    let (fh, fw) = match &frame {
-        Some(frame) => frame.size_around((oh, ow))?,
-        None => (oh, ow),
+    let (tile_dims, channels) = (&grid.tile_dims, grid.channels);
+    let grid_rows = grid.row_heights.len();
+    for (tile_index, &(tile_height, tile_width, _)) in tile_dims.iter().enumerate() {
+        let (grid_row, grid_col) = (tile_index / grid_width, tile_index % grid_width);
+        if (grid_row + 1 < grid_rows && tile_height % factor != 0)
+            || (grid_col + 1 < grid_width && tile_width % factor != 0)
+        {
+            return Err(PyValueError::new_err(
+                "inner tiles must divide by the factor",
+            ));
+        }
+    }
+    let reduced = |extents: &[usize]| -> Vec<usize> {
+        extents
+            .iter()
+            .map(|extent| extent.div_ceil(factor))
+            .collect()
     };
-    let row_stride = fw * channels;
+    let (out_row_heights, out_col_widths) = (reduced(&grid.row_heights), reduced(&grid.col_widths));
+    let (out_height, out_width): (usize, usize) =
+        (out_row_heights.iter().sum(), out_col_widths.iter().sum());
+    let frame = Frame::<T>::new(size, fill, channels)?;
+    let (frame_height, frame_width) = match &frame {
+        Some(frame) => frame.size_around((out_height, out_width))?,
+        None => (out_height, out_width),
+    };
+    let row_stride = frame_width * channels;
     let out = py.detach(|| {
-        let mut out = crate::cpu::unwritten_output::<T>(fh * row_stride);
-        let mut y0 = 0;
-        for (grid_row, &tile_rows) in out_rows.iter().enumerate() {
-            let mut x0 = 0;
-            for (col, &tile_cols) in out_cols.iter().enumerate() {
+        let mut out = crate::cpu::unwritten_output::<T>(frame_height * row_stride);
+        let mut tile_y = 0;
+        for (grid_row, &tile_rows) in out_row_heights.iter().enumerate() {
+            let mut tile_x = 0;
+            for (grid_col, &tile_cols) in out_col_widths.iter().enumerate() {
                 if tile_rows == 0 || tile_cols == 0 {
-                    // Nothing to write (an empty tile): no pointer to
-                    // its place, which may lie past the output.
-                    x0 += tile_cols;
+                    // An empty tile's place may lie past the output: no
+                    // pointer to it.
+                    tile_x += tile_cols;
                     continue;
                 }
-                let tile_index = grid_row * grid_width + col;
-                let tile_at = y0 * row_stride + x0 * channels;
-                let (tile_height, tile_width, _) = dims[tile_index];
+                let tile_index = grid_row * grid_width + grid_col;
+                let tile_at = tile_y * row_stride + tile_x * channels;
+                let (tile_height, tile_width, _) = tile_dims[tile_index];
                 let whole_blocks = tile_height % factor == 0 && tile_width % factor == 0;
-                // SAFETY: rows y0..y0 + tile_rows, samples x0 * channels.. of
-                // `out` are this tile's alone and inside it.
+                // SAFETY: rows tile_y..tile_y + tile_rows, samples tile_x *
+                // channels.. of `out` are this tile's alone and inside it.
                 let in_place = whole_blocks
                     && unsafe {
                         box_reduce::pyramid::box_pyramid_into(
                             srcs[tile_index],
-                            dims[tile_index],
+                            tile_dims[tile_index],
                             times,
                             out.as_mut_ptr().add(tile_at).cast::<T>(),
                             row_stride,
                         )
                     };
                 if !in_place {
-                    let (tile, tw, th) = box_reduce::pyramid::box_downscale(
+                    let (tile, reduced_width, reduced_height) = box_reduce::pyramid::box_downscale(
                         srcs[tile_index],
-                        dims[tile_index],
+                        tile_dims[tile_index],
                         times,
                     );
-                    debug_assert!((tw, th) == (tile_cols, tile_rows));
+                    debug_assert!((reduced_width, reduced_height) == (tile_cols, tile_rows));
+                    let row_samples = reduced_width * channels;
                     // SAFETY: as above.
-                    unsafe { place_rows(&tile, tw * channels, &mut out, tile_at, row_stride) };
+                    unsafe { place_rows(&tile, row_samples, &mut out, tile_at, row_stride) };
                 }
-                x0 += tile_cols;
+                tile_x += tile_cols;
             }
-            y0 += tile_rows;
+            tile_y += tile_rows;
         }
         if let Some(frame) = &frame {
-            // SAFETY: `out` holds the (fh, fw) frame, and `size_around` checked
-            // that the (oh, ow) block fits in it.
-            unsafe { frame.fill_margins(&mut out, (oh, ow)) };
+            // SAFETY: `out` holds the frame, and `size_around` checked that the
+            // reduced grid fits in it.
+            unsafe { frame.fill_margins(&mut out, (out_height, out_width)) };
         }
         // SAFETY: the tiles' outputs tile the top-left block and the frame's
         // fill the rest, each sample written once.
         unsafe { crate::cpu::written_output(out) }
     });
-    to_numpy(py, out, fh, fw, channels)
+    to_numpy(py, out, frame_height, frame_width, channels)
 }
 
 /// `image` placed at the top left of `frame`, the rest filled.
@@ -282,25 +299,24 @@ pub(crate) fn framed<T: Sample>(
     let (height, width, channels) = image_dims(image)?;
     let frame = Frame::<T>::new(size, fill, channels)?
         .ok_or_else(|| PyValueError::new_err("size is required"))?;
-    let (fh, fw) = frame.size_around((height, width))?;
+    let (frame_height, frame_width) = frame.size_around((height, width))?;
     let array = image
         .cast::<PyArrayDyn<T>>()
         .map_err(|_| PyValueError::new_err("image must have fill's dtype"))?;
     let read = read_only(array)?;
     let src = c_samples(&read, "image")?;
     let out = py.detach(|| {
-        let mut out = crate::cpu::unwritten_output::<T>(fh * fw * channels);
-        // SAFETY: `out` holds the (fh, fw) frame and `size_around` checked that
-        // the (height, width) image fits in it: the image's rows land inside
-        // `out` and fill its top-left block, the frame's fill the rest, so
-        // every sample is written.
+        let mut out = crate::cpu::unwritten_output::<T>(frame_height * frame_width * channels);
+        // SAFETY: `out` holds the frame and `size_around` checked that the
+        // image fits in it: the image's rows fill its top-left block, the
+        // frame's fill the rest, so every sample is written.
         unsafe {
-            place_rows(src, width * channels, &mut out, 0, fw * channels);
+            place_rows(src, width * channels, &mut out, 0, frame_width * channels);
             frame.fill_margins(&mut out, (height, width));
             crate::cpu::written_output(out)
         }
     });
-    to_numpy(py, out, fh, fw, channels)
+    to_numpy(py, out, frame_height, frame_width, channels)
 }
 
 /// The grid's tiles stitched into one image (recycled memory, no clearing),
@@ -317,30 +333,30 @@ pub(crate) fn stitch_grid<T: Sample>(
         .map(|read| c_samples(read, "tile"))
         .collect::<PyResult<Vec<_>>>()?;
     let (height, width, channels) = (
-        grid.heights.iter().sum::<usize>(),
-        grid.widths.iter().sum::<usize>(),
+        grid.row_heights.iter().sum::<usize>(),
+        grid.col_widths.iter().sum::<usize>(),
         grid.channels,
     );
     let stitched = py.detach(|| {
         let mut out = crate::cpu::unwritten_output::<T>(height * width * channels);
-        let mut y0 = 0;
-        for (grid_row, &th) in grid.heights.iter().enumerate() {
-            let mut x0 = 0;
-            for (col, &tw) in grid.widths.iter().enumerate() {
-                // SAFETY: rows y0..y0 + th, samples x0 * channels.. of `out` are this
-                // tile's alone and inside it.
+        let mut tile_y = 0;
+        for (grid_row, &tile_height) in grid.row_heights.iter().enumerate() {
+            let mut tile_x = 0;
+            for (grid_col, &tile_width) in grid.col_widths.iter().enumerate() {
+                // SAFETY: rows tile_y..tile_y + tile_height, samples tile_x *
+                // channels.. of `out` are this tile's alone and inside it.
                 unsafe {
                     place_rows(
-                        srcs[grid_row * grid.grid_width() + col],
-                        tw * channels,
+                        srcs[grid_row * grid.grid_width() + grid_col],
+                        tile_width * channels,
                         &mut out,
-                        (y0 * width + x0) * channels,
+                        (tile_y * width + tile_x) * channels,
                         width * channels,
                     );
                 };
-                x0 += tw;
+                tile_x += tile_width;
             }
-            y0 += th;
+            tile_y += tile_height;
         }
         // SAFETY: the tiles cover the stitched image, each sample written once.
         unsafe { crate::cpu::written_output(out) }

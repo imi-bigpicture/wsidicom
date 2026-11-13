@@ -351,7 +351,7 @@ fn compose_all<T: Element + Copy + Send + Sync>(
         }));
     };
     let mut canvas = Canvas {
-        px: c_samples_mut(&mut rw, "canvas")?,
+        samples: c_samples_mut(&mut rw, "canvas")?,
         width,
         height,
         channels,

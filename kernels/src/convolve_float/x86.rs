@@ -3,11 +3,9 @@
 //! transposed batches of 8 rows.
 //!
 //! # Safety
-//! Every kernel requires the CPU features in its `#[target_feature]` (its
-//! dispatch checks them at runtime). The register-only transposes are safe
-//! `fn`s; the kernels that load and store are `unsafe fn`s whose `# Safety`
-//! section gives the bounds the caller upholds, and each load and store is
-//! justified against those bounds at its loop guard.
+//! Every kernel requires the CPU features in its `#[target_feature]`, which
+//! its dispatch checks at runtime. The kernels that load and store are
+//! `unsafe fn`s whose `# Safety` section gives the caller's bounds.
 
 use std::ops::Range;
 
@@ -15,14 +13,15 @@ use crate::convolve::Windows;
 use crate::convolve_float::FloatSample;
 use crate::x86::{grouped_taps, groups_taps, prefetch_rows_after_window};
 
-/// Registers (of 8 f32) per block of the vertical pass: independent
-/// FMA chains that hide the FMA latency.
+/// Registers (of 8 f32) per block of the vertical pass: independent FMA
+/// chains that hide the FMA latency.
 const REGISTERS_PER_BLOCK: usize = 4;
+/// Bytes per cache line.
+const CACHE_LINE_BYTES: usize = 64;
 
-/// The vertical pass, `REGISTERS_PER_BLOCK` FMA chains per block,
-/// with a `load(row pointer)` of one register of samples as f32; the
-/// taps run in groups where `groups_taps` says so. `load` is only
-/// given the start of a register of samples within `rows`.
+/// The vertical pass, `REGISTERS_PER_BLOCK` FMA chains per block, `load`
+/// widening the register of samples at a pointer into `rows` to f32; the taps
+/// run in groups where `groups_taps` says so.
 ///
 /// # Safety
 /// `weights` is not empty and `rows` holds `weights.len()` rows of
@@ -49,21 +48,18 @@ unsafe fn vertical_with_load_avx2<T: FloatSample>(
         .map(|&weight| _mm256_set1_ps(weight))
         .collect();
     let (src_ptr, mid_ptr) = (rows.as_ptr(), mid.as_mut_ptr());
-    // Accumulates taps `taps` into `registers` registers at x; a later tap
-    // group resumes from the sums stored in mid.
-    let block = |x: usize, registers: usize, taps: Range<usize>| {
-        // The next window's rows ahead of the pass, for uint16 rows only.
-        if taps.start == 0 && std::mem::size_of::<T>() == 2 {
-            let (sample, block_bytes) = (
-                std::mem::size_of::<T>(),
-                registers * LANES * std::mem::size_of::<T>(),
-            );
-            for line in (0..block_bytes).step_by(64) {
+    let sample_bytes = std::mem::size_of::<T>();
+    // A tap group after the first resumes from the sums stored in mid.
+    let accumulate_block = |x: usize, registers: usize, taps: Range<usize>| {
+        let prefetches_next_window = taps.start == 0 && sample_bytes == 2;
+        if prefetches_next_window {
+            let block_bytes = registers * LANES * sample_bytes;
+            for line in (0..block_bytes).step_by(CACHE_LINE_BYTES) {
                 prefetch_rows_after_window(
                     src_ptr as *const u8,
                     weights.len(),
-                    stride * sample,
-                    x * sample + line,
+                    stride * sample_bytes,
+                    x * sample_bytes + line,
                 );
             }
         }
@@ -90,36 +86,34 @@ unsafe fn vertical_with_load_avx2<T: FloatSample>(
             unsafe { _mm256_storeu_ps(mid_ptr.add(x + register * LANES), *acc) };
         }
     };
-    let all = 0..weights.len();
+    let all_taps = 0..weights.len();
     let block_len = REGISTERS_PER_BLOCK * LANES;
     let blocks = 0..width / block_len * block_len;
-    if groups_taps(stride * std::mem::size_of::<T>(), weights.len()) {
-        let sample_bytes = std::mem::size_of::<f32>();
+    if groups_taps(stride * sample_bytes, weights.len()) {
         grouped_taps(
             blocks.clone(),
             block_len,
-            sample_bytes,
+            std::mem::size_of::<f32>(),
             weights.len(),
-            |x, taps| block(x, REGISTERS_PER_BLOCK, taps),
+            |x, taps| accumulate_block(x, REGISTERS_PER_BLOCK, taps),
         );
     } else {
         blocks
             .clone()
             .step_by(block_len)
-            .for_each(|x| block(x, REGISTERS_PER_BLOCK, all.clone()));
+            .for_each(|x| accumulate_block(x, REGISTERS_PER_BLOCK, all_taps.clone()));
     }
     let mut x = blocks.end;
     while x + LANES <= width {
-        block(x, 1, all.clone());
+        accumulate_block(x, 1, all_taps.clone());
         x += LANES;
     }
     if x < width {
-        block(width - LANES, 1, all);
+        accumulate_block(width - LANES, 1, all_taps);
     }
 }
 
-/// A batch of rows of `mid` (stride `stride`, a multiple of the
-/// batch) into `mid_t[x * LANES + r]`.
+/// The batch's rows of `mid`, `stride` apart, into `mid_t[x * LANES + r]`.
 ///
 /// # Safety
 /// `stride` is a multiple of the batch's `LANES` rows, and `mid` and
@@ -133,29 +127,29 @@ pub(crate) unsafe fn transpose_f32_rows_avx2(mid: &[f32], stride: usize, mid_t: 
             && mid.len() >= LANES * stride
             && mid_t.len() >= LANES * stride
     );
-    for x0 in (0..stride).step_by(LANES) {
+    for tile_x in (0..stride).step_by(LANES) {
         let mut tile = [_mm256_setzero_ps(); LANES];
         for (row, register) in tile.iter_mut().enumerate() {
-            // SAFETY: row < LANES and x0 + LANES <= stride: within
-            // the LANES * stride samples of `mid` (contract).
-            *register = unsafe { _mm256_loadu_ps(mid.as_ptr().add(row * stride + x0)) };
+            // SAFETY: row < LANES and tile_x + LANES <= stride: within the
+            // LANES * stride samples of `mid` (contract).
+            *register = unsafe { _mm256_loadu_ps(mid.as_ptr().add(row * stride + tile_x)) };
         }
         transpose_8x8_f32(&mut tile);
         for (column, register) in tile.iter().enumerate() {
-            // SAFETY: x0 + column < stride: within the stride *
-            // LANES samples of `mid_t` (contract).
-            unsafe { _mm256_storeu_ps(mid_t.as_mut_ptr().add((x0 + column) * LANES), *register) };
+            let at = (tile_x + column) * LANES;
+            // SAFETY: tile_x + column < stride: within the stride * LANES
+            // samples of `mid_t` (contract).
+            unsafe { _mm256_storeu_ps(mid_t.as_mut_ptr().add(at), *register) };
         }
     }
 }
 
-/// The horizontal pass of a transposed batch: per output sample, an
-/// FMA chain over its taps (each a unit-stride load of the batch's
-/// rows).
+/// The horizontal pass of a transposed batch: per output sample, an FMA chain
+/// over its taps, each a unit-stride load of the batch's rows.
 ///
 /// # Safety
-/// For every output o, `col.end() * channels * LANES <= mid_t.len()`
-/// and `(o + 1) * channels * LANES <= out_t.len()`.
+/// For every output o, `col.end() * channels * LANES <= mid_t.len()` and
+/// `(o + 1) * channels * LANES <= out_t.len()`.
 #[target_feature(enable = "avx2,fma")]
 pub(crate) unsafe fn horizontal_f32_transposed_avx2(
     mid_t: &[f32],
@@ -173,9 +167,8 @@ pub(crate) unsafe fn horizontal_f32_transposed_avx2(
         for channel in 0..channels {
             let mut acc = _mm256_setzero_ps();
             for (tap, &weight) in col.f32.iter().enumerate() {
-                // SAFETY: start + tap < col.end() and channel <
-                // channels: the LANES samples lie in `mid_t`
-                // (contract).
+                // SAFETY: start + tap < col.end() and channel < channels: the
+                // LANES samples lie in `mid_t` (contract).
                 let samples = unsafe {
                     _mm256_loadu_ps(
                         mid_t
@@ -185,8 +178,8 @@ pub(crate) unsafe fn horizontal_f32_transposed_avx2(
                 };
                 acc = _mm256_fmadd_ps(samples, _mm256_set1_ps(weight), acc);
             }
-            // SAFETY: channel < channels: the LANES sums lie in
-            // `out_t` (contract).
+            // SAFETY: channel < channels: the LANES sums lie in `out_t`
+            // (contract).
             unsafe {
                 _mm256_storeu_ps(
                     out_t
@@ -200,37 +193,39 @@ pub(crate) unsafe fn horizontal_f32_transposed_avx2(
 }
 
 /// `out_t[o * LANES + r]` back to rows `dst[r * stride + o]` (o <
-/// `ows`, r < `rows`) through `store(row, o, LANES samples, count)`.
+/// `out_row_samples`, r < `rows`) through `store(row, o, LANES samples,
+/// count)`.
 ///
 /// # Safety
-/// `out_t` holds `ows.next_multiple_of(LANES) * LANES` samples.
+/// `out_t` holds `out_row_samples.next_multiple_of(LANES) * LANES` samples.
 #[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn untranspose_avx2(
     out_t: &[f32],
-    ows: usize,
+    out_row_samples: usize,
     rows: usize,
     mut store: impl FnMut(usize, usize, std::arch::x86_64::__m256, usize),
 ) {
     use std::arch::x86_64::*;
     const LANES: usize = 8;
-    for o0 in (0..ows).step_by(LANES) {
-        debug_assert!((o0 + LANES) * LANES <= out_t.len());
+    for tile_output in (0..out_row_samples).step_by(LANES) {
+        debug_assert!((tile_output + LANES) * LANES <= out_t.len());
         let mut tile = [_mm256_setzero_ps(); LANES];
         for (output, register) in tile.iter_mut().enumerate() {
-            // SAFETY: o0 < ows, a multiple of LANES: outputs o0..o0 +
-            // LANES lie in `out_t` (contract).
-            *register = unsafe { _mm256_loadu_ps(out_t.as_ptr().add((o0 + output) * LANES)) };
+            let at = (tile_output + output) * LANES;
+            // SAFETY: tile_output < out_row_samples, a multiple of LANES: its
+            // LANES outputs lie in `out_t` (contract).
+            *register = unsafe { _mm256_loadu_ps(out_t.as_ptr().add(at)) };
         }
         transpose_8x8_f32(&mut tile);
+        let count = LANES.min(out_row_samples - tile_output);
         for (row, register) in tile.iter().enumerate().take(rows) {
-            store(row, o0, *register, LANES.min(ows - o0));
+            store(row, tile_output, *register, count);
         }
     }
 }
 
-/// The first `count` samples of `staged` to `at`: the partial store of a
-/// row's last register.
+/// The partial store of a row's last register.
 ///
 /// # Safety
 /// `count <= staged.len()`, and `at` is valid for `count` writes of `T`
@@ -251,8 +246,8 @@ fn transpose_8x8_f32(rows: &mut [std::arch::x86_64::__m256; 8]) {
         pairs[2 * pair] = _mm256_unpacklo_ps(rows[2 * pair], rows[2 * pair + 1]);
         pairs[2 * pair + 1] = _mm256_unpackhi_ps(rows[2 * pair], rows[2 * pair + 1]);
     }
-    // quads[4 group + column], per 128-bit lane L: column 4L + column of rows
-    // 4 group..4 group + 4.
+    // quads[4 * group + column], per 128-bit lane L: column 4L + column of
+    // rows 4 * group..4 * group + 4.
     let mut quads = [_mm256_setzero_ps(); 8];
     for group in 0..2 {
         quads[4 * group] = _mm256_shuffle_ps::<0x44>(pairs[4 * group], pairs[4 * group + 2]);
@@ -273,12 +268,13 @@ fn transpose_8x8_f32(rows: &mut [std::arch::x86_64::__m256; 8]) {
 /// Untranspose a batch to uint16 rows.
 ///
 /// # Safety
-/// `rows <= 8`, `out_t` holds `ows.next_multiple_of(8) * 8` samples, and
-/// `dst` is valid for writes of `rows` rows of `ows` samples, `stride` apart.
+/// `rows <= 8`, `out_t` holds `out_row_samples.next_multiple_of(8) * 8`
+/// samples, and `dst` is valid for writes of `rows` rows of `out_row_samples`
+/// samples, `stride` apart.
 #[target_feature(enable = "avx2,fma")]
 pub(crate) unsafe fn untranspose_store_u16_avx2(
     out_t: &[f32],
-    ows: usize,
+    out_row_samples: usize,
     dst: *mut u16,
     stride: usize,
     rows: usize,
@@ -286,7 +282,7 @@ pub(crate) unsafe fn untranspose_store_u16_avx2(
     use std::arch::x86_64::*;
     let zero = _mm256_setzero_si256();
     let store = |row: usize, output: usize, register: __m256, count: usize| {
-        // Round to nearest even (the default MXCSR mode), clamp to 0..65535.
+        // Rounds to nearest even (the default MXCSR mode); saturates.
         let ints = _mm256_max_epi32(_mm256_cvtps_epi32(register), zero);
         let samples = _mm256_castsi256_si128(_mm256_permute4x64_epi64::<0b10_00>(
             _mm256_packus_epi32(ints, ints),
@@ -306,7 +302,7 @@ pub(crate) unsafe fn untranspose_store_u16_avx2(
     };
     // SAFETY: out_t's size is the caller's (contract), and `store` writes
     // only within the rows of `dst` (contract).
-    unsafe { untranspose_avx2(out_t, ows, rows, store) };
+    unsafe { untranspose_avx2(out_t, out_row_samples, rows, store) };
 }
 
 /// The vertical pass of uint16 rows.
@@ -340,7 +336,7 @@ pub(crate) unsafe fn vertical_u16_avx2(
 #[target_feature(enable = "avx2,fma")]
 pub(crate) unsafe fn untranspose_store_u8_avx2(
     out_t: &[f32],
-    ows: usize,
+    out_row_samples: usize,
     dst: *mut u8,
     stride: usize,
     rows: usize,
@@ -348,8 +344,8 @@ pub(crate) unsafe fn untranspose_store_u8_avx2(
     use std::arch::x86_64::*;
     let zero = _mm256_setzero_si256();
     let store = |row: usize, output: usize, register: __m256, count: usize| {
-        // Round to nearest even (the default MXCSR mode), clamp to 0..255:
-        // the 8 bytes end up in dwords 0 (lane 0) and 4 (lane 1).
+        // Rounds to nearest even (the default MXCSR mode); saturates. The 8
+        // bytes end up in dwords 0 (lane 0) and 4 (lane 1).
         let ints = _mm256_max_epi32(_mm256_cvtps_epi32(register), zero);
         let words = _mm256_packus_epi32(ints, ints);
         let bytes = _mm256_packus_epi16(words, words);
@@ -372,7 +368,7 @@ pub(crate) unsafe fn untranspose_store_u8_avx2(
     };
     // SAFETY: out_t's size is the caller's (contract), and `store` writes
     // only within the rows of `dst` (contract).
-    unsafe { untranspose_avx2(out_t, ows, rows, store) };
+    unsafe { untranspose_avx2(out_t, out_row_samples, rows, store) };
 }
 
 /// The vertical pass of uint8 rows.
@@ -389,7 +385,7 @@ pub(crate) unsafe fn vertical_u8_avx2(
 ) {
     use std::arch::x86_64::*;
     // SAFETY: the bounds are the caller's (contract); the load is only given
-    // the start of a register (8 samples) within `rows`.
+    // the start of a register within `rows`.
     unsafe {
         vertical_with_load_avx2(rows, stride, weights, mid, |ptr| {
             _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(_mm_loadl_epi64(ptr as *const __m128i)))
