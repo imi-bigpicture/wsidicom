@@ -16,15 +16,15 @@ use crate::x86::prefetch_rows_after_window;
 /// pairs' sum less an offset to fit i16, then `madd` by ones adds the far
 /// pairs' sum into i32; 32 input samples per step. The unpacks leave samples
 /// 0..4 | 16..20, 4..8 | 20..24, 8..12 | 24..28 and 12..16 | 28..32 in four
-/// registers, which is already the even and odd pixels for 4 channels and
-/// one shuffle away for 1; RGB rows are shuffled to
+/// registers, one shuffle away from the even and odd pixels for 1 channel;
+/// RGB rows are shuffled to
 /// even | odd pixels per 4-pixel group as they load, and the 6-sample halves
 /// stored overlapping. Horizontal: 8 samples per step from the zero-padded
 /// even and odd sums, 8 unit-stride loads, in f32 (exact, see below).
 ///
 /// # Safety
 /// AVX2 and FMA must be available; `src` holds `width * height * channels`
-/// samples, `width` and `height` even; `channels` is 1, 3 or 4.
+/// samples, `width` and `height` even; `channels` is 1 or 3.
 #[target_feature(enable = "avx2,fma")]
 pub(crate) unsafe fn catmull_x2_avx2(
     src: &[u8],
@@ -38,7 +38,7 @@ pub(crate) unsafe fn catmull_x2_avx2(
     // sums are stored less the offset, which the rounding adds back.
     const OFFSET: i32 = 24010;
     const LANES: usize = 8; // i32 lanes
-    debug_assert!([1, 3, 4].contains(&channels));
+    debug_assert!([1, 3].contains(&channels));
     let (ow, oh, ws) = (width / 2, height / 2, width * channels);
     let row_samples = ow * channels;
     debug_assert!(src.len() >= width * height * channels);
@@ -182,10 +182,10 @@ pub(crate) unsafe fn catmull_x2_avx2(
                 }
             };
             for (parity, odd) in [(ep, false), (op, true)] {
-                let (first_source, second_source) = match channels {
-                    4 => (if odd { q1 } else { q0 }, if odd { q3 } else { q2 }),
-                    3 => (if odd { q2 } else { q0 }, if odd { q3 } else { q1 }),
-                    _ => (split(q0, q1, odd), split(q2, q3, odd)),
+                let (first_source, second_source) = if channels == 3 {
+                    (if odd { q2 } else { q0 }, if odd { q3 } else { q1 })
+                } else {
+                    (split(q0, q1, odd), split(q2, q3, odd))
                 };
                 // RGB: 6 samples and 2 junk lanes per store, the next store
                 // overwriting the junk.
@@ -306,7 +306,7 @@ mod tests {
         let kernel = |src: &[u8], width, height, channels| {
             // SAFETY: AVX2 and FMA are available; src holds width * height *
             // channels samples, width and height even (WIDTHS and HEIGHTS),
-            // channels 1, 3 or 4.
+            // channels 1 or 3.
             unsafe { catmull_x2_avx2(src, width, height, channels) }
         };
         assert_equals_reference(

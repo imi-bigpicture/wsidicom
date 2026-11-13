@@ -81,8 +81,8 @@ def random_tiles_and_positions(
 @pytest.mark.unittest
 @pytest.mark.parametrize(
     ["tile_samples", "canvas_samples"],
-    [(1, 1), (3, 3), (4, 4)],
-    ids=["planar", "rgb", "rgba"],
+    [(1, 1), (3, 3)],
+    ids=["planar", "rgb"],
 )
 class TestComposeIsStateless:
     @pytest.mark.usefixtures("simd_enabled")

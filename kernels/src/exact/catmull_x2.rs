@@ -108,7 +108,7 @@ pub(crate) fn catmull_x2(src: &[u8], width: usize, height: usize, channels: usiz
         if crate::cpu::has_avx2_fma() {
             // SAFETY: avx2 and fma detected; src holds width * height *
             // channels samples, width and height even (the exact kernel's
-            // condition), channels 1, 3 or 4 (the caller's shape check).
+            // condition), channels 1 or 3 (checked).
             return unsafe { x86::catmull_x2_avx2(src, width, height, channels) };
         }
     }

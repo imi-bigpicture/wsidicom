@@ -78,11 +78,11 @@ class TestValidation:
         with pytest.raises(
             ValueError,
             match=r"image must have at least one pixel and one channel"
-            r"|3D arrays must have 1, 3 or 4 channels",
+            r"|3D arrays must have 1 or 3 channels",
         ):
             operation(image)
 
-    @pytest.mark.parametrize("channels", [2, 5])
+    @pytest.mark.parametrize("channels", [2, 4])
     @pytest.mark.parametrize(
         "operation",
         [
@@ -104,15 +104,15 @@ class TestValidation:
             ),
         ],
     )
-    def test_rejects_channel_counts_other_than_1_3_4(
+    def test_rejects_channel_counts_other_than_1_3(
         self, channels: int, operation: Callable[[np.ndarray], Any]
     ) -> None:
-        """Only 1, 3 or 4 channels are supported, by every operation."""
+        """Only 1 or 3 channels are supported, by every operation."""
         # Arrange
         image = np.zeros((8, 8, channels), np.uint8)
 
         # Act & Assert
-        with pytest.raises(ValueError, match="1, 3 or 4 channels"):
+        with pytest.raises(ValueError, match="1 or 3 channels"):
             operation(image)
 
     @pytest.mark.parametrize(

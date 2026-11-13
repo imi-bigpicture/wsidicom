@@ -84,13 +84,12 @@ for dt, tag, hi in (
             lambda dt=dt, hi=hi: box_case(dt, (8192, 8192), hi, factor=4),
         )
     )
-    for c in (3, 4):
-        CASES.append(
-            (
-                f"box hwc {tag} c{c} 8192",
-                lambda dt=dt, hi=hi, c=c: box_case(dt, (8192, 8192, c), hi),
-            )
+    CASES.append(
+        (
+            f"box hwc {tag} c3 8192",
+            lambda dt=dt, hi=hi: box_case(dt, (8192, 8192, 3), hi),
         )
+    )
     CASES.append(
         (
             f"compose planar {tag} 5120",

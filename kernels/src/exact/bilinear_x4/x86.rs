@@ -11,8 +11,8 @@ use super::{bilinear_x4_scalar, window};
 use crate::exact::x86::cover_steps;
 use crate::x86::prefetch_rows_after_window;
 
-/// The SIMD kernels' frame, `PC` samples per pixel in the phase arrays (1,
-/// 2 or 4; RGB is read as RGBX, `PC` 4, and packed back per output row). Per
+/// The SIMD kernels' frame, `PC` samples per pixel in the phase arrays (1;
+/// RGB is read as RGBX, `PC` 4, and packed back per output row). Per
 /// output row y: `vertical(rows, y, phases)` splits the window's weighted sum
 /// of its 8 `rows` (a zero row for a clipped one) by pixel phase (x mod 4)
 /// into the four phase arrays, which have a zero pixel before and after;
@@ -22,7 +22,7 @@ use crate::x86::prefetch_rows_after_window;
 ///
 /// # Safety
 /// `src` holds `width * height * channels` samples (`channels` = 3 for `RGB`,
-/// else `PC`), `width` and `height` multiples of 4; AVX2 is available for
+/// else `PC` = 1), `width` and `height` multiples of 4; AVX2 is available for
 /// `RGB`; `vertical` writes the row's phase samples only, and `horizontal`
 /// the row's `width / 4 * PC` bytes.
 #[inline(always)]
@@ -91,8 +91,8 @@ pub(crate) unsafe fn x4_frame<const PC: usize, const RGB: bool>(
 /// Vertical, 32 input samples per step: `pmaddubsw` on the row pairs (3, 2)
 /// and (4, 5) at (7, 5) and (1, 0) and (6, 7) at (3, 1), so the window's sum
 /// (at most 32 * 255) is u16. Per 128-bit lane the low unpacks hold samples
-/// 0..8 and the high ones 8..16, already one pixel per phase for 4 channels
-/// and a word shuffle and an unpack away for 1; one 64-bit permute then
+/// 0..8 and the high ones 8..16, already one pixel per phase for the RGBX
+/// layout and a word shuffle and an unpack away for 1; one 64-bit permute then
 /// joins the lanes.
 ///
 /// Horizontal, 16 samples per step, unit-stride at the output resolution:
@@ -307,8 +307,7 @@ mod tests {
             unsafe {
                 match channels {
                     1 => bilinear_x4_avx2::<1, false>(src, width, height),
-                    3 => bilinear_x4_avx2::<4, true>(src, width, height),
-                    _ => bilinear_x4_avx2::<4, false>(src, width, height),
+                    _ => bilinear_x4_avx2::<4, true>(src, width, height),
                 }
             }
         };

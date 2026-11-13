@@ -1,9 +1,8 @@
-//! The sample types the kernels take (uint8, uint16, float32), the RGB and
-//! RGBX pixel sizes, and the Q15 fixed-point weights of the uint8 kernels.
+//! The sample types the kernels take (uint8, uint16, float32), the RGB
+//! pixel size, and the Q15 fixed-point weights of the uint8 kernels.
 
-/// Samples per pixel of an RGB image and of its 4-byte RGBX (Pillow) layout.
+/// Samples per pixel of an RGB image.
 pub(crate) const RGB: usize = 3;
-pub(crate) const RGBX: usize = 4;
 
 /// A resample weight in Q15, the fixed-point format `mulhrs` multiplies by.
 /// Clamped: a weight of exactly 1.0 would round to one past `i16::MAX`.
@@ -26,12 +25,12 @@ pub(crate) fn mulhrs(value: i32, weight: i16) -> i32 {
 /// Q7 (255 << 7 = 32640) past i16.
 pub(crate) const CONVOLVE_U8_FRAC_BITS: u32 = 6;
 
-/// Panics unless `src` holds a `width` x `height` image of `channels` (1, 3 or
-/// 4) samples per pixel: the layout the kernels' unchecked loads rely on.
+/// Panics unless `src` holds a `width` x `height` image of `channels` (1 or
+/// 3) samples per pixel: the layout the kernels' unchecked loads rely on.
 pub(crate) fn assert_image<T>(src: &[T], width: usize, height: usize, channels: usize) {
     assert!(
-        matches!(channels, 1 | RGB | RGBX),
-        "images have 1, 3 or 4 channels, not {channels}"
+        matches!(channels, 1 | RGB),
+        "images have 1 or 3 channels, not {channels}"
     );
     let samples = width
         .checked_mul(height)
@@ -42,11 +41,11 @@ pub(crate) fn assert_image<T>(src: &[T], width: usize, height: usize, channels: 
     );
 }
 
-/// Panics unless `channels` is an interleaved layout (RGB or 4 samples).
+/// Panics unless `channels` is the interleaved layout, RGB.
 pub(crate) fn assert_interleaved(channels: usize) {
     assert!(
-        matches!(channels, RGB | RGBX),
-        "interleaved images have 3 or 4 channels, not {channels}"
+        channels == RGB,
+        "interleaved images have 3 channels, not {channels}"
     );
 }
 
@@ -187,18 +186,24 @@ mod tests {
     fn assert_image_accepts_slices_holding_the_image() {
         assert_image::<u8>(&[], 0, 5, 1);
         assert_image(&[0u8; 12], 2, 2, RGB);
-        assert_image(&[0u16; 17], 2, 2, RGBX);
+        assert_image(&[0u16; 13], 2, 2, RGB);
         assert_image(&[0f32; 6], 3, 2, 1);
     }
 
     #[test]
-    #[should_panic(expected = "images have 1, 3 or 4 channels, not 2")]
+    #[should_panic(expected = "images have 1 or 3 channels, not 2")]
     fn assert_image_rejects_two_channels() {
         assert_image(&[0u8; 64], 2, 2, 2);
     }
 
     #[test]
-    #[should_panic(expected = "images have 1, 3 or 4 channels, not 0")]
+    #[should_panic(expected = "images have 1 or 3 channels, not 4")]
+    fn assert_image_rejects_four_channels() {
+        assert_image(&[0u8; 64], 2, 2, 4);
+    }
+
+    #[test]
+    #[should_panic(expected = "images have 1 or 3 channels, not 0")]
     fn assert_image_rejects_no_channels() {
         assert_image::<u8>(&[], 0, 0, 0);
     }
@@ -218,17 +223,16 @@ mod tests {
     #[test]
     #[should_panic(expected = "fewer than width * height * channels samples")]
     fn assert_image_rejects_samples_overflowing_usize() {
-        assert_image(&[0u8; 16], usize::MAX / 2, 2, RGBX);
+        assert_image(&[0u8; 16], usize::MAX / 2, 2, RGB);
     }
 
     #[test]
-    fn assert_interleaved_accepts_rgb_and_rgbx() {
+    fn assert_interleaved_accepts_rgb() {
         assert_interleaved(RGB);
-        assert_interleaved(RGBX);
     }
 
     #[test]
-    #[should_panic(expected = "interleaved images have 3 or 4 channels, not 1")]
+    #[should_panic(expected = "interleaved images have 3 channels, not 1")]
     fn assert_interleaved_rejects_planar() {
         assert_interleaved(1);
     }

@@ -15,7 +15,7 @@ use crate::cpu::has_avx2;
 #[cfg(target_arch = "aarch64")]
 use crate::cpu::use_neon;
 
-use crate::sample::{RGB, RGBX, Sample, assert_image, assert_interleaved};
+use crate::sample::{RGB, Sample, assert_image, assert_interleaved};
 #[cfg(target_arch = "aarch64")]
 use neon::*;
 #[cfg(target_arch = "x86_64")]
@@ -92,7 +92,6 @@ fn box4_band<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>>(
     match channels {
         1 => box4_quads::<T, Acc, 1>(sums, out, box_sums.mean16),
         RGB => box4_quads::<T, Acc, RGB>(sums, out, box_sums.mean16),
-        RGBX => box4_quads::<T, Acc, RGBX>(sums, out, box_sums.mean16),
         _ => unreachable!("{channels} channels"),
     }
 }
@@ -212,7 +211,8 @@ pub(crate) trait BoxSample: Sample + pyramid::BlockMean {
         false
     }
 
-    /// Halve an interleaved HWC array (`channels` 3 or 4).
+    /// Halve an interleaved HWC array (`channels` 3). Default scalar;
+    /// every dtype overrides with exact AVX2 and NEON (vldN) kernels.
     fn box2x_hwc(
         src: &[Self],
         width: usize,
@@ -308,7 +308,6 @@ fn box2_band<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>>(
     match channels {
         1 => box2_pairs::<T, Acc, 1>(sums, out, box_sums.mean4),
         RGB => box2_pairs::<T, Acc, RGB>(sums, out, box_sums.mean4),
-        RGBX => box2_pairs::<T, Acc, RGBX>(sums, out, box_sums.mean4),
         _ => unreachable!("{channels} channels"),
     }
 }
@@ -348,7 +347,7 @@ impl BoxSample for u8 {
                 box2x_u8_into_neon(src, width, height, dst_ptr, dst_stride);
             } else {
                 assert_interleaved(channels);
-                box2x_u8_hwc_into_neon(src, (width, height, channels), dst_ptr, dst_stride);
+                box2x_u8_hwc_into_neon(src, width, height, dst_ptr, dst_stride);
             }
         }
         true
@@ -371,7 +370,6 @@ impl BoxSample for u8 {
             match channels {
                 1 if has_avx2() => box2x_u8_avx2_to(src, width, height, output),
                 RGB if has_avx2() => box2x_u8_hwc3_avx2_to(src, width, height, output),
-                RGBX if has_avx2() => box2x_u8_hwc4_avx2_to(src, width, height, output),
                 _ => return false,
             };
         }
@@ -425,18 +423,12 @@ impl BoxSample for u8 {
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
             // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe {
-                if channels == RGB {
-                    box2x_u8_hwc3_avx2(src, width, height)
-                } else {
-                    box2x_u8_hwc4_avx2(src, width, height)
-                }
-            };
+            return unsafe { box2x_u8_hwc3_avx2(src, width, height) };
         }
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
             // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u8_hwc_neon(src, width, height, channels) };
+            return unsafe { box2x_u8_hwc_neon(src, width, height) };
         }
         box2x_interleaved::<u8>(src, width, height, channels)
     }
@@ -452,19 +444,15 @@ impl BoxSample for u8 {
         assert!((2..=3).contains(&levels));
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample); channels is 3 or 4.
-            return unsafe { box_reduce_u8_hwc_avx2(src, (width, height), channels, levels) };
+            // SAFETY: avx2 detected at runtime; `src` matches its dimensions
+            // (BoxSample) of RGB pixels (checked).
+            return unsafe { box_reduce_u8_rgb_avx2(src, (width, height), levels) };
         }
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample); channels is 3 or 4.
-            return unsafe {
-                if channels == RGB {
-                    box_levels_u8_hwc_neon::<RGB>(src, (width, height), levels)
-                } else {
-                    box_levels_u8_hwc_neon::<RGBX>(src, (width, height), levels)
-                }
-            };
+            // SAFETY: `src` matches its dimensions (BoxSample) of RGB pixels
+            // (checked).
+            return unsafe { box_levels_u8_hwc_neon(src, (width, height), levels) };
         }
         box_levels_fused(src, (width, height, channels), levels, &Self::box_sums())
     }
@@ -489,7 +477,7 @@ impl BoxSample for u16 {
                 box2x_u16_into_neon(src, width, height, dst_ptr, dst_stride);
             } else {
                 assert_interleaved(channels);
-                box2x_u16_hwc_into_neon(src, (width, height, channels), dst_ptr, dst_stride);
+                box2x_u16_hwc_into_neon(src, width, height, dst_ptr, dst_stride);
             }
         }
         true
@@ -514,8 +502,7 @@ impl BoxSample for u16 {
         unsafe {
             match channels {
                 1 => box2x_u16_avx2_to(src, width, height, output),
-                RGB => box2x_u16_hwc3_avx2_to(src, width, height, output),
-                _ => box2x_u16_hwc4_avx2_to(src, width, height, output),
+                _ => box2x_u16_hwc3_avx2_to(src, width, height, output),
             };
         }
         true
@@ -568,14 +555,9 @@ impl BoxSample for u16 {
         assert_interleaved(channels);
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample); channels is 3 or 4.
-            return unsafe {
-                if channels == RGB {
-                    box_levels_u16_hwc_neon::<RGB>(src, (width, height), levels)
-                } else {
-                    box_levels_u16_hwc_neon::<RGBX>(src, (width, height), levels)
-                }
-            };
+            // SAFETY: `src` matches its dimensions (BoxSample) of RGB pixels
+            // (checked).
+            return unsafe { box_levels_u16_hwc_neon(src, (width, height), levels) };
         }
         box_levels_fused(src, (width, height, channels), levels, &Self::box_sums())
     }
@@ -590,18 +572,12 @@ impl BoxSample for u16 {
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
             // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe {
-                if channels == RGB {
-                    box2x_u16_hwc3_avx2(src, width, height)
-                } else {
-                    box2x_u16_hwc4_avx2(src, width, height)
-                }
-            };
+            return unsafe { box2x_u16_hwc3_avx2(src, width, height) };
         }
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
             // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u16_hwc_neon(src, width, height, channels) };
+            return unsafe { box2x_u16_hwc_neon(src, width, height) };
         }
         box2x_interleaved::<u16>(src, width, height, channels)
     }
@@ -626,7 +602,7 @@ impl BoxSample for f32 {
                 box2x_f32_into_neon(src, width, height, dst_ptr, dst_stride);
             } else {
                 assert_interleaved(channels);
-                box2x_f32_hwc_into_neon(src, (width, height, channels), dst_ptr, dst_stride);
+                box2x_f32_hwc_into_neon(src, width, height, dst_ptr, dst_stride);
             }
         }
         true
@@ -651,8 +627,7 @@ impl BoxSample for f32 {
         unsafe {
             match channels {
                 1 => box2x_f32_avx2_to(src, width, height, output),
-                RGB => box2x_f32_hwc3_avx2_to(src, width, height, output),
-                _ => box2x_f32_hwc4_avx2_to(src, width, height, output),
+                _ => box2x_f32_hwc3_avx2_to(src, width, height, output),
             };
         }
         true
@@ -700,18 +675,12 @@ impl BoxSample for f32 {
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
             // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe {
-                if channels == RGB {
-                    box2x_f32_hwc3_avx2(src, width, height)
-                } else {
-                    box2x_f32_hwc4_avx2(src, width, height)
-                }
-            };
+            return unsafe { box2x_f32_hwc3_avx2(src, width, height) };
         }
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
             // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_f32_hwc_neon(src, width, height, channels) };
+            return unsafe { box2x_f32_hwc_neon(src, width, height) };
         }
         box2x_interleaved::<f32>(src, width, height, channels)
     }
@@ -948,15 +917,13 @@ mod tests {
 
     fn assert_interleaved_scalar_equals_planar<T: BoxTestSample>() {
         let mut rng = Rng::new(11);
-        for channels in [RGB, RGBX] {
-            for (width, height) in sizes_from(1) {
-                for src in test_images::<T>(&mut rng, width * height * channels) {
-                    assert_same_image(
-                        &box2x_interleaved(&src, width, height, channels),
-                        &per_channel(&src, (width, height, channels), box2x_scalar),
-                        &format!("{width} x {height} x {channels}"),
-                    );
-                }
+        for (width, height) in sizes_from(1) {
+            for src in test_images::<T>(&mut rng, width * height * RGB) {
+                assert_same_image(
+                    &box2x_interleaved(&src, width, height, RGB),
+                    &per_channel(&src, (width, height, RGB), box2x_scalar),
+                    &format!("{width} x {height}"),
+                );
             }
         }
     }
@@ -987,23 +954,21 @@ mod tests {
                 );
             }
         }
-        for channels in [RGB, RGBX] {
-            for (width, height) in box_sizes(1) {
-                let dims = (width, height, channels);
-                for src in test_images::<T>(&mut rng, width * height * channels) {
-                    let context = format!("{width} x {height} x {channels}");
+        for (width, height) in box_sizes(1) {
+            let dims = (width, height, RGB);
+            for src in test_images::<T>(&mut rng, width * height * RGB) {
+                let context = format!("{width} x {height} x {RGB}");
+                assert_same_image(
+                    &T::box2x_hwc(&src, width, height, RGB),
+                    &box2x_interleaved(&src, width, height, RGB),
+                    &format!("box2x_hwc {context}"),
+                );
+                for levels in [2, 3] {
                     assert_same_image(
-                        &T::box2x_hwc(&src, width, height, channels),
-                        &box2x_interleaved(&src, width, height, channels),
-                        &format!("box2x_hwc {context}"),
+                        &T::box_levels_hwc(&src, width, height, RGB, levels),
+                        &interleaved_pyramid_reference(&src, dims, levels),
+                        &format!("box_levels_hwc {levels} {context}"),
                     );
-                    for levels in [2, 3] {
-                        assert_same_image(
-                            &T::box_levels_hwc(&src, width, height, channels, levels),
-                            &interleaved_pyramid_reference(&src, dims, levels),
-                            &format!("box_levels_hwc {levels} {context}"),
-                        );
-                    }
                 }
             }
         }
@@ -1069,7 +1034,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "interleaved images have 3 or 4 channels")]
+    #[should_panic(expected = "interleaved images have 3 channels")]
     fn box2x_hwc_rejects_a_planar_image() {
         let src = vec![0u16; 16];
         let _ = u16::box2x_hwc(&src, 4, 4, 1);
@@ -1082,8 +1047,8 @@ mod tests {
     }
 
     #[test]
-    fn the_test_layouts_are_gray_rgb_and_rgbx() {
-        assert_eq!(CHANNELS, [1, RGB, RGBX]);
+    fn the_test_layouts_are_gray_and_rgb() {
+        assert_eq!(CHANNELS, [1, RGB]);
     }
 
     /// Whether this CPU's tier writes 2x boxes in place (`box2x_into`).

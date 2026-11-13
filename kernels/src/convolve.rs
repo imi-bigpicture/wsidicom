@@ -1,5 +1,5 @@
-//! Native convolution resize of u8 images, planar or interleaved RGB or
-//! 4-sample pixels, any ratio, with `fast_image_resize`'s filters and window
+//! Native convolution resize of u8 images, planar or interleaved RGB, any
+//! ratio, with `fast_image_resize`'s filters and window
 //! rules (clipped at the image edge, renormalized) — the same function, but
 //! more exactly: the vertical pass keeps a Q6 i16 intermediate instead of
 //! rounding and clamping to u8, which keeps every output within 1 LSB of the
@@ -11,10 +11,9 @@
 //! Vertical pass first, one output row at a time (contiguous, SIMD across the
 //! row, no intermediate image), then the horizontal pass on that cached row.
 //! The SIMD horizontal pass runs on transposed 16-row batches
-//! (`resize_transposed`); on AVX2, RGBA rows and some RGB reductions run per
-//! row instead (`PixelBlocks`, `TapRuns`; RGB rows are widened to the RGBX
-//! layout for them and packed back). Everything else runs the scalar
-//! reference per row. The SIMD kernels mirror the scalar arithmetic bit for
+//! (`resize_transposed`); on AVX2, some RGB reductions run per row instead
+//! (`TapRuns`, on rows widened to the RGBX layout and packed back).
+//! Everything else runs the scalar reference per row. The SIMD kernels mirror the scalar arithmetic bit for
 //! bit, so results are identical on every CPU.
 //!
 //! Interleaved images run the same vertical pass over cw samples and the
@@ -27,7 +26,6 @@ mod neon;
 pub(crate) mod x86;
 
 use std::cell::RefCell;
-use std::ops::Range;
 use std::sync::Arc;
 
 use crate::sample::{CONVOLVE_U8_FRAC_BITS, mulhrs, q15};
@@ -50,27 +48,20 @@ pub(crate) const TRANSPOSE_ROWS: usize = 16;
 /// i16 lanes of a run's weight group (`Runs`): `PIXEL_OUTPUTS` taps of 4
 /// lanes.
 pub(crate) const RUN_GROUP_LANES: usize = 32;
-/// Channels of the interleaved layouts with a native path; RGB runs the
-/// RGBA horizontal kernels on rows widened to RGBX.
+/// Samples per pixel of the interleaved layout, RGB, and of the RGBX layout
+/// its rows are widened to for the per-row kernels.
 pub(crate) const RGB: usize = 3;
-pub(crate) const RGBA: usize = 4;
-/// Output pixels per pixel block at most: one register of 8 x 4 i16 lanes.
+pub(crate) const RGBX: usize = 4;
+/// Output pixels per pixel block at most, and pixels per tap-run group.
 pub(crate) const PIXEL_OUTPUTS: usize = 8;
-/// Pixels one pixel-block tap may reach: the two registers of one permute.
-pub(crate) const PIXEL_SPAN: usize = 16;
-/// The AVX2 pixel blocks (`horizontal_pixels4_x2_avx2`): 4 outputs within an
-/// 8-pixel window (two registers of 4 pixels).
-pub(crate) const AVX2_PIXEL_OUTPUTS: usize = 4;
-pub(crate) const AVX2_PIXEL_SPAN: usize = 8;
+/// Pixels a pixel block's first taps may span.
+const PIXEL_SPAN: usize = 16;
 /// Pixel blocks this short (median outputs per block) leave tap runs ahead.
 const SPARSE_RUN_GROUP_LANES: usize = 5;
 /// Longer pixel blocks still lose to tap runs on windows of
 /// `TAP_RUN_WINDOW_TAPS`+ taps.
 const SHORT_RUN_GROUP_LANES: usize = 7;
 const TAP_RUN_WINDOW_TAPS: usize = 12;
-/// Mean outputs per AVX2 pixel block from which those blocks fill well
-/// enough to beat the transposed path.
-const AVX2_BLOCK_FILL: f64 = 3.5;
 /// RGB windows from which the transposed path beats widening to RGBX.
 #[cfg(target_arch = "x86_64")]
 const RGB_TRANSPOSED_TAPS: usize = 6;
@@ -442,9 +433,9 @@ impl Windows {
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const MAX_PADDED_TAPS: usize = 20;
 /// Samples past a row the padded windows' zero-weight taps read: a window
-/// starts at most at the row's last pixel, of at most 4 samples.
+/// starts at most at the row's last pixel, of at most 3 samples.
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-const PADDED_READS_PAST_ROW: usize = (MAX_PADDED_TAPS - 1) * 4;
+const PADDED_READS_PAST_ROW: usize = (MAX_PADDED_TAPS - 1) * RGB;
 
 /// Column windows padded with zero-weight taps to the widest one that fits
 /// Q15 (at most `MAX_PADDED_TAPS`), so the transposed horizontal pass has a
@@ -552,120 +543,43 @@ impl Runs {
     }
 }
 
-/// Runs of output pixels whose first taps lie close together: the AVX2
-/// RGBA-layout kernel's blocks (`AVX2_PIXEL_OUTPUTS` within
-/// `AVX2_PIXEL_SPAN`; RGBA, and RGB rows widened to RGBX). A pixel of the
-/// intermediate row is 4 x i16 = one qword; for tap t the window starting at
-/// `base + t` is loaded and one qword permute (a fixed index per block)
-/// gathers pixel `start_j + t` of every output j. Blocks of `PIXEL_OUTPUTS`
-/// within `PIXEL_SPAN` measure how densely the windows pack, which picks tap
-/// runs over blocks (`TapRuns::pay_off`).
-#[cfg_attr(
-    not(target_arch = "x86_64"),
-    expect(
-        dead_code,
-        reason = "read by the x86 kernels; the scalar path has no use"
-    )
-)]
-pub(crate) struct PixelBlocks {
-    pub(crate) blocks: Vec<PixelBlock>,
-    /// Per block tap, per lane: output j's weight in lanes 4j..4j + 4.
-    pub(crate) weights: Vec<[i16; PIXEL_OUTPUTS * RGBA]>,
-    /// Pixels a window may read past the row end.
-    overreach: usize,
-}
-
-#[cfg_attr(
-    not(target_arch = "x86_64"),
-    expect(
-        dead_code,
-        reason = "read by the x86 kernels; the scalar path has no use"
-    )
-)]
-pub(crate) struct PixelBlock {
-    pub(crate) o0: usize,
-    pub(crate) count: usize,
-    pub(crate) base: usize,
-    /// Output j's first tap, relative to `base`.
-    pub(crate) idx: [i64; PIXEL_OUTPUTS],
-    /// This block's rows of `PixelBlocks::weights`, one per tap.
-    pub(crate) taps: Range<usize>,
-}
-
-impl PixelBlocks {
-    /// Outputs of the middle block (blocks are uniform away from the edges).
-    fn median_outputs(&self) -> Option<usize> {
-        self.blocks
-            .get(self.blocks.len() / 2)
-            .map(|block| block.count)
-    }
-
-    fn new(cols: &Windows) -> PixelBlocks {
-        Self::with_size(cols, PIXEL_OUTPUTS, PIXEL_SPAN)
-    }
-
-    /// Blocks of up to `outputs` outputs whose first taps lie within `span`
-    /// pixels (the weight rows keep their `PIXEL_OUTPUTS` lanes; the first
-    /// `outputs` are used).
-    fn with_size(cols: &Windows, outputs: usize, span: usize) -> PixelBlocks {
-        let (mut blocks, mut weights, mut max_taps) = (Vec::new(), Vec::new(), 0);
-        let mut output = 0;
-        while output < cols.len() {
-            if !cols.get(output).fits_q15() {
-                output += 1;
-                continue;
-            }
-            let base = cols.get(output).start;
-            // A window starting before `base` (trimmed zero taps can start a
-            // window after the next one's) ends the block.
-            let fits = |slot: usize| {
-                output + slot < cols.len()
-                    && cols.get(output + slot).fits_q15()
-                    && cols
-                        .get(output + slot)
-                        .start
-                        .checked_sub(base)
-                        .is_some_and(|offset| offset < span)
-            };
-            let count = (0..outputs).take_while(|&slot| fits(slot)).count();
-            let taps = (output..output + count)
-                .map(|x| cols.get(x).q15.len())
-                .max()
-                .unwrap_or(0);
-            max_taps = max_taps.max(taps);
-            let first = weights.len();
-            weights.resize(first + taps, [0; PIXEL_OUTPUTS * RGBA]);
-            let mut idx = [0; PIXEL_OUTPUTS];
-            for (slot, first_tap) in idx.iter_mut().enumerate().take(count) {
-                let win = cols.get(output + slot);
-                *first_tap = (win.start - base) as i64;
-                for (tap, &weight) in win.q15.iter().enumerate() {
-                    weights[first + tap][RGBA * slot..RGBA * (slot + 1)].fill(weight);
-                }
-            }
-            blocks.push(PixelBlock {
-                o0: output,
-                count,
-                base,
-                idx,
-                taps: first..first + taps,
-            });
-            output += count;
+/// Outputs per pixel block: runs of up to `PIXEL_OUTPUTS` outputs whose
+/// first taps lie within `PIXEL_SPAN` pixels, the blocks a per-row pixel
+/// kernel would gather (outputs whose weights exceed Q15 belong to none).
+/// How densely the windows pack picks tap runs (`TapRuns::pay_off`).
+fn pixel_block_outputs(cols: &Windows) -> Vec<usize> {
+    let mut counts = Vec::new();
+    let mut output = 0;
+    while output < cols.len() {
+        if !cols.get(output).fits_q15() {
+            output += 1;
+            continue;
         }
-        PixelBlocks {
-            blocks,
-            weights,
-            overreach: max_taps + span,
-        }
+        let base = cols.get(output).start;
+        // A window starting before `base` (trimmed zero taps can start a
+        // window after the next one's) ends the block.
+        let fits = |slot: usize| {
+            output + slot < cols.len()
+                && cols.get(output + slot).fits_q15()
+                && cols
+                    .get(output + slot)
+                    .start
+                    .checked_sub(base)
+                    .is_some_and(|offset| offset < PIXEL_SPAN)
+        };
+        let count = (0..PIXEL_OUTPUTS).take_while(|&slot| fits(slot)).count();
+        counts.push(count);
+        output += count;
     }
+    counts
 }
 
-/// The RGB/RGBA horizontal pass for large reductions, vectorized over each
+/// The RGB horizontal pass for large reductions, vectorized over each
 /// output's taps instead of across outputs: `Runs` of `PIXEL_OUTPUTS`
 /// pixels per group. Pixel blocks fill their lanes only while several
 /// outputs' taps fit `PIXEL_SPAN` pixels; this costs the same per tap at any
-/// ratio. Used where blocks run short of outputs (`pay_off`); at milder
-/// ratios the blocks are faster. Either kernel gives the same result.
+/// ratio. Used where blocks run short of outputs (`pay_off`). It gives the
+/// scalar reference's result.
 #[cfg_attr(
     not(target_arch = "x86_64"),
     expect(
@@ -680,9 +594,10 @@ pub(crate) struct TapRuns {
 }
 
 impl TapRuns {
-    /// Whether tap runs beat `pixels` for these windows.
-    fn pay_off(cols: &Windows, pixels: &PixelBlocks) -> bool {
-        let Some(median) = pixels.median_outputs() else {
+    /// Whether tap runs pay off for these windows, whose middle pixel block
+    /// holds `median` outputs (blocks are uniform away from the edges).
+    fn pay_off(cols: &Windows, median: Option<usize>) -> bool {
+        let Some(median) = median else {
             return false;
         };
         let taps = cols.get(cols.len() / 2).q15.len();
@@ -690,10 +605,8 @@ impl TapRuns {
             || (median < SHORT_RUN_GROUP_LANES && taps >= TAP_RUN_WINDOW_TAPS)
     }
 
-    fn new(cols: &Windows, width: usize, pixels: &PixelBlocks) -> TapRuns {
-        let sparse_blocks = pixels
-            .median_outputs()
-            .is_some_and(|median| median < SPARSE_RUN_GROUP_LANES);
+    fn new(cols: &Windows, width: usize, median: Option<usize>) -> TapRuns {
+        let sparse_blocks = median.is_some_and(|median| median < SPARSE_RUN_GROUP_LANES);
         TapRuns {
             runs: Runs::new(cols, width),
             sparse_blocks,
@@ -715,11 +628,9 @@ pub(crate) struct Plan {
     /// Windows too wide for consecutive outputs to share a short span of
     /// inputs (`is_large_reduction`).
     large_reduction: bool,
-    /// Samples per pixel: 1, RGB or RGBA.
+    /// Samples per pixel: 1 or RGB.
     channels: usize,
-    /// RGBA on the AVX2 tier: the 4-output blocks of its pixel kernel.
-    pixels_avx2: Option<PixelBlocks>,
-    /// Some for RGB/RGBA reductions where it beats `pixels`.
+    /// Some for RGB reductions where tap runs pay off.
     tap_runs: Option<TapRuns>,
     /// Outputs whose weights exceed Q15, done by the scalar path.
     scalar_cols: Vec<usize>,
@@ -791,7 +702,7 @@ impl Plan {
 
     /// `Plan::new` for any `geometry`.
     pub(crate) fn over(geometry: Geometry, kernel: Kernel, channels: usize) -> Plan {
-        debug_assert!([1, RGB, RGBA].contains(&channels));
+        debug_assert!([1, RGB].contains(&channels));
         let Geometry {
             src: (width, height),
             extent: (extent_width, extent_height),
@@ -806,26 +717,13 @@ impl Plan {
             .collect();
         let widest_col = cols.iter().map(|col| col.q15.len()).max().unwrap_or(0);
         let large_reduction = is_large_reduction(extent_width, ow, kernel);
-        let pixels = (channels > 1).then(|| PixelBlocks::new(&cols));
-        let tap_runs = pixels
-            .as_ref()
-            .filter(|pixel_blocks| TapRuns::pay_off(&cols, pixel_blocks))
-            .map(|pixel_blocks| TapRuns::new(&cols, width, pixel_blocks));
-        let avx2_tier = crate::cpu::has_avx2();
-        // Only where the 4-output blocks fill; sparser blocks lose to the
-        // transposed path.
-        let pixels_avx2 = (channels == RGBA && avx2_tier && tap_runs.is_none())
-            .then(|| PixelBlocks::with_size(&cols, AVX2_PIXEL_OUTPUTS, AVX2_PIXEL_SPAN))
-            .filter(|pixel_blocks| pixel_blocks.blocks.len() as f64 * AVX2_BLOCK_FILL <= ow as f64);
-        // AVX2 RGBA past that: tap runs, which beat the transposed path.
-        let tap_runs =
-            if tap_runs.is_none() && channels == RGBA && avx2_tier && pixels_avx2.is_none() {
-                pixels
-                    .as_ref()
-                    .map(|pixel_blocks| TapRuns::new(&cols, width, pixel_blocks))
-            } else {
-                tap_runs
-            };
+        let tap_runs = (channels > 1)
+            .then(|| {
+                let block_outputs = pixel_block_outputs(&cols);
+                block_outputs.get(block_outputs.len() / 2).copied()
+            })
+            .filter(|&median| TapRuns::pay_off(&cols, median))
+            .map(|median| TapRuns::new(&cols, width, median));
         #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
         let padded_cols = PaddedWindows::new(&cols);
         Plan {
@@ -833,7 +731,6 @@ impl Plan {
             cols,
             large_reduction,
             channels,
-            pixels_avx2,
             tap_runs,
             scalar_cols,
             widest_col,
@@ -956,22 +853,17 @@ fn takes_transposed(plan: &Plan, width: usize) -> bool {
 /// has.
 #[cfg(target_arch = "x86_64")]
 fn runs_transposed(plan: &Plan) -> bool {
-    let channels = plan.channels;
-    // Large reductions (no block plan) of 1 and 3 channels: transposed on
-    // either tier, which needs no widening; RGBA's tap runs stay faster.
-    let large_reduction = plan.large_reduction && channels < RGBA;
+    // Large reductions (no block plan): transposed, which needs no widening.
     // RGB with wide windows: widening to RGBX costs the pixel kernels more
     // than the transposes.
-    let unwidened = channels == RGB && plan.widest_col >= RGB_TRANSPOSED_TAPS;
-    // Transposed unless the tier has a per-row kernel: RGBA pixel blocks, or
-    // tap runs (RGB only for sparse blocks, where they pay for the widening
-    // and packing).
-    let avx2_per_row = plan.pixels_avx2.is_some()
-        || plan
-            .tap_runs
-            .as_ref()
-            .is_some_and(|tap_runs| channels == RGBA || (channels > 1 && tap_runs.sparse_blocks));
-    large_reduction || unwidened || !avx2_per_row
+    let unwidened = plan.channels == RGB && plan.widest_col >= RGB_TRANSPOSED_TAPS;
+    // Transposed unless the tier has a per-row kernel: tap runs, for sparse
+    // blocks only, where they pay for the widening and packing.
+    let avx2_per_row = plan
+        .tap_runs
+        .as_ref()
+        .is_some_and(|tap_runs| tap_runs.sparse_blocks);
+    plan.large_reduction || unwidened || !avx2_per_row
 }
 
 /// The transposed path (AVX2 instructions, run on either tier). Without a
@@ -1131,9 +1023,9 @@ fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     out
 }
 
-/// The per-row interleaved path (the AVX2 pixel kernels, or the scalar
-/// reference). 2- and 3-channel rows are widened to the RGBX layout between
-/// the passes and the output rows packed back.
+/// The per-row RGB path (the AVX2 tap runs, or the scalar reference): rows
+/// widened to the RGBX layout between the passes and the output rows packed
+/// back.
 fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     // Padded: the widening reads whole groups of pixels, up to a register past.
     const WIDEN_GROUP_PIXELS: usize = 8;
@@ -1146,75 +1038,56 @@ fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     let row_pad = plan
         .tap_runs
         .as_ref()
-        .map_or(0, |tap_runs| tap_runs.runs.overreach)
-        .max(
-            plan.pixels_avx2
-                .as_ref()
-                .map_or(0, |pixels| pixels.overreach),
-        );
-    // An odd last row through the AVX2 pixel kernel (which runs pairs) writes
-    // its twin here.
-    #[cfg(target_arch = "x86_64")]
-    let mut spare_row = vec![
-        0u8;
-        if plan.pixels_avx2.is_some() {
-            ow * RGBA
-        } else {
-            0
-        }
-    ];
-    let padded = (width + row_pad) * RGBA;
+        .map_or(0, |tap_runs| tap_runs.runs.overreach);
+    let padded = (width + row_pad) * RGBX;
     let mut mids = [vec![0i16; padded], vec![0i16; padded]];
-    // Fewer than 4 channels: rows widened to the RGBX layout between the
-    // passes (from `narrow_mid`), output rows packed back (from `rgbx_rows`).
-    let widened = channels < RGBA;
+    // Rows widened to the RGBX layout between the passes (from
+    // `narrow_mid`), output rows packed back (from `rgbx_rows`).
     let narrow_pad = channels * width.next_multiple_of(WIDEN_GROUP_PIXELS) + AVX2_I16_LANES;
-    let mut narrow_mid = vec![0i16; if widened { narrow_pad } else { 0 }];
-    let mut rgbx_rows = [(); 2].map(|()| vec![0u8; if widened { ow * RGBA } else { 0 }]);
+    let mut narrow_mid = vec![0i16; narrow_pad];
+    let mut rgbx_rows = [(); 2].map(|()| vec![0u8; ow * RGBX]);
     let dp = out.as_mut_ptr();
     let rows = |lo: usize, hi: usize| {
         for y in (lo..hi).step_by(2) {
             let pair_len = 2.min(hi - y);
             for (y, mid) in (y..y + pair_len).zip(mids.iter_mut()) {
                 let win = plan.rows.get(y);
-                let rows = &src[win.start * ws..win.end() * ws];
-                if widened {
-                    vertical(rows, ws, win, &mut narrow_mid[..ws]);
-                    widen_to_rgbx(&narrow_mid, width, mid);
-                } else {
-                    vertical(rows, ws, win, &mut mid[..ws]);
-                }
+                vertical(
+                    &src[win.start * ws..win.end() * ws],
+                    ws,
+                    win,
+                    &mut narrow_mid[..ws],
+                );
+                widen_to_rgbx(&narrow_mid, width, mid);
             }
             let [rgbx0, rgbx1] = &mut rgbx_rows;
             let (rgbx_row0, rgbx_row1) = (rgbx0.as_mut_ptr(), rgbx1.as_mut_ptr());
-            // SAFETY: rows y .. y + pair_len of `out`, which only this closure
-            // call writes (with_prefault's contract); RGB: the two RGBX row
-            // buffers.
+            // SAFETY: the two RGBX row buffers, each written by one row at a
+            // time.
             let dst = |y: usize| unsafe {
-                let row = match (widened, y % 2) {
-                    (false, _) => dp.add(y * ows),
-                    (true, 0) => rgbx_row0,
-                    (true, _) => rgbx_row1,
+                let row = if y.is_multiple_of(2) {
+                    rgbx_row0
+                } else {
+                    rgbx_row1
                 };
-                std::slice::from_raw_parts_mut(row, ow * RGBA)
+                std::slice::from_raw_parts_mut(row, ow * RGBX)
             };
             #[cfg(target_arch = "x86_64")]
-            let simd = horizontal_pixels_simd(plan, &mids, y, pair_len, dst, &mut spare_row);
+            let simd = horizontal_pixels_simd(plan, &mids, y, pair_len, dst);
             #[cfg(not(target_arch = "x86_64"))]
             let simd = false;
             for (y, mid) in (y..y + pair_len).zip(&mids) {
                 let dst = dst(y);
                 if simd {
-                    narrow_scalar_cols(plan, mid, dst, RGBA);
+                    narrow_scalar_cols(plan, mid, dst, RGBX);
                 } else {
-                    horizontal_scalar(plan, mid, dst, RGBA);
+                    horizontal_scalar(plan, mid, dst, RGBX);
                 }
-                if widened {
-                    // SAFETY: row y of `out`, which only this closure call writes.
-                    pack_from_rgbx(dst, unsafe {
-                        std::slice::from_raw_parts_mut(dp.add(y * ows), ows)
-                    });
-                }
+                // SAFETY: row y of `out`, which only this closure call writes
+                // (with_prefault's contract).
+                pack_from_rgbx(dst, unsafe {
+                    std::slice::from_raw_parts_mut(dp.add(y * ows), ows)
+                });
             }
         }
     };
@@ -1223,9 +1096,9 @@ fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     out
 }
 
-/// The x86 SIMD horizontal passes of output rows y .. y + `pair_len` (one or
-/// two) of the per-row interleaved path, from `mids`, into `dst(y)`: false
-/// where none applies (the caller runs `horizontal_pixels`).
+/// The x86 SIMD horizontal pass of output rows y .. y + `pair_len` (one or
+/// two) of the per-row RGB path, from `mids`, into `dst(y)`: false where it
+/// doesn't apply (the caller runs `horizontal_scalar`).
 #[cfg(target_arch = "x86_64")]
 fn horizontal_pixels_simd<'row>(
     plan: &Plan,
@@ -1233,7 +1106,6 @@ fn horizontal_pixels_simd<'row>(
     y: usize,
     pair_len: usize,
     dst: impl Fn(usize) -> &'row mut [u8],
-    spare_row: &mut [u8],
 ) -> bool {
     if let (Some(runs), true, 2) = (&plan.tap_runs, crate::cpu::has_avx2(), pair_len) {
         let [mid0, mid1] = mids;
@@ -1244,19 +1116,6 @@ fn horizontal_pixels_simd<'row>(
                 [dst(y), dst(y + 1)],
                 &runs.runs,
             );
-        };
-        return true;
-    }
-    if let (Some(pixels4), true) = (&plan.pixels_avx2, crate::cpu::has_avx2()) {
-        let [mid0, mid1] = mids;
-        let (mid1, dst1) = if pair_len == 2 {
-            (mid1, dst(y + 1))
-        } else {
-            (mid0, &mut spare_row[..])
-        };
-        // SAFETY: avx2 detected; mids padded by `overreach` pixels.
-        unsafe {
-            crate::convolve::x86::horizontal_pixels4_x2_avx2([mid0, mid1], [dst(y), dst1], pixels4);
         };
         return true;
     }
@@ -1274,7 +1133,7 @@ fn widen_to_rgbx(src: &[i16], pixels: usize, rgbx: &mut [i16]) {
         return unsafe { crate::convolve::x86::widen_to_rgbx_avx2(src, pixels, rgbx) };
     }
     let (rgb_pixels, _) = src[..RGB * pixels].as_chunks::<RGB>();
-    let (rgbx_pixels, _) = rgbx.as_chunks_mut::<RGBA>();
+    let (rgbx_pixels, _) = rgbx.as_chunks_mut::<RGBX>();
     for (px, out) in rgb_pixels.iter().zip(rgbx_pixels) {
         *out = [px[0], px[1], px[2], 0];
     }
@@ -1287,7 +1146,7 @@ fn pack_from_rgbx(rgbx: &[u8], out: &mut [u8]) {
         // SAFETY: avx2 detected; rgbx holds out.len() / 3 pixels.
         return unsafe { crate::convolve::x86::pack_from_rgbx_avx2(rgbx, out) };
     }
-    let (rgbx_pixels, _) = rgbx.as_chunks::<RGBA>();
+    let (rgbx_pixels, _) = rgbx.as_chunks::<RGBX>();
     let (rgb_pixels, _) = out.as_chunks_mut::<RGB>();
     for (px, out) in rgbx_pixels.iter().zip(rgb_pixels) {
         *out = [px[0], px[1], px[2]];
@@ -1602,11 +1461,6 @@ mod tests {
         assert_resize_matches_reference(RGB);
     }
 
-    #[test]
-    fn rgba_resize_equals_reference() {
-        assert_resize_matches_reference(RGBA);
-    }
-
     /// The partial-sum check keeps every window of ordinary sizes on the SIMD
     /// path (only the weight range decides, as before it existed), and takes
     /// off it the windows of tens of thousands of taps whose rounded terms
@@ -1700,11 +1554,9 @@ mod tests {
                     let transposed = false;
                     reached.insert(match (transposed, channels) {
                         (true, 1) => "transposed planar",
-                        (true, RGB) => "transposed RGB",
-                        (true, _) => "transposed RGBA",
+                        (true, _) => "transposed RGB",
                         (false, 1) => "per-row planar",
-                        (false, RGB) => "per-row RGB",
-                        (false, _) => "per-row RGBA",
+                        (false, _) => "per-row RGB",
                     });
                 }
             }
@@ -1715,15 +1567,10 @@ mod tests {
             "scalar columns",
             "per-row planar",
             "per-row RGB",
-            "per-row RGBA",
         ];
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
         if has_simd_rows() {
             expected.extend(["transposed planar", "transposed RGB"]);
-        }
-        #[cfg(target_arch = "aarch64")]
-        if has_simd_rows() {
-            expected.extend(["transposed planar", "transposed RGB", "transposed RGBA"]);
         }
         for plan in expected {
             assert!(reached.contains(plan), "no case reaches {plan}");
@@ -1766,12 +1613,11 @@ mod tests {
         }
     }
 
-    /// The AVX2 RGBA-layout horizontal kernels (pixel blocks, tap runs) on
-    /// rows padded as `resize_pixel_rows` pads them, for every case,
-    /// whichever the plan would choose.
+    /// The AVX2 tap runs on RGBX-layout rows padded as `resize_pixel_rows`
+    /// pads them, for every case, whether or not the plan would choose them.
     #[cfg(target_arch = "x86_64")]
     #[test]
-    fn rgba_horizontal_kernels_equal_reference() {
+    fn tap_runs_equal_reference() {
         if !has_avx2() {
             return;
         }
@@ -1780,56 +1626,18 @@ mod tests {
             for (width, ow) in COLUMN_CASES {
                 let cols = Windows::new(width, ow, kernel);
                 let context = format!("{} {width} -> {ow}", kernel_name(kernel));
-                let pixels = PixelBlocks::new(&cols);
-                let pixels4 = PixelBlocks::with_size(&cols, AVX2_PIXEL_OUTPUTS, AVX2_PIXEL_SPAN);
                 let runs = Runs::new(&cols, width);
-                let mut padded_mids = |pad: usize| {
-                    [
-                        random_mid(&mut rng, (width + pad) * RGBA),
-                        random_mid(&mut rng, (width + pad) * RGBA),
-                    ]
-                };
-                let block_mids = padded_mids(pixels.overreach);
-                let run_mids = padded_mids(runs.overreach.max(pixels.overreach));
-                let fresh = || [vec![SENTINEL; ow * RGBA], vec![SENTINEL; ow * RGBA]];
-                let assert_rows =
-                    |mids: &[Vec<i16>; 2], dsts: &[Vec<u8>; 2], covered: &[bool], name: &str| {
-                        for (mid, dst) in mids.iter().zip(dsts) {
-                            assert_row(
-                                dst,
-                                mid,
-                                &cols,
-                                RGBA,
-                                covered,
-                                &format!("{context}, {name}"),
-                            );
-                        }
-                    };
-                let run_covered = covered_by(ow, runs.outputs.iter().copied());
-                let mut pair = fresh();
-                let mut taps = fresh();
-                // SAFETY: AVX2 detected; blocks of at most
-                // AVX2_PIXEL_OUTPUTS, the mids padded as above (the 8-pixel
-                // blocks' overreach covers the 4-pixel ones').
+                let mids = [(); 2].map(|()| random_mid(&mut rng, (width + runs.overreach) * RGBX));
+                let mut dsts = [(); 2].map(|()| vec![SENTINEL; ow * RGBX]);
+                // SAFETY: AVX2 detected; the mids padded by the runs' overreach.
                 unsafe {
-                    let [dst0, dst1] = &mut pair;
-                    x86::horizontal_pixels4_x2_avx2(
-                        [&block_mids[0], &block_mids[1]],
-                        [dst0, dst1],
-                        &pixels4,
-                    );
-                    let [dst0, dst1] = &mut taps;
-                    x86::horizontal_taps_x2_avx2([&run_mids[0], &run_mids[1]], [dst0, dst1], &runs);
+                    let [dst0, dst1] = &mut dsts;
+                    x86::horizontal_taps_x2_avx2([&mids[0], &mids[1]], [dst0, dst1], &runs);
                 }
-                let covered4 = covered_by(
-                    ow,
-                    pixels4
-                        .blocks
-                        .iter()
-                        .flat_map(|block| block.o0..block.o0 + block.count),
-                );
-                assert_rows(&block_mids, &pair, &covered4, "pixels4 x2 avx2");
-                assert_rows(&run_mids, &taps, &run_covered, "taps x2 avx2");
+                let covered = covered_by(ow, runs.outputs.iter().copied());
+                for (mid, dst) in mids.iter().zip(&dsts) {
+                    assert_row(dst, mid, &cols, RGBX, &covered, &context);
+                }
             }
         }
     }
@@ -1878,7 +1686,7 @@ mod tests {
                              kernel: unsafe fn(&[i16], usize, &mut [i16]),
                              name: &str| {
                 let src = random_mid(&mut rng, RGB * groups + overread);
-                let mut rgbx = vec![SENTINEL_I16; RGBA * groups];
+                let mut rgbx = vec![SENTINEL_I16; RGBX * groups];
                 // SAFETY: the caller detected the kernel's features; src and
                 // rgbx hold the kernel's minimum lengths.
                 unsafe { kernel(&src, pixels, &mut rgbx) };
@@ -1889,13 +1697,13 @@ mod tests {
                     .flat_map(|px| [px[0], px[1], px[2], 0])
                     .collect();
                 assert_same(
-                    &rgbx[..RGBA * pixels],
+                    &rgbx[..RGBX * pixels],
                     &expected,
                     &format!("{pixels} pixels, {name}"),
                 );
             };
             if avx2 {
-                let (group, overread) = (AVX2_I16_LANES / RGBA, AVX2_I16_LANES / 2);
+                let (group, overread) = (AVX2_I16_LANES / RGBX, AVX2_I16_LANES / 2);
                 check(
                     pixels.next_multiple_of(group),
                     overread,
@@ -1912,9 +1720,9 @@ mod tests {
         let avx2 = has_avx2();
         let mut rng = Rng::new(10);
         for pixels in 1..=70 {
-            let rgbx: Vec<u8> = random_samples(&mut rng, RGBA * pixels);
+            let rgbx: Vec<u8> = random_samples(&mut rng, RGBX * pixels);
             let expected: Vec<u8> = rgbx
-                .as_chunks::<RGBA>()
+                .as_chunks::<RGBX>()
                 .0
                 .iter()
                 .flat_map(|px| [px[0], px[1], px[2]])
@@ -1923,7 +1731,7 @@ mod tests {
             for (available, kernel, name) in tiers {
                 if available {
                     let mut out = vec![SENTINEL; RGB * pixels];
-                    // SAFETY: the kernel's features detected; rgbx holds RGBA
+                    // SAFETY: the kernel's features detected; rgbx holds RGBX
                     // bytes per output pixel.
                     unsafe { kernel(&rgbx, &mut out) };
                     assert_same(&out, &expected, &format!("{pixels} pixels, {name}"));

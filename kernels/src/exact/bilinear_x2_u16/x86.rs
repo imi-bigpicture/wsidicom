@@ -9,8 +9,8 @@
 //! their own arguments are safe.
 
 use crate::exact::bilinear_x2::{bilinear_x2_scalar, window};
-use crate::exact::x86::cover_steps;
-use crate::x86::prefetch_rows_after_window;
+use crate::exact::x86::{cover_steps, prefetch_next_rows};
+use crate::sample::RGB;
 
 /// The AVX2 kernel for one channel. A source pixel pair is one dword, so a
 /// row's even and odd pixels come from each load by a mask and a shift. The
@@ -132,8 +132,8 @@ pub(crate) unsafe fn bilinear_x2_u16_gray_avx2(
     unsafe { crate::cpu::written_output(out_buf) }
 }
 
-/// The AVX2 kernel for `CHANNELS` (3 or 4) interleaved channels: as the
-/// one-channel kernel, with each pixel in 4 i32 lanes (`CHANNELS` used) of
+/// The AVX2 kernel for RGB: as the one-channel kernel, with each pixel in 4
+/// i32 lanes (3 used) of
 /// the even and odd rows. A pixel pair (at most 16 bytes) loads into a
 /// 128-bit lane, one byte shuffle puts its even and odd pixels' samples into
 /// words 0.. and 4.. (the rest zero), and unpacking against zero widens them;
@@ -142,15 +142,16 @@ pub(crate) unsafe fn bilinear_x2_u16_gray_avx2(
 /// overwriting the rest (the row's last as `CHANNELS` masked dwords).
 ///
 /// # Safety
-/// AVX2 must be available; `src` holds `width * height * CHANNELS` samples,
+/// AVX2 must be available; `src` holds `width * height * 3` samples,
 /// `width` and `height` even.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn bilinear_x2_u16_hwc_avx2<const CHANNELS: usize>(
+pub(crate) unsafe fn bilinear_x2_u16_rgb_avx2(
     src: &[u16],
     width: usize,
     height: usize,
 ) -> Vec<u16> {
     use std::arch::x86_64::*;
+    const CHANNELS: usize = RGB;
     const PIXEL: usize = 4; // i32 lanes per pixel in the even and odd rows
     const STEP: usize = 4; // output pixels per step
     let (ow, oh, ws) = (width / 2, height / 2, width * CHANNELS);
@@ -165,7 +166,7 @@ pub(crate) unsafe fn bilinear_x2_u16_hwc_avx2<const CHANNELS: usize>(
     let (ep, op) = unsafe { (even.as_mut_ptr().add(PIXEL), odd.as_mut_ptr().add(PIXEL)) };
     // Room for a 16-byte load at any pixel pair.
     let zeros = vec![0u16; ws + 8];
-    let (split_pair, drop_unused, pair_dwords) = pixel_pair_shuffles::<CHANNELS>();
+    let (split_pair, drop_unused, pair_dwords) = pixel_pair_shuffles();
     let half = _mm256_set1_epi32(32);
     let zero = _mm256_setzero_si256();
     let triple = |sum: __m256i| _mm256_add_epi32(sum, _mm256_add_epi32(sum, sum));
@@ -274,7 +275,7 @@ pub(crate) unsafe fn bilinear_x2_u16_hwc_avx2<const CHANNELS: usize>(
             // SAFETY: avx2 is enabled here; row_out holds the row's
             // ow * CHANNELS outputs and o0 + 4 <= ow (cover_steps).
             unsafe {
-                store_pixel_quad::<CHANNELS>(
+                store_pixel_quad(
                     row_out,
                     o0,
                     ow,
@@ -291,18 +292,18 @@ pub(crate) unsafe fn bilinear_x2_u16_hwc_avx2<const CHANNELS: usize>(
     unsafe { crate::cpu::written_output(out_buf) }
 }
 
-/// For `CHANNELS` (3 or 4) interleaved channels: the byte shuffle putting a
-/// pixel pair's 2 CHANNELS words (in a 128-bit lane) at [first's CHANNELS,
-/// 0.., second's CHANNELS, 0..]; the one taking two pixels' 4-word groups
-/// back to their 2 CHANNELS samples; and the mask of a pixel pair's
-/// CHANNELS dwords (for loads and stores at a row's end).
+/// For RGB: the byte shuffle putting a pixel pair's 6 words (in a 128-bit
+/// lane) at [first's 3, 0, second's 3, 0]; the one taking two pixels'
+/// 4-word groups back to their 6 samples; and the mask of a pixel pair's 3
+/// dwords (for loads and stores at a row's end).
 #[target_feature(enable = "avx2")]
-pub(crate) fn pixel_pair_shuffles<const CHANNELS: usize>() -> (
+pub(crate) fn pixel_pair_shuffles() -> (
     std::arch::x86_64::__m256i,
     std::arch::x86_64::__m256i,
     std::arch::x86_64::__m128i,
 ) {
     use std::arch::x86_64::*;
+    const CHANNELS: usize = RGB;
     const PIXEL: usize = 4;
     let byte_pick = |word_of: &dyn Fn(usize) -> Option<usize>| -> __m256i {
         let bytes: [i8; 16] = std::array::from_fn(|byte| {
@@ -321,23 +322,23 @@ pub(crate) fn pixel_pair_shuffles<const CHANNELS: usize>() -> (
         word if (CHANNELS..2 * CHANNELS).contains(&word) => Some(PIXEL + word - CHANNELS),
         _ => None,
     });
-    let pair_dwords = _mm_setr_epi32(-1, -1, -1, if CHANNELS > 3 { -1 } else { 0 });
+    let pair_dwords = _mm_setr_epi32(-1, -1, -1, 0);
     (split_pair, drop_unused, pair_dwords)
 }
 
-/// Stores output pixels o0..o0 + 4 of a `CHANNELS`-channel row from their means
+/// Stores output pixels o0..o0 + 4 of an RGB row from their means
 /// (pixels o0 | o0 + 1 in `first`, o0 + 2 | o0 + 3 in `second`, 4 lanes
 /// each): packed per lane as [o0, o0 + 2 | o0 + 1, o0 + 3], put back in
 /// order, the unused lanes dropped; each 128-bit lane stored as 16 bytes, the
-/// next store overwriting the rest, the row's last (o0 + 4 = `ow`) as
-/// `CHANNELS` masked dwords.
+/// next store overwriting the rest, the row's last (o0 + 4 = `ow`) as 3
+/// masked dwords.
 ///
 /// # Safety
-/// AVX2 must be available; `CHANNELS` is 3 or 4, `row_out` is valid for
-/// writes of `ow * CHANNELS` samples and `o0 + 4 <= ow`.
+/// AVX2 must be available, `row_out` is valid for writes of `ow * 3`
+/// samples and `o0 + 4 <= ow`.
 #[target_feature(enable = "avx2")]
 #[inline]
-pub(crate) unsafe fn store_pixel_quad<const CHANNELS: usize>(
+pub(crate) unsafe fn store_pixel_quad(
     row_out: *mut u16,
     o0: usize,
     ow: usize,
@@ -347,6 +348,7 @@ pub(crate) unsafe fn store_pixel_quad<const CHANNELS: usize>(
     pair_dwords: std::arch::x86_64::__m128i,
 ) {
     use std::arch::x86_64::*;
+    const CHANNELS: usize = RGB;
     let packed = _mm256_packus_epi32(first, second);
     let samples = _mm256_shuffle_epi8(
         _mm256_permute4x64_epi64::<0b11_01_10_00>(packed),
@@ -416,8 +418,7 @@ mod tests {
             unsafe {
                 match channels {
                     1 => bilinear_x2_u16_gray_avx2(src, width, height),
-                    3 => bilinear_x2_u16_hwc_avx2::<3>(src, width, height),
-                    _ => bilinear_x2_u16_hwc_avx2::<4>(src, width, height),
+                    _ => bilinear_x2_u16_rgb_avx2(src, width, height),
                 }
             }
         };

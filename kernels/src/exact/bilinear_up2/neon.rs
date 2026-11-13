@@ -5,13 +5,12 @@
 //! Every `unsafe fn` here requires the bounds its doc states.
 
 use std::arch::aarch64::{
-    uint8x16_t, uint8x16x3_t, uint8x16x4_t, uint16x8_t, vaddw_u8, vcombine_u8, vdup_n_u8,
-    vget_high_u8, vget_low_u8, vld1q_u8, vld1q_u16, vld3q_u16, vld4q_u16, vmlaq_n_u16, vmull_u8,
-    vrshrn_n_u16, vst1q_u8, vst1q_u16, vst3q_u8, vst4q_u8, vzip1_u8, vzip2_u8,
+    uint8x16_t, uint8x16x3_t, uint16x8_t, vaddw_u8, vcombine_u8, vdup_n_u8, vget_high_u8,
+    vget_low_u8, vld1q_u8, vld1q_u16, vld3q_u16, vmlaq_n_u16, vmull_u8, vrshrn_n_u16, vst1q_u8,
+    vst1q_u16, vst3q_u8, vzip1_u8, vzip2_u8,
 };
 
 use super::{far, horizontal_scalar};
-use crate::sample::RGB;
 
 /// Input pixels per horizontal step: 16 output pixels.
 const STEP_PX: usize = 8;
@@ -21,11 +20,11 @@ const STEP_PX: usize = 8;
 /// outside it — the scalar reference's clamped far tap, so every input pixel
 /// m gives outputs 2m and 2m + 1 by the same formula, `(3 s[m] + s[m - 1] +
 /// 8) >> 4` and `(3 s[m] + s[m + 1] + 8) >> 4` (`vrshrn` by 4), per channel
-/// plane (`vld1`/`vld3`/`vld4`), interleaved by `vzip`. Pixels past the last
+/// plane (`vld1`/`vld3`), interleaved by `vzip`. Pixels past the last
 /// whole step by the scalar reference.
 ///
 /// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1, 3 or 4.
+/// `src` holds `width * height * channels` samples, `channels` 1 or 3.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn bilinear_up2_neon(
     src: &[u8],
@@ -60,33 +59,19 @@ pub(crate) unsafe fn bilinear_up2_neon(
             unsafe {
                 let at = |pixel: usize| sums_ptr.add(pixel * channels);
                 let dst_ptr = dst.as_mut_ptr().add(2 * first * channels);
-                match channels {
-                    1 => {
-                        let [before, center, after] =
-                            [first, first + 1, first + 2].map(|pixel| vld1q_u16(at(pixel)));
-                        vst1q_u8(dst_ptr, enlarged(before, center, after));
-                    }
-                    RGB => {
-                        let [before, center, after] =
-                            [first, first + 1, first + 2].map(|pixel| vld3q_u16(at(pixel)));
-                        let planes = uint8x16x3_t(
-                            enlarged(before.0, center.0, after.0),
-                            enlarged(before.1, center.1, after.1),
-                            enlarged(before.2, center.2, after.2),
-                        );
-                        vst3q_u8(dst_ptr, planes);
-                    }
-                    _ => {
-                        let [before, center, after] =
-                            [first, first + 1, first + 2].map(|pixel| vld4q_u16(at(pixel)));
-                        let planes = uint8x16x4_t(
-                            enlarged(before.0, center.0, after.0),
-                            enlarged(before.1, center.1, after.1),
-                            enlarged(before.2, center.2, after.2),
-                            enlarged(before.3, center.3, after.3),
-                        );
-                        vst4q_u8(dst_ptr, planes);
-                    }
+                if channels == 1 {
+                    let [before, center, after] =
+                        [first, first + 1, first + 2].map(|pixel| vld1q_u16(at(pixel)));
+                    vst1q_u8(dst_ptr, enlarged(before, center, after));
+                } else {
+                    let [before, center, after] =
+                        [first, first + 1, first + 2].map(|pixel| vld3q_u16(at(pixel)));
+                    let planes = uint8x16x3_t(
+                        enlarged(before.0, center.0, after.0),
+                        enlarged(before.1, center.1, after.1),
+                        enlarged(before.2, center.2, after.2),
+                    );
+                    vst3q_u8(dst_ptr, planes);
                 }
             }
         }

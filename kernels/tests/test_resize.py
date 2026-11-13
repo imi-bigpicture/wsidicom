@@ -120,13 +120,13 @@ class TestResizeChannels:
         filter: ResizeFilter,
         operation: Callable[[np.ndarray, ResizeFilter], np.ndarray],
     ) -> None:
-        """4-channel images are generic channels, not colour + alpha.
+        """Each channel of an interleaved image is filtered on its own.
 
-        No channel is scaled by another (fast_image_resize would premultiply by
-        a "last channel = alpha" unless told not to).
+        No channel is scaled by another: a constant channel stays constant
+        beside zero ones.
         """
-        # Arrange - constant colour; last channel 0 ("transparent")
-        image = np.zeros((64, 96, 4), dtype)
+        # Arrange - a constant first channel, the others 0
+        image = np.zeros((64, 96, 3), dtype)
         image[..., 0] = level
 
         # Act
@@ -176,8 +176,8 @@ class TestResizeAccuracy:
                 [
                     ((37, 53), (19, 71)),
                     ((64, 80, 3), (32, 40)),
-                    ((50, 61, 4), (150, 90)),
-                    ((90, 70, 4), (11, 23)),
+                    ((50, 61, 3), (150, 90)),
+                    ((90, 70, 3), (11, 23)),
                 ]
             )
         ],
@@ -212,7 +212,7 @@ class TestResizeAccuracy:
         else:
             assert np.abs(simd.astype(float) - exact).max() <= 1e-5
 
-    @pytest.mark.parametrize("channels", [1, 3, 4])
+    @pytest.mark.parametrize("channels", [1, 3])
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("filter", CONVOLUTION_FILTERS)
     def test_native_large_reductions_within_one_lsb(
@@ -225,8 +225,7 @@ class TestResizeAccuracy:
     ) -> None:
         """Large reductions stay native for every layout: within 1 LSB of exact.
 
-        No block plan; the transposed path for 1 and 3 channels, tap runs for
-        RGBA.
+        No block plan: the transposed path.
         """
         # Arrange
         shape = (96, 160, channels) if channels > 1 else (96, 160)
@@ -285,7 +284,7 @@ class TestResizeAccuracy:
             ((3, 40000), (1, 3)),
             ((20000, 2), (2, 1)),
             ((1200, 1300, 3), (3, 4)),
-            ((520, 300, 4), (2, 1)),
+            ((520, 300, 3), (2, 1)),
         ],
     )
     @pytest.mark.parametrize("dtype", DTYPES)
@@ -386,9 +385,9 @@ class TestResizeSimdParity:
     @pytest.mark.parametrize(
         ["dtype", "shape"],
         [
-            (np.uint8, (120, 1024, 4)),
+            (np.uint8, (120, 1024, 3)),
             (np.uint8, (100, 4096)),
-            (np.uint16, (100, 512, 4)),
+            (np.uint16, (100, 512, 3)),
             (np.float32, (100, 1024)),
         ],
     )
@@ -441,7 +440,6 @@ class TestResizeLayouts:
             ]
         ),
     )
-    @pytest.mark.parametrize("channels", [3, 4])
     def test_native_interleaved_resize_equals_planar_per_channel(
         self,
         random_image: RandomImage,
@@ -449,7 +447,6 @@ class TestResizeLayouts:
         size: ImageSize,
         output_size: ImageSize,
         filter: ResizeFilter,
-        channels: int,
     ) -> None:
         """Interleaved uint8 images resize natively with the planar arithmetic.
 
@@ -457,8 +454,8 @@ class TestResizeLayouts:
         (so within 1 LSB of exact too), SIMD and scalar alike.
         """
         # Arrange
-        image = random_image((*size, channels), np.uint8)
-        planes = [np.ascontiguousarray(image[..., c]) for c in range(channels)]
+        image = random_image((*size, 3), np.uint8)
+        planes = [np.ascontiguousarray(image[..., c]) for c in range(3)]
         expected = np.stack(
             [resize(plane, *output_size, filter) for plane in planes], axis=-1
         )
@@ -548,7 +545,7 @@ class TestResizeExactRatios:
     @pytest.mark.parametrize(
         ["height", "width"], [(1, 1), (2, 3), (5, 33), (17, 35), (65, 129)]
     )
-    @pytest.mark.parametrize("channels", [1, 3, 4])
+    @pytest.mark.parametrize("channels", [1, 3])
     @pytest.mark.parametrize("content", ["random", "saturated"])
     def test_integer_reduction_is_exact(
         self,
@@ -589,7 +586,7 @@ class TestResizeExactRatios:
     @pytest.mark.parametrize(
         ["height", "width"], [(1, 1), (3, 5), (10, 17), (33, 70), (65, 129)]
     )
-    @pytest.mark.parametrize("channels", [1, 3, 4])
+    @pytest.mark.parametrize("channels", [1, 3])
     def test_bilinear_to_double_size_is_exact(
         self,
         random_image: RandomImage,
@@ -619,7 +616,7 @@ class TestResizeExactRatios:
         assert np.array_equal(simd, expected)
         assert np.array_equal(scalar, expected)
 
-    @pytest.mark.parametrize("shape", [(64, 96), (64, 96, 3), (64, 96, 4)])
+    @pytest.mark.parametrize("shape", [(64, 96), (64, 96, 3)])
     @pytest.mark.parametrize("exponent", [1, 2])
     def test_resize_exact_power_of_two_box_matches_downscale(
         self, random_image: RandomImage, shape: tuple[int, ...], exponent: int
@@ -705,7 +702,7 @@ class TestResizeNearest:
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize(
         ["shape", "output_size"],
-        [((37, 53), (19, 71)), ((64, 48, 3), (64, 16)), ((30, 31, 4), (97, 13))],
+        [((37, 53), (19, 71)), ((64, 48, 3), (64, 16)), ((30, 31, 3), (97, 13))],
     )
     def test_nearest_matches_fast_image_resize_positions(
         self,

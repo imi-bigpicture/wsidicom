@@ -14,7 +14,7 @@
 
 """Fast tile compositing and downscaling.
 
-Operates on planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` arrays, dtype
+Operates on planar ``(H, W)`` or interleaved RGB ``(H, W, 3)`` arrays, dtype
 uint8 / uint16 / float32. Planar is the universal core — the only layout that
 expresses subsampled chroma (YCbCr 4:2:0), so compose/downscale those per plane.
 Overlaps in :func:`compose` resolve last-write-wins (no blending).

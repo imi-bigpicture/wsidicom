@@ -5,17 +5,21 @@
 //! Every `unsafe fn` here requires the bounds its doc states.
 
 use std::arch::aarch64::{
-    uint8x16_t, uint8x16x3_t, uint8x16x4_t, uint16x4_t, uint16x8_t, uint16x8x4_t, vaddq_u16,
-    vaddq_u32, vcombine_u8, vcombine_u16, vdup_n_u8, vdupq_n_u16, vdupq_n_u32, vextq_u16,
-    vget_high_u8, vget_high_u16, vget_low_u8, vget_low_u16, vgetq_lane_u32, vld1q_u8, vld1q_u16,
-    vld3q_u8, vld4q_u8, vld4q_u16, vmlal_high_n_u16, vmlal_n_u16, vmlal_u8, vmovl_u16, vmovn_u16,
-    vmull_high_n_u16, vmull_n_u16, vmull_u8, vqtbl1q_u8, vreinterpretq_u32_u8, vrshrn_n_u32,
-    vst1_u8, vst1q_u8, vst1q_u16, vst3q_u8, vst4q_u8, vst4q_u16, vuzp1q_u8,
+    uint8x16_t, uint8x16x3_t, uint16x4_t, uint16x8_t, uint16x8x4_t, vaddq_u16, vaddq_u32,
+    vcombine_u8, vcombine_u16, vdup_n_u8, vdupq_n_u16, vdupq_n_u32, vextq_u16, vget_high_u8,
+    vget_high_u16, vget_low_u8, vget_low_u16, vgetq_lane_u32, vld1q_u8, vld1q_u16, vld3q_u8,
+    vld4q_u16, vmlal_high_n_u16, vmlal_n_u16, vmlal_u8, vmovl_u16, vmovn_u16, vmull_high_n_u16,
+    vmull_n_u16, vmull_u8, vqtbl1q_u8, vreinterpretq_u32_u8, vrshrn_n_u32, vst1_u8, vst1q_u8,
+    vst1q_u16, vst3q_u8, vst4q_u16, vuzp1q_u8,
 };
 
 use super::{TAPS, divide_rounded, output_scalar, row_scalar, window};
-use crate::sample::{RGB, RGBX};
+use crate::sample::RGB;
 use crate::simd::cover_row;
+
+/// Samples per pixel of the RGBX layout RGB rows' vertical sums take for the
+/// colour pass.
+const RGBX: usize = 4;
 
 /// Samples per vertical step (u8 rows, two registers of u16 sums).
 const VERTICAL_BLOCK: usize = 16;
@@ -36,7 +40,7 @@ const FULL_TOTAL: u32 = 32;
 /// block, by the scalar reference's arithmetic.
 ///
 /// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1, 3 or 4.
+/// `src` holds `width * height * channels` samples, `channels` 1 or 3.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn bilinear_x4_neon(
     src: &[u8],
@@ -60,16 +64,9 @@ pub(crate) unsafe fn bilinear_x4_neon(
     // The rounded 8-tap results at every sample.
     let mut full = vec![0u8; ws];
     let weights = TAPS.map(|weight| weight as u8);
-    let colour_outputs = channels != 1 && ow >= 2 + COLOUR_OUTPUTS;
+    let colour_outputs = channels == RGB && ow >= 2 + COLOUR_OUTPUTS;
     // RGB rows' vertical sums laid out as RGBX, for the colour pass.
-    let mut sums_rgbx = vec![
-        0u16;
-        if colour_outputs && channels == RGB {
-            RGBX * width
-        } else {
-            0
-        }
-    ];
+    let mut sums_rgbx = vec![0u16; if colour_outputs { RGBX * width } else { 0 }];
     // The columns whose windows are clipped (at the row's two ends).
     let clipped_columns: Vec<usize> = (0..ow)
         .filter(|&output| window(output, width).1.len() < TAPS.len())
@@ -91,7 +88,7 @@ pub(crate) unsafe fn bilinear_x4_neon(
             }
             (low, high)
         };
-        if colour_outputs && channels == RGB {
+        if colour_outputs {
             let sums_ptr = sums_rgbx.as_mut_ptr();
             let zero = vdupq_n_u16(0);
             cover_row(width, VERTICAL_BLOCK, |pixel| {
@@ -122,16 +119,11 @@ pub(crate) unsafe fn bilinear_x4_neon(
             });
         }
         if colour_outputs {
-            let sums = if channels == RGB {
-                &sums_rgbx[..]
-            } else {
-                &sums[lead..][..ws]
-            };
-            // SAFETY: sums holds the row's `width` = 4 ow RGBX vertical sums,
-            // dst ow outputs of `channels` (3 or 4) samples.
-            unsafe { horizontal_colour(sums.as_ptr(), channels, ow, dst) };
+            // SAFETY: sums_rgbx holds the row's `width` = 4 ow RGBX vertical
+            // sums, dst ow RGB outputs.
+            unsafe { horizontal_colour(sums_rgbx.as_ptr(), ow, dst) };
             for output in [0, ow - 1] {
-                clipped_colour_output(sums, (width, channels), output, dst);
+                clipped_colour_output(&sums_rgbx, width, output, dst);
             }
             continue;
         }
@@ -243,16 +235,15 @@ unsafe fn colour_output(sums: *const u16) -> uint16x4_t {
     vrshrn_n_u32::<10>(vaddq_u32(low, high))
 }
 
-/// A colour row's horizontal pass only at the outputs whose windows are
-/// full (1 .. ow - 1), 4 per step from RGBX sums; RGB keeps 3 of each 4
-/// bytes by `vqtbl1q`. The clipped outputs 0 and ow - 1 are left to the
-/// caller.
+/// An RGB row's horizontal pass only at the outputs whose windows are full
+/// (1 .. ow - 1), 4 per step from RGBX sums, 3 of each 4 bytes kept by
+/// `vqtbl1q`. The clipped outputs 0 and ow - 1 are left to the caller.
 ///
 /// # Safety
 /// `sums` points at the row's `4 ow` RGBX vertical sums and `dst` holds `ow`
-/// outputs of `channels` (3 or 4) samples, `ow >= 2 + COLOUR_OUTPUTS`.
+/// RGB outputs, `ow >= 2 + COLOUR_OUTPUTS`.
 #[target_feature(enable = "neon")]
-unsafe fn horizontal_colour(sums: *const u16, channels: usize, ow: usize, dst: &mut [u8]) {
+unsafe fn horizontal_colour(sums: *const u16, ow: usize, dst: &mut [u8]) {
     const RGB_BYTES: [u8; 16] = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 16, 16, 16];
     // SAFETY: the 16 bytes of the constant.
     let rgb_bytes = unsafe { vld1q_u8(RGB_BYTES.as_ptr()) };
@@ -268,50 +259,40 @@ unsafe fn horizontal_colour(sums: *const u16, channels: usize, ow: usize, dst: &
             vmovn_u16(vcombine_u16(outputs[0], outputs[1])),
             vmovn_u16(vcombine_u16(outputs[2], outputs[3])),
         );
-        if channels == RGB {
-            let rgb = vqtbl1q_u8(rgbx, rgb_bytes);
-            // SAFETY: first + 4 <= ow: 12 bytes of the row's outputs.
-            unsafe {
-                vst1_u8(dst_ptr.add(first * RGB), vget_low_u8(rgb));
-                let last = vgetq_lane_u32::<2>(vreinterpretq_u32_u8(rgb));
-                dst_ptr
-                    .add(first * RGB + 8)
-                    .cast::<u32>()
-                    .write_unaligned(last);
-            }
-        } else {
-            // SAFETY: first + 4 <= ow: 16 bytes of the row's outputs.
-            unsafe { vst1q_u8(dst_ptr.add(first * RGBX), rgbx) };
+        let rgb = vqtbl1q_u8(rgbx, rgb_bytes);
+        // SAFETY: first + 4 <= ow: 12 bytes of the row's outputs.
+        unsafe {
+            vst1_u8(dst_ptr.add(first * RGB), vget_low_u8(rgb));
+            let last = vgetq_lane_u32::<2>(vreinterpretq_u32_u8(rgb));
+            dst_ptr
+                .add(first * RGB + 8)
+                .cast::<u32>()
+                .write_unaligned(last);
         }
     });
 }
 
-/// Output `output` (its window clipped) of a colour row from its RGBX
+/// Output `output` (its window clipped) of an RGB row from its RGBX
 /// vertical sums, by the scalar reference's arithmetic.
-fn clipped_colour_output(
-    sums: &[u16],
-    (width, channels): (usize, usize),
-    output: usize,
-    dst: &mut [u8],
-) {
+fn clipped_colour_output(sums: &[u16], width: usize, output: usize, dst: &mut [u8]) {
     let (x0, wh) = window(output, width);
     let denominator = FULL_TOTAL * wh.iter().sum::<u32>();
-    for channel in 0..channels {
+    for channel in 0..RGB {
         let numerator: u32 = wh
             .iter()
             .enumerate()
             .map(|(tap, &weight)| weight * u32::from(sums[(x0 + tap) * RGBX + channel]))
             .sum();
-        dst[output * channels + channel] = divide_rounded(numerator, denominator);
+        dst[output * RGB + channel] = divide_rounded(numerator, denominator);
     }
 }
 
 /// `dst[o]` = pixel `4 o` of `full`, for the `ow` output pixels: 16 per
-/// step, by `vld1`/`vld3`/`vld4` (whole channel planes) and two `vuzp1`
-/// levels (every 4th lane); scalar tail.
+/// step, by `vld1`/`vld3` (whole channel planes) and two `vuzp1` levels
+/// (every 4th lane); scalar tail.
 ///
 /// # Safety
-/// `full` holds `4 * ow` pixels of `channels` (1, 3 or 4) samples and `dst`
+/// `full` holds `4 * ow` pixels of `channels` (1 or 3) samples and `dst`
 /// `ow`.
 #[target_feature(enable = "neon")]
 unsafe fn keep_every_fourth_pixel(full: &[u8], channels: usize, ow: usize, dst: &mut [u8]) {
@@ -328,30 +309,17 @@ unsafe fn keep_every_fourth_pixel(full: &[u8], channels: usize, ow: usize, dst: 
         // SAFETY: output + 16 <= ow: the loads read pixels 4 output ..
         // 4 output + 64 of full, the store output pixels output .. + 16.
         unsafe {
-            match channels {
-                1 => {
-                    let plane = [0, 1, 2, 3].map(|block| vld1q_u8(full_ptr.add(at + 16 * block)));
-                    vst1q_u8(dst_ptr.add(output), fourths(plane));
-                }
-                RGB => {
-                    let blocks = [0, 1, 2, 3].map(|block| vld3q_u8(full_ptr.add(at + 48 * block)));
-                    let planes = uint8x16x3_t(
-                        fourths(blocks.map(|split| split.0)),
-                        fourths(blocks.map(|split| split.1)),
-                        fourths(blocks.map(|split| split.2)),
-                    );
-                    vst3q_u8(dst_ptr.add(output * RGB), planes);
-                }
-                _ => {
-                    let blocks = [0, 1, 2, 3].map(|block| vld4q_u8(full_ptr.add(at + 64 * block)));
-                    let planes = uint8x16x4_t(
-                        fourths(blocks.map(|split| split.0)),
-                        fourths(blocks.map(|split| split.1)),
-                        fourths(blocks.map(|split| split.2)),
-                        fourths(blocks.map(|split| split.3)),
-                    );
-                    vst4q_u8(dst_ptr.add(output * RGBX), planes);
-                }
+            if channels == 1 {
+                let plane = [0, 1, 2, 3].map(|block| vld1q_u8(full_ptr.add(at + 16 * block)));
+                vst1q_u8(dst_ptr.add(output), fourths(plane));
+            } else {
+                let blocks = [0, 1, 2, 3].map(|block| vld3q_u8(full_ptr.add(at + 48 * block)));
+                let planes = uint8x16x3_t(
+                    fourths(blocks.map(|split| split.0)),
+                    fourths(blocks.map(|split| split.1)),
+                    fourths(blocks.map(|split| split.2)),
+                );
+                vst3q_u8(dst_ptr.add(output * RGB), planes);
             }
         }
         output += STEP_PX;

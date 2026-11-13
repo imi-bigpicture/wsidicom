@@ -165,7 +165,6 @@ class TestComposeAtIntegerPositions:
         [
             ((37, 41), (50, 50)),
             ((37, 41, 3), (50, 50, 3)),
-            ((37, 41, 4), (50, 50, 4)),
         ],
     )
     def test_simd_matches_scalar(
@@ -235,7 +234,7 @@ class TestComposePiecesOfTiles:
         ]
 
     @pytest.mark.parametrize("dtype", DTYPES)
-    @pytest.mark.parametrize("channels", [1, 3, 4])
+    @pytest.mark.parametrize("channels", [1, 3])
     def test_crops_equal_copied_pieces(self, tiles: list[np.ndarray]) -> None:
         """Placing crops of tiles equals placing copies of the pieces."""
         # Arrange
@@ -258,7 +257,7 @@ class TestComposePiecesOfTiles:
         np.testing.assert_array_equal(composed, expected)
 
     @pytest.mark.parametrize("dtype", DTYPES)
-    @pytest.mark.parametrize("channels", [1, 3, 4])
+    @pytest.mark.parametrize("channels", [1, 3])
     def test_slices_equal_copied_pieces(self, tiles: list[np.ndarray]) -> None:
         """Row slices of tiles, passed as tiles, compose as their copies."""
         # Arrange

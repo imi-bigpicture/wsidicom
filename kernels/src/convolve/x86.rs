@@ -13,8 +13,7 @@ use std::arch::x86_64::__m256i;
 use std::ops::Range;
 
 use crate::convolve::{
-    AVX2_PIXEL_OUTPUTS, AVX2_PIXEL_SPAN, MAX_PADDED_TAPS, PIXEL_OUTPUTS, PaddedWindows,
-    PixelBlocks, RGB, RGBA, Runs, TRANSPOSE_ROWS, Windows,
+    MAX_PADDED_TAPS, PIXEL_OUTPUTS, PaddedWindows, RGB, RGBX, Runs, TRANSPOSE_ROWS, Windows,
 };
 use crate::x86::*;
 
@@ -59,11 +58,11 @@ fn run_step<const STEP: usize>(outputs: &[usize], i0: usize) -> ([usize; STEP], 
     (idx, consecutive)
 }
 
-/// Stores a run step's four RGBA pixels `px` (a dword each, see `run_step`):
+/// Stores a run step's four RGBX-layout pixels `px` (a dword each, see `run_step`):
 /// at once where the outputs are consecutive, else one by one.
 ///
 /// # Safety
-/// `outputs[index]` is a pixel of `dst` (`(outputs[index] + 1) * RGBA <=
+/// `outputs[index]` is a pixel of `dst` (`(outputs[index] + 1) * RGBX <=
 /// dst.len()`) for every index in `step_outputs`, and with `consecutive` those
 /// four are consecutive pixels (as `run_step` reports).
 unsafe fn store_step_pixels(
@@ -79,7 +78,7 @@ unsafe fn store_step_pixels(
         // lie in `dst` (contract).
         unsafe {
             _mm_storeu_si128(
-                dst.as_mut_ptr().add(outputs[step_outputs[0]] * RGBA) as *mut __m128i,
+                dst.as_mut_ptr().add(outputs[step_outputs[0]] * RGBX) as *mut __m128i,
                 px,
             );
         }
@@ -90,7 +89,7 @@ unsafe fn store_step_pixels(
         for (slot, &index) in step_outputs.iter().enumerate() {
             // SAFETY: `outputs[index]` is a pixel of `dst` (contract).
             unsafe {
-                (dst.as_mut_ptr().add(outputs[index] * RGBA) as *mut u32)
+                (dst.as_mut_ptr().add(outputs[index] * RGBX) as *mut u32)
                     .write_unaligned(four[slot]);
             }
         }
@@ -107,8 +106,8 @@ const fn pack_tables() -> ([i8; YMM_BYTES], [i32; 8]) {
     let mut lane = 0;
     while lane < 2 {
         let mut byte = 0;
-        while byte < RGBA * channels {
-            lane_bytes[16 * lane + byte] = (RGBA * (byte / channels) + byte % channels) as i8;
+        while byte < RGBX * channels {
+            lane_bytes[16 * lane + byte] = (RGBX * (byte / channels) + byte % channels) as i8;
             byte += 1;
         }
         let mut dword = 0;
@@ -132,7 +131,7 @@ const fn widen_shuffle_ymm() -> [i8; 32] {
     while lane < 2 {
         let mut word = 0;
         while word < 8 {
-            let (pixel, channel) = (word / RGBA, word % RGBA);
+            let (pixel, channel) = (word / RGBX, word % RGBX);
             if channel < channels {
                 let from = 2 * (channels * pixel + channel);
                 shuffle[16 * lane + 2 * word] = from as i8;
@@ -147,105 +146,6 @@ const fn widen_shuffle_ymm() -> [i8; 32] {
 const WIDEN_SHUFFLE_YMM: [i8; 32] = widen_shuffle_ymm();
 
 // ---- AVX2 tier ----------------------------------------------------------------
-
-/// The RGBA horizontal pass on AVX2, two rows at a time, by blocks of up to
-/// 4 outputs whose first taps lie within 8 pixels (`AVX2_PIXEL_OUTPUTS`):
-/// per tap the window of 8 pixels from `base + t` is two registers of 4
-/// pixels (a pixel = 4 x i16 = 2 dwords), and two dword permutes and a
-/// blend (fixed per block) gather pixel `start_j + t` of every output j —
-/// no transposes, which are a large share of the transposed path's work.
-///
-/// # Safety
-/// Every block holds at most `AVX2_PIXEL_OUTPUTS` outputs, and for every
-/// block and both rows `(block.base + block.taps.len() + AVX2_PIXEL_SPAN) *
-/// RGBA <= mid.len()` and `(block.o0 + block.count) * RGBA <= dst.len()`.
-#[target_feature(enable = "avx2")]
-pub(crate) unsafe fn horizontal_pixels4_x2_avx2(
-    mids: [&[i16]; 2],
-    dsts: [&mut [u8]; 2],
-    pixels: &PixelBlocks,
-) {
-    use std::arch::x86_64::*;
-    let [dst0, dst1] = dsts;
-    for block in &pixels.blocks {
-        debug_assert!(
-            mids.iter()
-                .all(|mid| (block.base + block.taps.len() + AVX2_PIXEL_SPAN) * RGBA <= mid.len())
-        );
-        debug_assert!((block.o0 + block.count) * RGBA <= dst0.len().min(dst1.len()));
-        // Output slot's pixel: dwords 2 pixel, 2 pixel + 1 of the low
-        // (pixel < 4) or high register.
-        let mut dwords = [0i32; 8];
-        let mut high = [0i32; 8];
-        for slot in 0..AVX2_PIXEL_OUTPUTS {
-            let pixel = block.idx[slot] as i32;
-            dwords[2 * slot] = 2 * (pixel % 4);
-            dwords[2 * slot + 1] = 2 * (pixel % 4) + 1;
-            high[2 * slot] = if pixel >= 4 { -1 } else { 0 };
-            high[2 * slot + 1] = high[2 * slot];
-        }
-        // SAFETY: `dwords` and `high` are the 8 lanes loaded each.
-        let (dwords, high) = unsafe {
-            (
-                _mm256_loadu_si256(dwords.as_ptr() as *const __m256i),
-                _mm256_loadu_si256(high.as_ptr() as *const __m256i),
-            )
-        };
-        let gather = |window: *const i16| {
-            // SAFETY: every caller passes the window of a tap t <
-            // block.taps.len(), pixels base + t .. base + t + AVX2_PIXEL_SPAN
-            // of its row, within the row (contract).
-            let (lo, hi) = unsafe {
-                (
-                    _mm256_loadu_si256(window as *const __m256i),
-                    _mm256_loadu_si256(window.add(16) as *const __m256i),
-                )
-            };
-            let lo = _mm256_permutevar8x32_epi32(lo, dwords);
-            let hi = _mm256_permutevar8x32_epi32(hi, dwords);
-            _mm256_blendv_epi8(lo, hi, high)
-        };
-        // SAFETY: the block's windows start in both mids (contract).
-        let (mut win0, mut win1) = unsafe {
-            (
-                mids[0].as_ptr().add(block.base * RGBA),
-                mids[1].as_ptr().add(block.base * RGBA),
-            )
-        };
-        let (mut acc0, mut acc1) = (_mm256_setzero_si256(), _mm256_setzero_si256());
-        for weights in &pixels.weights[block.taps.clone()] {
-            // SAFETY: a weight row holds the 16 lanes loaded.
-            let wv = unsafe { _mm256_loadu_si256(weights.as_ptr() as *const __m256i) };
-            acc0 = _mm256_add_epi16(acc0, _mm256_mulhrs_epi16(gather(win0), wv));
-            acc1 = _mm256_add_epi16(acc1, _mm256_mulhrs_epi16(gather(win1), wv));
-            // SAFETY: at most one pixel past the last tap's window start,
-            // still within the rows (contract).
-            unsafe {
-                win0 = win0.add(RGBA);
-                win1 = win1.add(RGBA);
-            }
-        }
-        for (acc, dst) in [(acc0, &mut *dst0), (acc1, &mut *dst1)] {
-            // packus clamps to 0..255; the lanes' low halves hold the 4 pixels.
-            let rounded = round_q6_avx2(acc);
-            let bytes = _mm256_castsi256_si128(_mm256_permute4x64_epi64::<LOW_QWORD_PER_LANE>(
-                _mm256_packus_epi16(rounded, rounded),
-            ));
-            // SAFETY: the block's block.count <= AVX2_PIXEL_OUTPUTS output
-            // pixels from block.o0 lie in `dst` (contract).
-            unsafe {
-                let at = dst.as_mut_ptr().add(block.o0 * RGBA);
-                if block.count == AVX2_PIXEL_OUTPUTS {
-                    _mm_storeu_si128(at as *mut __m128i, bytes);
-                } else {
-                    let mut px = [0u8; 16];
-                    _mm_storeu_si128(px.as_mut_ptr() as *mut __m128i, bytes);
-                    std::ptr::copy_nonoverlapping(px.as_ptr(), at, block.count * RGBA);
-                }
-            }
-        }
-    }
-}
 
 /// The horizontal pass by tap runs (`TapRuns`), two rows and four outputs
 /// per step: each 8-pixel weight group as two registers of 4 pixels, one
@@ -291,12 +191,12 @@ pub(crate) unsafe fn horizontal_taps_x2_avx2(mids: [&[i16]; 2], dsts: [&mut [u8]
                     // weight row.
                     let wv = unsafe {
                         _mm256_loadu_si256(
-                            weights_ptr.add(half * HALF_GROUP_PIXELS * RGBA) as *const __m256i
+                            weights_ptr.add(half * HALF_GROUP_PIXELS * RGBX) as *const __m256i
                         )
                     };
                     let at =
                         (runs.starts[index] + group * PIXEL_OUTPUTS + half * HALF_GROUP_PIXELS)
-                            * RGBA;
+                            * RGBX;
                     for (row, mid) in mids.iter().enumerate() {
                         // SAFETY: group < runs.groups: the group's
                         // PIXEL_OUTPUTS pixels lie in the mid (contract).
@@ -335,14 +235,14 @@ pub(crate) unsafe fn horizontal_taps_x2_avx2(mids: [&[i16]; 2], dsts: [&mut [u8]
 ///
 /// # Safety
 /// With `groups = pixels.next_multiple_of(4)`: `src` holds `RGB * groups + 8`
-/// samples and `rgbx` holds `RGBA * groups`.
+/// samples and `rgbx` holds `RGBX * groups`.
 #[target_feature(enable = "avx2")]
 pub(crate) unsafe fn widen_to_rgbx_avx2(src: &[i16], pixels: usize, rgbx: &mut [i16]) {
     use std::arch::x86_64::*;
     let channels = RGB;
     debug_assert!(
         src.len() >= channels * pixels.next_multiple_of(4) + 8
-            && rgbx.len() >= RGBA * pixels.next_multiple_of(4)
+            && rgbx.len() >= RGBX * pixels.next_multiple_of(4)
     );
     // SAFETY: the table is the 32 bytes loaded.
     let shuffle = unsafe { _mm256_loadu_si256(WIDEN_SHUFFLE_YMM.as_ptr() as *const __m256i) };
@@ -354,7 +254,7 @@ pub(crate) unsafe fn widen_to_rgbx_avx2(src: &[i16], pixels: usize, rgbx: &mut [
             let samples =
                 _mm256_loadu2_m128i(at.add(2 * channels) as *const __m128i, at as *const __m128i);
             _mm256_storeu_si256(
-                rgbx.as_mut_ptr().add(RGBA * pixel) as *mut __m256i,
+                rgbx.as_mut_ptr().add(RGBX * pixel) as *mut __m256i,
                 _mm256_shuffle_epi8(samples, shuffle),
             );
         }
@@ -365,14 +265,14 @@ pub(crate) unsafe fn widen_to_rgbx_avx2(src: &[i16], pixels: usize, rgbx: &mut [
 /// shuffle and dword permute, scalar for the tail.
 ///
 /// # Safety
-/// `rgbx` holds `RGBA * (out.len() / RGB)` bytes (the stores to `out` are
+/// `rgbx` holds `RGBX * (out.len() / RGB)` bytes (the stores to `out` are
 /// bounded here).
 #[target_feature(enable = "avx2")]
 pub(crate) unsafe fn pack_from_rgbx_avx2(rgbx: &[u8], out: &mut [u8]) {
     use std::arch::x86_64::*;
     let channels = RGB;
     let pixels = out.len() / channels;
-    debug_assert!(rgbx.len() >= RGBA * pixels);
+    debug_assert!(rgbx.len() >= RGBX * pixels);
     let (lane_bytes, dword_idx) = &PACK_TABLES;
     // SAFETY: the tables hold the 32 bytes loaded each.
     let (shuffle, dwords) = unsafe {
@@ -386,7 +286,7 @@ pub(crate) unsafe fn pack_from_rgbx_avx2(rgbx: &[u8], out: &mut [u8]) {
         // SAFETY: pixel + 8 <= pixels: the 8 pixels lie in `rgbx`
         // (contract).
         let bytes =
-            unsafe { _mm256_loadu_si256(rgbx.as_ptr().add(RGBA * pixel) as *const __m256i) };
+            unsafe { _mm256_loadu_si256(rgbx.as_ptr().add(RGBX * pixel) as *const __m256i) };
         let packed = _mm256_permutevar8x32_epi32(_mm256_shuffle_epi8(bytes, shuffle), dwords);
         // SAFETY: pixel + 8 <= out.len() / RGB: the 16 + 8 bytes stored lie
         // in `out`.
@@ -401,7 +301,7 @@ pub(crate) unsafe fn pack_from_rgbx_avx2(rgbx: &[u8], out: &mut [u8]) {
     }
     for pixel in whole..pixels {
         out[channels * pixel..channels * (pixel + 1)]
-            .copy_from_slice(&rgbx[RGBA * pixel..RGBA * pixel + channels]);
+            .copy_from_slice(&rgbx[RGBX * pixel..RGBX * pixel + channels]);
     }
 }
 

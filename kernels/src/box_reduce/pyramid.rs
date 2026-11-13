@@ -263,8 +263,8 @@ mod tests {
         BoxTestSample, assert_same_image, integer_differences, interleaved_pyramid_reference,
         per_channel, planar_pyramid_reference, test_images,
     };
-    use crate::sample::{RGB, RGBX};
-    use crate::testing::{Rng, random_samples, sizes_from};
+    use crate::sample::RGB;
+    use crate::testing::{CHANNELS, Rng, random_samples, sizes_from};
 
     /// What `box_pyramid` must return: the planar pyramid (fused 4x passes)
     /// of every channel.
@@ -297,7 +297,7 @@ mod tests {
 
     fn assert_small_pyramids_match<T: BoxTestSample>() {
         let mut rng = Rng::new(30);
-        for channels in [1, RGB, RGBX] {
+        for channels in CHANNELS {
             for times in 0..=4 {
                 for (width, height) in sizes_from(1) {
                     let dims = (height, width, channels);
@@ -345,17 +345,17 @@ mod tests {
     #[test]
     fn banded_pyramids_equal_the_whole_image_levels() {
         assert_banded_pyramid_matches::<u8>(100, RGB, 4);
-        assert_banded_pyramid_matches::<u8>(67, RGBX, 5);
+        assert_banded_pyramid_matches::<u8>(67, RGB, 5);
         assert_banded_pyramid_matches::<u16>(70, RGB, 4);
-        assert_banded_pyramid_matches::<u16>(130, RGBX, 6);
-        assert_banded_pyramid_matches::<f32>(40, RGBX, 5);
+        assert_banded_pyramid_matches::<u16>(130, RGB, 6);
+        assert_banded_pyramid_matches::<f32>(40, RGB, 5);
         assert_banded_pyramid_matches::<f32>(31, RGB, 4);
     }
 
     #[test]
     fn one_halving_equals_the_scalar_halving() {
         let mut rng = Rng::new(32);
-        for channels in [1, RGB, RGBX] {
+        for channels in CHANNELS {
             for (width, height) in sizes_from(2) {
                 let dims = (height, width, channels);
                 let src: Vec<u8> = random_samples(&mut rng, width * height * channels);
@@ -373,7 +373,7 @@ mod tests {
         // The documented rounding difference: a fused 4x rounds once where
         // two chained halvings round twice.
         let mut rng = Rng::new(33);
-        for channels in [1, RGB, RGBX] {
+        for channels in CHANNELS {
             let (width, height) = (64, 64);
             let dims = (height, width, channels);
             let src: Vec<u8> = random_samples(&mut rng, width * height * channels);
