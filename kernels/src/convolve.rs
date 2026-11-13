@@ -9,27 +9,17 @@
 //! engine (`crate::convolve_float`) instead.
 //!
 //! Vertical pass first, one output row at a time (contiguous, SIMD across the
-//! row, no intermediate image), then the horizontal pass on that cached row,
-//! by one of three plans:
-//! - phased, for an integer factor k <= `MAX_PHASES`: the row is split into
-//!   k phase arrays, after which every interior output has the same weights
-//!   and each tap is a unit-stride load;
-//! - blocks, for any ratio: runs of outputs whose taps fit a 64-sample window
-//!   gather each tap with one two-register permute;
-//! - sample runs, for windows too wide for blocks: each output's taps a
-//!   register at a time.
-//!
-//! Where the per-row gathers don't apply (see `resize_u8`), the horizontal
-//! pass runs on transposed 16-row batches instead (`resize_transposed`). The
-//! scalar kernels mirror the SIMD arithmetic bit for bit, so results are
-//! identical on every CPU.
+//! row, no intermediate image), then the horizontal pass on that cached row.
+//! The SIMD horizontal pass runs on transposed 16-row batches
+//! (`resize_transposed`); on AVX2, RGBA rows and some RGB reductions run per
+//! row instead (`PixelBlocks`, `TapRuns`; RGB rows are widened to the RGBX
+//! layout for them and packed back). Everything else runs the scalar
+//! reference per row. The SIMD kernels mirror the scalar arithmetic bit for
+//! bit, so results are identical on every CPU.
 //!
 //! Interleaved images run the same vertical pass over cw samples and the
 //! same weights per channel, so they equal resizing each channel as a planar
-//! image. Their horizontal pass gathers whole pixels (see `PixelBlocks`; RGB
-//! rows are widened to the RGBX layout for it and packed back), runs per
-//! output over its taps (`TapRuns`), or runs transposed with a channel
-//! stride.
+//! image.
 
 #[cfg(target_arch = "aarch64")]
 mod neon;
@@ -57,15 +47,9 @@ const AVX2_I16_LANES: usize = 16;
 /// i16 lanes, two NEON ones).
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub(crate) const TRANSPOSE_ROWS: usize = 16;
-/// Integer factors split into phase arrays (others use blocks or sample runs).
-const MAX_PHASES: usize = 4;
-/// Samples one block's taps may span: the two registers of one permute.
-pub(crate) const BLOCK_SPAN: usize = 64;
-/// Outputs per block at most: one register of i16 lanes.
-pub(crate) const BLOCK_OUTPUTS: usize = 32;
-/// Narrower blocks leave too many lanes idle; below this the sample runs
-/// are faster.
-const MIN_BLOCK_OUTPUTS: usize = 10;
+/// i16 lanes of a run's weight group (`Runs`): `PIXEL_OUTPUTS` taps of 4
+/// lanes.
+pub(crate) const RUN_GROUP_LANES: usize = 32;
 /// Channels of the interleaved layouts with a native path; RGB runs the
 /// RGBA horizontal kernels on rows widened to RGBX.
 pub(crate) const RGB: usize = 3;
@@ -78,14 +62,11 @@ pub(crate) const PIXEL_SPAN: usize = 16;
 /// 8-pixel window (two registers of 4 pixels).
 pub(crate) const AVX2_PIXEL_OUTPUTS: usize = 4;
 pub(crate) const AVX2_PIXEL_SPAN: usize = 8;
-/// Longest window the phased plan takes for integer factors >= 3; longer
-/// windows run as sample runs.
-const MAX_TAPS_FACTOR_3_PLUS: usize = 20;
 /// Pixel blocks this short (median outputs per block) leave tap runs ahead.
-const SPARSE_BLOCK_OUTPUTS: usize = 5;
+const SPARSE_RUN_GROUP_LANES: usize = 5;
 /// Longer pixel blocks still lose to tap runs on windows of
 /// `TAP_RUN_WINDOW_TAPS`+ taps.
-const SHORT_BLOCK_OUTPUTS: usize = 7;
+const SHORT_RUN_GROUP_LANES: usize = 7;
 const TAP_RUN_WINDOW_TAPS: usize = 12;
 /// Mean outputs per AVX2 pixel block from which those blocks fill well
 /// enough to beat the transposed path.
@@ -507,43 +488,9 @@ impl PaddedWindows {
     }
 }
 
-/// Outputs of one block: `count` from `o0`, taps within `mid[base..base +
-/// BLOCK_SPAN]`;
-/// per tap, the lane index into that window and the weight, per output lane.
-pub(crate) struct Block {
-    pub(crate) o0: usize,
-    pub(crate) count: usize,
-    pub(crate) base: usize,
-    pub(crate) idx: Vec<[i16; BLOCK_OUTPUTS]>,
-    pub(crate) weights: Vec<[i16; BLOCK_OUTPUTS]>,
-}
-
-/// An interior tap of the phased plan: output `o` reads `phases[phase][o + rel]`.
-#[derive(Clone, Copy)]
-pub(crate) struct PhaseTap {
-    pub(crate) phase: usize,
-    pub(crate) rel: isize,
-    pub(crate) weight: i16,
-}
-
-/// How the horizontal pass covers every output of a row.
-enum Horizontal {
-    Blocks(Vec<Block>),
-    Phased {
-        factor: usize,
-        interior: Range<usize>,
-        taps: Vec<PhaseTap>,
-        edges: Vec<Block>,
-    },
-    /// Large reductions: each output's own taps, a register of samples
-    /// (`BLOCK_OUTPUTS`) per group: the planar counterpart of `TapRuns`.
-    SampleRuns(Runs),
-}
-
 /// Per-output runs over the taps (large reductions): per output, its
-/// window's inputs a group at a time times its weights, the lanes then
-/// summed to one. Planar rows group `BLOCK_OUTPUTS` samples (one per lane),
-/// RGBA rows `PIXEL_OUTPUTS` pixels (4 lanes each).
+/// window's inputs a group of `PIXEL_OUTPUTS` pixels (4 lanes each) at a
+/// time times its weights, the lanes then summed to one.
 #[cfg_attr(
     not(target_arch = "x86_64"),
     expect(
@@ -560,15 +507,15 @@ pub(crate) struct Runs {
     pub(crate) groups: usize,
     /// Per output, per group: tap t's weight in the group's lanes for t (0
     /// past the window).
-    pub(crate) weights: Vec<[i16; BLOCK_OUTPUTS]>,
+    pub(crate) weights: Vec<[i16; RUN_GROUP_LANES]>,
     /// Inputs (samples or pixels, as `width`) a group may read past the row end.
     overreach: usize,
 }
 
 impl Runs {
-    /// Groups of `group_taps` taps, `BLOCK_OUTPUTS / group_taps` lanes per tap.
-    fn new(cols: &Windows, width: usize, group_taps: usize) -> Runs {
-        let lanes = BLOCK_OUTPUTS / group_taps;
+    fn new(cols: &Windows, width: usize) -> Runs {
+        let group_taps = PIXEL_OUTPUTS;
+        let lanes = RUN_GROUP_LANES / group_taps;
         let outputs: Vec<usize> = (0..cols.len())
             .filter(|&output| cols.get(output).fits_q15())
             .collect();
@@ -578,7 +525,7 @@ impl Runs {
             .max()
             .unwrap_or(0);
         let groups = taps.div_ceil(group_taps).max(1);
-        let mut weights = vec![[0; BLOCK_OUTPUTS]; outputs.len() * groups];
+        let mut weights = vec![[0; RUN_GROUP_LANES]; outputs.len() * groups];
         for (index, &output) in outputs.iter().enumerate() {
             for (tap, &weight) in cols.get(output).q15.iter().enumerate() {
                 let slot = tap % group_taps;
@@ -605,13 +552,21 @@ impl Runs {
     }
 }
 
-/// The RGBA-layout horizontal pass (RGBA, and 2- and 3-channel rows widened
-/// to RGBX), by runs of up to `PIXEL_OUTPUTS` output pixels whose first taps
-/// lie within `PIXEL_SPAN` pixels of the run's first (the AVX2 kernel:
-/// `AVX2_PIXEL_OUTPUTS` within `AVX2_PIXEL_SPAN`). A pixel of the
+/// Runs of output pixels whose first taps lie close together: the AVX2
+/// RGBA-layout kernel's blocks (`AVX2_PIXEL_OUTPUTS` within
+/// `AVX2_PIXEL_SPAN`; RGBA, and RGB rows widened to RGBX). A pixel of the
 /// intermediate row is 4 x i16 = one qword; for tap t the window starting at
 /// `base + t` is loaded and one qword permute (a fixed index per block)
-/// gathers pixel `start_j + t` of every output j.
+/// gathers pixel `start_j + t` of every output j. Blocks of `PIXEL_OUTPUTS`
+/// within `PIXEL_SPAN` measure how densely the windows pack, which picks tap
+/// runs over blocks (`TapRuns::pay_off`).
+#[cfg_attr(
+    not(target_arch = "x86_64"),
+    expect(
+        dead_code,
+        reason = "read by the x86 kernels; the scalar path has no use"
+    )
+)]
 pub(crate) struct PixelBlocks {
     pub(crate) blocks: Vec<PixelBlock>,
     /// Per block tap, per lane: output j's weight in lanes 4j..4j + 4.
@@ -620,6 +575,13 @@ pub(crate) struct PixelBlocks {
     overreach: usize,
 }
 
+#[cfg_attr(
+    not(target_arch = "x86_64"),
+    expect(
+        dead_code,
+        reason = "read by the x86 kernels; the scalar path has no use"
+    )
+)]
 pub(crate) struct PixelBlock {
     pub(crate) o0: usize,
     pub(crate) count: usize,
@@ -713,7 +675,7 @@ impl PixelBlocks {
 )]
 pub(crate) struct TapRuns {
     pub(crate) runs: Runs,
-    /// Pixel blocks would hold fewer than `SPARSE_BLOCK_OUTPUTS` outputs.
+    /// Pixel blocks would hold fewer than `SPARSE_RUN_GROUP_LANES` outputs.
     pub(crate) sparse_blocks: bool,
 }
 
@@ -724,16 +686,16 @@ impl TapRuns {
             return false;
         };
         let taps = cols.get(cols.len() / 2).q15.len();
-        median < SPARSE_BLOCK_OUTPUTS
-            || (median < SHORT_BLOCK_OUTPUTS && taps >= TAP_RUN_WINDOW_TAPS)
+        median < SPARSE_RUN_GROUP_LANES
+            || (median < SHORT_RUN_GROUP_LANES && taps >= TAP_RUN_WINDOW_TAPS)
     }
 
     fn new(cols: &Windows, width: usize, pixels: &PixelBlocks) -> TapRuns {
         let sparse_blocks = pixels
             .median_outputs()
-            .is_some_and(|median| median < SPARSE_BLOCK_OUTPUTS);
+            .is_some_and(|median| median < SPARSE_RUN_GROUP_LANES);
         TapRuns {
-            runs: Runs::new(cols, width, PIXEL_OUTPUTS),
+            runs: Runs::new(cols, width),
             sparse_blocks,
         }
     }
@@ -750,13 +712,11 @@ impl TapRuns {
 pub(crate) struct Plan {
     rows: Windows,
     cols: Windows,
-    /// The planar horizontal pass. Also built for the interleaved layouts,
-    /// where `Horizontal::SampleRuns` marks a large reduction for every layout.
-    horizontal: Horizontal,
+    /// Windows too wide for consecutive outputs to share a short span of
+    /// inputs (`is_large_reduction`).
+    large_reduction: bool,
     /// Samples per pixel: 1, RGB or RGBA.
     channels: usize,
-    /// Some for RGB and RGBA.
-    pixels: Option<PixelBlocks>,
     /// RGBA on the AVX2 tier: the 4-output blocks of its pixel kernel.
     pixels_avx2: Option<PixelBlocks>,
     /// Some for RGB/RGBA reductions where it beats `pixels`.
@@ -817,10 +777,8 @@ impl Geometry {
 
 impl Plan {
     /// The native plan for `(width, height) -> (ow, oh)` of a
-    /// `channels`-sample image (pixel kernels for RGB and RGBA): block or
-    /// phase plans where the windows are narrow enough to fill them,
-    /// per-output tap runs past that (large reductions) — the same choice for
-    /// every layout.
+    /// `channels`-sample image: the windows, and which per-row kernels the
+    /// tier has for them.
     #[cfg(test)]
     pub(crate) fn new(
         src: (usize, usize),
@@ -847,20 +805,8 @@ impl Plan {
             .filter(|&output| !cols.get(output).fits_q15())
             .collect();
         let widest_col = cols.iter().map(|col| col.q15.len()).max().unwrap_or(0);
-        let simd_cols =
-            |outputs: Range<usize>| outputs.filter(|output| cols.get(*output).fits_q15());
-        let factor = width / ow;
-        let planned = if !worth_planning(extent_width, ow, kernel) {
-            None
-        } else if width == factor * ow && (2..=MAX_PHASES).contains(&factor) {
-            phased(&cols, factor, &scalar_cols)
-        } else {
-            blocks(&cols, simd_cols(0..ow).collect()).map(Horizontal::Blocks)
-        };
-        let horizontal = planned
-            .unwrap_or_else(|| Horizontal::SampleRuns(Runs::new(&cols, width, BLOCK_OUTPUTS)));
-        let interleaved = channels > 1;
-        let pixels = interleaved.then(|| PixelBlocks::new(&cols));
+        let large_reduction = is_large_reduction(extent_width, ow, kernel);
+        let pixels = (channels > 1).then(|| PixelBlocks::new(&cols));
         let tap_runs = pixels
             .as_ref()
             .filter(|pixel_blocks| TapRuns::pay_off(&cols, pixel_blocks))
@@ -885,9 +831,8 @@ impl Plan {
         Plan {
             rows,
             cols,
-            horizontal,
+            large_reduction,
             channels,
-            pixels,
             pixels_avx2,
             tap_runs,
             scalar_cols,
@@ -945,140 +890,24 @@ impl Plan {
     }
 }
 
-/// Whether the horizontal pass of `width -> ow` can get a block or phase
-/// plan, judged from the widest possible window.
-fn worth_planning(width: usize, ow: usize, kernel: Kernel) -> bool {
+/// Whether `width -> ow` is a large reduction, judged from the widest
+/// possible window: at an integer factor 3 or 4, windows past 20 taps; at
+/// factor 2 never; at other ratios, windows such that 10 consecutive outputs
+/// read more than 64 inputs. Past it RGB takes the transposed path even where
+/// the tier has per-row tap runs (`runs_transposed`).
+fn is_large_reduction(width: usize, ow: usize, kernel: Kernel) -> bool {
+    const SPAN_INPUTS: f64 = 64.0;
+    const SPAN_OUTPUTS: f64 = 10.0;
+    const MAX_TAPS_FACTOR_3_PLUS: usize = 20;
     let scale = width as f64 / ow as f64;
     let max_taps = 2 * (kernel.support() * scale.max(1.0)).ceil() as usize + 1;
     let factor = width / ow;
-    if width == factor * ow && (2..=MAX_PHASES).contains(&factor) {
+    if width == factor * ow && (2..=4).contains(&factor) {
         // max_taps bounds the window from above: one past the widest a
         // window at an integer factor gets.
-        return factor < 3 || max_taps <= MAX_TAPS_FACTOR_3_PLUS + 1;
+        return factor >= 3 && max_taps > MAX_TAPS_FACTOR_3_PLUS + 1;
     }
-    // A block of MIN_BLOCK_OUTPUTS must fit its taps in one window.
-    (MIN_BLOCK_OUTPUTS - 1) as f64 * scale + max_taps as f64 <= BLOCK_SPAN as f64
-}
-
-/// Group `outputs` (ascending) into blocks of up to `BLOCK_OUTPUTS`
-/// consecutive outputs whose taps fit one `BLOCK_SPAN` window; None if that
-/// leaves blocks narrower than `MIN_BLOCK_OUTPUTS` anywhere but at a run's
-/// end.
-fn blocks(cols: &Windows, outputs: Vec<usize>) -> Option<Vec<Block>> {
-    // The samples the windows of `outputs` read: not simply from the first's
-    // start to the last's end, since trimmed zero taps can start a window
-    // after the next one's (or end it before the previous one's end).
-    let span = |outputs: Range<usize>| {
-        let start = outputs
-            .clone()
-            .map(|output| cols.get(output).start)
-            .min()
-            .unwrap_or(0);
-        start
-            ..outputs
-                .map(|output| cols.get(output).end())
-                .max()
-                .unwrap_or(start)
-    };
-    let mut blocks = Vec::new();
-    let mut next = 0;
-    while next < outputs.len() {
-        let o0 = outputs[next];
-        // The consecutive run starting at o0, capped at one register.
-        let run = outputs[next..]
-            .iter()
-            .enumerate()
-            .take_while(|&(ref offset, &output)| output == o0 + offset)
-            .take(BLOCK_OUTPUTS)
-            .count();
-        let (count, base) = (1..=run).rev().find_map(|count| {
-            let span = span(o0..o0 + count);
-            (span.len() <= BLOCK_SPAN).then_some((count, span.start))
-        })?;
-        if count < MIN_BLOCK_OUTPUTS && count < run {
-            return None;
-        }
-        let taps = (o0..o0 + count)
-            .map(|output| cols.get(output).q15.len())
-            .max()
-            .unwrap_or(0);
-        let mut idx = vec![[0i16; BLOCK_OUTPUTS]; taps];
-        let mut weights = vec![[0i16; BLOCK_OUTPUTS]; taps];
-        for slot in 0..count {
-            let win = cols.get(o0 + slot);
-            for (tap, &weight) in win.q15.iter().enumerate() {
-                idx[tap][slot] = (win.start - base + tap) as i16;
-                weights[tap][slot] = weight;
-            }
-        }
-        blocks.push(Block {
-            o0,
-            count,
-            base,
-            idx,
-            weights,
-        });
-        next += count;
-    }
-    Some(blocks)
-}
-
-/// The first run of `0..count` where `is_interior` holds.
-fn interior_run(count: usize, is_interior: impl Fn(usize) -> bool) -> Option<Range<usize>> {
-    let first = (0..count).find(|&index| is_interior(index))?;
-    Some(
-        first
-            ..(first..count)
-                .find(|&index| !is_interior(index))
-                .unwrap_or(count),
-    )
-}
-
-/// The phased plan for an exact integer factor `factor`: interior outputs
-/// (full window at the constant phase) read the phase arrays; the rest go to
-/// blocks.
-fn phased(cols: &Windows, factor: usize, scalar_cols: &[usize]) -> Option<Horizontal> {
-    let n_out = cols.len();
-    let mid = n_out / 2;
-    // Interior windows start `lead` inputs before `factor * output`.
-    let (len, lead) = (
-        cols.get(mid).q15.len(),
-        (factor * mid) as isize - cols.get(mid).start as isize,
-    );
-    if factor >= 3 && len > MAX_TAPS_FACTOR_3_PLUS {
-        return None;
-    }
-    let is_interior = |output: usize| {
-        let col = cols.get(output);
-        col.q15.len() == len
-            && (factor * output) as isize - col.start as isize == lead
-            && col.q15 == cols.get(mid).q15
-    };
-    let interior = interior_run(n_out, is_interior)?;
-    let taps = cols
-        .get(mid)
-        .q15
-        .iter()
-        .enumerate()
-        .map(|(tap, &weight)| {
-            let off = tap as isize - lead; // input factor*output + off
-            PhaseTap {
-                phase: off.rem_euclid(factor as isize) as usize,
-                rel: off.div_euclid(factor as isize),
-                weight,
-            }
-        })
-        .collect();
-    let edges = (0..interior.start)
-        .chain(interior.end..n_out)
-        .filter(|output| !scalar_cols.contains(output))
-        .collect();
-    Some(Horizontal::Phased {
-        factor,
-        interior,
-        taps,
-        edges: blocks(cols, edges)?,
-    })
+    (SPAN_OUTPUTS - 1.0) * scale + max_taps as f64 > SPAN_INPUTS
 }
 
 /// Resize a u8 image of `plan.channels` samples per pixel by `plan`; with
@@ -1104,9 +933,10 @@ pub(crate) fn resize_u8(
             None => out,
         };
     }
-    match &plan.pixels {
-        Some(pixels) => resize_pixel_rows(src, width, plan, pixels, rgbx_pad),
-        None => resize_rows(src, width, plan),
+    if channels > 1 {
+        resize_pixel_rows(src, width, plan, rgbx_pad)
+    } else {
+        resize_rows(src, width, plan)
     }
 }
 
@@ -1141,7 +971,7 @@ fn runs_transposed(plan: &Plan, rgbx_pad: Option<u8>) -> bool {
     let channels = plan.channels;
     // Large reductions (no block plan) of 1 and 3 channels: transposed on
     // either tier, which needs no widening; RGBA's tap runs stay faster.
-    let large_reduction = matches!(plan.horizontal, Horizontal::SampleRuns(_)) && channels < RGBA;
+    let large_reduction = plan.large_reduction && channels < RGBA;
     // RGB with wide windows unless written as RGBX: widening to RGBX costs
     // the pixel kernels more than the transposes.
     let unwidened = rgbx_pad.is_none() && channels == RGB && plan.widest_col >= RGB_TRANSPOSED_TAPS;
@@ -1291,64 +1121,21 @@ thread_local! {
 fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     let ow = plan.cols.len();
     let mut out = vec![0u8; ow * plan.rows.len()];
-    // Padded so a block's 64-sample window (or a run) may run past the row end.
-    let row_pad = match &plan.horizontal {
-        Horizontal::SampleRuns(runs) => runs.overreach.max(BLOCK_SPAN),
-        _ => BLOCK_SPAN,
-    };
-    let mut mids = [vec![0i16; width + row_pad], vec![0i16; width + row_pad]];
-    let factor = match plan.horizontal {
-        Horizontal::Phased { factor, .. } => factor,
-        _ => 1,
-    };
-    let phase_len = width.div_ceil(factor) + BLOCK_OUTPUTS;
-    let mut phases = vec![vec![0i16; phase_len]; if factor > 1 { factor } else { 0 }];
+    let mut mid = vec![0i16; width];
     let dp = out.as_mut_ptr();
     let rows = |lo: usize, hi: usize| {
-        for y in (lo..hi).step_by(2) {
-            let pair_len = 2.min(hi - y);
-            for (y, mid) in (y..y + pair_len).zip(mids.iter_mut()) {
-                let win = plan.rows.get(y);
-                vertical(
-                    &src[win.start * width..win.end() * width],
-                    width,
-                    win,
-                    &mut mid[..width],
-                );
-            }
-            // SAFETY: rows y .. y + pair_len of `out`, which only this closure
-            // call writes (with_prefault's contract).
-            let dst = |y: usize| unsafe { std::slice::from_raw_parts_mut(dp.add(y * ow), ow) };
-            match &plan.horizontal {
-                Horizontal::Blocks(blocks) => {
-                    for (y, mid) in (y..y + pair_len).zip(&mids) {
-                        horizontal_blocks(mid, dst(y), blocks);
-                    }
-                }
-                Horizontal::Phased {
-                    factor,
-                    interior,
-                    taps,
-                    edges,
-                } => {
-                    for (y, mid) in (y..y + pair_len).zip(&mids) {
-                        split_phases(&mid[..width], *factor, &mut phases);
-                        horizontal_phased(&phases, dst(y), interior.clone(), taps);
-                        horizontal_blocks(mid, dst(y), edges);
-                    }
-                }
-                Horizontal::SampleRuns(runs) => {
-                    for (y, mid) in (y..y + pair_len).zip(&mids) {
-                        let dst = dst(y);
-                        for &output in &runs.outputs {
-                            dst[output] = narrow(plan.cols.get(output).mulhrs_dot_at(mid, 1, 0));
-                        }
-                    }
-                }
-            }
-            for (y, mid) in (y..y + pair_len).zip(&mids) {
-                narrow_scalar_cols(plan, mid, dst(y), 1);
-            }
+        for y in lo..hi {
+            let win = plan.rows.get(y);
+            vertical(
+                &src[win.start * width..win.end() * width],
+                width,
+                win,
+                &mut mid,
+            );
+            // SAFETY: row y of `out`, which only this closure call writes
+            // (with_prefault's contract).
+            let dst = unsafe { std::slice::from_raw_parts_mut(dp.add(y * ow), ow) };
+            horizontal_scalar(plan, &mid, dst, 1);
         }
     };
     // SAFETY: `out` is this function's; `rows(lo, hi)` writes rows [lo, hi).
@@ -1360,13 +1147,7 @@ fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
 /// reference). 2- and 3-channel rows are widened to the RGBX layout between
 /// the passes and the output rows packed back — or, with `rgbx_pad`, kept as
 /// RGBX output with that 4th sample.
-fn resize_pixel_rows(
-    src: &[u8],
-    width: usize,
-    plan: &Plan,
-    pixels: &PixelBlocks,
-    rgbx_pad: Option<u8>,
-) -> Vec<u8> {
+fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan, rgbx_pad: Option<u8>) -> Vec<u8> {
     // Padded: the widening reads whole groups of pixels, up to a register past.
     const WIDEN_GROUP_PIXELS: usize = 8;
     let channels = plan.channels;
@@ -1378,12 +1159,16 @@ fn resize_pixel_rows(
         ow * channels
     };
     let mut out = vec![0u8; ows * plan.rows.len()];
-    // Padded so a block's windows may run past the row end.
+    // Padded so the SIMD kernels' windows may run past the row end.
     let row_pad = plan
         .tap_runs
         .as_ref()
         .map_or(0, |tap_runs| tap_runs.runs.overreach)
-        .max(pixels.overreach);
+        .max(
+            plan.pixels_avx2
+                .as_ref()
+                .map_or(0, |pixels| pixels.overreach),
+        );
     // An odd last row through the AVX2 pixel kernel (which runs pairs) writes
     // its twin here.
     #[cfg(target_arch = "x86_64")]
@@ -1436,14 +1221,13 @@ fn resize_pixel_rows(
             let simd = horizontal_pixels_simd(plan, &mids, y, pair_len, dst, &mut spare_row);
             #[cfg(not(target_arch = "x86_64"))]
             let simd = false;
-            if !simd {
-                for (y, mid) in (y..y + pair_len).zip(&mids) {
-                    horizontal_pixels(mid, dst(y), pixels);
-                }
-            }
             for (y, mid) in (y..y + pair_len).zip(&mids) {
                 let dst = dst(y);
-                narrow_scalar_cols(plan, mid, dst, RGBA);
+                if simd {
+                    narrow_scalar_cols(plan, mid, dst, RGBA);
+                } else {
+                    horizontal_scalar(plan, mid, dst, RGBA);
+                }
                 match rgbx_pad {
                     // SAFETY: row y of `out`, which only this closure call writes.
                     None if widened => pack_from_rgbx(dst, unsafe {
@@ -1553,6 +1337,22 @@ fn narrow_scalar_cols(plan: &Plan, mid: &[i16], dst: &mut [u8], channels: usize)
     }
 }
 
+/// One row's horizontal pass by the scalar reference (`channels` samples per
+/// pixel): the SIMD kernels' arithmetic where the weights fit Q15, exact
+/// sums elsewhere.
+fn horizontal_scalar(plan: &Plan, mid: &[i16], dst: &mut [u8], channels: usize) {
+    for (output, col) in plan.cols.iter().enumerate() {
+        for ch in 0..channels {
+            let acc = if col.fits_q15() {
+                col.mulhrs_dot_at(mid, channels, ch)
+            } else {
+                col.dot_at(mid, channels, ch)
+            };
+            dst[output * channels + ch] = narrow(acc);
+        }
+    }
+}
+
 /// `mid[x] = sum_t q15[t] * rows[t][x]` in Q6, `rows` = the window's source
 /// rows.
 fn vertical(rows: &[u8], width: usize, win: Window<'_>, mid: &mut [i16]) {
@@ -1580,73 +1380,6 @@ fn vertical(rows: &[u8], width: usize, win: Window<'_>, mid: &mut [i16]) {
     }
 }
 
-/// `phases[p][m] = mid[factor*m + p]`.
-fn split_phases(mid: &[i16], factor: usize, phases: &mut [Vec<i16>]) {
-    for (index, group) in mid.chunks(factor).enumerate() {
-        for (phase, &sample) in group.iter().enumerate() {
-            phases[phase][index] = sample;
-        }
-    }
-}
-
-/// The phased plan's interior outputs from the phase arrays.
-fn horizontal_phased(
-    phases: &[Vec<i16>],
-    dst: &mut [u8],
-    interior: Range<usize>,
-    taps: &[PhaseTap],
-) {
-    for output in interior {
-        let acc: i32 = taps
-            .iter()
-            .map(|tap| {
-                mulhrs(
-                    i32::from(phases[tap.phase][(output as isize + tap.rel) as usize]),
-                    tap.weight,
-                )
-            })
-            .sum();
-        dst[output] = narrow(acc);
-    }
-}
-
-/// One RGBA-layout row by pixel blocks.
-fn horizontal_pixels(mid: &[i16], dst: &mut [u8], pixels: &PixelBlocks) {
-    for block in &pixels.blocks {
-        for (slot, ch) in (0..block.count).flat_map(|slot| (0..RGBA).map(move |ch| (slot, ch))) {
-            let lane = slot * RGBA + ch;
-            let taps = pixels.weights[block.taps.clone()].iter().enumerate();
-            let acc: i32 = taps
-                .map(|(tap, weights)| {
-                    mulhrs(
-                        i32::from(mid[(block.base + block.idx[slot] as usize + tap) * RGBA + ch]),
-                        weights[lane],
-                    )
-                })
-                .sum();
-            dst[(block.o0 + slot) * RGBA + ch] = narrow(acc);
-        }
-    }
-}
-
-/// One planar row's block outputs.
-fn horizontal_blocks(mid: &[i16], dst: &mut [u8], blocks: &[Block]) {
-    for block in blocks {
-        for slot in 0..block.count {
-            let taps = block.idx.iter().zip(&block.weights);
-            let acc: i32 = taps
-                .map(|(idx, weights)| {
-                    mulhrs(
-                        i32::from(mid[block.base + idx[slot] as usize]),
-                        weights[slot],
-                    )
-                })
-                .sum();
-            dst[block.o0 + slot] = narrow(acc);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1660,9 +1393,8 @@ mod tests {
     ];
 
     /// Column ratios (input width, output width) that reach every plan: the
-    /// smallest images, block ratios around the vector widths, the phased
-    /// factors 2 to 4 (interiors past one register), integer upscales x2 and
-    /// x4, and reductions past the block plans.
+    /// smallest images, ratios around the vector widths, integer factors 2 to
+    /// 4, integer upscales x2 and x4, and large reductions.
     const COLUMN_CASES: [(usize, usize); 21] = [
         (1, 1),
         (1, 3),
@@ -1986,14 +1718,9 @@ mod tests {
             for channels in CHANNELS {
                 for (width, ow) in COLUMN_CASES {
                     let plan = Plan::new((width, 33), (ow, 16), kernel, channels);
-                    reached.insert(match &plan.horizontal {
-                        Horizontal::Phased { interior, .. } if interior.len() >= BLOCK_OUTPUTS => {
-                            "phased, a register or more"
-                        }
-                        Horizontal::Phased { .. } => "phased",
-                        Horizontal::Blocks(_) => "blocks",
-                        Horizontal::SampleRuns(_) => "sample runs",
-                    });
+                    if plan.large_reduction {
+                        reached.insert("large reduction");
+                    }
                     if plan.tap_runs.is_some() {
                         reached.insert("tap runs");
                     }
@@ -2022,10 +1749,7 @@ mod tests {
             }
         }
         let mut expected = vec![
-            "phased",
-            "phased, a register or more",
-            "blocks",
-            "sample runs",
+            "large reduction",
             "tap runs",
             "scalar columns",
             "per-row planar",
@@ -2098,7 +1822,7 @@ mod tests {
                 let context = format!("{} {width} -> {ow}", kernel_name(kernel));
                 let pixels = PixelBlocks::new(&cols);
                 let pixels4 = PixelBlocks::with_size(&cols, AVX2_PIXEL_OUTPUTS, AVX2_PIXEL_SPAN);
-                let runs = Runs::new(&cols, width, PIXEL_OUTPUTS);
+                let runs = Runs::new(&cols, width);
                 let mut padded_mids = |pad: usize| {
                     [
                         random_mid(&mut rng, (width + pad) * RGBA),
