@@ -7,7 +7,7 @@ use crate::cpu::{nt_stores_for, unwritten_output, with_prefault, written_output}
 use crate::x86::sfence_if_streamed;
 
 /// The output rows of a 2x box kernel: `height` rows of `row_len` samples,
-/// row `oy` at `dst + oy * stride`.
+/// row `out_y` at `dst + out_y * stride`.
 pub(super) struct BoxRows<T> {
     /// The new image the rows are, or none when they are the caller's.
     image: Option<Vec<MaybeUninit<T>>>,
@@ -15,7 +15,6 @@ pub(super) struct BoxRows<T> {
     layout: RowLayout,
 }
 
-/// Where the rows of a `BoxRows` lie, and how far a row's stores may reach.
 #[derive(Clone, Copy)]
 pub(super) struct RowLayout {
     pub(super) stride: usize,
@@ -28,23 +27,21 @@ pub(super) struct RowLayout {
 }
 
 impl RowLayout {
-    /// Sample offset of row `oy`.
-    pub(super) fn row_start(self, oy: usize) -> usize {
-        oy * self.stride
+    pub(super) fn row_start(self, out_y: usize) -> usize {
+        out_y * self.stride
     }
 
-    /// The offset no store of row `oy` may reach (exclusive).
-    pub(super) fn store_end(self, oy: usize) -> usize {
+    /// The offset no store of row `out_y` may reach (exclusive).
+    pub(super) fn store_end(self, out_y: usize) -> usize {
         if self.spills {
             self.height * self.stride
         } else {
-            oy * self.stride + self.row_len
+            out_y * self.stride + self.row_len
         }
     }
 }
 
 impl<T> BoxRows<T> {
-    /// A new image of `height` rows of `row_len` samples.
     pub(super) fn new_image(height: usize, row_len: usize) -> BoxRows<T> {
         let mut image = unwritten_output::<T>(height * row_len);
         let dst = image.as_mut_ptr().cast::<T>();
@@ -92,8 +89,7 @@ impl<T> BoxRows<T> {
         self.layout
     }
 
-    /// How many rows there are.
-    pub(super) fn rows(&self) -> usize {
+    pub(super) fn row_count(&self) -> usize {
         self.layout.height
     }
 
@@ -104,13 +100,13 @@ impl<T> BoxRows<T> {
             && nt_stores_for(self.layout.height * self.layout.row_len * size_of::<T>())
     }
 
-    /// Runs `rows(lo, hi)` over every row (a new image's behind the prefault
-    /// helper, see `with_prefault`), fences streamed stores, and returns the
-    /// new image, or an empty one for the caller's rows.
+    /// Runs `rows(first_row, end_row)` over every row (a new image's behind
+    /// the prefault helper, see `with_prefault`), fences streamed stores, and
+    /// returns the new image, or an empty one for the caller's rows.
     ///
     /// # Safety
-    /// `rows(lo, hi)` writes every sample of rows `[lo, hi)`, and its stores
-    /// for row `oy` stay below `layout().store_end(oy)`.
+    /// `rows(first_row, end_row)` writes every sample of those rows, and its
+    /// stores for row `out_y` stay below `layout().store_end(out_y)`.
     pub(super) unsafe fn write(self, streamed: bool, mut rows: impl FnMut(usize, usize)) -> Vec<T> {
         let RowLayout { stride, height, .. } = self.layout;
         let Some(image) = self.image else {

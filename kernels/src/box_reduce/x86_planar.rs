@@ -10,29 +10,32 @@ use super::box2_mean;
 use super::x86_output::BoxRows;
 use crate::x86::*;
 
-/// The frame every planar box kernel shares: `output`'s rows, row `oy`
-/// written by `row(oy, out_row, nt)` (in a new image once its pages are
-/// committed, see `BoxRows::write`), streamed stores fenced at the end.
-/// `row` must write all of its row: the output is not cleared beforehand.
+/// The frame every planar box kernel shares: `output`'s rows, row `out_y`
+/// written by `row(out_y, out_row, stream)` (in a new image once its pages
+/// are committed, see `BoxRows::write`), streamed stores fenced at the end.
 ///
 /// # Safety
-/// `row(oy, out_row, nt)` must write each of the row's outputs at `out_row`
-/// and nothing else.
+/// `row(out_y, out_row, stream)` must write each of the row's outputs at
+/// `out_row` and nothing else: the output is not cleared beforehand.
 #[inline(always)]
 unsafe fn planar_box_to<T: Copy>(
     output: BoxRows<T>,
     mut row: impl FnMut(usize, *mut T, bool),
 ) -> Vec<T> {
-    let (dp, layout, nt) = (output.dst(), output.layout(), output.streams());
-    let rows = crate::cpu::row_bands(|oy_lo, oy_hi| {
-        for oy in oy_lo..oy_hi {
-            // SAFETY: oy is one of the output's rows, which start inside it.
-            row(oy, unsafe { dp.add(layout.row_start(oy)) }, nt);
+    let (dst_ptr, layout, stream) = (output.dst(), output.layout(), output.streams());
+    let rows = crate::cpu::row_bands(|first_out_y, end_out_y| {
+        for out_y in first_out_y..end_out_y {
+            // SAFETY: out_y is one of the output's rows, which start inside it.
+            row(
+                out_y,
+                unsafe { dst_ptr.add(layout.row_start(out_y)) },
+                stream,
+            );
         }
     });
     // SAFETY: `row` writes every output of its row and nothing else (the
     // caller's contract; each kernel's body and tail cover the row).
-    unsafe { output.write(nt, rows) }
+    unsafe { output.write(stream, rows) }
 }
 
 /// `planar_box_to` into a new image of the `factor` reduction.
@@ -46,12 +49,12 @@ unsafe fn planar_box<T: Copy>(
     factor: usize,
     row: impl FnMut(usize, *mut T, bool),
 ) -> (Vec<T>, usize, usize) {
-    let (ow, oh) = (width / factor, height / factor);
+    let (out_width, out_height) = (width / factor, height / factor);
     // SAFETY: the caller's contract.
     (
-        unsafe { planar_box_to(BoxRows::new_image(oh, ow), row) },
-        ow,
-        oh,
+        unsafe { planar_box_to(BoxRows::new_image(out_height, out_width), row) },
+        out_width,
+        out_height,
     )
 }
 
@@ -61,22 +64,24 @@ fn planar_row<T, RowFn: FnMut(usize, *mut T, bool)>(row: RowFn) -> RowFn {
     row
 }
 
-/// Offsets into the source of the `ROWS` rows output row `oy` reduces.
-fn source_rows<const ROWS: usize>(oy: usize, width: usize) -> [usize; ROWS] {
-    std::array::from_fn(|row| (ROWS * oy + row) * width)
+/// Offsets into the source of the `ROWS` rows output row `out_y` reduces.
+fn source_rows<const ROWS: usize>(out_y: usize, width: usize) -> [usize; ROWS] {
+    std::array::from_fn(|row| (ROWS * out_y + row) * width)
 }
 
-/// The exact sum of the 4x4 block at column `x` of `rows` (offsets into `sp`).
+/// The exact sum of the 4x4 block at column `x` of `rows` (offsets into
+/// `src_ptr`).
 ///
 /// # Safety
-/// The 4 samples from `row + x` of each of `rows` must be readable at `sp`.
+/// The 4 samples from `row + x` of each of `rows` must be readable at
+/// `src_ptr`.
 #[inline(always)]
-unsafe fn box4_sum<T: Copy + Into<u32>>(sp: *const T, rows: [usize; 4], x: usize) -> u32 {
+unsafe fn box4_sum<T: Copy + Into<u32>>(src_ptr: *const T, rows: [usize; 4], x: usize) -> u32 {
     rows.iter()
         .map(|&row| {
             (0..4)
                 // SAFETY: inside the block the caller guarantees readable.
-                .map(|column| unsafe { *sp.add(row + x + column) }.into())
+                .map(|column| unsafe { *src_ptr.add(row + x + column) }.into())
                 .sum::<u32>()
         })
         .sum()
@@ -91,15 +96,21 @@ pub(crate) unsafe fn box2x_u8_avx2(
     width: usize,
     height: usize,
 ) -> (Vec<u8>, usize, usize) {
-    let (ow, oh) = (width / 2, height / 2);
+    let (out_width, out_height) = (width / 2, height / 2);
     // SAFETY: the caller's contract.
-    let image = unsafe { box2x_u8_avx2_to(src, width, height, BoxRows::new_image(oh, ow)) };
-    (image, ow, oh)
+    let image = unsafe {
+        box2x_u8_avx2_to(
+            src,
+            width,
+            height,
+            BoxRows::new_image(out_height, out_width),
+        )
+    };
+    (image, out_width, out_height)
 }
 
-/// AVX2 uint8 2x2 box average into `output`: maddubs sums horizontal pairs,
-/// 16 out px/iter. Rounding (sum + 2) >> 2 is bit-identical to Pillow's
-/// reduce(2).
+/// AVX2 uint8 2x2 box into `output`, 16 outputs per step: maddubs sums
+/// horizontal pairs, rounded `(sum + 2) >> 2` as Pillow's reduce(2).
 ///
 /// # Safety
 /// The CPU supports AVX2, `src.len() >= width * height`, and `output` holds
@@ -112,25 +123,24 @@ pub(crate) unsafe fn box2x_u8_avx2_to(
     output: BoxRows<u8>,
 ) -> Vec<u8> {
     use std::arch::x86_64::*;
-    let ow = width / 2;
-    debug_assert_eq!(output.rows(), height / 2);
+    let out_width = width / 2;
+    debug_assert_eq!(output.row_count(), height / 2);
     let ones = _mm256_set1_epi8(1);
     let two = _mm256_set1_epi16(2);
-    let sp = src.as_ptr();
-    let row = planar_row::<u8, _>(|oy, out_row, nt| {
-        let [r0, r1] = source_rows(oy, width);
-        let mut ox = 0usize;
-        while ox + 16 <= ow && 2 * ox + 32 <= width {
-            let x = 2 * ox;
-            // SAFETY: x + 32 <= width (the guard) in source rows 2oy, 2oy + 1
-            // < height, inside the `width * height` samples of `src`.
+    let src_ptr = src.as_ptr();
+    let row = planar_row::<u8, _>(|out_y, out_row, stream| {
+        let [top_row, bottom_row] = source_rows(out_y, width);
+        let mut out_x = 0usize;
+        while out_x + 16 <= out_width && 2 * out_x + 32 <= width {
+            let x = 2 * out_x;
+            // SAFETY: x + 32 <= width (the guard) in source rows up to
+            // 2 out_y + 1 < height, inside `src`.
             let (top, bottom) = unsafe {
                 (
-                    _mm256_loadu_si256(sp.add(r0 + x) as *const __m256i),
-                    _mm256_loadu_si256(sp.add(r1 + x) as *const __m256i),
+                    _mm256_loadu_si256(src_ptr.add(top_row + x) as *const __m256i),
+                    _mm256_loadu_si256(src_ptr.add(bottom_row + x) as *const __m256i),
                 )
             };
-            // maddubs(x, 1) sums adjacent byte pairs -> 16 i16 horizontal sums.
             let sums = _mm256_add_epi16(
                 _mm256_maddubs_epi16(top, ones),
                 _mm256_maddubs_epi16(bottom, ones),
@@ -140,26 +150,25 @@ pub(crate) unsafe fn box2x_u8_avx2_to(
                 _mm256_castsi256_si128(rounded),
                 _mm256_extracti128_si256(rounded, 1),
             );
-            // SAFETY: ox + 16 <= ow (the guard): inside the output row.
-            unsafe { store_128i(out_row.add(ox) as *mut __m128i, packed, nt) };
-            ox += 16;
+            // SAFETY: out_x + 16 <= out_width (the guard): in the row.
+            unsafe { store_128i(out_row.add(out_x) as *mut __m128i, packed, stream) };
+            out_x += 16;
         }
-        while ox < ow {
-            // SAFETY: ox < ow: the output is in the row, and its 2x2 block
-            // (columns 2ox, 2ox + 1 < width of rows 2oy, 2oy + 1) in `src`.
-            unsafe { *out_row.add(ox) = box2_mean(sp.add(r0 + 2 * ox), 1, width) };
-            ox += 1;
+        while out_x < out_width {
+            // SAFETY: out_x < width / 2, out_y < height / 2: the output is in
+            // the row, its 2x2 block in `src`.
+            unsafe { *out_row.add(out_x) = box2_mean(src_ptr.add(top_row + 2 * out_x), 1, width) };
+            out_x += 1;
         }
     });
-    // SAFETY: `row` writes outputs 0..ow of its row (the vector body, then
-    // the scalar tail up to ow) and nothing else.
+    // SAFETY: `row` writes outputs 0..out_width of its row (the vector body,
+    // then the scalar tail) and nothing else.
     unsafe { planar_box_to::<u8>(output, row) }
 }
 
-/// AVX2 uint8 fused 4x4 box average (one pass of factor 4): maddubs sums byte
-/// pairs per row (4 rows added: max 2040, fits i16), `madd_epi16` sums the i16
-/// pairs to full 4x4 block sums in u32, then (sum + 8) >> 4. Single rounding —
-/// closer to the true mean than two chained 2x passes. 16 output px/iter.
+/// AVX2 uint8 fused 4x4 box, 16 outputs per step: maddubs sums byte pairs
+/// per row (4 rows: at most 2040, fits i16), `madd_epi16` sums those pairs
+/// to the blocks' sums in u32, then `(sum + 8) >> 4`.
 ///
 /// # Safety
 /// The CPU supports AVX2, and `src.len() >= width * height`.
@@ -170,76 +179,80 @@ pub(crate) unsafe fn box4x_u8_avx2(
     height: usize,
 ) -> (Vec<u8>, usize, usize) {
     use std::arch::x86_64::*;
-    let ow = width / 4;
+    let out_width = width / 4;
     let ones = _mm256_set1_epi8(1);
-    let ones16 = _mm256_set1_epi16(1);
+    let ones_i16 = _mm256_set1_epi16(1);
     let eight = _mm256_set1_epi32(8);
-    let sp = src.as_ptr();
-    let row = planar_row::<u8, _>(|oy, out_row, nt| {
-        let rows = source_rows::<4>(oy, width);
-        let mut ox = 0usize;
-        // 8 rounded 4x4 quads (as u32) for the 32-column block starting at x.
-        let quad8 = |x: usize| {
+    let src_ptr = src.as_ptr();
+    let row = planar_row::<u8, _>(|out_y, out_row, stream| {
+        let rows = source_rows::<4>(out_y, width);
+        let mut out_x = 0usize;
+        // The 8 rounded 4x4 means (as u32) of the 32 columns at x.
+        let means_of_32_columns = |x: usize| {
             let row_pair_sums = |row: usize| {
                 // SAFETY: columns x..x + 32 <= width (the callers' guards) of
                 // a source row < height, inside `src`.
-                let pixels = unsafe { _mm256_loadu_si256(sp.add(row + x) as *const __m256i) };
+                let pixels = unsafe { _mm256_loadu_si256(src_ptr.add(row + x) as *const __m256i) };
                 _mm256_maddubs_epi16(pixels, ones)
             };
             let row4_col2_sums = _mm256_add_epi16(
                 _mm256_add_epi16(row_pair_sums(rows[0]), row_pair_sums(rows[1])),
                 _mm256_add_epi16(row_pair_sums(rows[2]), row_pair_sums(rows[3])),
             );
-            let quad_sums = _mm256_madd_epi16(row4_col2_sums, ones16);
+            let quad_sums = _mm256_madd_epi16(row4_col2_sums, ones_i16);
             _mm256_srli_epi32(_mm256_add_epi32(quad_sums, eight), 4)
         };
-        // Two 32-col blocks per iter fill one 16-byte (NT-streamable) store.
-        while ox + 16 <= ow && 4 * ox + 64 <= width {
-            let x = 4 * ox;
-            let (ra, rb) = (quad8(x), quad8(x + 32));
-            let p16a =
-                _mm_packus_epi32(_mm256_castsi256_si128(ra), _mm256_extracti128_si256(ra, 1));
-            let p16b =
-                _mm_packus_epi32(_mm256_castsi256_si128(rb), _mm256_extracti128_si256(rb, 1));
-            // SAFETY: ox + 16 <= ow (the guard): inside the output row.
+        // Two 32-column blocks per step fill one 16-byte (streamable) store.
+        while out_x + 16 <= out_width && 4 * out_x + 64 <= width {
+            let x = 4 * out_x;
+            let (first_means, second_means) = (means_of_32_columns(x), means_of_32_columns(x + 32));
+            let first_u16 = _mm_packus_epi32(
+                _mm256_castsi256_si128(first_means),
+                _mm256_extracti128_si256(first_means, 1),
+            );
+            let second_u16 = _mm_packus_epi32(
+                _mm256_castsi256_si128(second_means),
+                _mm256_extracti128_si256(second_means, 1),
+            );
+            // SAFETY: out_x + 16 <= out_width (the guard): in the row.
             unsafe {
                 store_128i(
-                    out_row.add(ox) as *mut __m128i,
-                    _mm_packus_epi16(p16a, p16b),
-                    nt,
+                    out_row.add(out_x) as *mut __m128i,
+                    _mm_packus_epi16(first_u16, second_u16),
+                    stream,
                 );
             }
-            ox += 16;
+            out_x += 16;
         }
-        while ox + 8 <= ow && 4 * ox + 32 <= width {
-            let means = quad8(4 * ox);
-            let p16 = _mm_packus_epi32(
+        while out_x + 8 <= out_width && 4 * out_x + 32 <= width {
+            let means = means_of_32_columns(4 * out_x);
+            let means_u16 = _mm_packus_epi32(
                 _mm256_castsi256_si128(means),
                 _mm256_extracti128_si256(means, 1),
             );
-            let packed = _mm_packus_epi16(p16, p16);
-            // SAFETY: ox + 8 <= ow (the guard): the 8 bytes are in the row.
-            unsafe { _mm_storel_epi64(out_row.add(ox) as *mut __m128i, packed) };
-            ox += 8;
+            let packed = _mm_packus_epi16(means_u16, means_u16);
+            // SAFETY: out_x + 8 <= out_width (the guard): in the row.
+            unsafe { _mm_storel_epi64(out_row.add(out_x) as *mut __m128i, packed) };
+            out_x += 8;
         }
-        while ox < ow {
-            // SAFETY: ox < ow: the output is in the row, and its 4x4 block
-            // (columns 4ox..4ox + 4 <= width of rows 4oy..4oy + 4 <= height)
-            // in `src`.
-            unsafe { *out_row.add(ox) = ((box4_sum(sp, rows, 4 * ox) + 8) >> 4) as u8 };
-            ox += 1;
+        while out_x < out_width {
+            // SAFETY: out_x < width / 4, out_y < height / 4: the output is in
+            // the row, its 4x4 block in `src`.
+            unsafe {
+                *out_row.add(out_x) = ((box4_sum(src_ptr, rows, 4 * out_x) + 8) >> 4) as u8;
+            };
+            out_x += 1;
         }
     });
-    // SAFETY: `row` writes outputs 0..ow of its row (the vector body, then
-    // the scalar tail up to ow) and nothing else.
+    // SAFETY: `row` writes outputs 0..out_width of its row (the vector body,
+    // then the scalar tail) and nothing else.
     unsafe { planar_box::<u8>(width, height, 4, row) }
 }
 
-/// AVX2 uint16 fused 4x4 box average: `(v & 0xFFFF) + (v >> 16)` sums adjacent
-/// u16 pairs into ordered u32 (see `box2x_u16_avx2`), accumulated over the 4
-/// rows; one hadd builds the 4-column quads (lane-scrambled to
-/// [q0,q1,q4,q5|q2,q3,q6,q7] — one vpermd restores order), then single-rounded
-/// (sum + 8) >> 4. 8 output px/iter.
+/// AVX2 uint16 fused 4x4 box, 8 outputs per step: adjacent u16 pairs summed
+/// into u32 in order (see `box2x_u16_avx2_to`) down the 4 rows; one hadd
+/// forms the blocks' sums, lane-scrambled to [q0,q1,q4,q5|q2,q3,q6,q7] (one
+/// vpermd restores the order), then `(sum + 8) >> 4`.
 ///
 /// # Safety
 /// The CPU supports AVX2, and `src.len() >= width * height`.
@@ -250,16 +263,16 @@ pub(crate) unsafe fn box4x_u16_avx2(
     height: usize,
 ) -> (Vec<u16>, usize, usize) {
     use std::arch::x86_64::*;
-    let ow = width / 4;
+    let out_width = width / 4;
     let eight = _mm256_set1_epi32(8);
-    let lo16 = _mm256_set1_epi32(0xFFFF);
-    let perm = _mm256_setr_epi32(0, 1, 4, 5, 2, 3, 6, 7);
-    let sp = src.as_ptr();
-    let row = planar_row::<u16, _>(|oy, out_row, nt| {
-        let rows = source_rows::<4>(oy, width);
-        let mut ox = 0usize;
-        while ox + 8 <= ow && 4 * ox + 32 <= width {
-            let x = 4 * ox;
+    let low_u16_mask = _mm256_set1_epi32(0xFFFF);
+    let quad_order = _mm256_setr_epi32(0, 1, 4, 5, 2, 3, 6, 7);
+    let src_ptr = src.as_ptr();
+    let row = planar_row::<u16, _>(|out_y, out_row, stream| {
+        let rows = source_rows::<4>(out_y, width);
+        let mut out_x = 0usize;
+        while out_x + 8 <= out_width && 4 * out_x + 32 <= width {
+            let x = 4 * out_x;
             let mut col_pairs_0_8 = _mm256_setzero_si256();
             let mut col_pairs_8_16 = _mm256_setzero_si256();
             for row in rows {
@@ -267,52 +280,55 @@ pub(crate) unsafe fn box4x_u16_avx2(
                 // row < height, inside `src`.
                 let (cols_0_16, cols_16_32) = unsafe {
                     (
-                        _mm256_loadu_si256(sp.add(row + x) as *const __m256i),
-                        _mm256_loadu_si256(sp.add(row + x + 16) as *const __m256i),
+                        _mm256_loadu_si256(src_ptr.add(row + x) as *const __m256i),
+                        _mm256_loadu_si256(src_ptr.add(row + x + 16) as *const __m256i),
                     )
                 };
                 col_pairs_0_8 = _mm256_add_epi32(
                     col_pairs_0_8,
                     _mm256_add_epi32(
-                        _mm256_and_si256(cols_0_16, lo16),
+                        _mm256_and_si256(cols_0_16, low_u16_mask),
                         _mm256_srli_epi32(cols_0_16, 16),
                     ),
                 );
                 col_pairs_8_16 = _mm256_add_epi32(
                     col_pairs_8_16,
                     _mm256_add_epi32(
-                        _mm256_and_si256(cols_16_32, lo16),
+                        _mm256_and_si256(cols_16_32, low_u16_mask),
                         _mm256_srli_epi32(cols_16_32, 16),
                     ),
                 );
             }
-            let quad_sums =
-                _mm256_permutevar8x32_epi32(_mm256_hadd_epi32(col_pairs_0_8, col_pairs_8_16), perm);
+            let quad_sums = _mm256_permutevar8x32_epi32(
+                _mm256_hadd_epi32(col_pairs_0_8, col_pairs_8_16),
+                quad_order,
+            );
             let means = _mm256_srli_epi32(_mm256_add_epi32(quad_sums, eight), 4);
-            let p16 = _mm_packus_epi32(
+            let means_u16 = _mm_packus_epi32(
                 _mm256_castsi256_si128(means),
                 _mm256_extracti128_si256(means, 1),
             );
-            // SAFETY: ox + 8 <= ow (the guard): inside the output row.
-            unsafe { store_128i(out_row.add(ox) as *mut __m128i, p16, nt) };
-            ox += 8;
+            // SAFETY: out_x + 8 <= out_width (the guard): in the row.
+            unsafe { store_128i(out_row.add(out_x) as *mut __m128i, means_u16, stream) };
+            out_x += 8;
         }
-        while ox < ow {
+        while out_x < out_width {
             // SAFETY: as box4x_u8_avx2's tail.
-            unsafe { *out_row.add(ox) = ((box4_sum(sp, rows, 4 * ox) + 8) >> 4) as u16 };
-            ox += 1;
+            unsafe {
+                *out_row.add(out_x) = ((box4_sum(src_ptr, rows, 4 * out_x) + 8) >> 4) as u16;
+            };
+            out_x += 1;
         }
     });
-    // SAFETY: `row` writes outputs 0..ow of its row (the vector body, then
-    // the scalar tail up to ow) and nothing else.
+    // SAFETY: `row` writes outputs 0..out_width of its row (the vector body,
+    // then the scalar tail) and nothing else.
     unsafe { planar_box::<u16>(width, height, 4, row) }
 }
 
-/// AVX2 uint16 2x2 box average. No maddubs for u16 (values >= 32768 would go
-/// negative as i16), but `(v & 0xFFFF) + (v >> 16)` sums adjacent u16 pairs
-/// into u32 — in order, no widen/extract/permute needed. Exact sums, so
-/// rounding (sum + 2) >> 2 stays bit-identical to `box2x_scalar` and Pillow.
-/// 8 output px/iter.
+/// AVX2 uint16 2x2 box into `output`, 8 outputs per step. maddubs would
+/// treat u16 samples >= 32768 as negative, but `(v & 0xFFFF) + (v >> 16)`
+/// sums adjacent u16 pairs into u32 in order; the sums are exact, so
+/// `(sum + 2) >> 2` equals `box2x_scalar`.
 ///
 /// # Safety
 /// The CPU supports AVX2, `src.len() >= width * height`, and `output` holds
@@ -325,49 +341,51 @@ pub(crate) unsafe fn box2x_u16_avx2_to(
     output: BoxRows<u16>,
 ) -> Vec<u16> {
     use std::arch::x86_64::*;
-    let ow = width / 2;
-    debug_assert_eq!(output.rows(), height / 2);
+    let out_width = width / 2;
+    debug_assert_eq!(output.row_count(), height / 2);
     let two = _mm256_set1_epi32(2);
-    let lo16 = _mm256_set1_epi32(0xFFFF);
-    let sp = src.as_ptr();
-    let row = planar_row::<u16, _>(|oy, out_row, nt| {
-        let [r0, r1] = source_rows(oy, width);
-        let mut ox = 0usize;
-        while ox + 8 <= ow && 2 * ox + 16 <= width {
-            let x = 2 * ox;
-            // SAFETY: x + 16 <= width (the guard) in source rows 2oy, 2oy + 1
-            // < height, inside `src`.
+    let low_u16_mask = _mm256_set1_epi32(0xFFFF);
+    let src_ptr = src.as_ptr();
+    let row = planar_row::<u16, _>(|out_y, out_row, stream| {
+        let [top_row, bottom_row] = source_rows(out_y, width);
+        let mut out_x = 0usize;
+        while out_x + 8 <= out_width && 2 * out_x + 16 <= width {
+            let x = 2 * out_x;
+            // SAFETY: x + 16 <= width (the guard) in source rows up to
+            // 2 out_y + 1 < height, inside `src`.
             let (top, bottom) = unsafe {
                 (
-                    _mm256_loadu_si256(sp.add(r0 + x) as *const __m256i),
-                    _mm256_loadu_si256(sp.add(r1 + x) as *const __m256i),
+                    _mm256_loadu_si256(src_ptr.add(top_row + x) as *const __m256i),
+                    _mm256_loadu_si256(src_ptr.add(bottom_row + x) as *const __m256i),
                 )
             };
-            let pair_sums0 =
-                _mm256_add_epi32(_mm256_and_si256(top, lo16), _mm256_srli_epi32(top, 16));
-            let pair_sums1 = _mm256_add_epi32(
-                _mm256_and_si256(bottom, lo16),
+            let top_pair_sums = _mm256_add_epi32(
+                _mm256_and_si256(top, low_u16_mask),
+                _mm256_srli_epi32(top, 16),
+            );
+            let bottom_pair_sums = _mm256_add_epi32(
+                _mm256_and_si256(bottom, low_u16_mask),
                 _mm256_srli_epi32(bottom, 16),
             );
-            let block_sums = _mm256_add_epi32(pair_sums0, pair_sums1);
+            let block_sums = _mm256_add_epi32(top_pair_sums, bottom_pair_sums);
             let rounded = _mm256_srli_epi32(_mm256_add_epi32(block_sums, two), 2);
             let packed = _mm_packus_epi32(
                 _mm256_castsi256_si128(rounded),
                 _mm256_extracti128_si256(rounded, 1),
             );
-            // SAFETY: ox + 8 <= ow (the guard): inside the output row.
-            unsafe { store_128i(out_row.add(ox) as *mut __m128i, packed, nt) };
-            ox += 8;
+            // SAFETY: out_x + 8 <= out_width (the guard): in the row.
+            unsafe { store_128i(out_row.add(out_x) as *mut __m128i, packed, stream) };
+            out_x += 8;
         }
-        while ox < ow {
-            // SAFETY: ox < ow: the output is in the row, and its 2x2 block
-            // (columns 2ox, 2ox + 1 < width of rows 2oy, 2oy + 1) in `src`.
-            unsafe { *out_row.add(ox) = box2_mean(sp.add(r0 + 2 * ox), 1, width) };
-            ox += 1;
+        while out_x < out_width {
+            // SAFETY: out_x < width / 2, out_y < height / 2: the output is in
+            // the row, its 2x2 block in `src`.
+            unsafe { *out_row.add(out_x) = box2_mean(src_ptr.add(top_row + 2 * out_x), 1, width) };
+            out_x += 1;
         }
     });
-    // SAFETY: `row` writes outputs 0..ow of its row (the vector body, then
-    // the scalar tail up to ow) and nothing else.
+    // SAFETY: `row` writes outputs 0..out_width of its row (the vector body,
+    // then the scalar tail) and nothing else.
     unsafe { planar_box_to::<u16>(output, row) }
 }
 
@@ -380,10 +398,17 @@ pub(crate) unsafe fn box2x_u16_avx2(
     width: usize,
     height: usize,
 ) -> (Vec<u16>, usize, usize) {
-    let (ow, oh) = (width / 2, height / 2);
+    let (out_width, out_height) = (width / 2, height / 2);
     // SAFETY: the caller's contract.
-    let image = unsafe { box2x_u16_avx2_to(src, width, height, BoxRows::new_image(oh, ow)) };
-    (image, ow, oh)
+    let image = unsafe {
+        box2x_u16_avx2_to(
+            src,
+            width,
+            height,
+            BoxRows::new_image(out_height, out_width),
+        )
+    };
+    (image, out_width, out_height)
 }
 
 #[cfg(test)]

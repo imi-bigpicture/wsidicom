@@ -40,14 +40,6 @@ pub(crate) fn assert_image<T>(src: &[T], width: usize, height: usize, channels: 
     );
 }
 
-/// Panics unless `channels` is the interleaved layout, RGB.
-pub(crate) fn assert_interleaved(channels: usize) {
-    assert!(
-        channels == RGB,
-        "interleaved images have 3 channels, not {channels}"
-    );
-}
-
 /// A sample type: its value as f32 and back, rounded and saturated.
 pub(crate) trait Sample: Copy + numpy::Element {
     fn to_f32(self) -> f32;
@@ -213,16 +205,5 @@ mod tests {
     #[should_panic(expected = "fewer than width * height * channels samples")]
     fn assert_image_rejects_samples_overflowing_usize() {
         assert_image(&[0u8; 16], usize::MAX / 2, 2, RGB);
-    }
-
-    #[test]
-    fn assert_interleaved_accepts_rgb() {
-        assert_interleaved(RGB);
-    }
-
-    #[test]
-    #[should_panic(expected = "interleaved images have 3 channels, not 1")]
-    fn assert_interleaved_rejects_planar() {
-        assert_interleaved(1);
     }
 }

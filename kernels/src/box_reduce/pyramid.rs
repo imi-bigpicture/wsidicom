@@ -6,9 +6,10 @@ use std::mem::MaybeUninit;
 
 use super::BoxSample;
 use crate::cpu::{unwritten_output, written_output};
+use crate::sample::assert_image;
 
-/// A sample type's mean of a block from the block's exact sum, rounded half
-/// up (as the box kernels round).
+/// A sample type's mean of a block from its exact sum, rounded half up (as
+/// the box kernels round).
 pub(crate) trait BlockMean: Sized {
     fn block_mean(sum: f64, count: usize) -> Self;
 }
@@ -43,32 +44,24 @@ pub(crate) fn box_downscale<T: BoxSample>(
     if height.is_multiple_of(block) && width.is_multiple_of(block) {
         return box_pyramid(src, dims, times);
     }
-    let (ow, oh) = (width.div_ceil(block), height.div_ceil(block));
-    let mut out = unwritten_output::<T>(ow * oh * channels);
+    let (out_width, out_height) = (width.div_ceil(block), height.div_ceil(block));
+    let out_stride = out_width * channels;
+    let mut out = unwritten_output::<T>(out_height * out_stride);
     if has_whole_blocks(dims, times) {
         // SAFETY: `out` holds the whole blocks' `height >> times` rows of
-        // `width >> times` pixels, `ow * channels` samples apart.
-        let in_place = unsafe {
-            box_pyramid_into(
-                src,
-                dims,
-                times,
-                out.as_mut_ptr().cast::<T>(),
-                ow * channels,
-            )
-        };
+        // `width >> times` pixels, `out_stride` samples apart.
+        let in_place =
+            unsafe { box_pyramid_into(src, dims, times, out.as_mut_ptr().cast::<T>(), out_stride) };
         if !in_place {
             let (whole, whole_width, _) = box_pyramid(src, dims, times);
-            place_rows(&whole, whole_width * channels, &mut out, ow * channels);
+            place_rows(&whole, whole_width * channels, &mut out, out_stride);
         }
     }
     write_partial_blocks(src, dims, times, &mut out);
     // SAFETY: the whole blocks and the partial ones cover every pixel.
-    (unsafe { written_output(out) }, ow, oh)
+    (unsafe { written_output(out) }, out_width, out_height)
 }
 
-/// Whether the image has a whole `2^times` block (the kernels reduce those
-/// and skip the rest).
 fn has_whole_blocks((height, width, _): (usize, usize, usize), times: u32) -> bool {
     (height >> times) > 0 && (width >> times) > 0
 }
@@ -84,8 +77,7 @@ fn place_rows<T: Copy>(rows: &[T], row_len: usize, out: &mut [MaybeUninit<T>], s
 }
 
 /// Writes the partial blocks of a `2^times` reduction at `ceil` size into
-/// `out`: the last column's and row's blocks the image ends inside, each
-/// pixel its channels' means.
+/// `out`: the blocks of the last column and row that the image ends inside.
 fn write_partial_blocks<T: BoxSample>(
     src: &[T],
     dims @ (height, width, channels): (usize, usize, usize),
@@ -93,28 +85,28 @@ fn write_partial_blocks<T: BoxSample>(
     out: &mut [MaybeUninit<T>],
 ) {
     let block = 1usize << times;
-    let (ow, oh) = (width.div_ceil(block), height.div_ceil(block));
+    let (out_width, out_height) = (width.div_ceil(block), height.div_ceil(block));
     let (whole_width, whole_height) = if has_whole_blocks(dims, times) {
         (width >> times, height >> times)
     } else {
         (0, 0)
     };
     let mut sums = vec![0.0; channels];
-    for y in 0..oh {
+    for y in 0..out_height {
         let first_partial = if y < whole_height { whole_width } else { 0 };
         let rows = y * block..((y + 1) * block).min(height);
-        for x in first_partial..ow {
-            let cols = x * block..((x + 1) * block).min(width);
+        for x in first_partial..out_width {
+            let columns = x * block..((x + 1) * block).min(width);
             sums.fill(0.0);
             for row in rows.clone() {
-                let samples = &src
-                    [(row * width + cols.start) * channels..(row * width + cols.end) * channels];
+                let samples = &src[(row * width + columns.start) * channels
+                    ..(row * width + columns.end) * channels];
                 for (index, &sample) in samples.iter().enumerate() {
                     sums[index % channels] += f64::from(sample.to_f32());
                 }
             }
-            let count = rows.len() * cols.len();
-            let pixel = &mut out[(y * ow + x) * channels..][..channels];
+            let count = rows.len() * columns.len();
+            let pixel = &mut out[(y * out_width + x) * channels..][..channels];
             for (sample, &sum) in pixel.iter_mut().zip(&sums) {
                 sample.write(T::block_mean(sum, count));
             }
@@ -128,17 +120,15 @@ pub(crate) fn box_halvings(filter: &str, factor: usize) -> Option<u32> {
 }
 
 /// `times` successive 2x box halvings of a (height, width, channels) image ->
-/// (pixels, width, height). Two levels per pass through the fused 4x passes
-/// while at least two remain (an interleaved image's last pass folds in a
-/// remaining 2x), so an interleaved image equals its channels reduced as
-/// planar ones. Interleaved images with more than one pass go band by band
-/// (see `box_pyramid_banded`).
+/// (pixels, width, height), two levels per fused 4x pass while at least two
+/// remain, so an interleaved image equals its channels reduced as planar
+/// ones. Interleaved images of more than one pass go band by band.
 pub(crate) fn box_pyramid<T: BoxSample>(
     src: &[T],
     (height, width, channels): (usize, usize, usize),
     times: u32,
 ) -> (Vec<T>, usize, usize) {
-    if channels > 1 && box_passes(times) >= 2 {
+    if channels > 1 && interleaved_pass_count(times) >= 2 {
         return box_pyramid_banded(
             src,
             (height, width, channels),
@@ -167,21 +157,19 @@ pub(crate) unsafe fn box_pyramid_into<T: BoxSample>(
     times == 1 && unsafe { T::box2x_into(src, dims, dst_ptr, dst_stride) }
 }
 
-/// The passes of a `times`-level interleaved pyramid.
-fn box_passes(times: u32) -> u32 {
+fn interleaved_pass_count(times: u32) -> u32 {
     if times >= 2 { times / 2 } else { times }
 }
 
-/// The levels of the next fused pass with `left` levels to go: 4x passes,
-/// the last one 8x when `left` is odd (the planar pyramid's 4x then 2x).
-fn fused_levels(left: u32) -> u32 {
-    if left == 3 { 3 } else { 2 }
-}
-
-/// Levels the next interleaved pass halves, of `left` to go: a fused pass
-/// while at least two remain, else one 2x pass.
+/// Levels the next interleaved pass halves with `left` to go: a fused 4x
+/// pass, the last one 8x when `left` is odd (the planar pyramid's 4x then
+/// 2x), or a lone 2x.
 fn next_pass_levels(left: u32) -> u32 {
-    if left >= 2 { fused_levels(left) } else { 1 }
+    match left {
+        0 | 1 => 1,
+        3 => 3,
+        _ => 2,
+    }
 }
 
 /// The pyramid's levels over a whole image (or band).
@@ -190,26 +178,27 @@ fn box_levels<T: BoxSample>(
     (height, width, channels): (usize, usize, usize),
     times: u32,
 ) -> (Vec<T>, usize, usize) {
+    assert_image(src, width, height, channels);
     let mut level = (Cow::Borrowed(src), width, height);
     let mut left = times;
     while left > 0 {
-        let (px, width, height) = (&level.0, level.1, level.2);
-        let (next, nw, nh) = if channels > 1 {
+        let (pixels, width, height) = (&level.0, level.1, level.2);
+        let (next, next_width, next_height) = if channels > 1 {
             let levels = next_pass_levels(left);
             left -= levels;
             if levels > 1 {
-                T::box_levels_hwc(px, width, height, channels, levels)
+                T::box_levels_hwc(pixels, width, height, levels)
             } else {
-                T::box2x_hwc(px, width, height, channels)
+                T::box2x_hwc(pixels, width, height)
             }
         } else if left >= 2 {
             left -= 2;
-            T::box4x(px, width, height)
+            T::box4x(pixels, width, height)
         } else {
             left -= 1;
-            T::box2x(px, width, height)
+            T::box2x(pixels, width, height)
         };
-        level = (Cow::Owned(next), nw, nh);
+        level = (Cow::Owned(next), next_width, next_height);
     }
     (level.0.into_owned(), level.1, level.2)
 }
@@ -219,9 +208,9 @@ const BAND_BYTES: usize = 256 << 10;
 
 /// A `times`-level pyramid of an interleaved image one band of input rows at
 /// a time: each output row depends only on its own 2^times input rows, so
-/// running the chained halvings (`levels`) per band gives the same pixels,
-/// while the intermediate levels stay small and cache-resident instead of
-/// full-size images written and read back.
+/// running `levels` per band gives the same pixels while the intermediate
+/// levels stay cache-resident instead of full-size images written and read
+/// back.
 fn box_pyramid_banded<T: Copy, LevelsFn>(
     src: &[T],
     (height, width, channels): (usize, usize, usize),
@@ -232,21 +221,22 @@ where
     LevelsFn: Fn(&[T], usize, usize) -> (Vec<T>, usize, usize),
 {
     let block = 1usize << times;
-    let (ow, oh) = (width >> times, height >> times);
-    let row_bytes = width * channels * std::mem::size_of::<T>();
-    let band_out = (BAND_BYTES / (row_bytes * block).max(1)).max(1);
+    let (out_width, out_height) = (width >> times, height >> times);
+    let row_samples = width * channels;
+    let row_bytes = row_samples * std::mem::size_of::<T>();
+    let out_rows_per_band = (BAND_BYTES / (row_bytes * block).max(1)).max(1);
     let mut out: Vec<T> = Vec::new();
-    for oy in (0..oh).step_by(band_out) {
-        let rows = band_out.min(oh - oy);
-        let band = &src[oy * block * width * channels..(oy + rows) * block * width * channels];
-        let (px, bw, bh) = levels(band, width, rows * block);
-        debug_assert!(bw == ow && bh == rows);
+    for out_y in (0..out_height).step_by(out_rows_per_band) {
+        let band_out_rows = out_rows_per_band.min(out_height - out_y);
+        let band = &src[out_y * block * row_samples..(out_y + band_out_rows) * block * row_samples];
+        let (band_out, band_width, band_height) = levels(band, width, band_out_rows * block);
+        debug_assert!(band_width == out_width && band_height == band_out_rows);
         if out.is_empty() {
-            out.reserve_exact(oh * (px.len() / rows));
+            out.reserve_exact(out_height * (band_out.len() / band_out_rows));
         }
-        out.extend_from_slice(&px);
+        out.extend_from_slice(&band_out);
     }
-    (out, ow, oh)
+    (out, out_width, out_height)
 }
 
 #[cfg(test)]
@@ -326,7 +316,7 @@ mod tests {
         );
         let height = (2 * band_rows + band_rows / 2 + 1) * block + block - 1;
         let dims = (height, width, channels);
-        assert!(box_passes(times) >= 2);
+        assert!(interleaved_pass_count(times) >= 2);
         let mut rng = Rng::new(31);
         let src: Vec<T> = random_samples(&mut rng, width * height * channels);
         let context = format!("{times} times, {width} x {height} x {channels}");
@@ -405,7 +395,10 @@ mod tests {
         assert_eq!(pass_levels(5), [2, 3]);
         assert_eq!(pass_levels(6), [2, 2, 2]);
         for times in 0..8 {
-            assert_eq!(pass_levels(times).len() as u32, box_passes(times));
+            assert_eq!(
+                pass_levels(times).len() as u32,
+                interleaved_pass_count(times)
+            );
         }
     }
 }

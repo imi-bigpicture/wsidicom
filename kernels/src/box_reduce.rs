@@ -15,7 +15,7 @@ use crate::cpu::has_avx2;
 #[cfg(target_arch = "aarch64")]
 use crate::cpu::use_neon;
 
-use crate::sample::{RGB, Sample, assert_image, assert_interleaved};
+use crate::sample::{RGB, Sample, assert_image};
 #[cfg(target_arch = "aarch64")]
 use neon::*;
 #[cfg(target_arch = "x86_64")]
@@ -25,10 +25,10 @@ use x86_output::BoxRows;
 #[cfg(target_arch = "x86_64")]
 use x86_planar::*;
 
-/// The rounded mean of the 2x2 block at `top_left` (`right` elements to the
-/// partner column, `below` to the partner row) — the scalar reference every
-/// box kernel matches bit for bit. Integer sums are exact in f32 (< 2^24), so
-/// for u8/u16 this is `(sum + 2) >> 2`.
+/// The rounded mean of the 2x2 block at `top_left`, its partner column
+/// `right` samples on and partner row `below`: the scalar reference every box
+/// kernel matches bit for bit. Integer sums are exact in f32, so this is
+/// `(sum + 2) >> 2`.
 ///
 /// # Safety
 /// `top_left`, `top_left + right`, `top_left + below` and
@@ -46,33 +46,29 @@ pub(crate) unsafe fn box2_mean<T: Sample>(top_left: *const T, right: usize, belo
 }
 
 /// How a box pass sums samples: widened to an accumulator that holds the
-/// sums exactly (u16 for uint8, u32 for uint16, or f32), and the sum of a
-/// 2x2 or 4x4 block finished to a sample.
+/// sums exactly, and a sum of 4 or 16 samples rounded to their mean.
 pub(crate) struct BoxSums<T, Acc> {
     pub(crate) widen: fn(T) -> Acc,
-    pub(crate) mean4: fn(Acc) -> T,
-    pub(crate) mean16: fn(Acc) -> T,
+    pub(crate) mean_of_4: fn(Acc) -> T,
+    pub(crate) mean_of_16: fn(Acc) -> T,
 }
 
-/// Sums in f32 (exact for integer samples): the scalar interleaved 2x.
+/// Sums in f32, exact for integer samples.
 fn f32_box_sums<T: Sample>() -> BoxSums<T, f32> {
     BoxSums {
         widen: T::to_f32,
-        mean4: |sum| T::from_f32(sum * 0.25),
-        mean16: |sum| T::from_f32(sum * (1.0 / 16.0)),
+        mean_of_4: |sum| T::from_f32(sum * 0.25),
+        mean_of_16: |sum| T::from_f32(sum * (1.0 / 16.0)),
     }
 }
 
-/// The scalar fused 4x box: a 4x4 mean rounded once (the SIMD kernels'
-/// arithmetic, so every tier gives the same result).
 fn box4x_scalar<T: BoxSample>(src: &[T], width: usize, height: usize) -> (Vec<T>, usize, usize) {
     box_levels_fused(src, (width, height, 1), 2, &T::box_sums())
 }
 
-/// The fused 4x box of a row band (4 rows of `channels`-sample
-/// pixels, `sums.len()` samples used) into `out`: per sample, the columns
-/// summed down the rows, then the 4 columns as (c0 + c1) + (c2 + c3) — the
-/// planar `box4x` kernels' order. Two contiguous passes, which vectorize.
+/// The 4x box of a band of 4 rows (`sums.len()` samples of each used),
+/// appended to `out`: the columns summed down the rows, then each output's 4
+/// columns. Two contiguous passes, which vectorize.
 #[inline(always)]
 fn box4_band<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>>(
     rows: [&[T]; 4],
@@ -87,40 +83,39 @@ fn box4_band<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>>(
             + widen(rows[3][index]);
     }
     match channels {
-        1 => box4_quads::<T, Acc, 1>(sums, out, box_sums.mean16),
-        RGB => box4_quads::<T, Acc, RGB>(sums, out, box_sums.mean16),
+        1 => box4_quads::<T, Acc, 1>(sums, out, box_sums.mean_of_16),
+        RGB => box4_quads::<T, Acc, RGB>(sums, out, box_sums.mean_of_16),
         _ => unreachable!("{channels} channels"),
     }
 }
 
-/// `box4_band`'s pixel loop for a compile-time channel count, so it
-/// vectorizes too.
+/// The means of each 4 adjacent pixels of `sums` (column sums of
+/// `CHANNELS`-sample pixels), appended to `out`.
 #[inline(always)]
 fn box4_quads<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>, const CHANNELS: usize>(
     sums: &[Acc],
     out: &mut Vec<T>,
-    mean16: fn(Acc) -> T,
+    mean_of_16: fn(Acc) -> T,
 ) {
     let quads = sums.chunks_exact(4 * CHANNELS);
     out.reserve(quads.len() * CHANNELS);
     for quad in quads {
-        let px: [T; CHANNELS] = std::array::from_fn(|ch| {
-            mean16(
-                (quad[ch] + quad[CHANNELS + ch])
-                    + (quad[2 * CHANNELS + ch] + quad[3 * CHANNELS + ch]),
+        let pixel: [T; CHANNELS] = std::array::from_fn(|channel| {
+            mean_of_16(
+                (quad[channel] + quad[CHANNELS + channel])
+                    + (quad[2 * CHANNELS + channel] + quad[3 * CHANNELS + channel]),
             )
         });
-        out.extend_from_slice(&px);
+        out.extend_from_slice(&pixel);
     }
 }
 
-/// `BoxSample::box_levels_hwc` with `box4_band`: the 4x pass, and for 8x a 2x
-/// pass of each pair of its rows while they are in cache (rather than
-/// halving a whole 4x image afterwards, which writes and re-reads it) — the
-/// planar pyramid's passes.
-// Inlined (with the band and pixel loops below) so `box_sums`' function
-// pointers are constants at the call site: called through, they cost a call
-// per sample and block vectorization.
+/// A 4x (`levels` 2) or 8x (`levels` 3) box in one pass, with the planar
+/// pyramid's rounding: a 4x mean, for 8x followed by the 2x mean of each pair
+/// of 4x rows while they are in cache.
+// Inlined (with the band and pixel loops) so `box_sums`' function pointers
+// are constants at the call site: called through, they cost a call per sample
+// and block vectorization.
 #[inline(always)]
 fn box_levels_fused<T: Copy, Acc: Copy + Default + std::ops::Add<Output = Acc>>(
     src: &[T],
@@ -129,61 +124,65 @@ fn box_levels_fused<T: Copy, Acc: Copy + Default + std::ops::Add<Output = Acc>>(
     box_sums: &BoxSums<T, Acc>,
 ) -> (Vec<T>, usize, usize) {
     let stride = width * channels;
-    let used = 4 * (width / 4) * channels;
-    let mut sums = vec![Acc::default(); used];
-    let band = |y: usize, out: &mut Vec<T>, sums: &mut [Acc]| {
-        let rows = [0, 1, 2, 3].map(|row| &src[(y + row) * stride..][..used]);
+    let block_row_samples = 4 * (width / 4) * channels;
+    let mut sums = vec![Acc::default(); block_row_samples];
+    let box4_rows_at = |y: usize, out: &mut Vec<T>, sums: &mut [Acc]| {
+        let rows = [0, 1, 2, 3].map(|row| &src[(y + row) * stride..][..block_row_samples]);
         box4_band(rows, channels, sums, out, box_sums);
     };
     if levels == 2 {
-        let (ow, oh) = (width / 4, height / 4);
-        let mut out = Vec::with_capacity(ow * oh * channels);
-        for oy in 0..oh {
-            band(4 * oy, &mut out, &mut sums);
+        let (out_width, out_height) = (width / 4, height / 4);
+        let mut out = Vec::with_capacity(out_width * out_height * channels);
+        for out_y in 0..out_height {
+            box4_rows_at(4 * out_y, &mut out, &mut sums);
         }
-        return (out, ow, oh);
+        return (out, out_width, out_height);
     }
-    let (ow, oh) = (width / 8, height / 8);
-    let mut out = Vec::with_capacity(ow * oh * channels);
-    let (mut top, mut bottom) = (
+    let (out_width, out_height) = (width / 8, height / 8);
+    let mut out = Vec::with_capacity(out_width * out_height * channels);
+    let (mut upper_4x_row, mut lower_4x_row) = (
         Vec::with_capacity(width / 4 * channels),
         Vec::with_capacity(width / 4 * channels),
     );
-    let mut pair_sums = vec![Acc::default(); 2 * ow * channels];
-    for oy in 0..oh {
-        top.clear();
-        bottom.clear();
-        band(8 * oy, &mut top, &mut sums);
-        band(8 * oy + 4, &mut bottom, &mut sums);
-        box2_band(&top, &bottom, channels, &mut pair_sums, &mut out, box_sums);
+    let mut pair_sums = vec![Acc::default(); 2 * out_width * channels];
+    for out_y in 0..out_height {
+        upper_4x_row.clear();
+        lower_4x_row.clear();
+        box4_rows_at(8 * out_y, &mut upper_4x_row, &mut sums);
+        box4_rows_at(8 * out_y + 4, &mut lower_4x_row, &mut sums);
+        box2_band(
+            &upper_4x_row,
+            &lower_4x_row,
+            channels,
+            &mut pair_sums,
+            &mut out,
+            box_sums,
+        );
     }
-    (out, ow, oh)
+    (out, out_width, out_height)
 }
 
 /// Box reduction per sample type: the scalar reference, overridden with
 /// AVX2/NEON kernels where they exist.
 ///
-/// Every method takes `src` holding the `width * height` (times `channels`)
-/// samples its dimensions describe — an array's shape at the API — which the
-/// kernels read without checking.
+/// Every method takes `src` holding the `width * height` pixels its
+/// dimensions describe (an array's shape at the API), which the kernels read
+/// without checking. Interleaved (HWC) images are RGB.
 pub(crate) trait BoxSample: Sample + pyramid::BlockMean {
-    /// The accumulator the fused passes sum in.
     type BoxAcc: Copy + Default + std::ops::Add<Output = Self::BoxAcc>;
 
-    /// How the fused passes sum and round: exactly (a pass rounds once).
+    /// How the fused passes sum, exactly, and round once.
     fn box_sums() -> BoxSums<Self, Self::BoxAcc>
     where
         Self: Sized;
 
-    /// Halve `src` (width x height) by 2x2 box average -> (out, width/2,
-    /// height/2).
+    /// The 2x box of a planar image -> (out, width / 2, height / 2).
     fn box2x(src: &[Self], width: usize, height: usize) -> (Vec<Self>, usize, usize)
     where
         Self: Sized;
 
-    /// Quarter `src` (width x height) by 4x4 box average -> (out, width/4,
-    /// height/4), rounded once (closer to the true mean than two rounded 2x
-    /// passes) on every tier.
+    /// The 4x box of a planar image -> (out, width / 4, height / 4), rounded
+    /// once: closer to the true mean than two rounded 2x passes.
     fn box4x(src: &[Self], width: usize, height: usize) -> (Vec<Self>, usize, usize)
     where
         Self: Sized;
@@ -207,86 +206,79 @@ pub(crate) trait BoxSample: Sample + pyramid::BlockMean {
         false
     }
 
-    /// Halve an interleaved HWC array (`channels` 3). Default scalar;
-    /// every dtype overrides with exact AVX2 and NEON (vldN) kernels.
-    fn box2x_hwc(
-        src: &[Self],
-        width: usize,
-        height: usize,
-        channels: usize,
-    ) -> (Vec<Self>, usize, usize)
+    /// The 2x box of an interleaved RGB image.
+    fn box2x_hwc(src: &[Self], width: usize, height: usize) -> (Vec<Self>, usize, usize)
     where
-        Self: Sized;
+        Self: Sized,
+    {
+        assert_image(src, width, height, RGB);
+        box2x_hwc_scalar::<Self>(src, width, height)
+    }
 
-    /// Reduce an interleaved HWC array by 4 (`levels` 2) or 8 (`levels` 3)
-    /// in one pass, as the planar pyramid: a 4x mean, for 8x followed by a 2x
-    /// mean. Default scalar.
+    /// The 4x (`levels` 2) or 8x (`levels` 3) box of an interleaved RGB
+    /// image in one pass, equal to the planar pyramid of each channel.
     fn box_levels_hwc(
         src: &[Self],
         width: usize,
         height: usize,
-        channels: usize,
         levels: u32,
     ) -> (Vec<Self>, usize, usize)
     where
         Self: Sized,
     {
-        assert_image(src, width, height, channels);
-        assert_interleaved(channels);
-        box_levels_fused(src, (width, height, channels), levels, &Self::box_sums())
+        assert_image(src, width, height, RGB);
+        box_levels_fused(src, (width, height, RGB), levels, &Self::box_sums())
     }
 }
 
-/// Scalar 2x2 box halving, planar.
 pub(crate) fn box2x_scalar<T: Sample>(
     src: &[T],
     width: usize,
     height: usize,
 ) -> (Vec<T>, usize, usize) {
     assert_image(src, width, height, 1);
-    let (ow, oh) = (width / 2, height / 2);
-    let mut out = Vec::with_capacity(ow * oh);
-    for oy in 0..oh {
-        let row = 2 * oy * width;
-        for ox in 0..ow {
-            // SAFETY: ox < width/2 and oy < height/2 keep the whole 2x2 block inside src.
-            out.push(unsafe { box2_mean(src.as_ptr().add(row + 2 * ox), 1, width) });
+    let (out_width, out_height) = (width / 2, height / 2);
+    let mut out = Vec::with_capacity(out_width * out_height);
+    for out_y in 0..out_height {
+        let row = 2 * out_y * width;
+        for out_x in 0..out_width {
+            // SAFETY: out_x < width / 2 and out_y < height / 2 keep the whole
+            // 2x2 block inside src.
+            out.push(unsafe { box2_mean(src.as_ptr().add(row + 2 * out_x), 1, width) });
         }
     }
-    (out, ow, oh)
+    (out, out_width, out_height)
 }
 
-/// Scalar 2x2 box halving, interleaved HWC with `channels` samples per pixel
-/// (each channel averaged on its own).
-pub(crate) fn box2x_interleaved<T: Sample>(
+/// The 2x box of an interleaved RGB image, each channel averaged on its own.
+pub(crate) fn box2x_hwc_scalar<T: Sample>(
     src: &[T],
     width: usize,
     height: usize,
-    channels: usize,
 ) -> (Vec<T>, usize, usize) {
-    assert_image(src, width, height, channels);
-    let (ow, oh) = (width / 2, height / 2);
-    let (stride, used) = (width * channels, 2 * ow * channels);
-    let mut out = Vec::with_capacity(ow * oh * channels);
-    let mut sums = vec![0f32; used];
+    assert_image(src, width, height, RGB);
+    let (out_width, out_height) = (width / 2, height / 2);
+    let (stride, block_row_samples) = (width * RGB, 2 * out_width * RGB);
+    let mut out = Vec::with_capacity(out_width * out_height * RGB);
+    let mut sums = vec![0f32; block_row_samples];
     let box_sums = f32_box_sums::<T>();
-    for oy in 0..oh {
+    for out_y in 0..out_height {
         box2_band(
-            &src[2 * oy * stride..][..used],
-            &src[(2 * oy + 1) * stride..][..used],
-            channels,
+            &src[2 * out_y * stride..][..block_row_samples],
+            &src[(2 * out_y + 1) * stride..][..block_row_samples],
+            RGB,
             &mut sums,
             &mut out,
             &box_sums,
         );
     }
-    (out, ow, oh)
+    (out, out_width, out_height)
 }
 
-/// The 2x box of two interleaved rows (`sums.len()` samples each) into
-/// `out`: the two rows' sums, then each output pixel's two adjacent pixels —
-/// both passes over contiguous samples, which vectorize (unlike one sample
-/// at a time with strided loads).
+/// The 2x box of two interleaved rows (`sums.len()` samples each), appended
+/// to `out`: the two rows' sums, then each output's two adjacent pixels. Both
+/// passes run over contiguous samples, which vectorize (unlike one sample at
+/// a time with strided loads).
 #[inline(always)]
 fn box2_band<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>>(
     top: &[T],
@@ -300,27 +292,27 @@ fn box2_band<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>>(
     for ((sum, &top_sample), &bottom_sample) in sums.iter_mut().zip(top).zip(bottom) {
         *sum = widen(top_sample) + widen(bottom_sample);
     }
-    // A compile-time channel count, so the pixel loop vectorizes too.
     match channels {
-        1 => box2_pairs::<T, Acc, 1>(sums, out, box_sums.mean4),
-        RGB => box2_pairs::<T, Acc, RGB>(sums, out, box_sums.mean4),
+        1 => box2_pairs::<T, Acc, 1>(sums, out, box_sums.mean_of_4),
+        RGB => box2_pairs::<T, Acc, RGB>(sums, out, box_sums.mean_of_4),
         _ => unreachable!("{channels} channels"),
     }
 }
 
-/// Averages of horizontally adjacent pixel pairs of `sums` (vertical pair
-/// sums of `CHANNELS`-sample pixels), appended to `out`.
+/// The means of each 2 adjacent pixels of `sums` (column sums of
+/// `CHANNELS`-sample pixels), appended to `out`.
 #[inline(always)]
 fn box2_pairs<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>, const CHANNELS: usize>(
     sums: &[Acc],
     out: &mut Vec<T>,
-    mean4: fn(Acc) -> T,
+    mean_of_4: fn(Acc) -> T,
 ) {
     let pairs = sums.chunks_exact(2 * CHANNELS);
     out.reserve(pairs.len() * CHANNELS);
     for pair in pairs {
-        let px: [T; CHANNELS] = std::array::from_fn(|ch| mean4(pair[ch] + pair[CHANNELS + ch]));
-        out.extend_from_slice(&px);
+        let pixel: [T; CHANNELS] =
+            std::array::from_fn(|channel| mean_of_4(pair[channel] + pair[CHANNELS + channel]));
+        out.extend_from_slice(&pixel);
     }
 }
 
@@ -336,13 +328,12 @@ impl BoxSample for u8 {
         if !use_neon() {
             return false;
         }
-        // SAFETY: `src` matches its dimensions (checked); `dst_ptr` holds the
-        // output rows (the caller's contract).
+        // SAFETY: `src` matches its dimensions of 1 or 3 channels (checked);
+        // `dst_ptr` holds the output rows (the caller's contract).
         unsafe {
             if channels == 1 {
                 box2x_u8_into_neon(src, width, height, dst_ptr, dst_stride);
             } else {
-                assert_interleaved(channels);
                 box2x_u8_hwc_into_neon(src, width, height, dst_ptr, dst_stride);
             }
         }
@@ -360,12 +351,11 @@ impl BoxSample for u8 {
         let output =
             unsafe { BoxRows::in_place(dst_ptr, dst_stride, height / 2, width / 2 * channels) };
         // SAFETY: each kernel's features are detected at runtime; `src`
-        // matches its dimensions (checked) and `output` holds its rows. The
-        // tiers are box2x's and box2x_hwc's.
+        // matches its dimensions (checked) and `output` holds its rows.
         unsafe {
             match channels {
                 1 if has_avx2() => box2x_u8_avx2_to(src, width, height, output),
-                RGB if has_avx2() => box2x_u8_hwc3_avx2_to(src, width, height, output),
+                RGB if has_avx2() => box2x_u8_hwc_avx2_to(src, width, height, output),
                 _ => return false,
             };
         }
@@ -376,8 +366,8 @@ impl BoxSample for u8 {
     fn box_sums() -> BoxSums<u8, u16> {
         BoxSums {
             widen: u16::from,
-            mean4: |sum| ((sum + 2) >> 2) as u8,
-            mean16: |sum| ((sum + 8) >> 4) as u8,
+            mean_of_4: |sum| ((sum + 2) >> 2) as u8,
+            mean_of_16: |sum| ((sum + 8) >> 4) as u8,
         }
     }
     fn box2x(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
@@ -408,49 +398,40 @@ impl BoxSample for u8 {
         }
         box4x_scalar(src, width, height)
     }
-    fn box2x_hwc(
-        src: &[u8],
-        width: usize,
-        height: usize,
-        channels: usize,
-    ) -> (Vec<u8>, usize, usize) {
-        assert_image(src, width, height, channels);
-        assert_interleaved(channels);
+    fn box2x_hwc(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
+        assert_image(src, width, height, RGB);
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
             // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u8_hwc3_avx2(src, width, height) };
+            return unsafe { box2x_u8_hwc_avx2(src, width, height) };
         }
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
             // SAFETY: `src` matches its dimensions (BoxSample).
             return unsafe { box2x_u8_hwc_neon(src, width, height) };
         }
-        box2x_interleaved::<u8>(src, width, height, channels)
+        box2x_hwc_scalar::<u8>(src, width, height)
     }
     fn box_levels_hwc(
         src: &[u8],
         width: usize,
         height: usize,
-        channels: usize,
         levels: u32,
     ) -> (Vec<u8>, usize, usize) {
-        assert_image(src, width, height, channels);
-        assert_interleaved(channels);
+        assert_image(src, width, height, RGB);
         assert!((2..=3).contains(&levels));
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
             // SAFETY: avx2 detected at runtime; `src` matches its dimensions
-            // (BoxSample) of RGB pixels (checked).
-            return unsafe { box_reduce_u8_rgb_avx2(src, (width, height), levels) };
+            // (checked).
+            return unsafe { box_levels_u8_hwc_avx2(src, (width, height), levels) };
         }
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample) of RGB pixels
-            // (checked).
+            // SAFETY: `src` matches its dimensions (checked).
             return unsafe { box_levels_u8_hwc_neon(src, (width, height), levels) };
         }
-        box_levels_fused(src, (width, height, channels), levels, &Self::box_sums())
+        box_levels_fused(src, (width, height, RGB), levels, &Self::box_sums())
     }
 }
 
@@ -466,13 +447,12 @@ impl BoxSample for u16 {
         if !use_neon() {
             return false;
         }
-        // SAFETY: `src` matches its dimensions (checked); `dst_ptr` holds the
-        // output rows (the caller's contract).
+        // SAFETY: `src` matches its dimensions of 1 or 3 channels (checked);
+        // `dst_ptr` holds the output rows (the caller's contract).
         unsafe {
             if channels == 1 {
                 box2x_u16_into_neon(src, width, height, dst_ptr, dst_stride);
             } else {
-                assert_interleaved(channels);
                 box2x_u16_hwc_into_neon(src, width, height, dst_ptr, dst_stride);
             }
         }
@@ -492,13 +472,12 @@ impl BoxSample for u16 {
         // SAFETY: `dst_ptr` holds the output rows (the caller's contract).
         let output =
             unsafe { BoxRows::in_place(dst_ptr, dst_stride, height / 2, width / 2 * channels) };
-        // SAFETY: avx2 detected at runtime; `src` matches its dimensions
-        // (checked) and `output` holds its rows. The kernels are box2x's and
-        // box2x_hwc's.
+        // SAFETY: avx2 detected at runtime; `src` matches its dimensions of 1
+        // or 3 channels (checked) and `output` holds its rows.
         unsafe {
             match channels {
                 1 => box2x_u16_avx2_to(src, width, height, output),
-                _ => box2x_u16_hwc3_avx2_to(src, width, height, output),
+                _ => box2x_u16_hwc_avx2_to(src, width, height, output),
             };
         }
         true
@@ -508,8 +487,8 @@ impl BoxSample for u16 {
     fn box_sums() -> BoxSums<u16, u32> {
         BoxSums {
             widen: u32::from,
-            mean4: |sum| ((sum + 2) >> 2) as u16,
-            mean16: |sum| ((sum + 8) >> 4) as u16,
+            mean_of_4: |sum| ((sum + 2) >> 2) as u16,
+            mean_of_16: |sum| ((sum + 8) >> 4) as u16,
         }
     }
     fn box2x(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
@@ -544,38 +523,29 @@ impl BoxSample for u16 {
         src: &[u16],
         width: usize,
         height: usize,
-        channels: usize,
         levels: u32,
     ) -> (Vec<u16>, usize, usize) {
-        assert_image(src, width, height, channels);
-        assert_interleaved(channels);
+        assert_image(src, width, height, RGB);
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample) of RGB pixels
-            // (checked).
+            // SAFETY: `src` matches its dimensions (checked).
             return unsafe { box_levels_u16_hwc_neon(src, (width, height), levels) };
         }
-        box_levels_fused(src, (width, height, channels), levels, &Self::box_sums())
+        box_levels_fused(src, (width, height, RGB), levels, &Self::box_sums())
     }
-    fn box2x_hwc(
-        src: &[u16],
-        width: usize,
-        height: usize,
-        channels: usize,
-    ) -> (Vec<u16>, usize, usize) {
-        assert_image(src, width, height, channels);
-        assert_interleaved(channels);
+    fn box2x_hwc(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
+        assert_image(src, width, height, RGB);
         #[cfg(target_arch = "x86_64")]
         if has_avx2() {
             // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u16_hwc3_avx2(src, width, height) };
+            return unsafe { box2x_u16_hwc_avx2(src, width, height) };
         }
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
             // SAFETY: `src` matches its dimensions (BoxSample).
             return unsafe { box2x_u16_hwc_neon(src, width, height) };
         }
-        box2x_interleaved::<u16>(src, width, height, channels)
+        box2x_hwc_scalar::<u16>(src, width, height)
     }
 }
 
@@ -592,10 +562,10 @@ mod tests {
 
         /// The fused 4x4 mean of `block` (4 rows of 4 columns), rounded
         /// once: `(sum + 8) >> 4`.
-        fn mean16(block: [[Self; 4]; 4]) -> Self;
+        fn mean_4x4(block: [[Self; 4]; 4]) -> Self;
     }
 
-    fn integer_mean16<T: Copy + Into<u32>>(block: [[T; 4]; 4]) -> u32 {
+    fn integer_mean_4x4<T: Copy + Into<u32>>(block: [[T; 4]; 4]) -> u32 {
         let sum: u32 = block.iter().flatten().map(|&sample| sample.into()).sum();
         (sum + 8) >> 4
     }
@@ -603,16 +573,16 @@ mod tests {
     impl BoxTestSample for u8 {
         const MAX: Self = u8::MAX;
         const ZERO: Self = 0;
-        fn mean16(block: [[Self; 4]; 4]) -> Self {
-            u8::try_from(integer_mean16(block)).expect("a mean of u8 fits u8")
+        fn mean_4x4(block: [[Self; 4]; 4]) -> Self {
+            u8::try_from(integer_mean_4x4(block)).expect("a mean of u8 fits u8")
         }
     }
 
     impl BoxTestSample for u16 {
         const MAX: Self = u16::MAX;
         const ZERO: Self = 0;
-        fn mean16(block: [[Self; 4]; 4]) -> Self {
-            u16::try_from(integer_mean16(block)).expect("a mean of u16 fits u16")
+        fn mean_4x4(block: [[Self; 4]; 4]) -> Self {
+            u16::try_from(integer_mean_4x4(block)).expect("a mean of u16 fits u16")
         }
     }
 
@@ -622,17 +592,17 @@ mod tests {
         width: usize,
         height: usize,
     ) -> (Vec<T>, usize, usize) {
-        let (ow, oh) = (width / 4, height / 4);
-        let mut out = Vec::with_capacity(ow * oh);
-        for oy in 0..oh {
-            for ox in 0..ow {
+        let (out_width, out_height) = (width / 4, height / 4);
+        let mut out = Vec::with_capacity(out_width * out_height);
+        for out_y in 0..out_height {
+            for out_x in 0..out_width {
                 let block = std::array::from_fn(|row| {
-                    std::array::from_fn(|col| src[(4 * oy + row) * width + 4 * ox + col])
+                    std::array::from_fn(|col| src[(4 * out_y + row) * width + 4 * out_x + col])
                 });
-                out.push(T::mean16(block));
+                out.push(T::mean_4x4(block));
             }
         }
-        (out, ow, oh)
+        (out, out_width, out_height)
     }
 
     /// Two scalar 2x halvings: the chained (twice rounded) 4x box.
@@ -675,18 +645,18 @@ mod tests {
     ) -> (Vec<T>, usize, usize) {
         let pixels = width * height;
         let reduced: Vec<(Vec<T>, usize, usize)> = (0..channels)
-            .map(|ch| {
+            .map(|channel| {
                 let plane: Vec<T> = (0..pixels)
-                    .map(|pixel| src[pixel * channels + ch])
+                    .map(|pixel| src[pixel * channels + channel])
                     .collect();
                 planar(&plane, width, height)
             })
             .collect();
-        let (ow, oh) = (reduced[0].1, reduced[0].2);
-        let out = (0..ow * oh)
+        let (out_width, out_height) = (reduced[0].1, reduced[0].2);
+        let out = (0..out_width * out_height)
             .flat_map(|pixel| reduced.iter().map(move |plane| plane.0[pixel]))
             .collect();
-        (out, ow, oh)
+        (out, out_width, out_height)
     }
 
     /// The planar pyramid reference of every channel: what an interleaved
@@ -802,7 +772,7 @@ mod tests {
         for (width, height) in sizes_from(1) {
             for src in test_images::<T>(&mut rng, width * height * RGB) {
                 assert_same_image(
-                    &box2x_interleaved(&src, width, height, RGB),
+                    &box2x_hwc_scalar(&src, width, height),
                     &per_channel(&src, (width, height, RGB), box2x_scalar),
                     &format!("{width} x {height}"),
                 );
@@ -840,13 +810,13 @@ mod tests {
             for src in test_images::<T>(&mut rng, width * height * RGB) {
                 let context = format!("{width} x {height} x {RGB}");
                 assert_same_image(
-                    &T::box2x_hwc(&src, width, height, RGB),
-                    &box2x_interleaved(&src, width, height, RGB),
+                    &T::box2x_hwc(&src, width, height),
+                    &box2x_hwc_scalar(&src, width, height),
                     &format!("box2x_hwc {context}"),
                 );
                 for levels in [2, 3] {
                     assert_same_image(
-                        &T::box_levels_hwc(&src, width, height, RGB, levels),
+                        &T::box_levels_hwc(&src, width, height, levels),
                         &interleaved_pyramid_reference(&src, dims, levels),
                         &format!("box_levels_hwc {levels} {context}"),
                     );
@@ -892,14 +862,7 @@ mod tests {
     #[should_panic(expected = "fewer than width * height * channels")]
     fn box2x_hwc_rejects_a_short_image() {
         let src = vec![0u8; 4 * 4 * RGB - 1];
-        let _ = u8::box2x_hwc(&src, 4, 4, RGB);
-    }
-
-    #[test]
-    #[should_panic(expected = "interleaved images have 3 channels")]
-    fn box2x_hwc_rejects_a_planar_image() {
-        let src = vec![0u16; 16];
-        let _ = u16::box2x_hwc(&src, 4, 4, 1);
+        let _ = u8::box2x_hwc(&src, 4, 4);
     }
 
     #[test]
@@ -934,15 +897,15 @@ mod tests {
         for channels in CHANNELS {
             for (width, height) in box_sizes(1) {
                 let src = random_samples::<T>(&mut rng, width * height * channels);
-                let (expected, ow, oh) = if channels == 1 {
+                let (expected, out_width, out_height) = if channels == 1 {
                     box2x_scalar(&src, width, height)
                 } else {
-                    box2x_interleaved(&src, width, height, channels)
+                    box2x_hwc_scalar(&src, width, height)
                 };
-                let dst_stride = ow * channels + ROW_GAP;
-                let mut dst = vec![sentinel; oh * dst_stride];
+                let dst_stride = out_width * channels + ROW_GAP;
+                let mut dst = vec![sentinel; out_height * dst_stride];
                 // SAFETY: src holds width x height pixels of `channels`
-                // samples; dst holds oh rows dst_stride apart.
+                // samples; dst holds out_height rows dst_stride apart.
                 let in_place = unsafe {
                     T::box2x_into(
                         &src,
@@ -956,11 +919,11 @@ mod tests {
                     continue;
                 }
                 let context = format!("{width} x {height} x {channels}");
-                let row_len = ow * channels;
-                for oy in 0..oh {
-                    let row = &dst[oy * dst_stride..][..dst_stride];
-                    let expected_row = &expected[oy * row_len..][..row_len];
-                    assert_eq!(&row[..row_len], expected_row, "{context}, row {oy}");
+                let row_len = out_width * channels;
+                for out_y in 0..out_height {
+                    let row = &dst[out_y * dst_stride..][..dst_stride];
+                    let expected_row = &expected[out_y * row_len..][..row_len];
+                    assert_eq!(&row[..row_len], expected_row, "{context}, row {out_y}");
                     let gap = &row[row_len..];
                     assert!(gap.iter().all(|&sample| sample == sentinel), "{context}");
                 }
