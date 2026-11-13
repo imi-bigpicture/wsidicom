@@ -136,8 +136,8 @@ pub(crate) fn catmull_x2(src: &[u8], width: usize, height: usize, channels: usiz
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
-    use crate::testing::CHANNELS;
+    use crate::exact::tests::{assert_equals_reference, assert_rejects};
+    use crate::testing::{CHANNELS, size_grid};
 
     /// Even widths around the SIMD steps and the scalar fallback, the clipped
     /// edge windows (3 input pixels each side) and the vector tails; even

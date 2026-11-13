@@ -89,8 +89,8 @@ pub(crate) fn bilinear_up2(src: &[u8], width: usize, height: usize, channels: us
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
-    use crate::testing::CHANNELS;
+    use crate::exact::tests::{assert_equals_reference, assert_rejects};
+    use crate::testing::{CHANNELS, size_grid};
 
     /// Widths around 32 samples per row (the SIMD kernels' scalar fallback
     /// below it), the SIMD steps and a last step shifted back; heights from a

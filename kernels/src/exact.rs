@@ -52,43 +52,11 @@ pub(crate) fn exact_kernel_u16(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::testing::{RandomSample, Rng, random_samples};
+    use crate::testing::{RandomSample, Rng, test_images};
 
     /// An `ExactKernel` of any sample type.
     pub(crate) type ChannelKernel<'kernel, T> =
         &'kernel dyn Fn(&[T], usize, usize, usize) -> Vec<T>;
-
-    pub(crate) fn size_grid<'sizes>(
-        widths: &'sizes [usize],
-        heights: &'sizes [usize],
-    ) -> impl Iterator<Item = (usize, usize)> + 'sizes {
-        widths
-            .iter()
-            .flat_map(move |&width| heights.iter().map(move |&height| (width, height)))
-    }
-
-    /// Random samples, all at `max` (the largest sums), and random 0 or `max`
-    /// (the largest overshoots of negative weights).
-    pub(crate) fn test_images<T: RandomSample + Copy + Default>(
-        rng: &mut Rng,
-        len: usize,
-        max: T,
-    ) -> [(&'static str, Vec<T>); 3] {
-        let extremes = (0..len)
-            .map(|_| {
-                if rng.next_u64() & 1 == 0 {
-                    T::default()
-                } else {
-                    max
-                }
-            })
-            .collect();
-        [
-            ("random", random_samples(rng, len)),
-            ("saturated", vec![max; len]),
-            ("extremes", extremes),
-        ]
-    }
 
     /// Bit for bit on every `test_images` image of each size and channel
     /// count, on sources of exactly `width * height * channels` samples.

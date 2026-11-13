@@ -28,7 +28,7 @@ pub(crate) fn bilinear_x2_u16(
             return unsafe {
                 match channels {
                     1 => x86::bilinear_x2_u16_gray_avx2(src, width, height),
-                    _ => x86::bilinear_x2_u16_rgb_avx2(src, width, height),
+                    _ => x86::bilinear_x2_u16_hwc_avx2(src, width, height),
                 }
             };
         }
@@ -44,8 +44,8 @@ pub(crate) fn bilinear_x2_u16(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
-    use crate::testing::CHANNELS;
+    use crate::exact::tests::{assert_equals_reference, assert_rejects};
+    use crate::testing::{CHANNELS, size_grid};
 
     /// Even widths around the gray kernel's 8-pixel step, the RGB kernel's
     /// 4-pixel step and their scalar fallbacks.

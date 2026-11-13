@@ -132,3 +132,28 @@ fn enlarged(before: uint16x8_t, center: uint16x8_t, after: uint16x8_t) -> uint8x
     let odd = vrshrn_n_u16::<4>(vmlaq_n_u16(after, center, 3));
     vcombine_u8(vzip1_u8(even, odd), vzip2_u8(even, odd))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::bilinear_up2_neon;
+    use crate::exact::bilinear_up2::bilinear_up2_scalar;
+    use crate::exact::bilinear_up2::tests::{HEIGHTS, WIDTHS};
+    use crate::exact::tests::assert_equals_reference;
+    use crate::testing::{CHANNELS, size_grid};
+
+    #[test]
+    fn neon_equals_scalar() {
+        let kernel = |src: &[u8], width, height, channels| {
+            // SAFETY: NEON is baseline on aarch64; src holds width * height * channels
+            // samples.
+            unsafe { bilinear_up2_neon(src, width, height, channels) }
+        };
+        assert_equals_reference(
+            size_grid(&WIDTHS, &HEIGHTS),
+            &CHANNELS,
+            u8::MAX,
+            &kernel,
+            bilinear_up2_scalar,
+        );
+    }
+}

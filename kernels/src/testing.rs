@@ -1,7 +1,8 @@
 //! Helpers shared by the unit tests: reproducible random images, the sizes
-//! that exercise vector bodies, tails and image edges, and the comparison of
-//! a kernel's output with its scalar reference.
+//! that exercise vector bodies, tails and image edges, CPU feature probes,
+//! and a sample-by-sample comparison of two outputs.
 
+use crate::convolve::Kernel;
 use crate::sample::Sample;
 
 /// A kernel from a `width` x `height` image to its output and output size.
@@ -60,15 +61,82 @@ pub(crate) const SIZES: [usize; 14] = [1, 2, 3, 4, 7, 8, 15, 16, 17, 31, 33, 64,
 /// The pixel layouts the kernels take: gray and RGB.
 pub(crate) const CHANNELS: [usize; 2] = [1, 3];
 
+/// Every (width, height) pair of `widths` and `heights`, width by width.
+pub(crate) fn size_grid<'sizes>(
+    widths: &'sizes [usize],
+    heights: &'sizes [usize],
+) -> impl Iterator<Item = (usize, usize)> + 'sizes {
+    widths
+        .iter()
+        .flat_map(move |&width| heights.iter().map(move |&height| (width, height)))
+}
+
 /// Every (width, height) pair of `SIZES` with both at least `minimum`.
-pub(crate) fn sizes_from(minimum: usize) -> impl Iterator<Item = (usize, usize)> {
-    SIZES
-        .into_iter()
-        .filter(move |&size| size >= minimum)
-        .flat_map(move |width| {
-            SIZES
-                .into_iter()
-                .filter(move |&size| size >= minimum)
-                .map(move |height| (width, height))
+pub(crate) fn sizes_from(minimum: usize) -> Vec<(usize, usize)> {
+    let sizes: Vec<usize> = SIZES.into_iter().filter(|&size| size >= minimum).collect();
+    size_grid(&sizes, &sizes).collect()
+}
+
+/// Random samples, all at `max` (the largest sums), and random 0 or `max`
+/// (the extremes, where integer sums and packs would overflow or saturate
+/// and negative weights overshoot most).
+pub(crate) fn test_images<T: RandomSample + Copy + Default>(
+    rng: &mut Rng,
+    len: usize,
+    max: T,
+) -> [(&'static str, Vec<T>); 3] {
+    let extremes = (0..len)
+        .map(|_| {
+            if rng.next_u64() & 1 == 0 {
+                T::default()
+            } else {
+                max
+            }
         })
+        .collect();
+    [
+        ("random", random_samples(rng, len)),
+        ("saturated", vec![max; len]),
+        ("extremes", extremes),
+    ]
+}
+
+/// Asserts `actual` equals `expected`, naming the first differing sample
+/// (rather than printing whole outputs).
+#[track_caller]
+pub(crate) fn assert_same<T: PartialEq + std::fmt::Debug>(
+    actual: &[T],
+    expected: &[T],
+    context: &str,
+) {
+    assert_eq!(actual.len(), expected.len(), "{context}: length");
+    if let Some(index) = (0..actual.len()).find(|&index| actual[index] != expected[index]) {
+        panic!(
+            "{context}: sample {index} is {:?}, expected {:?}",
+            actual[index], expected[index]
+        );
+    }
+}
+
+/// The name `resize` takes for `kernel`.
+pub(crate) fn kernel_name(kernel: Kernel) -> &'static str {
+    match kernel {
+        Kernel::Box => "box",
+        Kernel::Bilinear => "bilinear",
+        Kernel::CatmullRom => "catmullrom",
+        Kernel::Lanczos3 => "lanczos3",
+    }
+}
+
+/// Whether this CPU has AVX2, whatever `set_simd` says: the tests call the
+/// AVX2 kernels directly.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn avx2_detected() -> bool {
+    std::is_x86_feature_detected!("avx2")
+}
+
+/// Whether this CPU has AVX2 and FMA, whatever `set_simd` says.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn avx2_fma_detected() -> bool {
+    avx2_detected() && std::is_x86_feature_detected!("fma")
 }

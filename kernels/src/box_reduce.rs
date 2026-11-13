@@ -4,7 +4,7 @@
 mod neon;
 pub(crate) mod pyramid;
 #[cfg(target_arch = "x86_64")]
-mod x86_interleaved;
+mod x86_hwc;
 #[cfg(target_arch = "x86_64")]
 mod x86_output;
 #[cfg(target_arch = "x86_64")]
@@ -19,7 +19,7 @@ use crate::sample::{RGB, Sample, assert_image};
 #[cfg(target_arch = "aarch64")]
 use neon::*;
 #[cfg(target_arch = "x86_64")]
-use x86_interleaved::*;
+use x86_hwc::*;
 #[cfg(target_arch = "x86_64")]
 use x86_output::BoxRows;
 #[cfg(target_arch = "x86_64")]
@@ -316,29 +316,58 @@ fn box2_pairs<T: Copy, Acc: Copy + std::ops::Add<Output = Acc>, const CHANNELS: 
     }
 }
 
-impl BoxSample for u8 {
-    #[cfg(target_arch = "aarch64")]
-    unsafe fn box2x_into(
-        src: &[u8],
-        (width, height, channels): (usize, usize, usize),
-        dst_ptr: *mut u8,
-        dst_stride: usize,
-    ) -> bool {
-        assert_image(src, width, height, channels);
-        if !use_neon() {
-            return false;
-        }
-        // SAFETY: `src` matches its dimensions of 1 or 3 channels (checked);
-        // `dst_ptr` holds the output rows (the caller's contract).
-        unsafe {
-            if channels == 1 {
-                box2x_u8_into_neon(src, width, height, dst_ptr, dst_stride);
-            } else {
-                box2x_u8_hwc_into_neon(src, width, height, dst_ptr, dst_stride);
+/// A `BoxSample` method `$method` of `$T`: the AVX2 kernel where AVX2 is
+/// detected, the NEON one where NEON is on, else the scalar reference.
+macro_rules! dispatched_box_method {
+    ($method:ident, $T:ty, $channels:expr, $avx2:ident, $neon:ident, $scalar:expr) => {
+        fn $method(src: &[$T], width: usize, height: usize) -> (Vec<$T>, usize, usize) {
+            assert_image(src, width, height, $channels);
+            #[cfg(target_arch = "x86_64")]
+            if has_avx2() {
+                // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
+                return unsafe { $avx2(src, width, height) };
             }
+            #[cfg(target_arch = "aarch64")]
+            if use_neon() {
+                // SAFETY: `src` matches its dimensions (BoxSample).
+                return unsafe { $neon(src, width, height) };
+            }
+            $scalar(src, width, height)
         }
-        true
-    }
+    };
+}
+
+/// `BoxSample::box2x_into` of `$T` on aarch64: the `$planar` or `$hwc` NEON
+/// kernel where NEON is on.
+macro_rules! neon_box2x_into {
+    ($T:ty, $planar:ident, $hwc:ident) => {
+        #[cfg(target_arch = "aarch64")]
+        unsafe fn box2x_into(
+            src: &[$T],
+            (width, height, channels): (usize, usize, usize),
+            dst_ptr: *mut $T,
+            dst_stride: usize,
+        ) -> bool {
+            assert_image(src, width, height, channels);
+            if !use_neon() {
+                return false;
+            }
+            // SAFETY: `src` matches its dimensions of 1 or 3 channels (checked);
+            // `dst_ptr` holds the output rows (the caller's contract).
+            unsafe {
+                if channels == 1 {
+                    $planar(src, width, height, dst_ptr, dst_stride);
+                } else {
+                    $hwc(src, width, height, dst_ptr, dst_stride);
+                }
+            }
+            true
+        }
+    };
+}
+
+impl BoxSample for u8 {
+    neon_box2x_into!(u8, box2x_u8_into_neon, box2x_u8_hwc_into_neon);
     #[cfg(target_arch = "x86_64")]
     unsafe fn box2x_into(
         src: &[u8],
@@ -354,8 +383,8 @@ impl BoxSample for u8 {
         // matches its dimensions (checked) and `output` holds its rows.
         unsafe {
             match channels {
-                1 if has_avx2() => box2x_u8_avx2_to(src, width, height, output),
-                RGB if has_avx2() => box2x_u8_hwc_avx2_to(src, width, height, output),
+                1 if has_avx2() => box2x_u8_into_avx2(src, width, height, output),
+                RGB if has_avx2() => box2x_u8_hwc_into_avx2(src, width, height, output),
                 _ => return false,
             };
         }
@@ -370,48 +399,23 @@ impl BoxSample for u8 {
             mean_of_16: |sum| ((sum + 8) >> 4) as u8,
         }
     }
-    fn box2x(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
-        assert_image(src, width, height, 1);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u8_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u8_neon(src, width, height) };
-        }
-        box2x_scalar::<u8>(src, width, height)
-    }
-    fn box4x(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
-        assert_image(src, width, height, 1);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box4x_u8_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box4x_u8_neon(src, width, height) };
-        }
-        box4x_scalar(src, width, height)
-    }
-    fn box2x_hwc(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
-        assert_image(src, width, height, RGB);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u8_hwc_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u8_hwc_neon(src, width, height) };
-        }
-        box2x_hwc_scalar::<u8>(src, width, height)
-    }
+    dispatched_box_method!(
+        box2x,
+        u8,
+        1,
+        box2x_u8_avx2,
+        box2x_u8_neon,
+        box2x_scalar::<u8>
+    );
+    dispatched_box_method!(box4x, u8, 1, box4x_u8_avx2, box4x_u8_neon, box4x_scalar);
+    dispatched_box_method!(
+        box2x_hwc,
+        u8,
+        RGB,
+        box2x_u8_hwc_avx2,
+        box2x_u8_hwc_neon,
+        box2x_hwc_scalar::<u8>
+    );
     fn box_levels_hwc(
         src: &[u8],
         width: usize,
@@ -436,28 +440,7 @@ impl BoxSample for u8 {
 }
 
 impl BoxSample for u16 {
-    #[cfg(target_arch = "aarch64")]
-    unsafe fn box2x_into(
-        src: &[u16],
-        (width, height, channels): (usize, usize, usize),
-        dst_ptr: *mut u16,
-        dst_stride: usize,
-    ) -> bool {
-        assert_image(src, width, height, channels);
-        if !use_neon() {
-            return false;
-        }
-        // SAFETY: `src` matches its dimensions of 1 or 3 channels (checked);
-        // `dst_ptr` holds the output rows (the caller's contract).
-        unsafe {
-            if channels == 1 {
-                box2x_u16_into_neon(src, width, height, dst_ptr, dst_stride);
-            } else {
-                box2x_u16_hwc_into_neon(src, width, height, dst_ptr, dst_stride);
-            }
-        }
-        true
-    }
+    neon_box2x_into!(u16, box2x_u16_into_neon, box2x_u16_hwc_into_neon);
     #[cfg(target_arch = "x86_64")]
     unsafe fn box2x_into(
         src: &[u16],
@@ -476,8 +459,8 @@ impl BoxSample for u16 {
         // or 3 channels (checked) and `output` holds its rows.
         unsafe {
             match channels {
-                1 => box2x_u16_avx2_to(src, width, height, output),
-                _ => box2x_u16_hwc_avx2_to(src, width, height, output),
+                1 => box2x_u16_into_avx2(src, width, height, output),
+                _ => box2x_u16_hwc_into_avx2(src, width, height, output),
             };
         }
         true
@@ -491,34 +474,15 @@ impl BoxSample for u16 {
             mean_of_16: |sum| ((sum + 8) >> 4) as u16,
         }
     }
-    fn box2x(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
-        assert_image(src, width, height, 1);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u16_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u16_neon(src, width, height) };
-        }
-        box2x_scalar::<u16>(src, width, height)
-    }
-    fn box4x(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
-        assert_image(src, width, height, 1);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box4x_u16_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box4x_u16_neon(src, width, height) };
-        }
-        box4x_scalar(src, width, height)
-    }
+    dispatched_box_method!(
+        box2x,
+        u16,
+        1,
+        box2x_u16_avx2,
+        box2x_u16_neon,
+        box2x_scalar::<u16>
+    );
+    dispatched_box_method!(box4x, u16, 1, box4x_u16_avx2, box4x_u16_neon, box4x_scalar);
     fn box_levels_hwc(
         src: &[u16],
         width: usize,
@@ -533,32 +497,27 @@ impl BoxSample for u16 {
         }
         box_levels_fused(src, (width, height, RGB), levels, &Self::box_sums())
     }
-    fn box2x_hwc(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
-        assert_image(src, width, height, RGB);
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u16_hwc_avx2(src, width, height) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (BoxSample).
-            return unsafe { box2x_u16_hwc_neon(src, width, height) };
-        }
-        box2x_hwc_scalar::<u16>(src, width, height)
-    }
+    dispatched_box_method!(
+        box2x_hwc,
+        u16,
+        RGB,
+        box2x_u16_hwc_avx2,
+        box2x_u16_hwc_neon,
+        box2x_hwc_scalar::<u16>
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{CHANNELS, RandomSample, Rng, SIZES, random_samples, sizes_from};
+    use crate::testing::{
+        CHANNELS, RandomSample, Rng, SIZES, random_samples, size_grid, sizes_from, test_images,
+    };
 
-    /// A box sample type with the kernels' fused 4x4 mean and its extremes
-    /// (the saturation edges of the integer kernels).
-    pub(crate) trait BoxTestSample: RandomSample + BoxSample {
+    /// A box sample type with the kernels' fused 4x4 mean and its largest
+    /// value (a saturation edge of the integer kernels).
+    pub(crate) trait BoxTestSample: RandomSample + BoxSample + Default {
         const MAX: Self;
-        const ZERO: Self;
 
         /// The fused 4x4 mean of `block` (4 rows of 4 columns), rounded
         /// once: `(sum + 8) >> 4`.
@@ -572,7 +531,6 @@ mod tests {
 
     impl BoxTestSample for u8 {
         const MAX: Self = u8::MAX;
-        const ZERO: Self = 0;
         fn mean_4x4(block: [[Self; 4]; 4]) -> Self {
             u8::try_from(integer_mean_4x4(block)).expect("a mean of u8 fits u8")
         }
@@ -580,7 +538,6 @@ mod tests {
 
     impl BoxTestSample for u16 {
         const MAX: Self = u16::MAX;
-        const ZERO: Self = 0;
         fn mean_4x4(block: [[Self; 4]; 4]) -> Self {
             u16::try_from(integer_mean_4x4(block)).expect("a mean of u16 fits u16")
         }
@@ -661,7 +618,7 @@ mod tests {
 
     /// The planar pyramid reference of every channel: what an interleaved
     /// pyramid (or a fused `levels` pass) must equal.
-    pub(crate) fn interleaved_pyramid_reference<T: BoxTestSample>(
+    pub(crate) fn hwc_pyramid_reference<T: BoxTestSample>(
         src: &[T],
         dims: (usize, usize, usize),
         times: u32,
@@ -671,33 +628,19 @@ mod tests {
         })
     }
 
-    /// The images every box kernel is checked on: uniform random samples,
-    /// and samples at the extremes (zero or the largest value), where the
-    /// integer kernels' sums and packs would overflow or saturate.
-    pub(crate) fn test_images<T: BoxTestSample>(rng: &mut Rng, len: usize) -> [Vec<T>; 2] {
-        let uniform = random_samples(rng, len);
-        let extremes = random_samples::<u8>(rng, len)
-            .into_iter()
-            .map(|byte| if byte & 1 == 0 { T::ZERO } else { T::MAX })
-            .collect();
-        [uniform, extremes]
-    }
-
     /// Widths past `SIZES` with several vector iterations per row, for the
     /// kernels with wide steps (32 to 64 output pixels, 8x reductions).
     const WIDE_WIDTHS: [usize; 4] = [190, 256, 263, 520];
 
     /// `sizes_from(minimum)`, and the wide widths with a few short heights.
     pub(crate) fn box_sizes(minimum: usize) -> Vec<(usize, usize)> {
-        let short_heights = SIZES
+        let short_heights: Vec<usize> = SIZES
             .into_iter()
-            .filter(|&height| height >= minimum && height <= 17);
+            .filter(|&height| height >= minimum && height <= 17)
+            .collect();
         sizes_from(minimum)
-            .chain(
-                WIDE_WIDTHS
-                    .into_iter()
-                    .flat_map(|width| short_heights.clone().map(move |height| (width, height))),
-            )
+            .into_iter()
+            .chain(size_grid(&WIDE_WIDTHS, &short_heights))
             .collect()
     }
 
@@ -757,7 +700,7 @@ mod tests {
             assert_eq!(u32::from(mean), (sum + 2) >> 2, "sum {sum}");
         }
         let mut rng = Rng::new(10);
-        for samples in test_images::<u16>(&mut rng, 4 * 4096) {
+        for (_, samples) in test_images(&mut rng, 4 * 4096, u16::MAX) {
             for block in samples.as_chunks::<4>().0 {
                 let sum: u32 = block.iter().copied().map(u32::from).sum();
                 // SAFETY: the 2x2 block of a 2 x 2 image.
@@ -767,10 +710,10 @@ mod tests {
         }
     }
 
-    fn assert_interleaved_scalar_equals_planar<T: BoxTestSample>() {
+    fn assert_hwc_scalar_equals_planar<T: BoxTestSample>() {
         let mut rng = Rng::new(11);
         for (width, height) in sizes_from(1) {
-            for src in test_images::<T>(&mut rng, width * height * RGB) {
+            for (_, src) in test_images(&mut rng, width * height * RGB, T::MAX) {
                 assert_same_image(
                     &box2x_hwc_scalar(&src, width, height),
                     &per_channel(&src, (width, height, RGB), box2x_scalar),
@@ -781,9 +724,9 @@ mod tests {
     }
 
     #[test]
-    fn box2x_interleaved_equals_each_channel_halved_as_planar() {
-        assert_interleaved_scalar_equals_planar::<u8>();
-        assert_interleaved_scalar_equals_planar::<u16>();
+    fn box2x_hwc_equals_each_channel_halved_as_planar() {
+        assert_hwc_scalar_equals_planar::<u8>();
+        assert_hwc_scalar_equals_planar::<u16>();
     }
 
     /// Every `BoxSample` method of `T` through its runtime dispatch (the
@@ -791,7 +734,7 @@ mod tests {
     fn assert_dispatch_matches_references<T: BoxTestSample>() {
         let mut rng = Rng::new(12);
         for (width, height) in box_sizes(1) {
-            for src in test_images::<T>(&mut rng, width * height) {
+            for (_, src) in test_images(&mut rng, width * height, T::MAX) {
                 let context = format!("{width} x {height}");
                 assert_same_image(
                     &T::box2x(&src, width, height),
@@ -807,7 +750,7 @@ mod tests {
         }
         for (width, height) in box_sizes(1) {
             let dims = (width, height, RGB);
-            for src in test_images::<T>(&mut rng, width * height * RGB) {
+            for (_, src) in test_images(&mut rng, width * height * RGB, T::MAX) {
                 let context = format!("{width} x {height} x {RGB}");
                 assert_same_image(
                     &T::box2x_hwc(&src, width, height),
@@ -817,7 +760,7 @@ mod tests {
                 for levels in [2, 3] {
                     assert_same_image(
                         &T::box_levels_hwc(&src, width, height, levels),
-                        &interleaved_pyramid_reference(&src, dims, levels),
+                        &hwc_pyramid_reference(&src, dims, levels),
                         &format!("box_levels_hwc {levels} {context}"),
                     );
                 }

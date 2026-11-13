@@ -280,3 +280,28 @@ impl BlockPlanes<RGB> for RgbPlanes {
         unsafe { vst3_u8(dst, uint8x8x3_t(planes[0], planes[1], planes[2])) };
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::bilinear_x2_neon;
+    use crate::exact::bilinear_x2::bilinear_x2_scalar;
+    use crate::exact::bilinear_x2::tests::{HEIGHTS, WIDTHS};
+    use crate::exact::tests::assert_equals_reference;
+    use crate::testing::{CHANNELS, size_grid};
+
+    #[test]
+    fn neon_equals_scalar() {
+        let kernel = |src: &[u8], width, height, channels| {
+            // SAFETY: NEON is baseline on aarch64; src holds width * height * channels
+            // samples.
+            unsafe { bilinear_x2_neon(src, width, height, channels) }
+        };
+        assert_equals_reference(
+            size_grid(&WIDTHS, &HEIGHTS),
+            &CHANNELS,
+            u8::MAX,
+            &kernel,
+            bilinear_x2_scalar,
+        );
+    }
+}

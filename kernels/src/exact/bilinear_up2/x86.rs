@@ -266,12 +266,12 @@ pub(crate) unsafe fn horizontal_steps_avx2<const IS_RGB: bool>(
 mod tests {
     use super::*;
     use crate::exact::bilinear_up2::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::{assert_equals_reference, size_grid};
-    use crate::testing::CHANNELS;
+    use crate::exact::tests::assert_equals_reference;
+    use crate::testing::{CHANNELS, size_grid};
 
     #[test]
     fn avx2_equals_scalar() {
-        if !std::is_x86_feature_detected!("avx2") {
+        if !crate::testing::avx2_detected() {
             return;
         }
         let kernel = |src: &[u8], width, height, channels| {

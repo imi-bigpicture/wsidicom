@@ -125,8 +125,8 @@ mod tests {
     }
 
     #[test]
-    fn keep_even_pixels_equals_scalar() {
-        if !std::is_x86_feature_detected!("avx2") {
+    fn keep_even_pixels_equals_reference() {
+        if !crate::testing::avx2_detected() {
             return;
         }
         let mut rng = Rng::new(3);

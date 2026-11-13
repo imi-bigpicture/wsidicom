@@ -254,28 +254,31 @@ pub(crate) trait TransposedTier: FloatSample {
     fn resize_transposed(src: &[Self], width: usize, plan: &FloatPlan) -> Vec<Self>;
 }
 
-#[cfg(target_arch = "x86_64")]
+/// `TransposedTier` for `$t` by the `$tier` module's `$rows`-row kernels.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 macro_rules! transposed_tier {
     (
         $t:ty,
-        $vertical_avx2:ident,
-        $store_avx2:ident
+        $tier:ident,
+        $rows:expr,
+        $vertical:ident,
+        $transpose:ident,
+        $horizontal:ident,
+        $store:ident
     ) => {
         impl TransposedTier for $t {
             fn resize_transposed(src: &[$t], width: usize, plan: &FloatPlan) -> Vec<$t> {
-                use crate::convolve_float::x86;
-                // SAFETY: avx2+fma detected; the driver sizes every buffer.
+                // SAFETY: the tier's features are detected (avx2+fma) or
+                // baseline (NEON on aarch64); the driver sizes every buffer.
                 unsafe {
-                    transposed::<$t, 8>(
+                    transposed::<$t, { $rows }>(
                         src,
                         width,
                         plan,
-                        |rows, stride, weights, mid| {
-                            x86::$vertical_avx2(rows, stride, weights, mid)
-                        },
-                        x86::transpose_f32_rows_avx2,
-                        x86::horizontal_f32_transposed_avx2,
-                        x86::$store_avx2,
+                        |rows, stride, weights, mid| $tier::$vertical(rows, stride, weights, mid),
+                        $tier::$transpose,
+                        $tier::$horizontal,
+                        $tier::$store,
                     )
                 }
             }
@@ -284,36 +287,45 @@ macro_rules! transposed_tier {
 }
 
 #[cfg(target_arch = "x86_64")]
-transposed_tier!(u8, vertical_u8_avx2, untranspose_store_u8_avx2);
+transposed_tier!(
+    u8,
+    x86,
+    8,
+    vertical_u8_avx2,
+    transpose_f32_rows_avx2,
+    horizontal_f32_transposed_avx2,
+    untranspose_store_u8_avx2
+);
 #[cfg(target_arch = "x86_64")]
-transposed_tier!(u16, vertical_u16_avx2, untranspose_store_u16_avx2);
-
+transposed_tier!(
+    u16,
+    x86,
+    8,
+    vertical_u16_avx2,
+    transpose_f32_rows_avx2,
+    horizontal_f32_transposed_avx2,
+    untranspose_store_u16_avx2
+);
 #[cfg(target_arch = "aarch64")]
-macro_rules! neon_transposed_tier {
-    ($t:ty, $vertical:ident, $store:ident) => {
-        impl TransposedTier for $t {
-            fn resize_transposed(src: &[$t], width: usize, plan: &FloatPlan) -> Vec<$t> {
-                // SAFETY: NEON is baseline on aarch64; the driver sizes every
-                // buffer.
-                unsafe {
-                    transposed::<$t, { neon::ROWS }>(
-                        src,
-                        width,
-                        plan,
-                        |rows, stride, weights, mid| neon::$vertical(rows, stride, weights, mid),
-                        neon::transpose_f32_rows_neon,
-                        neon::horizontal_f32_transposed_neon,
-                        neon::$store,
-                    )
-                }
-            }
-        }
-    };
-}
+transposed_tier!(
+    u16,
+    neon,
+    neon::ROWS,
+    vertical_u16_neon,
+    transpose_f32_rows_neon,
+    horizontal_f32_transposed_neon,
+    untranspose_store_u16_neon
+);
 #[cfg(target_arch = "aarch64")]
-neon_transposed_tier!(u16, vertical_u16_neon, untranspose_store_u16_neon);
-#[cfg(target_arch = "aarch64")]
-neon_transposed_tier!(u8, vertical_u8_neon, untranspose_store_u8_neon);
+transposed_tier!(
+    u8,
+    neon,
+    neon::ROWS,
+    vertical_u8_neon,
+    transpose_f32_rows_neon,
+    horizontal_f32_transposed_neon,
+    untranspose_store_u8_neon
+);
 
 /// The SIMD driver for batches of `ROWS` rows: per batch the vertical passes,
 /// a transpose (sample x of row r to `mid_t[x * ROWS + r]`), the horizontal
@@ -454,8 +466,10 @@ thread_local! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::convolve::RGB;
-    use crate::testing::{CHANNELS, RandomSample, Rng, random_samples};
+    use crate::sample::RGB;
+    #[cfg(target_arch = "x86_64")]
+    use crate::testing::avx2_fma_detected;
+    use crate::testing::{CHANNELS, RandomSample, Rng, assert_same, kernel_name, random_samples};
 
     const KERNELS: [Kernel; 4] = [
         Kernel::Box,
@@ -495,20 +509,6 @@ mod tests {
         (130, 2),
     ];
 
-    fn kernel_name(kernel: Kernel) -> &'static str {
-        match kernel {
-            Kernel::Box => "box",
-            Kernel::Bilinear => "bilinear",
-            Kernel::CatmullRom => "catmullrom",
-            Kernel::Lanczos3 => "lanczos3",
-        }
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn has_avx2_fma() -> bool {
-        std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma")
-    }
-
     /// A sample type's dtype-specific AVX2 kernels.
     #[cfg(target_arch = "x86_64")]
     trait TierKernels: TransposedTier + RandomSample {
@@ -536,19 +536,9 @@ mod tests {
     #[cfg(not(target_arch = "x86_64"))]
     impl<T: FloatResample + RandomSample> TestFloat for T {}
 
-    fn assert_same<T: PartialEq + std::fmt::Debug>(actual: &[T], expected: &[T], context: &str) {
-        assert_eq!(actual.len(), expected.len(), "{context}: length");
-        if let Some(index) = (0..actual.len()).find(|&index| actual[index] != expected[index]) {
-            panic!(
-                "{context}: sample {index} is {:?}, expected {:?}",
-                actual[index], expected[index]
-            );
-        }
-    }
-
-    /// The entry point and each tier's driver equal the scalar reference bit
+    /// The entry point and each tier's driver equal the scalar path bit
     /// for bit (the same FMA chains in the same order).
-    fn assert_tiers_match_reference<T: TestFloat>(
+    fn assert_tiers_match_scalar<T: TestFloat>(
         src: &[T],
         (width, height): (usize, usize),
         plan: &FloatPlan,
@@ -562,7 +552,7 @@ mod tests {
         );
     }
 
-    fn assert_resize_matches_reference<T: TestFloat>(seed: u64) {
+    fn assert_resize_matches_scalar<T: TestFloat>(seed: u64) {
         let mut rng = Rng::new(seed);
         for kernel in KERNELS {
             for channels in CHANNELS {
@@ -578,7 +568,7 @@ mod tests {
                             "{} {channels} channels {width} x {height} -> {out_width} x {out_height}",
                             kernel_name(kernel)
                         );
-                        assert_tiers_match_reference(&src, (width, height), &plan, &context);
+                        assert_tiers_match_scalar(&src, (width, height), &plan, &context);
                     }
                 }
             }
@@ -588,20 +578,20 @@ mod tests {
     /// Random uint16 samples over the whole range, so the filters' overshoot
     /// clamps at both ends.
     #[test]
-    fn uint16_resize_equals_reference() {
-        assert_resize_matches_reference::<u16>(2);
+    fn uint16_resize_equals_scalar() {
+        assert_resize_matches_scalar::<u16>(2);
     }
 
     /// uint8 takes the engine for large reductions; any ratio must agree.
     #[test]
-    fn uint8_resize_equals_reference() {
-        assert_resize_matches_reference::<u8>(4);
+    fn uint8_resize_equals_scalar() {
+        assert_resize_matches_scalar::<u8>(4);
     }
 
     /// Windows longer than `CHUNK_TAPS` sum in chunks, in both passes, the
     /// same on every tier: reductions whose windows take one, two and more
     /// chunks along either axis.
-    fn assert_chunked_matches_reference<T: TestFloat>(seed: u64) {
+    fn assert_chunked_matches_scalar<T: TestFloat>(seed: u64) {
         let mut rng = Rng::new(seed);
         let cases = [
             ((1000, 3), (40, 3)),
@@ -622,16 +612,16 @@ mod tests {
                         "chunked {} {channels} channels {width} x {height} -> {out_width} x {out_height}",
                         kernel_name(kernel)
                     );
-                    assert_tiers_match_reference(&src, (width, height), &plan, &context);
+                    assert_tiers_match_scalar(&src, (width, height), &plan, &context);
                 }
             }
         }
     }
 
     #[test]
-    fn chunked_resize_equals_reference() {
-        assert_chunked_matches_reference::<u8>(5);
-        assert_chunked_matches_reference::<u16>(6);
+    fn chunked_resize_equals_scalar() {
+        assert_chunked_matches_scalar::<u8>(5);
+        assert_chunked_matches_scalar::<u16>(6);
     }
 
     /// A flat image reduced to one pixel through tens of thousands of taps
@@ -656,7 +646,7 @@ mod tests {
 
     /// A window whose rows overflow L2 runs the vertical pass in column
     /// strips.
-    fn assert_striped_matches_reference<T: TestFloat>(width: usize, channels: usize) {
+    fn assert_striped_matches_scalar<T: TestFloat>(width: usize, channels: usize) {
         let (height, out_height, out_width) = (1024, 4, width / 2 + 1);
         let plan = FloatPlan::new(
             Windows::new(height, out_height, Kernel::Lanczos3),
@@ -668,13 +658,13 @@ mod tests {
         let mut rng = Rng::new(3);
         let src: Vec<T> = random_samples(&mut rng, width * height * channels);
         let context = format!("striped {width} x {height} x {channels}");
-        assert_tiers_match_reference(&src, (width, height), &plan, &context);
+        assert_tiers_match_scalar(&src, (width, height), &plan, &context);
     }
 
     #[test]
-    fn striped_vertical_pass_equals_reference() {
-        assert_striped_matches_reference::<u8>(1026, 1);
-        assert_striped_matches_reference::<u16>(171, RGB);
+    fn striped_vertical_pass_equals_scalar() {
+        assert_striped_matches_scalar::<u8>(1026, 1);
+        assert_striped_matches_scalar::<u16>(171, RGB);
     }
 
     /// A vertical kernel, whether this host runs it, and its tier's name.
@@ -690,7 +680,7 @@ mod tests {
     /// strips), and the strides and window lengths where the taps run in
     /// groups.
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-    fn assert_vertical_matches_reference<T: FloatSample + RandomSample>(
+    fn assert_vertical_matches_scalar<T: FloatSample + RandomSample>(
         rng: &mut Rng,
         tiers: &[VerticalTier<T>],
     ) {
@@ -735,29 +725,23 @@ mod tests {
 
     #[cfg(target_arch = "x86_64")]
     fn x86_vertical_tiers<T: TierKernels>() -> [VerticalTier<T>; 1] {
-        [(has_avx2_fma(), T::VERTICAL_AVX2, "avx2")]
+        [(avx2_fma_detected(), T::VERTICAL_AVX2, "avx2")]
     }
 
     #[cfg(target_arch = "x86_64")]
     #[test]
-    fn vertical_kernels_equal_reference() {
+    fn vertical_kernels_equal_scalar() {
         let mut rng = Rng::new(4);
-        assert_vertical_matches_reference::<u8>(&mut rng, &x86_vertical_tiers());
-        assert_vertical_matches_reference::<u16>(&mut rng, &x86_vertical_tiers());
+        assert_vertical_matches_scalar::<u8>(&mut rng, &x86_vertical_tiers());
+        assert_vertical_matches_scalar::<u16>(&mut rng, &x86_vertical_tiers());
     }
 
     #[cfg(target_arch = "aarch64")]
     #[test]
-    fn vertical_kernels_equal_reference() {
+    fn vertical_kernels_equal_scalar() {
         let mut rng = Rng::new(4);
         let neon = crate::cpu::use_neon();
-        assert_vertical_matches_reference::<u8>(
-            &mut rng,
-            &[(neon, neon::vertical_u8_neon, "neon")],
-        );
-        assert_vertical_matches_reference::<u16>(
-            &mut rng,
-            &[(neon, neon::vertical_u16_neon, "neon")],
-        );
+        assert_vertical_matches_scalar::<u8>(&mut rng, &[(neon, neon::vertical_u8_neon, "neon")]);
+        assert_vertical_matches_scalar::<u16>(&mut rng, &[(neon, neon::vertical_u16_neon, "neon")]);
     }
 }

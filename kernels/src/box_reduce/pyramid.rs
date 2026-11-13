@@ -128,7 +128,7 @@ pub(crate) fn box_pyramid<T: BoxSample>(
     (width, height, channels): (usize, usize, usize),
     times: u32,
 ) -> (Vec<T>, usize, usize) {
-    if channels > 1 && interleaved_pass_count(times) >= 2 {
+    if channels > 1 && hwc_pass_count(times) >= 2 {
         return box_pyramid_banded(
             src,
             (width, height, channels),
@@ -157,7 +157,7 @@ pub(crate) unsafe fn box_pyramid_into<T: BoxSample>(
     times == 1 && unsafe { T::box2x_into(src, dims, dst_ptr, dst_stride) }
 }
 
-fn interleaved_pass_count(times: u32) -> u32 {
+fn hwc_pass_count(times: u32) -> u32 {
     if times >= 2 { times / 2 } else { times }
 }
 
@@ -244,11 +244,11 @@ mod tests {
     use super::*;
     use crate::box_reduce::box2x_scalar;
     use crate::box_reduce::tests::{
-        BoxTestSample, assert_same_image, integer_differences, interleaved_pyramid_reference,
-        per_channel, planar_pyramid_reference, test_images,
+        BoxTestSample, assert_same_image, hwc_pyramid_reference, integer_differences, per_channel,
+        planar_pyramid_reference,
     };
     use crate::sample::RGB;
-    use crate::testing::{CHANNELS, Rng, random_samples, sizes_from};
+    use crate::testing::{CHANNELS, Rng, random_samples, sizes_from, test_images};
 
     /// What `box_pyramid` must return: the planar pyramid (fused 4x passes)
     /// of every channel.
@@ -260,7 +260,7 @@ mod tests {
         if channels == 1 {
             planar_pyramid_reference(src, width, height, times)
         } else {
-            interleaved_pyramid_reference(src, (width, height, channels), times)
+            hwc_pyramid_reference(src, (width, height, channels), times)
         }
     }
 
@@ -285,7 +285,7 @@ mod tests {
             for times in 0..=4 {
                 for (width, height) in sizes_from(1) {
                     let dims = (width, height, channels);
-                    for src in test_images::<T>(&mut rng, width * height * channels) {
+                    for (_, src) in test_images(&mut rng, width * height * channels, T::MAX) {
                         assert_same_image(
                             &box_pyramid(&src, dims, times),
                             &pyramid_reference(&src, dims, times),
@@ -316,7 +316,7 @@ mod tests {
         );
         let height = (2 * band_rows + band_rows / 2 + 1) * block + block - 1;
         let dims = (width, height, channels);
-        assert!(interleaved_pass_count(times) >= 2);
+        assert!(hwc_pass_count(times) >= 2);
         let mut rng = Rng::new(31);
         let src: Vec<T> = random_samples(&mut rng, width * height * channels);
         let context = format!("{times} times, {width} x {height} x {channels}");
@@ -395,10 +395,7 @@ mod tests {
         assert_eq!(pass_levels(5), [2, 3]);
         assert_eq!(pass_levels(6), [2, 2, 2]);
         for times in 0..8 {
-            assert_eq!(
-                pass_levels(times).len() as u32,
-                interleaved_pass_count(times)
-            );
+            assert_eq!(pass_levels(times).len() as u32, hwc_pass_count(times));
         }
     }
 }

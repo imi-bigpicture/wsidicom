@@ -7,10 +7,8 @@
 
 use super::{bilinear_x4_scalar, window};
 use crate::exact::x86::cover_steps;
+use crate::sample::RGBX;
 use crate::x86::prefetch_rows_after_window;
-
-/// Samples per pixel of the RGBX layout RGB rows take in the phase arrays.
-const RGBX: usize = 4;
 
 /// Samples per pixel in the phase arrays: RGB is read as RGBX.
 const fn phase_channels(is_rgb: bool) -> usize {
@@ -330,12 +328,12 @@ pub(crate) unsafe fn bilinear_x4_avx2<const IS_RGB: bool>(
 mod tests {
     use super::*;
     use crate::exact::bilinear_x4::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::{assert_equals_reference, size_grid};
-    use crate::testing::CHANNELS;
+    use crate::exact::tests::assert_equals_reference;
+    use crate::testing::{CHANNELS, size_grid};
 
     #[test]
     fn avx2_equals_scalar() {
-        if !std::is_x86_feature_detected!("avx2") {
+        if !crate::testing::avx2_detected() {
             return;
         }
         let kernel = |src: &[u8], width, height, channels| {

@@ -11,14 +11,14 @@ use super::x86_output::BoxRows;
 use crate::cpu::{unwritten_output, written_output};
 use crate::sample::RGB;
 
-type Box2xTo<T> = unsafe fn(&[T], usize, usize, BoxRows<T>) -> Vec<T>;
+type Box2xInto<T> = unsafe fn(&[T], usize, usize, BoxRows<T>) -> Vec<T>;
 
 /// `kernel` into a new image.
 ///
 /// # Safety
 /// As `kernel`, with the CPU features it needs.
 unsafe fn into_new_image<T>(
-    kernel: Box2xTo<T>,
+    kernel: Box2xInto<T>,
     src: &[T],
     width: usize,
     height: usize,
@@ -107,17 +107,17 @@ fn rgb_compaction_mask() -> ([u8; 32], usize, usize) {
     (mask, pixels, low_lane_bytes)
 }
 
-/// `box2x_u8_hwc_avx2_to` into a new image.
+/// `box2x_u8_hwc_into_avx2` into a new image.
 ///
 /// # Safety
-/// As `box2x_u8_hwc_avx2_to`.
+/// As `box2x_u8_hwc_into_avx2`.
 pub(crate) unsafe fn box2x_u8_hwc_avx2(
     src: &[u8],
     width: usize,
     height: usize,
 ) -> (Vec<u8>, usize, usize) {
     // SAFETY: the caller's contract.
-    unsafe { into_new_image(box2x_u8_hwc_avx2_to, src, width, height) }
+    unsafe { into_new_image(box2x_u8_hwc_into_avx2, src, width, height) }
 }
 
 /// AVX2 uint8 RGB 2x2 box into `output`: `rounded_mean4_u8` of loads shifted
@@ -128,7 +128,7 @@ pub(crate) unsafe fn box2x_u8_hwc_avx2(
 /// The CPU supports AVX2, `src.len() >= width * height * 3`, and `output`
 /// holds `height / 2` rows of `width / 2` pixels.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_u8_hwc_avx2_to(
+pub(crate) unsafe fn box2x_u8_hwc_into_avx2(
     src: &[u8],
     width: usize,
     height: usize,
@@ -220,17 +220,17 @@ fn prefetch_next_row_pair<T>(src_ptr: *const T, at: usize, stride: usize) {
     }
 }
 
-/// `box2x_u16_hwc_avx2_to` into a new image.
+/// `box2x_u16_hwc_into_avx2` into a new image.
 ///
 /// # Safety
-/// As `box2x_u16_hwc_avx2_to`.
+/// As `box2x_u16_hwc_into_avx2`.
 pub(crate) unsafe fn box2x_u16_hwc_avx2(
     src: &[u16],
     width: usize,
     height: usize,
 ) -> (Vec<u16>, usize, usize) {
     // SAFETY: the caller's contract.
-    unsafe { into_new_image(box2x_u16_hwc_avx2_to, src, width, height) }
+    unsafe { into_new_image(box2x_u16_hwc_into_avx2, src, width, height) }
 }
 
 /// AVX2 uint16 RGB 2x2 box into `output`, 3 output pixels per step: samples
@@ -245,7 +245,7 @@ pub(crate) unsafe fn box2x_u16_hwc_avx2(
 /// The CPU supports AVX2, `src.len() >= width * height * 3`, and `output`
 /// holds `height / 2` rows of `width / 2` pixels.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_u16_hwc_avx2_to(
+pub(crate) unsafe fn box2x_u16_hwc_into_avx2(
     src: &[u16],
     width: usize,
     height: usize,
@@ -529,14 +529,10 @@ mod tests {
     use super::*;
     use crate::box_reduce::box2x_hwc_scalar;
     use crate::box_reduce::tests::{
-        BoxTestSample, assert_same_image, box_sizes, interleaved_pyramid_reference, test_images,
+        BoxTestSample, assert_same_image, box_sizes, hwc_pyramid_reference,
     };
     use crate::cpu::{LARGE_OUTPUT_BYTES, PREFAULT_OUTPUT_BYTES};
-    use crate::testing::{Rng, UnsafeImageKernel, random_samples};
-
-    fn avx2_detected() -> bool {
-        std::is_x86_feature_detected!("avx2")
-    }
+    use crate::testing::{Rng, UnsafeImageKernel, avx2_detected, random_samples, test_images};
 
     /// Runs the 2x RGB `kernel` on random and extreme images of every box
     /// test size, against the scalar interleaved halving.
@@ -546,7 +542,7 @@ mod tests {
     unsafe fn assert_halves_as_scalar<T: BoxTestSample>(kernel: UnsafeImageKernel<T>) {
         let mut rng = Rng::new(20);
         for (width, height) in box_sizes(1) {
-            for src in test_images::<T>(&mut rng, width * height * RGB) {
+            for (_, src) in test_images(&mut rng, width * height * RGB, T::MAX) {
                 // SAFETY: the CPU features (the caller's contract); src holds
                 // width * height pixels.
                 let simd = unsafe { kernel(&src, width, height) };
@@ -579,9 +575,8 @@ mod tests {
         let mut rng = Rng::new(22);
         for levels in [2, 3] {
             for (width, height) in box_sizes(1) {
-                for src in test_images::<u8>(&mut rng, width * height * RGB) {
-                    let expected =
-                        interleaved_pyramid_reference(&src, (width, height, RGB), levels);
+                for (_, src) in test_images(&mut rng, width * height * RGB, u8::MAX) {
+                    let expected = hwc_pyramid_reference(&src, (width, height, RGB), levels);
                     // SAFETY: AVX2 is available; levels is 2 or 3; src holds
                     // the image.
                     let simd = unsafe { box_levels_u8_hwc_avx2(&src, (width, height), levels) };
@@ -617,7 +612,7 @@ mod tests {
                 assert_same_image(&padded, &exact, &context);
                 assert_same_image(
                     &exact,
-                    &interleaved_pyramid_reference(&src, (width, height, RGB), levels),
+                    &hwc_pyramid_reference(&src, (width, height, RGB), levels),
                     &context,
                 );
             }

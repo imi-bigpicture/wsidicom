@@ -157,7 +157,7 @@ pub(crate) unsafe fn bilinear_x2_u16_gray_avx2(
 /// AVX2 must be available; `src` holds `width * height * 3` samples,
 /// `width` and `height` even.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn bilinear_x2_u16_rgb_avx2(
+pub(crate) unsafe fn bilinear_x2_u16_hwc_avx2(
     src: &[u16],
     width: usize,
     height: usize,
@@ -433,12 +433,12 @@ pub(crate) fn divide_lanes(
 mod tests {
     use super::*;
     use crate::exact::bilinear_x2_u16::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::{assert_equals_reference, size_grid};
-    use crate::testing::CHANNELS;
+    use crate::exact::tests::assert_equals_reference;
+    use crate::testing::{CHANNELS, size_grid};
 
     #[test]
     fn avx2_equals_scalar() {
-        if !std::is_x86_feature_detected!("avx2") {
+        if !crate::testing::avx2_detected() {
             return;
         }
         let kernel = |src: &[u16], width, height, channels| {
@@ -447,7 +447,7 @@ mod tests {
             unsafe {
                 match channels {
                     1 => bilinear_x2_u16_gray_avx2(src, width, height),
-                    _ => bilinear_x2_u16_rgb_avx2(src, width, height),
+                    _ => bilinear_x2_u16_hwc_avx2(src, width, height),
                 }
             }
         };
