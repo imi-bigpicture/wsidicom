@@ -14,12 +14,8 @@ use std::arch::aarch64::{
 };
 
 use super::{TAPS, divide_rounded, output_scalar, row_scalar, window};
-use crate::sample::RGB;
+use crate::sample::{RGB, RGBX};
 use crate::simd::cover_row;
-
-/// Samples per pixel of the RGBX layout of RGB rows' vertical sums in the
-/// colour pass.
-const RGBX: usize = 4;
 
 /// Samples per vertical step: u8 rows into two registers of u16 sums.
 const VERTICAL_BLOCK: usize = 16;
@@ -64,8 +60,8 @@ pub(crate) unsafe fn bilinear_x4_neon(
     // The rounded 8-tap sums at every sample.
     let mut full = vec![0u8; row_samples];
     let weights = TAPS.map(|weight| weight as u8);
-    let colour_outputs = channels == RGB && out_width >= 2 + COLOUR_OUTPUTS;
-    let mut sums_rgbx = vec![0u16; if colour_outputs { RGBX * width } else { 0 }];
+    let color_outputs = channels == RGB && out_width >= 2 + COLOR_OUTPUTS;
+    let mut sums_rgbx = vec![0u16; if color_outputs { RGBX * width } else { 0 }];
     let clipped_columns: Vec<usize> = (0..out_width)
         .filter(|&output| window(output, width).1.len() < TAPS.len())
         .collect();
@@ -87,7 +83,7 @@ pub(crate) unsafe fn bilinear_x4_neon(
             }
             (low, high)
         };
-        if colour_outputs {
+        if color_outputs {
             let sums_ptr = sums_rgbx.as_mut_ptr();
             let zero = vdupq_n_u16(0);
             cover_row(width, VERTICAL_BLOCK, |pixel| {
@@ -117,12 +113,12 @@ pub(crate) unsafe fn bilinear_x4_neon(
                 }
             });
         }
-        if colour_outputs {
+        if color_outputs {
             // SAFETY: sums_rgbx holds the row's `width` = 4 out_width RGBX
             // vertical sums, dst out_width RGB outputs.
-            unsafe { horizontal_colour(sums_rgbx.as_ptr(), out_width, dst) };
+            unsafe { horizontal_color(sums_rgbx.as_ptr(), out_width, dst) };
             for output in [0, out_width - 1] {
-                clipped_colour_output(&sums_rgbx, width, output, dst);
+                clipped_color_output(&sums_rgbx, width, output, dst);
             }
             continue;
         }
@@ -203,10 +199,10 @@ unsafe fn horizontal_phased(sums: *const u16, out_width: usize, dst: &mut [u8]) 
     });
 }
 
-/// Output pixels per step of `horizontal_colour`.
-const COLOUR_OUTPUTS: usize = 4;
+/// Output pixels per step of `horizontal_color`.
+const COLOR_OUTPUTS: usize = 4;
 
-/// One output pixel of a colour row from its RGBX vertical sums: the 8
+/// One output pixel of a color row from its RGBX vertical sums: the 8
 /// window pixels as 4 registers of 2 pixels, summed in pixel pairs of equal
 /// weight (the last two registers' pixels swapped by `vextq`: -2 + 5, -1 + 4
 /// weighted 1 and 3; 0 + 3, 1 + 2 weighted 5 and 7), then weighted in u32.
@@ -216,7 +212,7 @@ const COLOUR_OUTPUTS: usize = 4;
 /// 4 output + 6`.
 #[target_feature(enable = "neon")]
 #[inline]
-unsafe fn colour_output(sums: *const u16) -> uint16x4_t {
+unsafe fn color_output(sums: *const u16) -> uint16x4_t {
     // SAFETY: the window's 8 RGBX pixels (the caller's contract).
     let pairs: [uint16x8_t; 4] = [0, 1, 2, 3].map(|pair| unsafe { vld1q_u16(sums.add(8 * pair)) });
     let outer = vaddq_u16(pairs[0], vextq_u16::<4>(pairs[3], pairs[3]));
@@ -239,19 +235,19 @@ unsafe fn colour_output(sums: *const u16) -> uint16x4_t {
 ///
 /// # Safety
 /// `sums` points at the row's `4 out_width` RGBX vertical sums and `dst` holds
-/// `out_width` RGB outputs, `out_width >= 2 + COLOUR_OUTPUTS`.
+/// `out_width` RGB outputs, `out_width >= 2 + COLOR_OUTPUTS`.
 #[target_feature(enable = "neon")]
-unsafe fn horizontal_colour(sums: *const u16, out_width: usize, dst: &mut [u8]) {
+unsafe fn horizontal_color(sums: *const u16, out_width: usize, dst: &mut [u8]) {
     const RGB_BYTES: [u8; 16] = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 16, 16, 16, 16];
     // SAFETY: the 16 bytes of the constant.
     let rgb_bytes = unsafe { vld1q_u8(RGB_BYTES.as_ptr()) };
     let dst_ptr = dst.as_mut_ptr();
-    cover_row(out_width - 2, COLOUR_OUTPUTS, |index| {
+    cover_row(out_width - 2, COLOR_OUTPUTS, |index| {
         let first = 1 + index;
         // SAFETY: 1 <= first and first + 4 <= out_width - 1, so every window's
         // pixels 4 output - 2 .. 4 output + 6 lie within the row's 4 out_width.
         let outputs: [uint16x4_t; 4] = std::array::from_fn(|output| unsafe {
-            colour_output(sums.add(RGBX * (4 * (first + output) - LEAD)))
+            color_output(sums.add(RGBX * (4 * (first + output) - LEAD)))
         });
         let rgbx = vcombine_u8(
             vmovn_u16(vcombine_u16(outputs[0], outputs[1])),
@@ -272,7 +268,7 @@ unsafe fn horizontal_colour(sums: *const u16, out_width: usize, dst: &mut [u8]) 
 
 /// Output `output` of an RGB row from its RGBX vertical sums, by the scalar
 /// reference's arithmetic.
-fn clipped_colour_output(sums: &[u16], width: usize, output: usize, dst: &mut [u8]) {
+fn clipped_color_output(sums: &[u16], width: usize, output: usize, dst: &mut [u8]) {
     let (first_column, horizontal_weights) = window(output, width);
     let denominator = FULL_TOTAL * horizontal_weights.iter().sum::<u32>();
     for channel in 0..RGB {
@@ -328,3 +324,28 @@ unsafe fn keep_every_fourth_pixel(full: &[u8], channels: usize, out_width: usize
 
 // The rounding shift by 10 divides by a full 2D window's total.
 const _: () = assert!(FULL_TOTAL * FULL_TOTAL == 1 << 10);
+
+#[cfg(test)]
+mod tests {
+    use super::bilinear_x4_neon;
+    use crate::exact::bilinear_x4::bilinear_x4_scalar;
+    use crate::exact::bilinear_x4::tests::{HEIGHTS, WIDTHS};
+    use crate::exact::tests::assert_equals_reference;
+    use crate::testing::{CHANNELS, size_grid};
+
+    #[test]
+    fn neon_equals_scalar() {
+        let kernel = |src: &[u8], width, height, channels| {
+            // SAFETY: NEON is baseline on aarch64; src holds width * height * channels
+            // samples.
+            unsafe { bilinear_x4_neon(src, width, height, channels) }
+        };
+        assert_equals_reference(
+            size_grid(&WIDTHS, &HEIGHTS),
+            &CHANNELS,
+            u8::MAX,
+            &kernel,
+            bilinear_x4_scalar,
+        );
+    }
+}

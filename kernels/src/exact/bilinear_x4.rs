@@ -123,8 +123,8 @@ pub(crate) fn bilinear_x4(src: &[u8], width: usize, height: usize, channels: usi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, assert_rejects, size_grid};
-    use crate::testing::CHANNELS;
+    use crate::exact::tests::{assert_equals_reference, assert_rejects};
+    use crate::testing::{CHANNELS, size_grid};
 
     /// Widths (multiples of 4) around the SIMD steps (64 gray input pixels
     /// and twice that) and the scalar fallback; heights from one output row

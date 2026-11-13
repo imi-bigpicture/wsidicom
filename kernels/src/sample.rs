@@ -1,8 +1,16 @@
 //! The sample types the kernels take (uint8, uint16), the RGB pixel size,
 //! and the Q15 fixed-point weights of the uint8 kernels.
+//!
+//! Entry checks: an entry point that hands raw slices to unsafe kernels
+//! checks them with `assert_image`, in release builds too. `resize_u8` and
+//! `resize_float` only `debug_assert!` their sizes: they reach the kernels
+//! through checked slice indexing, so a short image panics there instead.
 
 /// Samples per pixel of an RGB image.
 pub(crate) const RGB: usize = 3;
+/// RGB widened with a zero X sample: the layout the per-row RGB convolution
+/// kernels and the exact x4 kernels' RGB sums take.
+pub(crate) const RGBX: usize = 4;
 
 /// 1.0 in Q15.
 const Q15_ONE: f32 = 32768.0;

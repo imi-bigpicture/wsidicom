@@ -21,7 +21,7 @@ pub(crate) mod x86;
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use crate::sample::{CONVOLVE_U8_FRAC_BITS, mulhrs, q15};
+use crate::sample::{CONVOLVE_U8_FRAC_BITS, RGB, RGBX, mulhrs, q15};
 
 /// Fraction bits of the intermediate row (u8 << 6 leaves i16 headroom for
 /// the filters' overshoot).
@@ -38,9 +38,6 @@ const AVX2_I16_LANES: usize = 16;
 pub(crate) const TRANSPOSE_ROWS: usize = 16;
 /// i16 lanes of a `Runs` weight group: `PIXEL_OUTPUTS` taps of `RGBX` lanes.
 pub(crate) const RUN_GROUP_LANES: usize = 32;
-pub(crate) const RGB: usize = 3;
-/// RGB widened with a zero X sample, the per-row RGB kernels' layout.
-pub(crate) const RGBX: usize = 4;
 /// Outputs per pixel block at most, and pixels per tap-run group.
 pub(crate) const PIXEL_OUTPUTS: usize = 8;
 /// Pixels a pixel block's first taps may span.
@@ -811,7 +808,7 @@ pub(crate) fn resize_u8(src: &[u8], (width, height): (usize, usize), plan: &Plan
         return resize_transposed(src, width, channels, plan);
     }
     if channels > 1 {
-        resize_pixel_rows(src, width, plan)
+        resize_hwc_rows(src, width, plan)
     } else {
         resize_rows(src, width, plan)
     }
@@ -872,11 +869,11 @@ fn resize_transposed(src: &[u8], width: usize, channels: usize, plan: &Plan) -> 
     };
     // Whole cache lines plus half of one, so the batch's rows don't share L1
     // sets (as a power-of-2 stride would).
-    const CACHE_LINE_I16: usize = 32;
+    const CACHE_LINE_I16_LANES: usize = 32;
     const ROWS: usize = TRANSPOSE_ROWS;
     let (out_width, out_height) = (plan.cols.len(), plan.rows.len());
     let (row_samples, out_row_samples) = (width * channels, out_width * channels);
-    let mid_stride = row_samples.next_multiple_of(2 * CACHE_LINE_I16) + CACHE_LINE_I16;
+    let mid_stride = row_samples.next_multiple_of(2 * CACHE_LINE_I16_LANES) + CACHE_LINE_I16_LANES;
     let out_t_columns = out_row_samples.next_multiple_of(ROWS);
     let mut out = vec![0u8; out_row_samples * out_height];
     // A call writes everything it reads (the row padding passes through the
@@ -945,18 +942,9 @@ fn resize_transposed(src: &[u8], width: usize, channels: usize, plan: &Plan) -> 
     unsafe {
         crate::cpu::with_prefault(dst_ptr, out_len, out_row_samples, out_height, batches);
     }
-    if (mid.capacity() + mid_t.capacity() + out_t.capacity()) * size_of::<i16>()
-        <= SCRATCH_KEPT_BYTES
-    {
-        SCRATCH.with_borrow_mut(|scratch| *scratch = TransposeScratch { mid, mid_t, out_t });
-    }
+    TransposeScratch { mid, mid_t, out_t }.keep_in(&SCRATCH);
     out
 }
-
-/// Scratch kept per thread up to this size, so a very wide image doesn't pin
-/// its buffers to the thread.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-const SCRATCH_KEPT_BYTES: usize = 8 << 20;
 
 /// The transposed path's buffers, kept per thread so a tile's call doesn't
 /// clear (or fault in) fresh ones: `TRANSPOSE_ROWS` intermediate rows, the
@@ -1029,7 +1017,7 @@ fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
 /// The per-row RGB path (the AVX2 tap runs, or the scalar reference): rows
 /// widened to the RGBX layout between the passes and the output rows packed
 /// back.
-fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
+fn resize_hwc_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     // The widening reads whole groups of pixels, and up to a register past.
     const WIDEN_GROUP_PIXELS: usize = 8;
     let channels = plan.channels;
@@ -1236,7 +1224,9 @@ fn vertical(rows: &[u8], width: usize, window: Window<'_>, mid: &mut [i16]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{CHANNELS, Rng, random_samples};
+    #[cfg(target_arch = "x86_64")]
+    use crate::testing::avx2_detected;
+    use crate::testing::{CHANNELS, Rng, assert_same, kernel_name, random_samples};
 
     const KERNELS: [Kernel; 4] = [
         Kernel::Box,
@@ -1314,27 +1304,13 @@ mod tests {
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     fn has_simd_rows() -> bool {
         #[cfg(target_arch = "x86_64")]
-        return has_avx2();
+        return avx2_detected();
         #[cfg(target_arch = "aarch64")]
         return crate::cpu::use_neon();
     }
 
     #[cfg(target_arch = "x86_64")]
     type PackKernel = unsafe fn(&[u8], &mut [u8]);
-
-    fn kernel_name(kernel: Kernel) -> &'static str {
-        match kernel {
-            Kernel::Box => "box",
-            Kernel::Bilinear => "bilinear",
-            Kernel::CatmullRom => "catmullrom",
-            Kernel::Lanczos3 => "lanczos3",
-        }
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn has_avx2() -> bool {
-        std::is_x86_feature_detected!("avx2")
-    }
 
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     /// Intermediate samples as the vertical pass leaves them: Q6 u8 values,
@@ -1367,16 +1343,6 @@ mod tests {
             .into_iter()
             .map(|weight| scale(weight) as i16)
             .collect()
-    }
-
-    fn assert_same<T: PartialEq + std::fmt::Debug>(actual: &[T], expected: &[T], context: &str) {
-        assert_eq!(actual.len(), expected.len(), "{context}: length");
-        if let Some(index) = (0..actual.len()).find(|&index| actual[index] != expected[index]) {
-            panic!(
-                "{context}: sample {index} is {:?}, expected {:?}",
-                actual[index], expected[index]
-            );
-        }
     }
 
     /// The vertical pass by its definition: per tap a `mulhrs` of the Q6
@@ -1494,7 +1460,7 @@ mod tests {
                     let plan = Plan::new((width, 6), (out_width, 6), kernel, RGB);
                     let src = random_samples(&mut rng, width * 6 * RGB);
                     assert_same(
-                        &resize_pixel_rows(&src, width, &plan),
+                        &resize_hwc_rows(&src, width, &plan),
                         &reference_resize(&src, width, &plan),
                         &format!("{} {width} -> {out_width}", kernel_name(kernel)),
                     );
@@ -1653,12 +1619,12 @@ mod tests {
         }
     }
 
-    /// The AVX2 tap runs on RGBX-layout rows padded as `resize_pixel_rows`
+    /// The AVX2 tap runs on RGBX-layout rows padded as `resize_hwc_rows`
     /// pads them, for every case, whether or not the plan would choose them.
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn tap_runs_equal_reference() {
-        if !has_avx2() {
+        if !avx2_detected() {
             return;
         }
         let mut rng = Rng::new(6);
@@ -1716,7 +1682,7 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn widen_to_rgbx_kernels_equal_reference() {
-        let avx2 = has_avx2();
+        let avx2 = avx2_detected();
         let mut rng = Rng::new(9);
         for pixels in 1..=70 {
             // The kernel's minimum padding: whole groups of 4 pixels, and half
@@ -1757,7 +1723,7 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn pack_from_rgbx_kernels_equal_reference() {
-        let avx2 = has_avx2();
+        let avx2 = avx2_detected();
         let mut rng = Rng::new(10);
         for pixels in 1..=70 {
             let rgbx: Vec<u8> = random_samples(&mut rng, RGBX * pixels);

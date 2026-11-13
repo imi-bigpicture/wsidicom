@@ -736,7 +736,7 @@ mod tests {
     }
 
     #[test]
-    fn resize_nearest_equals_its_definition() {
+    fn resize_nearest_equals_reference() {
         assert_resizes_match::<u8>();
         assert_resizes_match::<u16>();
     }

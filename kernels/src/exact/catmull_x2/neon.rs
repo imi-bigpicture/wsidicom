@@ -244,3 +244,28 @@ unsafe fn horizontal_phased(sums: *const i32, out_width: usize, dst: &mut [u8]) 
         unsafe { vst1_u8(dst_ptr.add(first), narrowed) };
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::catmull_x2_neon;
+    use crate::exact::catmull_x2::catmull_x2_scalar;
+    use crate::exact::catmull_x2::tests::{HEIGHTS, WIDTHS};
+    use crate::exact::tests::assert_equals_reference;
+    use crate::testing::{CHANNELS, size_grid};
+
+    #[test]
+    fn neon_equals_scalar() {
+        let kernel = |src: &[u8], width, height, channels| {
+            // SAFETY: NEON is baseline on aarch64; src holds width * height * channels
+            // samples, width and height even (WIDTHS and HEIGHTS).
+            unsafe { catmull_x2_neon(src, width, height, channels) }
+        };
+        assert_equals_reference(
+            size_grid(&WIDTHS, &HEIGHTS),
+            &CHANNELS,
+            u8::MAX,
+            &kernel,
+            catmull_x2_scalar,
+        );
+    }
+}

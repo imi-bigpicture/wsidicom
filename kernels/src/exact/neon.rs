@@ -166,12 +166,12 @@ mod tests {
     }
 
     #[test]
-    fn keep_even_pixels_equals_its_definition() {
+    fn keep_even_pixels_equals_reference() {
         assert_keeps_even_pixels::<u8>(keep_even_pixels);
     }
 
     #[test]
-    fn keep_even_pixels_u16_equals_its_definition() {
+    fn keep_even_pixels_u16_equals_reference() {
         assert_keeps_even_pixels::<u16>(keep_even_pixels_u16);
     }
 }

@@ -13,8 +13,9 @@ use std::arch::x86_64::__m256i;
 use std::ops::Range;
 
 use crate::convolve::{
-    MAX_PADDED_TAPS, PIXEL_OUTPUTS, PaddedWindows, RGB, RGBX, Runs, TRANSPOSE_ROWS, Windows,
+    MAX_PADDED_TAPS, PIXEL_OUTPUTS, PaddedWindows, Runs, TRANSPOSE_ROWS, Windows,
 };
+use crate::sample::{RGB, RGBX};
 use crate::x86::*;
 
 /// Bytes of a 256-bit register.
@@ -312,7 +313,7 @@ pub(crate) unsafe fn pack_from_rgbx_avx2(rgbx: &[u8], out: &mut [u8]) {
 pub(crate) unsafe fn vertical_q6_avx2(rows: &[u8], width: usize, weights: &[i16], mid: &mut [i16]) {
     use std::arch::x86_64::*;
     const LANES: usize = 16;
-    const CACHE_LINE: usize = 4 * LANES;
+    const CACHE_LINE_LANES: usize = 4 * LANES;
     debug_assert!(rows.len() >= weights.len() * width && mid.len() >= width && width >= LANES);
     let weight_vectors: Vec<__m256i> = weights
         .iter()
@@ -341,10 +342,10 @@ pub(crate) unsafe fn vertical_q6_avx2(rows: &[u8], width: usize, weights: &[i16]
         if taps.start == 0 {
             prefetch_rows_after_window(src_ptr, weights.len(), width, x);
         }
-        let mut acc = [_mm256_setzero_si256(); CACHE_LINE / LANES];
+        let mut acc = [_mm256_setzero_si256(); CACHE_LINE_LANES / LANES];
         if taps.start > 0 {
             for (register, acc) in acc.iter_mut().enumerate() {
-                // SAFETY: every line ends by `width` (x + CACHE_LINE <= width <=
+                // SAFETY: every line ends by `width` (x + CACHE_LINE_LANES <= width <=
                 // mid.len(), contract).
                 *acc = unsafe {
                     _mm256_loadu_si256(mid_ptr.add(x + register * LANES) as *const __m256i)
@@ -353,7 +354,7 @@ pub(crate) unsafe fn vertical_q6_avx2(rows: &[u8], width: usize, weights: &[i16]
         }
         for tap in taps {
             for (register, acc) in acc.iter_mut().enumerate() {
-                // SAFETY: tap < weights.len() and x + CACHE_LINE <= width: the
+                // SAFETY: tap < weights.len() and x + CACHE_LINE_LANES <= width: the
                 // register's samples lie in the tap's row of `rows`
                 // (contract).
                 let register_ptr = unsafe { src_ptr.add(tap * width + x + register * LANES) };
@@ -364,21 +365,21 @@ pub(crate) unsafe fn vertical_q6_avx2(rows: &[u8], width: usize, weights: &[i16]
             }
         }
         for (register, acc) in acc.iter().enumerate() {
-            // SAFETY: x + CACHE_LINE <= width <= mid.len() (contract).
+            // SAFETY: x + CACHE_LINE_LANES <= width <= mid.len() (contract).
             unsafe { _mm256_storeu_si256(mid_ptr.add(x + register * LANES) as *mut __m256i, *acc) };
         }
     };
-    if width < CACHE_LINE {
+    if width < CACHE_LINE_LANES {
         return cover_row(width, LANES, block);
     }
     if groups_taps(width, weights.len()) {
-        let lines = 0..width / CACHE_LINE * CACHE_LINE;
-        grouped_taps(lines.clone(), CACHE_LINE, 2, weights.len(), &line);
+        let lines = 0..width / CACHE_LINE_LANES * CACHE_LINE_LANES;
+        grouped_taps(lines.clone(), CACHE_LINE_LANES, 2, weights.len(), &line);
         if lines.end < width {
-            line(width - CACHE_LINE, 0..weights.len());
+            line(width - CACHE_LINE_LANES, 0..weights.len());
         }
     } else {
-        cover_row(width, CACHE_LINE, |x| line(x, 0..weights.len()));
+        cover_row(width, CACHE_LINE_LANES, |x| line(x, 0..weights.len()));
     }
 }
 

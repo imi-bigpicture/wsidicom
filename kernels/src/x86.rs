@@ -117,24 +117,6 @@ mod tests {
     use std::arch::x86_64::*;
 
     #[test]
-    fn cover_row_covers_every_output_with_whole_blocks() {
-        for width in [1, 4, 8, 16] {
-            for len in width..=5 * width + 3 {
-                let mut starts = Vec::new();
-                cover_row(len, width, |start| starts.push(start));
-                assert!(starts.iter().all(|&start| start + width <= len));
-                assert!(starts.windows(2).all(|pair| pair[0] < pair[1]));
-                assert_eq!(starts.len(), len.div_ceil(width), "{len} by {width}");
-                let mut covered = vec![false; len];
-                for start in starts {
-                    covered[start..start + width].fill(true);
-                }
-                assert!(covered.iter().all(|&output| output), "{len} by {width}");
-            }
-        }
-    }
-
-    #[test]
     fn grouped_taps_visit_every_block_with_every_tap_group_in_order() {
         for (range, len, sample_bytes, taps) in [
             (0..48, 16, 1, 1),

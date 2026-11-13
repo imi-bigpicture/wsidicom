@@ -687,11 +687,10 @@ gen_box_levels_hwc_neon!(
 mod tests {
     use super::*;
     use crate::box_reduce::tests::{
-        BoxTestSample, assert_same_image, box_sizes, box4x_fused_reference,
-        interleaved_pyramid_reference, test_images,
+        BoxTestSample, assert_same_image, box_sizes, box4x_fused_reference, hwc_pyramid_reference,
     };
     use crate::box_reduce::{box2x_hwc_scalar, box2x_scalar};
-    use crate::testing::{ImageKernel, Rng, UnsafeImageKernel};
+    use crate::testing::{ImageKernel, Rng, UnsafeImageKernel, test_images};
 
     fn assert_planar_matches_reference<T: BoxTestSample>(
         kernel: UnsafeImageKernel<T>,
@@ -699,7 +698,7 @@ mod tests {
     ) {
         let mut rng = Rng::new(40);
         for (width, height) in box_sizes(1) {
-            for src in test_images::<T>(&mut rng, width * height) {
+            for (_, src) in test_images(&mut rng, width * height, T::MAX) {
                 // SAFETY: NEON is baseline on aarch64; src holds width *
                 // height samples.
                 let simd = unsafe { kernel(&src, width, height) };
@@ -712,10 +711,10 @@ mod tests {
         }
     }
 
-    fn assert_interleaved_halves_as_scalar<T: BoxTestSample>(kernel: UnsafeImageKernel<T>) {
+    fn assert_hwc_halves_as_scalar<T: BoxTestSample>(kernel: UnsafeImageKernel<T>) {
         let mut rng = Rng::new(41);
         for (width, height) in box_sizes(1) {
-            for src in test_images::<T>(&mut rng, width * height * RGB) {
+            for (_, src) in test_images(&mut rng, width * height * RGB, T::MAX) {
                 // SAFETY: NEON is baseline on aarch64; src holds width *
                 // height RGB pixels.
                 let simd = unsafe { kernel(&src, width, height) };
@@ -735,9 +734,9 @@ mod tests {
     }
 
     #[test]
-    fn interleaved_neon_kernels_equal_scalar() {
-        assert_interleaved_halves_as_scalar::<u8>(box2x_u8_hwc_neon);
-        assert_interleaved_halves_as_scalar::<u16>(box2x_u16_hwc_neon);
+    fn hwc_neon_kernels_equal_scalar() {
+        assert_hwc_halves_as_scalar::<u8>(box2x_u8_hwc_neon);
+        assert_hwc_halves_as_scalar::<u16>(box2x_u16_hwc_neon);
     }
 
     /// A fused interleaved NEON kernel: (src, (width, height), levels).
@@ -753,13 +752,13 @@ mod tests {
         let mut rng = Rng::new(42);
         for levels in [2, 3] {
             for (width, height) in box_sizes(1) {
-                for src in test_images::<T>(&mut rng, width * height * RGB) {
+                for (_, src) in test_images(&mut rng, width * height * RGB, T::MAX) {
                     // SAFETY: NEON is baseline on aarch64; src holds width *
                     // height RGB pixels.
                     let simd = unsafe { kernel(&src, (width, height), levels) };
                     assert_same_image(
                         &simd,
-                        &interleaved_pyramid_reference(&src, (width, height, RGB), levels),
+                        &hwc_pyramid_reference(&src, (width, height, RGB), levels),
                         &format!("{levels} levels, {width} x {height}"),
                     );
                 }
@@ -768,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    fn fused_interleaved_neon_kernels_equal_the_pyramid() {
+    fn fused_hwc_neon_kernels_equal_the_pyramid() {
         assert_levels_match_the_pyramid::<u8>(box_levels_u8_hwc_neon);
         assert_levels_match_the_pyramid::<u16>(box_levels_u16_hwc_neon);
     }

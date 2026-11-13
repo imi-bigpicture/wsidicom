@@ -18,7 +18,7 @@ use crate::x86::*;
 /// `row(out_y, out_row, stream)` must write each of the row's outputs at
 /// `out_row` and nothing else: the output is not cleared beforehand.
 #[inline(always)]
-unsafe fn planar_box_to<T: Copy>(
+unsafe fn planar_box_into<T: Copy>(
     output: BoxRows<T>,
     mut row: impl FnMut(usize, *mut T, bool),
 ) -> Vec<T> {
@@ -38,10 +38,10 @@ unsafe fn planar_box_to<T: Copy>(
     unsafe { output.write(stream, rows) }
 }
 
-/// `planar_box_to` into a new image of the `factor` reduction.
+/// `planar_box_into` into a new image of the `factor` reduction.
 ///
 /// # Safety
-/// As `planar_box_to`, for rows of `width / factor` outputs.
+/// As `planar_box_into`, for rows of `width / factor` outputs.
 #[inline(always)]
 unsafe fn planar_box<T: Copy>(
     width: usize,
@@ -52,7 +52,7 @@ unsafe fn planar_box<T: Copy>(
     let (out_width, out_height) = (width / factor, height / factor);
     // SAFETY: the caller's contract.
     (
-        unsafe { planar_box_to(BoxRows::new_image(out_height, out_width), row) },
+        unsafe { planar_box_into(BoxRows::new_image(out_height, out_width), row) },
         out_width,
         out_height,
     )
@@ -87,10 +87,10 @@ unsafe fn box4_sum<T: Copy + Into<u32>>(src_ptr: *const T, rows: [usize; 4], x: 
         .sum()
 }
 
-/// `box2x_u8_avx2_to` into a new image.
+/// `box2x_u8_into_avx2` into a new image.
 ///
 /// # Safety
-/// As `box2x_u8_avx2_to`.
+/// As `box2x_u8_into_avx2`.
 pub(crate) unsafe fn box2x_u8_avx2(
     src: &[u8],
     width: usize,
@@ -99,7 +99,7 @@ pub(crate) unsafe fn box2x_u8_avx2(
     let (out_width, out_height) = (width / 2, height / 2);
     // SAFETY: the caller's contract.
     let image = unsafe {
-        box2x_u8_avx2_to(
+        box2x_u8_into_avx2(
             src,
             width,
             height,
@@ -116,7 +116,7 @@ pub(crate) unsafe fn box2x_u8_avx2(
 /// The CPU supports AVX2, `src.len() >= width * height`, and `output` holds
 /// `height / 2` rows of `width / 2` samples.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_u8_avx2_to(
+pub(crate) unsafe fn box2x_u8_into_avx2(
     src: &[u8],
     width: usize,
     height: usize,
@@ -163,7 +163,7 @@ pub(crate) unsafe fn box2x_u8_avx2_to(
     });
     // SAFETY: `row` writes outputs 0..out_width of its row (the vector body,
     // then the scalar tail) and nothing else.
-    unsafe { planar_box_to::<u8>(output, row) }
+    unsafe { planar_box_into::<u8>(output, row) }
 }
 
 /// AVX2 uint8 fused 4x4 box, 16 outputs per step: maddubs sums byte pairs
@@ -250,7 +250,7 @@ pub(crate) unsafe fn box4x_u8_avx2(
 }
 
 /// AVX2 uint16 fused 4x4 box, 8 outputs per step: adjacent u16 pairs summed
-/// into u32 in order (see `box2x_u16_avx2_to`) down the 4 rows; one hadd
+/// into u32 in order (see `box2x_u16_into_avx2`) down the 4 rows; one hadd
 /// forms the blocks' sums, lane-scrambled to [q0,q1,q4,q5|q2,q3,q6,q7] (one
 /// vpermd restores the order), then `(sum + 8) >> 4`.
 ///
@@ -334,7 +334,7 @@ pub(crate) unsafe fn box4x_u16_avx2(
 /// The CPU supports AVX2, `src.len() >= width * height`, and `output` holds
 /// `height / 2` rows of `width / 2` samples.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_u16_avx2_to(
+pub(crate) unsafe fn box2x_u16_into_avx2(
     src: &[u16],
     width: usize,
     height: usize,
@@ -386,13 +386,13 @@ pub(crate) unsafe fn box2x_u16_avx2_to(
     });
     // SAFETY: `row` writes outputs 0..out_width of its row (the vector body,
     // then the scalar tail) and nothing else.
-    unsafe { planar_box_to::<u16>(output, row) }
+    unsafe { planar_box_into::<u16>(output, row) }
 }
 
-/// `box2x_u16_avx2_to` into a new image.
+/// `box2x_u16_into_avx2` into a new image.
 ///
 /// # Safety
-/// As `box2x_u16_avx2_to`.
+/// As `box2x_u16_into_avx2`.
 pub(crate) unsafe fn box2x_u16_avx2(
     src: &[u16],
     width: usize,
@@ -401,7 +401,7 @@ pub(crate) unsafe fn box2x_u16_avx2(
     let (out_width, out_height) = (width / 2, height / 2);
     // SAFETY: the caller's contract.
     let image = unsafe {
-        box2x_u16_avx2_to(
+        box2x_u16_into_avx2(
             src,
             width,
             height,
@@ -416,11 +416,12 @@ mod tests {
     use super::*;
     use crate::box_reduce::box2x_scalar;
     use crate::box_reduce::tests::{
-        BoxTestSample, assert_same_image, box_sizes, box4x_chained_reference,
-        box4x_fused_reference, test_images,
+        BoxTestSample, assert_same_image, box_sizes, box4x_chained_reference, box4x_fused_reference,
     };
     use crate::cpu::{LARGE_OUTPUT_BYTES, PREFAULT_OUTPUT_BYTES};
-    use crate::testing::{ImageKernel, Rng, UnsafeImageKernel, random_samples, sizes_from};
+    use crate::testing::{
+        ImageKernel, Rng, UnsafeImageKernel, avx2_detected, random_samples, sizes_from, test_images,
+    };
 
     /// Runs `kernel` (needing AVX2) and `reference` on random and extreme
     /// images of every test size of at least `minimum`, and asserts the same
@@ -430,12 +431,12 @@ mod tests {
         kernel: UnsafeImageKernel<T>,
         reference: ImageKernel<T>,
     ) {
-        if !std::is_x86_feature_detected!("avx2") {
+        if !avx2_detected() {
             return;
         }
         let mut rng = Rng::new(1);
         for (width, height) in box_sizes(minimum) {
-            for src in test_images::<T>(&mut rng, width * height) {
+            for (_, src) in test_images(&mut rng, width * height, T::MAX) {
                 // SAFETY: AVX2 is available; src holds width * height samples.
                 let simd = unsafe { kernel(&src, width, height) };
                 assert_same_image(
@@ -463,7 +464,7 @@ mod tests {
     fn box4x_avx2_integers_equal_two_scalar_halvings_within_one() {
         // The fused 4x kernel rounds once; two halvings round twice, so
         // integers may differ by 1.
-        if !std::is_x86_feature_detected!("avx2") {
+        if !avx2_detected() {
             return;
         }
         let mut rng = Rng::new(2);
@@ -502,7 +503,7 @@ mod tests {
 
     #[test]
     fn large_outputs_stream_past_the_cache_and_prefault() {
-        if !std::is_x86_feature_detected!("avx2") {
+        if !avx2_detected() {
             return;
         }
         // Outputs past both thresholds: streaming stores and the prefault
