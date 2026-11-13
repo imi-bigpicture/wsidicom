@@ -6,7 +6,8 @@
 //! guards.
 
 use super::{horizontal_scalar, vertical_sums_scalar, window};
-use crate::exact::x86::{keep_even_pixels, prefetch_next_rows};
+use crate::exact::x86::keep_even_pixels;
+use crate::x86::prefetch_rows_after_window;
 
 /// The vertical sums `row0 + row3 + 3 (row1 + row2)` in u16, then the
 /// rounded 4-tap sums at every sample as bytes, of which the even pixels are
@@ -82,7 +83,7 @@ pub(crate) unsafe fn bilinear_x2_avx2(
         let sums_ptr = unsafe { sums.as_mut_ptr().add(channels) };
         let vertical_block = |x: usize| {
             if x.is_multiple_of(64) {
-                prefetch_next_rows(src, 2 * y + 3, row_samples, x);
+                prefetch_rows_after_window(src.as_ptr(), 2 * y + 3, row_samples, x);
             }
             let load = |tap: usize| {
                 // SAFETY: x <= row_samples - LANES at both calls, so the load's

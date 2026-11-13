@@ -377,7 +377,7 @@ impl RowGather {
         let out_row_bytes = self.cols.len() * self.pixel_bytes;
         debug_assert!(out_row_bytes >= 32 && row.len() >= 2 * out_row_bytes);
         let src_ptr = row.as_ptr();
-        // Called with at + 32 <= out_row_bytes.
+        // Called with at + 32 <= out_row_bytes (`cover_row`).
         let step = |at: usize| {
             // SAFETY: 2 * at + 64 <= 2 * out_row_bytes <= the source row (the plan's
             // columns 2x + 1 reach its end).
@@ -404,14 +404,7 @@ impl RowGather {
             // (the caller's contract).
             unsafe { _mm256_storeu_si256(dst.add(at) as *mut __m256i, ordered) };
         };
-        let mut at = 0;
-        while at + 32 <= out_row_bytes {
-            step(at);
-            at += 32;
-        }
-        if at < out_row_bytes {
-            step(out_row_bytes - 32);
-        }
+        crate::simd::cover_row(out_row_bytes, 32, step);
     }
 
     /// The row by the planned chunks' byte shuffles.

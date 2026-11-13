@@ -175,8 +175,18 @@ pub(crate) unsafe fn bilinear_x4_avx2<const IS_RGB: bool>(
         };
         let vertical_step = |first_output: usize| {
             let first_pixel = 4 * first_output;
-            prefetch_next_rows(src, 4 * y + 6, row_samples, first_pixel * channels);
-            prefetch_next_rows(src, 4 * y + 8, row_samples, first_pixel * channels);
+            prefetch_rows_after_window(
+                src.as_ptr(),
+                4 * y + 6,
+                row_samples,
+                first_pixel * channels,
+            );
+            prefetch_rows_after_window(
+                src.as_ptr(),
+                4 * y + 8,
+                row_samples,
+                first_pixel * channels,
+            );
             let loaded: [__m256i; 8] = std::array::from_fn(|tap| load(tap, first_pixel));
             let window_sums = |low_half: bool| {
                 let pair = |low_tap: usize, high_tap: usize| {

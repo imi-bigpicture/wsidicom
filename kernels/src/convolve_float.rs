@@ -252,20 +252,6 @@ impl<T: FloatSample> FloatResample for T {}
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 pub(crate) trait TransposedTier: FloatSample {
     fn resize_transposed(src: &[Self], width: usize, plan: &FloatPlan) -> Vec<Self>;
-
-    /// The transposed driver on the AVX-512 tier (16-row batches).
-    ///
-    /// # Safety
-    /// AVX-512 F, BW and VL are available.
-    #[cfg(target_arch = "x86_64")]
-    unsafe fn resize_avx512(src: &[Self], width: usize, plan: &FloatPlan) -> Vec<Self>;
-
-    /// The transposed driver on the AVX2 tier (8-row batches).
-    ///
-    /// # Safety
-    /// AVX2 and FMA are available.
-    #[cfg(target_arch = "x86_64")]
-    unsafe fn resize_avx2(src: &[Self], width: usize, plan: &FloatPlan) -> Vec<Self>;
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -460,16 +446,6 @@ fn vertical_strip_samples(
         .min(row_samples)
 }
 
-/// The transposed driver's buffers: `ROWS` intermediate rows, the same
-/// transposed, and the transposed output sums.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-#[derive(Default)]
-struct TransposeScratch {
-    mid: Vec<f32>,
-    mid_t: Vec<f32>,
-    out_t: Vec<f32>,
-}
-
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 thread_local! {
     static SCRATCH: RefCell<TransposeScratch<f32>> = const { RefCell::new(TransposeScratch::new()) };
@@ -547,30 +523,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     impl TierKernels for u16 {
         const VERTICAL_AVX2: unsafe fn(&[u16], usize, &[f32], &mut [f32]) = x86::vertical_u16_avx2;
-        const STORE_AVX2: unsafe fn(&[f32], usize, *mut u16, usize, usize) =
-            x86::untranspose_store_u16_avx2;
-    }
-
-    /// The transposed driver on the AVX2 tier (8-row batches).
-    #[cfg(target_arch = "x86_64")]
-    fn resize_avx2<T: TierKernels>(src: &[T], width: usize, plan: &FloatPlan) -> Vec<T> {
-        let vertical = |rows: &[T], stride: usize, weights: &[f32], mid: &mut [f32]| {
-            // SAFETY: the caller detected AVX2 and FMA; the driver passes each
-            // window's rows of the strip.
-            unsafe { (T::VERTICAL_AVX2)(rows, stride, weights, mid) }
-        };
-        // SAFETY: the caller detected AVX2 and FMA; these are the 8-row kernels.
-        unsafe {
-            transposed::<T, 8>(
-                src,
-                width,
-                plan,
-                vertical,
-                x86::transpose_f32_rows_avx2,
-                x86::horizontal_f32_transposed_avx2,
-                T::STORE_AVX2,
-            )
-        }
     }
 
     /// A sample type the tests resize: with its x86 tiers' kernels there.
@@ -608,17 +560,6 @@ mod tests {
             &expected,
             &format!("{context}, dispatched"),
         );
-        #[cfg(target_arch = "x86_64")]
-        {
-            if has_avx2_fma() {
-                assert_same(
-                    // SAFETY: AVX2 and FMA detected.
-                    &unsafe { T::resize_avx2(src, width, plan) },
-                    &expected,
-                    &format!("{context}, avx2"),
-                );
-            }
-        }
     }
 
     fn assert_resize_matches_reference<T: TestFloat>(seed: u64) {

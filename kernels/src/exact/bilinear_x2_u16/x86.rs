@@ -6,8 +6,9 @@
 //! their loop guards.
 
 use crate::exact::bilinear_x2::{bilinear_x2_scalar, window};
-use crate::exact::x86::{cover_steps, prefetch_next_rows};
+use crate::exact::x86::cover_steps;
 use crate::sample::RGB;
+use crate::x86::prefetch_rows_after_window;
 
 /// The gray kernel. A source pixel pair is one dword, so each load splits
 /// into even and odd pixels by a mask and a shift. Their vertical sums
@@ -61,7 +62,7 @@ pub(crate) unsafe fn bilinear_x2_u16_gray_avx2(
         let first = 2 * y as isize - 1;
         let rows: [*const u16; 4] = std::array::from_fn(|tap| row(first + tap as isize));
         let vertical_step = |first_output: usize| {
-            prefetch_next_rows(src_bytes, 2 * y + 3, 2 * width, 4 * first_output);
+            prefetch_rows_after_window(src_bytes.as_ptr(), 2 * y + 3, 2 * width, 4 * first_output);
             let pairs = |tap: usize| {
                 // SAFETY: first_output + LANES <= out_width (cover_steps), so
                 // the load's 16 samples from 2 first_output lie within a src
@@ -221,8 +222,8 @@ pub(crate) unsafe fn bilinear_x2_u16_rgb_avx2(
             }
         };
         let vertical_step = |first_output: usize| {
-            prefetch_next_rows(
-                src_bytes,
+            prefetch_rows_after_window(
+                src_bytes.as_ptr(),
                 2 * y + 3,
                 2 * row_samples,
                 4 * first_output * CHANNELS,

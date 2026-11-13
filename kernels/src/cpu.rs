@@ -38,18 +38,9 @@ pub(crate) const LARGE_OUTPUT_BYTES: usize = 4 << 20;
 pub(crate) const PREFAULT_OUTPUT_BYTES: usize = 8 << 20;
 
 /// On unless set to "0"; `default` when unset.
+#[cfg(target_arch = "x86_64")]
 fn env_flag(name: &str, default: bool) -> bool {
     std::env::var(name).map_or(default, |value| value != "0")
-}
-
-/// `WSIDICOM_KERNELS_PREFAULT=0` disables `with_prefault`'s helper thread.
-/// x86-64 only: on aarch64 (macOS) large outputs come back as recycled
-/// pages, so the helper only costs.
-#[inline]
-fn prefault_enabled() -> bool {
-    static ENABLED: std::sync::LazyLock<bool> =
-        std::sync::LazyLock::new(|| env_flag("WSIDICOM_KERNELS_PREFAULT", true));
-    cfg!(target_arch = "x86_64") && *ENABLED
 }
 
 /// Bytes an overlapping store may write past the last row of a
@@ -82,7 +73,9 @@ pub(crate) unsafe fn with_prefault(
     /// Bands are whole batches of the transposed kernels' rows.
     const BATCH_ROWS: usize = 16;
     const SPINS_BEFORE_YIELD: u32 = 256;
-    if !(prefault_enabled() && total_bytes >= PREFAULT_OUTPUT_BYTES && out_height >= 2) {
+    // x86-64 only: on aarch64 (macOS) large outputs come back as recycled
+    // pages, so the helper only costs.
+    if !(cfg!(target_arch = "x86_64") && total_bytes >= PREFAULT_OUTPUT_BYTES && out_height >= 2) {
         return rows(0, out_height);
     }
     // The helper has touched every page below this offset and writes nothing
@@ -249,7 +242,7 @@ mod tests {
         let row_bytes = 4096 + 12;
         let out_height = PREFAULT_OUTPUT_BYTES.div_ceil(row_bytes) + 7;
         let bands = assert_bands_cover_the_rows(row_bytes, out_height);
-        if prefault_enabled() {
+        if cfg!(target_arch = "x86_64") {
             assert!(bands.len() > 1);
         }
         // A single row, however large, is one band.
