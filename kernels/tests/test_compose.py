@@ -204,7 +204,7 @@ class TestComposeBorrowing:
     ) -> None:
         """A tile sharing the canvas's buffer raises ValueError."""
         # Act & Assert
-        with pytest.raises(ValueError, match="a tile shares memory with the canvas"):
+        with pytest.raises(ValueError, match="A tile shares memory with the canvas"):
             compose(canvas, [alias(canvas)], position)
 
     def test_non_contiguous_view_of_canvas_raises_value_error(
@@ -215,7 +215,7 @@ class TestComposeBorrowing:
         It shares the canvas's buffer.
         """
         # Act & Assert
-        with pytest.raises(ValueError, match="a tile shares memory with the canvas"):
+        with pytest.raises(ValueError, match="A tile shares memory with the canvas"):
             compose(canvas, [canvas[0:4, 0:4]], np.array([[5, 5]], np.int64))
 
     @pytest.mark.parametrize(

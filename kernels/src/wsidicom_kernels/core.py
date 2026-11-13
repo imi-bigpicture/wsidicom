@@ -85,7 +85,7 @@ def compose(
 def downscale(
     image: NDArray[Any],
     factor: int,
-    filter: ResizeFilter,
+    resample: ResizeFilter,
 ) -> NDArray[Any]:
     """Reduce ``image`` by integer ``factor`` per spatial axis, antialiased.
 
@@ -122,7 +122,7 @@ def downscale(
         ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
     factor: int
         Integer reduction factor applied to both spatial axes.
-    filter: ResizeFilter
+    resample: ResizeFilter
         Antialiasing filter.
 
     Returns
@@ -130,14 +130,14 @@ def downscale(
     np.ndarray
         A new, reduced array with the same dtype and channel count as ``image``.
     """
-    return lib.downscale(image, factor, filter)
+    return lib.downscale(image, factor, resample)
 
 
 def downscale_grid(
     tiles: Sequence[NDArray[Any]],
     grid_width: int,
     factor: int,
-    filter: ResizeFilter,
+    resample: ResizeFilter,
     size: tuple[int, int] | None = None,
     fill: NDArray[Any] | None = None,
 ) -> NDArray[Any]:
@@ -163,7 +163,7 @@ def downscale_grid(
         Tiles per grid row; ``len(tiles)`` must be a multiple of it.
     factor: int
         Integer reduction factor applied to both spatial axes.
-    filter: ResizeFilter
+    resample: ResizeFilter
         Antialiasing filter.
     size: tuple[int, int] | None = None
         If set, the ``(height, width)`` of the result, at least the reduced
@@ -183,11 +183,11 @@ def downscale_grid(
     """
     tile_list = list(tiles)
     if not tile_list or grid_width < 1 or len(tile_list) % grid_width:
-        raise ValueError("tiles must fill whole grid rows of grid_width tiles")
+        raise ValueError("Tiles must fill whole grid rows of grid_width tiles.")
     if (size is None) != (fill is None):
-        raise ValueError("size and fill go together")
+        raise ValueError("Size and fill go together.")
     if factor < 1:
-        raise ValueError("factor must be >= 1")
+        raise ValueError("Factor must be >= 1.")
     last_col = grid_width - 1
     inner_rows = tile_list[: len(tile_list) - grid_width]
     inner_cols = [
@@ -197,10 +197,10 @@ def downscale_grid(
         tile.shape[1] % factor == 0 for tile in inner_cols
     )
     power_of_two = factor > 0 and factor & (factor - 1) == 0
-    if filter == ResizeFilter.BOX and power_of_two and seams_divide:
+    if resample == ResizeFilter.BOX and power_of_two and seams_divide:
         return lib.downscale_grid_box(tile_list, grid_width, factor, size, fill)
     stitched = lib.stitch_grid(tile_list, grid_width)
-    reduced = downscale(stitched, factor, filter)
+    reduced = downscale(stitched, factor, resample)
     if size is None or fill is None:
         return reduced
     return lib.framed(reduced, size, fill)
@@ -208,11 +208,11 @@ def downscale_grid(
 
 def resize(
     image: NDArray[Any],
-    out_h: int,
-    out_w: int,
-    filter: ResizeFilter,
+    height: int,
+    width: int,
+    resample: ResizeFilter,
 ) -> NDArray[Any]:
-    """Resample ``image`` to an exact ``(out_h, out_w)`` — any ratio, antialiased.
+    """Resample ``image`` to an exact ``(height, width)`` — any ratio, antialiased.
 
     Unlike :func:`downscale`, the ratio is not restricted to an integer factor:
     any target size works, including fractional reductions (e.g. resampling to a
@@ -241,17 +241,17 @@ def resize(
     image: np.ndarray
         The source, C-contiguous, dtype uint8 / uint16. Planar
         ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3.
-    out_h: int
+    height: int
         Target height in pixels.
-    out_w: int
+    width: int
         Target width in pixels.
-    filter: ResizeFilter
+    resample: ResizeFilter
         Resampling filter.
 
     Returns
     -------
     np.ndarray
-        A new ``(out_h, out_w)`` (or ``(out_h, out_w, C)``) array, same dtype
+        A new ``(height, width)`` (or ``(height, width, C)``) array, same dtype
         and channel count as ``image``.
     """
-    return lib.resize(image, out_h, out_w, filter)
+    return lib.resize(image, height, width, resample)

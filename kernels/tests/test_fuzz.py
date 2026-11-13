@@ -201,7 +201,7 @@ class TestResize:
         dtype=dtypes,
         channels=channel_counts,
         sizes=resizes(),
-        filter=st.sampled_from(
+        resample=st.sampled_from(
             [
                 ResizeFilter.BOX,
                 ResizeFilter.BILINEAR,
@@ -217,7 +217,7 @@ class TestResize:
         dtype: Any,
         channels: int,
         sizes: tuple[Size, Size],
-        filter: ResizeFilter,
+        resample: ResizeFilter,
         seed: int,
     ) -> None:
         """Resizing stays in bounds and the SIMD kernels match the scalar reference."""
@@ -227,13 +227,13 @@ class TestResize:
 
         # Act
         simd, scalar = simd_and_scalar(
-            lambda: resize(image, output_height, output_width, filter)
+            lambda: resize(image, output_height, output_width, resample)
         )
 
         # Assert — identical on every tier, except the power-of-2 box kernels'
         # fused versus chained rounding.
         is_power_of_2_box = (
-            filter == ResizeFilter.BOX
+            resample == ResizeFilter.BOX
             and height % output_height == 0
             and width % output_width == 0
             and height // output_height == width // output_width

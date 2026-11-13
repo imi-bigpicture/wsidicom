@@ -317,9 +317,9 @@ class TestDownscaleFilters:
         assert reduced.std() < 1.0
         assert abs(reduced.mean() - 128) < 2
 
-    @pytest.mark.parametrize("filter", CONVOLUTION_FILTERS)
+    @pytest.mark.parametrize("resample", CONVOLUTION_FILTERS)
     def test_convolution_filters_antialias_noise(
-        self, noise: np.ndarray, filter: ResizeFilter
+        self, noise: np.ndarray, resample: ResizeFilter
     ) -> None:
         """Every filter except nearest low-passes before decimating.
 
@@ -330,8 +330,8 @@ class TestDownscaleFilters:
         ~8x; an aliasing interpolator keeps it ~intact.
         """
         # Act
-        reduced = downscale(noise, 8, filter).astype(float)
-        resized = resize(noise, 49, 49, filter).astype(float)
+        reduced = downscale(noise, 8, resample).astype(float)
+        resized = resize(noise, 49, 49, resample).astype(float)
 
         # Assert
         assert reduced.std() < 20
@@ -346,10 +346,10 @@ class TestDownscaleFilters:
         assert reduced.std() > 60
 
     @pytest.mark.parametrize(
-        "filter",
+        "resample",
         [ResizeFilter.BILINEAR, ResizeFilter.CATMULLROM, ResizeFilter.LANCZOS3],
     )
-    def test_windowed_filters_do_not_moire(self, filter: ResizeFilter) -> None:
+    def test_windowed_filters_do_not_moire(self, resample: ResizeFilter) -> None:
         """Periodic stripes reduce without a moire beat.
 
         Box is left out: it legitimately keeps a low-frequency beat, as true area
@@ -360,7 +360,7 @@ class TestDownscaleFilters:
         stripes[:, ::3] = 255
 
         # Act
-        reduced = downscale(stripes, 4, filter).astype(float)
+        reduced = downscale(stripes, 4, resample).astype(float)
 
         # Assert
         assert reduced.std() < 10
@@ -388,14 +388,14 @@ def box_block_means(image: np.ndarray, factor: int) -> np.ndarray:
 class TestDownscalePartialBlocks:
     """A factor that doesn't divide the size: ceil size, the scale exact."""
 
-    @pytest.mark.parametrize("filter", list(ResizeFilter))
+    @pytest.mark.parametrize("resample", list(ResizeFilter))
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("factor", [2, 3, 4, 8])
     @pytest.mark.parametrize("shape", [(37, 51), (37, 51, 3)])
     def test_output_size_rounds_up(
         self,
         random_image: RandomImage,
-        filter: ResizeFilter,
+        resample: ResizeFilter,
         dtype: type[np.generic],
         factor: int,
         shape: tuple[int, ...],
@@ -405,7 +405,7 @@ class TestDownscalePartialBlocks:
         image = random_image(shape, dtype)
 
         # Act
-        reduced = downscale(image, factor, filter)
+        reduced = downscale(image, factor, resample)
 
         # Assert
         assert reduced.shape == (-(-37 // factor), -(-51 // factor), *shape[2:])
@@ -430,20 +430,20 @@ class TestDownscalePartialBlocks:
         # Assert
         assert np.array_equal(reduced, box_block_means(image, factor))
 
-    @pytest.mark.parametrize("filter", list(ResizeFilter))
+    @pytest.mark.parametrize("resample", list(ResizeFilter))
     def test_factor_beyond_the_image_gives_one_pixel(
-        self, random_image: RandomImage, filter: ResizeFilter
+        self, random_image: RandomImage, resample: ResizeFilter
     ) -> None:
         """A factor past the image's size reduces it to one pixel."""
         # Arrange
         image = random_image((3, 5), np.uint8)
 
         # Act
-        reduced = downscale(image, 8, filter)
+        reduced = downscale(image, 8, resample)
 
         # Assert
         assert reduced.shape == (1, 1)
-        if filter == ResizeFilter.BOX:
+        if resample == ResizeFilter.BOX:
             assert reduced[0, 0] == np.floor(image.mean() + 0.5)
 
     def test_nearest_partial_block_takes_its_last_pixel(self) -> None:
@@ -458,11 +458,11 @@ class TestDownscalePartialBlocks:
         assert reduced[0].tolist() == [1, 3, 5, 7, 8]
 
     @pytest.mark.parametrize(
-        "filter",
+        "resample",
         [ResizeFilter.BOX, ResizeFilter.BILINEAR, ResizeFilter.CATMULLROM],
     )
     def test_scale_is_the_factor(
-        self, random_image: RandomImage, filter: ResizeFilter
+        self, random_image: RandomImage, resample: ResizeFilter
     ) -> None:
         """Outputs whose windows end inside the image ignore the remainder.
 
@@ -474,8 +474,8 @@ class TestDownscalePartialBlocks:
         whole_blocks = np.ascontiguousarray(image[:39, :39])
 
         # Act
-        reduced = downscale(image, 3, filter)
-        reduced_whole = downscale(whole_blocks, 3, filter)
+        reduced = downscale(image, 3, resample)
+        reduced_whole = downscale(whole_blocks, 3, resample)
 
         # Assert
         assert np.array_equal(reduced[:11, :11], reduced_whole[:11, :11])

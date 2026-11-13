@@ -76,7 +76,7 @@ class TestValidation:
         # Act & Assert
         with pytest.raises(
             ValueError,
-            match=r"image must have at least one pixel and one channel"
+            match=r"Image must have at least one pixel and one channel"
             r"|3D arrays must have 1 or 3 channels",
         ):
             operation(image)
@@ -173,14 +173,14 @@ class TestValidation:
         strided = np.zeros((1, 4), np.int64)[:, ::2]
 
         # Act & Assert
-        with pytest.raises(ValueError, match="positions must be C-contiguous"):
+        with pytest.raises(ValueError, match="Positions must be C-contiguous"):
             compose(image.copy(), [image], strided)
 
     @pytest.mark.parametrize(
         ["positions", "match"],
         [
             (np.zeros((1, 3), np.int64), r"shape \(N, 2\)"),
-            (np.zeros((2, 2), np.int64), "number of positions"),
+            (np.zeros((2, 2), np.int64), "Number of positions"),
         ],
         ids=["three-columns", "count"],
     )
@@ -222,7 +222,7 @@ class TestValidation:
         rejected.
         """
         # Act & Assert
-        with pytest.raises(ValueError, match="fill"):
+        with pytest.raises(ValueError, match="Fill"):
             downscale_grid([image], 1, 2, ResizeFilter.BOX, size=(8, 8), fill=fill)
 
     @pytest.mark.parametrize(
@@ -238,7 +238,7 @@ class TestValidation:
     ) -> None:
         """Size and fill are given together or not at all."""
         # Act & Assert
-        with pytest.raises(ValueError, match="size and fill"):
+        with pytest.raises(ValueError, match="Size and fill"):
             downscale_grid([image], 1, 2, ResizeFilter.BOX, size=size, fill=fill)
 
     @pytest.mark.parametrize(
@@ -334,7 +334,7 @@ class TestValidation:
         tile = np.zeros((8, 8), np.uint8)[::-1]
 
         # Act & Assert
-        with pytest.raises(ValueError, match="each tile row must be contiguous"):
+        with pytest.raises(ValueError, match="Each tile row must be contiguous"):
             compose(canvas, [tile], origin)
 
     @pytest.mark.parametrize(
@@ -352,7 +352,7 @@ class TestValidation:
         positions[0, axis] = position
 
         # Act & Assert
-        with pytest.raises(ValueError, match="positions"):
+        with pytest.raises(ValueError, match="Positions"):
             compose(canvas, [tile], positions)
 
     def test_compose_rejects_read_only_canvas(
@@ -364,7 +364,7 @@ class TestValidation:
         canvas.flags.writeable = False
 
         # Act & Assert
-        with pytest.raises(ValueError, match="canvas must be writable"):
+        with pytest.raises(ValueError, match="Canvas must be writable"):
             compose(canvas, [image], origin)
 
     @pytest.mark.parametrize(
@@ -399,7 +399,7 @@ class TestValidation:
     def test_downscale_grid_rejects_zero_factor(self, image: np.ndarray) -> None:
         """A factor below 1 is a ValueError."""
         # Act & Assert
-        with pytest.raises(ValueError, match="factor must be >= 1"):
+        with pytest.raises(ValueError, match="Factor must be >= 1"):
             downscale_grid([image] * 4, 2, 0, ResizeFilter.BOX)
 
     def test_misaligned_image_is_reported_as_such(self) -> None:
@@ -456,17 +456,17 @@ class TestValidation:
         [
             pytest.param(
                 lambda image: resize(image, -1, 4, ResizeFilter.BOX),
-                "out_h and out_w must be >= 1",
+                "Height and width must be >= 1",
                 id="resize-negative",
             ),
             pytest.param(
                 lambda image: downscale(image, -2, ResizeFilter.BOX),
-                "factor must be >= 1",
+                "Factor must be >= 1",
                 id="downscale-negative",
             ),
             pytest.param(
                 lambda image: downscale(image, 0, ResizeFilter.BOX),
-                "factor must be >= 1",
+                "Factor must be >= 1",
                 id="downscale-zero",
             ),
         ],
@@ -498,7 +498,7 @@ class TestValidation:
     ) -> None:
         """Names other than the enum's values are unknown, not silent aliases."""
         # Act & Assert
-        with pytest.raises(ValueError, match="unknown filter"):
+        with pytest.raises(ValueError, match="Unknown filter"):
             operation(image, name)
 
 
@@ -562,9 +562,9 @@ class TestTallReductions:
         ["dtype", "rows", "value"],
         [(np.uint8, 600_000, 100), (np.uint16, 300_000, 1000)],
     )
-    @pytest.mark.parametrize("filter", [ResizeFilter.BILINEAR, ResizeFilter.LANCZOS3])
+    @pytest.mark.parametrize("resample", [ResizeFilter.BILINEAR, ResizeFilter.LANCZOS3])
     def test_heavy_vertical_reduction_of_tall_image(
-        self, dtype: type, rows: int, value: int, filter: ResizeFilter
+        self, dtype: type, rows: int, value: int, resample: ResizeFilter
     ) -> None:
         """A batch of rows larger than the strip budget still resizes.
 
@@ -574,7 +574,7 @@ class TestTallReductions:
         image = np.full((rows, 2), value, dtype)
 
         # Act
-        result = resize(image, 1, 2, filter)
+        result = resize(image, 1, 2, resample)
 
         # Assert
         np.testing.assert_allclose(result, np.full((1, 2), value), rtol=1e-3)

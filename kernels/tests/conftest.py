@@ -96,13 +96,13 @@ def exact_resize_float() -> Callable[[np.ndarray, int, int, ResizeFilter], np.nd
     (kernel scaled when minifying, window clipped at the edge, renormalized).
     """
 
-    def kernel(x: np.ndarray, filter: ResizeFilter) -> np.ndarray:
+    def kernel(x: np.ndarray, resample: ResizeFilter) -> np.ndarray:
         a, ax = -0.5, np.abs(x)
-        if filter == "box":
+        if resample == "box":
             return ((x > -0.5) & (x <= 0.5)).astype(float)
-        if filter == "bilinear":
+        if resample == "bilinear":
             return np.maximum(0.0, 1.0 - ax)
-        if filter == "catmullrom":
+        if resample == "catmullrom":
             return np.where(
                 ax < 1,
                 ((a + 2) * ax - (a + 3)) * ax * ax + 1,
@@ -112,26 +112,28 @@ def exact_resize_float() -> Callable[[np.ndarray, int, int, ResizeFilter], np.nd
 
     support = {"box": 0.5, "bilinear": 1.0, "catmullrom": 2.0, "lanczos3": 3.0}
 
-    def matrix(n_in: int, n_out: int, filter: ResizeFilter) -> np.ndarray:
+    def matrix(n_in: int, n_out: int, resample: ResizeFilter) -> np.ndarray:
         scale = n_in / n_out
         ks = max(scale, 1.0)
         m = np.zeros((n_out, n_in))
         for o in range(n_out):
             center = (o + 0.5) * scale
-            lo = max(0, math.floor(center - support[filter] * ks))
-            hi = min(n_in, math.ceil(center + support[filter] * ks))
-            weights = kernel((np.arange(lo, hi) - (center - 0.5)) / ks, filter)
+            lo = max(0, math.floor(center - support[resample] * ks))
+            hi = min(n_in, math.ceil(center + support[resample] * ks))
+            weights = kernel((np.arange(lo, hi) - (center - 0.5)) / ks, resample)
             m[o, lo:hi] = weights / weights.sum()
         return m
 
-    def resize(image: np.ndarray, oh: int, ow: int, filter: ResizeFilter) -> np.ndarray:
+    def resize(
+        image: np.ndarray, oh: int, ow: int, resample: ResizeFilter
+    ) -> np.ndarray:
         planes = (
             [image]
             if image.ndim == 2
             else [image[..., c] for c in range(image.shape[2])]
         )
-        rows = matrix(image.shape[0], oh, filter)
-        cols = matrix(image.shape[1], ow, filter).T
+        rows = matrix(image.shape[0], oh, resample)
+        cols = matrix(image.shape[1], ow, resample).T
         out = [rows @ p.astype(float) @ cols for p in planes]
         return out[0] if image.ndim == 2 else np.stack(out, axis=-1)
 
@@ -144,8 +146,10 @@ def exact_resize_u8(
 ) -> Callable[[np.ndarray, int, int, ResizeFilter], np.ndarray]:
     """`exact_resize_float` rounded half up and clamped to the uint8 range."""
 
-    def resize(image: np.ndarray, oh: int, ow: int, filter: ResizeFilter) -> np.ndarray:
-        exact = exact_resize_float(image, oh, ow, filter)
+    def resize(
+        image: np.ndarray, oh: int, ow: int, resample: ResizeFilter
+    ) -> np.ndarray:
+        exact = exact_resize_float(image, oh, ow, resample)
         return np.clip(np.floor(exact + 0.5), 0, 255)
 
     return resize

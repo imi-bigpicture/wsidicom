@@ -23,7 +23,7 @@ impl TileGrid {
     fn new(tiles: &[Bound<'_, PyAny>], grid_width: usize) -> PyResult<TileGrid> {
         if grid_width == 0 || tiles.is_empty() || !tiles.len().is_multiple_of(grid_width) {
             return Err(PyValueError::new_err(
-                "tiles must fill whole grid rows of grid_width tiles",
+                "Tiles must fill whole grid rows of grid_width tiles.",
             ));
         }
         let tile_dims = tiles.iter().map(image_dims).collect::<PyResult<Vec<_>>>()?;
@@ -41,8 +41,8 @@ impl TileGrid {
                 || tile_channels != channels
             {
                 return Err(PyValueError::new_err(
-                    "every tile must share its grid row's height, its grid column's width \
-                     and the channel count",
+                    "Every tile must share its grid row's height, its grid column's width \
+                     and the channel count.",
                 ));
             }
         }
@@ -67,7 +67,7 @@ fn tile_samples<'py, T: Element>(
         .iter()
         .map(|tile| {
             let array = tile.cast::<PyArrayDyn<T>>().map_err(|_| {
-                PyValueError::new_err("every tile must have the first tile's dtype")
+                PyValueError::new_err("Every tile must have the first tile's dtype.")
             })?;
             read_only(array)
         })
@@ -125,10 +125,10 @@ impl<T: Element + Copy> Frame<T> {
         };
         let samples = fill
             .cast::<PyArrayDyn<T>>()
-            .map_err(|_| PyValueError::new_err("fill must have the tiles' dtype"))?;
+            .map_err(|_| PyValueError::new_err("Fill must have the tiles' dtype."))?;
         if samples.shape() != [channels] {
             return Err(PyValueError::new_err(
-                "fill must be a (C,) array: one value per channel",
+                "Fill must be a (C,) array: one value per channel.",
             ));
         }
         let fill = c_samples(&read_only(samples)?, "fill")?.to_vec();
@@ -148,7 +148,7 @@ impl<T: Element + Copy> Frame<T> {
     ) -> PyResult<(usize, usize)> {
         if self.height < reduced_height || self.width < reduced_width {
             return Err(PyValueError::new_err(
-                "size must be at least the reduced grid's",
+                "Size must be at least the reduced grid's.",
             ));
         }
         Ok((self.height, self.width))
@@ -206,7 +206,7 @@ pub(crate) fn box_grid<T: BoxSample>(
     let reads = tile_samples::<T>(tiles)?;
     let srcs = reads
         .iter()
-        .map(|read| c_samples(read, "tile"))
+        .map(|read| c_samples(read, "Tile"))
         .collect::<PyResult<Vec<_>>>()?;
     let (tile_dims, channels) = (&grid.tile_dims, grid.channels);
     let grid_rows = grid.row_heights.len();
@@ -216,7 +216,7 @@ pub(crate) fn box_grid<T: BoxSample>(
             || (grid_col + 1 < grid_width && tile_width % factor != 0)
         {
             return Err(PyValueError::new_err(
-                "inner tiles must divide by the factor",
+                "Inner tiles must divide by the factor.",
             ));
         }
     }
@@ -296,13 +296,13 @@ pub(crate) fn framed<T: Sample>(
 ) -> PyResult<Py<PyAny>> {
     let (height, width, channels) = image_dims(image)?;
     let frame = Frame::<T>::new(size, fill, channels)?
-        .ok_or_else(|| PyValueError::new_err("size is required"))?;
+        .ok_or_else(|| PyValueError::new_err("Size is required."))?;
     let (frame_height, frame_width) = frame.size_around((height, width))?;
     let array = image
         .cast::<PyArrayDyn<T>>()
-        .map_err(|_| PyValueError::new_err("image must have fill's dtype"))?;
+        .map_err(|_| PyValueError::new_err("Image must have fill's dtype."))?;
     let read = read_only(array)?;
-    let src = c_samples(&read, "image")?;
+    let src = c_samples(&read, "Image")?;
     let out = py.detach(|| {
         let mut out = crate::cpu::unwritten_output::<T>(frame_height * frame_width * channels);
         // SAFETY: `out` holds the frame and `size_around` checked that the
@@ -328,7 +328,7 @@ pub(crate) fn stitch_grid<T: Sample>(
     let reads = tile_samples::<T>(tiles)?;
     let srcs = reads
         .iter()
-        .map(|read| c_samples(read, "tile"))
+        .map(|read| c_samples(read, "Tile"))
         .collect::<PyResult<Vec<_>>>()?;
     let (height, width, channels) = (
         grid.row_heights.iter().sum::<usize>(),
