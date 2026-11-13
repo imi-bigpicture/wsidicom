@@ -1,25 +1,27 @@
-//! Exact x2 catmullrom reduction of u8 images. At exactly half size the
-//! catmullrom weights are integers over 256 per axis (renormalized where the
-//! window is clipped at the image edge), so each output is an integer sum
-//! over the samples, divided once and clamped.
+//! Exact x2 catmullrom reduction. At exactly half size the catmullrom weights
+//! are integers over 256 per axis (renormalized where the window is clipped
+//! at the image edge), so each output is an integer sum divided once and
+//! clamped.
 
 #[cfg(target_arch = "aarch64")]
 mod neon;
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
-/// The catmullrom weights at x2 (x 256): output o reads inputs 2o - 3 ..= 2o + 4.
+/// The catmullrom weights at x2 (x 256): output o reads inputs
+/// 2o - 3 ..= 2o + 4.
 const CATMULL_TAPS: [i32; 8] = [-3, -9, 29, 111, 111, 29, -9, -3];
 
-/// The catmullrom window of output `output` along an axis of `axis_len`
-/// inputs, clipped.
+/// The first input and the weights of output `output`'s window, clipped to an
+/// axis of `axis_len` inputs.
 fn catmull_window(output: usize, axis_len: usize) -> (usize, &'static [i32]) {
-    let lo = 2 * output as isize - 3;
-    let start = lo.max(0) as usize;
-    let end = ((lo + 8) as usize).min(axis_len);
+    let unclipped_start = 2 * output as isize - 3;
+    let start = unclipped_start.max(0) as usize;
+    let end = ((unclipped_start + 8) as usize).min(axis_len);
     (
         start,
-        &CATMULL_TAPS[(start as isize - lo) as usize..(end as isize - lo) as usize],
+        &CATMULL_TAPS[(start as isize - unclipped_start) as usize
+            ..(end as isize - unclipped_start) as usize],
     )
 }
 
@@ -48,50 +50,61 @@ pub(crate) fn catmull_x2_scalar(
     height: usize,
     channels: usize,
 ) -> Vec<u8> {
-    let (ow, oh, ws) = (width / 2, height / 2, width * channels);
-    let mut out = vec![0u8; ow * oh * channels];
-    let mut sums = vec![0i64; ws];
-    for y in 0..oh {
-        let (r0, wv) = catmull_window(y, height);
+    let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
+    let mut out = vec![0u8; out_width * out_height * channels];
+    let mut sums = vec![0i64; row_samples];
+    for y in 0..out_height {
+        let (first_row, vertical_weights) = catmull_window(y, height);
         for (x, sum) in sums.iter_mut().enumerate() {
-            *sum = wv
+            *sum = vertical_weights
                 .iter()
                 .enumerate()
-                .map(|(tap, &weight)| i64::from(weight) * i64::from(src[(r0 + tap) * ws + x]))
+                .map(|(tap, &weight)| {
+                    i64::from(weight) * i64::from(src[(first_row + tap) * row_samples + x])
+                })
                 .sum();
         }
-        let zv: i64 = wv.iter().map(|&weight| i64::from(weight)).sum();
+        let vertical_total: i64 = vertical_weights
+            .iter()
+            .map(|&weight| i64::from(weight))
+            .sum();
         catmull_row_scalar(
             &sums,
             channels,
             width,
-            zv,
-            0..ow,
-            &mut out[y * ow * channels..(y + 1) * ow * channels],
+            vertical_total,
+            0..out_width,
+            &mut out[y * out_width * channels..(y + 1) * out_width * channels],
         );
     }
     out
 }
 
-/// Outputs `outputs` of a row of vertical sums (weight total `zv`).
+/// Outputs `outputs` of a row of vertical sums.
 fn catmull_row_scalar(
     sums: &[i64],
     channels: usize,
     width: usize,
-    zv: i64,
+    vertical_total: i64,
     outputs: std::ops::Range<usize>,
     dst: &mut [u8],
 ) {
     for output in outputs {
-        let (x0, wh) = catmull_window(output, width);
-        let denominator = zv * wh.iter().map(|&weight| i64::from(weight)).sum::<i64>();
-        for ch in 0..channels {
-            let numerator: i64 = wh
+        let (first_column, horizontal_weights) = catmull_window(output, width);
+        let denominator = vertical_total
+            * horizontal_weights
+                .iter()
+                .map(|&weight| i64::from(weight))
+                .sum::<i64>();
+        for channel in 0..channels {
+            let numerator: i64 = horizontal_weights
                 .iter()
                 .enumerate()
-                .map(|(tap, &weight)| i64::from(weight) * sums[(x0 + tap) * channels + ch])
+                .map(|(tap, &weight)| {
+                    i64::from(weight) * sums[(first_column + tap) * channels + channel]
+                })
                 .sum();
-            dst[output * channels + ch] = divide_rounded_clamped(numerator, denominator);
+            dst[output * channels + channel] = divide_rounded_clamped(numerator, denominator);
         }
     }
 }
@@ -107,15 +120,14 @@ pub(crate) fn catmull_x2(src: &[u8], width: usize, height: usize, channels: usiz
     {
         if crate::cpu::has_avx2_fma() {
             // SAFETY: avx2 and fma detected; src holds width * height *
-            // channels samples, width and height even (the exact kernel's
-            // condition), channels 1 or 3 (checked).
+            // channels samples, width and height even, channels 1 or 3
+            // (checked).
             return unsafe { x86::catmull_x2_avx2(src, width, height, channels) };
         }
     }
     #[cfg(target_arch = "aarch64")]
     if crate::cpu::use_neon() {
-        // SAFETY: NEON is baseline on aarch64; src holds width * height *
-        // channels samples.
+        // SAFETY: src holds width * height * channels samples.
         return unsafe { neon::catmull_x2_neon(src, width, height, channels) };
     }
     catmull_x2_scalar(src, width, height, channels)
@@ -127,9 +139,9 @@ mod tests {
     use crate::exact::tests::{assert_equals_reference, size_grid};
     use crate::testing::CHANNELS;
 
-    /// Even widths around the kernel's step and its scalar fallback, the
-    /// clipped edge windows (3 input pixels each side) and the vector tails;
-    /// even heights from one output row (both edges clipped) up.
+    /// Even widths around the SIMD steps and the scalar fallback, the clipped
+    /// edge windows (3 input pixels each side) and the vector tails; even
+    /// heights from one output row (both edges clipped) up.
     pub(super) const WIDTHS: [usize; 22] = [
         2, 4, 6, 8, 10, 12, 16, 20, 24, 28, 32, 34, 36, 40, 62, 64, 66, 70, 128, 130, 134, 262,
     ];

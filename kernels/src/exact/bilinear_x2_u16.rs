@@ -1,14 +1,12 @@
-//! Exact x2 bilinear reduction of uint16 images: the uint8 kernel's integer
-//! arithmetic (`bilinear_x2`) in 32-bit lanes. Vertical sums reach 8 x 65535
-//! and the window's sum 64 x 65535, so every lane is i32.
+//! Exact x2 bilinear reduction of uint16 images: `bilinear_x2`'s arithmetic
+//! in 32-bit lanes (the window's sum reaches 64 x 65535).
 
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
 use super::bilinear_x2::bilinear_x2_scalar;
 
-/// The exact x2 bilinear reduction of a uint16 image (each tier computes the
-/// same result).
+/// Each tier computes the same result.
 pub(crate) fn bilinear_x2_u16(
     src: &[u16],
     width: usize,
@@ -35,8 +33,7 @@ pub(crate) fn bilinear_x2_u16(
     }
     #[cfg(target_arch = "aarch64")]
     if crate::cpu::use_neon() {
-        // SAFETY: NEON is baseline on aarch64; src holds width * height *
-        // channels samples.
+        // SAFETY: src holds width * height * channels samples.
         return unsafe {
             super::bilinear_x2::neon::bilinear_x2_u16_neon(src, width, height, channels)
         };
@@ -50,8 +47,8 @@ mod tests {
     use crate::exact::tests::{assert_equals_reference, size_grid};
     use crate::testing::CHANNELS;
 
-    /// Even widths around the one-channel kernel's 8-pixel step and the
-    /// interleaved kernels' 4-pixel step and their scalar fallbacks.
+    /// Even widths around the gray kernel's 8-pixel step, the RGB kernel's
+    /// 4-pixel step and their scalar fallbacks.
     pub(super) const WIDTHS: [usize; 16] =
         [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 34, 36, 38, 66, 130];
     pub(super) const HEIGHTS: [usize; 5] = [2, 4, 6, 8, 12];

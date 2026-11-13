@@ -1,8 +1,8 @@
 //! The NEON kernel of the exact x2 bilinear enlargement.
 //!
 //! # Safety
-//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
-//! Every `unsafe fn` here requires the bounds its doc states.
+//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch;
+//! every `unsafe fn` here requires the bounds its doc states.
 
 use std::arch::aarch64::{
     uint8x16_t, uint8x16x3_t, uint16x8_t, vaddw_u8, vcombine_u8, vdup_n_u8, vget_high_u8,
@@ -13,15 +13,12 @@ use std::arch::aarch64::{
 use super::{far, horizontal_scalar};
 
 /// Input pixels per horizontal step: 16 output pixels.
-const STEP_PX: usize = 8;
+const STEP_PIXELS: usize = 8;
 
-/// The NEON kernel. Per output row: the vertical sums `3 near + far` (u16,
-/// at most 4 x 255) with the row's first and last pixel repeated once
-/// outside it — the scalar reference's clamped far tap, so every input pixel
-/// m gives outputs 2m and 2m + 1 by the same formula, `(3 s[m] + s[m - 1] +
-/// 8) >> 4` and `(3 s[m] + s[m + 1] + 8) >> 4` (`vrshrn` by 4), per channel
-/// plane (`vld1`/`vld3`), interleaved by `vzip`. Pixels past the last
-/// whole step by the scalar reference.
+/// Per output row the vertical sums `3 near + far`, with the row's first and
+/// last pixel repeated once outside it (the scalar reference's clamped far
+/// tap), so every input pixel gives its two outputs by `enlarged`. Pixels
+/// past the last whole step by the scalar reference.
 ///
 /// # Safety
 /// `src` holds `width * height * channels` samples, `channels` 1 or 3.
@@ -32,30 +29,36 @@ pub(crate) unsafe fn bilinear_up2_neon(
     height: usize,
     channels: usize,
 ) -> Vec<u8> {
-    let (ow, oh, ws) = (2 * width, 2 * height, width * channels);
+    let (out_width, out_height, row_samples) = (2 * width, 2 * height, width * channels);
     debug_assert!(src.len() >= width * height * channels);
-    let mut out_buf = crate::cpu::unwritten_output::<u8>(ow * oh * channels);
+    let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
     // SAFETY: u8 has no invalid values; every sample is written below before
     // the vector is returned.
     let out = unsafe {
-        std::slice::from_raw_parts_mut(out_buf.as_mut_ptr().cast::<u8>(), ow * oh * channels)
+        std::slice::from_raw_parts_mut(
+            out_buf.as_mut_ptr().cast::<u8>(),
+            out_width * out_height * channels,
+        )
     };
-    // The vertical sums with one pixel before and after the row.
-    let mut sums = vec![0u16; ws + 2 * channels];
-    let steps = width / STEP_PX;
-    for y in 0..oh {
-        let (near, far) = (&src[y / 2 * ws..][..ws], &src[far(y, height) * ws..][..ws]);
-        let row_sums = &mut sums[channels..channels + ws];
+    // A pixel before and after the row.
+    let mut sums = vec![0u16; row_samples + 2 * channels];
+    let steps = width / STEP_PIXELS;
+    for y in 0..out_height {
+        let (near, far) = (
+            &src[y / 2 * row_samples..][..row_samples],
+            &src[far(y, height) * row_samples..][..row_samples],
+        );
+        let row_sums = &mut sums[channels..channels + row_samples];
         vertical_sums(near, far, row_sums);
-        // The edge pixels repeated before and after the row.
         sums.copy_within(channels..2 * channels, 0);
-        sums.copy_within(ws..ws + channels, ws + channels);
-        let dst = &mut out[y * ow * channels..(y + 1) * ow * channels];
+        sums.copy_within(row_samples..row_samples + channels, row_samples + channels);
+        let dst = &mut out[y * out_width * channels..(y + 1) * out_width * channels];
         let sums_ptr = sums.as_ptr();
         for step in 0..steps {
-            let first = step * STEP_PX;
-            // SAFETY: first + 8 <= width: the loads read sums pixels first .. first + 10
-            // (the lead pixel at 0), the store output pixels 2 first .. 2 first + 16.
+            let first = step * STEP_PIXELS;
+            // SAFETY: first + 8 <= width: the loads read sums pixels first ..
+            // first + 10 (the lead pixel at 0), the store output pixels
+            // 2 first .. 2 first + 16.
             unsafe {
                 let at = |pixel: usize| sums_ptr.add(pixel * channels);
                 let dst_ptr = dst.as_mut_ptr().add(2 * first * channels);
@@ -76,10 +79,10 @@ pub(crate) unsafe fn bilinear_up2_neon(
             }
         }
         horizontal_scalar(
-            &sums[channels..channels + ws],
+            &sums[channels..channels + row_samples],
             channels,
             width,
-            2 * steps * STEP_PX..ow,
+            2 * steps * STEP_PIXELS..out_width,
             dst,
         );
     }
@@ -87,7 +90,7 @@ pub(crate) unsafe fn bilinear_up2_neon(
     unsafe { crate::cpu::written_output(out_buf) }
 }
 
-/// `sums[x] = 3 near[x] + far[x]`: 16 samples per step; scalar tail.
+/// `sums[x] = 3 near[x] + far[x]`.
 #[target_feature(enable = "neon")]
 fn vertical_sums(near: &[u8], far: &[u8], sums: &mut [u16]) {
     const BLOCK: usize = 16;
