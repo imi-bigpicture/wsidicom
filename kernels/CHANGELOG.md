@@ -17,5 +17,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `downscale_grid`, reducing a grid of tiles into one image, optionally into a
   filled frame of a given size.
 - `resize`, resampling an image to any size.
-- `rgb_to_rgbx`, expanding RGB to 4-byte RGBX.
 - `ResizeFilter`, the antialiasing filters of `downscale` and `resize`.

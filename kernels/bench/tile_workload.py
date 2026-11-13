@@ -2,8 +2,8 @@
 
 Each "request" builds a 2048x2048 RGB image from tiles overlapping by one
 pixel, then serves it two common ways:
-  - thumbnail: compose to RGB, downscale 2x (box), expand to RGBX for Pillow
-  - full size: compose straight into an RGBX canvas (fused expand)
+  - thumbnail: compose to RGB, downscale 2x (box)
+  - full size: compose to RGB
 with fresh output buffers per request, as a naive service would allocate
 them (page faults on those buffers are about half the request time; see the
 README's performance notes — this driver deliberately keeps that cost in).
@@ -20,7 +20,6 @@ from wsidicom_kernels import (
     ResizeFilter,
     compose,
     downscale,
-    rgb_to_rgbx,
 )
 
 REGION = 2048
@@ -45,10 +44,10 @@ def request(t):
     tiles, pos = SETS[t]
     rgb = np.empty((REGION, REGION, 3), np.uint8)
     compose(rgb, tiles, pos)
-    thumb = rgb_to_rgbx(downscale(rgb, 2, ResizeFilter.BOX))
-    rgbx = np.empty((REGION, REGION, 4), np.uint8)
-    compose(rgbx, tiles, pos)
-    return thumb, rgbx
+    thumb = downscale(rgb, 2, ResizeFilter.BOX)
+    full = np.empty((REGION, REGION, 3), np.uint8)
+    compose(full, tiles, pos)
+    return thumb, full
 
 
 if __name__ == "__main__":

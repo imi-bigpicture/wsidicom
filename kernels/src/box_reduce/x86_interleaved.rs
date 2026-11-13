@@ -1,5 +1,4 @@
-//! Interleaved (HWC) box kernels for RGB and 4-sample pixels, including
-//! RGB -> RGBX.
+//! Interleaved (HWC) box kernels for RGB and 4-sample pixels.
 //!
 //! # Safety
 //! Every kernel requires the CPU features in its `#[target_feature]` (its
@@ -213,100 +212,6 @@ fn prefetch_next_row_pair<T>(sp: *const T, at: usize, stride: usize) {
         _mm_prefetch::<_MM_HINT_T0>(next as *const i8);
         _mm_prefetch::<_MM_HINT_T0>(next.wrapping_add(stride) as *const i8);
     }
-}
-
-/// AVX2 uint8 HWC 2x2 box, RGB (3 samples) in -> RGBX (4 samples) out, fused.
-///
-/// Same exact `box_sum4_u8` as the 3-channel kernel; only the shuffle and store
-/// differ. `hh[k]` holds the horizontally-averaged value of source element
-/// `src_offset+k`, so output pixel `m` of this iteration lives at
-/// `hh[6m .. 6m+3]`. Those land in lane 0 for m=0..2 and lane 1 for m=3..4, giving 5 output pixels per
-/// iteration -- picked straight into 4-byte slots with the padding sample OR'd
-/// in, so the expand costs nothing beyond the store it already had to do.
-///
-/// # Safety
-/// The CPU supports AVX2, and `src.len() >= width * height * 3`.
-#[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_u8_hwc3to4_avx2(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    pad: u8,
-) -> (Vec<u8>, usize, usize) {
-    use std::arch::x86_64::*;
-    const IN_CHANNELS: usize = 3;
-    const OUT_CHANNELS: usize = 4;
-    let (ow, oh) = (width / 2, height / 2);
-    let (stride, ostride) = (width * IN_CHANNELS, ow * OUT_CHANNELS);
-    let mut out = unwritten_output::<u8>(oh * ostride);
-    let olen = oh * ostride;
-    let (sp, dp) = (src.as_ptr(), out.as_mut_ptr().cast::<u8>());
-    // lane0: m=0,1,2 at hh 0..2, 6..8, 12..14; lane1: m=3,4 at local 2..4, 8..10
-    let mask = _mm256_setr_epi8(
-        0, 1, 2, -1, 6, 7, 8, -1, 12, 13, 14, -1, -1, -1, -1, -1, //
-        2, 3, 4, -1, 8, 9, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    );
-    let padv = rgbx_pad_lanes(pad);
-    let rows = crate::cpu::row_bands(|oy_lo, oy_hi| {
-        for oy in oy_lo..oy_hi {
-            let (r0, r1) = (2 * oy * stride, (2 * oy + 1) * stride);
-            let orow = oy * ostride;
-            let mut ox = 0usize;
-            // Lane 0 writes 12 valid bytes, lane 1 the next 8; the next iteration
-            // starts exactly at +20, so the store slop is overwritten.
-            while ox + 5 <= ow
-                && 2 * ox * IN_CHANNELS + IN_CHANNELS + 32 <= stride
-                && orow + ox * OUT_CHANNELS + 28 <= olen
-            {
-                let src_offset = 2 * ox * IN_CHANNELS;
-                // SAFETY: offset <= IN_CHANNELS, so the 32 bytes stay
-                // within the guard's src_offset + IN_CHANNELS + 32 <= stride of
-                // source rows 2oy, 2oy + 1 < height, inside `src`.
-                let ld = |offset: usize| unsafe {
-                    _mm256_loadu_si256(sp.add(r0 + src_offset + offset) as *const __m256i)
-                };
-                // SAFETY: as `ld`, in source row 2oy + 1.
-                let ld1 = |offset: usize| unsafe {
-                    _mm256_loadu_si256(sp.add(r1 + src_offset + offset) as *const __m256i)
-                };
-                let hh = box_sum4_u8(ld(0), ld1(0), ld(IN_CHANNELS), ld1(IN_CHANNELS));
-                let compacted = _mm256_or_si256(_mm256_shuffle_epi8(hh, mask), padv);
-                let out_at = orow + ox * OUT_CHANNELS;
-                // SAFETY: out_at + 28 <= olen (the guard), so both stores are
-                // inside `out`.
-                unsafe {
-                    _mm_storeu_si128(
-                        dp.add(out_at) as *mut __m128i,
-                        _mm256_castsi256_si128(compacted),
-                    );
-                    _mm_storeu_si128(
-                        dp.add(out_at + 12) as *mut __m128i,
-                        _mm256_extracti128_si256(compacted, 1),
-                    );
-                }
-                ox += 5;
-            }
-            while ox < ow {
-                let top_left = r0 + 2 * ox * IN_CHANNELS;
-                // SAFETY: ox < ow: the output pixel is in row oy, and its 2x2
-                // block (pixels 2ox, 2ox + 1 < width of rows 2oy, 2oy + 1 <
-                // height) in `src`.
-                unsafe {
-                    for ch in 0..IN_CHANNELS {
-                        *dp.add(orow + ox * OUT_CHANNELS + ch) =
-                            box2_mean(sp.add(top_left + ch), IN_CHANNELS, stride);
-                    }
-                    *dp.add(orow + ox * OUT_CHANNELS + 3) = pad;
-                }
-                ox += 1;
-            }
-        }
-    });
-    // SAFETY: `out` is this function's; `rows(oy_lo, oy_hi)` writes only
-    // output rows [oy_lo, oy_hi), plus store slop inside the buffer.
-    unsafe { crate::cpu::with_prefault(dp, olen, ostride, oh, rows) };
-    // SAFETY: every row's body and tail wrote all of it.
-    (unsafe { written_output(out) }, ow, oh)
 }
 
 /// AVX2 uint8 HWC 2x2 box, 4 channels (RGBX): one pixel = 4 bytes = one dword, so a
@@ -809,8 +714,7 @@ fn quad_columns_mask(channels: usize) -> [u8; 32] {
 /// or 8 (`levels` 3) in one pass, with the planar pyramid's rounding: exact
 /// 4x4 means ((sum + 8) >> 4, as `box4x_u8_avx2`), and for 8x the exact 2x2
 /// mean of those ((sum + 2) >> 2, as `box2x`) — so every channel equals that
-/// channel reduced as a planar image. With `pad`, RGB in -> RGBX out (`pad`
-/// in X).
+/// channel reduced as a planar image.
 ///
 /// Each 128-bit lane reads one 4-pixel block per row (RGB: 12 of its 16
 /// bytes), groups each channel's columns with one pshufb and sums them with
@@ -820,8 +724,7 @@ fn quad_columns_mask(channels: usize) -> [u8; 32] {
 /// output bytes.
 ///
 /// # Safety
-/// The CPU supports AVX2, `channels` is 3 or 4 (3 with `pad`), `levels` 2 or
-/// 3, and `src.len() >= width * height * channels`. (The vector blocks check
+/// The CPU supports AVX2, `channels` is 3 or 4, `levels` 2 or 3, and `src.len() >= width * height * channels`. (The vector blocks check
 /// their reads against `src.len()`; the scalar tail relies on the bound.)
 #[target_feature(enable = "avx2")]
 pub(crate) unsafe fn box_reduce_u8_hwc_avx2(
@@ -829,18 +732,12 @@ pub(crate) unsafe fn box_reduce_u8_hwc_avx2(
     (width, height): (usize, usize),
     channels: usize,
     levels: u32,
-    pad: Option<u8>,
 ) -> (Vec<u8>, usize, usize) {
     use std::arch::x86_64::*;
-    debug_assert!(
-        (channels == RGB || channels == RGBX)
-            && (2..=3).contains(&levels)
-            && (pad.is_none() || channels == RGB)
-    );
+    debug_assert!((channels == RGB || channels == RGBX) && (2..=3).contains(&levels));
     let factor = 1usize << levels;
-    let out_channels = if pad.is_some() { RGBX } else { channels };
     let (ow, oh) = (width / factor, height / factor);
-    let (stride, ostride) = (width * channels, ow * out_channels);
+    let (stride, ostride) = (width * channels, ow * channels);
     let mut out = unwritten_output::<u8>(oh * ostride);
     let olen = out.len();
     let lane_bytes = if channels == RGB { 12 } else { 16 };
@@ -851,11 +748,7 @@ pub(crate) unsafe fn box_reduce_u8_hwc_avx2(
     let reg = (factor / 2) * lane_bytes;
     let step_px = 8;
     let reads = 4 * reg + (16 - lane_bytes);
-    let store_reach = if channels == RGB && pad.is_none() {
-        28
-    } else {
-        32
-    };
+    let store_reach = if channels == RGB { 28 } else { 32 };
     // SAFETY: the mask is 32 bytes.
     let mask =
         unsafe { _mm256_loadu_si256(quad_columns_mask(channels).as_ptr() as *const __m256i) };
@@ -867,7 +760,6 @@ pub(crate) unsafe fn box_reduce_u8_hwc_avx2(
         0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, -1, -1, -1, -1, //
         0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, -1, -1, -1, -1,
     );
-    let pad_lanes = rgbx_pad_lanes(pad.unwrap_or(0));
     let (sp, dp) = (src.as_ptr(), out.as_mut_ptr().cast::<u8>());
     let rows = crate::cpu::row_bands(|oy_lo, oy_hi| {
         for oy in oy_lo..oy_hi {
@@ -924,7 +816,7 @@ pub(crate) unsafe fn box_reduce_u8_hwc_avx2(
             // or row.
             let fits = |ox: usize| {
                 (factor * oy + factor - 1) * stride + factor * ox * channels + reads <= src.len()
-                    && orow + ox * out_channels + store_reach <= olen
+                    && orow + ox * channels + store_reach <= olen
             };
             // Only called at an ox `fits` passed.
             let block = |ox: usize| {
@@ -932,16 +824,11 @@ pub(crate) unsafe fn box_reduce_u8_hwc_avx2(
                 let low = _mm256_packus_epi32(means(x), means(x + reg));
                 let high = _mm256_packus_epi32(means(x + 2 * reg), means(x + 3 * reg));
                 let px = _mm256_permutevar8x32_epi32(_mm256_packus_epi16(low, high), lane_order);
-                // SAFETY: `fits(ox)`: the stores end by orow + ox * out_channels
+                // SAFETY: `fits(ox)`: the stores end by orow + ox * channels
                 // + store_reach <= olen, inside `out`.
                 unsafe {
-                    let out_ptr = dp.add(orow + ox * out_channels);
-                    if pad.is_some() {
-                        _mm256_storeu_si256(
-                            out_ptr as *mut __m256i,
-                            _mm256_or_si256(px, pad_lanes),
-                        );
-                    } else if channels == RGB {
+                    let out_ptr = dp.add(orow + ox * channels);
+                    if channels == RGB {
                         let rgb = _mm256_shuffle_epi8(px, rgbx_to_rgb);
                         _mm_storeu_si128(out_ptr as *mut __m128i, _mm256_castsi256_si128(rgb));
                         _mm_storeu_si128(
@@ -985,11 +872,7 @@ pub(crate) unsafe fn box_reduce_u8_hwc_avx2(
                         (quad(0, x0) + quad(0, x0 + 4) + quad(4, x0) + quad(4, x0 + 4) + 2) >> 2
                     };
                     // SAFETY: ox < ow: the sample is in row oy of `out`.
-                    unsafe { *dp.add(orow + ox * out_channels + ch) = mean as u8 };
-                }
-                if let Some(pad) = pad {
-                    // SAFETY: as above (out_channels is 4 with `pad`).
-                    unsafe { *dp.add(orow + ox * out_channels + 3) = pad };
+                    unsafe { *dp.add(orow + ox * channels + ch) = mean as u8 };
                 }
                 ox += 1;
             }
@@ -1007,8 +890,7 @@ mod tests {
     use super::*;
     use crate::box_reduce::box2x_interleaved;
     use crate::box_reduce::tests::{
-        BoxTestSample, assert_same_image, box_sizes, interleaved_pyramid_reference, rgb_to_rgbx,
-        test_images,
+        BoxTestSample, assert_same_image, box_sizes, interleaved_pyramid_reference, test_images,
     };
     use crate::cpu::{LARGE_OUTPUT_BYTES, PREFAULT_OUTPUT_BYTES};
     use crate::testing::{Rng, UnsafeImageKernel, random_samples};
@@ -1077,46 +959,19 @@ mod tests {
         }
     }
 
-    #[test]
-    fn box2x_rgb_to_rgbx_avx2_equals_the_scalar_halving_padded() {
-        if !avx2_detected() {
-            return;
-        }
-        let mut rng = Rng::new(21);
-        for pad in [0, 0x5A, u8::MAX] {
-            for (width, height) in box_sizes(1) {
-                for src in test_images::<u8>(&mut rng, width * height * RGB) {
-                    let (rgb, ow, oh) = box2x_interleaved(&src, width, height, RGB);
-                    // SAFETY: AVX2 is available; src holds width * height RGB
-                    // pixels.
-                    let simd = unsafe { box2x_u8_hwc3to4_avx2(&src, width, height, pad) };
-                    assert_same_image(
-                        &simd,
-                        &(rgb_to_rgbx(&rgb, pad), ow, oh),
-                        &format!("pad {pad}, {width} x {height}"),
-                    );
-                }
-            }
-        }
-    }
-
-    /// The fused u8 reduction (`levels`, `channels`, `pad`) against each
-    /// channel reduced by the planar pyramid reference, padded.
-    fn assert_fused_u8_equals_planar_pyramid(channels: usize, levels: u32, pad: Option<u8>) {
+    /// The fused u8 reduction (`levels`, `channels`) against each channel
+    /// reduced by the planar pyramid reference.
+    fn assert_fused_u8_equals_planar_pyramid(channels: usize, levels: u32) {
         let mut rng = Rng::new(22);
         for (width, height) in box_sizes(1) {
             for src in test_images::<u8>(&mut rng, width * height * channels) {
-                let reference =
+                let expected =
                     interleaved_pyramid_reference(&src, (width, height, channels), levels);
-                let expected = match pad {
-                    Some(pad) => (rgb_to_rgbx(&reference.0, pad), reference.1, reference.2),
-                    None => reference,
-                };
                 // SAFETY: AVX2 is available (the callers check); channels is 3
-                // or 4 (3 with a pad), levels 2 or 3; src holds the image.
+                // or 4, levels 2 or 3; src holds the image.
                 let simd =
-                    unsafe { box_reduce_u8_hwc_avx2(&src, (width, height), channels, levels, pad) };
-                let context = format!("{levels} levels, {width} x {height} x {channels}, {pad:?}");
+                    unsafe { box_reduce_u8_hwc_avx2(&src, (width, height), channels, levels) };
+                let context = format!("{levels} levels, {width} x {height} x {channels}");
                 assert_same_image(&simd, &expected, &context);
             }
         }
@@ -1128,9 +983,8 @@ mod tests {
             return;
         }
         for levels in [2, 3] {
-            assert_fused_u8_equals_planar_pyramid(RGB, levels, None);
-            assert_fused_u8_equals_planar_pyramid(RGBX, levels, None);
-            assert_fused_u8_equals_planar_pyramid(RGB, levels, Some(0x81));
+            assert_fused_u8_equals_planar_pyramid(RGB, levels);
+            assert_fused_u8_equals_planar_pyramid(RGBX, levels);
         }
     }
 
@@ -1151,14 +1005,8 @@ mod tests {
                     // or 3; both slices hold the image.
                     let (exact, padded) = unsafe {
                         (
-                            box_reduce_u8_hwc_avx2(
-                                &src[..len],
-                                (width, height),
-                                channels,
-                                levels,
-                                None,
-                            ),
-                            box_reduce_u8_hwc_avx2(&src, (width, height), channels, levels, None),
+                            box_reduce_u8_hwc_avx2(&src[..len], (width, height), channels, levels),
+                            box_reduce_u8_hwc_avx2(&src, (width, height), channels, levels),
                         )
                     };
                     src.truncate(len);

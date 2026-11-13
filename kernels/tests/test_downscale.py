@@ -12,11 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Tests for downscale: box reduction, box pyramids, RGBX output and filters.
+"""Tests for downscale: box reduction, box pyramids and filters.
 
 The box reduction against the true mean, the box pyramids' interleaved/planar
-and SIMD/scalar agreement, the fused RGB to RGBX output, and antialiasing of
-every filter when minifying.
+and SIMD/scalar agreement, and antialiasing of every filter when minifying.
 """
 
 import contextlib
@@ -25,7 +24,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from wsidicom_kernels import ResizeFilter, downscale, resize, rgb_to_rgbx
+from wsidicom_kernels import ResizeFilter, downscale, resize
 
 RandomImage = Callable[[tuple[int, ...], Any], np.ndarray]
 ScalarKernels = Callable[[], contextlib.AbstractContextManager[None]]
@@ -47,12 +46,6 @@ def is_integer(dtype: type[np.generic]) -> bool:
 
 
 @pytest.fixture
-def odd_rgb_image(random_image: RandomImage) -> np.ndarray:
-    """Make a uint8 RGB image of odd size, so the vector body and scalar tail run."""
-    return random_image((67, 91, 3), np.uint8)
-
-
-@pytest.fixture
 def kernels(simd: bool, scalar_kernels: ScalarKernels) -> ScalarKernels:
     """Return a context manager running the SIMD kernels or the scalar reference.
 
@@ -65,83 +58,6 @@ def kernels(simd: bool, scalar_kernels: ScalarKernels) -> ScalarKernels:
 def noise(random_image: RandomImage) -> np.ndarray:
     """White noise: a discriminator between resamplers and interpolators."""
     return random_image((256, 256), np.uint8)
-
-
-@pytest.mark.unittest
-class TestDownscaleToRgbx:
-    """``pad`` reduces RGB straight to RGBX, mapping into Pillow with no copy."""
-
-    @pytest.mark.parametrize("factor", [1, 2, 4])
-    def test_box_pad_equals_box_then_expand(
-        self, odd_rgb_image: np.ndarray, factor: int
-    ) -> None:
-        """Bit-exact with reducing to RGB and expanding after.
-
-        Every box kernel rounds exactly ((sum+2)>>2), vector body and scalar tail
-        alike.
-        """
-        # Act
-        rgb = downscale(odd_rgb_image, factor, ResizeFilter.BOX)
-        rgbx = downscale(odd_rgb_image, factor, ResizeFilter.BOX, pad=255)
-
-        # Assert
-        assert rgbx.shape == (*rgb.shape[:2], 4)
-        assert rgbx.dtype == np.uint8
-        assert (rgbx[..., :3] == rgb).all()
-        assert (rgbx[..., 3] == 255).all()
-
-    @pytest.mark.parametrize("factor", [2, 4, 8])
-    def test_simd_equals_scalar(
-        self, odd_rgb_image: np.ndarray, simd_and_scalar: SimdAndScalar, factor: int
-    ) -> None:
-        """The fused SIMD kernels are bit-exact with the scalar fallback."""
-        # Act
-        simd, scalar = simd_and_scalar(
-            lambda: downscale(odd_rgb_image, factor, ResizeFilter.BOX, pad=255)
-        )
-
-        # Assert
-        assert (simd == scalar).all()
-
-    def test_lanczos_resizes_then_expands(self, odd_rgb_image: np.ndarray) -> None:
-        """A non-box filter resizes to RGB and expands, still 4 samples out."""
-        # Act
-        lanczos = downscale(odd_rgb_image, 2, ResizeFilter.LANCZOS3, pad=7)
-
-        # Assert
-        assert lanczos.shape == (34, 46, 4)
-        assert (lanczos[..., 3] == 7).all()
-
-    def test_fractional_box_resize_expands(self, odd_rgb_image: np.ndarray) -> None:
-        """A fractional box resize expands to RGBX too."""
-        # Act
-        fractional = resize(odd_rgb_image, 21, 30, ResizeFilter.BOX, pad=1)
-
-        # Assert
-        assert fractional.shape == (21, 30, 4)
-        assert (fractional[..., 3] == 1).all()
-
-    @pytest.mark.parametrize(
-        ["unsupported", "message"],
-        [
-            (lambda image: image[..., 0], r"needs a 3-sample \(H, W, 3\) uint8 image"),
-            (lambda image: image.astype(np.uint16), "needs a uint8 image"),
-        ],
-        ids=["planar", "uint16"],
-    )
-    def test_rejects_unsupported_images(
-        self,
-        odd_rgb_image: np.ndarray,
-        unsupported: Callable[[np.ndarray], np.ndarray],
-        message: str,
-    ) -> None:
-        """Planar and non-uint8 images are rejected, not silently mangled."""
-        # Arrange
-        image = unsupported(odd_rgb_image)
-
-        # Act & Assert
-        with pytest.raises(ValueError, match=message):
-            downscale(image, 2, ResizeFilter.BOX, pad=0)
 
 
 @pytest.mark.unittest
@@ -352,41 +268,6 @@ class TestDownscaleBox:
 
         # Assert
         assert np.array_equal(reduced, np.stack(planar, -1))
-
-    @pytest.mark.parametrize(
-        ["height", "width", "factor"],
-        [
-            (height, width, factor)
-            for height, width in BOX_PYRAMID_SIZES
-            for factor in BOX_PYRAMID_FACTORS
-            if height % factor == 0 and width % factor == 0
-        ],
-    )
-    @pytest.mark.parametrize("simd", [True, False])
-    def test_pad_equals_rgbx_of_reduced(
-        self,
-        random_image: RandomImage,
-        kernels: ScalarKernels,
-        height: int,
-        width: int,
-        factor: int,
-    ) -> None:
-        """A uint8 RGB box pyramid with pad= equals the RGB one expanded to RGBX.
-
-        With a whole factor.
-        """
-        # Arrange
-        image = random_image((height, width, 3), np.uint8)
-
-        # Act
-        with kernels():
-            reduced = downscale(image, factor, ResizeFilter.BOX)
-            padded = resize(
-                image, height // factor, width // factor, ResizeFilter.BOX, pad=7
-            )
-
-        # Assert
-        assert (padded == rgb_to_rgbx(reduced, 7)).all()
 
     @pytest.mark.parametrize("dtype", DTYPES)
     @pytest.mark.parametrize("shape", [(129, 131), (65, 67, 3), (65, 67, 4)])

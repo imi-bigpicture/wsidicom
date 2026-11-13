@@ -19,7 +19,6 @@ from wsidicom_kernels import (
     ResizeFilter,
     downscale,
     resize,
-    rgb_to_rgbx,
 )
 
 RUNS = 15
@@ -107,13 +106,4 @@ row(
     lambda: pillow_rgb.resize((1517, 1517), Image.Resampling.LANCZOS),
     None,  # cv2 INTER_LANCZOS4 aliases when minifying — not comparable
     lambda: vips_rgb.resize(1517 / 4096, kernel="lanczos3").numpy(),
-)
-
-
-row(
-    "rgb->rgbx (Pillow handoff)",
-    lambda: rgb_to_rgbx(rgb),
-    lambda: pillow_rgb.im.convert("RGBX"),
-    None,
-    None,
 )

@@ -20,8 +20,6 @@ thumbnails:
 - All resampling is native, on every CPU: uint8 and uint16 within 1 LSB of
   the exact convolution at any ratio, float32 computed in f32 (see
   [What runs where](#what-runs-where)).
-- **`rgb_to_rgbx`** — RGB → 4-byte RGBX for a zero-copy Pillow handoff; `compose`,
-  `downscale` and `resize` can also emit RGBX directly (`pad=`).
 
 Works on **planar `(H, W)`** or **interleaved HWC `(H, W, C)`** arrays, dtype
 `uint8` / `uint16` / `float32`. Planar is the universal core — the only layout
@@ -68,26 +66,6 @@ thumb = downscale(canvas, 4, ResizeFilter.LANCZOS3)  # (256, 256, 3)
 sized = resize(canvas, 300, 400, ResizeFilter.CATMULLROM)  # (300, 400, 3)
 ```
 
-For Pillow, use Pillow's own 4-byte RGBX pixel layout, which Pillow can wrap
-without copying (it reports the mode as `RGBX`; `.convert("RGB")` if you need
-a plain RGB image). wsidicom-kernels can write that layout directly — an `(H, W, 4)`
-uint8 canvas takes RGB tiles, and `downscale` / `resize` take `pad=` — or
-convert an existing RGB array with `rgb_to_rgbx`:
-
-```python
-from PIL import Image
-from wsidicom_kernels import rgb_to_rgbx
-
-# RGB tiles into an RGBX canvas.
-rgbx = np.zeros((1024, 1024, 4), np.uint8)
-compose(rgbx, tiles, positions)
-img = Image.frombuffer("RGB", (1024, 1024), rgbx, "raw", "RGBX", 0, 1)
-
-thumb_rgbx = downscale(canvas, 4, ResizeFilter.BOX, pad=255)  # (256, 256, 4)
-sized_rgbx = resize(canvas, 300, 400, ResizeFilter.BOX, pad=255)  # (300, 400, 4)
-half_rgbx = rgb_to_rgbx(half, pad=255)  # existing RGB array -> (512, 512, 4)
-```
-
 Where tiles overlap, the later one wins. Tiles may hang off the canvas; only
 the pixels inside it are written.
 
@@ -111,10 +89,9 @@ filters and windows.
 
 | Operation | Computed by |
 | --- | --- |
-| `compose`, `stitch` — RGBX canvas included | wsidicom-kernels |
+| `compose`, `stitch` | wsidicom-kernels |
 | `downscale` / `resize` with `"box"` at an exact power-of-2 factor | wsidicom-kernels |
-| `rgb_to_rgbx`, and the RGBX expand behind every `pad=` | wsidicom-kernels |
-| `downscale` / `resize` of **uint8** (RGB also to RGBX with `pad=`), with `box` / `bilinear` / `catmullrom` / `lanczos3` — any ratio up or down | wsidicom-kernels |
+| `downscale` / `resize` of **uint8**, with `box` / `bilinear` / `catmullrom` / `lanczos3` — any ratio up or down | wsidicom-kernels |
 | `nearest`, every dtype (fast_image_resize's sample positions) | wsidicom-kernels |
 | `downscale` / `resize` of **uint16 / float32**, with `box` / `bilinear` / `catmullrom` / `lanczos3` — any ratio (computed in f32; uint16 within 1 LSB of exact) | wsidicom-kernels |
 
@@ -170,9 +147,6 @@ threads (there is no internal compute threading).
   copying tiles into it. A service that composes a large image per request
   can keep a pool of canvases by shape instead of calling `np.empty` each
   time.
-- **Let wsidicom-kernels produce RGBX directly** for Pillow: compose into an
-  `(H, W, 4)` canvas, or `downscale(..., pad=255)`, rather than a separate
-  `rgb_to_rgbx` pass afterwards.
 - **Pass all tiles of an image in one `compose` call**; per-call overhead is
   a few microseconds.
 - **Parallelize with threads**, e.g. one output image per thread: the GIL is
@@ -199,7 +173,7 @@ uv run --all-packages pytest kernels/tests
 ```
 
 One test file per operation (`test_compose`, `test_resize`, `test_downscale`,
-`test_downscale_grid`, `test_rgb_to_rgbx`), plus cross-cutting ones:
+`test_downscale_grid`), plus cross-cutting ones:
 
 | file | checks |
 | --- | --- |

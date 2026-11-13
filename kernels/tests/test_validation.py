@@ -30,7 +30,6 @@ from wsidicom_kernels import (
     downscale,
     downscale_grid,
     resize,
-    rgb_to_rgbx,
     stitch,
 )
 
@@ -256,7 +255,6 @@ class TestValidation:
                 lambda image: resize(image, 4, 4, ResizeFilter.NEAREST),
                 id="resize-nearest",
             ),
-            pytest.param(lambda image: rgb_to_rgbx(image), id="rgb_to_rgbx"),
             pytest.param(
                 lambda image: compose(
                     np.zeros((8, 8, 3), np.uint8), [image], np.zeros((1, 2), np.int64)

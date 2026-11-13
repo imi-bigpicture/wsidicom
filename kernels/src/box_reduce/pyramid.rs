@@ -1,14 +1,11 @@
 //! The power-of-2 box pyramid: chained 2x and fused 4x/8x box passes, band
-//! by band for interleaved images, optionally widening RGB to RGBX in the
-//! last pass.
+//! by band for interleaved images.
 
 use std::borrow::Cow;
 use std::mem::MaybeUninit;
 
-use super::{BoxSample, box_levels_rgb_to_rgbx, box2x_rgb_to_rgbx};
+use super::BoxSample;
 use crate::cpu::{unwritten_output, written_output};
-use crate::rgbx::expand_image;
-use crate::sample::{RGB, RGBX};
 
 /// A sample type's mean of a block from the block's exact sum: integers
 /// rounded half up (as the box kernels round), float32 the quotient.
@@ -71,39 +68,7 @@ pub(crate) fn box_downscale<T: BoxSample>(
             place_rows(&whole, whole_width * channels, &mut out, ow * channels);
         }
     }
-    write_partial_blocks(src, dims, times, &mut out, channels, |means, pixel| {
-        for (sample, &mean) in pixel.iter_mut().zip(means) {
-            sample.write(mean);
-        }
-    });
-    // SAFETY: the whole blocks and the partial ones cover every pixel.
-    (unsafe { written_output(out) }, ow, oh)
-}
-
-/// `box_downscale` of an RGB image with RGBX output.
-pub(crate) fn box_downscale_rgbx(
-    src: &[u8],
-    (height, width): (usize, usize),
-    times: u32,
-    pad: u8,
-) -> (Vec<u8>, usize, usize) {
-    let block = 1usize << times;
-    if height.is_multiple_of(block) && width.is_multiple_of(block) {
-        return box_pyramid_rgbx(src, (height, width), times, pad);
-    }
-    let dims = (height, width, RGB);
-    let (ow, oh) = (width.div_ceil(block), height.div_ceil(block));
-    let mut out = unwritten_output::<u8>(ow * oh * RGBX);
-    if has_whole_blocks(dims, times) {
-        let (whole, whole_width, _) = box_pyramid_rgbx(src, (height, width), times, pad);
-        place_rows(&whole, whole_width * RGBX, &mut out, ow * RGBX);
-    }
-    write_partial_blocks(src, dims, times, &mut out, RGBX, |means, pixel| {
-        for (sample, &mean) in pixel.iter_mut().zip(means) {
-            sample.write(mean);
-        }
-        pixel[RGB].write(pad);
-    });
+    write_partial_blocks(src, dims, times, &mut out);
     // SAFETY: the whole blocks and the partial ones cover every pixel.
     (unsafe { written_output(out) }, ow, oh)
 }
@@ -125,15 +90,13 @@ fn place_rows<T: Copy>(rows: &[T], row_len: usize, out: &mut [MaybeUninit<T>], s
 }
 
 /// Writes the partial blocks of a `2^times` reduction at `ceil` size into
-/// `out` (`out_channels` samples per pixel): the last column's and row's
-/// blocks the image ends inside. `pixel` writes each from its channels' means.
-fn write_partial_blocks<T: BoxSample, O>(
+/// `out`: the last column's and row's blocks the image ends inside, each
+/// pixel its channels' means.
+fn write_partial_blocks<T: BoxSample>(
     src: &[T],
     dims @ (height, width, channels): (usize, usize, usize),
     times: u32,
-    out: &mut [MaybeUninit<O>],
-    out_channels: usize,
-    pixel: impl Fn(&[T], &mut [MaybeUninit<O>]),
+    out: &mut [MaybeUninit<T>],
 ) {
     let block = 1usize << times;
     let (ow, oh) = (width.div_ceil(block), height.div_ceil(block));
@@ -143,7 +106,6 @@ fn write_partial_blocks<T: BoxSample, O>(
         (0, 0)
     };
     let mut sums = vec![0.0; channels];
-    let mut means = vec![src[0]; channels];
     for y in 0..oh {
         let first_partial = if y < whole_height { whole_width } else { 0 };
         let rows = y * block..((y + 1) * block).min(height);
@@ -158,13 +120,10 @@ fn write_partial_blocks<T: BoxSample, O>(
                 }
             }
             let count = rows.len() * cols.len();
-            for (mean, &sum) in means.iter_mut().zip(&sums) {
-                *mean = T::block_mean(sum, count);
+            let pixel = &mut out[(y * ow + x) * channels..][..channels];
+            for (sample, &sum) in pixel.iter_mut().zip(&sums) {
+                sample.write(T::block_mean(sum, count));
             }
-            pixel(
-                &means,
-                &mut out[(y * ow + x) * out_channels..][..out_channels],
-            );
         }
     }
 }
@@ -296,64 +255,15 @@ where
     (out, ow, oh)
 }
 
-/// `box_pyramid` of an RGB image with RGBX output. Intermediate levels stay
-/// RGB; only the last halving widens, inside the pass that writes every output
-/// pixel anyway.
-pub(crate) fn box_pyramid_rgbx(
-    src: &[u8],
-    (height, width): (usize, usize),
-    times: u32,
-    pad: u8,
-) -> (Vec<u8>, usize, usize) {
-    if times == 0 {
-        return (expand_image(src, height, width, pad), width, height);
-    }
-    if box_passes(times) >= 2 {
-        return box_pyramid_banded(src, (height, width, RGB), times, |band, width, height| {
-            box_levels_rgbx(band, (height, width), times, pad)
-        });
-    }
-    box_levels_rgbx(src, (height, width), times, pad)
-}
-
-/// `box_pyramid_rgbx`'s levels over a whole image (or band): `box_levels`'
-/// passes, the last one writing RGBX.
-fn box_levels_rgbx(
-    src: &[u8],
-    (height, width): (usize, usize),
-    times: u32,
-    pad: u8,
-) -> (Vec<u8>, usize, usize) {
-    let mut level = (Cow::Borrowed(src), width, height);
-    let mut left = times;
-    loop {
-        let (px, width, height) = (&level.0, level.1, level.2);
-        let levels = next_pass_levels(left);
-        if left == levels {
-            return if levels > 1 {
-                box_levels_rgb_to_rgbx(px, width, height, levels, pad)
-            } else {
-                box2x_rgb_to_rgbx(px, width, height, pad)
-            };
-        }
-        let (next, nw, nh) = if levels > 1 {
-            u8::box_levels_hwc(px, width, height, RGB, levels)
-        } else {
-            u8::box2x_hwc(px, width, height, RGB)
-        };
-        left -= levels;
-        level = (Cow::Owned(next), nw, nh);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::box_reduce::box2x_scalar;
     use crate::box_reduce::tests::{
         BoxTestSample, assert_same_image, integer_differences, interleaved_pyramid_reference,
-        per_channel, planar_pyramid_reference, rgb_to_rgbx, test_images,
+        per_channel, planar_pyramid_reference, test_images,
     };
+    use crate::sample::{RGB, RGBX};
     use crate::testing::{Rng, random_samples, sizes_from};
 
     /// What `box_pyramid` must return: the planar pyramid (fused 4x passes)
@@ -475,32 +385,6 @@ mod tests {
             // Every tier fuses, so the difference is real on ordinary data.
             assert!(count > 0, "{channels} channels");
         }
-    }
-
-    #[test]
-    fn rgbx_pyramids_equal_the_rgb_pyramid_padded() {
-        let mut rng = Rng::new(34);
-        for times in 0..=4 {
-            for (width, height) in sizes_from(1) {
-                let src: Vec<u8> = random_samples(&mut rng, width * height * RGB);
-                let (rgb, ow, oh) = box_pyramid(&src, (height, width, RGB), times);
-                assert_same_image(
-                    &box_pyramid_rgbx(&src, (height, width), times, 0xEE),
-                    &(rgb_to_rgbx(&rgb, 0xEE), ow, oh),
-                    &format!("{times} times, {width} x {height}"),
-                );
-            }
-        }
-        let (width, times) = (90, 4);
-        let band_rows = BAND_BYTES / (width * RGB * (1 << times));
-        let height = (2 * band_rows + 3) * (1 << times);
-        let src: Vec<u8> = random_samples(&mut rng, width * height * RGB);
-        let (rgb, ow, oh) = interleaved_pyramid_reference(&src, (width, height, RGB), times);
-        assert_same_image(
-            &box_pyramid_rgbx(&src, (height, width), times, 1),
-            &(rgb_to_rgbx(&rgb, 1), ow, oh),
-            "banded",
-        );
     }
 
     #[test]

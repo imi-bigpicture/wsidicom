@@ -19,7 +19,6 @@ mod cpu;
 mod exact;
 mod grid;
 mod nearest;
-mod rgbx;
 mod sample;
 mod simd;
 #[cfg(test)]
@@ -28,7 +27,7 @@ mod testing;
 mod x86;
 
 use box_reduce::BoxSample;
-use composite::{Canvas, Tile, compose_tiles, compose_tiles_rgbx};
+use composite::{Canvas, Tile, compose_tiles};
 use convolve::Geometry;
 use sample::{RGB, RGBX};
 
@@ -344,11 +343,8 @@ fn compose_all<T: Element + Copy + Send + Sync>(
     canvas_array: &Bound<'_, PyArrayDyn<T>>,
     tile_arrays: &[Bound<'_, PyAny>],
     (pos, crops): (&ArrayView2<i64>, Option<&ArrayView2<i64>>),
-    tile_c: Option<usize>,
-    compose: impl FnOnce(&mut Canvas<T>, &[Tile<T>], &[(isize, isize)]) + Send,
 ) -> PyResult<()> {
     let (height, width, channels) = hwc_dims(canvas_array.shape())?;
-    let tile_c = tile_c.unwrap_or(channels);
     let Ok(mut rw) = canvas_array.try_readwrite() else {
         let writable = canvas_array
             .getattr("flags")?
@@ -374,13 +370,10 @@ fn compose_all<T: Element + Copy + Send + Sync>(
             .cast::<PyArrayDyn<T>>()
             .map_err(|_| PyValueError::new_err("every tile must match the canvas dtype"))?;
         let (th, tw, tc) = hwc_dims(tile_array.shape())?;
-        if tc != tile_c {
-            return Err(PyValueError::new_err(if tile_c == channels {
-                "every tile must have the same channels as the canvas"
-            } else {
-                "an RGBX (H, W, 4) canvas takes RGB (H, W, 3) tiles; \
-                 for a 4-sample tile, use a 4-sample canvas"
-            }));
+        if tc != channels {
+            return Err(PyValueError::new_err(
+                "every tile must have the same channels as the canvas",
+            ));
         }
         let ro = tile_array.try_readonly().map_err(|_| {
             PyValueError::new_err("a tile shares memory with the canvas — pass a copy")
@@ -393,7 +386,7 @@ fn compose_all<T: Element + Copy + Send + Sync>(
             let (px, stride) = tile_samples(guard, *dims)?;
             Ok(Tile {
                 stride,
-                ..Tile::new(px, *tile_width, *tile_height, tile_c)
+                ..Tile::new(px, *tile_width, *tile_height, channels)
             })
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -408,25 +401,23 @@ fn compose_all<T: Element + Copy + Send + Sync>(
         .collect();
     canvas_array
         .py()
-        .detach(|| compose(&mut canvas, &tiles, &positions));
+        .detach(|| compose_tiles(&mut canvas, &tiles, &positions));
     Ok(())
 }
 
-/// compose(canvas, tiles, positions, pad=255, crops=None)
+/// compose(canvas, tiles, positions, crops=None)
 ///
 /// Paste `tiles` onto `canvas` (mutated in place) at `positions` (N x 2 int64,
 /// each (x, y) = (column, row)); with `crops` (N x 5 int64, each (tile index,
 /// x, y, width, height)), paste those pieces of `tiles` instead. Overlaps:
 /// last wins. Canvas and tiles are all either planar 2D (H, W) or interleaved
-/// HWC (H, W, C) with matching channels, except that a uint8 RGBX (H, W, 4)
-/// canvas takes RGB (H, W, 3) tiles, `pad` filling the fourth sample.
+/// HWC (H, W, C) with matching channels.
 #[pyfunction]
-#[pyo3(signature = (canvas, tiles, positions, pad=255, crops=None))]
+#[pyo3(signature = (canvas, tiles, positions, crops=None))]
 fn compose(
     canvas: &Bound<'_, PyAny>,
     tiles: Vec<Bound<'_, PyAny>>,
     positions: &Bound<'_, PyAny>,
-    pad: u8,
     crops: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<()> {
     let positions = positions
@@ -473,35 +464,14 @@ fn compose(
         ));
     }
 
-    if let Ok(rgbx) = canvas.cast::<PyArrayDyn<u8>>() {
-        let first_tile_channels = tiles
-            .first()
-            .and_then(|tile| tile.cast::<PyArrayDyn<u8>>().ok())
-            .and_then(|tile| hwc_dims(tile.shape()).ok())
-            .map(|(_, _, channels)| channels);
-        if hwc_dims(rgbx.shape())?.2 == RGBX && first_tile_channels == Some(RGB) {
-            let placements = (&pos, crops.as_ref());
-            return compose_all(
-                rgbx,
-                &tiles,
-                placements,
-                Some(RGB),
-                |canvas, tiles, positions| {
-                    compose_tiles_rgbx(canvas, tiles, positions, pad);
-                },
-            );
-        }
-    }
     with_dtype!(canvas, "canvas", |array: T| compose_all::<T>(
         array,
         &tiles,
-        (&pos, crops.as_ref()),
-        None,
-        compose_tiles
+        (&pos, crops.as_ref())
     ))
 }
 
-// ---- downscale / resize / rgb_to_rgbx ------------------------------------------
+// ---- downscale / resize --------------------------------------------------------
 
 fn box_reduce<T: BoxSample>(
     py: Python<'_>,
@@ -596,7 +566,7 @@ fn resize_image(
     if convolve::Kernel::parse(filter).is_none() {
         return Err(unknown_filter(filter));
     }
-    if let Some(result) = resize_native_u8(py, image, geometry, channels, filter, None) {
+    if let Some(result) = resize_native_u8(py, image, geometry, channels, filter) {
         return result;
     }
     if let Some(result) = resize_native_float(py, image, geometry, channels, filter) {
@@ -676,22 +646,18 @@ fn resize_nearest_array<T: Element + bytemuck::Pod>(
     to_numpy(py, out, oh, ow, channels)
 }
 
-/// The native u8 resize (RGB to RGBX with `rgbx_pad`), or
-/// None for other dtypes and filters.
+/// The native u8 resize, or None for other dtypes and filters.
 fn resize_native_u8(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
     geometry: Geometry,
     channels: usize,
     filter: &str,
-    rgbx_pad: Option<u8>,
 ) -> Option<PyResult<Py<PyAny>>> {
     let kernel = convolve::Kernel::parse(filter)?;
     let array = image.cast::<PyArrayDyn<u8>>().ok()?;
     if geometry.reduces_past(FIXED_POINT_MAX_REDUCTION) {
-        return Some(resize_u8_float(
-            py, array, geometry, channels, kernel, rgbx_pad,
-        ));
+        return Some(resize_u8_float(py, array, geometry, channels, kernel));
     }
     let ((width, height), (ow, oh)) = (geometry.src, geometry.dst);
     if let Some(exact_kernel) = geometry
@@ -702,20 +668,8 @@ fn resize_native_u8(
         let exact = || {
             let ro = read_only(array)?;
             let src = c_samples(&ro, "image")?;
-            let out = py.detach(|| {
-                let resized = exact_kernel(src, width, height, channels);
-                match rgbx_pad {
-                    Some(pad) => rgbx::expand_image(&resized, oh, ow, pad),
-                    None => resized,
-                }
-            });
-            to_numpy(
-                py,
-                out,
-                oh,
-                ow,
-                if rgbx_pad.is_some() { RGBX } else { channels },
-            )
+            let out = py.detach(|| exact_kernel(src, width, height, channels));
+            to_numpy(py, out, oh, ow, channels)
         };
         return Some(exact());
     }
@@ -723,14 +677,8 @@ fn resize_native_u8(
     let resized = || {
         let ro = read_only(array)?;
         let src = c_samples(&ro, "image")?;
-        let out = py.detach(|| convolve::resize_u8(src, (width, height), &plan, rgbx_pad));
-        to_numpy(
-            py,
-            out,
-            oh,
-            ow,
-            if rgbx_pad.is_some() { RGBX } else { channels },
-        )
+        let out = py.detach(|| convolve::resize_u8(src, (width, height), &plan));
+        to_numpy(py, out, oh, ow, channels)
     };
     Some(resized())
 }
@@ -740,86 +688,25 @@ fn resize_native_u8(
 /// taps the roundings add up. Past it uint8 takes the float32 engine.
 const FIXED_POINT_MAX_REDUCTION: usize = 128;
 
-/// A uint8 resize by the float32 engine (RGB to RGBX with `rgbx_pad`).
+/// A uint8 resize by the float32 engine.
 fn resize_u8_float(
     py: Python<'_>,
     array: &Bound<'_, PyArrayDyn<u8>>,
     geometry: Geometry,
     channels: usize,
     kernel: convolve::Kernel,
-    rgbx_pad: Option<u8>,
 ) -> PyResult<Py<PyAny>> {
     let ro = read_only(array)?;
     let src = c_samples(&ro, "image")?;
     let (ow, oh) = geometry.dst;
     let out = py.detach(|| {
         let plan = convolve_float::FloatPlan::cached(geometry, kernel, channels);
-        let resized = convolve_float::resize_float(src, geometry.src, &plan);
-        match rgbx_pad {
-            Some(pad) => rgbx::expand_image(&resized, oh, ow, pad),
-            None => resized,
-        }
+        convolve_float::resize_float(src, geometry.src, &plan)
     });
-    to_numpy(
-        py,
-        out,
-        oh,
-        ow,
-        if rgbx_pad.is_some() { RGBX } else { channels },
-    )
+    to_numpy(py, out, oh, ow, channels)
 }
 
-/// Downscale/resize an RGB image to RGBX: the fused box pyramid for a
-/// power-of-2 box reduction (`box_times` halvings), else the convolution
-/// resize writing RGBX, else (nearest) the nearest resize expanded.
-fn resize_to_rgbx(
-    py: Python<'_>,
-    image: &Bound<'_, PyAny>,
-    geometry: Geometry,
-    channels: usize,
-    filter: &str,
-    box_times: Option<u32>,
-    pad: u8,
-) -> PyResult<Py<PyAny>> {
-    enum Method {
-        BoxPyramid(u32),
-        Nearest,
-    }
-    if channels != RGB {
-        return Err(PyValueError::new_err(
-            "pad (RGBX output) needs a 3-sample (H, W, 3) uint8 image",
-        ));
-    }
-    let array = image
-        .cast::<PyArrayDyn<u8>>()
-        .map_err(|_| PyValueError::new_err("pad (RGBX output) needs a uint8 image"))?;
-    if box_times.is_none()
-        && let Some(result) = resize_native_u8(py, image, geometry, channels, filter, Some(pad))
-    {
-        return result;
-    }
-    let method = match box_times {
-        Some(times) => Method::BoxPyramid(times),
-        None if filter == "nearest" => Method::Nearest,
-        None => return Err(unknown_filter(filter)),
-    };
-    let ro = read_only(array)?;
-    let src = c_samples(&ro, "image")?;
-    let (width, height) = geometry.src;
-    let (out, ow, oh) = py.detach(|| match method {
-        Method::BoxPyramid(times) => {
-            box_reduce::pyramid::box_downscale_rgbx(src, (height, width), times, pad)
-        }
-        Method::Nearest => {
-            let rgb = nearest::resize_nearest_over(src, geometry, RGB);
-            let (ow, oh) = geometry.dst;
-            (rgbx::expand_image(&rgb, oh, ow, pad), ow, oh)
-        }
-    });
-    to_numpy(py, out, oh, ow, RGBX)
-}
-
-/// downscale(image, factor, filter="box", pad=None)
+/// downscale(image, factor, filter="box")
 ///
 /// Reduce `image` by integer `factor` per spatial axis. Accepts a planar 2D
 /// (H, W) array or an interleaved HWC 3D (H, W, C) array; call planar per
@@ -827,16 +714,15 @@ fn resize_to_rgbx(
 /// SIMD box kernels) / "bilinear" / "catmullrom" / "lanczos3" (native
 /// convolution) / "nearest".
 #[pyfunction]
-#[pyo3(signature = (image, factor, filter="box", pad=None))]
+#[pyo3(signature = (image, factor, filter="box"))]
 fn downscale(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
     factor: i64,
     filter: &str,
-    pad: Option<u8>,
 ) -> PyResult<Py<PyAny>> {
     let factor = at_least_one(factor, "factor must be >= 1")?;
-    let out = downscale_image(py, image, factor, filter, pad)?;
+    let out = downscale_image(py, image, factor, filter)?;
     shaped_like(py, image, out)
 }
 
@@ -845,15 +731,10 @@ fn downscale_image(
     image: &Bound<'_, PyAny>,
     factor: usize,
     filter: &str,
-    pad: Option<u8>,
 ) -> PyResult<Py<PyAny>> {
     let dims @ (height, width, channels) = image_dims(image)?;
     let geometry = Geometry::downscale((width, height), factor);
-    let box_times = box_reduce::pyramid::box_halvings(filter, factor);
-    if let Some(pad) = pad {
-        return resize_to_rgbx(py, image, geometry, channels, filter, box_times, pad);
-    }
-    if let Some(times) = box_times {
+    if let Some(times) = box_reduce::pyramid::box_halvings(filter, factor) {
         return with_dtype!(image, "image", |array: T| box_reduce::<T>(
             py, array, dims, times
         ));
@@ -861,7 +742,7 @@ fn downscale_image(
     resize_image(py, image, geometry, channels, filter)
 }
 
-/// resize(image, `out_h`, `out_w`, filter="box", pad=None)
+/// resize(image, `out_h`, `out_w`, filter="box")
 ///
 /// Resample `image` to an exact `(out_h, out_w)` — any ratio, including
 /// fractional (e.g. a requested resolution) and upscaling. Accepts a planar
@@ -870,18 +751,17 @@ fn downscale_image(
 /// ratio, so every filter here antialiases at any ratio. An exact power-of-2
 /// "box" reduction takes the same native kernel as `downscale`.
 #[pyfunction]
-#[pyo3(signature = (image, out_h, out_w, filter="box", pad=None))]
+#[pyo3(signature = (image, out_h, out_w, filter="box"))]
 fn resize(
     py: Python<'_>,
     image: &Bound<'_, PyAny>,
     out_h: i64,
     out_w: i64,
     filter: &str,
-    pad: Option<u8>,
 ) -> PyResult<Py<PyAny>> {
     let message = "out_h and out_w must be >= 1";
     let size = (at_least_one(out_h, message)?, at_least_one(out_w, message)?);
-    let out = resize_to(py, image, size, filter, pad)?;
+    let out = resize_to(py, image, size, filter)?;
     shaped_like(py, image, out)
 }
 
@@ -890,50 +770,24 @@ fn resize_to(
     image: &Bound<'_, PyAny>,
     (out_h, out_w): (usize, usize),
     filter: &str,
-    pad: Option<u8>,
 ) -> PyResult<Py<PyAny>> {
     let dims @ (height, width, channels) = image_dims(image)?;
-    let out_channels = if pad.is_some() { RGBX } else { channels };
     output_samples(
-        (out_h, out_w, out_channels),
+        (out_h, out_w, channels),
         image.cast::<PyUntypedArray>()?.dtype().itemsize(),
     )?;
     let geometry = Geometry::resize((width, height), (out_w, out_h));
     let exact_factor =
         (width % out_w == 0 && height % out_h == 0 && width / out_w == height / out_h)
             .then_some(width / out_w);
-    let box_times =
-        exact_factor.and_then(|factor| box_reduce::pyramid::box_halvings(filter, factor));
-    if let Some(pad) = pad {
-        return resize_to_rgbx(py, image, geometry, channels, filter, box_times, pad);
-    }
-    if let Some(times) = box_times {
+    if let Some(times) =
+        exact_factor.and_then(|factor| box_reduce::pyramid::box_halvings(filter, factor))
+    {
         return with_dtype!(image, "image", |array: T| box_reduce::<T>(
             py, array, dims, times
         ));
     }
     resize_image(py, image, geometry, channels, filter)
-}
-
-/// `rgb_to_rgbx(rgb`, pad=0)
-///
-/// Expand a contiguous (H, W, 3) uint8 RGB array to a new (H, W, 4) RGBX array,
-/// with the 4th byte set to `pad`. Pairs with PIL's zero-copy handoff to skip
-/// the RGB->RGBX repack:
-///   Image.frombuffer("RGB", (w, h), `rgb_to_rgbx(a)`, "raw", "RGBX", 0, 1)
-#[pyfunction]
-#[pyo3(signature = (rgb, pad=0))]
-fn rgb_to_rgbx(py: Python<'_>, rgb: &Bound<'_, PyAny>, pad: u8) -> PyResult<Py<PyAny>> {
-    let array = rgb
-        .cast::<PyArrayDyn<u8>>()
-        .map_err(|_| PyValueError::new_err("rgb must be a uint8 array"))?;
-    let [height, width, RGB] = *array.shape() else {
-        return Err(PyValueError::new_err("rgb must have shape (H, W, 3)"));
-    };
-    let ro = read_only(array)?;
-    let src = c_samples(&ro, "rgb")?;
-    let out = py.detach(|| rgbx::expand_image(src, height, width, pad));
-    to_numpy(py, out, height, width, RGBX)
 }
 
 /// `set_simd(enabled)`
@@ -960,7 +814,6 @@ fn _kernels(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(downscale_grid_box, module)?)?;
     module.add_function(wrap_pyfunction!(stitch_grid, module)?)?;
     module.add_function(wrap_pyfunction!(framed, module)?)?;
-    module.add_function(wrap_pyfunction!(rgb_to_rgbx, module)?)?;
     module.add_function(wrap_pyfunction!(set_simd, module)?)?;
     Ok(())
 }

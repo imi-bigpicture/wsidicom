@@ -43,7 +43,6 @@ from wsidicom_kernels import (
     compose,
     downscale,
     resize,
-    rgb_to_rgbx,
 )
 
 SimdAndScalar = Callable[[Callable[[], Any]], tuple[Any, Any]]
@@ -121,7 +120,7 @@ class TestCompose:
     @fuzz
     @given(
         dtype=dtypes,
-        layout=st.sampled_from([(1, 1), (3, 3), (4, 4), (3, 4)]),
+        channels=channel_counts,
         tile_size=st.tuples(st.integers(1, 160), st.integers(1, 160)),
         canvas_size=st.tuples(st.integers(1, 168), st.integers(1, 168)),
         position=st.tuples(st.integers(-170, 178), st.integers(-170, 178)),
@@ -131,7 +130,7 @@ class TestCompose:
         self,
         simd_and_scalar: SimdAndScalar,
         dtype: Any,
-        layout: tuple[int, int],
+        channels: int,
         tile_size: Size,
         canvas_size: Size,
         position: tuple[int, int],
@@ -143,13 +142,10 @@ class TestCompose:
         side or miss it entirely.
         """
         # Arrange
-        tile_channels, canvas_channels = layout
-        if canvas_channels != tile_channels:  # RGB onto RGBX: uint8 only
-            dtype = np.uint8
-        tile = page_end(image_shape(tile_size, tile_channels), dtype, seed)
+        tile = page_end(image_shape(tile_size, channels), dtype, seed)
 
         def composed() -> np.ndarray:
-            canvas_shape = image_shape(canvas_size, canvas_channels)
+            canvas_shape = image_shape(canvas_size, channels)
             canvas = page_end(canvas_shape, dtype, seed + 1)
             compose(canvas, [tile], np.array([position], np.int64))
             return canvas
@@ -195,41 +191,11 @@ class TestBoxDownscale:
         simd, scalar = simd_and_scalar(
             lambda: downscale(image, factor, ResizeFilter.BOX)
         )
-        if dtype == np.uint8 and channels == 3:
-            downscale(
-                image, factor, ResizeFilter.BOX, pad=255
-            )  # the padded path's bounds
 
         # Assert — fused and chained passes may round differently: one step per
         # level.
         levels = factor.bit_length() - 1
         assert_parity(simd, scalar, integer_tolerance=levels + 1)
-
-
-@pytest.mark.unittest
-class TestRgbToRgbx:
-    """rgb_to_rgbx over generated sizes."""
-
-    @fuzz
-    @given(height=st.integers(1, 40), width=st.integers(1, 40), seed=seeds)
-    def test_simd_matches_scalar_and_packs(
-        self, simd_and_scalar: SimdAndScalar, height: int, width: int, seed: int
-    ) -> None:
-        """Packing stays in bounds and the SIMD kernels match the scalar reference.
-
-        They match exactly, and the color channels are kept with the pad value
-        after.
-        """
-        # Arrange
-        image = page_end((height, width, 3), np.uint8, seed)
-
-        # Act
-        simd, scalar = simd_and_scalar(lambda: rgb_to_rgbx(image, 7))
-
-        # Assert
-        assert (simd == scalar).all()
-        assert (simd[:, :, :3] == image).all()
-        assert (simd[:, :, 3] == 7).all()
 
 
 @pytest.mark.unittest

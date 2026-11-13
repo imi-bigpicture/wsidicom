@@ -910,31 +910,19 @@ fn is_large_reduction(width: usize, ow: usize, kernel: Kernel) -> bool {
     (SPAN_OUTPUTS - 1.0) * scale + max_taps as f64 > SPAN_INPUTS
 }
 
-/// Resize a u8 image of `plan.channels` samples per pixel by `plan`; with
-/// `rgbx_pad`, an RGB image to RGBX output, `rgbx_pad` the 4th sample.
+/// Resize a u8 image of `plan.channels` samples per pixel by `plan`.
 /// Every path computes the same fixed-point arithmetic (per-tap rounded
 /// mulhrs, i16 sums, one final rounding), so the result is identical on
 /// every CPU.
-pub(crate) fn resize_u8(
-    src: &[u8],
-    (width, height): (usize, usize),
-    plan: &Plan,
-    rgbx_pad: Option<u8>,
-) -> Vec<u8> {
+pub(crate) fn resize_u8(src: &[u8], (width, height): (usize, usize), plan: &Plan) -> Vec<u8> {
     let channels = plan.channels;
     debug_assert!(src.len() >= width * height * channels && plan.n_in == width);
-    debug_assert!(rgbx_pad.is_none() || channels == RGB);
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-    if takes_transposed(plan, width, rgbx_pad) {
-        let out = resize_transposed(src, width, channels, plan);
-        let (ow, oh) = (plan.cols.len(), plan.rows.len());
-        return match rgbx_pad {
-            Some(pad) => crate::rgbx::expand_image(&out, oh, ow, pad),
-            None => out,
-        };
+    if takes_transposed(plan, width) {
+        return resize_transposed(src, width, channels, plan);
     }
     if channels > 1 {
-        resize_pixel_rows(src, width, plan, rgbx_pad)
+        resize_pixel_rows(src, width, plan)
     } else {
         resize_rows(src, width, plan)
     }
@@ -949,15 +937,15 @@ pub(crate) fn resize_u8(
 /// their intermediate sums can leave the range its kernels assume, and a
 /// clamped column sum near `i16::MAX` would wrap in the transposed narrowing.
 #[cfg(target_arch = "x86_64")]
-fn takes_transposed(plan: &Plan, width: usize, rgbx_pad: Option<u8>) -> bool {
+fn takes_transposed(plan: &Plan, width: usize) -> bool {
     crate::cpu::has_avx2()
         && width * plan.channels >= AVX2_I16_LANES
         && plan.rows.sums_fit()
         && plan.cols.sums_fit()
-        && runs_transposed(plan, rgbx_pad)
+        && runs_transposed(plan)
 }
 #[cfg(target_arch = "aarch64")]
-fn takes_transposed(plan: &Plan, width: usize, _rgbx_pad: Option<u8>) -> bool {
+fn takes_transposed(plan: &Plan, width: usize) -> bool {
     crate::cpu::use_neon()
         && width * plan.channels >= TRANSPOSE_ROWS
         && plan.rows.sums_fit()
@@ -967,14 +955,14 @@ fn takes_transposed(plan: &Plan, width: usize, _rgbx_pad: Option<u8>) -> bool {
 /// On x86, whether the transposed path beats the per-row kernels the tier
 /// has.
 #[cfg(target_arch = "x86_64")]
-fn runs_transposed(plan: &Plan, rgbx_pad: Option<u8>) -> bool {
+fn runs_transposed(plan: &Plan) -> bool {
     let channels = plan.channels;
     // Large reductions (no block plan) of 1 and 3 channels: transposed on
     // either tier, which needs no widening; RGBA's tap runs stay faster.
     let large_reduction = plan.large_reduction && channels < RGBA;
-    // RGB with wide windows unless written as RGBX: widening to RGBX costs
-    // the pixel kernels more than the transposes.
-    let unwidened = rgbx_pad.is_none() && channels == RGB && plan.widest_col >= RGB_TRANSPOSED_TAPS;
+    // RGB with wide windows: widening to RGBX costs the pixel kernels more
+    // than the transposes.
+    let unwidened = channels == RGB && plan.widest_col >= RGB_TRANSPOSED_TAPS;
     // Transposed unless the tier has a per-row kernel: RGBA pixel blocks, or
     // tap runs (RGB only for sparse blocks, where they pay for the widening
     // and packing).
@@ -1145,19 +1133,14 @@ fn resize_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
 
 /// The per-row interleaved path (the AVX2 pixel kernels, or the scalar
 /// reference). 2- and 3-channel rows are widened to the RGBX layout between
-/// the passes and the output rows packed back — or, with `rgbx_pad`, kept as
-/// RGBX output with that 4th sample.
-fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan, rgbx_pad: Option<u8>) -> Vec<u8> {
+/// the passes and the output rows packed back.
+fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
     // Padded: the widening reads whole groups of pixels, up to a register past.
     const WIDEN_GROUP_PIXELS: usize = 8;
     let channels = plan.channels;
     let ow = plan.cols.len();
     let ws = width * channels;
-    let ows = if rgbx_pad.is_some() {
-        ow * RGBA
-    } else {
-        ow * channels
-    };
+    let ows = ow * channels;
     let mut out = vec![0u8; ows * plan.rows.len()];
     // Padded so the SIMD kernels' windows may run past the row end.
     let row_pad = plan
@@ -1183,13 +1166,11 @@ fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan, rgbx_pad: Option<u8>
     let padded = (width + row_pad) * RGBA;
     let mut mids = [vec![0i16; padded], vec![0i16; padded]];
     // Fewer than 4 channels: rows widened to the RGBX layout between the
-    // passes (from `narrow_mid`), output rows packed back (from `rgbx_rows`)
-    // unless the output is RGBX.
+    // passes (from `narrow_mid`), output rows packed back (from `rgbx_rows`).
     let widened = channels < RGBA;
-    let pack = widened && rgbx_pad.is_none();
     let narrow_pad = channels * width.next_multiple_of(WIDEN_GROUP_PIXELS) + AVX2_I16_LANES;
     let mut narrow_mid = vec![0i16; if widened { narrow_pad } else { 0 }];
-    let mut rgbx_rows = [(); 2].map(|()| vec![0u8; if pack { ow * RGBA } else { 0 }]);
+    let mut rgbx_rows = [(); 2].map(|()| vec![0u8; if widened { ow * RGBA } else { 0 }]);
     let dp = out.as_mut_ptr();
     let rows = |lo: usize, hi: usize| {
         for y in (lo..hi).step_by(2) {
@@ -1210,7 +1191,7 @@ fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan, rgbx_pad: Option<u8>
             // call writes (with_prefault's contract); RGB: the two RGBX row
             // buffers.
             let dst = |y: usize| unsafe {
-                let row = match (pack, y % 2) {
+                let row = match (widened, y % 2) {
                     (false, _) => dp.add(y * ows),
                     (true, 0) => rgbx_row0,
                     (true, _) => rgbx_row1,
@@ -1228,18 +1209,11 @@ fn resize_pixel_rows(src: &[u8], width: usize, plan: &Plan, rgbx_pad: Option<u8>
                 } else {
                     horizontal_scalar(plan, mid, dst, RGBA);
                 }
-                match rgbx_pad {
+                if widened {
                     // SAFETY: row y of `out`, which only this closure call writes.
-                    None if widened => pack_from_rgbx(dst, unsafe {
+                    pack_from_rgbx(dst, unsafe {
                         std::slice::from_raw_parts_mut(dp.add(y * ows), ows)
-                    }),
-                    // The 4th sample came out 0 (widened rows carry 0 there).
-                    Some(pad) => dst
-                        .as_chunks_mut::<RGBA>()
-                        .0
-                        .iter_mut()
-                        .for_each(|px| px[3] = pad),
-                    None => {}
+                    });
                 }
             }
         }
@@ -1581,7 +1555,7 @@ mod tests {
     }
 
     /// The whole resize by its definition, output row by output row.
-    fn reference_resize(src: &[u8], width: usize, plan: &Plan, rgbx_pad: Option<u8>) -> Vec<u8> {
+    fn reference_resize(src: &[u8], width: usize, plan: &Plan) -> Vec<u8> {
         let channels = plan.channels;
         let ws = width * channels;
         let mut out = Vec::new();
@@ -1593,13 +1567,12 @@ mod tests {
                         reference_output(&mid, &plan.cols, channels, output, channel)
                     }),
                 );
-                out.extend(rgbx_pad);
             }
         }
         out
     }
 
-    fn assert_resize_matches_reference(channels: usize, rgbx_pad: Option<u8>) {
+    fn assert_resize_matches_reference(channels: usize) {
         let mut rng = Rng::new(channels as u64);
         for kernel in KERNELS {
             for (width, ow) in COLUMN_CASES {
@@ -1607,11 +1580,10 @@ mod tests {
                     let src: Vec<u8> = random_samples(&mut rng, width * height * channels);
                     let plan = Plan::new((width, height), (ow, oh), kernel, channels);
                     assert_same(
-                        &resize_u8(&src, (width, height), &plan, rgbx_pad),
-                        &reference_resize(&src, width, &plan, rgbx_pad),
+                        &resize_u8(&src, (width, height), &plan),
+                        &reference_resize(&src, width, &plan),
                         &format!(
-                            "{} {channels} channels {width} x {height} -> {ow} x {oh}, pad \
-                             {rgbx_pad:?}",
+                            "{} {channels} channels {width} x {height} -> {ow} x {oh}",
                             kernel_name(kernel)
                         ),
                     );
@@ -1622,22 +1594,17 @@ mod tests {
 
     #[test]
     fn planar_resize_equals_reference() {
-        assert_resize_matches_reference(1, None);
+        assert_resize_matches_reference(1);
     }
 
     #[test]
     fn rgb_resize_equals_reference() {
-        assert_resize_matches_reference(RGB, None);
-    }
-
-    #[test]
-    fn rgb_to_rgbx_resize_equals_reference() {
-        assert_resize_matches_reference(RGB, Some(0x7F));
+        assert_resize_matches_reference(RGB);
     }
 
     #[test]
     fn rgba_resize_equals_reference() {
-        assert_resize_matches_reference(RGBA, None);
+        assert_resize_matches_reference(RGBA);
     }
 
     /// The partial-sum check keeps every window of ordinary sizes on the SIMD
@@ -1701,8 +1668,8 @@ mod tests {
             let random = random_samples(&mut rng, width * step_rows.len());
             for src in [steps, random] {
                 assert_same(
-                    &resize_u8(&src, (width, step_rows.len()), &plan, None),
-                    &reference_resize(&src, width, &plan, None),
+                    &resize_u8(&src, (width, step_rows.len()), &plan),
+                    &reference_resize(&src, width, &plan),
                     &format!("{} {width} -> {ow}", kernel_name(kernel)),
                 );
             }
@@ -1727,24 +1694,18 @@ mod tests {
                     if !plan.scalar_cols.is_empty() {
                         reached.insert("scalar columns");
                     }
-                    for rgbx_pad in [None, Some(0)]
-                        .into_iter()
-                        .take(1 + usize::from(channels == RGB))
-                    {
-                        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-                        let transposed = takes_transposed(&plan, width, rgbx_pad);
-                        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-                        let transposed = false;
-                        reached.insert(match (transposed, channels, rgbx_pad) {
-                            (true, 1, _) => "transposed planar",
-                            (true, RGB, _) => "transposed RGB",
-                            (true, _, _) => "transposed RGBA",
-                            (false, 1, _) => "per-row planar",
-                            (false, RGB, None) => "per-row RGB",
-                            (false, RGB, Some(_)) => "per-row RGB to RGBX",
-                            (false, _, _) => "per-row RGBA",
-                        });
-                    }
+                    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+                    let transposed = takes_transposed(&plan, width);
+                    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+                    let transposed = false;
+                    reached.insert(match (transposed, channels) {
+                        (true, 1) => "transposed planar",
+                        (true, RGB) => "transposed RGB",
+                        (true, _) => "transposed RGBA",
+                        (false, 1) => "per-row planar",
+                        (false, RGB) => "per-row RGB",
+                        (false, _) => "per-row RGBA",
+                    });
                 }
             }
         }
@@ -1754,7 +1715,6 @@ mod tests {
             "scalar columns",
             "per-row planar",
             "per-row RGB",
-            "per-row RGB to RGBX",
             "per-row RGBA",
         ];
         #[cfg(target_arch = "x86_64")]

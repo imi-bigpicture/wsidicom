@@ -1,9 +1,5 @@
 //! Tile compositing: paste each tile onto the canvas at an integer position,
-//! later tiles overwriting earlier ones, planar/HWC, plus the RGB -> RGBX
-//! variant.
-
-use crate::rgbx::expand_rgb_rgbx;
-use crate::sample::RGB;
+//! later tiles overwriting earlier ones, planar/HWC.
 
 /// A read-only `width x height` pixel grid, `channels` interleaved samples per
 /// pixel (channels = 1: planar). Each row is contiguous, and row `y` starts
@@ -74,34 +70,13 @@ pub(crate) fn compose_tiles<T: Copy>(
     positions: &[(isize, isize)],
 ) {
     for (tile, &position) in tiles.iter().zip(positions) {
-        paste(canvas, tile, position, |dst, src| dst.copy_from_slice(src));
+        paste(canvas, tile, position);
     }
 }
 
-/// `compose_tiles` of RGB tiles onto an RGBX canvas, expanding as it writes
-/// (`pad` fills the fourth sample). Pillow stores RGB as 4-byte RGBX, so such
-/// a canvas maps into a Pillow image with no copy.
-pub(crate) fn compose_tiles_rgbx(
-    canvas: &mut Canvas<u8>,
-    tiles: &[Tile<u8>],
-    positions: &[(isize, isize)],
-    pad: u8,
-) {
-    for (tile, &position) in tiles.iter().zip(positions) {
-        paste(canvas, tile, position, |dst, src| {
-            expand_rgb_rgbx(src, dst, src.len() / RGB, pad);
-        });
-    }
-}
-
-/// Paste `tile` with its top-left at canvas position (ox, oy), handing `put`
-/// each visible tile-row segment with the canvas segment it lands on.
-fn paste<T, U: Copy>(
-    canvas: &mut Canvas<T>,
-    tile: &Tile<U>,
-    (ox, oy): (isize, isize),
-    mut put: impl FnMut(&mut [T], &[U]),
-) {
+/// Paste `tile` with its top-left at canvas position (ox, oy): each visible
+/// tile-row segment copied onto the canvas segment it lands on.
+fn paste<T: Copy>(canvas: &mut Canvas<T>, tile: &Tile<T>, (ox, oy): (isize, isize)) {
     let x0 = ox.max(0);
     let x1 = ox
         .saturating_add_unsigned(tile.width)
@@ -115,17 +90,15 @@ fn paste<T, U: Copy>(
         .min(canvas.height as isize);
     for cy in oy.max(0)..y1 {
         let row = tile.row((cy - oy) as usize);
-        put(
-            canvas.run(x0, cy, count),
-            &row[skip * tile.channels..(skip + count) * tile.channels],
-        );
+        canvas
+            .run(x0, cy, count)
+            .copy_from_slice(&row[skip * tile.channels..(skip + count) * tile.channels]);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sample::RGBX;
     use crate::testing::{CHANNELS, Rng};
 
     /// Each canvas sample as a reference paste leaves it: the last tile
@@ -210,26 +183,5 @@ mod tests {
         };
         compose_tiles(&mut canvas, &[piece], &[(1, 1)]);
         assert_eq!(out, [0, 0, 0, 0, 0, 8, 9, 10, 0, 14, 15, 16]);
-    }
-
-    #[test]
-    fn rgbx_pastes_expand_rgb() {
-        let rgb: Vec<u8> = (0..2 * 2 * RGB as u8).collect();
-        let tile = Tile::new(&rgb, 2, 2, RGB);
-        let mut out = vec![0u8; 3 * 2 * RGBX];
-        let mut canvas = Canvas {
-            px: &mut out,
-            width: 3,
-            height: 2,
-            channels: RGBX,
-        };
-        compose_tiles_rgbx(&mut canvas, &[tile], &[(1, 0)], 9);
-        assert_eq!(
-            out,
-            [
-                0, 0, 0, 0, 0, 1, 2, 9, 3, 4, 5, 9, //
-                0, 0, 0, 0, 6, 7, 8, 9, 9, 10, 11, 9,
-            ]
-        );
     }
 }
