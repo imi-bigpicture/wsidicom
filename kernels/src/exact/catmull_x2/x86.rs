@@ -135,7 +135,12 @@ pub(crate) unsafe fn catmull_x2_avx2(
             }
         };
         let vertical_step = |first_output: usize| {
-            prefetch_next_rows(src, 2 * y + 5, row_samples, 2 * first_output * channels);
+            prefetch_rows_after_window(
+                src.as_ptr(),
+                2 * y + 5,
+                row_samples,
+                2 * first_output * channels,
+            );
             let loaded: [__m256i; 8] = std::array::from_fn(|tap| load(tap, 2 * first_output));
             // Per 128-bit lane, the low unpacks hold samples 0..8, the high
             // ones 8..16.

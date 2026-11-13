@@ -19,20 +19,6 @@ pub(crate) fn cover_steps(len: usize, step: usize, step_at: &impl Fn(usize)) {
     }
 }
 
-/// Prefetches sample `x` of rows `first_row` and `first_row + 1`, the rows
-/// the next output row's window adds, so a tile not in cache streams ahead of
-/// the vertical pass. Rows past the image are harmless.
-#[inline(always)]
-pub(crate) fn prefetch_next_rows(src: &[u8], first_row: usize, row_samples: usize, x: usize) {
-    use std::arch::x86_64::*;
-    let first = src.as_ptr().wrapping_add(first_row * row_samples + x);
-    // SAFETY: a prefetch reads nothing architecturally and never faults.
-    unsafe {
-        _mm_prefetch::<_MM_HINT_T0>(first as *const i8);
-        _mm_prefetch::<_MM_HINT_T0>(first.wrapping_add(row_samples) as *const i8);
-    }
-}
-
 /// `dst` = the even pixels (`channels` samples each) of `full`.
 ///
 /// # Safety

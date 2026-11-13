@@ -124,9 +124,8 @@ Kernels dispatch at runtime: **AVX2** on x86-64 (via
 binary runs on any CPU — full speed where SIMD exists, correct otherwise. No
 global `target-cpu` needed.
 
-Environment toggles (read once per process): `WSIDICOM_KERNELS_NT=0` disables non-temporal stores on large box outputs,
-and `WSIDICOM_KERNELS_PREFAULT=0` disables the page-prefault helper thread for large
-outputs.
+Environment toggle (read once per process): `WSIDICOM_KERNELS_NT=0` disables
+non-temporal stores on large box outputs.
 
 The GIL is released around every kernel; parallelize across tiles with Python
 threads (there is no internal compute threading).
