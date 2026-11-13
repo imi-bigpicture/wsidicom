@@ -27,7 +27,7 @@ use crate::simd::cover_row;
 
 const Q6: i32 = CONVOLVE_U8_FRAC_BITS as i32;
 /// i16 lanes per register.
-const LANES: usize = 8;
+const I16_LANES: usize = 8;
 
 /// `mid[x] = sum_t mulhrs(rows[t][x] << 6, weights[t])` (Q6, wrapping i16
 /// sums) in blocks of several registers per tap, the last block overlapping
@@ -42,23 +42,28 @@ const LANES: usize = 8;
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn vertical_q6_neon(rows: &[u8], width: usize, weights: &[i16], mid: &mut [i16]) {
     debug_assert!(rows.len() >= weights.len() * width && mid.len() >= width && width >= 16);
-    let line = weights.len() >= LONG_WINDOW_TAPS && width >= LINE;
-    let half_line = width >= LINE / 2;
+    let whole_lines = weights.len() >= LONG_WINDOW_TAPS && width >= CACHE_LINE_BYTES;
+    let half_lines = width >= CACHE_LINE_BYTES / 2;
     // SAFETY: the contract, passed on; RDM is detected for its kernels.
     unsafe {
-        match (has_rdm(), line, half_line) {
-            (true, true, _) => vertical_blocks_rdm::<{ LINE / 16 }>(rows, width, weights, mid),
-            (true, false, true) => vertical_blocks_rdm::<{ LINE / 32 }>(rows, width, weights, mid),
+        match (has_rdm(), whole_lines, half_lines) {
+            (true, true, _) => vertical_blocks_rdm::<WHOLE_LINE_LOADS>(rows, width, weights, mid),
+            (true, false, true) => {
+                vertical_blocks_rdm::<HALF_LINE_LOADS>(rows, width, weights, mid);
+            }
             (true, false, false) => vertical_blocks_rdm::<1>(rows, width, weights, mid),
-            (false, true, _) => vertical_blocks::<{ LINE / 16 }>(rows, width, weights, mid),
-            (false, false, true) => vertical_blocks::<{ LINE / 32 }>(rows, width, weights, mid),
+            (false, true, _) => vertical_blocks::<WHOLE_LINE_LOADS>(rows, width, weights, mid),
+            (false, false, true) => vertical_blocks::<HALF_LINE_LOADS>(rows, width, weights, mid),
             (false, false, false) => vertical_blocks::<1>(rows, width, weights, mid),
         }
     }
 }
 
 /// Bytes per cache line (Apple silicon's; two lines of 64 bytes elsewhere).
-const LINE: usize = 128;
+const CACHE_LINE_BYTES: usize = 128;
+/// 16-byte loads per vertical block of a whole cache line, and of half one.
+const WHOLE_LINE_LOADS: usize = CACHE_LINE_BYTES / 16;
+const HALF_LINE_LOADS: usize = CACHE_LINE_BYTES / 32;
 /// Taps from which a vertical block is a whole line.
 const LONG_WINDOW_TAPS: usize = 16;
 
@@ -111,7 +116,7 @@ macro_rules! gen_vertical_blocks {
                     // SAFETY: x + LOADS * 16 <= width <= mid's length.
                     unsafe {
                         vst1q_s16(mid_ptr.add(x + 16 * load), low);
-                        vst1q_s16(mid_ptr.add(x + 16 * load + LANES), high);
+                        vst1q_s16(mid_ptr.add(x + 16 * load + I16_LANES), high);
                     }
                 }
             });
@@ -154,25 +159,35 @@ fn transpose_8x8_i16(rows: [int16x8_t; 8]) -> [int16x8_t; 8] {
     })
 }
 
-/// `TRANSPOSE_ROWS` (= 16) rows of `mid` (stride `wp`, a multiple of 8)
-/// into column-major `mid_t[x * 16 + r]`.
+/// `TRANSPOSE_ROWS` (= 16) rows of `mid`, `stride` apart (a multiple of 8),
+/// into column-major `mid_t[x * 16 + row]`.
 ///
 /// # Safety
-/// `mid` and `mid_t` hold at least `16 * wp` samples.
+/// `mid` and `mid_t` hold at least `16 * stride` samples.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn transpose_rows_i16_neon(mid: &[i16], wp: usize, mid_t: &mut [i16]) {
+pub(crate) unsafe fn transpose_rows_i16_neon(mid: &[i16], stride: usize, mid_t: &mut [i16]) {
     const ROWS: usize = TRANSPOSE_ROWS;
-    debug_assert!(wp.is_multiple_of(LANES) && mid.len() >= ROWS * wp && mid_t.len() >= ROWS * wp);
+    debug_assert!(
+        stride.is_multiple_of(I16_LANES)
+            && mid.len() >= ROWS * stride
+            && mid_t.len() >= ROWS * stride
+    );
     let (mid_ptr, mid_t_ptr) = (mid.as_ptr(), mid_t.as_mut_ptr());
-    for x0 in (0..wp).step_by(LANES) {
-        for half in 0..ROWS / LANES {
-            // SAFETY: x0 + 8 <= wp: 8 samples of each of the 16 rows.
+    for tile_x in (0..stride).step_by(I16_LANES) {
+        for half in 0..ROWS / I16_LANES {
+            // SAFETY: tile_x + 8 <= stride: 8 samples of each of the 16 rows.
             let rows = std::array::from_fn(|row| unsafe {
-                vld1q_s16(mid_ptr.add((half * LANES + row) * wp + x0))
+                vld1q_s16(mid_ptr.add((half * I16_LANES + row) * stride + tile_x))
             });
             for (column, samples) in transpose_8x8_i16(rows).into_iter().enumerate() {
-                // SAFETY: (x0 + column) * 16 + 16 <= wp * 16 <= mid_t's length.
-                unsafe { vst1q_s16(mid_t_ptr.add((x0 + column) * ROWS + half * LANES), samples) };
+                // SAFETY: (tile_x + column) * 16 + 16 <= stride * 16 <= mid_t's
+                // length.
+                unsafe {
+                    vst1q_s16(
+                        mid_t_ptr.add((tile_x + column) * ROWS + half * I16_LANES),
+                        samples,
+                    );
+                };
             }
         }
     }
@@ -231,7 +246,7 @@ macro_rules! gen_horizontal_transposed {
                         let (samples_low, samples_high) = unsafe {
                             (
                                 vld1q_s16(mid_t_ptr.add(at)),
-                                vld1q_s16(mid_t_ptr.add(at + LANES)),
+                                vld1q_s16(mid_t_ptr.add(at + I16_LANES)),
                             )
                         };
                         low = $add(low, samples_low, weight);
@@ -241,7 +256,7 @@ macro_rules! gen_horizontal_transposed {
                     // SAFETY: inside the outputs' sums (the caller's contract).
                     unsafe {
                         vst1q_s16(out_t_ptr.add(at), low);
-                        vst1q_s16(out_t_ptr.add(at + LANES), high);
+                        vst1q_s16(out_t_ptr.add(at + I16_LANES), high);
                     }
                 }
             }
@@ -351,7 +366,7 @@ macro_rules! gen_horizontal_padded {
                         let (samples_low, samples_high) = unsafe {
                             (
                                 vld1q_s16(mid_t_ptr.add(at)),
-                                vld1q_s16(mid_t_ptr.add(at + LANES)),
+                                vld1q_s16(mid_t_ptr.add(at + I16_LANES)),
                             )
                         };
                         low = $add(low, samples_low, weight);
@@ -361,7 +376,7 @@ macro_rules! gen_horizontal_padded {
                     // SAFETY: inside the outputs' sums (the caller's contract).
                     unsafe {
                         vst1q_s16(out_t_ptr.add(at), low);
-                        vst1q_s16(out_t_ptr.add(at + LANES), high);
+                        vst1q_s16(out_t_ptr.add(at + I16_LANES), high);
                     }
                 }
             }
@@ -372,46 +387,59 @@ macro_rules! gen_horizontal_padded {
 gen_horizontal_padded!(horizontal_padded_plain, "neon", add_mulhrs);
 gen_horizontal_padded!(horizontal_padded_rdm, "neon,rdm", add_mulhrs_rdm);
 
-/// Q6 sums `out_t[o * 16 + r]` back to row-major u8 `out[r * ow + o]` for the
-/// first `rows` rows: 8x8 transposes, then `vqrshrun` (rounded, clamped).
-/// Each row's output is staged a cache line at a time: 8-byte pieces of 16
-/// rows at once would, at power-of-2 row strides (which share L1 sets),
-/// evict each line before it is complete.
+/// Q6 sums `out_t[sample * 16 + row]` back to row-major u8
+/// `out[row * out_row_samples + sample]` for the first `rows` rows: 8x8
+/// transposes, then `vqrshrun` (rounded, clamped). Each row's output is
+/// staged a cache line at a time: 8-byte pieces of 16 rows at once would, at
+/// power-of-2 row strides (which share L1 sets), evict each line before it
+/// is complete.
 ///
 /// # Safety
-/// `out_t` holds `ow.next_multiple_of(16) * 16` sums and `out` `rows * ow`
-/// samples, `rows <= 16`.
+/// `out_t` holds `out_row_samples.next_multiple_of(16) * 16` sums and `out`
+/// `rows * out_row_samples` samples, `rows <= 16`.
 #[target_feature(enable = "neon")]
 pub(crate) unsafe fn untranspose_narrow_neon(
     out_t: &[i16],
-    ow: usize,
+    out_row_samples: usize,
     out: &mut [u8],
     rows: usize,
 ) {
-    const LINE: usize = 64;
+    const STAGED_LINE_BYTES: usize = 64;
     const ROWS: usize = TRANSPOSE_ROWS;
-    debug_assert!(out_t.len() >= ow.next_multiple_of(ROWS) * ROWS && out.len() >= rows * ow);
+    debug_assert!(
+        out_t.len() >= out_row_samples.next_multiple_of(ROWS) * ROWS
+            && out.len() >= rows * out_row_samples
+    );
     let out_t_ptr = out_t.as_ptr();
-    let mut staged = [[0u8; LINE]; ROWS];
-    for line_start in (0..ow).step_by(LINE) {
-        for o0 in (line_start..(line_start + LINE).min(ow)).step_by(LANES) {
-            for half in 0..ROWS / LANES {
-                // SAFETY: o0 < ow with o0 a multiple of 8, so o0 + 8 <=
-                // ow.next_multiple_of(16): 8 outputs' sums of 8 rows.
+    let mut staged = [[0u8; STAGED_LINE_BYTES]; ROWS];
+    for line_start in (0..out_row_samples).step_by(STAGED_LINE_BYTES) {
+        for tile_start in
+            (line_start..(line_start + STAGED_LINE_BYTES).min(out_row_samples)).step_by(I16_LANES)
+        {
+            for half in 0..ROWS / I16_LANES {
+                // SAFETY: tile_start < out_row_samples and a multiple of 8, so
+                // tile_start + 8 <= out_row_samples.next_multiple_of(16): 8
+                // outputs' sums of 8 rows.
                 let sums = std::array::from_fn(|output| unsafe {
-                    vld1q_s16(out_t_ptr.add((o0 + output) * ROWS + half * LANES))
+                    vld1q_s16(out_t_ptr.add((tile_start + output) * ROWS + half * I16_LANES))
                 });
                 let by_row = transpose_8x8_i16(sums);
-                for (row, staged) in staged.iter_mut().enumerate().skip(half * LANES).take(LANES) {
-                    let narrowed = vqrshrun_n_s16::<Q6>(by_row[row - half * LANES]);
-                    // SAFETY: o0 - line_start + 8 <= 64, inside the staged line.
-                    unsafe { vst1_u8(staged.as_mut_ptr().add(o0 - line_start), narrowed) };
+                for (row, staged) in staged
+                    .iter_mut()
+                    .enumerate()
+                    .skip(half * I16_LANES)
+                    .take(I16_LANES)
+                {
+                    let narrowed = vqrshrun_n_s16::<Q6>(by_row[row - half * I16_LANES]);
+                    // SAFETY: tile_start - line_start + 8 <= STAGED_LINE_BYTES,
+                    // inside the staged line.
+                    unsafe { vst1_u8(staged.as_mut_ptr().add(tile_start - line_start), narrowed) };
                 }
             }
         }
-        let len = LINE.min(ow - line_start);
+        let len = STAGED_LINE_BYTES.min(out_row_samples - line_start);
         for (row, line) in staged.iter().enumerate().take(rows) {
-            out[row * ow + line_start..][..len].copy_from_slice(&line[..len]);
+            out[row * out_row_samples + line_start..][..len].copy_from_slice(&line[..len]);
         }
     }
 }
@@ -422,9 +450,7 @@ mod tests {
     use crate::convolve::{Kernel, PADDED_READS_PAST_ROW};
     use crate::testing::{Rng, random_samples};
 
-    /// A vertical block kernel.
     type VerticalBlocks = unsafe fn(&[u8], usize, &[i16], &mut [i16]);
-    /// A padded horizontal pass.
     type PaddedPass = unsafe fn(&[i16], &[usize], &[i16], usize, &mut [i16]);
 
     /// The plain transposed horizontal passes (for CPUs without RDM), over
@@ -433,8 +459,8 @@ mod tests {
     #[test]
     fn rdm_and_plain_horizontal_kernels_agree() {
         const ROWS: usize = TRANSPOSE_ROWS;
-        // The padded pass of `taps` taps, plain or RDM.
         macro_rules! padded_pass {
+
             ($rdm:expr, $taps:expr, $($tap_count:literal)+) => {
                 match $taps {
                     $($tap_count => if $rdm {
@@ -452,7 +478,7 @@ mod tests {
         let mut rng = Rng::new(32);
         for kernel in [Kernel::Bilinear, Kernel::CatmullRom, Kernel::Lanczos3] {
             for channels in [1, 3, 4] {
-                for (width, ow) in [
+                for (width, out_width) in [
                     (17, 33),
                     (64, 32),
                     (130, 37),
@@ -460,7 +486,7 @@ mod tests {
                     (201, 67),
                     (640, 10),
                 ] {
-                    let cols = Windows::new(width, ow, kernel);
+                    let cols = Windows::new(width, out_width, kernel);
                     let mid_samples =
                         ((width * channels).next_multiple_of(64) + 32 + PADDED_READS_PAST_ROW)
                             * ROWS;
@@ -468,13 +494,13 @@ mod tests {
                         .into_iter()
                         .map(|sample| (i16::from(sample) - 16) << Q6)
                         .collect();
-                    let out_samples = (ow * channels).next_multiple_of(ROWS) * ROWS;
+                    let out_samples = (out_width * channels).next_multiple_of(ROWS) * ROWS;
                     let run = |pass: &dyn Fn(&mut [i16])| {
                         let mut out_t = vec![i16::MIN; out_samples];
                         pass(&mut out_t);
                         out_t
                     };
-                    let context = format!("{width} -> {ow} x {channels}");
+                    let context = format!("{width} -> {out_width} x {channels}");
                     let plain = run(&|out_t| {
                         // SAFETY: NEON detected; mid_t is padded as
                         // resize_transposed pads it, out_t holds every output.
@@ -518,10 +544,22 @@ mod tests {
         let blocks: [(VerticalBlocks, usize, &str); 6] = [
             (vertical_blocks::<1>, 1, "plain"),
             (vertical_blocks_rdm::<1>, 1, "rdm"),
-            (vertical_blocks::<{ LINE / 32 }>, LINE / 32, "plain"),
-            (vertical_blocks_rdm::<{ LINE / 32 }>, LINE / 32, "rdm"),
-            (vertical_blocks::<{ LINE / 16 }>, LINE / 16, "plain"),
-            (vertical_blocks_rdm::<{ LINE / 16 }>, LINE / 16, "rdm"),
+            (vertical_blocks::<HALF_LINE_LOADS>, HALF_LINE_LOADS, "plain"),
+            (
+                vertical_blocks_rdm::<HALF_LINE_LOADS>,
+                HALF_LINE_LOADS,
+                "rdm",
+            ),
+            (
+                vertical_blocks::<WHOLE_LINE_LOADS>,
+                WHOLE_LINE_LOADS,
+                "plain",
+            ),
+            (
+                vertical_blocks_rdm::<WHOLE_LINE_LOADS>,
+                WHOLE_LINE_LOADS,
+                "rdm",
+            ),
         ];
         let mut rng = Rng::new(31);
         for (width, taps) in [(16, 1), (40, 3), (64, 6), (100, 17), (130, 18), (300, 41)] {
