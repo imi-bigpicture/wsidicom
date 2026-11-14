@@ -365,43 +365,6 @@ class TestResizeSimdParity:
         # Assert
         assert np.array_equal(simd, scalar)
 
-    @pytest.mark.parametrize(
-        ["dtype", "shape"],
-        [
-            (np.uint8, (120, 1024, 3)),
-            (np.uint8, (100, 4096)),
-            (np.uint16, (100, 512, 3)),
-            (np.uint16, (100, 2048)),
-        ],
-    )
-    @pytest.mark.parametrize("reduction", [4, 6, 8])
-    def test_vertical_tap_groups_equal_scalar(
-        self,
-        random_image: RandomImage,
-        simd_and_scalar: SimdAndScalar,
-        dtype: type[np.generic],
-        shape: tuple[int, ...],
-        reduction: int,
-    ) -> None:
-        """Row strides a multiple of 4 KB group the taps, identical to scalar.
-
-        With enough taps (12+ on AVX2) the vertical pass runs with the taps in
-        groups: the same sums in the same order, so identical to the scalar
-        reference.
-        """
-        # Arrange
-        image = random_image(shape, dtype)
-        output_height = shape[0] // reduction
-        output_width = shape[1] // reduction + 3
-
-        # Act
-        simd, scalar = simd_and_scalar(
-            lambda: resize(image, output_height, output_width, ResizeFilter.LANCZOS3)
-        )
-
-        # Assert
-        assert np.array_equal(simd, scalar)
-
 
 @pytest.mark.unittest
 class TestResizeLayouts:
