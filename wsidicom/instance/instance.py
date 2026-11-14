@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 from collections.abc import Sequence
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -441,7 +442,8 @@ class WsiInstance:
         image: Image | str | Path | UPath
             Image, or path to an image file.
         base_dataset: Dataset
-            Base dataset to include.
+            Base dataset to include. A copy is used, as it is commonly the dataset of
+            the base level.
         file_options: dict[str, Any] | None = None
             Keyword arguments for opening the filesystem the image file is on.
 
@@ -455,7 +457,7 @@ class WsiInstance:
         else:
             image_data = NumpyImageData.from_file(image, file_options)
         instance_dataset = WsiDataset.create_instance_dataset(
-            base_dataset, ImageType.LABEL, image_data
+            deepcopy(base_dataset), ImageType.LABEL, image_data
         )
         return cls(instance_dataset, image_data)
 
