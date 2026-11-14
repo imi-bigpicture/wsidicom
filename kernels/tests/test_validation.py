@@ -15,8 +15,8 @@
 """Tests for input validation across the API.
 
 Images the kernels cannot process raise a ValueError, not a panic or an empty
-result; filter strings, non-contiguous arrays, positions other than an int64 array
-and unfit fills are rejected, not converted.
+result; filter strings, non-contiguous arrays and unfit fills are rejected, not
+converted.
 """
 
 from collections.abc import Callable
@@ -26,7 +26,6 @@ import numpy as np
 import pytest
 from wsidicom_kernels import (
     ResizeFilter,
-    compose,
     downscale,
     downscale_grid,
     resize,
@@ -36,12 +35,6 @@ from wsidicom_kernels import (
 @pytest.fixture
 def image() -> np.ndarray:
     return np.zeros((8, 8, 3), np.uint8)
-
-
-@pytest.fixture
-def origin() -> np.ndarray:
-    """One int64 position at the canvas's top-left corner."""
-    return np.zeros((1, 2), np.int64)
 
 
 @pytest.fixture
@@ -92,12 +85,6 @@ class TestValidation:
                 lambda image: resize(image, 4, 4, ResizeFilter.BILINEAR), id="resize"
             ),
             pytest.param(
-                lambda image: compose(
-                    image.copy(), [image], np.zeros((1, 2), np.int64)
-                ),
-                id="compose",
-            ),
-            pytest.param(
                 lambda image: downscale_grid([image], 1, 2, ResizeFilter.BOX),
                 id="downscale_grid",
             ),
@@ -123,18 +110,6 @@ class TestValidation:
             pytest.param(
                 lambda image: resize(image, 4, 4, ResizeFilter.BOX), id="resize"
             ),
-            pytest.param(
-                lambda image: compose(
-                    np.zeros((8, 8, 3), np.uint8), [image], np.zeros((1, 2), np.int64)
-                ),
-                id="compose-tile",
-            ),
-            pytest.param(
-                lambda image: compose(
-                    image, [np.zeros((4, 4, 3), np.uint8)], np.zeros((1, 2), np.int64)
-                ),
-                id="compose-canvas",
-            ),
         ],
     )
     def test_non_contiguous_image_raises_value_error(
@@ -144,53 +119,6 @@ class TestValidation:
         # Act & Assert
         with pytest.raises(ValueError, match="C-contiguous"):
             operation(non_contiguous_image)
-
-    @pytest.mark.parametrize(
-        "positions",
-        [
-            [[0, 0]],
-            np.zeros((1, 2), np.float64),
-            np.zeros((1, 2), np.float32),
-            np.zeros((1, 2), np.int32),
-        ],
-        ids=["list", "float64", "float32", "int32"],
-    )
-    def test_compose_rejects_positions_other_than_int64_array(
-        self, image: np.ndarray, positions: Any
-    ) -> None:
-        """Positions must be an (N, 2) int64 array.
-
-        A list or another dtype, even one holding whole numbers, is not
-        converted.
-        """
-        # Act & Assert
-        with pytest.raises((TypeError, ValueError)):
-            compose(image.copy(), [image], positions)
-
-    def test_compose_rejects_strided_positions(self, image: np.ndarray) -> None:
-        """A non-contiguous view of int64 positions is rejected, not copied."""
-        # Arrange
-        strided = np.zeros((1, 4), np.int64)[:, ::2]
-
-        # Act & Assert
-        with pytest.raises(ValueError, match="Positions must be C-contiguous"):
-            compose(image.copy(), [image], strided)
-
-    @pytest.mark.parametrize(
-        ["positions", "match"],
-        [
-            (np.zeros((1, 3), np.int64), r"shape \(N, 2\)"),
-            (np.zeros((2, 2), np.int64), "Number of positions"),
-        ],
-        ids=["three-columns", "count"],
-    )
-    def test_compose_rejects_positions_unfit_for_tiles(
-        self, image: np.ndarray, positions: np.ndarray, match: str
-    ) -> None:
-        """Positions are (N, 2), one per tile."""
-        # Act & Assert
-        with pytest.raises(ValueError, match=match):
-            compose(image.copy(), [image], positions)
 
     @pytest.mark.parametrize(
         "fill",
@@ -255,18 +183,6 @@ class TestValidation:
                 id="resize-nearest",
             ),
             pytest.param(
-                lambda image: compose(
-                    np.zeros((8, 8, 3), np.uint8), [image], np.zeros((1, 2), np.int64)
-                ),
-                id="compose-tile",
-            ),
-            pytest.param(
-                lambda image: compose(
-                    image, [np.zeros((4, 4, 3), np.uint8)], np.zeros((1, 2), np.int64)
-                ),
-                id="compose-canvas",
-            ),
-            pytest.param(
                 lambda image: downscale_grid([image] * 2, 2, 2, ResizeFilter.BOX),
                 id="downscale_grid",
             ),
@@ -285,87 +201,6 @@ class TestValidation:
         # Act & Assert
         with pytest.raises(ValueError, match="C-contiguous"):
             operation(image)
-
-    @pytest.mark.parametrize(
-        ["crops", "match"],
-        [
-            ([[0, 0, 0, 4, 4]], "positions must equal number of crops"),
-            (np.zeros((1, 5), np.int32), "int64"),
-            (np.zeros((1, 4), np.int64), r"\(N, 5\)"),
-            ([[[0, 0, 0, 4, 4]]], r"\(N, 5\)"),
-            ([[1, 0, 0, 4, 4], [0, 0, 0, 4, 4]], "index in tiles"),
-            ([[0, -1, 0, 4, 4], [0, 0, 0, 4, 4]], "not be negative"),
-            ([[0, 5, 0, 4, 4], [0, 0, 0, 4, 4]], "inside their tile"),
-            ([[0, 0, 6, 4, 3], [0, 0, 0, 4, 4]], "inside their tile"),
-            ([[0, 0, 0, 0, 4], [0, 0, 0, 4, 4]], "nonempty"),
-        ],
-        ids=[
-            "count",
-            "int32",
-            "four-columns",
-            "three-dimensions",
-            "index",
-            "negative",
-            "past-right",
-            "past-bottom",
-            "empty",
-        ],
-    )
-    def test_compose_rejects_bad_crops(self, crops: Any, match: str) -> None:
-        """Crops are an (N, 5) int64 array of nonempty rectangles of tiles."""
-        # Arrange
-        canvas = np.zeros((8, 8), np.uint8)
-        tile = np.zeros((8, 8), np.uint8)
-        positions = np.zeros((2, 2), np.int64)
-
-        # Act & Assert
-        with pytest.raises(ValueError, match=match):
-            compose(
-                canvas,
-                [tile],
-                positions,
-                crops=np.asarray(crops, np.int64) if isinstance(crops, list) else crops,
-            )
-
-    def test_compose_rejects_negative_row_stride(self, origin: np.ndarray) -> None:
-        """Rows in reverse order are rejected, not read past the array."""
-        # Arrange
-        canvas = np.zeros((8, 8), np.uint8)
-        tile = np.zeros((8, 8), np.uint8)[::-1]
-
-        # Act & Assert
-        with pytest.raises(ValueError, match="Each tile row must be contiguous"):
-            compose(canvas, [tile], origin)
-
-    @pytest.mark.parametrize(
-        "position",
-        [2**52 + 1, -(2**52) - 1, 2**63 - 1, -(2**63)],
-        ids=["2^52+1", "-2^52-1", "int64-max", "int64-min"],
-    )
-    @pytest.mark.parametrize("axis", [0, 1], ids=["x", "y"])
-    def test_compose_rejects_huge_positions(self, position: int, axis: int) -> None:
-        """A position beyond 2^52 in magnitude is a ValueError, not an overflow."""
-        # Arrange
-        canvas = np.full((4, 64), 7, np.uint8)
-        tile = np.arange(3, dtype=np.uint8).reshape(3, 1)
-        positions = np.zeros((1, 2), np.int64)
-        positions[0, axis] = position
-
-        # Act & Assert
-        with pytest.raises(ValueError, match="Positions"):
-            compose(canvas, [tile], positions)
-
-    def test_compose_rejects_read_only_canvas(
-        self, image: np.ndarray, origin: np.ndarray
-    ) -> None:
-        """A read-only canvas is reported as such."""
-        # Arrange
-        canvas = np.zeros((8, 8, 3), np.uint8)
-        canvas.flags.writeable = False
-
-        # Act & Assert
-        with pytest.raises(ValueError, match="Canvas must be writable"):
-            compose(canvas, [image], origin)
 
     @pytest.mark.parametrize(
         "size", [(2**33, 2**31), (2**62, 1)], ids=["wraps-to-zero", "wraps-small"]
@@ -431,12 +266,6 @@ class TestValidation:
             ),
             pytest.param(
                 lambda image: resize(image, 4, 4, ResizeFilter.BILINEAR), id="resize"
-            ),
-            pytest.param(
-                lambda image: compose(
-                    image.copy(), [image], np.zeros((1, 2), np.int64)
-                ),
-                id="compose",
             ),
         ],
     )

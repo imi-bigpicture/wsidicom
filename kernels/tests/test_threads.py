@@ -14,50 +14,20 @@
 
 """Tests of the GIL-released paths under threads."""
 
-import contextlib
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import numpy as np
 import pytest
-from wsidicom_kernels import ResizeFilter, compose, downscale
+from wsidicom_kernels import ResizeFilter, downscale, resize
 
 THREADS = 8
 ROUNDS = 30
-POSITION = np.array([[3, 2]], np.int64)
-
-
-@pytest.fixture
-def tile(random_image: Callable[[tuple[int, ...], Any], np.ndarray]) -> np.ndarray:
-    """Make an odd-sized random tile, so rows end in a partial vector."""
-    return random_image((257, 263), np.uint8)
 
 
 @pytest.mark.unittest
 class TestThreads:
-    def test_separate_canvases_equal_single_threaded(self, tile: np.ndarray) -> None:
-        """Concurrent composes onto separate canvases equal a single-threaded one."""
-        # Arrange
-        reference = np.zeros((300, 300), np.uint8)
-        compose(reference, [tile], POSITION)
-
-        def compose_rounds(_: int) -> list[np.ndarray]:
-            canvases = []
-            for _ in range(ROUNDS):
-                canvas = np.zeros((300, 300), np.uint8)
-                compose(canvas, [tile], POSITION)
-                canvases.append(canvas)
-            return canvases
-
-        # Act
-        with ThreadPoolExecutor(THREADS) as pool:
-            per_thread = list(pool.map(compose_rounds, range(THREADS)))
-
-        # Assert
-        for canvases in per_thread:
-            assert all((canvas == reference).all() for canvas in canvases)
-
     def test_shared_input_downscales_equal(
         self, random_image: Callable[[tuple[int, ...], Any], np.ndarray]
     ) -> None:
@@ -81,25 +51,30 @@ class TestThreads:
         for downscaled in per_thread:
             assert all((result == single).all() for result in downscaled)
 
-    def test_shared_canvas_raises_value_error_at_worst(self, tile: np.ndarray) -> None:
-        """Concurrent composes onto one canvas each succeed or raise ValueError.
+    def test_concurrent_resizes_of_different_sizes_equal_single_threaded(
+        self, random_image: Callable[[tuple[int, ...], Any], np.ndarray]
+    ) -> None:
+        """Each thread's resizes equal single-threaded ones, whatever the others run.
 
-        A clean ValueError (the canvas is borrowed): never another error.
+        Every thread cycles through different output sizes, so the threads'
+        plan caches hold different plans at the same time.
         """
         # Arrange
-        canvas = np.zeros((300, 300), np.uint8)
+        image = random_image((257, 263, 3), np.uint8)
+        sizes = [(128, 131), (85, 87), (200, 150), (64, 66)]
+        single = {size: resize(image, *size, ResizeFilter.BILINEAR) for size in sizes}
 
-        def count_successful_rounds(_: int) -> int:
-            succeeded = 0
-            for _ in range(ROUNDS):
-                with contextlib.suppress(ValueError):
-                    compose(canvas, [tile], POSITION)
-                    succeeded += 1
-            return succeeded
+        def resize_rounds(offset: int) -> list[tuple[tuple[int, int], np.ndarray]]:
+            results = []
+            for round_index in range(ROUNDS):
+                size = sizes[(offset + round_index) % len(sizes)]
+                results.append((size, resize(image, *size, ResizeFilter.BILINEAR)))
+            return results
 
         # Act
         with ThreadPoolExecutor(THREADS) as pool:
-            succeeded = sum(pool.map(count_successful_rounds, range(THREADS)))
+            per_thread = list(pool.map(resize_rounds, range(THREADS)))
 
         # Assert
-        assert succeeded > 0
+        for results in per_thread:
+            assert all((result == single[size]).all() for size, result in results)

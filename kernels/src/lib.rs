@@ -2,17 +2,15 @@
 //! array borrows, GIL release and numpy conversion around the pure-Rust
 //! kernel modules.
 
-use numpy::ndarray::{ArrayD, ArrayView2, Dimension, IxDyn};
+use numpy::ndarray::{ArrayD, Dimension, IxDyn};
 use numpy::{
-    Element, IntoPyArray, PyArray, PyArray2, PyArrayDescrMethods, PyArrayDyn, PyArrayMethods,
-    PyReadonlyArray, PyReadonlyArray2, PyReadonlyArrayDyn, PyReadwriteArray, PyUntypedArray,
-    PyUntypedArrayMethods,
+    Element, IntoPyArray, PyArray, PyArrayDescrMethods, PyArrayDyn, PyArrayMethods,
+    PyReadonlyArray, PyReadonlyArrayDyn, PyUntypedArray, PyUntypedArrayMethods,
 };
 use pyo3::exceptions::{PyMemoryError, PyValueError};
 use pyo3::prelude::*;
 
 mod box_reduce;
-mod composite;
 mod convolve;
 mod convolve_float;
 mod cpu;
@@ -27,7 +25,6 @@ mod testing;
 mod x86;
 
 use box_reduce::BoxSample;
-use composite::{Canvas, Tile, compose_tiles};
 use convolve::Geometry;
 use sample::RGB;
 
@@ -55,10 +52,10 @@ unsafe extern "C" {
 
 // ---- Errors and conversions ----------------------------------------------------
 
-/// numpy's borrow tracking is process-wide, so this also catches a compose
-/// on another thread.
-fn held_by_concurrent_compose() -> PyErr {
-    PyValueError::new_err("Array is being written by a concurrent compose — pass a copy.")
+/// numpy's borrow tracking is process-wide: another Rust extension may hold
+/// the array for writing.
+fn borrowed_for_writing() -> PyErr {
+    PyValueError::new_err("Array is borrowed for writing elsewhere — pass a copy.")
 }
 
 fn not_c_contiguous(what: &str) -> PyErr {
@@ -127,15 +124,6 @@ pub(crate) fn output_samples(
     Ok(samples)
 }
 
-/// `c_samples` of an array borrowed for writing.
-fn c_samples_mut<'a, T: Element, D: Dimension>(
-    array: &'a mut PyReadwriteArray<'_, T, D>,
-    what: &str,
-) -> PyResult<&'a mut [T]> {
-    check_c_slice(array, what)?;
-    array.as_slice_mut().map_err(|_| not_c_contiguous(what))
-}
-
 /// `value` as a size or factor; a `ValueError` with `message` below 1.
 fn at_least_one(value: i64, message: &str) -> PyResult<usize> {
     usize::try_from(value)
@@ -180,9 +168,7 @@ fn image_dims(image: &Bound<'_, PyAny>) -> PyResult<(usize, usize, usize)> {
 fn read_only<'py, T: Element>(
     array: &Bound<'py, PyArrayDyn<T>>,
 ) -> PyResult<PyReadonlyArrayDyn<'py, T>> {
-    array
-        .try_readonly()
-        .map_err(|_| held_by_concurrent_compose())
+    array.try_readonly().map_err(|_| borrowed_for_writing())
 }
 
 /// `data` as a numpy array, (height, width) for one channel.
@@ -238,221 +224,6 @@ macro_rules! with_dtype {
             )))
         }
     };
-}
-
-// ---- compose -------------------------------------------------------------------
-
-/// A borrowed tile's samples, from its first to its last, and how many
-/// samples apart its rows start. Each row must be contiguous: a C-contiguous
-/// array, or a slice of one (`tile[y0:y1, x0:x1]`).
-fn tile_samples<'a, T: Element>(
-    array: &'a PyReadonlyArrayDyn<'_, T>,
-    (height, width, channels): (usize, usize, usize),
-) -> PyResult<(&'a [T], usize)> {
-    let row_samples = width * channels;
-    if array.is_c_contiguous() {
-        return Ok((c_samples(array, "Tiles")?, row_samples));
-    }
-    if !array.is_aligned() {
-        return Err(misaligned("Tiles"));
-    }
-    let sample_bytes = std::mem::size_of::<T>() as isize;
-    let strides = array.strides();
-    let pixels_contiguous = channels == 1 || strides.get(2).copied() == Some(sample_bytes);
-    let row_contiguous = width <= 1 || strides[1] == channels as isize * sample_bytes;
-    let row_stride = if height <= 1 {
-        Some(row_samples)
-    } else {
-        (strides[0] % sample_bytes == 0)
-            .then(|| usize::try_from(strides[0] / sample_bytes).ok())
-            .flatten()
-            .filter(|&stride| stride >= row_samples)
-    };
-    let (true, true, Some(row_stride)) = (pixels_contiguous, row_contiguous, row_stride) else {
-        return Err(PyValueError::new_err(
-            "Each tile row must be contiguous: a C-contiguous array, or a slice of rows \
-             and columns of one.",
-        ));
-    };
-    let len = if height == 0 || width == 0 {
-        0
-    } else {
-        (height - 1) * row_stride + row_samples
-    };
-    // SAFETY: sample (y, x, c) of the array lies `y * row_stride + x *
-    // channels + c` samples past its data pointer, and its buffer holds
-    // every sample from its first to its last; the read-only borrow keeps
-    // them alive and unwritten by other borrowers for 'a.
-    let samples = unsafe { std::slice::from_raw_parts(array.data().cast_const(), len) };
-    Ok((samples, row_stride))
-}
-
-/// The pieces `crops` cuts from `tiles`, one per row: (tile index, x, y,
-/// width, height), each nonempty and inside its tile.
-fn crop_tiles<'a, T: Copy>(
-    tiles: &[Tile<'a, T>],
-    crops: &ArrayView2<i64>,
-) -> PyResult<Vec<Tile<'a, T>>> {
-    crops
-        .rows()
-        .into_iter()
-        .map(|crop| {
-            let field = |at: usize| usize::try_from(crop[at]).ok();
-            let piece = (field(0), field(1), field(2), field(3), field(4));
-            let (Some(index), Some(x), Some(y), Some(width), Some(height)) = piece else {
-                return Err(PyValueError::new_err("Crops must not be negative."));
-            };
-            let tile = tiles.get(index).ok_or_else(|| {
-                PyValueError::new_err("Crops must name a tile by its index in tiles.")
-            })?;
-            let inside = width > 0
-                && height > 0
-                && x.checked_add(width).is_some_and(|end| end <= tile.width)
-                && y.checked_add(height).is_some_and(|end| end <= tile.height);
-            if !inside {
-                return Err(PyValueError::new_err(
-                    "Crops must be nonempty and inside their tile.",
-                ));
-            }
-            Ok(tile.crop((x, y), (width, height)))
-        })
-        .collect()
-}
-
-/// Validate and borrow all tiles, then compose them with the GIL released.
-/// Borrows are fallible so aliasing — a tile sharing the canvas's buffer, or
-/// another thread composing onto it — is a `ValueError` rather than a panic.
-fn compose_all<T: Element + Copy + Send + Sync>(
-    canvas_array: &Bound<'_, PyArrayDyn<T>>,
-    tile_arrays: &[Bound<'_, PyAny>],
-    (positions, crops): (&ArrayView2<i64>, Option<&ArrayView2<i64>>),
-) -> PyResult<()> {
-    let (height, width, channels) = hwc_dims(canvas_array.shape())?;
-    let Ok(mut canvas_borrow) = canvas_array.try_readwrite() else {
-        let writable = canvas_array
-            .getattr("flags")?
-            .getattr("writeable")?
-            .extract::<bool>()?;
-        return Err(PyValueError::new_err(if writable {
-            "Canvas is already borrowed (in use by another compose?)."
-        } else {
-            "Canvas must be writable."
-        }));
-    };
-    let mut canvas = Canvas {
-        samples: c_samples_mut(&mut canvas_borrow, "Canvas")?,
-        width,
-        height,
-        channels,
-    };
-
-    let mut tile_borrows: Vec<(PyReadonlyArrayDyn<T>, (usize, usize, usize))> =
-        Vec::with_capacity(tile_arrays.len());
-    for tile_object in tile_arrays {
-        let tile_array = tile_object
-            .cast::<PyArrayDyn<T>>()
-            .map_err(|_| PyValueError::new_err("Every tile must match the canvas dtype."))?;
-        let tile_dims @ (_, _, tile_channels) = hwc_dims(tile_array.shape())?;
-        if tile_channels != channels {
-            return Err(PyValueError::new_err(
-                "Every tile must have the same channels as the canvas.",
-            ));
-        }
-        let tile_borrow = tile_array.try_readonly().map_err(|_| {
-            PyValueError::new_err("A tile shares memory with the canvas — pass a copy.")
-        })?;
-        tile_borrows.push((tile_borrow, tile_dims));
-    }
-    let mut tiles = tile_borrows
-        .iter()
-        .map(|(tile_borrow, tile_dims @ (tile_height, tile_width, _))| {
-            let (samples, stride) = tile_samples(tile_borrow, *tile_dims)?;
-            Ok(Tile {
-                stride,
-                ..Tile::new(samples, *tile_width, *tile_height, channels)
-            })
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    if let Some(crops) = crops {
-        tiles = crop_tiles(&tiles, crops)?;
-    }
-
-    let tile_positions: Vec<(isize, isize)> = positions
-        .rows()
-        .into_iter()
-        .map(|row| (row[0] as isize, row[1] as isize))
-        .collect();
-    canvas_array
-        .py()
-        .detach(|| compose_tiles(&mut canvas, &tiles, &tile_positions));
-    Ok(())
-}
-
-/// Positions' largest magnitude: pixel arithmetic on it cannot overflow.
-const MAX_POSITION_MAGNITUDE: u64 = 1 << 52;
-
-/// Paste `tiles` onto `canvas` (mutated in place) at `positions` (N x 2 int64,
-/// each (x, y) = (column, row)); with `crops` (N x 5 int64, each (tile index,
-/// x, y, width, height)), paste those pieces of `tiles` instead. Overlaps:
-/// last wins. Canvas and tiles are all either planar 2D (H, W) or interleaved
-/// HWC (H, W, C) with matching channels.
-#[pyfunction]
-#[pyo3(signature = (canvas, tiles, positions, crops=None))]
-fn compose(
-    canvas: &Bound<'_, PyAny>,
-    tiles: Vec<Bound<'_, PyAny>>,
-    positions: &Bound<'_, PyAny>,
-    crops: Option<&Bound<'_, PyAny>>,
-) -> PyResult<()> {
-    let positions_borrow = positions
-        .cast::<PyArray2<i64>>()
-        .map_err(|_| {
-            PyValueError::new_err("Positions must be an (N, 2) int64 array of integer positions.")
-        })?
-        .try_readonly()
-        .map_err(|_| held_by_concurrent_compose())?;
-    if !positions_borrow.is_c_contiguous() {
-        return Err(PyValueError::new_err("Positions must be C-contiguous."));
-    }
-    let positions = positions_borrow.as_array();
-    if positions.shape()[1] != 2 {
-        return Err(PyValueError::new_err("Positions must have shape (N, 2)."));
-    }
-    let crops = crops
-        .map(|crops| {
-            crops
-                .cast::<PyArray2<i64>>()
-                .ok()
-                .filter(|crops| crops.shape()[1] == 5)
-                .ok_or_else(|| PyValueError::new_err("Crops must be an (N, 5) int64 array."))?
-                .try_readonly()
-                .map_err(|_| held_by_concurrent_compose())
-        })
-        .transpose()?;
-    let crops = crops.as_ref().map(PyReadonlyArray2::as_array);
-    let (pieces, what) = match &crops {
-        Some(crops) => (crops.shape()[0], "crops"),
-        None => (tiles.len(), "tiles"),
-    };
-    if positions.shape()[0] != pieces {
-        return Err(PyValueError::new_err(format!(
-            "Number of positions must equal number of {what}."
-        )));
-    }
-    if !positions
-        .iter()
-        .all(|position| position.unsigned_abs() <= MAX_POSITION_MAGNITUDE)
-    {
-        return Err(PyValueError::new_err(
-            "Positions must be at most 2^52 in magnitude.",
-        ));
-    }
-
-    with_dtype!(canvas, "Canvas", |array: T| compose_all::<T>(
-        array,
-        &tiles,
-        (&positions, crops.as_ref())
-    ))
 }
 
 // ---- downscale / resize --------------------------------------------------------
@@ -774,7 +545,6 @@ fn _kernels(module: &Bound<'_, PyModule>) -> PyResult<()> {
     unsafe {
         mi_option_set(MI_OPTION_PURGE_DELAY, PURGE_DELAY_MS);
     };
-    module.add_function(wrap_pyfunction!(compose, module)?)?;
     module.add_function(wrap_pyfunction!(downscale, module)?)?;
     module.add_function(wrap_pyfunction!(resize, module)?)?;
     module.add_function(wrap_pyfunction!(downscale_grid_box, module)?)?;

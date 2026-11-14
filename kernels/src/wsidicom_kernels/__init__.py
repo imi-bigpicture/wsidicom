@@ -12,12 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-"""Fast tile compositing and downscaling.
+"""Fast, accurate image resizing and pyramid downscaling.
 
 Operates on planar ``(H, W)`` or interleaved RGB ``(H, W, 3)`` arrays, dtype
-uint8 / uint16. Planar is the universal core — the only layout that
-expresses subsampled chroma (YCbCr 4:2:0), so compose/downscale those per plane.
-Overlaps in :func:`compose` resolve last-write-wins (no blending).
+uint8 / uint16. Subsampled chroma (YCbCr 4:2:0) is resized per plane.
 
 The implementation lives in :mod:`wsidicom_kernels.core` over the PyO3 extension
 :mod:`wsidicom_kernels._kernels`; this module only re-exports the public API.
@@ -26,7 +24,6 @@ The implementation lives in :mod:`wsidicom_kernels.core` over the PyO3 extension
 from importlib.metadata import version
 
 from wsidicom_kernels.core import (
-    compose,
     downscale,
     downscale_grid,
     resize,
@@ -37,7 +34,6 @@ __version__ = version("wsidicom-kernels")
 
 __all__ = [
     "ResizeFilter",
-    "compose",
     "downscale",
     "downscale_grid",
     "resize",

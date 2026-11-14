@@ -5,13 +5,13 @@ build-backend = "maturin"
 [project]
 name = "wsidicom-kernels"
 version = "0.1.0"
-description = "Fast tile compositing and downscaling (planar + HWC, sub-pixel, SIMD) for numpy."
+description = "Fast, accurate SIMD resizing and pyramid downscaling for numpy arrays."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD-PARTY-LICENSES.md"]
 authors = [{ name = "Erik O Gabrielsson", email = "erik.o.gabrielsson@sectra.com" }]
-keywords = ["image", "tile", "compose", "stitch", "mosaic", "downscale", "resize", "pyramid", "simd"]
+keywords = ["image", "tile", "downscale", "resize", "pyramid", "simd"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
