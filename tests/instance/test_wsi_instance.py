@@ -19,6 +19,8 @@ from PIL import Image as Pillow
 
 from tests.data_gen import create_main_dataset
 from wsidicom.instance import WsiInstance
+from wsidicom.instance.numpy_image_data import NumpyImageData
+from wsidicom.metadata import ImageType
 
 
 @pytest.mark.unittest
@@ -35,3 +37,22 @@ class TestWsiInstance:
         # Assert
         assert base_dataset == unchanged
         assert label_instance.dataset.as_dataset().ImageType[2] == "LABEL"
+
+    def test_create_instance_leaves_base_dataset_unchanged(self) -> None:
+        # Arrange - one base dataset given for several instances
+        base_dataset = create_main_dataset()
+        unchanged = deepcopy(base_dataset)
+        image_data = NumpyImageData.from_image(
+            Pillow.new("RGB", (256, 128), (128, 128, 128))
+        )
+
+        # Act
+        overview = WsiInstance.create_instance(
+            image_data, base_dataset, ImageType.OVERVIEW
+        )
+        label = WsiInstance.create_instance(image_data, base_dataset, ImageType.LABEL)
+
+        # Assert
+        assert base_dataset == unchanged
+        assert overview.dataset.as_dataset().ImageType[2] == "OVERVIEW"
+        assert label.dataset.as_dataset().ImageType[2] == "LABEL"

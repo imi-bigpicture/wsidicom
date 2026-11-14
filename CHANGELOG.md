@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `WsiInstance.create_label()` changed the base dataset it was given into a label dataset. With `WsiDicom.save(label=...)` on a source whose base dataset is the base level's dataset (such as a wsidicomizer source), the base level was then written as a label.
+- `WsiInstance.create_label()` and `WsiInstance.create_instance()` changed the base dataset they were given into the new instance's dataset. With `WsiDicom.save(label=...)` on a source whose base dataset is the base level's dataset (such as a wsidicomizer source), the base level was then written as a label; instances created from one shared base dataset overwrote each other. Both now use a copy.
 - Saving a level whose optical paths are stored in separate instances, one per optical path, wrote an instance that described only one of them, so it reopened with a single optical path.
 - `WsiDicom.files` listed files left out for not belonging to the slide.
 - Files whose Extended Offset Table Lengths state an odd frame length failed to open with "Invalid frame length" (#240).

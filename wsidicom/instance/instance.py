@@ -479,7 +479,8 @@ class WsiInstance:
         image_data: ImageData
             Format-specific image data for the instance.
         base_dataset: Dataset
-            Base dataset to include.
+            Base dataset to include. A copy is used, so one base dataset can be given
+            for several instances.
         image_type: ImageType
             Type of instance to create.
         pyramid_index: int | None = None
@@ -491,7 +492,7 @@ class WsiInstance:
             Created WsiInstance.
         """
         instance_dataset = WsiDataset.create_instance_dataset(
-            base_dataset, image_type, image_data, pyramid_index
+            deepcopy(base_dataset), image_type, image_data, pyramid_index
         )
         return cls(instance_dataset, image_data)
 
