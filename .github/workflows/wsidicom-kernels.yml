@@ -1,0 +1,91 @@
+name: wsidicom-kernels
+
+# Wheels and sdist of wsidicom-kernels (kernels/), released on its own with a
+# wsidicom-kernels-v* tag.
+on:
+  push:
+    tags: ["wsidicom-kernels-v*"]
+  pull_request:
+    paths: ["kernels/**", ".github/workflows/wsidicom-kernels.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Pull requests run lint.yml on their own; a release checks it again here.
+  lint:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/wsidicom-kernels-v')
+    uses: ./.github/workflows/lint.yml
+
+  wheels:
+    name: wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # One runner per architecture: wheels are built and tested natively
+        # (cibuildwheel config in kernels/pyproject.toml).
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - windows-latest
+          - macos-latest # arm64
+          - macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+      - name: Build and test wheels
+        run: uvx cibuildwheel==4.3.0 kernels --output-dir wheelhouse
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+      - run: uv build --sdist kernels --out-dir dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  # A release tag must match the version being built, and have a changelog entry.
+  check-version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/wsidicom-kernels-v')
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check tag matches project version and changelog
+        working-directory: kernels
+        run: |
+          tag="${GITHUB_REF_NAME#wsidicom-kernels-v}"
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Release tag ($tag) does not match pyproject version ($version)"
+            exit 1
+          fi
+          if ! grep -q "\[$version\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no entry for [$version]"
+            exit 1
+          fi
+
+  # Trusted publishing (OIDC): PyPI project wsidicom-kernels, this repository,
+  # workflow wsidicom-kernels.yml, environment pypi-wsidicom-kernels.
+  publish:
+    needs: [check-version, lint, wheels, sdist]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/wsidicom-kernels-v')
+    runs-on: ubuntu-latest
+    environment: pypi-wsidicom-kernels
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: astral-sh/setup-uv@v10.1.0
+      - run: uv publish dist/*  # trusted publishing; no token needed in CI

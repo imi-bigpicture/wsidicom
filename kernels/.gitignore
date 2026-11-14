@@ -1,0 +1,23 @@
+# Rust build
+/target
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# Compiled extension (built by `maturin develop`)
+*.pyd
+*.pdb
+*.so
+*.dylib
+
+# Misc
+.claude/
+*.log
