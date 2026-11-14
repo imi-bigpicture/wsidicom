@@ -18,6 +18,45 @@ use crate::convolve::Kernel;
 /// and `channels`.
 pub(crate) type ExactKernel<T> = fn(&[T], usize, usize, usize) -> Vec<T>;
 
+/// Panics unless `src` holds a `width` x `height` image of 1 or 3 channels
+/// whose sizes are multiples of `FACTOR`: the arguments the exact kernels of
+/// every tier take (an enlargement's `FACTOR` is 1).
+pub(crate) fn assert_exact_image<T, const FACTOR: usize>(
+    src: &[T],
+    width: usize,
+    height: usize,
+    channels: usize,
+) {
+    crate::sample::assert_image(src, width, height, channels);
+    assert!(
+        width.is_multiple_of(FACTOR) && height.is_multiple_of(FACTOR),
+        "{}",
+        match FACTOR {
+            2 => "the exact x2 kernels take even sizes",
+            _ => "the exact x4 kernel takes sizes that are multiples of 4",
+        }
+    );
+}
+
+/// Panics unless `channels` is 1 or 3, `full` holds `FACTOR * out_width`
+/// pixels and `dst` `out_width`: the rows the kernels keep every `FACTOR`th
+/// pixel of.
+pub(crate) fn assert_kept_pixels<T, const FACTOR: usize>(
+    full: &[T],
+    channels: usize,
+    out_width: usize,
+    dst: &[T],
+) {
+    assert!(
+        matches!(channels, 1 | crate::sample::RGB),
+        "pixels have 1 or 3 channels, not {channels}"
+    );
+    assert!(
+        full.len() >= FACTOR * out_width * channels && dst.len() >= out_width * channels,
+        "the rows hold fewer pixels than the outputs need"
+    );
+}
+
 /// The uint8 exact kernel of `kernel` resizing `width x height` to
 /// `out_width x out_height`, if there is one.
 pub(crate) fn exact_kernel(

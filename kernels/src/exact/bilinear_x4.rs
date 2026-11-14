@@ -93,31 +93,15 @@ fn output_scalar<S: Copy + Into<u32>>(
 
 /// The exact x4 bilinear reduction (each tier computes the same result).
 pub(crate) fn bilinear_x4(src: &[u8], width: usize, height: usize, channels: usize) -> Vec<u8> {
-    crate::sample::assert_image(src, width, height, channels);
-    assert!(
-        width.is_multiple_of(4) && height.is_multiple_of(4),
-        "the exact x4 kernel takes sizes that are multiples of 4"
-    );
-    #[cfg(target_arch = "x86_64")]
-    {
-        if crate::cpu::has_avx2() {
-            // SAFETY: avx2 detected; src holds width * height * channels
-            // samples, width and height multiples of 4, channels 1 or 3
-            // (checked).
-            return unsafe {
-                match channels {
-                    1 => x86::bilinear_x4_avx2::<false>(src, width, height),
-                    _ => x86::bilinear_x4_avx2::<true>(src, width, height),
-                }
-            };
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    if crate::cpu::use_neon() {
-        // SAFETY: src holds width * height * channels samples.
-        return unsafe { neon::bilinear_x4_neon(src, width, height, channels) };
-    }
-    bilinear_x4_scalar(src, width, height, channels)
+    super::assert_exact_image::<_, 4>(src, width, height, channels);
+    crate::cpu::dispatch!(
+        avx2: match channels {
+            1 => x86::bilinear_x4_avx2::<false>(src, width, height),
+            _ => x86::bilinear_x4_avx2::<true>(src, width, height),
+        },
+        neon: neon::bilinear_x4_neon(src, width, height, channels),
+        scalar: bilinear_x4_scalar(src, width, height, channels),
+    )
 }
 
 #[cfg(test)]

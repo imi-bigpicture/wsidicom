@@ -1,7 +1,6 @@
 //! x86 helpers shared by the exact kernels.
 //!
-//! # Safety
-//! `keep_even_pixels` requires AVX2 and the row lengths its doc states; its
+//! `keep_even_pixels` checks its row lengths, so it needs only AVX2; its
 //! loads and stores are justified against those at their loop guards.
 
 /// Runs `step_at(start)` for steps of `step` covering `0..len`
@@ -21,12 +20,12 @@ pub(crate) fn cover_steps(len: usize, step: usize, step_at: &impl Fn(usize)) {
 
 /// `dst` = the even pixels (`channels` samples each) of `full`.
 ///
-/// # Safety
-/// AVX2 must be available, and `full` holds at least `2 * dst.len()` samples
-/// (the shuffles read it unchecked; `dst` is bounded by its own length).
+/// Panics unless `channels` is 1 or 3 and `full` holds twice the pixels of
+/// `dst`.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn keep_even_pixels(full: &[u8], channels: usize, dst: &mut [u8]) {
+pub(crate) fn keep_even_pixels(full: &[u8], channels: usize, dst: &mut [u8]) {
     use std::arch::x86_64::*;
+    crate::exact::assert_kept_pixels::<_, 2>(full, channels, dst.len() / channels, dst);
     let out_width = dst.len() / channels;
     let (full_ptr, dst_ptr) = (full.as_ptr(), dst.as_mut_ptr());
     let mut output = 0;
@@ -134,7 +133,7 @@ mod tests {
             for kept_pixels in 0..80 {
                 let full: Vec<u8> = random_samples(&mut rng, 2 * kept_pixels * channels);
                 let mut dst = vec![0; kept_pixels * channels];
-                // SAFETY: AVX2 is available; full holds 2 dst.len() samples.
+                // SAFETY: AVX2 is available.
                 unsafe { keep_even_pixels(&full, channels, &mut dst) };
                 let expected: Vec<u8> = full
                     .chunks_exact(2 * channels)

@@ -322,17 +322,11 @@ macro_rules! dispatched_box_method {
     ($method:ident, $T:ty, $channels:expr, $avx2:ident, $neon:ident, $scalar:expr) => {
         fn $method(src: &[$T], width: usize, height: usize) -> (Vec<$T>, usize, usize) {
             assert_image(src, width, height, $channels);
-            #[cfg(target_arch = "x86_64")]
-            if has_avx2() {
-                // SAFETY: avx2 detected at runtime; `src` matches its dimensions (BoxSample).
-                return unsafe { $avx2(src, width, height) };
-            }
-            #[cfg(target_arch = "aarch64")]
-            if use_neon() {
-                // SAFETY: `src` matches its dimensions (BoxSample).
-                return unsafe { $neon(src, width, height) };
-            }
-            $scalar(src, width, height)
+            crate::cpu::dispatch!(
+                avx2: $avx2(src, width, height),
+                neon: $neon(src, width, height),
+                scalar: $scalar(src, width, height),
+            )
         }
     };
 }
@@ -379,8 +373,8 @@ impl BoxSample for u8 {
         // SAFETY: `dst_ptr` holds the output rows (the caller's contract).
         let output =
             unsafe { BoxRows::in_place(dst_ptr, dst_stride, height / 2, width / 2 * channels) };
-        // SAFETY: each kernel's features are detected at runtime; `src`
-        // matches its dimensions (checked) and `output` holds its rows.
+        // SAFETY: each kernel's features are detected at runtime; it checks
+        // the rest.
         unsafe {
             match channels {
                 1 if has_avx2() => box2x_u8_into_avx2(src, width, height, output),
@@ -424,18 +418,11 @@ impl BoxSample for u8 {
     ) -> (Vec<u8>, usize, usize) {
         assert_image(src, width, height, RGB);
         assert!((2..=3).contains(&levels));
-        #[cfg(target_arch = "x86_64")]
-        if has_avx2() {
-            // SAFETY: avx2 detected at runtime; `src` matches its dimensions
-            // (checked).
-            return unsafe { box_levels_u8_hwc_avx2(src, (width, height), levels) };
-        }
-        #[cfg(target_arch = "aarch64")]
-        if use_neon() {
-            // SAFETY: `src` matches its dimensions (checked).
-            return unsafe { box_levels_u8_hwc_neon(src, (width, height), levels) };
-        }
-        box_levels_fused(src, (width, height, RGB), levels, &Self::box_sums())
+        crate::cpu::dispatch!(
+            avx2: box_levels_u8_hwc_avx2(src, (width, height), levels),
+            neon: box_levels_u8_hwc_neon(src, (width, height), levels),
+            scalar: box_levels_fused(src, (width, height, RGB), levels, &Self::box_sums()),
+        )
     }
 }
 
@@ -455,8 +442,7 @@ impl BoxSample for u16 {
         // SAFETY: `dst_ptr` holds the output rows (the caller's contract).
         let output =
             unsafe { BoxRows::in_place(dst_ptr, dst_stride, height / 2, width / 2 * channels) };
-        // SAFETY: avx2 detected at runtime; `src` matches its dimensions of 1
-        // or 3 channels (checked) and `output` holds its rows.
+        // SAFETY: avx2 detected at runtime; the kernels check the rest.
         unsafe {
             match channels {
                 1 => box2x_u16_into_avx2(src, width, height, output),
@@ -492,7 +478,7 @@ impl BoxSample for u16 {
         assert_image(src, width, height, RGB);
         #[cfg(target_arch = "aarch64")]
         if use_neon() {
-            // SAFETY: `src` matches its dimensions (checked).
+            // SAFETY: NEON is baseline on aarch64; the kernel checks the rest.
             return unsafe { box_levels_u16_hwc_neon(src, (width, height), levels) };
         }
         box_levels_fused(src, (width, height, RGB), levels, &Self::box_sums())

@@ -69,21 +69,12 @@ fn horizontal_scalar(
 
 /// The exact x2 bilinear enlargement (each tier computes the same result).
 pub(crate) fn bilinear_up2(src: &[u8], width: usize, height: usize, channels: usize) -> Vec<u8> {
-    crate::sample::assert_image(src, width, height, channels);
-    #[cfg(target_arch = "x86_64")]
-    {
-        if crate::cpu::has_avx2() {
-            // SAFETY: avx2 detected; src holds width * height * channels
-            // samples.
-            return unsafe { x86::bilinear_up2_avx2(src, width, height, channels) };
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    if crate::cpu::use_neon() {
-        // SAFETY: src holds width * height * channels samples.
-        return unsafe { neon::bilinear_up2_neon(src, width, height, channels) };
-    }
-    bilinear_up2_scalar(src, width, height, channels)
+    super::assert_exact_image::<_, 1>(src, width, height, channels);
+    crate::cpu::dispatch!(
+        avx2: x86::bilinear_up2_avx2(src, width, height, channels),
+        neon: neon::bilinear_up2_neon(src, width, height, channels),
+        scalar: bilinear_up2_scalar(src, width, height, channels),
+    )
 }
 
 #[cfg(test)]

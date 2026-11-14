@@ -1,8 +1,7 @@
 //! The AVX2 kernel of the exact x2 catmullrom reduction.
 //!
-//! # Safety
-//! The kernel requires AVX2, FMA and the bounds its doc states; loads and
-//! stores are justified against those and its own buffers at their loop
+//! The kernel checks its arguments, so it needs only AVX2 and FMA; loads
+//! and stores are justified against those and its own buffers at their loop
 //! guards.
 
 use super::{catmull_window, catmull_x2_scalar};
@@ -18,26 +17,19 @@ use crate::x86::prefetch_rows_after_window;
 /// overlapping. Horizontal, 8 samples per step: unit-stride loads of the
 /// zero-padded even and odd sums, in exact f32.
 ///
-/// # Safety
-/// AVX2 and FMA must be available; `src` holds `width * height * channels`
-/// samples, `width` and `height` even; `channels` is 1 or 3.
+/// Panics unless `src` holds a `width` x `height` image of 1 or 3 channels, of
+/// even sizes.
 #[target_feature(enable = "avx2,fma")]
-pub(crate) unsafe fn catmull_x2_avx2(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    channels: usize,
-) -> Vec<u8> {
+pub(crate) fn catmull_x2_avx2(src: &[u8], width: usize, height: usize, channels: usize) -> Vec<u8> {
     use std::arch::x86_64::*;
     // The near pairs' two sums span -4590..=56610: less the offset they fit
     // i16, and madd by (1, 1) adds the far pairs' sums into i32. The vertical
     // sums are stored less the offset, which the rounding adds back.
     const OFFSET: i32 = 24010;
     const LANES: usize = 8;
-    debug_assert!([1, 3].contains(&channels));
+    crate::exact::assert_exact_image::<_, 2>(src, width, height, channels);
     let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
     let out_row_samples = out_width * channels;
-    debug_assert!(src.len() >= width * height * channels);
     let vertical_step_outputs = if channels == 3 {
         4
     } else {
@@ -332,9 +324,7 @@ mod tests {
             return;
         }
         let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: AVX2 and FMA are available; src holds width * height *
-            // channels samples, width and height even (WIDTHS and HEIGHTS),
-            // channels 1 or 3.
+            // SAFETY: AVX2 and FMA are available.
             unsafe { catmull_x2_avx2(src, width, height, channels) }
         };
         assert_equals_reference(

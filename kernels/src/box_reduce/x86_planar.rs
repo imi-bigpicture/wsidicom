@@ -1,10 +1,9 @@
 //! Planar 2x2 and fused 4x4 box kernels (u8 / u16).
 //!
-//! # Safety
-//! Every kernel requires the CPU features in its `#[target_feature]` (its
-//! dispatch checks them at runtime) and `src.len() >= width * height`, which
-//! it does not check. Loads are justified against that bound at their loop
-//! guards; stores write the kernel's own output row.
+//! Every kernel checks `src.len() >= width * height`, so it requires only
+//! the CPU features in its `#[target_feature]` (its dispatch checks them at
+//! runtime). Loads are justified against that bound at their loop guards;
+//! stores write the kernel's own output row.
 
 use super::box2_mean;
 use super::x86_output::BoxRows;
@@ -88,35 +87,25 @@ unsafe fn box4_sum<T: Copy + Into<u32>>(src_ptr: *const T, rows: [usize; 4], x: 
 }
 
 /// `box2x_u8_into_avx2` into a new image.
-///
-/// # Safety
-/// As `box2x_u8_into_avx2`.
-pub(crate) unsafe fn box2x_u8_avx2(
-    src: &[u8],
-    width: usize,
-    height: usize,
-) -> (Vec<u8>, usize, usize) {
+#[target_feature(enable = "avx2")]
+pub(crate) fn box2x_u8_avx2(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
     let (out_width, out_height) = (width / 2, height / 2);
-    // SAFETY: the caller's contract.
-    let image = unsafe {
-        box2x_u8_into_avx2(
-            src,
-            width,
-            height,
-            BoxRows::new_image(out_height, out_width),
-        )
-    };
+    let image = box2x_u8_into_avx2(
+        src,
+        width,
+        height,
+        BoxRows::new_image(out_height, out_width),
+    );
     (image, out_width, out_height)
 }
 
 /// AVX2 uint8 2x2 box into `output`, 16 outputs per step: maddubs sums
 /// horizontal pairs, rounded `(sum + 2) >> 2` as Pillow's reduce(2).
 ///
-/// # Safety
-/// The CPU supports AVX2, `src.len() >= width * height`, and `output` holds
+/// Panics unless `src` holds a `width` x `height` image and `output` its
 /// `height / 2` rows of `width / 2` samples.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_u8_into_avx2(
+pub(crate) fn box2x_u8_into_avx2(
     src: &[u8],
     width: usize,
     height: usize,
@@ -124,7 +113,8 @@ pub(crate) unsafe fn box2x_u8_into_avx2(
 ) -> Vec<u8> {
     use std::arch::x86_64::*;
     let out_width = width / 2;
-    debug_assert_eq!(output.row_count(), height / 2);
+    crate::sample::assert_image(src, width, height, 1);
+    output.assert_rows(height / 2, width / 2);
     let ones = _mm256_set1_epi8(1);
     let two = _mm256_set1_epi16(2);
     let src_ptr = src.as_ptr();
@@ -170,15 +160,11 @@ pub(crate) unsafe fn box2x_u8_into_avx2(
 /// per row (4 rows: at most 2040, fits i16), `madd_epi16` sums those pairs
 /// to the blocks' sums in u32, then `(sum + 8) >> 4`.
 ///
-/// # Safety
-/// The CPU supports AVX2, and `src.len() >= width * height`.
+/// Panics unless `src` holds a `width` x `height` image.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box4x_u8_avx2(
-    src: &[u8],
-    width: usize,
-    height: usize,
-) -> (Vec<u8>, usize, usize) {
+pub(crate) fn box4x_u8_avx2(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
     use std::arch::x86_64::*;
+    crate::sample::assert_image(src, width, height, 1);
     let out_width = width / 4;
     let ones = _mm256_set1_epi8(1);
     let ones_i16 = _mm256_set1_epi16(1);
@@ -254,15 +240,11 @@ pub(crate) unsafe fn box4x_u8_avx2(
 /// forms the blocks' sums, lane-scrambled to [q0,q1,q4,q5|q2,q3,q6,q7] (one
 /// vpermd restores the order), then `(sum + 8) >> 4`.
 ///
-/// # Safety
-/// The CPU supports AVX2, and `src.len() >= width * height`.
+/// Panics unless `src` holds a `width` x `height` image.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box4x_u16_avx2(
-    src: &[u16],
-    width: usize,
-    height: usize,
-) -> (Vec<u16>, usize, usize) {
+pub(crate) fn box4x_u16_avx2(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
     use std::arch::x86_64::*;
+    crate::sample::assert_image(src, width, height, 1);
     let out_width = width / 4;
     let eight = _mm256_set1_epi32(8);
     let low_u16_mask = _mm256_set1_epi32(0xFFFF);
@@ -330,11 +312,10 @@ pub(crate) unsafe fn box4x_u16_avx2(
 /// sums adjacent u16 pairs into u32 in order; the sums are exact, so
 /// `(sum + 2) >> 2` equals `box2x_scalar`.
 ///
-/// # Safety
-/// The CPU supports AVX2, `src.len() >= width * height`, and `output` holds
+/// Panics unless `src` holds a `width` x `height` image and `output` its
 /// `height / 2` rows of `width / 2` samples.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn box2x_u16_into_avx2(
+pub(crate) fn box2x_u16_into_avx2(
     src: &[u16],
     width: usize,
     height: usize,
@@ -342,7 +323,8 @@ pub(crate) unsafe fn box2x_u16_into_avx2(
 ) -> Vec<u16> {
     use std::arch::x86_64::*;
     let out_width = width / 2;
-    debug_assert_eq!(output.row_count(), height / 2);
+    crate::sample::assert_image(src, width, height, 1);
+    output.assert_rows(height / 2, width / 2);
     let two = _mm256_set1_epi32(2);
     let low_u16_mask = _mm256_set1_epi32(0xFFFF);
     let src_ptr = src.as_ptr();
@@ -390,24 +372,15 @@ pub(crate) unsafe fn box2x_u16_into_avx2(
 }
 
 /// `box2x_u16_into_avx2` into a new image.
-///
-/// # Safety
-/// As `box2x_u16_into_avx2`.
-pub(crate) unsafe fn box2x_u16_avx2(
-    src: &[u16],
-    width: usize,
-    height: usize,
-) -> (Vec<u16>, usize, usize) {
+#[target_feature(enable = "avx2")]
+pub(crate) fn box2x_u16_avx2(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
     let (out_width, out_height) = (width / 2, height / 2);
-    // SAFETY: the caller's contract.
-    let image = unsafe {
-        box2x_u16_into_avx2(
-            src,
-            width,
-            height,
-            BoxRows::new_image(out_height, out_width),
-        )
-    };
+    let image = box2x_u16_into_avx2(
+        src,
+        width,
+        height,
+        BoxRows::new_image(out_height, out_width),
+    );
     (image, out_width, out_height)
 }
 
@@ -437,7 +410,7 @@ mod tests {
         let mut rng = Rng::new(1);
         for (width, height) in box_sizes(minimum) {
             for (_, src) in test_images(&mut rng, width * height, T::MAX) {
-                // SAFETY: AVX2 is available; src holds width * height samples.
+                // SAFETY: AVX2 is available.
                 let simd = unsafe { kernel(&src, width, height) };
                 assert_same_image(
                     &simd,
@@ -470,14 +443,14 @@ mod tests {
         let mut rng = Rng::new(2);
         for (width, height) in sizes_from(4) {
             let src: Vec<u8> = random_samples(&mut rng, width * height);
-            // SAFETY: AVX2 is available; src holds width * height samples.
+            // SAFETY: AVX2 is available.
             let (fused, ..) = unsafe { box4x_u8_avx2(&src, width, height) };
             let (chained, ..) = box4x_chained_reference(&src, width, height);
             for (fused, chained) in fused.iter().zip(&chained) {
                 assert!(fused.abs_diff(*chained) <= 1, "{width} x {height}");
             }
             let src: Vec<u16> = random_samples(&mut rng, width * height);
-            // SAFETY: AVX2 is available; src holds width * height samples.
+            // SAFETY: AVX2 is available.
             let (fused, ..) = unsafe { box4x_u16_avx2(&src, width, height) };
             let (chained, ..) = box4x_chained_reference(&src, width, height);
             for (fused, chained) in fused.iter().zip(&chained) {
@@ -495,8 +468,7 @@ mod tests {
     ) {
         let (width, height) = (2 * out_width + 1, 2 * out_height + 1);
         let src: Vec<T> = random_samples(&mut Rng::new(3), width * height);
-        // SAFETY: AVX2 is available (the caller checked); src holds width *
-        // height samples.
+        // SAFETY: AVX2 is available (the caller checked).
         let simd = unsafe { kernel(&src, width, height) };
         assert_same_image(&simd, &reference(&src, width, height), "large");
     }

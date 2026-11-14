@@ -89,8 +89,12 @@ impl<T> BoxRows<T> {
         self.layout
     }
 
-    pub(super) fn row_count(&self) -> usize {
-        self.layout.height
+    /// Panics unless these are `height` rows of `row_len` samples.
+    pub(super) fn assert_rows(&self, height: usize, row_len: usize) {
+        assert!(
+            self.layout.height == height && self.layout.row_len == row_len,
+            "the output rows do not fit the image"
+        );
     }
 
     /// Whether to stream the stores past the cache: a large new image (see

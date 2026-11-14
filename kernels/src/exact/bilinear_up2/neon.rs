@@ -1,8 +1,8 @@
 //! The NEON kernel of the exact x2 bilinear enlargement.
 //!
-//! # Safety
-//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch;
-//! every `unsafe fn` here requires the bounds its doc states.
+//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
+//! The kernel checks its arguments; the `unsafe fn` here require the bounds
+//! their docs state.
 
 use std::arch::aarch64::{
     uint8x16_t, uint8x16x3_t, uint16x8_t, vaddw_u8, vcombine_u8, vdup_n_u8, vget_high_u8,
@@ -20,17 +20,16 @@ const STEP_PIXELS: usize = 8;
 /// tap), so every input pixel gives its two outputs by `enlarged`. Pixels
 /// past the last whole step by the scalar reference.
 ///
-/// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1 or 3.
+/// Panics unless `src` holds a `width` x `height` image of 1 or 3 channels.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn bilinear_up2_neon(
+pub(crate) fn bilinear_up2_neon(
     src: &[u8],
     width: usize,
     height: usize,
     channels: usize,
 ) -> Vec<u8> {
     let (out_width, out_height, row_samples) = (2 * width, 2 * height, width * channels);
-    debug_assert!(src.len() >= width * height * channels);
+    crate::exact::assert_exact_image::<_, 1>(src, width, height, channels);
     let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
     // SAFETY: u8 has no invalid values; every sample is written below before
     // the vector is returned.
@@ -144,8 +143,7 @@ mod tests {
     #[test]
     fn neon_equals_scalar() {
         let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: NEON is baseline on aarch64; src holds width * height * channels
-            // samples.
+            // SAFETY: NEON is baseline on aarch64.
             unsafe { bilinear_up2_neon(src, width, height, channels) }
         };
         assert_equals_reference(

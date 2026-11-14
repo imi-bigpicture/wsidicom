@@ -1,8 +1,8 @@
 //! The NEON kernel of the exact x2 catmullrom reduction.
 //!
-//! # Safety
-//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch;
-//! every `unsafe fn` here requires the bounds its doc states.
+//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
+//! The kernel checks its arguments; the `unsafe fn` here require the bounds
+//! their docs state.
 
 use std::arch::aarch64::{
     int32x4_t, uint8x8_t, vaddl_u8, vaddq_s32, vaddw_high_s16, vaddw_s16, vcombine_u16, vdup_n_u16,
@@ -47,20 +47,13 @@ const FULL_TOTAL: i64 = 256;
 /// rows take the horizontal pass only at the outputs). Clipped columns, and
 /// clipped or too short rows, by the scalar reference's arithmetic.
 ///
-/// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1 or 3,
-/// `width` and `height` even (with an odd width the gray horizontal pass
-/// would leave output `out_width - 2` unwritten).
+/// Panics unless `src` holds a `width` x `height` image of 1 or 3 channels, of
+/// even sizes (with an odd width the gray horizontal pass would leave output
+/// `out_width - 2` unwritten).
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn catmull_x2_neon(
-    src: &[u8],
-    width: usize,
-    height: usize,
-    channels: usize,
-) -> Vec<u8> {
+pub(crate) fn catmull_x2_neon(src: &[u8], width: usize, height: usize, channels: usize) -> Vec<u8> {
     let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
-    debug_assert!(src.len() >= width * height * channels);
-    debug_assert!(width.is_multiple_of(2) && height.is_multiple_of(2));
+    crate::exact::assert_exact_image::<_, 2>(src, width, height, channels);
     let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
     // SAFETY: u8 has no invalid values; every sample is written below before
     // the vector is returned.
@@ -173,9 +166,7 @@ pub(crate) unsafe fn catmull_x2_neon(
                 // SAFETY: x + 8 <= row_samples, the length of `full`.
                 unsafe { vst1_u8(full_ptr.add(x), vqmovn_u16(rounded)) };
             });
-            // SAFETY: full holds 2 * out_width pixels of `channels` samples,
-            // dst out_width.
-            unsafe { keep_even_pixels(&full, channels, out_width, dst) };
+            keep_even_pixels(&full, channels, out_width, dst);
         }
         for &output in &clipped_columns {
             let (first_column, horizontal_weights) = catmull_window(output, width);
@@ -256,8 +247,7 @@ mod tests {
     #[test]
     fn neon_equals_scalar() {
         let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: NEON is baseline on aarch64; src holds width * height * channels
-            // samples, width and height even (WIDTHS and HEIGHTS).
+            // SAFETY: NEON is baseline on aarch64.
             unsafe { catmull_x2_neon(src, width, height, channels) }
         };
         assert_equals_reference(

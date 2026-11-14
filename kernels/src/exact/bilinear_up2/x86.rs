@@ -1,8 +1,8 @@
 //! The AVX2 kernel of the exact x2 bilinear enlargement.
 //!
-//! # Safety
-//! Every `unsafe fn` here requires AVX2 and the bounds its doc states; loads
-//! and stores are justified against those at their loop guards.
+//! The kernel checks its arguments, so it needs only AVX2; loads and stores
+//! are justified against those at their loop guards. The `unsafe fn` here
+//! require the bounds their docs state.
 
 use super::{bilinear_up2_scalar, far, horizontal_scalar};
 use crate::sample::RGB;
@@ -98,11 +98,9 @@ pub(crate) unsafe fn up2_rows(
 
 /// The vertical sums `3 near + far`, then `horizontal_steps_avx2`.
 ///
-/// # Safety
-/// AVX2 must be available; `src` holds `width * height * channels` samples,
-/// `channels` 1 or 3.
+/// Panics unless `src` holds a `width` x `height` image of 1 or 3 channels.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn bilinear_up2_avx2(
+pub(crate) fn bilinear_up2_avx2(
     src: &[u8],
     width: usize,
     height: usize,
@@ -110,7 +108,7 @@ pub(crate) unsafe fn bilinear_up2_avx2(
 ) -> Vec<u8> {
     use std::arch::x86_64::*;
     let row_samples = width * channels;
-    debug_assert!(matches!(channels, 1 | RGB));
+    crate::exact::assert_exact_image::<_, 1>(src, width, height, channels);
     // Rows of at least 32 samples: one vertical step of 16, one horizontal
     // step of two lanes and a neighbour pixel.
     if row_samples < 32 {
@@ -275,8 +273,7 @@ mod tests {
             return;
         }
         let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: AVX2 is available; src holds width * height * channels
-            // samples.
+            // SAFETY: AVX2 is available.
             unsafe { bilinear_up2_avx2(src, width, height, channels) }
         };
         assert_equals_reference(

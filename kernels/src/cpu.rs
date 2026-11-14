@@ -136,6 +136,39 @@ pub(crate) fn use_neon() -> bool {
     simd_enabled()
 }
 
+/// The value of the first kernel this CPU runs: the AVX2 (or AVX2 and FMA)
+/// one on x86-64 with those features, the NEON one on aarch64, else the
+/// scalar one (also when `set_simd` turned SIMD off).
+///
+/// The kernels are safe `#[target_feature]` functions, which check their
+/// arguments themselves, so the CPU features are all the `unsafe` here
+/// vouches for.
+macro_rules! dispatch {
+    (avx2: $avx2:expr, neon: $neon:expr, scalar: $scalar:expr $(,)?) => {
+        $crate::cpu::dispatch!(@ has_avx2, $avx2, $neon, $scalar)
+    };
+    (avx2_fma: $avx2:expr, neon: $neon:expr, scalar: $scalar:expr $(,)?) => {
+        $crate::cpu::dispatch!(@ has_avx2_fma, $avx2, $neon, $scalar)
+    };
+    (@ $detected:ident, $avx2:expr, $neon:expr, $scalar:expr) => {
+        'dispatch: {
+            #[cfg(target_arch = "x86_64")]
+            if $crate::cpu::$detected() {
+                // SAFETY: the kernel's x86 features were detected; it checks
+                // the rest.
+                break 'dispatch unsafe { $avx2 };
+            }
+            #[cfg(target_arch = "aarch64")]
+            if $crate::cpu::use_neon() {
+                // SAFETY: NEON is baseline on aarch64; the kernel checks the rest.
+                break 'dispatch unsafe { $neon };
+            }
+            $scalar
+        }
+    };
+}
+pub(crate) use dispatch;
+
 /// The ARMv8.1 rounding multiply-accumulate (`vqrdmlah`).
 #[cfg(target_arch = "aarch64")]
 #[inline]

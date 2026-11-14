@@ -111,26 +111,12 @@ fn catmull_row_scalar(
 
 /// The exact x2 catmullrom reduction (each tier computes the same result).
 pub(crate) fn catmull_x2(src: &[u8], width: usize, height: usize, channels: usize) -> Vec<u8> {
-    crate::sample::assert_image(src, width, height, channels);
-    assert!(
-        width.is_multiple_of(2) && height.is_multiple_of(2),
-        "the exact x2 kernels take even sizes"
-    );
-    #[cfg(target_arch = "x86_64")]
-    {
-        if crate::cpu::has_avx2_fma() {
-            // SAFETY: avx2 and fma detected; src holds width * height *
-            // channels samples, width and height even, channels 1 or 3
-            // (checked).
-            return unsafe { x86::catmull_x2_avx2(src, width, height, channels) };
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    if crate::cpu::use_neon() {
-        // SAFETY: src holds width * height * channels samples.
-        return unsafe { neon::catmull_x2_neon(src, width, height, channels) };
-    }
-    catmull_x2_scalar(src, width, height, channels)
+    super::assert_exact_image::<_, 2>(src, width, height, channels);
+    crate::cpu::dispatch!(
+        avx2_fma: x86::catmull_x2_avx2(src, width, height, channels),
+        neon: neon::catmull_x2_neon(src, width, height, channels),
+        scalar: catmull_x2_scalar(src, width, height, channels),
+    )
 }
 
 #[cfg(test)]

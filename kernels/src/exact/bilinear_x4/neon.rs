@@ -1,8 +1,8 @@
 //! The NEON kernel of the exact x4 bilinear reduction.
 //!
-//! # Safety
-//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch;
-//! every `unsafe fn` here requires the bounds its doc states.
+//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
+//! The kernel checks its arguments; the `unsafe fn` here require the bounds
+//! their docs state.
 
 use std::arch::aarch64::{
     uint8x16_t, uint8x16x3_t, uint16x4_t, uint16x8_t, uint16x8x4_t, vaddq_u16, vaddq_u32,
@@ -32,17 +32,17 @@ const FULL_TOTAL: u32 = 32;
 /// narrower ones at every sample, keeping every 4th pixel. Clipped columns,
 /// and clipped or too short rows, by the scalar reference's arithmetic.
 ///
-/// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1 or 3.
+/// Panics unless `src` holds a `width` x `height` image of 1 or 3 channels,
+/// whose sizes are multiples of 4.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn bilinear_x4_neon(
+pub(crate) fn bilinear_x4_neon(
     src: &[u8],
     width: usize,
     height: usize,
     channels: usize,
 ) -> Vec<u8> {
     let (out_width, out_height, row_samples) = (width / 4, height / 4, width * channels);
-    debug_assert!(src.len() >= width * height * channels);
+    crate::exact::assert_exact_image::<_, 4>(src, width, height, channels);
     let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
     // SAFETY: u8 has no invalid values; every sample is written below before
     // the vector is returned.
@@ -146,9 +146,7 @@ pub(crate) unsafe fn bilinear_x4_neon(
                 // are bytes.
                 unsafe { vst1_u8(full_ptr.add(x), vmovn_u16(rounded)) };
             });
-            // SAFETY: full holds 4 * out_width pixels of `channels` samples,
-            // dst out_width.
-            unsafe { keep_every_fourth_pixel(&full, channels, out_width, dst) };
+            keep_every_fourth_pixel(&full, channels, out_width, dst);
         }
         for &output in &clipped_columns {
             output_scalar(&sums[lead..], (width, channels), FULL_TOTAL, output, dst);
@@ -284,13 +282,12 @@ fn clipped_color_output(sums: &[u16], width: usize, output: usize, dst: &mut [u8
 /// `dst[o]` = pixel `4 o` of `full`: `vld1`/`vld3` split the channel planes
 /// and two `vuzp1` levels keep every 4th lane.
 ///
-/// # Safety
-/// `full` holds `4 * out_width` pixels of `channels` (1 or 3) samples and `dst`
-/// `out_width`.
+/// Panics unless `channels` is 1 or 3, `full` holds `4 * out_width` pixels and
+/// `dst` `out_width`.
 #[target_feature(enable = "neon")]
-unsafe fn keep_every_fourth_pixel(full: &[u8], channels: usize, out_width: usize, dst: &mut [u8]) {
+fn keep_every_fourth_pixel(full: &[u8], channels: usize, out_width: usize, dst: &mut [u8]) {
     const STEP_PIXELS: usize = 16;
-    debug_assert!(full.len() >= 4 * out_width * channels && dst.len() >= out_width * channels);
+    crate::exact::assert_kept_pixels::<_, 4>(full, channels, out_width, dst);
     let (full_ptr, dst_ptr) = (full.as_ptr(), dst.as_mut_ptr());
     let every_fourth_lane = |plane: [uint8x16_t; 4]| {
         vuzp1q_u8(vuzp1q_u8(plane[0], plane[1]), vuzp1q_u8(plane[2], plane[3]))
@@ -336,8 +333,7 @@ mod tests {
     #[test]
     fn neon_equals_scalar() {
         let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: NEON is baseline on aarch64; src holds width * height * channels
-            // samples.
+            // SAFETY: NEON is baseline on aarch64.
             unsafe { bilinear_x4_neon(src, width, height, channels) }
         };
         assert_equals_reference(

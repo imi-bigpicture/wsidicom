@@ -1,9 +1,8 @@
 //! The AVX2 kernels of the exact uint16 x2 bilinear reduction.
 //!
-//! # Safety
-//! Every `unsafe fn` here requires AVX2 and the bounds its doc states; loads
-//! and stores are justified against those and the kernels' own buffers at
-//! their loop guards.
+//! The kernels check their arguments, so they need only AVX2; loads and
+//! stores are justified against those and the kernels' own buffers at their
+//! loop guards. The `unsafe fn` here require the bounds their docs state.
 
 use crate::exact::bilinear_x2::{bilinear_x2_scalar, window};
 use crate::exact::x86::cover_steps;
@@ -17,17 +16,12 @@ use crate::x86::prefetch_rows_after_window;
 /// odd[o])`, `(sum + 32) >> 6` where both windows are whole, else divided by
 /// `divide_lanes`.
 ///
-/// # Safety
-/// AVX2 must be available; `src` holds `width * height` samples, `width` and
-/// `height` even.
+/// Panics unless `src` holds a `width` x `height` gray image of even sizes.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn bilinear_x2_u16_gray_avx2(
-    src: &[u16],
-    width: usize,
-    height: usize,
-) -> Vec<u16> {
+pub(crate) fn bilinear_x2_u16_gray_avx2(src: &[u16], width: usize, height: usize) -> Vec<u16> {
     use std::arch::x86_64::*;
     const LANES: usize = 8;
+    crate::exact::assert_exact_image::<_, 2>(src, width, height, 1);
     let (out_width, out_height) = (width / 2, height / 2);
     if out_width < LANES + 2 {
         return bilinear_x2_scalar(src, width, height, 1);
@@ -153,19 +147,14 @@ pub(crate) unsafe fn bilinear_x2_u16_gray_avx2(
 /// byte shuffle puts its even and odd pixels' samples into words 0.. and 4..
 /// (the rest zero), and unpacking against zero widens them.
 ///
-/// # Safety
-/// AVX2 must be available; `src` holds `width * height * 3` samples,
-/// `width` and `height` even.
+/// Panics unless `src` holds a `width` x `height` RGB image of even sizes.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn bilinear_x2_u16_hwc_avx2(
-    src: &[u16],
-    width: usize,
-    height: usize,
-) -> Vec<u16> {
+pub(crate) fn bilinear_x2_u16_hwc_avx2(src: &[u16], width: usize, height: usize) -> Vec<u16> {
     use std::arch::x86_64::*;
     const CHANNELS: usize = RGB;
     const PIXEL: usize = RGBX_PIXEL_LANES;
     const STEP: usize = 4;
+    crate::exact::assert_exact_image::<_, 2>(src, width, height, RGB);
     let (out_width, out_height, row_samples) = (width / 2, height / 2, width * CHANNELS);
     if out_width < STEP + 2 {
         return bilinear_x2_scalar(src, width, height, CHANNELS);
@@ -442,8 +431,7 @@ mod tests {
             return;
         }
         let kernel = |src: &[u16], width, height, channels| {
-            // SAFETY: AVX2 is available; src holds width * height * channels
-            // samples, width and height even (WIDTHS and HEIGHTS).
+            // SAFETY: AVX2 is available.
             unsafe {
                 match channels {
                     1 => bilinear_x2_u16_gray_avx2(src, width, height),

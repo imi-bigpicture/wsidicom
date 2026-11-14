@@ -1,9 +1,8 @@
 //! The AVX2 kernel of the exact x4 bilinear reduction.
 //!
-//! # Safety
-//! Every `unsafe fn` here requires AVX2 and the bounds its doc states; loads
-//! and stores are justified against those and the frame's buffers at their
-//! loop guards.
+//! The kernel checks its arguments, so it needs only AVX2; loads and stores
+//! are justified against those and the frame's buffers at their loop guards.
+//! The `unsafe fn` here require the bounds their docs state.
 
 use super::{bilinear_x4_scalar, window};
 use crate::exact::x86::cover_steps;
@@ -108,15 +107,21 @@ pub(crate) unsafe fn x4_frame<const IS_RGB: bool>(
 /// at least 1 / (2d) >= 2^-11 from an integer, far above f32's rounding
 /// error at 256).
 ///
-/// # Safety
-/// AVX2 must be available; as `x4_frame`.
+/// Panics unless `src` holds a `width` x `height` image (RGB for `IS_RGB`, else
+/// gray) whose sizes are multiples of 4.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn bilinear_x4_avx2<const IS_RGB: bool>(
+pub(crate) fn bilinear_x4_avx2<const IS_RGB: bool>(
     src: &[u8],
     width: usize,
     height: usize,
 ) -> Vec<u8> {
     use std::arch::x86_64::*;
+    crate::exact::assert_exact_image::<_, 4>(
+        src,
+        width,
+        height,
+        if IS_RGB { crate::sample::RGB } else { 1 },
+    );
     let phase_channels = phase_channels(IS_RGB);
     let channels = if IS_RGB { 3 } else { 1 };
     let (out_width, row_samples) = (width / 4, width * channels);
@@ -337,8 +342,7 @@ mod tests {
             return;
         }
         let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: AVX2 is available; src holds width * height * channels
-            // samples, width and height multiples of 4 (WIDTHS and HEIGHTS).
+            // SAFETY: AVX2 is available.
             unsafe {
                 match channels {
                     1 => bilinear_x4_avx2::<false>(src, width, height),

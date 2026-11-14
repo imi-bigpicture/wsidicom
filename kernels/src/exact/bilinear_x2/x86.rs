@@ -1,9 +1,7 @@
 //! The AVX2 kernel of the exact x2 bilinear reduction.
 //!
-//! # Safety
-//! The kernel requires AVX2 and the source length its doc states; loads and
-//! stores are justified against those and its own buffers at their loop
-//! guards.
+//! The kernel checks its arguments, so it needs only AVX2; loads and stores
+//! are justified against those and its own buffers at their loop guards.
 
 use super::{horizontal_scalar, vertical_sums_scalar, window};
 use crate::exact::x86::keep_even_pixels;
@@ -11,12 +9,10 @@ use crate::x86::prefetch_rows_after_window;
 
 /// The vertical sums `row0 + row3 + 3 (row1 + row2)` in u16, then the
 /// rounded 4-tap sums at every sample as bytes, of which the even pixels are
-/// kept.
-///
-/// # Safety
-/// AVX2 must be available; `src` holds `width * height * channels` samples.
+/// kept. Panics unless `src` holds a `width` x `height` image of 1 or 3
+/// channels, of even sizes.
 #[target_feature(enable = "avx2")]
-pub(crate) unsafe fn bilinear_x2_avx2(
+pub(crate) fn bilinear_x2_avx2(
     src: &[u8],
     width: usize,
     height: usize,
@@ -25,7 +21,7 @@ pub(crate) unsafe fn bilinear_x2_avx2(
     use std::arch::x86_64::*;
     const LANES: usize = 16;
     let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
-    debug_assert!(src.len() >= width * height * channels);
+    crate::exact::assert_exact_image::<_, 2>(src, width, height, channels);
     let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
     // SAFETY: u8 has no invalid values; every sample is written below before
     // the vector is returned.
@@ -149,9 +145,7 @@ pub(crate) unsafe fn bilinear_x2_avx2(
         if start < row_samples {
             horizontal_block(row_samples - 2 * LANES);
         }
-        // SAFETY: avx2 is enabled here; full[..row_samples] holds 2 dst.len()
-        // samples.
-        unsafe { keep_even_pixels(&full[..row_samples], channels, dst) };
+        keep_even_pixels(&full[..row_samples], channels, dst);
         for clipped_output in [0, out_width - 1] {
             let clipped = clipped_output..clipped_output + 1;
             horizontal_scalar(
@@ -182,8 +176,7 @@ mod tests {
             return;
         }
         let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: AVX2 is available; src holds width * height * channels
-            // samples.
+            // SAFETY: AVX2 is available.
             unsafe { bilinear_x2_avx2(src, width, height, channels) }
         };
         assert_equals_reference(

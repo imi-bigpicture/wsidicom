@@ -6,10 +6,10 @@
 //! round with `vrshrn` (rounding shift and narrow): `(sum + 2) >> 2` and
 //! `(sum + 8) >> 4`, the scalar reference's exact single rounding.
 //!
-//! # Safety
 //! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
-//! Every `unsafe fn` here requires `src.len() >= width * height * channels`.
-//! Loads and stores are justified against that at their loop guards.
+//! The whole-image kernels check `src.len() >= width * height * channels`;
+//! the `unsafe fn` here require it and the output rows their docs state.
+//! Loads and stores are justified against those at their loop guards.
 
 use std::arch::aarch64::{
     uint8x8_t, uint8x8x3_t, uint8x16_t, uint8x16x3_t, uint16x4_t, uint16x4x3_t, uint16x8_t,
@@ -152,19 +152,20 @@ type Box2xInto<T> = unsafe fn(&[T], usize, usize, *mut T, usize);
 
 /// `kernel`'s 2x box of `src` into a new image of `channels`-sample pixels.
 ///
-/// # Safety
-/// `src` holds `width * height` pixels.
+/// Panics unless `src` holds a `width` x `height` image of `channels` (1 or 3).
 #[target_feature(enable = "neon")]
-unsafe fn box2x_allocated<T>(
+#[inline]
+fn box2x_allocated<T>(
     kernel: Box2xInto<T>,
     src: &[T],
     (width, height, channels): (usize, usize, usize),
 ) -> (Vec<T>, usize, usize) {
+    crate::sample::assert_image(src, width, height, channels);
     let (out_width, out_height) = halved(width, height);
     let out_stride = out_width * channels;
     let mut out = unwritten_output::<T>(out_height * out_stride);
     let dst_ptr = out.as_mut_ptr().cast::<T>();
-    // SAFETY: the caller's bound on src; out holds the out_height rows of
+    // SAFETY: src holds the image (checked); out holds the out_height rows of
     // out_width pixels, out_stride samples apart.
     unsafe { kernel(src, width, height, dst_ptr, out_stride) };
     // SAFETY: the kernel wrote every output row in full.
@@ -173,30 +174,18 @@ unsafe fn box2x_allocated<T>(
 
 /// NEON uint8 2x2 box into a new image.
 ///
-/// # Safety
-/// `src` holds `width * height` samples.
+/// Panics unless `src` holds a `width` x `height` image.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn box2x_u8_neon(
-    src: &[u8],
-    width: usize,
-    height: usize,
-) -> (Vec<u8>, usize, usize) {
-    // SAFETY: the caller's bound.
-    unsafe { box2x_allocated(box2x_u8_into_neon, src, (width, height, 1)) }
+pub(crate) fn box2x_u8_neon(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
+    box2x_allocated(box2x_u8_into_neon, src, (width, height, 1))
 }
 
 /// NEON uint16 2x2 box into a new image.
 ///
-/// # Safety
-/// `src` holds `width * height` samples.
+/// Panics unless `src` holds a `width` x `height` image.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn box2x_u16_neon(
-    src: &[u16],
-    width: usize,
-    height: usize,
-) -> (Vec<u16>, usize, usize) {
-    // SAFETY: the caller's bound.
-    unsafe { box2x_allocated(box2x_u16_into_neon, src, (width, height, 1)) }
+pub(crate) fn box2x_u16_neon(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
+    box2x_allocated(box2x_u16_into_neon, src, (width, height, 1))
 }
 
 /// The uint16 RGB 2x2 box, 4 output pixels per step: `vld3q` splits 8 source
@@ -343,30 +332,26 @@ unsafe fn box2x_hwc_tail<T: Sample>(
 
 /// NEON uint8 RGB 2x2 box into a new image.
 ///
-/// # Safety
-/// `src` holds `width * height * 3` samples.
+/// Panics unless `src` holds a `width` x `height` RGB image.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn box2x_u8_hwc_neon(
+pub(crate) fn box2x_u8_hwc_neon(
     src: &[u8],
     width: usize,
     height: usize,
 ) -> (Vec<u8>, usize, usize) {
-    // SAFETY: the caller's bound.
-    unsafe { box2x_allocated(box2x_u8_hwc_into_neon, src, (width, height, RGB)) }
+    box2x_allocated(box2x_u8_hwc_into_neon, src, (width, height, RGB))
 }
 
 /// NEON uint16 RGB 2x2 box into a new image.
 ///
-/// # Safety
-/// `src` holds `width * height * 3` samples.
+/// Panics unless `src` holds a `width` x `height` RGB image.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn box2x_u16_hwc_neon(
+pub(crate) fn box2x_u16_hwc_neon(
     src: &[u16],
     width: usize,
     height: usize,
 ) -> (Vec<u16>, usize, usize) {
-    // SAFETY: the caller's bound.
-    unsafe { box2x_allocated(box2x_u16_hwc_into_neon, src, (width, height, RGB)) }
+    box2x_allocated(box2x_u16_hwc_into_neon, src, (width, height, RGB))
 }
 
 fn quartered(width: usize, height: usize) -> (usize, usize) {
@@ -382,14 +367,10 @@ fn source_rows4(out_y: usize, width: usize) -> [usize; 4] {
 /// byte-pair sums of the 4 rows in u16 (at most 2040), `vpaddq` forms the
 /// 4x4 sums (at most 4080) and `vrshrn` rounds them once.
 ///
-/// # Safety
-/// `src` holds `width * height` samples.
+/// Panics unless `src` holds a `width` x `height` image.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn box4x_u8_neon(
-    src: &[u8],
-    width: usize,
-    height: usize,
-) -> (Vec<u8>, usize, usize) {
+pub(crate) fn box4x_u8_neon(src: &[u8], width: usize, height: usize) -> (Vec<u8>, usize, usize) {
+    crate::sample::assert_image(src, width, height, 1);
     let (out_width, out_height) = quartered(width, height);
     let mut out = unwritten_output::<u8>(out_width * out_height);
     let (src_ptr, dst_ptr) = (src.as_ptr(), out.as_mut_ptr().cast::<u8>());
@@ -440,14 +421,10 @@ pub(crate) unsafe fn box4x_u8_neon(
 /// pair sums of the 4 rows in u32, `vpaddq` forms the 4x4 sums and `vrshrn`
 /// rounds them once.
 ///
-/// # Safety
-/// `src` holds `width * height` samples.
+/// Panics unless `src` holds a `width` x `height` image.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn box4x_u16_neon(
-    src: &[u16],
-    width: usize,
-    height: usize,
-) -> (Vec<u16>, usize, usize) {
+pub(crate) fn box4x_u16_neon(src: &[u16], width: usize, height: usize) -> (Vec<u16>, usize, usize) {
+    crate::sample::assert_image(src, width, height, 1);
     let (out_width, out_height) = quartered(width, height);
     let mut out = unwritten_output::<u16>(out_width * out_height);
     let (src_ptr, dst_ptr) = (src.as_ptr(), out.as_mut_ptr().cast::<u16>());
@@ -564,16 +541,17 @@ macro_rules! gen_box_levels_hwc_neon {
         /// The RGB box reduced by 4 (`levels` 2) or 8 (`levels` 3), with
         /// each channel equal to the planar pyramid's.
         ///
-        /// # Safety
-        /// `src` holds `width * height * 3` samples, and `levels` is 2 or 3.
+        /// Panics unless `src` holds a `width` x `height` RGB image and
+        /// `levels` is 2 or 3.
         #[target_feature(enable = "neon")]
-        pub(crate) unsafe fn $name(
+        pub(crate) fn $name(
             src: &[$t],
             (width, height): (usize, usize),
             levels: u32,
         ) -> (Vec<$t>, usize, usize) {
             const LANES: usize = $lanes;
-            debug_assert!((2..=3).contains(&levels));
+            crate::sample::assert_image(src, width, height, RGB);
+            assert!((2..=3).contains(&levels), "2 or 3 levels, not {levels}");
             let block = 1usize << levels;
             let (out_width, out_height) = (width / block, height / block);
             let (stride, out_stride) = (width * RGB, out_width * RGB);
@@ -699,8 +677,7 @@ mod tests {
         let mut rng = Rng::new(40);
         for (width, height) in box_sizes(1) {
             for (_, src) in test_images(&mut rng, width * height, T::MAX) {
-                // SAFETY: NEON is baseline on aarch64; src holds width *
-                // height samples.
+                // SAFETY: NEON is baseline on aarch64.
                 let simd = unsafe { kernel(&src, width, height) };
                 assert_same_image(
                     &simd,
@@ -715,8 +692,7 @@ mod tests {
         let mut rng = Rng::new(41);
         for (width, height) in box_sizes(1) {
             for (_, src) in test_images(&mut rng, width * height * RGB, T::MAX) {
-                // SAFETY: NEON is baseline on aarch64; src holds width *
-                // height RGB pixels.
+                // SAFETY: NEON is baseline on aarch64.
                 let simd = unsafe { kernel(&src, width, height) };
                 assert_same_image(
                     &simd,
@@ -753,8 +729,7 @@ mod tests {
         for levels in [2, 3] {
             for (width, height) in box_sizes(1) {
                 for (_, src) in test_images(&mut rng, width * height * RGB, T::MAX) {
-                    // SAFETY: NEON is baseline on aarch64; src holds width *
-                    // height RGB pixels.
+                    // SAFETY: NEON is baseline on aarch64.
                     let simd = unsafe { kernel(&src, (width, height), levels) };
                     assert_same_image(
                         &simd,

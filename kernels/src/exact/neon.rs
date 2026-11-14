@@ -1,8 +1,6 @@
 //! Helpers shared by the NEON exact kernels.
 //!
-//! # Safety
-//! NEON is baseline on aarch64; every `unsafe fn` here requires the bounds
-//! its doc states.
+//! NEON is baseline on aarch64; the helpers check their arguments.
 
 use std::arch::aarch64::{
     uint8x16_t, uint8x16x3_t, uint16x8_t, uint16x8x3_t, vld2q_u8, vld2q_u16, vld3q_u8, vld3q_u16,
@@ -15,18 +13,13 @@ use crate::sample::RGB;
 /// `dst` = the even pixels of `full`: `vld2`/`vld3` split the channel planes
 /// and `vuzp1` keeps their even lanes.
 ///
-/// # Safety
-/// `full` holds `2 * out_width` pixels of `channels` (1 or 3) samples and
+/// Panics unless `channels` is 1 or 3, `full` holds `2 * out_width` pixels and
 /// `dst` `out_width`.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn keep_even_pixels(
-    full: &[u8],
-    channels: usize,
-    out_width: usize,
-    dst: &mut [u8],
-) {
+#[inline]
+pub(crate) fn keep_even_pixels(full: &[u8], channels: usize, out_width: usize, dst: &mut [u8]) {
     const STEP_PIXELS: usize = 16;
-    debug_assert!(full.len() >= 2 * out_width * channels && dst.len() >= out_width * channels);
+    crate::exact::assert_kept_pixels::<_, 2>(full, channels, out_width, dst);
     let (full_ptr, dst_ptr) = (full.as_ptr(), dst.as_mut_ptr());
     let mut output = 0usize;
     while output + STEP_PIXELS <= out_width {
@@ -59,18 +52,16 @@ pub(crate) unsafe fn keep_even_pixels(
 type PlanePair = (uint8x16_t, uint8x16_t);
 
 /// `keep_even_pixels` for uint16 samples.
-///
-/// # Safety
-/// As `keep_even_pixels`.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn keep_even_pixels_u16(
+#[inline]
+pub(crate) fn keep_even_pixels_u16(
     full: &[u16],
     channels: usize,
     out_width: usize,
     dst: &mut [u16],
 ) {
     const STEP_PIXELS: usize = 8;
-    debug_assert!(full.len() >= 2 * out_width * channels && dst.len() >= out_width * channels);
+    crate::exact::assert_kept_pixels::<_, 2>(full, channels, out_width, dst);
     let (full_ptr, dst_ptr) = (full.as_ptr(), dst.as_mut_ptr());
     let even = |left: uint16x8_t, right: uint16x8_t| vuzp1q_u16(left, right);
     let mut output = 0usize;
@@ -156,8 +147,7 @@ mod tests {
             for out_width in 0..80 {
                 let full: Vec<T> = random_samples(&mut rng, 2 * out_width * channels);
                 let mut dst = vec![T::default(); out_width * channels];
-                // SAFETY: NEON is baseline; full holds 2 out_width pixels, dst
-                // out_width.
+                // SAFETY: NEON is baseline.
                 unsafe { kernel(&full, channels, out_width, &mut dst) };
                 let expected = even_pixels(&full, channels);
                 assert_eq!(dst, expected, "{channels} channels, {out_width} pixels");

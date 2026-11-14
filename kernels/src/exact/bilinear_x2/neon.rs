@@ -1,8 +1,8 @@
 //! The NEON kernel of the exact x2 bilinear reduction.
 //!
-//! # Safety
-//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch;
-//! every `unsafe fn` here requires the bounds its doc states.
+//! NEON is baseline on aarch64, gated only by the `set_simd` kill switch.
+//! The kernel checks its arguments; the `unsafe fn` here require the bounds
+//! their docs state.
 
 use std::arch::aarch64::{
     uint8x8_t, uint8x8x3_t, uint8x16_t, uint16x8_t, vaddl_high_u8, vaddl_u8, vaddq_u16,
@@ -23,19 +23,17 @@ const BLOCK: usize = 16;
 /// row2)` in u16, then the rounded 4-tap sum at every sample (at most 64 x
 /// 255, `vrshrn` by 6), of which the even pixels are kept. Clipped columns
 /// from the same sums, and clipped or too short rows, by the scalar
-/// reference's arithmetic.
-///
-/// # Safety
-/// `src` holds `width * height * channels` samples, `channels` 1 or 3.
+/// reference's arithmetic. Panics unless `src` holds a `width` x `height`
+/// image of 1 or 3 channels, of even sizes.
 #[target_feature(enable = "neon")]
-pub(crate) unsafe fn bilinear_x2_neon(
+pub(crate) fn bilinear_x2_neon(
     src: &[u8],
     width: usize,
     height: usize,
     channels: usize,
 ) -> Vec<u8> {
     let (out_width, out_height, row_samples) = (width / 2, height / 2, width * channels);
-    debug_assert!(src.len() >= width * height * channels);
+    crate::exact::assert_exact_image::<_, 2>(src, width, height, channels);
     let mut out_buf = crate::cpu::unwritten_output::<u8>(out_width * out_height * channels);
     // SAFETY: u8 has no invalid values; every sample is written below before
     // the vector is returned.
@@ -125,9 +123,7 @@ pub(crate) unsafe fn bilinear_x2_neon(
             // SAFETY: x + 16 <= row_samples, the length of `full`.
             unsafe { vst1q_u8(full_ptr.add(x), rounded) };
         });
-        // SAFETY: full holds 2 * out_width pixels of `channels` samples, dst
-        // out_width.
-        unsafe { keep_even_pixels(&full, channels, out_width, dst) };
+        keep_even_pixels(&full, channels, out_width, dst);
         for clipped_output in [0, out_width - 1] {
             let clipped = clipped_output..clipped_output + 1;
             horizontal_scalar(
@@ -292,8 +288,7 @@ mod tests {
     #[test]
     fn neon_equals_scalar() {
         let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: NEON is baseline on aarch64; src holds width * height * channels
-            // samples.
+            // SAFETY: NEON is baseline on aarch64.
             unsafe { bilinear_x2_neon(src, width, height, channels) }
         };
         assert_equals_reference(
