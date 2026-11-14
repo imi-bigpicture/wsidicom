@@ -263,27 +263,6 @@ pub(crate) unsafe fn horizontal_steps_avx2<const IS_RGB: bool>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::bilinear_up2::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::assert_equals_reference;
-    use crate::testing::{CHANNELS, size_grid};
-
-    #[test]
-    fn avx2_equals_scalar() {
-        if !crate::testing::avx2_detected() {
-            return;
-        }
-        let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: AVX2 is available.
-            unsafe { bilinear_up2_avx2(src, width, height, channels) }
-        };
-        assert_equals_reference(
-            size_grid(&WIDTHS, &HEIGHTS),
-            &CHANNELS,
-            u8::MAX,
-            &kernel,
-            bilinear_up2_scalar,
-        );
-    }
 
     #[test]
     fn interleave_bytes_reads_each_pixel_pair_in_order() {

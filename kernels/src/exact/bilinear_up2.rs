@@ -80,16 +80,16 @@ pub(crate) fn bilinear_up2(src: &[u8], width: usize, height: usize, channels: us
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, assert_rejects};
     use crate::testing::{CHANNELS, size_grid};
+    use crate::testing::{assert_equals_reference, assert_rejects};
 
     /// Widths around 32 samples per row (the SIMD kernels' scalar fallback
     /// below it), the SIMD steps and a last step shifted back; heights from a
     /// single row (both neighbours the edge) up.
-    pub(super) const WIDTHS: [usize; 20] = [
+    const WIDTHS: [usize; 20] = [
         1, 2, 3, 5, 7, 8, 10, 11, 15, 16, 17, 22, 31, 32, 33, 63, 64, 65, 129, 131,
     ];
-    pub(super) const HEIGHTS: [usize; 4] = [1, 2, 3, 5];
+    const HEIGHTS: [usize; 4] = [1, 2, 3, 5];
 
     #[test]
     fn dispatch_equals_scalar() {

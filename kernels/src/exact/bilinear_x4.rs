@@ -107,16 +107,16 @@ pub(crate) fn bilinear_x4(src: &[u8], width: usize, height: usize, channels: usi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, assert_rejects};
     use crate::testing::{CHANNELS, size_grid};
+    use crate::testing::{assert_equals_reference, assert_rejects};
 
     /// Widths (multiples of 4) around the SIMD steps (64 gray input pixels
     /// and twice that) and the scalar fallback; heights from one output row
     /// (both edges clipped) up.
-    pub(super) const WIDTHS: [usize; 18] = [
+    const WIDTHS: [usize; 18] = [
         4, 8, 12, 16, 20, 28, 32, 36, 44, 60, 64, 68, 124, 128, 132, 136, 260, 516,
     ];
-    pub(super) const HEIGHTS: [usize; 5] = [4, 8, 12, 16, 20];
+    const HEIGHTS: [usize; 5] = [4, 8, 12, 16, 20];
 
     #[test]
     fn dispatch_equals_scalar() {

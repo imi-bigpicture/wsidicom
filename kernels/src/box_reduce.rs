@@ -760,6 +760,59 @@ mod tests {
         assert_dispatch_matches_references::<u16>();
     }
 
+    /// Halvings whose outputs pass the prefault (and on x86 the
+    /// streaming-store) threshold, with rows that are not a multiple of the
+    /// vector width.
+    fn assert_large_halvings_equal_scalar<T: BoxTestSample>() {
+        let mut rng = Rng::new(24);
+        for (channels, out_width) in [(1, 2052), (RGB, 1027)] {
+            let row_bytes = out_width * channels * size_of::<T>();
+            let out_height = crate::cpu::PREFAULT_OUTPUT_BYTES.div_ceil(row_bytes);
+            let (width, height) = (2 * out_width + 1, 2 * out_height + 1);
+            let src: Vec<T> = random_samples(&mut rng, width * height * channels);
+            let (actual, expected) = if channels == 1 {
+                (
+                    T::box2x(&src, width, height),
+                    box2x_scalar(&src, width, height),
+                )
+            } else {
+                (
+                    T::box2x_hwc(&src, width, height),
+                    box2x_hwc_scalar(&src, width, height),
+                )
+            };
+            assert_same_image(
+                &actual,
+                &expected,
+                &format!("{width} x {height} x {channels}"),
+            );
+        }
+    }
+
+    #[test]
+    fn large_outputs_stream_past_the_cache_and_prefault() {
+        assert_large_halvings_equal_scalar::<u8>();
+        assert_large_halvings_equal_scalar::<u16>();
+    }
+
+    /// The fused levels bound their vector reads by the slice's length, so a
+    /// longer slice takes more vector blocks; the output must not change.
+    #[test]
+    fn fused_levels_ignore_samples_past_the_image() {
+        let mut rng = Rng::new(23);
+        for levels in [2, 3] {
+            for (width, height) in box_sizes(8) {
+                let len = width * height * RGB;
+                let src: Vec<u8> = random_samples(&mut rng, len + 64 * RGB);
+                assert_same_image(
+                    &u8::box_levels_hwc(&src, width, height, levels),
+                    &u8::box_levels_hwc(&src[..len], width, height, levels),
+                    &format!("{levels} levels, {width} x {height}"),
+                );
+            }
+        }
+    }
+
     #[test]
     fn fused_box4x_rounds_once_where_chained_halvings_round_twice() {
         // The documented difference: at most one step, and real on ordinary

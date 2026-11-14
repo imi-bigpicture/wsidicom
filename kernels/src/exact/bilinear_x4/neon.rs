@@ -321,27 +321,3 @@ fn keep_every_fourth_pixel(full: &[u8], channels: usize, out_width: usize, dst: 
 
 // The rounding shift by 10 divides by a full 2D window's total.
 const _: () = assert!(FULL_TOTAL * FULL_TOTAL == 1 << 10);
-
-#[cfg(test)]
-mod tests {
-    use super::bilinear_x4_neon;
-    use crate::exact::bilinear_x4::bilinear_x4_scalar;
-    use crate::exact::bilinear_x4::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::assert_equals_reference;
-    use crate::testing::{CHANNELS, size_grid};
-
-    #[test]
-    fn neon_equals_scalar() {
-        let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: NEON is baseline on aarch64.
-            unsafe { bilinear_x4_neon(src, width, height, channels) }
-        };
-        assert_equals_reference(
-            size_grid(&WIDTHS, &HEIGHTS),
-            &CHANNELS,
-            u8::MAX,
-            &kernel,
-            bilinear_x4_scalar,
-        );
-    }
-}

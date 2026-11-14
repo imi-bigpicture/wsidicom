@@ -161,30 +161,3 @@ pub(crate) fn bilinear_x2_avx2(
     // SAFETY: every row wrote all of its samples.
     unsafe { crate::cpu::written_output(out_buf) }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::exact::bilinear_x2::bilinear_x2_scalar;
-    use crate::exact::bilinear_x2::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::assert_equals_reference;
-    use crate::testing::{CHANNELS, size_grid};
-
-    #[test]
-    fn avx2_equals_scalar() {
-        if !crate::testing::avx2_detected() {
-            return;
-        }
-        let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: AVX2 is available.
-            unsafe { bilinear_x2_avx2(src, width, height, channels) }
-        };
-        assert_equals_reference(
-            size_grid(&WIDTHS, &HEIGHTS),
-            &CHANNELS,
-            u8::MAX,
-            &kernel,
-            bilinear_x2_scalar,
-        );
-    }
-}

@@ -509,36 +509,13 @@ mod tests {
         (130, 2),
     ];
 
-    /// A sample type's dtype-specific AVX2 kernels.
-    #[cfg(target_arch = "x86_64")]
-    trait TierKernels: TransposedTier + RandomSample {
-        const VERTICAL_AVX2: unsafe fn(&[Self], usize, &[f32], &mut [f32]);
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    impl TierKernels for u8 {
-        const VERTICAL_AVX2: unsafe fn(&[u8], usize, &[f32], &mut [f32]) = x86::vertical_u8_avx2;
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    impl TierKernels for u16 {
-        const VERTICAL_AVX2: unsafe fn(&[u16], usize, &[f32], &mut [f32]) = x86::vertical_u16_avx2;
-    }
-
-    /// A sample type the tests resize: with its x86 tiers' kernels there.
-    #[cfg(target_arch = "x86_64")]
-    trait TestFloat: TierKernels {}
-    #[cfg(target_arch = "x86_64")]
-    impl<T: TierKernels> TestFloat for T {}
     /// A sample type the tests resize.
-    #[cfg(not(target_arch = "x86_64"))]
     trait TestFloat: FloatResample + RandomSample {}
-    #[cfg(not(target_arch = "x86_64"))]
     impl<T: FloatResample + RandomSample> TestFloat for T {}
 
-    /// The entry point and each tier's driver equal the scalar path bit
-    /// for bit (the same FMA chains in the same order).
-    fn assert_tiers_match_scalar<T: TestFloat>(
+    /// The dispatched resize equals the scalar path bit for bit (the same
+    /// FMA chains in the same order).
+    fn assert_matches_scalar<T: TestFloat>(
         src: &[T],
         (width, height): (usize, usize),
         plan: &FloatPlan,
@@ -548,7 +525,7 @@ mod tests {
         assert_same(
             &resize_float(src, (width, height), plan),
             &expected,
-            &format!("{context}, dispatched"),
+            context,
         );
     }
 
@@ -568,7 +545,7 @@ mod tests {
                             "{} {channels} channels {width} x {height} -> {out_width} x {out_height}",
                             kernel_name(kernel)
                         );
-                        assert_tiers_match_scalar(&src, (width, height), &plan, &context);
+                        assert_matches_scalar(&src, (width, height), &plan, &context);
                     }
                 }
             }
@@ -612,7 +589,7 @@ mod tests {
                         "chunked {} {channels} channels {width} x {height} -> {out_width} x {out_height}",
                         kernel_name(kernel)
                     );
-                    assert_tiers_match_scalar(&src, (width, height), &plan, &context);
+                    assert_matches_scalar(&src, (width, height), &plan, &context);
                 }
             }
         }
@@ -658,7 +635,7 @@ mod tests {
         let mut rng = Rng::new(3);
         let src: Vec<T> = random_samples(&mut rng, width * height * channels);
         let context = format!("striped {width} x {height} x {channels}");
-        assert_tiers_match_scalar(&src, (width, height), &plan, &context);
+        assert_matches_scalar(&src, (width, height), &plan, &context);
     }
 
     #[test]
@@ -667,22 +644,19 @@ mod tests {
         assert_striped_matches_scalar::<u16>(171, RGB);
     }
 
-    /// A vertical kernel, whether this host runs it, and its tier's name.
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-    type VerticalTier<T> = (
-        bool,
-        unsafe fn(&[T], usize, &[f32], &mut [f32]),
-        &'static str,
-    );
+    type VerticalKernel<T> = unsafe fn(&[T], usize, &[f32], &mut [f32]);
 
-    /// The vertical kernels of every tier: rows narrower than a register,
-    /// widths around the registers and blocks, strides past the row (column
-    /// strips), and the strides and window lengths where the taps run in
-    /// groups.
+    /// A SIMD vertical kernel: rows narrower than a register, widths around
+    /// the registers and blocks, strides past the row (column strips), and
+    /// the strides and window lengths where the taps run in groups.
+    ///
+    /// # Safety
+    /// The CPU supports `kernel`'s features.
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-    fn assert_vertical_matches_scalar<T: FloatSample + RandomSample>(
+    unsafe fn assert_vertical_matches_scalar<T: FloatSample + RandomSample>(
         rng: &mut Rng,
-        tiers: &[VerticalTier<T>],
+        kernel: VerticalKernel<T>,
     ) {
         let widths = [1, 7, 8, 9, 15, 16, 17, 63, 64, 65, 100, 130];
         let sample_bytes = size_of::<T>();
@@ -706,42 +680,50 @@ mod tests {
                 let mut expected = vec![0.0; width];
                 vertical(&rows, stride, &weights, &mut expected);
                 let context = format!("width {width}, stride {stride}, {taps} taps");
-                for &(available, kernel, name) in tiers {
-                    if available {
-                        let mut mid = vec![f32::NAN; width];
-                        // SAFETY: the kernel's features detected; rows holds
-                        // taps (> 0) rows of width, stride apart.
-                        unsafe { kernel(&rows, stride, &weights, &mut mid) };
-                        let (actual, wanted): (Vec<u32>, Vec<u32>) = (
-                            mid.iter().map(|sum| sum.to_bits()).collect(),
-                            expected.iter().map(|sum| sum.to_bits()).collect(),
-                        );
-                        assert_same(&actual, &wanted, &format!("{context}, {name}"));
-                    }
-                }
+                let mut mid = vec![f32::NAN; width];
+                // SAFETY: the kernel's features (the caller's contract); rows
+                // holds taps (> 0) rows of width, stride apart.
+                unsafe { kernel(&rows, stride, &weights, &mut mid) };
+                let (actual, wanted): (Vec<u32>, Vec<u32>) = (
+                    mid.iter().map(|sum| sum.to_bits()).collect(),
+                    expected.iter().map(|sum| sum.to_bits()).collect(),
+                );
+                assert_same(&actual, &wanted, &context);
             }
         }
     }
 
-    #[cfg(target_arch = "x86_64")]
-    fn x86_vertical_tiers<T: TierKernels>() -> [VerticalTier<T>; 1] {
-        [(avx2_fma_detected(), T::VERTICAL_AVX2, "avx2")]
-    }
-
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     #[test]
     fn vertical_kernels_equal_scalar() {
+        #[cfg(target_arch = "x86_64")]
+        let (available, kernel_u8, kernel_u16): (
+            _,
+            VerticalKernel<u8>,
+            VerticalKernel<u16>,
+        ) = (
+            avx2_fma_detected(),
+            x86::vertical_u8_avx2,
+            x86::vertical_u16_avx2,
+        );
+        #[cfg(target_arch = "aarch64")]
+        let (available, kernel_u8, kernel_u16): (
+            _,
+            VerticalKernel<u8>,
+            VerticalKernel<u16>,
+        ) = (
+            crate::cpu::use_neon(),
+            neon::vertical_u8_neon,
+            neon::vertical_u16_neon,
+        );
+        if !available {
+            return;
+        }
         let mut rng = Rng::new(4);
-        assert_vertical_matches_scalar::<u8>(&mut rng, &x86_vertical_tiers());
-        assert_vertical_matches_scalar::<u16>(&mut rng, &x86_vertical_tiers());
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    #[test]
-    fn vertical_kernels_equal_scalar() {
-        let mut rng = Rng::new(4);
-        let neon = crate::cpu::use_neon();
-        assert_vertical_matches_scalar::<u8>(&mut rng, &[(neon, neon::vertical_u8_neon, "neon")]);
-        assert_vertical_matches_scalar::<u16>(&mut rng, &[(neon, neon::vertical_u16_neon, "neon")]);
+        // SAFETY: the kernels' features were detected.
+        unsafe {
+            assert_vertical_matches_scalar(&mut rng, kernel_u8);
+            assert_vertical_matches_scalar(&mut rng, kernel_u16);
+        }
     }
 }

@@ -29,14 +29,13 @@ pub(crate) fn bilinear_x2_u16(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, assert_rejects};
     use crate::testing::{CHANNELS, size_grid};
+    use crate::testing::{assert_equals_reference, assert_rejects};
 
     /// Even widths around the gray kernel's 8-pixel step, the RGB kernel's
     /// 4-pixel step and their scalar fallbacks.
-    pub(super) const WIDTHS: [usize; 16] =
-        [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 34, 36, 38, 66, 130];
-    pub(super) const HEIGHTS: [usize; 5] = [2, 4, 6, 8, 12];
+    const WIDTHS: [usize; 16] = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 34, 36, 38, 66, 130];
+    const HEIGHTS: [usize; 5] = [2, 4, 6, 8, 12];
 
     #[test]
     fn dispatch_equals_scalar() {

@@ -328,34 +328,3 @@ pub(crate) fn bilinear_x4_avx2<const IS_RGB: bool>(
     // stores.
     unsafe { x4_frame::<IS_RGB>(src, (width, height), vertical, horizontal) }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::exact::bilinear_x4::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::assert_equals_reference;
-    use crate::testing::{CHANNELS, size_grid};
-
-    #[test]
-    fn avx2_equals_scalar() {
-        if !crate::testing::avx2_detected() {
-            return;
-        }
-        let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: AVX2 is available.
-            unsafe {
-                match channels {
-                    1 => bilinear_x4_avx2::<false>(src, width, height),
-                    _ => bilinear_x4_avx2::<true>(src, width, height),
-                }
-            }
-        };
-        assert_equals_reference(
-            size_grid(&WIDTHS, &HEIGHTS),
-            &CHANNELS,
-            u8::MAX,
-            &kernel,
-            bilinear_x4_scalar,
-        );
-    }
-}

@@ -122,16 +122,16 @@ pub(crate) fn catmull_x2(src: &[u8], width: usize, height: usize, channels: usiz
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exact::tests::{assert_equals_reference, assert_rejects};
     use crate::testing::{CHANNELS, size_grid};
+    use crate::testing::{assert_equals_reference, assert_rejects};
 
     /// Even widths around the SIMD steps and the scalar fallback, the clipped
     /// edge windows (3 input pixels each side) and the vector tails; even
     /// heights from one output row (both edges clipped) up.
-    pub(super) const WIDTHS: [usize; 22] = [
+    const WIDTHS: [usize; 22] = [
         2, 4, 6, 8, 10, 12, 16, 20, 24, 28, 32, 34, 36, 40, 62, 64, 66, 70, 128, 130, 134, 262,
     ];
-    pub(super) const HEIGHTS: [usize; 6] = [2, 4, 6, 8, 10, 14];
+    const HEIGHTS: [usize; 6] = [2, 4, 6, 8, 10, 14];
 
     #[test]
     fn dispatch_equals_scalar() {

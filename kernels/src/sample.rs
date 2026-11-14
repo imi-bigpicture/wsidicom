@@ -184,38 +184,39 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "images have 1 or 3 channels, not 2")]
-    fn assert_image_rejects_two_channels() {
-        assert_image(&[0u8; 64], 2, 2, 2);
-    }
-
-    #[test]
-    #[should_panic(expected = "images have 1 or 3 channels, not 4")]
-    fn assert_image_rejects_four_channels() {
-        assert_image(&[0u8; 64], 2, 2, 4);
-    }
-
-    #[test]
-    #[should_panic(expected = "images have 1 or 3 channels, not 0")]
-    fn assert_image_rejects_no_channels() {
-        assert_image::<u8>(&[], 0, 0, 0);
-    }
-
-    #[test]
-    #[should_panic(expected = "fewer than width * height * channels samples")]
-    fn assert_image_rejects_a_short_slice() {
-        assert_image(&[0u8; 11], 2, 2, RGB);
-    }
-
-    #[test]
-    #[should_panic(expected = "fewer than width * height * channels samples")]
-    fn assert_image_rejects_pixels_overflowing_usize() {
-        assert_image(&[0u8; 16], usize::MAX, 2, 1);
-    }
-
-    #[test]
-    #[should_panic(expected = "fewer than width * height * channels samples")]
-    fn assert_image_rejects_samples_overflowing_usize() {
-        assert_image(&[0u8; 16], usize::MAX / 2, 2, RGB);
+    fn assert_image_rejects_bad_images() {
+        let check = |src: &[u8], width, height, channels| {
+            assert_image(src, width, height, channels);
+            Vec::new()
+        };
+        crate::testing::assert_rejects(
+            &check,
+            &[
+                (64, 2, 2, 2, "images have 1 or 3 channels, not 2"),
+                (64, 2, 2, 4, "images have 1 or 3 channels, not 4"),
+                (0, 0, 0, 0, "images have 1 or 3 channels, not 0"),
+                (
+                    11,
+                    2,
+                    2,
+                    RGB,
+                    "fewer than width * height * channels samples",
+                ),
+                (
+                    16,
+                    usize::MAX,
+                    2,
+                    1,
+                    "fewer than width * height * channels samples",
+                ),
+                (
+                    16,
+                    usize::MAX / 2,
+                    2,
+                    RGB,
+                    "fewer than width * height * channels samples",
+                ),
+            ],
+        );
     }
 }

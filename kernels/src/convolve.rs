@@ -1309,9 +1309,6 @@ mod tests {
         return crate::cpu::use_neon();
     }
 
-    #[cfg(target_arch = "x86_64")]
-    type PackKernel = unsafe fn(&[u8], &mut [u8]);
-
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     /// Intermediate samples as the vertical pass leaves them: Q6 u8 values,
     /// with some filter overshoot below 0.
@@ -1674,56 +1671,47 @@ mod tests {
                 // SAFETY: the tier detected; rows holds taps rows of width >=
                 // 16 samples, mid holds width.
                 unsafe { vertical_q6(rows, width, &weights, &mut mid) };
-                assert_same(&mid, &expected, &format!("{context}, first tier"));
+                assert_same(&mid, &expected, &context);
             }
         }
     }
 
     #[cfg(target_arch = "x86_64")]
     #[test]
-    fn widen_to_rgbx_kernels_equal_reference() {
-        let avx2 = avx2_detected();
+    fn widen_to_rgbx_avx2_equals_reference() {
+        if !avx2_detected() {
+            return;
+        }
         let mut rng = Rng::new(9);
-        for pixels in 1..=70 {
+        for pixels in 1..=70usize {
             // The kernel's minimum padding: whole groups of 4 pixels, and half
             // a register's read past them.
-            let mut check = |groups: usize,
-                             overread: usize,
-                             kernel: unsafe fn(&[i16], usize, &mut [i16]),
-                             name: &str| {
-                let src = random_mid(&mut rng, RGB * groups + overread);
-                let mut rgbx = vec![SENTINEL_I16; RGBX * groups];
-                // SAFETY: the caller detected the kernel's features; src and
-                // rgbx hold the kernel's minimum lengths.
-                unsafe { kernel(&src, pixels, &mut rgbx) };
-                let expected: Vec<i16> = src[..RGB * pixels]
-                    .as_chunks::<RGB>()
-                    .0
-                    .iter()
-                    .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], 0])
-                    .collect();
-                assert_same(
-                    &rgbx[..RGBX * pixels],
-                    &expected,
-                    &format!("{pixels} pixels, {name}"),
-                );
-            };
-            if avx2 {
-                let (group, overread) = (AVX2_I16_LANES / RGBX, AVX2_I16_LANES / 2);
-                check(
-                    pixels.next_multiple_of(group),
-                    overread,
-                    x86::widen_to_rgbx_avx2,
-                    "avx2",
-                );
-            }
+            let groups = pixels.next_multiple_of(AVX2_I16_LANES / RGBX);
+            let src = random_mid(&mut rng, RGB * groups + AVX2_I16_LANES / 2);
+            let mut rgbx = vec![SENTINEL_I16; RGBX * groups];
+            // SAFETY: AVX2 detected; src and rgbx hold the kernel's minimum
+            // lengths.
+            unsafe { x86::widen_to_rgbx_avx2(&src, pixels, &mut rgbx) };
+            let expected: Vec<i16> = src[..RGB * pixels]
+                .as_chunks::<RGB>()
+                .0
+                .iter()
+                .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], 0])
+                .collect();
+            assert_same(
+                &rgbx[..RGBX * pixels],
+                &expected,
+                &format!("{pixels} pixels"),
+            );
         }
     }
 
     #[cfg(target_arch = "x86_64")]
     #[test]
-    fn pack_from_rgbx_kernels_equal_reference() {
-        let avx2 = avx2_detected();
+    fn pack_from_rgbx_avx2_equals_reference() {
+        if !avx2_detected() {
+            return;
+        }
         let mut rng = Rng::new(10);
         for pixels in 1..=70 {
             let rgbx: Vec<u8> = random_samples(&mut rng, RGBX * pixels);
@@ -1733,16 +1721,10 @@ mod tests {
                 .iter()
                 .flat_map(|pixel| [pixel[0], pixel[1], pixel[2]])
                 .collect();
-            let tiers: [(bool, PackKernel, &str); 1] = [(avx2, x86::pack_from_rgbx_avx2, "avx2")];
-            for (available, kernel, name) in tiers {
-                if available {
-                    let mut out = vec![SENTINEL; RGB * pixels];
-                    // SAFETY: the kernel's features detected; rgbx holds RGBX
-                    // bytes per output pixel.
-                    unsafe { kernel(&rgbx, &mut out) };
-                    assert_same(&out, &expected, &format!("{pixels} pixels, {name}"));
-                }
-            }
+            let mut out = vec![SENTINEL; RGB * pixels];
+            // SAFETY: AVX2 detected; rgbx holds RGBX bytes per output pixel.
+            unsafe { x86::pack_from_rgbx_avx2(&rgbx, &mut out) };
+            assert_same(&out, &expected, &format!("{pixels} pixels"));
         }
     }
 

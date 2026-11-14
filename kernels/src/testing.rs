@@ -1,14 +1,12 @@
 //! Helpers shared by the unit tests: reproducible random images, the sizes
 //! that exercise vector bodies, tails and image edges, CPU feature probes,
 //! and a sample-by-sample comparison of two outputs.
+//!
+//! No test turns `set_simd` off, so the tests of a dispatcher run the SIMD
+//! kernel this CPU has, against the scalar reference.
 
 use crate::convolve::Kernel;
 use crate::sample::Sample;
-
-/// A kernel from a `width` x `height` image to its output and output size.
-pub(crate) type ImageKernel<T> = fn(&[T], usize, usize) -> (Vec<T>, usize, usize);
-/// An [`ImageKernel`] that needs CPU features or a caller contract.
-pub(crate) type UnsafeImageKernel<T> = unsafe fn(&[T], usize, usize) -> (Vec<T>, usize, usize);
 
 /// A xorshift64* generator: reproducible test data without a dependency.
 pub(crate) struct Rng(u64);
@@ -139,4 +137,59 @@ pub(crate) fn avx2_detected() -> bool {
 #[cfg(target_arch = "x86_64")]
 pub(crate) fn avx2_fma_detected() -> bool {
     avx2_detected() && std::is_x86_feature_detected!("fma")
+}
+
+/// A kernel of `(src, width, height, channels)`.
+pub(crate) type ChannelKernel<'kernel, T> = &'kernel dyn Fn(&[T], usize, usize, usize) -> Vec<T>;
+
+/// Bit for bit on every `test_images` image of each size and channel
+/// count, on sources of exactly `width * height * channels` samples.
+pub(crate) fn assert_equals_reference<T: RandomSample + Copy + Default>(
+    sizes: impl Iterator<Item = (usize, usize)>,
+    channel_counts: &[usize],
+    max: T,
+    kernel: ChannelKernel<'_, T>,
+    reference: fn(&[T], usize, usize, usize) -> Vec<T>,
+) {
+    let mut rng = Rng::new(7);
+    for (width, height) in sizes {
+        for &channels in channel_counts {
+            for (image, src) in test_images(&mut rng, width * height * channels, max) {
+                assert_eq!(
+                    kernel(&src, width, height, channels),
+                    reference(&src, width, height, channels),
+                    "{image} {width} x {height} x {channels}"
+                );
+            }
+        }
+    }
+}
+
+/// Bad arguments to a kernel: the source's sample count, `width`,
+/// `height`, `channels`, and a fragment of the panic message expected.
+pub(crate) type Rejection = (usize, usize, usize, usize, &'static str);
+
+/// Each rejection panics with its expected message.
+pub(crate) fn assert_rejects<T: Copy + Default>(
+    kernel: ChannelKernel<'_, T>,
+    rejections: &[Rejection],
+) {
+    for &(samples, width, height, channels, expected) in rejections {
+        let src = vec![T::default(); samples];
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            drop(kernel(&src, width, height, channels));
+        }))
+        .expect_err(&format!(
+            "{samples} samples {width} x {height} x {channels} did not panic"
+        ));
+        let message = panic
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| panic.downcast_ref::<&str>().copied())
+            .unwrap_or_default();
+        assert!(
+            message.contains(expected),
+            "{width} x {height} x {channels}: {message:?} lacks {expected:?}"
+        );
+    }
 }

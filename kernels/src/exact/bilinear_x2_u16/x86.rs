@@ -417,34 +417,3 @@ pub(crate) fn divide_lanes(
     let high = divide(_mm256_extracti128_si256::<1>(sums), &denominators[4..]);
     _mm256_inserti128_si256::<1>(_mm256_castsi128_si256(low), high)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::exact::bilinear_x2_u16::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::assert_equals_reference;
-    use crate::testing::{CHANNELS, size_grid};
-
-    #[test]
-    fn avx2_equals_scalar() {
-        if !crate::testing::avx2_detected() {
-            return;
-        }
-        let kernel = |src: &[u16], width, height, channels| {
-            // SAFETY: AVX2 is available.
-            unsafe {
-                match channels {
-                    1 => bilinear_x2_u16_gray_avx2(src, width, height),
-                    _ => bilinear_x2_u16_hwc_avx2(src, width, height),
-                }
-            }
-        };
-        assert_equals_reference(
-            size_grid(&WIDTHS, &HEIGHTS),
-            &CHANNELS,
-            u16::MAX,
-            &kernel,
-            bilinear_x2_scalar,
-        );
-    }
-}

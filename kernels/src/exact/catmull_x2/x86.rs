@@ -309,30 +309,3 @@ pub(crate) fn catmull_x2_avx2(src: &[u8], width: usize, height: usize, channels:
     // SAFETY: every row's steps covered all of its outputs.
     unsafe { crate::cpu::written_output(out_buf) }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::exact::catmull_x2::catmull_x2_scalar;
-    use crate::exact::catmull_x2::tests::{HEIGHTS, WIDTHS};
-    use crate::exact::tests::assert_equals_reference;
-    use crate::testing::{CHANNELS, size_grid};
-
-    #[test]
-    fn avx2_equals_scalar() {
-        if !crate::testing::avx2_fma_detected() {
-            return;
-        }
-        let kernel = |src: &[u8], width, height, channels| {
-            // SAFETY: AVX2 and FMA are available.
-            unsafe { catmull_x2_avx2(src, width, height, channels) }
-        };
-        assert_equals_reference(
-            size_grid(&WIDTHS, &HEIGHTS),
-            &CHANNELS,
-            u8::MAX,
-            &kernel,
-            catmull_x2_scalar,
-        );
-    }
-}
