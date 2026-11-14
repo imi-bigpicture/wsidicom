@@ -1,16 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-import numpy as np
 from numpy.typing import NDArray
-
-def compose(
-    canvas: NDArray[Any],
-    tiles: Sequence[NDArray[Any]],
-    positions: NDArray[np.int64],
-    crops: NDArray[np.int64] | None = None,
-) -> None:
-    """Low-level binding; see :func:`wsidicom_kernels.compose`."""
 
 def downscale(image: NDArray[Any], factor: int, resample: str) -> NDArray[Any]:
     """Low-level binding; see :func:`wsidicom_kernels.downscale`."""

@@ -19,22 +19,14 @@ DTYPES = {"u8": (np.uint8, 256), "u16": (np.uint16, 65536)}
 
 
 def worker(barrier, q, tag, factor):
-    from wsidicom_kernels import ResizeFilter, compose, downscale
+    from wsidicom_kernels import ResizeFilter, downscale
 
     rng = np.random.default_rng(os.getpid())
-    if tag == "compose":
-        tile = rng.integers(0, 256, (4096, 4096, 3), np.uint8)
-        cv = np.zeros((4098, 4098, 3), np.uint8)
-        position = np.array([[1, 1]], np.int64)
+    dt, hi = DTYPES[tag]
+    img = rng.integers(0, hi, (8192, 8192)).astype(dt)
 
-        def op():
-            compose(cv, [tile], position)
-    else:
-        dt, hi = DTYPES[tag]
-        img = rng.integers(0, hi, (8192, 8192)).astype(dt)
-
-        def op():
-            downscale(img, factor, ResizeFilter.BOX)
+    def op():
+        downscale(img, factor, ResizeFilter.BOX)
 
     op()  # warm
     barrier.wait()

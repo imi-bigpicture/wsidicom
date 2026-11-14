@@ -17,69 +17,10 @@
 from collections.abc import Sequence
 from typing import Any
 
-import numpy as np
 from numpy.typing import NDArray
 
 import wsidicom_kernels._kernels as lib
 from wsidicom_kernels.models import ResizeFilter
-
-
-def compose(
-    canvas: NDArray[Any],
-    tiles: Sequence[NDArray[Any]],
-    positions: NDArray[np.int64],
-    crops: NDArray[np.int64] | None = None,
-) -> NDArray[Any]:
-    """Paste ``tiles`` onto ``canvas`` in place; overlaps resolve last-write-wins.
-
-    Each tile is copied into ``canvas`` with its top-left at its integer
-    ``(x, y)`` position, row by row. Tiles may hang off the canvas on any side;
-    only the pixels inside it are written.
-
-    With ``crops``, each placed piece is a rectangle of one of ``tiles``, so
-    a tile that packs several pieces is passed once, decoded, and never
-    copied apart.
-
-    Images are planar ``(H, W)`` or interleaved HWC ``(H, W, C)`` with 1 or 3
-    channels. Subsampled chroma (differently sized planes) cannot be
-    interleaved, so compose those per plane.
-
-    Parameters
-    ----------
-    canvas: np.ndarray
-        The destination, dtype uint8 / uint16, C-contiguous. Planar
-        ``(H, W)`` or interleaved HWC ``(H, W, C)``, C = 1 or 3. Mutated in
-        place.
-    tiles: Sequence[np.ndarray]
-        The source tiles, same dtype and channel count as ``canvas``
-        (individual sizes may differ). Each row must be contiguous: a
-        C-contiguous array, or a slice of rows and columns of one
-        (``tile[y0:y1, x0:x1]``), read without a copy.
-    positions: np.ndarray
-        C-contiguous ``(N, 2)`` int64 top-left ``(x, y)`` = ``(column, row)``
-        positions in canvas pixels, one per tile (per crop, with ``crops``).
-    crops: np.ndarray | None = None
-        ``(N, 5)`` int64 ``(tile, x, y, width, height)`` rows: the pieces to
-        place, each a nonempty rectangle of ``tiles[tile]`` with its
-        top-left at ``(x, y)`` in that tile. ``None`` places each tile whole.
-        Pieces overlap in their order, as tiles do.
-
-    Returns
-    -------
-    np.ndarray
-        ``canvas``, mutated in place and returned for convenience.
-
-    Notes
-    -----
-    Performance: each call carries a few microseconds of fixed cost (borrow
-    setup). For tile loops, pass all tiles in ONE call; batching amortizes the
-    fixed cost to nothing.
-    Reuse large canvases across calls where possible: first writes to a
-    freshly allocated array page-fault, which can cost more than the
-    compose itself (see the README's performance notes).
-    """
-    lib.compose(canvas, list(tiles), positions, crops)
-    return canvas
 
 
 def downscale(

@@ -14,7 +14,6 @@ import time
 import numpy as np
 from wsidicom_kernels import (
     ResizeFilter,
-    compose,
     downscale,
 )
 from wsidicom_kernels._kernels import set_simd
@@ -52,17 +51,6 @@ def box_case(dt, shape, hi, factor=2):
     return lambda: downscale(img, factor, ResizeFilter.BOX)
 
 
-def compose_case(dt, hi, c, n=5120):
-    """Paste one n x n tile of ``c`` samples per pixel at (1, 1)."""
-    rng = np.random.default_rng(2)
-    tshape = (n, n) if c == 1 else (n, n, c)
-    cshape = (n + 2, n + 2) if c == 1 else (n + 2, n + 2, c)
-    tile = rng.integers(0, hi, tshape).astype(dt)
-    canvas = np.zeros(cshape, dt)
-    position = np.array([[1, 1]], np.int64)
-    return lambda: compose(canvas, [tile], position)
-
-
 CASES = []
 for dt, tag, hi in (
     (np.uint8, "u8", 256),
@@ -81,18 +69,6 @@ for dt, tag, hi in (
         (
             f"box hwc {tag} c3 8192",
             lambda dt=dt, hi=hi: box_case(dt, (8192, 8192, 3), hi),
-        )
-    )
-    CASES.append(
-        (
-            f"compose planar {tag} 5120",
-            lambda dt=dt, hi=hi: compose_case(dt, hi, 1),
-        )
-    )
-    CASES.append(
-        (
-            f"compose hwc {tag} c3 5120",
-            lambda dt=dt, hi=hi: compose_case(dt, hi, 3),
         )
     )
 

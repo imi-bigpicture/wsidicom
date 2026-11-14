@@ -34,7 +34,7 @@ pylibjpeg-rle = ["pylibjpeg-rle>=2.0.0,<3.0.0"]
 pyjpegls = ["pyjpegls>=1.2.0,<2.0.0"]
 pylibjpeg-openjpeg = ["pylibjpeg-openjpeg>=2.1.1,<3.0.0"]
 opencv = ["opencv-python-headless>=4.5.0"]
-# SIMD resampling, box reduction and compositing (Rust; see kernels/), released
+# SIMD resampling and box reduction (Rust; see kernels/), released
 # on its own from this repository.
 kernels = ["wsidicom-kernels>=0.1.0,<0.2.0"]
 

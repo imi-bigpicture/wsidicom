@@ -14,13 +14,13 @@
 
 """Property tests over generated shapes, positions, factors and filters.
 
-Every input (and the compose canvas) ends flush with the end of an mmap'd
+Every input ends flush with the end of an mmap'd
 region, so a kernel that reads or writes one element past its buffer hits
 unmapped memory and crashes, instead of quietly touching heap slack that no
 value-based test sees.
 
-Each case checks that nothing crashes, and that compose equals a numpy paste
-and the resampling SIMD kernels match the forced-scalar reference.
+Each case checks that nothing crashes, and that the resampling SIMD kernels
+match the forced-scalar reference.
 
 Hypothesis runs many examples inside one pytest test, so a function-scoped
 fixture is not reset between them and Hypothesis refuses one by default. The
@@ -40,7 +40,6 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from wsidicom_kernels import (
     ResizeFilter,
-    compose,
     downscale,
     resize,
 )
@@ -103,52 +102,6 @@ def resizes(draw: st.DrawFn) -> tuple[Size, Size]:
         k = draw(st.sampled_from([2, 4]))
         return (h, w), (h * k, w * k)
     return (h, w), (draw(st.integers(1, 2 * h)), draw(st.integers(1, 2 * w)))
-
-
-@pytest.mark.unittest
-class TestCompose:
-    """compose over generated tiles, canvases and positions."""
-
-    @fuzz
-    @given(
-        dtype=dtypes,
-        channels=channel_counts,
-        tile_size=st.tuples(st.integers(1, 160), st.integers(1, 160)),
-        canvas_size=st.tuples(st.integers(1, 168), st.integers(1, 168)),
-        position=st.tuples(st.integers(-170, 178), st.integers(-170, 178)),
-        seed=seeds,
-    )
-    def test_stays_in_bounds_and_equals_numpy_paste(
-        self,
-        dtype: Any,
-        channels: int,
-        tile_size: Size,
-        canvas_size: Size,
-        position: tuple[int, int],
-        seed: int,
-    ) -> None:
-        """Composing stays in bounds and equals the clipped numpy paste.
-
-        Positions reach past every edge of the canvas, so tiles hang off any
-        side or miss it entirely.
-        """
-        # Arrange
-        tile = page_end(image_shape(tile_size, channels), dtype, seed)
-        canvas = page_end(image_shape(canvas_size, channels), dtype, seed + 1)
-        expected = canvas.copy()
-        x, y = position
-        top, bottom = max(y, 0), min(y + tile_size[0], canvas_size[0])
-        left, right = max(x, 0), min(x + tile_size[1], canvas_size[1])
-        if top < bottom and left < right:
-            expected[top:bottom, left:right] = tile[
-                top - y : bottom - y, left - x : right - x
-            ]
-
-        # Act
-        compose(canvas, [tile], np.array([position], np.int64))
-
-        # Assert
-        np.testing.assert_array_equal(canvas, expected)
 
 
 @pytest.mark.unittest
