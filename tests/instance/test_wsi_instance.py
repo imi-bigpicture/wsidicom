@@ -14,13 +14,30 @@
 
 from copy import deepcopy
 
+import numpy as np
 import pytest
 from PIL import Image as Pillow
 
 from tests.data_gen import create_main_dataset
+from wsidicom.geometry import Point, Region, Size
 from wsidicom.instance import WsiInstance
 from wsidicom.instance.numpy_image_data import NumpyImageData
 from wsidicom.metadata import ImageType
+from wsidicom.thread import ReadExecutor
+
+
+class RegionReadingImageData(NumpyImageData):
+    """Image data that reads regions itself, recording the regions it reads."""
+
+    def __init__(self, array: np.ndarray) -> None:
+        super().__init__(array)
+        self.regions: list[Region] = []
+
+    def get_decoded_region(
+        self, region: Region, z: float, path: str, *, executor: ReadExecutor
+    ) -> np.ndarray:
+        self.regions.append(region)
+        return np.full((region.size.height, region.size.width, 3), 7, np.uint8)
 
 
 @pytest.mark.unittest
@@ -56,3 +73,40 @@ class TestWsiInstance:
         assert base_dataset == unchanged
         assert overview.dataset.as_dataset().ImageType[2] == "OVERVIEW"
         assert label.dataset.as_dataset().ImageType[2] == "LABEL"
+
+    def test_region_is_read_through_image_data(self) -> None:
+        # Arrange - image data that reads regions itself rather than by tiles
+        image_data = RegionReadingImageData(np.zeros((128, 256, 3), np.uint8))
+        instance = WsiInstance.create_instance(
+            image_data, create_main_dataset(), ImageType.OVERVIEW
+        )
+        region = Region(Point(10, 20), Size(30, 40))
+
+        # Act
+        pixels = instance.get_region(
+            region,
+            image_data.default_z,
+            image_data.default_path,
+            executor=ReadExecutor(1, None),
+        )
+
+        # Assert
+        assert image_data.regions == [region]
+        assert (pixels == 7).all()
+
+    def test_region_is_assembled_from_tiles_by_default(self) -> None:
+        # Arrange
+        array = np.arange(128 * 256 * 3, dtype=np.uint32).astype(np.uint8)
+        image_data = NumpyImageData(array.reshape(128, 256, 3))
+        region = Region(Point(10, 20), Size(30, 40))
+
+        # Act
+        pixels = image_data.get_decoded_region(
+            region,
+            image_data.default_z,
+            image_data.default_path,
+            executor=ReadExecutor(1, None),
+        )
+
+        # Assert
+        assert (pixels == array.reshape(128, 256, 3)[20:60, 10:40]).all()

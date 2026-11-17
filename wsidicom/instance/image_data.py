@@ -21,9 +21,12 @@ import numpy as np
 from pydicom.uid import UID
 
 from wsidicom.codec import Encoder
+from wsidicom.errors import WsiDicomOutOfBoundsError
 from wsidicom.geometry import Point, Region, Size, SizeMm
 from wsidicom.instance.tile_byte_ranges import FrameReader, TileByteRanges
 from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
+from wsidicom.stitcher import NumpyStitcher
+from wsidicom.thread import ReadExecutor
 
 
 class ImageData(metaclass=ABCMeta):
@@ -34,11 +37,14 @@ class ImageData(metaclass=ABCMeta):
     primitives ``get_decoded_tile`` and ``get_encoded_tile``. Optional
     overrides: the batch variants (``get_decoded_tiles``, ``get_encoded_tiles``,
     ``get_encoded_and_decoded_tile``, ``get_encoded_and_decoded_tiles``) for
-    more efficient bulk fetching; ``focal_planes`` / ``optical_paths`` when
-    more than one is present.
+    more efficient bulk fetching; ``get_decoded_region`` for more efficient
+    region reading; ``focal_planes`` / ``optical_paths`` when more than one is
+    present.
     """
 
     _default_z: float | None = None
+    _stitcher = NumpyStitcher()
+    """Assembles regions from tiles; holds no state, so it is shared."""
 
     def __init__(self, encoder: Encoder) -> None:
         self._encoder = encoder
@@ -325,6 +331,60 @@ class ImageData(metaclass=ABCMeta):
         """
         return (self.get_encoded_and_decoded_tile(tile, z, path) for tile in tiles)
 
+    def get_decoded_region(
+        self,
+        region: Region,
+        z: float,
+        path: str,
+        *,
+        executor: ReadExecutor,
+    ) -> np.ndarray:
+        """Return the pixels of a region.
+
+        By default the region is assembled from the tiles covering it, as read
+        by ``get_decoded_tiles``, fetched across the executor's workers.
+        Implementations can override this for more efficient reading.
+
+        Parameters
+        ----------
+        region: Region
+            Pixel region to read.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+        executor: ReadExecutor
+            Executor that splits the read's tile fetches across worker threads.
+
+        Returns
+        -------
+        np.ndarray
+            The region as ``(rows, columns)`` or ``(rows, columns, samples)``.
+
+        Raises
+        ------
+        WsiDicomOutOfBoundsError
+            If the region falls outside the tiled image.
+        """
+        tile_region = self._get_tile_range(region, z, path)
+        if tile_region.size.area == 1:
+            # Only one tile, no need to stitch
+            array = self.get_decoded_tile(tile_region.start, z, path)
+            tile_crop = region.inside_crop(tile_region.start, self.tile_size)
+            if tile_crop.size != self.tile_size:
+                left, upper, right, lower = tile_crop.box
+                array = array[upper:lower, left:right]
+            return array
+        return self._stitcher.stitch_parallel(
+            region=region,
+            tile_region=tile_region,
+            fetch=lambda chunk: self.get_decoded_tiles(chunk, z, path),
+            tile_size=self.tile_size,
+            dtype=self.dtype,
+            samples_per_pixel=self.samples_per_pixel,
+            executor=executor,
+        )
+
     @property
     def focal_planes(self) -> list[float]:
         """Focal planes available in the image defined in um."""
@@ -440,6 +500,38 @@ class ImageData(metaclass=ABCMeta):
             and (z in self.focal_planes)
             and (path in self.optical_paths)
         )
+
+    def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:
+        """Return range of tiles to cover the pixel region.
+
+        Parameters
+        ----------
+        pixel_region: Region
+            Pixel region to cover.
+        z: float
+            Z coordinate.
+        path: str
+            Optical path.
+
+        Returns
+        -------
+        Region
+            Tile region, in tile coordinates, covering the pixel region.
+
+        Raises
+        ------
+        WsiDicomOutOfBoundsError
+            If the tile region falls outside the tiled image.
+        """
+        tile_region = Region.from_points(
+            pixel_region.start // self.tile_size,
+            (pixel_region.end - 1) // self.tile_size + 1,
+        )
+        if not self.valid_tiles(tile_region, z, path):
+            raise WsiDicomOutOfBoundsError(
+                f"Tile region {tile_region}", f"tiled size {self.tiled_size}"
+            )
+        return tile_region
 
     @staticmethod
     def _get_blank_color(

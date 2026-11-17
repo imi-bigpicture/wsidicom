@@ -26,7 +26,6 @@ from upath import UPath
 from wsidicom.downsampler import Downsampler
 from wsidicom.errors import (
     WsiDicomError,
-    WsiDicomOutOfBoundsError,
     WsiDicomUidDuplicateError,
 )
 from wsidicom.geometry import Point, Region, Size, SizeMm
@@ -34,7 +33,6 @@ from wsidicom.instance.dataset import WsiDataset
 from wsidicom.instance.image_data import ImageData
 from wsidicom.instance.numpy_image_data import NumpyImageData
 from wsidicom.metadata.image import ImageCoordinateSystem, ImageType
-from wsidicom.stitcher import NumpyStitcher
 from wsidicom.thread import ReadExecutor
 from wsidicom.uid import SlideUids
 
@@ -62,7 +60,6 @@ class WsiInstance:
         self._image_data = image_data
         self._identifier, self._uids = self._validate_instance(self.datasets)
         self._image_type = self.dataset.image_type
-        self._stitcher = NumpyStitcher()
         self._downsampler: Downsampler = Downsampler.create_for_read()
 
         if self.ext_depth_of_field:
@@ -279,9 +276,9 @@ class WsiInstance:
     ) -> np.ndarray:
         """Read the pixels of ``region`` from this instance.
 
-        Assembles the pixels covering ``region`` and, if ``output_size`` is
-        given, downsamples the result to it. Pillow is derived by the caller
-        (``WsiDicom``) at the outermost boundary.
+        Reads the pixels of ``region`` from the image data (``get_decoded_region``) and,
+        if ``output_size`` is given, downsamples the result to it. Pillow is
+        derived by the caller (``WsiDicom``) at the outermost boundary.
 
         Parameters
         ----------
@@ -302,39 +299,10 @@ class WsiInstance:
         np.ndarray
             The region as ``(rows, columns)`` or ``(rows, columns, samples)``.
         """
-        array = self._assemble_region(region, z, path, executor=executor)
+        array = self._image_data.get_decoded_region(region, z, path, executor=executor)
         if output_size is None or output_size == region.size:
             return array
         return self._downsampler.downsample(array, output_size)
-
-    def _assemble_region(
-        self,
-        region: Region,
-        z: float,
-        path: str,
-        *,
-        executor: ReadExecutor,
-    ) -> np.ndarray:
-        """Assemble the full-resolution pixels covering ``region``."""
-        image_data = self._image_data
-        tile_region = self._get_tile_range(region, z, path)
-        if tile_region.size.area == 1:
-            # Only one tile, no need to stitch
-            array = image_data.get_decoded_tile(tile_region.start, z, path)
-            tile_crop = region.inside_crop(tile_region.start, image_data.tile_size)
-            if tile_crop.size != image_data.tile_size:
-                left, upper, right, lower = tile_crop.box
-                array = array[upper:lower, left:right]
-            return array
-        return self._stitcher.stitch_parallel(
-            region=region,
-            tile_region=tile_region,
-            fetch=lambda chunk: image_data.get_decoded_tiles(chunk, z, path),
-            tile_size=image_data.tile_size,
-            dtype=image_data.dtype,
-            samples_per_pixel=image_data.samples_per_pixel,
-            executor=executor,
-        )
 
     def get_thumbnail(
         self,
@@ -394,39 +362,6 @@ class WsiInstance:
             left, upper, right, lower = tile_crop.box
             return tile[upper:lower, left:right]
         return tile
-
-    def _get_tile_range(self, pixel_region: Region, z: float, path: str) -> Region:
-        """Return range of tiles to cover the pixel region.
-
-        Parameters
-        ----------
-        pixel_region: Region
-            Pixel region to cover.
-        z: float
-            Z coordinate.
-        path: str
-            Optical path.
-
-        Returns
-        -------
-        Region
-            Tile region, in tile coordinates, covering the pixel region.
-
-        Raises
-        ------
-        WsiDicomOutOfBoundsError
-            If the tile region falls outside the tiled image.
-        """
-        image_data = self._image_data
-        tile_region = Region.from_points(
-            pixel_region.start // image_data.tile_size,
-            (pixel_region.end - 1) // image_data.tile_size + 1,
-        )
-        if not image_data.valid_tiles(tile_region, z, path):
-            raise WsiDicomOutOfBoundsError(
-                f"Tile region {tile_region}", f"tiled size {image_data.tiled_size}"
-            )
-        return tile_region
 
     @classmethod
     def create_label(
