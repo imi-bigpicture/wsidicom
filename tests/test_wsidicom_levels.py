@@ -167,7 +167,7 @@ class TestWsiDicomLevels:
         instance = base_level.get_instance()
 
         # Act
-        tile_range = instance._get_tile_range(region, 0, "0")
+        tile_range = instance.image_data._get_tile_range(region, 0, "0")
 
         # Assert
         assert tile_range == expected_result
