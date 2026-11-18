@@ -971,7 +971,11 @@ class PyramidFileWriter(BaseFileWriter):
                         isinstance(level_writer, SourcePyramidLevelWriter)
                         and not transcode
                     ):
-                        level_transfer_syntax = source_image_data.transfer_syntax
+                        # A level read from the source keeps its own encoding,
+                        # which may differ from the base level's.
+                        level_transfer_syntax = next(
+                            iter(level_writer.source_image_data)
+                        ).transfer_syntax
                     else:
                         level_transfer_syntax = encoder.transfer_syntax
                     file_writer = self._open_writer(

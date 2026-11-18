@@ -24,11 +24,12 @@ from typing import Any, Never
 import pytest
 from decoy import Decoy, matchers
 from PIL import ImageChops, ImageFilter, ImageStat
+from pydicom.uid import RLELossless
 from upath import UPath
 
 from tests.conftest import WsiTestDefinitions
 from wsidicom import WsiDicom
-from wsidicom.codec import Encoder
+from wsidicom.codec import Channels, Encoder, RleSettings
 from wsidicom.file import OffsetTableType, WsiFile
 from wsidicom.file.file_writer import (
     BaseFileWriter,
@@ -414,6 +415,78 @@ class TestPyramidFileWriterIntegration:
             diff = ImageChops.difference(created.filter(blur), original.filter(blur))
             for band_rms in ImageStat.Stat(diff).rms:
                 assert band_rms < 2
+
+    @pytest.mark.parametrize("wsi_name", WsiTestDefinitions.wsi_names("full"))
+    def test_level_keeps_own_transfer_syntax(
+        self,
+        wsi_name: str,
+        wsi_factory: Callable[[str], WsiDicom],
+        tmp_path: Path,
+        uid_generator: UidGenerator,
+    ) -> None:
+        """Test a level read from the source keeps its own transfer syntax.
+
+        Also when it differs from the base level's.
+        """
+        # Arrange - the second stored level re-encoded (RLE), the base as stored
+        wsi = wsi_factory(wsi_name)
+        if len(wsi.pyramids[0]) < 2:
+            pytest.skip("needs at least two levels")
+        base = wsi.pyramids[0].get(0).default_instance.image_data
+        if base.transfer_syntax == RLELossless:
+            pytest.skip("base level is already RLE")
+        channels = Channels.RGB if base.samples_per_pixel == 3 else Channels.GRAYSCALE
+        level_1_path = tmp_path / "level_1"
+        wsi.save(
+            level_1_path,
+            uid_generator,
+            include_levels=[1],
+            include_labels=False,
+            include_overviews=False,
+            include_thumbnails=False,
+            transcoding=RleSettings(base.bits, channels),
+        )
+        others_path = tmp_path / "others"
+        wsi.save(
+            others_path,
+            uid_generator,
+            include_levels=[0],
+            include_labels=False,
+            include_overviews=False,
+            include_thumbnails=False,
+        )
+        output_path = tmp_path / "output"
+        with WsiDicom.open(
+            list(level_1_path.iterdir()) + list(others_path.iterdir())
+        ) as mixed:
+            pyramid = mixed.pyramids[0]
+            expected = {
+                level.level: level.default_instance.image_data.transfer_syntax
+                for level in pyramid
+            }
+            assert len(set(expected.values())) == 2
+
+            # Act
+            PyramidFileWriter(
+                pyramid=pyramid,
+                pyramid_index=0,
+                output_path=UPath(output_path),
+                uid_generator=uid_generator,
+                max_threads=4,
+                offset_table=OffsetTableType.BASIC,
+            ).write()
+
+        # Assert
+        with WsiDicom.open(output_path) as saved_wsi:
+            for level in saved_wsi.pyramids[0]:
+                if level.level not in expected:
+                    continue
+                transfer_syntax = level.default_instance.image_data.transfer_syntax
+                assert transfer_syntax == expected[level.level]
+                size = level.size.to_tuple()
+                region_size = (min(64, size[0]), min(64, size[1]))
+                image = saved_wsi.read_region((0, 0), level.level, region_size)
+                assert image.size == region_size
 
 
 @pytest.mark.integration
