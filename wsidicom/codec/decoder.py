@@ -44,14 +44,14 @@ from pydicom.uid import (
 
 from wsidicom.codec.optionals import (
     IMAGE_CODECS_AVAILABLE,
+    JPEG,
     JPEG2K,
-    JPEG8,
     JPEGLS,
     PYLIBJPEGLS_AVAILABLE,
     PYLIBJPEGOPENJPEG_AVAILABLE,
     PYLIBJPEGRLE_AVAILABLE,
     jpeg2k_decode,
-    jpeg8_decode,
+    jpeg_decode,
     jpegls_decode,
     jpegxl_decode,
     pylibjpeg_ls_decode,
@@ -432,10 +432,10 @@ class ImageCodecsDecoder(Decoder):
     _supported_transfer_syntaxes: ClassVar[
         dict[UID, tuple[Callable[..., np.ndarray] | None, Any]]
     ] = {
-        JPEGBaseline8Bit: (jpeg8_decode, JPEG8),
-        JPEGExtended12Bit: (jpeg8_decode, JPEG8),
-        JPEGLossless: (jpeg8_decode, JPEG8),
-        JPEGLosslessSV1: (jpeg8_decode, JPEG8),
+        JPEGBaseline8Bit: (jpeg_decode, JPEG),
+        JPEGExtended12Bit: (jpeg_decode, JPEG),
+        JPEGLossless: (jpeg_decode, JPEG),
+        JPEGLosslessSV1: (jpeg_decode, JPEG),
         JPEGLSLossless: (jpegls_decode, JPEGLS),
         JPEGLSNearLossless: (jpegls_decode, JPEGLS),
         JPEG2000Lossless: (jpeg2k_decode, JPEG2K),
@@ -467,7 +467,7 @@ class ImageCodecsDecoder(Decoder):
         if decoder is None:
             raise ValueError(f"Unsupported transfer syntax: {transfer_syntax}.")
         self._decoder = decoder
-        if photometric_interpretation == "RGB" and decoder is jpeg8_decode:
+        if photometric_interpretation == "RGB" and decoder is jpeg_decode:
             self._decode_kwargs = {"colorspace": "RGB", "outcolorspace": "RGB"}
         else:
             self._decode_kwargs = {}

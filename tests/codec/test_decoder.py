@@ -67,7 +67,7 @@ from wsidicom.codec.optionals import (
     IMAGE_CODECS_AVAILABLE,
     PYLIBJPEGLS_AVAILABLE,
     PYLIBJPEGOPENJPEG_AVAILABLE,
-    jpeg8_encode,
+    jpeg_encode,
 )
 from wsidicom.geometry import Size
 from wsidicom.options import DecoderOption
@@ -116,10 +116,10 @@ def rgb_jpeg_without_rgb_signal(rgb_image: np.ndarray) -> bytes:
     The Adobe APP14 marker is stripped and the component ids are reset to 1, 2, 3,
     so the stream carries no in-band RGB signal (decoders default to YCbCr).
     """
-    if jpeg8_encode is None:
+    if jpeg_encode is None:
         pytest.skip("imagecodecs required")
     frame = bytearray(
-        jpeg8_encode(
+        jpeg_encode(
             np.asarray(rgb_image),
             colorspace="RGB",
             outcolorspace="RGB",
@@ -269,11 +269,11 @@ class TestPillowDecoder:
         # The RGB hint must not corrupt a stream that already signals RGB via
         # 'R', 'G', 'B' component ids (regression for the draft hack).
         # Arrange
-        if jpeg8_encode is None:
+        if jpeg_encode is None:
             pytest.skip("imagecodecs required")
         # RGB encode keeps APP14 + R, G, B ids; strip only APP14 to leave the ids.
         frame = bytearray(
-            jpeg8_encode(
+            jpeg_encode(
                 rgb_image,
                 colorspace="RGB",
                 outcolorspace="RGB",
