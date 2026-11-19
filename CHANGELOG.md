@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only DICOMweb instances cache encoded frames. `Settings.encoded_frame_cache_size` is renamed `web_encoded_frame_cache_size`.
 - Assembling a region from tiles moved from `WsiInstance.get_region()` to `ImageData.get_decoded_region()`, which image data can override for more efficient reading.
 
+### Removed
+
+- Support for Python 3.11. wsidicom requires Python 3.12 or later.
+
 ### Fixed
 
 - `WsiInstance.create_label()` and `WsiInstance.create_instance()` changed the base dataset they were given into the new instance's dataset. With `WsiDicom.save(label=...)` on a source whose base dataset is the base level's dataset (such as a wsidicomizer source), the base level was then written as a label; instances created from one shared base dataset overwrote each other. Both now use a copy.

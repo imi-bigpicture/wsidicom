@@ -34,12 +34,12 @@ from pydicom.uid import (
 
 from wsidicom.codec.optionals import (
     IMAGE_CODECS_AVAILABLE,
-    JPEG8,
+    JPEG,
     PYLIBJPEGLS_AVAILABLE,
     PYLIBJPEGOPENJPEG_AVAILABLE,
     PYLIBJPEGRLE_AVAILABLE,
     jpeg2k_encode,
-    jpeg8_encode,
+    jpeg_encode,
     jpegls_encode,
     jpegxl_encode,
     pylibjpeg_ls_encode,
@@ -353,11 +353,11 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
         else:
             self._dtype = np.uint16
         if settings.channels == Channels.GRAYSCALE:
-            self._output_colorspace = JPEG8.CS.GRAYSCALE
+            self._output_colorspace = JPEG.CS.GRAYSCALE
         elif settings.channels == Channels.YBR:
-            self._output_colorspace = JPEG8.CS.YCbCr
+            self._output_colorspace = JPEG.CS.YCbCr
         elif settings.channels == Channels.RGB:
-            self._output_colorspace = JPEG8.CS.RGB
+            self._output_colorspace = JPEG.CS.RGB
         else:
             raise ValueError(f"Unsupported channels: {settings.channels}.")
         if isinstance(settings, JpegSettings):
@@ -385,7 +385,7 @@ class JpegEncoder(Encoder[JpegSettings | JpegLosslessSettings]):
         if not self.is_available():
             raise RuntimeError("Image codecs not available.")
         return bytes(
-            jpeg8_encode(
+            jpeg_encode(
                 np.array(pixels).astype(self._dtype),
                 level=self._level,
                 lossless=self._lossless,

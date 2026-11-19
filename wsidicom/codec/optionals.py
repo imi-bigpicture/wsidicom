@@ -16,8 +16,8 @@
 
 __all__ = [
     "IMAGE_CODECS_AVAILABLE",
+    "JPEG",
     "JPEG2K",
-    "JPEG8",
     "JPEGLS",
     "JPEGXL",
     "PYLIBJPEGLS_AVAILABLE",
@@ -26,8 +26,8 @@ __all__ = [
     "dicomrle_decode",
     "jpeg2k_decode",
     "jpeg2k_encode",
-    "jpeg8_decode",
-    "jpeg8_encode",
+    "jpeg_decode",
+    "jpeg_encode",
     "jpegls_decode",
     "jpegls_encode",
     "jpegxl_decode",
@@ -53,15 +53,15 @@ except ImportError:
 
 try:
     from imagecodecs import (
+        JPEG,
         JPEG2K,
-        JPEG8,
         JPEGLS,
         JPEGXL,
         dicomrle_decode,
         jpeg2k_decode,
         jpeg2k_encode,
-        jpeg8_decode,
-        jpeg8_encode,
+        jpeg_decode,
+        jpeg_encode,
         jpegls_decode,
         jpegls_encode,
         jpegxl_decode,
@@ -74,14 +74,14 @@ try:
 except ImportError:
     IMAGE_CODECS_AVAILABLE = False
     JPEG2K = None
-    JPEG8 = None
+    JPEG = None
     JPEGLS = None
     JPEGXL = None
     dicomrle_decode = None
     jpeg2k_decode = None
     jpeg2k_encode = None
-    jpeg8_decode = None
-    jpeg8_encode = None
+    jpeg_decode = None
+    jpeg_encode = None
     jpegls_decode = None
     jpegls_encode = None
     jpegxl_decode = None
