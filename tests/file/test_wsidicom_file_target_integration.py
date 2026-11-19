@@ -25,10 +25,10 @@ from wsidicom import WsiDicom
 from wsidicom.codec import (
     Encoder,
     Jpeg2kSettings,
-    JpegOptimizer,
     JpegSettings,
     Settings,
 )
+from wsidicom.codec.recoder import JpegOptimizer
 from wsidicom.file import OffsetTableType, WsiDicomFileTarget
 from wsidicom.geometry import Point
 from wsidicom.metadata.uid_generator import CallableUidGenerator
@@ -184,7 +184,7 @@ class TestWsiDicomFileTargetIntegration:
         ):
             pytest.skip("No level is JPEG Baseline")
         transcoder = Encoder.create_for_settings(JpegSettings(optimize=True))
-        jpeg_optimizer = JpegOptimizer()
+        jpeg_optimizer = JpegOptimizer(JpegSettings(optimize=True))
 
         # Act
         with WsiDicomFileTarget(

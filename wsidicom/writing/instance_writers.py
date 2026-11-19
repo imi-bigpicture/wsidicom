@@ -23,7 +23,6 @@ from collections.abc import Iterable, Sequence
 from concurrent.futures import Future
 from threading import Semaphore
 
-from wsidicom.codec import Encoder, Recoder
 from wsidicom.geometry import Point, Size
 from wsidicom.group import Instances
 from wsidicom.instance import ImageData
@@ -36,6 +35,7 @@ from wsidicom.thread import (
     ReadOnlyQueue,
     ShutdownSentinel,
 )
+from wsidicom.writing.group_tile_sources import GroupTileSource
 from wsidicom.writing.models import EncodingTaskResult
 from wsidicom.writing.pyramid_tile_accumulator import (
     PyramidTileAccumulator,
@@ -53,11 +53,9 @@ class GroupInstanceWriter:
         self,
         dataset: WsiDataset,
         instances: Instances,
-        encoder: Encoder,
-        transcode: bool,
+        tile_source: GroupTileSource,
         focal_planes: Sequence[float],
         optical_paths: Sequence[str],
-        recoder: Recoder | None = None,
     ) -> None:
         """Create a writer for one group instance.
 
@@ -67,25 +65,18 @@ class GroupInstanceWriter:
             Dataset of the instance.
         instances: Instances
             Source instances to read tiles from.
-        encoder: Encoder
-            Encoder to transcode tiles with, when `transcode`.
-        transcode: bool
-            If to decode and encode the tiles instead of copying them.
+        tile_source: GroupTileSource
+            Gives the encoded tiles to write from the source instances.
         focal_planes: Sequence[float]
             Focal planes of the instance.
         optical_paths: Sequence[str]
             Optical paths of the instance.
-        recoder: Recoder | None = None
-            If given, copied tiles are recoded with it. Not used when
-            `transcode`.
         """
         self._dataset = dataset
         self._instances = instances
-        self._encoder = encoder
-        self._transcode = transcode
+        self._tile_source = tile_source
         self._focal_planes = focal_planes
         self._optical_paths = optical_paths
-        self._recoder = recoder
 
     @property
     def dataset(self) -> WsiDataset:
@@ -93,21 +84,11 @@ class GroupInstanceWriter:
 
     def write(self, tile_writer: TileWriter) -> None:
         """Write all tiles to the given writer. Does not finalize the writer."""
-        if self._transcode:
-            tiles: Iterable[bytes] = (
-                self._encoder.encode(decoded)
-                for decoded in self._instances.iter_decoded_tiles(
-                    self._focal_planes, self._optical_paths
-                )
+        tile_writer.write_tiles(
+            self._tile_source.iter_tiles(
+                self._instances, self._focal_planes, self._optical_paths
             )
-        else:
-            tiles = self._instances.iter_encoded_tiles(
-                self._focal_planes, self._optical_paths
-            )
-            recoder = self._recoder
-            if recoder is not None:
-                tiles = (recoder.recode(tile) for tile in tiles)
-        tile_writer.write_tiles(tiles)
+        )
 
 
 class PyramidLevelWriter:

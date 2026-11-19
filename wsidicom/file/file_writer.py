@@ -33,7 +33,7 @@ from typing import BinaryIO
 from pydicom.uid import UID
 from upath import UPath
 
-from wsidicom.codec import Encoder, JpegOptimizer, JpegSettings
+from wsidicom.codec import Encoder
 from wsidicom.downsampler import Downsampler
 from wsidicom.file.io import OffsetTableType, WsiDicomWriter
 from wsidicom.file.io.constants import TAG_AND_LENGTH_SIZE
@@ -47,7 +47,6 @@ from wsidicom.geometry import Size
 from wsidicom.group import Instances, Label, Level, Overview, Thumbnail
 from wsidicom.instance import (
     ConcatenationPart,
-    ImageData,
     WsiDataset,
     WsiInstance,
 )
@@ -64,11 +63,23 @@ from wsidicom.stitcher import NumpyStitcher
 from wsidicom.thread import CancellationToken, Cancelled, ReadExecutor
 from wsidicom.writing.block_downsampler import BlockDownsampler
 from wsidicom.writing.encoder_pool import EncoderPool
+from wsidicom.writing.group_tile_sources import (
+    CopyingGroupTileSource,
+    GroupTileSource,
+    RecodingGroupTileSource,
+    TranscodingGroupTileSource,
+)
 from wsidicom.writing.instance_writers import (
     GeneratedPyramidLevelWriter,
     GroupInstanceWriter,
     PyramidLevelWriter,
     SourcePyramidLevelWriter,
+)
+from wsidicom.writing.output_encoding import (
+    CopiedEncoding,
+    EncodingResolver,
+    RecodedEncoding,
+    TranscodedEncoding,
 )
 from wsidicom.writing.pyramid_tile_accumulator import (
     PyramidTileAccumulator,
@@ -76,11 +87,9 @@ from wsidicom.writing.pyramid_tile_accumulator import (
 )
 from wsidicom.writing.tile_cache import ByteBudgetTileCache, DictTileCache, TileCache
 from wsidicom.writing.tile_readers import (
-    CascadingPassthroughTileReader,
-    CascadingRecodeTileReader,
-    CascadingTranscodeTileReader,
-    PassthroughTileReader,
-    RecodeTileReader,
+    EncodedTileReader,
+    PassthroughEncodedTileSubmitter,
+    RecodeEncodedTileSubmitter,
     TileReader,
     TranscodeTileReader,
 )
@@ -310,6 +319,21 @@ class WrittenPart:
 
     filepath: UPath
     dataset: WsiDataset
+
+
+@dataclass(frozen=True)
+class EncodedLevelWriter:
+    """A writer for a pyramid level, and how the tiles it writes are encoded."""
+
+    level_writer: PyramidLevelWriter
+    """Writer of the level."""
+    transfer_syntax: UID
+    """Transfer syntax of the tiles of the level."""
+    transcoder: Encoder | None
+    """Encoder the tiles of the source are encoded again with.
+
+    None if the pixels keep the encoding of the source.
+    """
 
 
 class PartSink(metaclass=ABCMeta):
@@ -577,8 +601,7 @@ class BaseFileWriter(metaclass=ABCMeta):
         self,
         output_path: UPath,
         uid_generator: UidGenerator,
-        transcoder: Encoder | None,
-        force_transcoding: bool,
+        encoding_resolver: EncodingResolver,
         offset_table: OffsetTableType | None,
         instance_number_start: int,
         metadata: WsiMetadata | None = None,
@@ -593,14 +616,8 @@ class BaseFileWriter(metaclass=ABCMeta):
             Directory to write output files to.
         uid_generator: UidGenerator
             UID generator for new instances.
-        transcoder: Optional[Encoder]
-            Encoder for transcoding. If None, source encoding is preserved.
-            A JPEG Baseline transcoder with optimized Huffman tables also has
-            the JPEG Baseline tiles that are copied recoded with optimized
-            tables, losslessly. Copied progressive tiles, which JPEG Baseline does
-            not allow, are recoded to baseline and can become larger.
-        force_transcoding: bool
-            If True, transcode even if transfer syntax matches.
+        encoding_resolver: EncodingResolver
+            Resolves how the tiles of each source are encoded when written.
         offset_table: Optional[OffsetTableType]
             Offset table type to use. If None, determined automatically.
         instance_number_start: int
@@ -623,14 +640,12 @@ class BaseFileWriter(metaclass=ABCMeta):
         """
         self._output_path = output_path
         self._uid_generator = uid_generator
-        self._transcoder = transcoder
-        self._force_transcoding = force_transcoding
+        self._encoding_resolver = encoding_resolver
         self._offset_table = offset_table
         self._instance_number = instance_number_start
         self._metadata = metadata
         self._replace_metadata = replace_metadata
         self._instance_split = instance_split
-        self._jpeg_optimizer = self._create_jpeg_optimizer(transcoder)
 
     @abstractmethod
     def write(self) -> Mapping[UPath, WsiFile]:
@@ -710,99 +725,6 @@ class BaseFileWriter(metaclass=ABCMeta):
             instances.tiled_size,
             scale,
         )
-
-    def _resolve_transcoding(
-        self, source_image_data: ImageData
-    ) -> tuple[Encoder, bool]:
-        """Resolve encoder and whether transcoding is needed.
-
-        Returns
-        -------
-        Tuple[Encoder, bool]
-            Encoder to use and whether transcoding from source is needed.
-        """
-        if self._transcoder is not None and (
-            self._force_transcoding
-            or source_image_data.transfer_syntax != self._transcoder.transfer_syntax
-        ):
-            transcoder = self._transcoder
-        elif source_image_data.transcoder is not None:
-            transcoder = source_image_data.transcoder
-        else:
-            transcoder = None
-
-        if transcoder is not None:
-            if (
-                transcoder.bits != source_image_data.bits
-                or transcoder.samples_per_pixel != source_image_data.samples_per_pixel
-            ):
-                raise ValueError(
-                    "Transcode settings must match image data bits and "
-                    "photometric interpretation."
-                )
-            return transcoder, True
-        return source_image_data.encoder, False
-
-    @staticmethod
-    def _create_jpeg_optimizer(transcoder: Encoder | None) -> JpegOptimizer | None:
-        """Return an optimizer if the transcoder asks for optimized JPEG tiles.
-
-        Copied JPEG Baseline tiles are then recoded with optimized Huffman
-        tables, as the tiles the transcoder encodes are.
-
-        Raises
-        ------
-        RuntimeError
-            If optimized tables are asked for but tiles can not be recoded.
-        """
-        if transcoder is None:
-            return None
-        settings = transcoder.settings
-        if not (
-            isinstance(settings, JpegSettings)
-            and settings.optimize
-            and JpegOptimizer.supports_transfer_syntax(settings.transfer_syntax)
-        ):
-            return None
-        if not JpegOptimizer.is_available():
-            raise RuntimeError(
-                "Recoding copied JPEG tiles with optimized Huffman tables "
-                "requires imagecodecs."
-            )
-        return JpegOptimizer()
-
-    def _optimize_encoder(self, encoder: Encoder) -> Encoder:
-        """Return the encoder to encode tiles with.
-
-        When JPEG tiles are optimized, a JPEG Baseline encoder that does not
-        optimize its Huffman tables is replaced by one that does, created from
-        the same settings. Other encoders are returned as they are.
-        """
-        settings = encoder.settings
-        if (
-            self._jpeg_optimizer is None
-            or not isinstance(settings, JpegSettings)
-            or not self._jpeg_optimizer.supports_transfer_syntax(
-                settings.transfer_syntax
-            )
-            or settings.optimize
-        ):
-            return encoder
-        return Encoder.create_for_settings(settings.with_optimize(True))
-
-    def _jpeg_optimizer_for(self, image_data: ImageData) -> JpegOptimizer | None:
-        """Return the optimizer to recode copied tiles of image data with.
-
-        None if JPEG tiles are not optimized, or the tiles are not JPEG Baseline.
-        """
-        if (
-            self._jpeg_optimizer is not None
-            and self._jpeg_optimizer.supports_transfer_syntax(
-                image_data.transfer_syntax
-            )
-        ):
-            return self._jpeg_optimizer
-        return None
 
     def _resolve_offset_table(self, transfer_syntax: UID) -> OffsetTableType:
         """Resolve offset table type from settings or transfer syntax."""
@@ -889,10 +811,9 @@ class PyramidFileWriter(BaseFileWriter):
         pyramid_index: int,
         output_path: UPath,
         uid_generator: UidGenerator,
+        encoding_resolver: EncodingResolver,
         max_threads: int = 16,
         offset_table: OffsetTableType | None = None,
-        transcoder: Encoder | None = None,
-        force_transcoding: bool = False,
         include_levels: Sequence[int] | None = None,
         add_missing_levels: bool = True,
         regenerate_pyramid: bool = False,
@@ -919,14 +840,12 @@ class PyramidFileWriter(BaseFileWriter):
             Directory to write output files to.
         uid_generator: UidGenerator
             UID generator for new instances.
+        encoding_resolver: EncodingResolver
+            Resolves how the tiles of each source are encoded when written.
         max_threads: int
             Maximum threads in the shared pool across all levels.
         offset_table: Optional[OffsetTableType]
             Offset table type to use. If None, determined automatically.
-        transcoder: Optional[Encoder]
-            Encoder for transcoding. If None, source encoding is preserved.
-        force_transcoding: bool
-            If True, transcode even if transfer syntax matches.
         include_levels: Optional[Sequence[int]]
             Optional indices of levels to include.
         add_missing_levels: bool
@@ -972,8 +891,7 @@ class PyramidFileWriter(BaseFileWriter):
         super().__init__(
             output_path=output_path,
             uid_generator=uid_generator,
-            transcoder=transcoder,
-            force_transcoding=force_transcoding,
+            encoding_resolver=encoding_resolver,
             offset_table=offset_table,
             instance_number_start=instance_number_start,
             metadata=metadata,
@@ -1000,14 +918,8 @@ class PyramidFileWriter(BaseFileWriter):
         dict[UPath, WsiLevelFile]
             The created DICOM files, by path, described as written.
         """
-        # Get source info
         base_instance = next(iter(self._pyramid.base_level.instances.values()))
         source_image_data = base_instance.image_data
-
-        # Resolve encoder and whether transcoding is needed
-        encoder, transcode = self._resolve_transcoding(source_image_data)
-        encoder = self._optimize_encoder(encoder)
-
         block_downsampler = BlockDownsampler(
             downsampler=Downsampler.create_for_pyramid(),
             stitcher=NumpyStitcher(),
@@ -1022,43 +934,35 @@ class PyramidFileWriter(BaseFileWriter):
             token=token,
         )
         try:
+            encoded_level_writers: list[EncodedLevelWriter] = []
             level_writers: list[PyramidLevelWriter] = []
             file_writers: list[InstanceFileWriter] = []
-            transfer_syntaxes: list[UID] = []
             try:
-                level_writers = self._build_level_writers(
+                encoded_level_writers = self._build_level_writers(
                     self._pyramid.pyramid_indices,
                     block_downsampler,
-                    encoder,
-                    transcode,
                     encoder_pool,
                     temp_dir,
                     token,
                 )
+                level_writers = [
+                    encoded_level_writer.level_writer
+                    for encoded_level_writer in encoded_level_writers
+                ]
                 instance_counter = itertools.count(self._instance_number)
-                for level_writer in level_writers:
-                    if (
-                        isinstance(level_writer, SourcePyramidLevelWriter)
-                        and not transcode
-                    ):
-                        # A level read from the source keeps its own encoding,
-                        # which may differ from the base level's.
-                        level_transfer_syntax = next(
-                            iter(level_writer.source_image_data)
-                        ).transfer_syntax
-                    else:
-                        level_transfer_syntax = encoder.transfer_syntax
+                for encoded_level_writer in encoded_level_writers:
                     file_writer = self._open_writer(
-                        level_writer,
+                        encoded_level_writer.level_writer,
                         instance_counter,
-                        level_transfer_syntax,
-                        self._resolve_offset_table(level_transfer_syntax),
-                        encoder if transcode else None,
+                        encoded_level_writer.transfer_syntax,
+                        self._resolve_offset_table(
+                            encoded_level_writer.transfer_syntax
+                        ),
+                        encoded_level_writer.transcoder,
                         temp_dir,
                     )
                     file_writers.append(file_writer)
-                    transfer_syntaxes.append(level_transfer_syntax)
-                    level_writer.start(file_writer)
+                    encoded_level_writer.level_writer.start(file_writer)
                 encoder_pool.start()
 
                 source_level_writers = [
@@ -1103,14 +1007,14 @@ class PyramidFileWriter(BaseFileWriter):
             return {
                 part.filepath: WsiLevelFile.from_dataset(
                     part.dataset,
-                    transfer_syntax,
-                    level_writer.focal_planes,
-                    level_writer.optical_paths,
+                    encoded_level_writer.transfer_syntax,
+                    encoded_level_writer.level_writer.focal_planes,
+                    encoded_level_writer.level_writer.optical_paths,
                     self._pyramid_index,
-                    level_writer.level_index,
+                    encoded_level_writer.level_writer.level_index,
                 )
-                for level_writer, file_writer, transfer_syntax in zip(
-                    level_writers, file_writers, transfer_syntaxes, strict=True
+                for encoded_level_writer, file_writer in zip(
+                    encoded_level_writers, file_writers, strict=True
                 )
                 for part in file_writer.written_parts
             }
@@ -1122,12 +1026,10 @@ class PyramidFileWriter(BaseFileWriter):
         self,
         present_levels: Sequence[int],
         block_downsampler: BlockDownsampler,
-        encoder: Encoder,
-        transcode: bool,
         encoder_pool: EncoderPool,
         temp_dir: UPath,
         token: CancellationToken,
-    ) -> list[PyramidLevelWriter]:
+    ) -> list[EncodedLevelWriter]:
         """Build PyramidLevelWriters for all included levels.
 
         Iterates levels from highest to lowest. Generated levels are created
@@ -1138,7 +1040,8 @@ class PyramidFileWriter(BaseFileWriter):
         level it is read from or downsampled from — not from the base — so levels
         that differ (e.g. fewer focal planes on downsampled levels) are each
         written with their own, with no uniform-membership requirement across
-        levels.
+        levels. Likewise the encoding of each level is resolved from the source
+        level it is read from or downsampled from.
         """
         # Determine which levels to build
         highest_in_file = present_levels[-1]
@@ -1208,7 +1111,7 @@ class PyramidFileWriter(BaseFileWriter):
         # instance-split bucket) is an independent cascade chain, producing one
         # instance per written level in the segment.
         tile_cache = self._create_tile_cache(temp_dir)
-        level_writers: list[PyramidLevelWriter] = []
+        level_writers: list[EncodedLevelWriter] = []
         read_levels_sorted = sorted(read_levels)
         for segment_position, read_level in enumerate(read_levels_sorted):
             next_read_level = (
@@ -1235,8 +1138,6 @@ class PyramidFileWriter(BaseFileWriter):
                         included_levels=included_levels,
                         read_levels=read_levels,
                         block_downsampler=block_downsampler,
-                        encoder=encoder,
-                        transcode=transcode,
                         encoder_pool=encoder_pool,
                         tile_cache=tile_cache,
                         token=token,
@@ -1256,18 +1157,17 @@ class PyramidFileWriter(BaseFileWriter):
         included_levels: Sequence[int],
         read_levels: set[int],
         block_downsampler: BlockDownsampler,
-        encoder: Encoder,
-        transcode: bool,
         encoder_pool: EncoderPool,
         tile_cache: TileCache,
         token: CancellationToken,
-    ) -> list[PyramidLevelWriter]:
+    ) -> list[EncodedLevelWriter]:
         """Build the cascade chain for one instance-split bucket of one segment.
 
         Walks the segment's levels from highest to lowest: each generated level
         creates an accumulator chained to the one above, the source (read) level
         at the bottom gets a tile reader feeding that chain, and gap-bridging
-        levels get an intermediate accumulator with no writer.
+        levels get an intermediate accumulator with no writer. The encoding of
+        the tiles is resolved from the read level.
 
         Parameters
         ----------
@@ -1289,11 +1189,6 @@ class PyramidFileWriter(BaseFileWriter):
             All levels read from the source, used to detect chain starts.
         block_downsampler: BlockDownsampler
             Downsampler the generated levels are downsampled with.
-        encoder: Encoder
-            Encoder for transcoded tiles, when `transcode`, and for the tiles of
-            generated levels.
-        transcode: bool
-            Whether tiles are transcoded.
         encoder_pool: EncoderPool
             Shared pool the accumulators and readers submit encode work to.
         tile_cache: TileCache
@@ -1303,11 +1198,14 @@ class PyramidFileWriter(BaseFileWriter):
 
         Returns
         -------
-        list[PyramidLevelWriter]
+        list[EncodedLevelWriter]
             Writers for this bucket's written levels, lowest level first.
         """
+        encoding = self._encoding_resolver.resolve(
+            source_group.instance_at(paths[0], planes[0]).image_data
+        )
         next_accumulator: PyramidTileAccumulator | None = None
-        bucket_writers: dict[int, PyramidLevelWriter] = {}
+        bucket_writers: dict[int, EncodedLevelWriter] = {}
         # Accumulators for the levels that are written, and for the levels that
         # only bridge a gap in the cascade to reach them.
         writing_accumulators: dict[int, WritingPyramidTileAccumulator] = {}
@@ -1335,7 +1233,7 @@ class PyramidFileWriter(BaseFileWriter):
                     is_chain_start=level_index - 1 in read_levels,
                     queue_maxsize=self._queue_maxsize,
                     block_downsampler=block_downsampler,
-                    encoder=encoder,
+                    encoder=encoding.generated_tiles_encoder,
                     token=token,
                 )
                 intermediate_accumulators[level_index] = intermediate
@@ -1346,60 +1244,41 @@ class PyramidFileWriter(BaseFileWriter):
             dataset = self._build_dataset(
                 source_group, planes, paths, scale, level_index
             )
-            transcoder = encoder if transcode else None
-            if transcoder is not None:
-                dataset = dataset.update_for_transcoding(transcoder, scale)
+            if encoding.transcoder is not None:
+                dataset = dataset.update_for_transcoding(encoding.transcoder, scale)
 
             if in_source:
                 # Source level: create tile reader, referencing next accumulator
                 # for cascading if present
                 tile_reader: TileReader
-                recoder = (
-                    None
-                    if transcode
-                    else self._jpeg_optimizer_for(
-                        source_group.instance_at(paths[0], planes[0]).image_data
-                    )
-                )
-                if transcode and next_accumulator is not None:
-                    tile_reader = CascadingTranscodeTileReader(
-                        level_index,
-                        encoder_pool.queue,
-                        encoder,
-                        next_accumulator,
-                        token,
-                    )
-                elif transcode:
-                    tile_reader = TranscodeTileReader(
-                        level_index,
-                        encoder_pool.queue,
-                        encoder,
-                        token,
-                    )
-                elif recoder is not None and next_accumulator is not None:
-                    tile_reader = CascadingRecodeTileReader(
-                        level_index,
-                        encoder_pool.queue,
-                        recoder,
-                        next_accumulator,
-                        token,
-                    )
-                elif recoder is not None:
-                    tile_reader = RecodeTileReader(
-                        level_index,
-                        encoder_pool.queue,
-                        recoder,
-                        token,
-                    )
-                elif next_accumulator is not None:
-                    tile_reader = CascadingPassthroughTileReader(
-                        level_index,
-                        next_accumulator,
-                        token,
-                    )
-                else:
-                    tile_reader = PassthroughTileReader(level_index, token)
-                bucket_writers[level_index] = SourcePyramidLevelWriter(
+                match encoding:
+                    case TranscodedEncoding(transcoder=transcoder):
+                        tile_reader = TranscodeTileReader(
+                            level_index,
+                            encoder_pool.queue,
+                            transcoder,
+                            next_accumulator,
+                            token,
+                        )
+                    case RecodedEncoding(recoder=recoder):
+                        tile_reader = EncodedTileReader(
+                            level_index,
+                            RecodeEncodedTileSubmitter(
+                                encoder_pool.queue, recoder, token
+                            ),
+                            next_accumulator,
+                            token,
+                        )
+                    case CopiedEncoding():
+                        tile_reader = EncodedTileReader(
+                            level_index,
+                            PassthroughEncodedTileSubmitter(token),
+                            next_accumulator,
+                            token,
+                        )
+                    case _:
+                        raise TypeError(f"Unknown output encoding {encoding}.")
+                source_level_writer = SourcePyramidLevelWriter(
                     level_index=level_index,
                     dataset=dataset,
                     tile_cache=tile_cache,
@@ -1411,6 +1290,11 @@ class PyramidFileWriter(BaseFileWriter):
                     focal_planes=planes,
                     optical_paths=paths,
                     token=token,
+                )
+                bucket_writers[level_index] = EncodedLevelWriter(
+                    source_level_writer,
+                    encoding.transfer_syntax,
+                    encoding.transcoder,
                 )
                 next_accumulator = None
             else:
@@ -1429,7 +1313,7 @@ class PyramidFileWriter(BaseFileWriter):
                     is_chain_start=level_index - 1 in read_levels,
                     queue_maxsize=self._queue_maxsize,
                     block_downsampler=block_downsampler,
-                    encoder=encoder,
+                    encoder=encoding.generated_tiles_encoder,
                     token=token,
                 )
                 writing_accumulators[level_index] = accumulator
@@ -1437,7 +1321,7 @@ class PyramidFileWriter(BaseFileWriter):
                 next_accumulator = accumulator
 
         for generated_level, generated_dataset, generated_tiled_size in generated:
-            bucket_writers[generated_level] = GeneratedPyramidLevelWriter(
+            generated_level_writer = GeneratedPyramidLevelWriter(
                 level_index=generated_level,
                 dataset=generated_dataset,
                 tile_cache=tile_cache,
@@ -1452,6 +1336,11 @@ class PyramidFileWriter(BaseFileWriter):
                         generated_level, intermediate_accumulators
                     )
                 ],
+            )
+            bucket_writers[generated_level] = EncodedLevelWriter(
+                generated_level_writer,
+                encoding.generated_tiles_encoder.transfer_syntax,
+                encoding.transcoder,
             )
 
         return [bucket_writers[level_index] for level_index in sorted(bucket_writers)]
@@ -1739,8 +1628,7 @@ class GroupFileWriter(BaseFileWriter):
         group: Label | Overview | Thumbnail,
         output_path: UPath,
         uid_generator: UidGenerator,
-        transcoder: Encoder | None,
-        force_transcoding: bool,
+        encoding_resolver: EncodingResolver,
         offset_table: OffsetTableType | None = None,
         instance_number_start: int = 1,
         metadata: WsiMetadata | None = None,
@@ -1758,10 +1646,8 @@ class GroupFileWriter(BaseFileWriter):
             Folder path to save files to.
         uid_generator: UidGenerator
             UID generator to use.
-        transcoder: Optional[Encoder]
-            Encoder for transcoding. If None, source encoding is preserved.
-        force_transcoding: bool
-            If True, transcode even if transfer syntax matches.
+        encoding_resolver: EncodingResolver
+            Resolves how the tiles of each source are encoded when written.
         offset_table: Optional[OffsetTableType]
             Offset table type to use. If None, determined automatically.
         instance_number_start: int
@@ -1784,8 +1670,7 @@ class GroupFileWriter(BaseFileWriter):
         super().__init__(
             output_path=output_path,
             uid_generator=uid_generator,
-            transcoder=transcoder,
-            force_transcoding=force_transcoding,
+            encoding_resolver=encoding_resolver,
             offset_table=offset_table,
             instance_number_start=instance_number_start,
             metadata=metadata,
@@ -1808,25 +1693,25 @@ class GroupFileWriter(BaseFileWriter):
             source_image_data = sub_group[0].image_data
             sub_instances = Instances(sub_group)
 
-            encoder, transcode = self._resolve_transcoding(source_image_data)
-            encoder = self._optimize_encoder(encoder)
-            transcoder = encoder if transcode else None
-            jpeg_optimizer = (
-                None if transcode else self._jpeg_optimizer_for(source_image_data)
-            )
-            transfer_syntax = (
-                encoder.transfer_syntax
-                if transcode
-                else source_image_data.transfer_syntax
-            )
-            offset_table = self._resolve_offset_table(transfer_syntax)
+            encoding = self._encoding_resolver.resolve(source_image_data)
+            tile_source: GroupTileSource
+            match encoding:
+                case TranscodedEncoding(transcoder=transcoder):
+                    tile_source = TranscodingGroupTileSource(transcoder)
+                case RecodedEncoding(recoder=recoder):
+                    tile_source = RecodingGroupTileSource(recoder)
+                case CopiedEncoding():
+                    tile_source = CopyingGroupTileSource()
+                case _:
+                    raise TypeError(f"Unknown output encoding {encoding}.")
+            offset_table = self._resolve_offset_table(encoding.transfer_syntax)
 
             for planes, paths in self._split_planes_paths(
                 sub_instances.focal_planes_by_optical_path
             ):
                 dataset = self._build_dataset(sub_instances, planes, paths)
-                if transcoder is not None:
-                    dataset = dataset.update_for_transcoding(transcoder, 1)
+                if encoding.transcoder is not None:
+                    dataset = dataset.update_for_transcoding(encoding.transcoder, 1)
                 # The identity is set before the writer is made, so that the
                 # writer is given the dataset that is written.
                 dataset = dataset.as_instance(
@@ -1837,26 +1722,24 @@ class GroupFileWriter(BaseFileWriter):
                 instance_writer = GroupInstanceWriter(
                     dataset=dataset,
                     instances=sub_instances,
-                    encoder=encoder,
-                    transcode=transcode,
+                    tile_source=tile_source,
                     focal_planes=planes,
                     optical_paths=paths,
-                    recoder=jpeg_optimizer,
                 )
                 filepath = self._output_path.joinpath(
                     str(dataset.instance_uid) + ".dcm"
                 )
                 with WsiDicomWriter.open_instance(
                     filepath,
-                    transfer_syntax,
+                    encoding.transfer_syntax,
                     offset_table,
                     dataset,
                 ) as file_writer:
                     instance_writer.write(file_writer)
-                    written = file_writer.finalize(dataset, transcoder)
+                    written = file_writer.finalize(dataset, encoding.transcoder)
                 self._instance_number += 1
                 created_files[filepath] = self._describe(
-                    written, transfer_syntax, planes, paths
+                    written, encoding.transfer_syntax, planes, paths
                 )
         return created_files
 

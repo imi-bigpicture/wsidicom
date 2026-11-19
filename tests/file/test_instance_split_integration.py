@@ -44,6 +44,7 @@ from wsidicom.metadata import ImageCoordinateSystem, LossyCompression
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.options import InstanceSplit
 from wsidicom.series import Pyramid
+from wsidicom.writing.output_encoding import EncodingResolver
 
 FOCAL_PLANES = [0.0, 1.0]
 UNEQUAL_FOCAL_PLANES = [0.0, 0.5, 2.0]
@@ -298,6 +299,7 @@ def write_pyramid(
             pyramid_index=0,
             output_path=UPath(output_path),
             uid_generator=uid_generator,
+            encoding_resolver=EncodingResolver(None, False),
             max_threads=1,
             offset_table=OffsetTableType.BASIC,
             add_missing_levels=False,

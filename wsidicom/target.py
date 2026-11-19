@@ -21,6 +21,7 @@ from wsidicom.codec import Encoder
 from wsidicom.codec import Settings as EncoderSettings
 from wsidicom.metadata.uid_generator import UidGenerator
 from wsidicom.series import Labels, Overviews, Pyramids
+from wsidicom.writing.output_encoding import EncodingResolver
 
 
 class Target(metaclass=ABCMeta):
@@ -75,11 +76,7 @@ class Target(metaclass=ABCMeta):
         self._add_missing_levels = add_missing_levels
         self._regenerate_pyramid = regenerate_pyramid
         self._instance_number = 1
-        self._force_transcoding = force_transcoding
-        if isinstance(transcoding, EncoderSettings):
-            self._transcoder = Encoder.create_for_settings(transcoding)
-        else:
-            self._transcoder = transcoding
+        self._encoding_resolver = EncodingResolver(transcoding, force_transcoding)
         self.__enter__()
 
     @abstractmethod

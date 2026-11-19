@@ -29,8 +29,17 @@ from pydicom.uid import (
 )
 from wsidicom_data import TestData
 
-from wsidicom.codec import Channels, JpegOptimizer, JpegSettings, Subsampling
+from wsidicom.codec import (
+    Channels,
+    Encoder,
+    Jpeg2kSettings,
+    JpegSettings,
+    Recoder,
+    Settings,
+    Subsampling,
+)
 from wsidicom.codec.encoder import JpegEncoder, PillowEncoder
+from wsidicom.codec.recoder import JpegOptimizer
 
 
 @pytest.fixture
@@ -52,7 +61,7 @@ class TestJpegOptimizer:
         # Arrange
         encoded = JpegEncoder(JpegSettings()).encode(image)
         original = decode(encoded)
-        optimizer = JpegOptimizer()
+        optimizer = JpegOptimizer(JpegSettings(optimize=True))
 
         # Act
         optimized_encoded = optimizer.recode(encoded)
@@ -64,7 +73,7 @@ class TestJpegOptimizer:
     def test_recode_makes_image_smaller(self, image: np.ndarray) -> None:
         # Arrange
         encoded = JpegEncoder(JpegSettings()).encode(image)
-        optimizer = JpegOptimizer()
+        optimizer = JpegOptimizer(JpegSettings(optimize=True))
 
         # Act
         optimized = optimizer.recode(encoded)
@@ -74,7 +83,7 @@ class TestJpegOptimizer:
 
     def test_recode_twice_changes_nothing(self, image: np.ndarray) -> None:
         # Arrange
-        optimizer = JpegOptimizer()
+        optimizer = JpegOptimizer(JpegSettings(optimize=True))
         optimized = optimizer.recode(JpegEncoder(JpegSettings()).encode(image))
 
         # Act
@@ -89,7 +98,7 @@ class TestJpegOptimizer:
         Pillow.fromarray(image).save(buffer, format="jpeg", progressive=True)
         progressive = buffer.getvalue()
         original = decode(progressive)
-        optimizer = JpegOptimizer()
+        optimizer = JpegOptimizer(JpegSettings(optimize=True))
 
         # Act
         optimized_encoded = optimizer.recode(progressive)
@@ -117,12 +126,80 @@ class TestJpegOptimizer:
         self, transfer_syntax: UID, expected: bool
     ) -> None:
         # Arrange
+        optimizer = JpegOptimizer(JpegSettings(optimize=True))
 
         # Act
-        supported = JpegOptimizer.supports_transfer_syntax(transfer_syntax)
+        supported = optimizer.supports_transfer_syntax(transfer_syntax)
 
         # Assert
         assert supported == expected
+
+    def test_recoded_images_are_jpeg_baseline(self) -> None:
+        # Arrange
+        optimizer = JpegOptimizer(JpegSettings(optimize=True))
+
+        # Act
+        transfer_syntax = optimizer.transfer_syntax
+
+        # Assert
+        assert transfer_syntax == JPEGBaseline8Bit
+
+    def test_matching_encoder_optimizes_jpeg_baseline_encoder(self) -> None:
+        # Arrange
+        optimizer = JpegOptimizer(JpegSettings(optimize=True))
+        encoder = Encoder.create_for_settings(JpegSettings(quality=90))
+
+        # Act
+        matching = optimizer.matching_encoder(encoder)
+
+        # Assert
+        settings = matching.settings
+        assert isinstance(settings, JpegSettings)
+        assert settings.optimize
+        assert settings.quality == 90
+
+    @pytest.mark.parametrize(
+        "settings",
+        [JpegSettings(optimize=True), Jpeg2kSettings()],
+    )
+    def test_matching_encoder_keeps_other_encoders(self, settings: Settings) -> None:
+        # Arrange
+        optimizer = JpegOptimizer(JpegSettings(optimize=True))
+        encoder = Encoder.create_for_settings(settings)
+
+        # Act
+        matching = optimizer.matching_encoder(encoder)
+
+        # Assert
+        assert matching is encoder
+
+
+@pytest.mark.unittest
+class TestRecoderCreateForSettings:
+    @pytest.mark.skipif(not JpegOptimizer.is_available(), reason="Requires imagecodecs")
+    def test_optimizing_jpeg_settings_give_jpeg_optimizer(self) -> None:
+        # Arrange
+        settings = JpegSettings(optimize=True)
+
+        # Act
+        recoder = Recoder.create_for_settings(settings)
+
+        # Assert
+        assert isinstance(recoder, JpegOptimizer)
+        assert recoder.settings == settings
+
+    @pytest.mark.parametrize(
+        "settings",
+        [JpegSettings(), JpegSettings(bits=12, optimize=True), Jpeg2kSettings()],
+    )
+    def test_other_settings_give_no_recoder(self, settings: Settings) -> None:
+        # Arrange
+
+        # Act
+        recoder = Recoder.create_for_settings(settings)
+
+        # Assert
+        assert recoder is None
 
 
 @pytest.mark.unittest
